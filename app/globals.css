@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  height: 100%;
+  height: 100dvh;
+}
+
+@layer components {
+
+  /* ===== LABEL ===== */
+  .label {
+    @apply text-sm font-medium text-[#2E3093] mb-1;
+  }
+
+  /* ===== INPUT SIZES ===== */
+  .input-sm {
+    @apply h-10 w-full max-w-[180px] rounded-lg border border-gray-300 px-3 text-sm
+    focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]
+    transition;
+  }
+
+  .input-md {
+    @apply h-10 w-full max-w-[320px] rounded-lg border border-gray-300 px-3 text-sm
+    focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]
+    transition;
+  }
+
+  .input-lg {
+    @apply h-10 w-full max-w-[520px] rounded-lg border border-gray-300 px-3 text-sm
+    focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]
+    transition;
+  }
+
+  /* ===== TEXTAREAS ===== */
+  .textarea-base {
+    @apply w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
+    focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]
+    transition;
+  }
+
+  .textarea-lg {
+    @apply w-full max-w-[640px] rounded-lg border border-gray-300 px-3 py-2 text-sm
+    focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]
+    transition;
+  }
+
+  /* ===== CARD ===== */
+  .form-card {
+    @apply bg-white border border-gray-200 rounded-2xl shadow-sm;
+  }
+
+  /* ===== SECTION TITLE ===== */
+  .section-title {
+    @apply text-sm font-semibold text-[#2E3093] tracking-wide;
+  }
+
+  /* ===== BUTTONS ===== */
+  .btn-primary {
+    @apply px-5 py-2 text-sm font-semibold text-white bg-[#2E3093]
+    hover:bg-[#23257A] rounded-lg flex items-center gap-2
+    disabled:opacity-50 transition;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 text-sm border border-gray-300 rounded-lg
+    hover:bg-gray-50 transition;
+  }
+
+  /* ===== EDITOR ===== */
+  .editor-card {
+    @apply max-w-[640px] border border-gray-300 rounded-lg overflow-hidden bg-white;
+  }
+
+  .editor-toolbar {
+    @apply flex items-center gap-1 px-2 py-1.5 bg-gray-50 border-b border-gray-200;
+  }
+
+  .editor-content {
+    @apply min-h-[120px] px-3 py-2 text-sm;
+  }
+
+  .toolbar-btn {
+    @apply flex items-center justify-center w-7 h-7 text-xs font-semibold
+    rounded-md border border-gray-300 bg-white text-gray-600
+    hover:bg-gray-100 transition;
+  }
+
+  .toolbar-btn-active {
+    @apply bg-[#2E3093] text-white border-[#2E3093];
+  }
+
+  /* ===== DASHBOARD TABLE — grid lines ===== */
+  .dashboard-table {
+    @apply border-collapse border border-gray-200;
+  }
+
+  .dashboard-table th,
+  .dashboard-table td {
+    @apply border border-gray-200;
+  }
+
+}

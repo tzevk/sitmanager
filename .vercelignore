@@ -1,0 +1,19 @@
+# Dev / editor files
+.vscode/
+.idea/
+*.md
+!README.md
+
+# Environment
+.env.local
+.env.example
+
+# Config not needed at runtime
+tsconfig.json
+eslint.config.mjs
+postcss.config.mjs
+.gitignore
+
+# OS files
+.DS_Store
+Thumbs.db
