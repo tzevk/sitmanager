@@ -2,30 +2,19 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import {
+  QuickStatsSkeleton,
+  TableSkeleton,
+  WidgetSkeleton,
+  UpcomingBatchesSkeleton,
+  EnquirySkeleton,
+} from './components/Skeletons';
 
 interface TodoItem {
   id: string;
   text: string;
   done: boolean;
   createdAt: string;
-}
-
-interface DashboardData {
-  annualTargets: { targets: any[]; batchTargets: any[]; sparklineData: any[] };
-  upcomingBatches: any[];
-  enquiryReport: {
-    summary: { total_enquiries: number; last_30_days: number; last_7_days: number };
-    recentEnquiries: any[];
-    corporateTotal: number;
-    recentCorporate: any[];
-  };
-  placementReport: {
-    rows: any[];
-    activeRequirements: number;
-    companyRequirements: any[];
-  };
-  quickStats: { totalStudents: number; activeCourses: number; activeBatches: number; totalFaculty: number };
-  notices: any[];
 }
 
 // --- Mini Sparkline (SVG) ---
@@ -85,16 +74,19 @@ function WidgetHeader({ title, icon, badge, accent = 'from-[#2E3093] to-[#2A6BB5
 }
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [newTodo, setNewTodo] = useState('');
 
+  // Fetch dashboard data
   useEffect(() => {
+    let cancelled = false;
     fetch('/api/dashboard')
-      .then((res) => res.json())
-      .then((d) => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); })
+      .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   // Load todos from localStorage
@@ -118,23 +110,15 @@ export default function DashboardPage() {
   const toggleTodo = (id: string) => saveTodos(todos.map(t => t.id === id ? { ...t, done: !t.done } : t));
   const removeTodo = (id: string) => saveTodos(todos.filter(t => t.id !== id));
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64 gap-3">
-        <div className="w-8 h-8 border-[3px] border-[#2E3093] border-t-transparent rounded-full animate-spin" />
-        <span className="text-sm text-gray-400 font-medium">Loading dashboard...</span>
-      </div>
-    );
-  }
-
-  if (!data) return <div className="text-red-500 p-4 text-sm">Failed to load dashboard data.</div>;
-
-  const qs = data.quickStats ?? { totalStudents: 0, activeCourses: 0, activeBatches: 0, totalFaculty: 0 };
+  const qs = data?.quickStats ?? { totalStudents: 0, activeCourses: 0, activeBatches: 0, totalFaculty: 0 };
 
   return (
     <div className="space-y-5">
       {/* ── Quick Stats Row ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {loading ? (
+        <QuickStatsSkeleton />
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>}
           label="Total Students" value={qs.totalStudents}
@@ -156,24 +140,30 @@ export default function DashboardPage() {
           color="bg-amber-500" bg="bg-amber-50/70"
         />
       </div>
+      )}
 
       {/* ── Main Grid ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
         {/* ── Annual Targets (full width) ── */}
+        {loading ? (
+          <TableSkeleton rows={6} cols={10} className="lg:col-span-3" />
+        ) : (
         <Widget className="lg:col-span-3">
           <WidgetHeader
             title="Annual Targets"
             icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>}
-            badge={`${new Date().getFullYear()} · ${(data.annualTargets?.batchTargets ?? []).length} programs`}
+            badge={`${new Date().getFullYear()} · ${(data?.annualTargets?.batchTargets ?? []).length} programs`}
           />
           <div className="p-0 flex-1 overflow-auto max-h-[420px]">
-            {(data.annualTargets?.batchTargets?.length ?? 0) > 0 ? (() => {
-              const sparkMap: Record<number, number[]> = {};
-              (data.annualTargets?.sparklineData ?? []).forEach((s: any) => {
-                if (!sparkMap[s.Course_Id]) sparkMap[s.Course_Id] = new Array(12).fill(0);
+            {(data?.annualTargets?.batchTargets?.length ?? 0) > 0 ? (() => {
+              const sparkMap: Record<number, number[]> = data?.placementReport?.sparkMap ?? {};
+              // Also build from sparklineData if sparkMap doesn't have the data
+              const rawSparkMap: Record<number, number[]> = { ...sparkMap };
+              (data?.annualTargets?.sparklineData ?? []).forEach((s: any) => {
+                if (!rawSparkMap[s.Course_Id]) rawSparkMap[s.Course_Id] = new Array(12).fill(0);
                 const monthIdx = parseInt(s.month.split('-')[1], 10) - 1;
-                sparkMap[s.Course_Id][monthIdx] = s.batch_count;
+                rawSparkMap[s.Course_Id][monthIdx] = s.batch_count;
               });
 
               return (
@@ -195,7 +185,7 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(data.annualTargets?.batchTargets ?? []).map((t: any, i: number) => {
+                    {(data?.annualTargets?.batchTargets ?? []).map((t: any, i: number) => {
                       const minStu = parseInt(t.min_students_batch) || 15;
                       const targetFreq = Number(t.target_frequency) || 1;
                       const yearlyTarget = minStu * targetFreq;
@@ -204,8 +194,7 @@ export default function DashboardPage() {
                       const feesCollected = Number(t.fees_collected) || 0;
                       const admitted = Number(t.students_admitted) || 0;
                       const adPct = yearlyTarget > 0 ? Math.min(100, (admitted / yearlyTarget) * 100) : 0;
-                      const fPct = feesTarget > 0 ? Math.min(100, (feesCollected / feesTarget) * 100) : 0;
-                      const spark = sparkMap[t.Course_Id] ?? [];
+                      const spark = rawSparkMap[t.Course_Id] ?? [];
                       const conducted = Number(t.frequency_conducted) || 0;
 
                       return (
@@ -236,14 +225,14 @@ export default function DashboardPage() {
                   <tfoot>
                     <tr className="bg-gray-50/80 border-t border-gray-200 font-semibold text-[11px] sticky bottom-0">
                       <td className="py-2 px-2" colSpan={4}><span className="text-gray-500">Totals</span></td>
-                      <td className="py-2 px-2 text-center text-gray-700">{(data.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.frequency_conducted) || 0), 0)}</td>
-                      <td className="py-2 px-2 text-center text-[#2E3093]">{(data.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.target_frequency) || 1), 0)}</td>
+                      <td className="py-2 px-2 text-center text-gray-700">{(data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.frequency_conducted) || 0), 0)}</td>
+                      <td className="py-2 px-2 text-center text-[#2E3093]">{(data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.target_frequency) || 1), 0)}</td>
                       <td className="py-2 px-2"></td>
-                      <td className="py-2 px-2 text-center text-gray-700">{(data.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.students_admitted) || 0), 0)}</td>
-                      <td className="py-2 px-2 text-center text-[#2E3093]">{(data.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => { const ms = parseInt(t.min_students_batch) || 15; const tf = Number(t.target_frequency) || 1; return s + ms * tf; }, 0)}</td>
+                      <td className="py-2 px-2 text-center text-gray-700">{(data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.students_admitted) || 0), 0)}</td>
+                      <td className="py-2 px-2 text-center text-[#2E3093]">{(data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => { const ms = parseInt(t.min_students_batch) || 15; const tf = Number(t.target_frequency) || 1; return s + ms * tf; }, 0)}</td>
                       <td className="py-2 px-2"></td>
-                      <td className="py-2 px-2 text-right text-gray-700">₹{((data.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.fees_collected) || 0), 0) / 100000).toFixed(1)}L</td>
-                      <td className="py-2 px-2 text-right text-[#2E3093]">₹{((data.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => { const ms = parseInt(t.min_students_batch) || 15; const tf = Number(t.target_frequency) || 1; const f = Number(t.Fees) || 0; return s + ms * tf * f; }, 0) / 100000).toFixed(1)}L</td>
+                      <td className="py-2 px-2 text-right text-gray-700">₹{((data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.fees_collected) || 0), 0) / 100000).toFixed(1)}L</td>
+                      <td className="py-2 px-2 text-right text-[#2E3093]">₹{((data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => { const ms = parseInt(t.min_students_batch) || 15; const tf = Number(t.target_frequency) || 1; const f = Number(t.Fees) || 0; return s + ms * tf * f; }, 0) / 100000).toFixed(1)}L</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -256,8 +245,9 @@ export default function DashboardPage() {
             )}
           </div>
         </Widget>
+        )}
 
-        {/* ── Todo List ── */}
+        {/* ── Todo List (client-only, loads instantly) ── */}
         <Widget>
           <WidgetHeader
             title="To-Do List"
@@ -314,18 +304,21 @@ export default function DashboardPage() {
           </div>
         </Widget>
 
-        {/* ── Upcoming Batches (2 col) ── */}
+        {/* ── Upcoming Batches (2 col)  ── */}
+        {loading ? (
+          <UpcomingBatchesSkeleton />
+        ) : (
         <Widget className="lg:col-span-2">
           <WidgetHeader
             title="Upcoming Batches"
             icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>}
-            badge={(data.upcomingBatches ?? []).length}
+            badge={(data?.upcomingBatches ?? []).length}
             accent="from-[#2A6BB5] to-[#4A90D9]"
           />
           <div className="p-4 flex-1 overflow-auto max-h-80">
-            {(data.upcomingBatches ?? []).length > 0 ? (
+            {(data?.upcomingBatches ?? []).length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-x-2 gap-y-1.5">
-                {(data.upcomingBatches ?? []).map((b: any) => (
+                {(data?.upcomingBatches ?? []).map((b: any) => (
                   <div key={b.Batch_Id} className="rounded-xl border border-gray-100 p-3.5 hover:border-[#2A6BB5]/30 hover:shadow-md transition-all group">
                     <div className="flex items-start justify-between mb-2">
                       <div className="min-w-0 flex-1">
@@ -357,8 +350,12 @@ export default function DashboardPage() {
             )}
           </div>
         </Widget>
+        )}
 
-        {/* ── Notice Board ── */}
+        {/* ── Notice Board  ── */}
+        {loading ? (
+          <WidgetSkeleton lines={3} />
+        ) : (
         <Widget>
           <WidgetHeader
             title="Notice Board"
@@ -366,9 +363,9 @@ export default function DashboardPage() {
             accent="from-[#7C3AED] to-[#A78BFA]"
           />
           <div className="p-4 flex-1 overflow-auto max-h-72">
-            {(data.notices ?? []).length > 0 ? (
+            {(data?.notices ?? []).length > 0 ? (
               <div className="space-y-3">
-                {(data.notices ?? []).map((n: any) => (
+                {(data?.notices ?? []).map((n: any) => (
                   <div key={n.id} className="p-3 rounded-xl bg-purple-50/50 border border-purple-100/50">
                     <div className="text-sm text-gray-700" dangerouslySetInnerHTML={{ __html: n.specification }} />
                     <div className="flex items-center gap-2 mt-2 text-[10px] text-gray-400">
@@ -387,8 +384,12 @@ export default function DashboardPage() {
             )}
           </div>
         </Widget>
+        )}
 
-        {/* ── Enquiry Report ── */}
+        {/* ── Enquiry Report  ── */}
+        {loading ? (
+          <EnquirySkeleton />
+        ) : (
         <Widget>
           <WidgetHeader
             title="Enquiry Report"
@@ -398,22 +399,22 @@ export default function DashboardPage() {
           <div className="p-4 flex-1">
             <div className="grid grid-cols-3 gap-2 mb-4">
               <div className="bg-indigo-50 rounded-xl p-3 text-center">
-                <p className="text-xl font-extrabold text-[#2E3093]">{data.enquiryReport?.summary?.total_enquiries ?? 0}</p>
+                <p className="text-xl font-extrabold text-[#2E3093]">{data?.enquiryReport?.summary?.total_enquiries ?? 0}</p>
                 <p className="text-[9px] text-gray-500 mt-0.5 font-medium">Student</p>
               </div>
               <div className="bg-emerald-50 rounded-xl p-3 text-center">
-                <p className="text-xl font-extrabold text-emerald-600">{data.enquiryReport?.corporateTotal ?? 0}</p>
+                <p className="text-xl font-extrabold text-emerald-600">{data?.enquiryReport?.corporateTotal ?? 0}</p>
                 <p className="text-[9px] text-gray-500 mt-0.5 font-medium">Corporate</p>
               </div>
               <div className="bg-purple-50 rounded-xl p-3 text-center">
-                <p className="text-xl font-extrabold text-purple-600">{(data.enquiryReport?.summary?.total_enquiries ?? 0) + (data.enquiryReport?.corporateTotal ?? 0)}</p>
+                <p className="text-xl font-extrabold text-purple-600">{(data?.enquiryReport?.summary?.total_enquiries ?? 0) + (data?.enquiryReport?.corporateTotal ?? 0)}</p>
                 <p className="text-[9px] text-gray-500 mt-0.5 font-medium">Total</p>
               </div>
             </div>
             <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Recent Corporate</h3>
             <div className="space-y-1.5 overflow-y-auto max-h-48">
-              {(data.enquiryReport?.recentCorporate ?? []).length > 0 ? (
-                (data.enquiryReport?.recentCorporate ?? []).map((e: any) => (
+              {(data?.enquiryReport?.recentCorporate ?? []).length > 0 ? (
+                (data?.enquiryReport?.recentCorporate ?? []).map((e: any) => (
                   <div key={e.Id} className="flex items-center gap-3 p-2.5 rounded-xl bg-gray-50 hover:bg-gray-100/80 transition-colors">
                     <div className="w-8 h-8 rounded-lg bg-indigo-100 text-[#2E3093] flex items-center justify-center text-xs font-bold shrink-0">
                       {(e.FullName || '?')[0]}
@@ -431,18 +432,22 @@ export default function DashboardPage() {
             </div>
           </div>
         </Widget>
+        )}
 
-        {/* ── Placement Report (full width) ── */}
+        {/* ── Placement Report (full width)  ── */}
+        {loading ? (
+          <TableSkeleton rows={5} cols={11} className="lg:col-span-3" />
+        ) : (
         <Widget className="lg:col-span-3">
           <WidgetHeader
             title="Placement Report"
             icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>}
-            badge={`${(data.placementReport?.rows ?? []).length} batches`}
+            badge={`${(data?.placementReport?.rows ?? []).length} batches`}
             accent="from-[#059669] to-[#34D399]"
           />
           <div className="p-0 flex-1 overflow-auto max-h-[420px]">
-            {(data.placementReport?.rows ?? []).length > 0 ? (() => {
-              const rows = data.placementReport?.rows ?? [];
+            {(data?.placementReport?.rows ?? []).length > 0 ? (() => {
+              const rows = data?.placementReport?.rows ?? [];
               const totals = rows.reduce(
                 (acc: any, r: any) => ({
                   passed: acc.passed + (r.passedStudent || 0),
@@ -521,19 +526,23 @@ export default function DashboardPage() {
             )}
           </div>
         </Widget>
+        )}
 
-        {/* ── Company Requirements ── */}
+        {/* ── Company Requirements  ── */}
+        {loading ? (
+          <WidgetSkeleton lines={3} />
+        ) : (
         <Widget>
           <WidgetHeader
             title="Company Requirements"
             icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>}
-            badge={`${data.placementReport?.activeRequirements ?? 0} active`}
+            badge={`${data?.placementReport?.activeRequirements ?? 0} active`}
             accent="from-[#0369A1] to-[#38BDF8]"
           />
           <div className="p-4 flex-1 overflow-auto max-h-72">
-            {(data.placementReport?.companyRequirements ?? []).length > 0 ? (
+            {(data?.placementReport?.companyRequirements ?? []).length > 0 ? (
               <div className="space-y-2.5">
-                {(data.placementReport?.companyRequirements ?? []).map((r: any) => (
+                {(data?.placementReport?.companyRequirements ?? []).map((r: any) => (
                   <div key={r.CompReqId} className="p-3 rounded-xl border border-gray-100 hover:border-sky-200 hover:shadow-sm transition-all">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -554,6 +563,7 @@ export default function DashboardPage() {
             )}
           </div>
         </Widget>
+        )}
       </div>
     </div>
   );

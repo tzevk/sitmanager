@@ -43,6 +43,13 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // Dashboard sub-endpoints (stats, summary, reports)
+        source: '/api/dashboard/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'private, max-age=60, stale-while-revalidate=120' },
+        ],
+      },
+      {
         // Master options/dropdown APIs — cache longer
         source: '/api/:path*/options',
         headers: [
