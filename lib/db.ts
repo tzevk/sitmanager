@@ -6,6 +6,7 @@ let pool: mysql.Pool | null = null;
 
 // Detect if running on Vercel (serverless)
 const isServerless = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
+const isProduction = process.env.NODE_ENV === 'production';
 
 export function getPool(): mysql.Pool {
   if (!pool) {
@@ -24,26 +25,61 @@ export function getPool(): mysql.Pool {
       queueLimit: 0,
       enableKeepAlive: !isServerless, // Disable keep-alive in serverless
       keepAliveInitialDelay: 30000,
-      connectTimeout: isServerless ? 5000 : 10000, // Faster timeout for serverless
+      connectTimeout: isServerless ? 10000 : 30000, // More generous timeout for remote DB
       namedPlaceholders: true,
-      // Ensure connections are released properly
       dateStrings: true,
+      // SECURITY: Require SSL/TLS for production database connections
+      ...(isProduction && {
+        ssl: {
+          rejectUnauthorized: true,
+        },
+      }),
+    });
+
+    // Handle pool errors to prevent unhandled rejections
+    pool.on('connection', (connection) => {
+      connection.on('error', (err) => {
+        console.error('DB connection error:', err.code);
+        if (err.code === 'PROTOCOL_CONNECTION_LOST' || err.code === 'ECONNRESET') {
+          // Connection will be removed from pool automatically
+          console.warn('Database connection lost. Pool will create a new one.');
+        }
+      });
     });
   }
   return pool;
 }
 
 /**
- * Execute a query with automatic connection management
- * Ensures connections are properly released back to pool
+ * Gracefully close the connection pool.
+ * Call during shutdown / hot-reload to prevent connection leaks.
+ */
+export async function destroyPool(): Promise<void> {
+  if (pool) {
+    await pool.end();
+    pool = null;
+  }
+}
+
+/**
+ * Execute a query with automatic connection management.
+ * Uses parameterized queries to prevent SQL injection.
+ * Ensures connections are properly released back to pool.
  */
 export async function query<T>(
   sql: string,
   params?: (string | number | null | boolean)[]
 ): Promise<T[]> {
   const p = getPool();
-  const [rows] = await p.query<mysql.RowDataPacket[]>(sql, params);
-  return rows as T[];
+  try {
+    const [rows] = await p.query<mysql.RowDataPacket[]>(sql, params);
+    return rows as T[];
+  } catch (err: unknown) {
+    // Log DB errors server-side, but don't expose details to callers
+    const message = err instanceof Error ? err.message : 'Unknown DB error';
+    console.error('DB query error:', message);
+    throw new Error('Database query failed');
+  }
 }
 
 /**

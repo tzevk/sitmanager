@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getPool, cached } from '@/lib/db';
+import { requireAuth } from '@/lib/api-auth';
 
 const CACHE_TTL = 10 * 60 * 1000; // 10 min — slow-moving counts
 
@@ -12,7 +13,10 @@ async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallb
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const pool = getPool();
 

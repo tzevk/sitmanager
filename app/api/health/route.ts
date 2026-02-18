@@ -1,13 +1,19 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { checkEnv } from '@/lib/env';
+import { healthRateLimiter } from '@/lib/rate-limit';
 
 /**
  * GET /api/health
  * Quick health check for monitoring — tests env vars + DB connectivity.
- * Public endpoint (no auth required).
+ * Public endpoint (no auth required) but rate-limited.
+ * SECURITY: Does not expose internal details (env var names, stack traces).
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Rate limit health checks to prevent abuse
+  const rateLimited = healthRateLimiter(request);
+  if (rateLimited) return rateLimited;
+
   const start = Date.now();
 
   // 1. Environment check
@@ -41,9 +47,8 @@ export async function GET() {
         env: env.ok ? 'pass' : 'fail',
         database: dbOk ? 'pass' : 'fail',
       },
-      ...(env.missing.length > 0 && { missingEnv: env.missing }),
+      // SECURITY: Never expose missing env var names or internal details publicly
       version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || 'dev',
-      region: process.env.VERCEL_REGION || 'local',
     },
     { status: healthy ? 200 : 503 }
   );

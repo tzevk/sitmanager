@@ -3,12 +3,29 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
+// Safe date formatter that avoids hydration mismatches
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return '\u2014';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '\u2014';
+    const day = String(d.getDate()).padStart(2, '0');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const mon = months[d.getMonth()];
+    const year = d.getFullYear();
+    return `${day} ${mon} ${year}`;
+  } catch {
+    return '\u2014';
+  }
+}
+
 interface InquiryRow {
   Student_Id: number;
   Student_Name: string;
   CourseName: string | null;
   Inquiry_Dt: string | null;
   Discussion: string | null;
+  DiscussionDate: string | null;
   Present_Mobile: string | null;
   Email: string | null;
   Discipline: string | null;
@@ -253,12 +270,12 @@ export default function InquiryPage() {
                 <th className="text-left py-3 px-4 font-semibold">#</th>
                 <th className="text-left py-3 px-4 font-semibold">Student Name</th>
                 <th className="text-left py-3 px-4 font-semibold">Course Name</th>
-                <th className="text-left py-3 px-4 font-semibold">Inquiry Date</th>
-                <th className="text-left py-3 px-4 font-semibold">Discussion</th>
                 <th className="text-left py-3 px-4 font-semibold">Mobile</th>
                 <th className="text-left py-3 px-4 font-semibold">Email</th>
                 <th className="text-left py-3 px-4 font-semibold">Discipline</th>
                 <th className="text-left py-3 px-4 font-semibold">Inquiry Type</th>
+                <th className="text-left py-3 px-4 font-semibold">Inquiry Date</th>
+                <th className="text-left py-3 px-4 font-semibold">Discussion</th>
                 <th className="text-center py-3 px-4 font-semibold">Status</th>
                 <th className="text-center py-3 px-4 font-semibold">Action</th>
               </tr>
@@ -299,20 +316,6 @@ export default function InquiryPage() {
                     <td className="py-2.5 px-4 text-gray-600 max-w-[160px]">
                       <span className="truncate block">{r.CourseName || '—'}</span>
                     </td>
-                    <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap">
-                      {r.Inquiry_Dt
-                        ? new Date(r.Inquiry_Dt).toLocaleDateString('en-IN', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                          })
-                        : '—'}
-                    </td>
-                    <td className="py-2.5 px-4 text-gray-500 max-w-[220px]">
-                      <span className="truncate block text-xs" title={r.Discussion || ''}>
-                        {r.Discussion || '—'}
-                      </span>
-                    </td>
                     <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap font-mono text-xs">
                       {r.Present_Mobile || '—'}
                     </td>
@@ -320,10 +323,18 @@ export default function InquiryPage() {
                       <span className="truncate block text-xs">{r.Email || '—'}</span>
                     </td>
                     <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap text-xs">
-                      {r.Discipline || '—'}
+                      {r.Discipline && r.Discipline !== 'NULL' && r.Discipline !== 'Select' ? r.Discipline : '—'}
                     </td>
                     <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap text-xs">
                       {r.Inquiry_Type || '—'}
+                    </td>
+                    <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap">
+                      {formatDate(r.DiscussionDate || r.Inquiry_Dt)}
+                    </td>
+                    <td className="py-2.5 px-4 text-gray-500 max-w-[220px]">
+                      <span className="truncate block text-xs" title={r.Discussion && r.Discussion !== 'NULL' ? r.Discussion : ''}>
+                        {r.Discussion && r.Discussion !== 'NULL' ? r.Discussion : '\u2014'}
+                      </span>
                     </td>
                     <td className="py-2.5 px-4 text-center">
                       <span

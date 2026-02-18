@@ -2,12 +2,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const SECRET_KEY = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your-secret-key-min-32-characters-long!'
-);
+// SECURITY: Never fall back to a default secret — fail hard if JWT_SECRET is missing
+function getSecretKey(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error(
+      'CRITICAL: JWT_SECRET environment variable is not set. ' +
+      'The application cannot start without a secure signing key.'
+    );
+  }
+  if (secret.length < 32) {
+    throw new Error('CRITICAL: JWT_SECRET must be at least 32 characters long.');
+  }
+  return new TextEncoder().encode(secret);
+}
+
+// Lazy-initialized secret key — validated on first use
+let _secretKey: Uint8Array | null = null;
+function SECRET_KEY(): Uint8Array {
+  if (!_secretKey) {
+    _secretKey = getSecretKey();
+  }
+  return _secretKey;
+}
 
 const SESSION_COOKIE_NAME = 'sit_session';
-const SESSION_DURATION = 60 * 60 * 24; // 24 hours in seconds
+const SESSION_DURATION = 60 * 60 * 8; // 8 hours in seconds (reduced from 24h)
 
 export interface SessionData {
   userId: number;
@@ -26,7 +46,7 @@ export async function createSession(data: SessionData): Promise<string> {
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime(`${SESSION_DURATION}s`)
-    .sign(SECRET_KEY);
+    .sign(SECRET_KEY());
   
   return token;
 }
@@ -36,7 +56,7 @@ export async function createSession(data: SessionData): Promise<string> {
  */
 export async function verifySession(token: string): Promise<SessionData | null> {
   try {
-    const { payload } = await jwtVerify(token, SECRET_KEY);
+    const { payload } = await jwtVerify(token, SECRET_KEY());
     return payload as unknown as SessionData;
   } catch {
     return null;

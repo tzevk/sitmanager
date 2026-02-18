@@ -4,15 +4,29 @@
  *  1. Session check for /api/* (except auth routes) and /dashboard/*
  *  2. Redirects unauthenticated users to /signin
  *  3. Returns 401 for unauthenticated API requests
+ *  4. Adds security headers to all responses
  */
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const SECRET_KEY = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your-secret-key-min-32-characters-long!'
-);
+// SECURITY: Never fall back to a default secret — fail hard if missing
+function getSecretKey(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error(
+      'CRITICAL: JWT_SECRET environment variable is missing or too short (min 32 chars).'
+    );
+  }
+  return new TextEncoder().encode(secret);
+}
+
+let _secretKey: Uint8Array | null = null;
+function SECRET_KEY(): Uint8Array {
+  if (!_secretKey) _secretKey = getSecretKey();
+  return _secretKey;
+}
 
 const SESSION_COOKIE = 'sit_session';
 
@@ -44,7 +58,7 @@ export async function proxy(request: NextRequest) {
 
   // Allow public paths
   if (isPublicRoute(pathname)) {
-    return NextResponse.next();
+    return addSecurityHeaders(NextResponse.next());
   }
 
   // Only protect /api/* and /dashboard/* routes
@@ -52,7 +66,7 @@ export async function proxy(request: NextRequest) {
   const isDashboardRoute = pathname.startsWith('/dashboard');
 
   if (!isApiRoute && !isDashboardRoute) {
-    return NextResponse.next();
+    return addSecurityHeaders(NextResponse.next());
   }
 
   // Check for session cookie
@@ -74,8 +88,8 @@ export async function proxy(request: NextRequest) {
 
   // Verify JWT token
   try {
-    await jwtVerify(token, SECRET_KEY);
-    return NextResponse.next();
+    await jwtVerify(token, SECRET_KEY());
+    return addSecurityHeaders(NextResponse.next());
   } catch {
     // Invalid/expired token — clear cookie and respond
     const response = isApiRoute
@@ -95,6 +109,29 @@ export async function proxy(request: NextRequest) {
 
     return response;
   }
+}
+
+/**
+ * Append security headers to any response.
+ */
+function addSecurityHeaders(response: NextResponse): NextResponse {
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  response.headers.set(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), browsing-topics=()'
+  );
+  response.headers.set('X-Permitted-Cross-Domain-Policies', 'none');
+
+  if (process.env.NODE_ENV === 'production') {
+    response.headers.set(
+      'Strict-Transport-Security',
+      'max-age=63072000; includeSubDomains; preload'
+    );
+  }
+
+  return response;
 }
 
 // Configure which paths the proxy runs on

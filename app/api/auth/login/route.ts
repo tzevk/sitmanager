@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { createSession, setSessionCookie } from '@/lib/session';
+import { loginRateLimiter } from '@/lib/rate-limit';
+import { sanitizeString, isNonEmpty } from '@/lib/validation';
 import crypto from 'crypto';
 
 // Department name to role ID mapping
@@ -17,12 +19,29 @@ const SUPERADMIN_ROLE = 1;
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, department } = await request.json();
+    // Rate limit: 5 login attempts per 60 seconds per IP
+    const rateLimited = loginRateLimiter(request);
+    if (rateLimited) return rateLimited;
+
+    const body = await request.json();
+
+    // Sanitize inputs
+    const email = sanitizeString(body.email);
+    const password = typeof body.password === 'string' ? body.password : '';
+    const department = sanitizeString(body.department);
 
     // Validate required fields
-    if (!email || !password || !department) {
+    if (!isNonEmpty(email) || !password || !isNonEmpty(department)) {
       return NextResponse.json(
         { success: false, message: 'Email, password, and department are required.' },
+        { status: 400 }
+      );
+    }
+
+    // Enforce reasonable length limits
+    if (email.length > 254 || password.length > 128 || department.length > 100) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid input.' },
         { status: 400 }
       );
     }
@@ -37,7 +56,8 @@ export async function POST(request: NextRequest) {
 
     const pool = getPool();
 
-    // Hash password with MD5 (matching existing DB format)
+    // TODO: SECURITY — MD5 is cryptographically broken for password hashing.
+    // Migrate to bcrypt/argon2 when possible. This matches the existing DB format.
     const hashedPassword = crypto.createHash('md5').update(password).digest('hex');
 
     // Look up user by username/email and password

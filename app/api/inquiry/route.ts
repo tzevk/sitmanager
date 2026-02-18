@@ -128,7 +128,7 @@ export async function GET(req: NextRequest) {
     const dateFrom = url.searchParams.get('dateFrom') || '';
     const dateTo = url.searchParams.get('dateTo') || '';
 
-    // Build WHERE clauses
+    // Build WHERE clauses for student_master filters
     const conditions: string[] = [
       '(sm.IsDelete = 0 OR sm.IsDelete IS NULL)',
     ];
@@ -169,22 +169,25 @@ export async function GET(req: NextRequest) {
 
     const whereClause = conditions.length > 0 ? `WHERE (${conditions.join(') AND (')})` : '';
 
-    // Count query
+    // ── Sequential queries to avoid exhausting MySQL connection pool ──
+
+    // 1. Count
     const countSql = `
       SELECT COUNT(*) as total
       FROM student_master sm
       LEFT JOIN course_mst c ON sm.Course_Id = c.Course_Id
       ${whereClause}
     `;
+    const [countResult] = await pool.query(countSql, params);
+    const total = (countResult as any[])[0]?.total || 0;
 
-    // Data query
+    // 2. Paginated data — simple Student_Id DESC ordering (fast, uses PK index)
     const dataSql = `
       SELECT 
         sm.Student_Id,
         sm.Student_Name,
         c.Course_Name as CourseName,
         sm.Inquiry_Dt,
-        sm.Discussion,
         sm.Present_Mobile,
         sm.Email,
         sm.Discipline,
@@ -196,23 +199,53 @@ export async function GET(req: NextRequest) {
       ORDER BY sm.Student_Id DESC
       LIMIT ? OFFSET ?
     `;
+    const [dataRows] = await pool.query(dataSql, [...params, limit, offset]);
+    const studentIds = (dataRows as any[]).map((r: any) => r.Student_Id);
 
-    // Fetch filter options (for dropdowns) + data + count in parallel
-    const [countResult, dataResult, disciplinesResult, typesResult] = await Promise.all([
-      pool.query(countSql, params),
-      pool.query(dataSql, [...params, limit, offset]),
-      pool.query(
-        "SELECT DISTINCT Discipline FROM student_master WHERE Discipline IS NOT NULL AND Discipline != '' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Discipline"
-      ),
-      pool.query(
-        "SELECT DISTINCT Inquiry_Type FROM student_master WHERE Inquiry_Type IS NOT NULL AND Inquiry_Type != '' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Inquiry_Type"
-      ),
-    ]);
+    // 3. Fetch latest discussions for just these student IDs (fast — only 25 IDs)
+    let discMap = new Map<string, { discussion: string; date: string; created_date: string }>();
+    if (studentIds.length > 0) {
+      const placeholders = studentIds.map(() => '?').join(',');
+      const [discRows] = await pool.query(
+        `SELECT d.Inquiry_id, d.discussion, d.date as disc_date, d.created_date
+         FROM awt_inquirydiscussion d
+         INNER JOIN (
+           SELECT Inquiry_id, MAX(id) as max_id
+           FROM awt_inquirydiscussion
+           WHERE deleted = 0 AND Inquiry_id IN (${placeholders})
+           GROUP BY Inquiry_id
+         ) latest ON d.id = latest.max_id`,
+        studentIds.map(String)
+      );
+      discMap = new Map(
+        (discRows as any[]).map((d: any) => [
+          String(d.Inquiry_id),
+          { discussion: d.discussion, date: d.disc_date, created_date: d.created_date },
+        ])
+      );
+    }
 
-    const total = (countResult[0] as any[])[0]?.total || 0;
-    const rows = dataResult[0] as any[];
-    const disciplines = (disciplinesResult[0] as any[]).map((d: any) => d.Discipline);
-    const inquiryTypes = (typesResult[0] as any[]).map((t: any) => t.Inquiry_Type);
+    // 4. Filter options (lightweight queries)
+    const [disciplinesResult] = await pool.query(
+      "SELECT DISTINCT Discipline FROM student_master WHERE Discipline IS NOT NULL AND Discipline != '' AND Discipline != 'NULL' AND Discipline != 'Select' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Discipline"
+    );
+    const [typesResult] = await pool.query(
+      "SELECT DISTINCT Inquiry_Type FROM student_master WHERE Inquiry_Type IS NOT NULL AND Inquiry_Type != '' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Inquiry_Type"
+    );
+
+    // Build enriched rows
+    const rows = (dataRows as any[]).map((r: any) => {
+      const disc = discMap.get(String(r.Student_Id));
+      return {
+        ...r,
+        Discipline: r.Discipline && r.Discipline !== 'NULL' && r.Discipline !== 'Select' ? r.Discipline : null,
+        Discussion: disc?.discussion || null,
+        DiscussionDate: disc?.date || null,
+      };
+    });
+
+    const disciplines = (disciplinesResult as any[]).map((d: any) => d.Discipline);
+    const inquiryTypes = (typesResult as any[]).map((t: any) => t.Inquiry_Type);
 
     // Status mapping (since awt_status is empty, use common status labels)
     const statusMap: Record<number, string> = {
