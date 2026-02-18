@@ -8,10 +8,8 @@
 .env.local
 .env.example
 
-# Config not needed at runtime
-tsconfig.json
+# Config not needed at runtime (but keep tsconfig.json — needed for @ path aliases)
 eslint.config.mjs
-postcss.config.mjs
 .gitignore
 
 # OS files
