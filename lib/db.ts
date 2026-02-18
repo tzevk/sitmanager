@@ -6,7 +6,6 @@ let pool: mysql.Pool | null = null;
 
 // Detect if running on Vercel (serverless)
 const isServerless = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
-const isProduction = process.env.NODE_ENV === 'production';
 
 export function getPool(): mysql.Pool {
   if (!pool) {
