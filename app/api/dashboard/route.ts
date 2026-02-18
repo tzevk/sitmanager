@@ -18,11 +18,10 @@ async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallb
 }
 
 export async function GET(request: NextRequest) {
-  // SECURITY: Dashboard data requires authentication
-  const auth = await requireAuth(request);
-  if (auth instanceof NextResponse) return auth;
-
   try {
+    // SECURITY: Dashboard data requires authentication
+    const auth = await requireAuth(request);
+    if (auth instanceof NextResponse) return auth;
     const result = await cached('dashboard', CACHE_TTL, fetchDashboardData);
 
     return NextResponse.json(result, {

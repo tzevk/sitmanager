@@ -80,8 +80,14 @@ export async function requireAuth(
     );
   }
 
-  const permissions = await getRolePermissions(session.role);
-  return { session, permissions };
+  try {
+    const permissions = await getRolePermissions(session.role);
+    return { session, permissions };
+  } catch (err) {
+    console.error('Failed to load permissions for role', session.role, err);
+    // Return empty permissions rather than crashing — route can still check auth
+    return { session, permissions: [] };
+  }
 }
 
 /**

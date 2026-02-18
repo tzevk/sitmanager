@@ -15,10 +15,9 @@ async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallb
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth(request);
-  if (auth instanceof NextResponse) return auth;
-
   try {
+    const auth = await requireAuth(request);
+    if (auth instanceof NextResponse) return auth;
     const result = await cached('dashboard:reports', CACHE_TTL, async () => {
       const pool = getPool();
 
