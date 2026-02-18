@@ -28,8 +28,8 @@ export function getPool(): mysql.Pool {
       connectTimeout: isServerless ? 10000 : 30000, // More generous timeout for remote DB
       namedPlaceholders: true,
       dateStrings: true,
-      // SECURITY: Require SSL/TLS for production database connections
-      ...(isProduction && {
+      // SECURITY: Enable SSL/TLS when DB_SSL=true (set in env for SSL-capable servers)
+      ...(process.env.DB_SSL === 'true' && {
         ssl: {
           rejectUnauthorized: true,
         },
