@@ -99,6 +99,22 @@ export const cacheKeys = {
     list: () => 'courses:list',
     prefix: 'courses:',
   },
+  cvShortlisted: {
+    list: (params: { page: number; limit: number; search: string }) =>
+      `cv_shortlisted:list:${params.page}:${params.limit}:${params.search}`,
+    single: (id: number) => `cv_shortlisted:single:${id}`,
+    prefix: 'cv_shortlisted:',
+  },
+  shortlistedBySit: {
+    list: (params: { page: number; limit: number; search: string }) =>
+      `shortlisted_sit:list:${params.page}:${params.limit}:${params.search}`,
+    single: (id: number) => `shortlisted_sit:single:${id}`,
+    prefix: 'shortlisted_sit:',
+  },
+  consultancyReport: {
+    list: (params: string) => `consultancy_report:list:${params}`,
+    prefix: 'consultancy_report:',
+  },
   // Add more cache keys as needed
 };
 

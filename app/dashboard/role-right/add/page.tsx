@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 import { 
   FaShieldAlt, FaSave, FaTimes, FaChevronDown, FaChevronUp, 
   FaCheckSquare, FaSquare, FaMinusSquare, FaSearch, FaInfoCircle,
@@ -59,6 +61,7 @@ interface Stats {
 
 export default function AddRolePage() {
   const router = useRouter();
+  const { canCreate, loading: permLoading } = useResourcePermissions('role');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState<Set<string>>(new Set());
@@ -196,6 +199,9 @@ export default function AddRolePage() {
   };
 
   const filteredGroups = getFilteredGroups();
+
+  if (permLoading) return <PermissionLoading />;
+  if (!canCreate) return <AccessDenied message="You do not have permission to create roles." />;
 
   return (
     <div className="space-y-3">

@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Pencil, Trash2 } from 'lucide-react';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 interface CourseRow {
   Course_Id: number;
@@ -21,6 +23,7 @@ interface Pagination {
 
 export default function CourseMasterPage() {
   const router = useRouter();
+  const { canView, canCreate, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('course');
   const [rows, setRows] = useState<CourseRow[]>([]);
   const [pagination, setPagination] = useState<Pagination>({
     page: 1, limit: 25, total: 0, totalPages: 0,
@@ -129,6 +132,9 @@ const handleDelete = async () => {
     setDeleteId(null);
   }
 };
+if (permLoading) return <PermissionLoading />;
+if (!canView) return <AccessDenied message="You do not have permission to view courses." />;
+
 return (
   <div className="space-y-4">
 
@@ -168,12 +174,14 @@ return (
         </div>
 
         {/* Add Button */}
+        {canCreate && (
         <button
           onClick={handleAddCourse}
           className="bg-[#2E3093] hover:bg-[#23257A] text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-sm transition"
         >
           Add Course
         </button>
+        )}
       </div>
     </div>
 
@@ -267,6 +275,7 @@ return (
                   <td className="px-4 py-3">
                     <div className="flex justify-end items-center gap-2">
 
+                      {canUpdate && (
                       <button
                         title="Edit"
                         onClick={() => handleEditCourse(r.Course_Id)}
@@ -274,7 +283,9 @@ return (
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
+                      )}
 
+                      {canDelete && (
                       <button
                         title="Delete"
                         onClick={() => setDeleteId(r.Course_Id)}
@@ -282,6 +293,7 @@ return (
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
+                      )}
 
                     </div>
                   </td>

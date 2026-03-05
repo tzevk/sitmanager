@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 const labelCls = 'block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-0.5';
 const inputCls = 'max-w-[220px] w-full border-2 border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-gray-700 placeholder:text-gray-300';
@@ -10,6 +12,7 @@ export default function EditCollegePage() {
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
+  const { canUpdate, loading: permLoading } = useResourcePermissions('college');
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -125,6 +128,9 @@ export default function EditCollegePage() {
       </div>
     );
   }
+
+  if (permLoading) return <PermissionLoading />;
+  if (!canUpdate) return <AccessDenied message="You do not have permission to edit colleges." />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 p-4">

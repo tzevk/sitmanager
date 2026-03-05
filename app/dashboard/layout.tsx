@@ -6,17 +6,17 @@ import { PermissionProvider } from '@/lib/permissions-context';
 
 // ── Static data hoisted outside component to avoid re-creation ──────
 const MENU_ITEMS = [
+  'Dashboard',
   'General Master',
   'Masters',
   'Admission Activity',
   'Daily Activities',
-  'Report',
-  'Library Management',
-  'Role Right',
-  'Employee Training',
-  'Account Master',
-  'Utility',
+  'Admin/Accounts',
+  'Corporate Training',
   'Placement',
+  'Reports',
+  'Role Right',
+  'Utility',
 ] as const;
 
 const SUB_MENU_ROUTES: Record<string, string> = {
@@ -30,17 +30,33 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Masters > Employee': '/dashboard/masters/employee',
   'Masters > Library Book': '/dashboard/masters/library-book',
   'Masters > Faculty': '/dashboard/masters/faculty',
-  'Account Master > Employee Profession Tax': '/dashboard/account-master/employee-profession-tax',
-  'Account Master > Account Head': '/dashboard/account-master/account-head',
-  'Account Master > Assets': '/dashboard/account-master/assets',
-  'Account Master > Asset Category': '/dashboard/account-master/asset-category',
+  'Admin/Accounts > Employee Profession Tax': '/dashboard/account-master/employee-profession-tax',
+  'Admin/Accounts > Account Head': '/dashboard/account-master/account-head',
+  'Admin/Accounts > Assets': '/dashboard/account-master/assets',
+  'Admin/Accounts > Asset Category': '/dashboard/account-master/asset-category',
   'Admission Activity > Inquiry': '/dashboard/inquiry',
   'Admission Activity > Online Admission': '/dashboard/online-admission',
   'Admission Activity > Student': '/dashboard/student',
   'Admission Activity > Corporate Inquiry': '/dashboard/corporate-inquiry',
-  'Report > Inquiry': '/dashboard/inquiry',
+  'Reports > Inquiry': '/dashboard/reports/inquiry',
+  'Reports > Inquiry Report': '/dashboard/reports/inquiry',
+  'Reports > Online Students': '/dashboard/reports/online-student',
+  'Reports > Full Attendance Report': '/dashboard/reports/attendance',
   'Role Right > Roles & Permissions': '/dashboard/role-right',
+  'Role Right > Create User': '/dashboard/role-right?tab=create-user',
   'Daily Activities > Allot Roll Number': '/dashboard/daily-activities/allot-roll-number',
+  'Daily Activities > Lecture Taken': '/dashboard/daily-activities/lecture-taken',
+  'Daily Activities > Assignments Taken': '/dashboard/daily-activities/assignments-taken',
+  'Daily Activities > Unit Test Taken': '/dashboard/daily-activities/unit-test-taken',
+  'Daily Activities > Viva / MOC Taken': '/dashboard/daily-activities/viva-moc-taken',
+  'Daily Activities > Final Exam Taken': '/dashboard/daily-activities/final-exam-taken',
+  'Daily Activities > Site Visit': '/dashboard/daily-activities/site-visit',
+  'Daily Activities > Generate Final Result': '/dashboard/daily-activities/generate-final-result',
+  'Daily Activities > Faculty Working Hours': '/dashboard/daily-activities/faculty-working',
+  'Placement > Consultancy Master': '/dashboard/masters/consultancy',
+  'Placement > CV Shortlisted': '/dashboard/cv-shortlisted',
+  'Placement > Shortlisted By SIT': '/dashboard/shortlisted-by-sit',
+  'Placement > Consultancy Report': '/dashboard/reports/consultancy',
 };
 
 const SUB_MENUS: Record<string, string[]> = {
@@ -95,9 +111,9 @@ const SUB_MENUS: Record<string, string[]> = {
     'FeedBack2',
     'Site Visit',
   ],
-  'Report': [
+  'Reports': [
     'Inquiry',
-    'Online Studentss',
+    'Online Students',
     'Full Attendance Report',
     'Student Batch Wise',
     'Student Report',
@@ -123,7 +139,7 @@ const SUB_MENUS: Record<string, string[]> = {
     'Faculty Monthly Statement',
     'Inquiry Report',
   ],
-  'Account Master': [
+  'Admin/Accounts': [
     'Employee Profession Tax',
     'Account Head',
     'Assets',
@@ -141,6 +157,12 @@ const SUB_MENUS: Record<string, string[]> = {
     'Batch Moving',
     'Batch Transfer',
     'Batch Cancellation',
+    'Employee Training',
+  ],
+  'Corporate Training': [
+    'Corporate Clients',
+    'Corporate Batches',
+    'Corporate Reports',
   ],
   'Utility': [
     'Festival Photo Upload',
@@ -170,6 +192,7 @@ const SUB_MENUS: Record<string, string[]> = {
   ],
   'Role Right': [
     'Roles & Permissions',
+    'Create User',
   ],
 };
 
@@ -179,7 +202,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [activeMenu, setActiveMenu] = useState('General Master');
+  const [activeMenu, setActiveMenu] = useState('Dashboard');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   const handleSignOut = useCallback(async () => {
@@ -245,7 +268,10 @@ export default function DashboardLayout({
                 <button
                   onClick={() => {
                     setActiveMenu(item);
-                    if (SUB_MENUS[item]) {
+                    if (item === 'Dashboard') {
+                      setOpenDropdown(null);
+                      router.push('/dashboard');
+                    } else if (SUB_MENUS[item]) {
                       setOpenDropdown(openDropdown === item ? null : item);
                     } else {
                       setOpenDropdown(null);

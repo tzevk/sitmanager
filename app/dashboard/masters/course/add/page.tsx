@@ -2,9 +2,12 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 export default function AddCoursePage() {
   const router = useRouter();
+  const { canCreate, loading: permLoading } = useResourcePermissions('course');
 
   /* form fields */
   const [courseName, setCourseName] = useState('');
@@ -68,6 +71,9 @@ export default function AddCoursePage() {
       <div className="px-3 py-2">{children}</div>
     </div>
   );
+
+  if (permLoading) return <PermissionLoading />;
+  if (!canCreate) return <AccessDenied message="You do not have permission to create courses." />;
 
   return (
     <div className="space-y-3">

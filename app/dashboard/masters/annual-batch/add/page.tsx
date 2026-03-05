@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 interface Course {
   Course_Id: number;
@@ -18,6 +20,7 @@ interface BatchCategory {
 
 export default function AddAnnualBatchPage() {
   const router = useRouter();
+  const { canCreate, loading: permLoading } = useResourcePermissions('annual_batch');
 
   /* --- form state --- */
   const [courseId, setCourseId] = useState('');
@@ -166,6 +169,9 @@ export default function AddAnnualBatchPage() {
       <div className="px-3 py-2">{children}</div>
     </div>
   );
+
+  if (permLoading) return <PermissionLoading />;
+  if (!canCreate) return <AccessDenied message="You do not have permission to create annual batches." />;
 
   return (
     <div className="space-y-3">

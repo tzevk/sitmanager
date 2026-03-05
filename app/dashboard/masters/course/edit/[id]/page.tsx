@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -53,6 +55,7 @@ export default function EditCoursePage() {
   const router = useRouter();
   const params = useParams();
   const courseId = params.id as string;
+  const { canUpdate, loading: permLoading } = useResourcePermissions('course');
 
   /* ---------------- FORM STATE ---------------- */
   const [courseIdVal, setCourseIdVal] = useState(0);
@@ -166,6 +169,9 @@ const editor = useEditor({
       </div>
     );
   }
+
+  if (permLoading) return <PermissionLoading />;
+  if (!canUpdate) return <AccessDenied message="You do not have permission to edit courses." />;
 
   return (
     <div className="space-y-3">

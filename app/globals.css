@@ -108,6 +108,41 @@ body {
     @apply bg-[#2E3093] text-white border-[#2E3093];
   }
 
+  /* ===== REPORT PRINT STYLES ===== */
+  .report-header-inner {
+    @apply flex items-center gap-4 mb-2;
+  }
+  .report-logo-wrap {
+    @apply flex-shrink-0;
+  }
+  .report-logo {
+    @apply w-16 h-16 object-contain;
+  }
+  .report-title-block {
+    @apply flex-1;
+  }
+  .report-title {
+    @apply text-lg font-bold text-[#2E3093] leading-tight;
+  }
+  .report-subtitle {
+    @apply text-sm font-semibold text-[#2A6BB5] mt-0.5;
+  }
+  .report-period {
+    @apply text-[10px] text-gray-600 mt-1;
+  }
+  .report-meta {
+    @apply text-[9px] text-gray-400 mt-0.5;
+  }
+  .report-header-line {
+    @apply h-[3px] bg-gradient-to-r from-[#2E3093] via-[#2A6BB5] to-[#FAE452] rounded-full mb-4;
+  }
+  .report-footer-line {
+    @apply h-[2px] bg-gradient-to-r from-[#2E3093] via-[#2A6BB5] to-[#FAE452] rounded-full mt-6 mb-2;
+  }
+  .report-footer-inner {
+    @apply flex justify-between text-[8px] text-gray-400;
+  }
+
   /* ===== DASHBOARD TABLE — grid lines ===== */
   .dashboard-table {
     @apply border-collapse border border-gray-200;
@@ -118,4 +153,89 @@ body {
     @apply border border-gray-200;
   }
 
+}
+
+/* ===== PRINT STYLES ===== */
+@media print {
+  /* Hide everything except the report */
+  body {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  header, nav, .form-card:has(h2.section-title:first-child) {
+    display: none !important;
+  }
+
+  /* Hide filter card & summary card on print, keep only the printable report */
+  .space-y-5 > *:not(#inquiry-report-print):not(.report-print-area) {
+    display: none !important;
+  }
+
+  /* Make the report fill the page */
+  .report-print-area {
+    display: block !important;
+    position: static !important;
+  }
+
+  .report-print-area .hidden.print\:block {
+    display: block !important;
+  }
+
+  /* Remove card shadows for print */
+  .form-card {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    border: none !important;
+  }
+
+  /* Ensure table borders print */
+  table {
+    border-collapse: collapse !important;
+  }
+
+  table th {
+    background-color: #2A6BB5 !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  table td, table th {
+    border: 1px solid #d1d5db !important;
+    padding: 4px 8px !important;
+    font-size: 8pt !important;
+  }
+
+  /* Color-code status badges in print */
+  table td span[class*="rounded-full"] {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Report header gradient line */
+  .report-header-line,
+  .report-footer-line {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Page setup */
+  @page {
+    size: landscape;
+    margin: 12mm 10mm;
+  }
+
+  /* Keep rows together */
+  tr {
+    page-break-inside: avoid;
+  }
+
+  /* Footer on every page */
+  .report-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
 }

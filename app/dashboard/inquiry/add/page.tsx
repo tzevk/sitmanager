@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -69,6 +71,8 @@ export default function AddInquiryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get('editId') ? parseInt(searchParams.get('editId')!) : null;
+
+  const { canCreate, canUpdate, loading: permLoading } = useResourcePermissions('inquiry');
 
   /* tab state */
   const [activeTab, setActiveTab] = useState<'personal' | 'discussion'>('personal');
@@ -245,6 +249,10 @@ export default function AddInquiryPage() {
     }
     setDiscussionLoading(false);
   };
+
+  if (permLoading) return <PermissionLoading />;
+  if (editId && !canUpdate) return <AccessDenied message="You do not have permission to edit inquiries." />;
+  if (!editId && !canCreate) return <AccessDenied message="You do not have permission to create inquiries." />;
 
   return (
     <div className="space-y-3">
@@ -621,6 +629,13 @@ export default function AddInquiryPage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => {
+                      if (editId) {
+                        router.push(`/dashboard/admission-form/${editId}`);
+                      } else {
+                        alert('Please save the inquiry first before sending admission form');
+                      }
+                    }}
                     className="flex items-center justify-center gap-2 bg-[#2A6BB5] hover:bg-[#2360A0] text-white px-4 py-1.5 rounded text-xs font-semibold transition-all shadow-md hover:shadow-lg"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

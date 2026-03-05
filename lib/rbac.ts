@@ -487,6 +487,11 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/dashboard/masters/faculty/add': ['faculty.create'],
   '/dashboard/masters/faculty/edit': ['faculty.update'],
 
+  // Consultancy
+  '/dashboard/masters/consultancy': ['consultancy.view'],
+  '/dashboard/masters/consultancy/add': ['consultancy.create'],
+  '/dashboard/masters/consultancy/edit': ['consultancy.update'],
+
   // Admission Activity
   '/dashboard/inquiry': ['inquiry.view'],
   '/dashboard/inquiry/add': ['inquiry.create'],
@@ -534,6 +539,15 @@ export const API_PERMISSIONS: Record<string, Record<string, string[]>> = {
     GET: ['corporate_inquiry.view'],
     PUT: ['corporate_inquiry.update'],
     DELETE: ['corporate_inquiry.delete'],
+  },
+  '/api/masters/consultancy': {
+    GET: ['consultancy.view'],
+    POST: ['consultancy.create'],
+    PUT: ['consultancy.update'],
+    DELETE: ['consultancy.delete'],
+  },
+  '/api/masters/consultancy/:id': {
+    GET: ['consultancy.view'],
   },
   '/api/roles': {
     GET: ['role.view'],

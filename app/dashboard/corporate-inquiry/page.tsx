@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { FaPlus, FaFilter, FaFileExport, FaEdit, FaTrashAlt, FaSearch, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 interface CorporateInquiry {
   Id: number;
@@ -37,6 +39,7 @@ interface Pagination {
 
 export default function CorporateInquiryPage() {
   const router = useRouter();
+  const { canView, canCreate, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('corporate_inquiry');
   const [inquiries, setInquiries] = useState<CorporateInquiry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -138,6 +141,7 @@ export default function CorporateInquiryPage() {
 
   return (
     <div className="space-y-3">
+      {permLoading ? <PermissionLoading /> : !canView ? <AccessDenied message="You do not have permission to view corporate inquiries." /> : (<>
       {/* Header Container */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
         <div className="flex flex-col gap-4">
@@ -150,12 +154,14 @@ export default function CorporateInquiryPage() {
               </p>
             </div>
             {/* Add Button */}
+            {canCreate && (
             <button
               onClick={() => router.push('/dashboard/corporate-inquiry/add')}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#2A6BB5] hover:bg-[#2360A0] text-white font-semibold text-sm shadow-sm transition-colors"
             >
               <FaPlus className="w-4 h-4" /> Add
             </button>
+            )}
           </div>
 
           {/* Controls Row */}
@@ -254,6 +260,7 @@ export default function CorporateInquiryPage() {
                     <td className="py-3 px-4 text-gray-600">{inq.Mobile || inq.Phone || '-'}</td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1">
+                        {canUpdate && (
                         <button
                           onClick={() => router.push(`/dashboard/corporate-inquiry/edit/${inq.Id}`)}
                           className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-[#2A6BB5] transition-colors"
@@ -261,6 +268,8 @@ export default function CorporateInquiryPage() {
                         >
                           <FaEdit className="w-4 h-4" />
                         </button>
+                        )}
+                        {canDelete && (
                         <button
                           onClick={() => handleDelete(inq.Id)}
                           disabled={deleting === inq.Id}
@@ -269,6 +278,7 @@ export default function CorporateInquiryPage() {
                         >
                           <FaTrashAlt className="w-4 h-4" />
                         </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -305,6 +315,7 @@ export default function CorporateInquiryPage() {
           </button>
         </div>
       </div>
+      </>)}
     </div>
   );
 }

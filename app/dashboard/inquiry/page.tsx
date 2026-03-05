@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 // Safe date formatter that avoids hydration mismatches
 function formatDate(dateStr: string | null): string {
@@ -49,6 +51,7 @@ interface Filters {
 
 export default function InquiryPage() {
   const router = useRouter();
+  const { canView, canCreate, canUpdate, loading: permLoading } = useResourcePermissions('inquiry');
   const [rows, setRows] = useState<InquiryRow[]>([]);
   const [pagination, setPagination] = useState<Pagination>({
     page: 1, limit: 25, total: 0, totalPages: 0,
@@ -137,6 +140,7 @@ export default function InquiryPage() {
 
   return (
     <div className="space-y-3">
+      {permLoading ? <PermissionLoading /> : !canView ? <AccessDenied message="You do not have permission to view inquiries." /> : (<>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -145,6 +149,7 @@ export default function InquiryPage() {
             {pagination.total.toLocaleString()} total inquiries
           </p>
         </div>
+        {canCreate && (
         <button
           onClick={handleAdd}
           className="flex items-center gap-2 bg-[#2E3093] hover:bg-[#252780] text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
@@ -154,6 +159,7 @@ export default function InquiryPage() {
           </svg>
           Add Inquiry
         </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -359,7 +365,8 @@ export default function InquiryPage() {
                         <button
                           title="Edit"
                           onClick={() => handleEdit(r.Student_Id)}
-                          className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition-colors"
+                          className={`p-1.5 rounded-lg hover:bg-amber-50 transition-colors ${canUpdate ? 'text-gray-400 hover:text-amber-600' : 'text-gray-200 cursor-not-allowed'}`}
+                          disabled={!canUpdate}
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -461,7 +468,7 @@ export default function InquiryPage() {
           </div>
         )}
       </div>
-
+      </>)}
     </div>
   );
 }

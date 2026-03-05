@@ -1,0 +1,1107 @@
+Script started on Fri Feb 20 16:07:13 2026
+pyenv: shell integration not enabled. Run `pyenv init' for instructions.
+[1m[7m%[27m[1m[0m                                                                                             [0m[27m[24m[Jtanvikadam@Tanvis-MacBook-Pro sitmanager % [K[?2004h[?2004l
+[1m[7m%[27m[1m[0m                                                                                             [0m[27m[24m[Jtanvikadam@Tanvis-MacBook-Pro sitmanager % [K[?2004h  node tmp-db-research.cjs 2>&1[?2004l
+=== 1. Tables matching %unit% ===
+[
+  {
+    "Tables_in_sit (%unit%)": "awt_unittesttaken"
+  }
+]
+
+=== 2. Tables matching %test% ===
+[
+  {
+    "Tables_in_sit (%test%)": "awt_unittesttaken"
+  },
+  {
+    "Tables_in_sit (%test%)": "test_taken_child"
+  },
+  {
+    "Tables_in_sit (%test%)": "test_taken_master"
+  },
+  {
+    "Tables_in_sit (%test%)": "testimonial_master"
+  }
+]
+
+=== 3. Tables matching %assign% ===
+[
+  {
+    "Tables_in_sit (%assign%)": "assignment_given_child"
+  },
+  {
+    "Tables_in_sit (%assign%)": "assignment_taken"
+  },
+  {
+    "Tables_in_sit (%assign%)": "assignmentstaken"
+  }
+]
+
+=== DESCRIBE awt_unittesttaken ===
+[
+  {
+    "Field": "id",
+    "Type": "int(11)",
+    "Null": "NO",
+    "Key": "PRI",
+    "Default": null,
+    "Extra": "auto_increment"
+  },
+  {
+    "Field": "batch_id",
+    "Type": "varchar(50)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "batchcode",
+    "Type": "varchar(255)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "utdate",
+    "Type": "varchar(255)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "subject",
+    "Type": "varchar(50)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "marks",
+    "Type": "varchar(50)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "duration",
+    "Type": "varchar(50)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "created_by",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "updated_by",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "created_date",
+    "Type": "datetime",
+    "Null": "NO",
+    "Key": "",
+    "Default": "current_timestamp()",
+    "Extra": ""
+  },
+  {
+    "Field": "updated_date",
+    "Type": "datetime",
+    "Null": "NO",
+    "Key": "",
+    "Default": "current_timestamp()",
+    "Extra": ""
+  },
+  {
+    "Field": "deleted",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": "0",
+    "Extra": ""
+  }
+]
+
+=== DESCRIBE test_taken_child ===
+[
+  {
+    "Field": "ID",
+    "Type": "int(11)",
+    "Null": "NO",
+    "Key": "PRI",
+    "Default": null,
+    "Extra": "auto_increment"
+  },
+  {
+    "Field": "Take_Id",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Test_Id",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Student_Id",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Student_Name",
+    "Type": "varchar(100)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Marks_Given",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Marks_from",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Status",
+    "Type": "varchar(25)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "IsActive",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": "1",
+    "Extra": ""
+  },
+  {
+    "Field": "IsDelete",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": "0",
+    "Extra": ""
+  }
+]
+
+=== DESCRIBE test_taken_master ===
+[
+  {
+    "Field": "Take_Id",
+    "Type": "int(11)",
+    "Null": "NO",
+    "Key": "PRI",
+    "Default": null,
+    "Extra": "auto_increment"
+  },
+  {
+    "Field": "Course_Id",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Batch_Id",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Test_Id",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Test_No",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Marks",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Test_Dt",
+    "Type": "varchar(15)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "IsActive",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": "1",
+    "Extra": ""
+  },
+  {
+    "Field": "IsDelete",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": "0",
+    "Extra": ""
+  }
+]
+
+=== DESCRIBE testimonial_master ===
+[
+  {
+    "Field": "Id",
+    "Type": "int(11)",
+    "Null": "NO",
+    "Key": "PRI",
+    "Default": null,
+    "Extra": "auto_increment"
+  },
+  {
+    "Field": "Student_Id",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "IsActive",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": "1",
+    "Extra": ""
+  },
+  {
+    "Field": "IsDelete",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": "0",
+    "Extra": ""
+  },
+  {
+    "Field": "Description",
+    "Type": "text",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Course_Id",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Batch_Id",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "StudName",
+    "Type": "text",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "date_added",
+    "Type": "datetime",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  }
+]
+
+=== DESCRIBE assignment_given_child ===
+[
+  {
+    "Field": "ID",
+    "Type": "int(11)",
+    "Null": "NO",
+    "Key": "PRI",
+    "Default": null,
+    "Extra": "auto_increment"
+  },
+  {
+    "Field": "Given_Id",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Student_Id",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Student_Name",
+    "Type": "varchar(150)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Actual_Dt",
+    "Type": "varchar(25)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Marks_Given",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Status",
+    "Type": "varchar(50)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "IsActive",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "IsDelete",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": "0",
+    "Extra": ""
+  }
+]
+
+=== DESCRIBE assignment_taken ===
+[
+  {
+    "Field": "Given_Id",
+    "Type": "int(11)",
+    "Null": "NO",
+    "Key": "PRI",
+    "Default": null,
+    "Extra": "auto_increment"
+  },
+  {
+    "Field": "Course_Id",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Batch_Id",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Marks",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Assignment_Id",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Assign_No",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Faculty_Id",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Assign_Dt",
+    "Type": "varchar(15)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "Return_Dt",
+    "Type": "varchar(15)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "IsActive",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "IsDelete",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": "0",
+    "Extra": ""
+  }
+]
+
+=== DESCRIBE assignmentstaken ===
+[
+  {
+    "Field": "id",
+    "Type": "int(11)",
+    "Null": "NO",
+    "Key": "PRI",
+    "Default": null,
+    "Extra": "auto_increment"
+  },
+  {
+    "Field": "batch_id",
+    "Type": "varchar(255)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "assignmentname",
+    "Type": "varchar(255)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "subjects",
+    "Type": "varchar(500)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "marks",
+    "Type": "varchar(50)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "assignmentdate",
+    "Type": "varchar(50)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "created_by",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "updated_by",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "created_date",
+    "Type": "datetime",
+    "Null": "NO",
+    "Key": "",
+    "Default": "current_timestamp()",
+    "Extra": ""
+  },
+  {
+    "Field": "updated_date",
+    "Type": "datetime",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "deleted",
+    "Type": "int(11)",
+    "Null": "NO",
+    "Key": "",
+    "Default": "0",
+    "Extra": ""
+  }
+]
+
+=== 7. Tables matching %unittest% ===
+[
+  {
+    "Tables_in_sit (%unittest%)": "awt_unittesttaken"
+  }
+]
+
+=== DESCRIBE awt_unittesttaken ===
+[
+  {
+    "Field": "id",
+    "Type": "int(11)",
+    "Null": "NO",
+    "Key": "PRI",
+    "Default": null,
+    "Extra": "auto_increment"
+  },
+  {
+    "Field": "batch_id",
+    "Type": "varchar(50)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "batchcode",
+    "Type": "varchar(255)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "utdate",
+    "Type": "varchar(255)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "subject",
+    "Type": "varchar(50)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "marks",
+    "Type": "varchar(50)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "duration",
+    "Type": "varchar(50)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "created_by",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "updated_by",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": null,
+    "Extra": ""
+  },
+  {
+    "Field": "created_date",
+    "Type": "datetime",
+    "Null": "NO",
+    "Key": "",
+    "Default": "current_timestamp()",
+    "Extra": ""
+  },
+  {
+    "Field": "updated_date",
+    "Type": "datetime",
+    "Null": "NO",
+    "Key": "",
+    "Default": "current_timestamp()",
+    "Extra": ""
+  },
+  {
+    "Field": "deleted",
+    "Type": "int(11)",
+    "Null": "YES",
+    "Key": "",
+    "Default": "0",
+    "Extra": ""
+  }
+]
+
+=== Sample from awt_unittesttaken ===
+[
+  {
+    "id": 14,
+    "batch_id": "71",
+    "batchcode": null,
+    "utdate": "2007-05-07",
+    "subject": "Engineering",
+    "marks": "150",
+    "duration": "1.3",
+    "created_by": null,
+    "updated_by": null,
+    "created_date": "2025-02-18T06:43:55.000Z",
+    "updated_date": "2025-02-18T06:43:55.000Z",
+    "deleted": 0
+  },
+  {
+    "id": 15,
+    "batch_id": "70",
+    "batchcode": null,
+    "utdate": "2007-02-20",
+    "subject": "Piping-1",
+    "marks": "100",
+    "duration": "1.5",
+    "created_by": null,
+    "updated_by": null,
+    "created_date": "2025-02-18T06:43:55.000Z",
+    "updated_date": "2025-02-18T06:43:55.000Z",
+    "deleted": 0
+  },
+  {
+    "id": 16,
+    "batch_id": "70",
+    "batchcode": null,
+    "utdate": "2007-02-26",
+    "subject": "Piping-2",
+    "marks": "50",
+    "duration": "30",
+    "created_by": null,
+    "updated_by": null,
+    "created_date": "2025-02-18T06:43:55.000Z",
+    "updated_date": "2025-02-18T06:43:55.000Z",
+    "deleted": 0
+  },
+  {
+    "id": 17,
+    "batch_id": "70",
+    "batchcode": null,
+    "utdate": "2007-03-22",
+    "subject": "Piping-3",
+    "marks": "50",
+    "duration": "30",
+    "created_by": null,
+    "updated_by": null,
+    "created_date": "2025-02-18T06:43:55.000Z",
+    "updated_date": "2025-02-18T06:43:55.000Z",
+    "deleted": 0
+  },
+  {
+    "id": 18,
+    "batch_id": "70",
+    "batchcode": null,
+    "utdate": "2007-04-04",
+    "subject": "Piping-4",
+    "marks": "50",
+    "duration": "30",
+    "created_by": null,
+    "updated_by": null,
+    "created_date": "2025-02-18T06:43:55.000Z",
+    "updated_date": "2025-02-18T06:43:55.000Z",
+    "deleted": 0
+  }
+]
+[1m[7m%[27m[1m[0m                                                                                             [0m[27m[24m[Jtanvikadam@Tanvis-MacBook-Pro sitmanager % [K[?2004h[?2004l
+[1m[7m%[27m[1m[0m                                                                                             [0m[27m[24m[Jtanvikadam@Tanvis-MacBook-Pro sitmanager % [K[?2004h  node tmp-db-research2.cjs 2>&1[?2004l
+=== test_taken_master sample (5 rows) with JOINs ===
+[
+  {
+    "Take_Id": 3634,
+    "Course_Id": 12,
+    "Batch_Id": 921,
+    "Test_Id": 3808,
+    "Test_No": 6,
+    "Marks": 50,
+    "Test_Dt": "2026-01-25",
+    "IsActive": 1,
+    "IsDelete": 0,
+    "Course_Name": "Piping Design & Drafting",
+    "Batch_code": "12037",
+    "UT_Subject": "A-6",
+    "UT_Marks": "50",
+    "UT_Date": "2026-01-25",
+    "UT_Duration": "1.5 hr"
+  },
+  {
+    "Take_Id": 3633,
+    "Course_Id": 1,
+    "Batch_Id": 912,
+    "Test_Id": 3807,
+    "Test_No": 6,
+    "Marks": 50,
+    "Test_Dt": "2026-01-25",
+    "IsActive": 1,
+    "IsDelete": 0,
+    "Course_Name": "Piping Engineering",
+    "Batch_code": "01162",
+    "UT_Subject": "A-6",
+    "UT_Marks": "50",
+    "UT_Date": "2026-01-25",
+    "UT_Duration": "1.5 hr"
+  },
+  {
+    "Take_Id": 3632,
+    "Course_Id": 1,
+    "Batch_Id": 914,
+    "Test_Id": 3823,
+    "Test_No": 2,
+    "Marks": 50,
+    "Test_Dt": "2026-02-02",
+    "IsActive": 1,
+    "IsDelete": 0,
+    "Course_Name": "Piping Engineering",
+    "Batch_code": "01164",
+    "UT_Subject": "A-2",
+    "UT_Marks": "50",
+    "UT_Date": "2026-02-02",
+    "UT_Duration": "1.5 hr"
+  },
+  {
+    "Take_Id": 3631,
+    "Course_Id": 3,
+    "Batch_Id": 922,
+    "Test_Id": 3796,
+    "Test_No": 3,
+    "Marks": 25,
+    "Test_Dt": "2025-12-07",
+    "IsActive": 1,
+    "IsDelete": 0,
+    "Course_Name": "Process Engineering",
+    "Batch_code": "03087",
+    "UT_Subject": "A-3",
+    "UT_Marks": "25",
+    "UT_Date": "2025-12-07",
+    "UT_Duration": "1.5 hr"
+  },
+  {
+    "Take_Id": 3630,
+    "Course_Id": 3,
+    "Batch_Id": 922,
+    "Test_Id": 3795,
+    "Test_No": 2,
+    "Marks": 25,
+    "Test_Dt": "2025-11-09",
+    "IsActive": 1,
+    "IsDelete": 0,
+    "Course_Name": "Process Engineering",
+    "Batch_code": "03087",
+    "UT_Subject": "A-2",
+    "UT_Marks": "25",
+    "UT_Date": "2025-11-09",
+    "UT_Duration": "1.5 hr"
+  }
+]
+
+=== test_taken_master active count ===
+[
+  {
+    "total": 3037
+  }
+]
+
+=== test_taken_master total count ===
+[
+  {
+    "total": 3349
+  }
+]
+
+=== test_taken_child sample (5 rows) ===
+[
+  {
+    "ID": 157448,
+    "Take_Id": 3634,
+    "Test_Id": null,
+    "Student_Id": 173757,
+    "Student_Name": "Shraddha Jadhav",
+    "Marks_Given": 0,
+    "Marks_from": null,
+    "Status": "Present",
+    "IsActive": 1,
+    "IsDelete": 0
+  },
+  {
+    "ID": 157447,
+    "Take_Id": 3634,
+    "Test_Id": null,
+    "Student_Id": 176065,
+    "Student_Name": "muzammil ahmed vakil ahmed shaikh",
+    "Marks_Given": 16,
+    "Marks_from": null,
+    "Status": "Present",
+    "IsActive": 1,
+    "IsDelete": 0
+  },
+  {
+    "ID": 157446,
+    "Take_Id": 3634,
+    "Test_Id": null,
+    "Student_Id": 176037,
+    "Student_Name": "Tahir Sameer Shaikh",
+    "Marks_Given": 9,
+    "Marks_from": null,
+    "Status": "Present",
+    "IsActive": 1,
+    "IsDelete": 0
+  },
+  {
+    "ID": 157445,
+    "Take_Id": 3634,
+    "Test_Id": null,
+    "Student_Id": 176026,
+    "Student_Name": "Rohit Thakare",
+    "Marks_Given": 18,
+    "Marks_from": null,
+    "Status": "Present",
+    "IsActive": 1,
+    "IsDelete": 0
+  },
+  {
+    "ID": 157444,
+    "Take_Id": 3634,
+    "Test_Id": null,
+    "Student_Id": 176015,
+    "Student_Name": "Vishal Yadav",
+    "Marks_Given": 0,
+    "Marks_from": null,
+    "Status": "Present",
+    "IsActive": 1,
+    "IsDelete": 0
+  }
+]
+
+=== test_taken_child count ===
+[
+  {
+    "total": 79962
+  }
+]
+
+=== awt_unittesttaken active count ===
+[
+  {
+    "total": 3341
+  }
+]
+
+=== Check if test_taken_master has Faculty_Id ===
+Columns: [
+  [32m'Take_Id'[39m,  [32m'Course_Id'[39m,
+  [32m'Batch_Id'[39m, [32m'Test_Id'[39m,
+  [32m'Test_No'[39m,  [32m'Marks'[39m,
+  [32m'Test_Dt'[39m,  [32m'IsActive'[39m,
+  [32m'IsDelete'[39m
+]
+Has Faculty_Id: [33mfalse[39m
+
+=== awt_unittesttaken with batch join (5 rows) ===
+[
+  {
+    "id": 3823,
+    "batch_id": "914",
+    "batchcode": null,
+    "utdate": "2026-02-02",
+    "subject": "A-2",
+    "marks": "50",
+    "duration": "1.5 hr",
+    "created_by": null,
+    "updated_by": null,
+    "created_date": "2026-02-09T07:10:49.000Z",
+    "updated_date": "2026-02-09T07:10:49.000Z",
+    "deleted": 0,
+    "Batch_code": "01164",
+    "Course_Id": 1,
+    "Course_Name": "Piping Engineering"
+  },
+  {
+    "id": 3822,
+    "batch_id": "944",
+    "batchcode": null,
+    "utdate": "2025-12-21",
+    "subject": "A-4",
+    "marks": "25",
+    "duration": "1 Hr",
+    "created_by": null,
+    "updated_by": null,
+    "created_date": "2026-02-08T05:22:17.000Z",
+    "updated_date": "2026-02-08T05:22:17.000Z",
+    "deleted": 0,
+    "Batch_code": "23014",
+    "Course_Id": 23,
+    "Course_Name": "Rotating Equipment"
+  },
+  {
+    "id": 3821,
+    "batch_id": "925",
+    "batchcode": null,
+    "utdate": "2026-02-01",
+    "subject": "A-4",
+    "marks": "25",
+    "duration": "1 Hr",
+    "created_by": null,
+    "updated_by": null,
+    "created_date": "2026-02-08T02:55:09.000Z",
+    "updated_date": "2026-02-08T02:55:09.000Z",
+    "deleted": 0,
+    "Batch_code": "08065",
+    "Course_Id": 8,
+    "Course_Name": "Structural Engineering"
+  },
+  {
+    "id": 3820,
+    "batch_id": "923",
+    "batchcode": null,
+    "utdate": "2026-01-25",
+    "subject": "A-3",
+    "marks": "25",
+    "duration": "1 Hr",
+    "created_by": null,
+    "updated_by": null,
+    "created_date": "2026-02-07T09:17:47.000Z",
+    "updated_date": "2026-02-07T09:17:47.000Z",
+    "deleted": 0,
+    "Batch_code": "03088",
+    "Course_Id": 3,
+    "Course_Name": "Process Engineering"
+  },
+  {
+    "id": 3819,
+    "batch_id": "923",
+    "batchcode": null,
+    "utdate": "2026-01-04",
+    "subject": "A-2",
+    "marks": "25",
+    "duration": "1 Hr",
+    "created_by": null,
+    "updated_by": null,
+    "created_date": "2026-02-07T09:17:19.000Z",
+    "updated_date": "2026-02-07T09:17:19.000Z",
+    "deleted": 0,
+    "Batch_code": "03088",
+    "Course_Id": 3,
+    "Course_Name": "Process Engineering"
+  }
+]
+
+=== awt_unittesttaken total ===
+[
+  {
+    "total": 3597
+  }
+]
+[1m[7m%[27m[1m[0m                                                                                             [0m[27m[24m[Jtanvikadam@Tanvis-MacBook-Pro sitmanager % [K[?2004h[?2004l
+[1m[7m%[27m[1m[0m                                                                                             [0m[27m[24m[Jtanvikadam@Tanvis-MacBook-Pro sitmanager % [K[?2004h  rm /Users/tanvikadam/Desktop/SIT/sitmanager/tmp-d [Kbb-research.cjs /Users/tanvikadam/Desktop/SIT/sitmanager/tmp-db-research2.cjs[?2004l
+[1m[7m%[27m[1m[0m                                                                                             [0m[27m[24m[Jtanvikadam@Tanvis-MacBook-Pro sitmanager % [K[?2004h

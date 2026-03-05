@@ -83,3 +83,94 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export async function POST(req: NextRequest) {
+  try {
+    const auth = await requirePermission(req, 'batch.create');
+    if (auth instanceof NextResponse) return auth;
+    const pool = getPool();
+    const body = await req.json();
+
+    const {
+      Course_Id, Batch_code, Category, Timings, SDate, EDate,
+      Admission_Date, Duration, Training_Coordinator,
+      Min_Qualification, Documents_Required, Passing_Criteria,
+      Max_Students, Course_description, CourseName, Comments,
+      NoStudent,
+      INR_Basic, INR_ServiceTax, INR_Total,
+      Dollar_Basic, Dollar_ServiceTax, Dollar_Total,
+      Actual_Fees_Payment, Fees_Full_Payment, Fees_Installment_Payment,
+    } = body;
+
+    if (!Course_Id) {
+      return NextResponse.json({ error: 'Course Name is required' }, { status: 400 });
+    }
+    if (!Min_Qualification?.toString().trim()) {
+      return NextResponse.json({ error: 'Eligibility is required' }, { status: 400 });
+    }
+    if (!Max_Students?.toString().trim()) {
+      return NextResponse.json({ error: 'Target Student is required' }, { status: 400 });
+    }
+    if (!Documents_Required?.toString().trim()) {
+      return NextResponse.json({ error: 'Documents Required is required' }, { status: 400 });
+    }
+    if (!Passing_Criteria?.toString().trim()) {
+      return NextResponse.json({ error: 'Passing Criteria is required' }, { status: 400 });
+    }
+    if (!Course_description?.toString().trim()) {
+      return NextResponse.json({ error: 'Brief Description is required' }, { status: 400 });
+    }
+
+    const sql = `
+      INSERT INTO batch_mst (
+        Course_Id, Batch_code, Category, Timings, SDate, EDate,
+        Admission_Date, Duration, Training_Coordinator,
+        Min_Qualification, Documents_Required, Passing_Criteria,
+        Max_Students, Course_description, CourseName, Comments,
+        NoStudent,
+        INR_Basic, INR_ServiceTax, INR_Total,
+        Dollar_Basic, Dollar_ServiceTax, Dollar_Total,
+        Actual_Fees_Payment, Fees_Full_Payment, Fees_Installment_Payment,
+        IsActive, IsDelete
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)
+    `;
+    const [result] = await pool.query<any>(sql, [
+      Course_Id ? Number(Course_Id) : null,
+      Batch_code?.trim() || null,
+      Category?.trim() || null,
+      Timings?.trim() || null,
+      SDate || null,
+      EDate || null,
+      Admission_Date || null,
+      Duration?.trim() || null,
+      Training_Coordinator?.trim() || null,
+      Min_Qualification?.trim(),
+      Documents_Required?.trim(),
+      Passing_Criteria?.trim(),
+      Max_Students?.toString().trim() || null,
+      Course_description?.trim(),
+      CourseName?.trim() || null,
+      Comments?.trim() || null,
+      NoStudent ? Number(NoStudent) : null,
+      INR_Basic ? Number(INR_Basic) : null,
+      INR_ServiceTax ? Number(INR_ServiceTax) : null,
+      INR_Total ? Number(INR_Total) : null,
+      Dollar_Basic ? Number(Dollar_Basic) : null,
+      Dollar_ServiceTax ? Number(Dollar_ServiceTax) : null,
+      Dollar_Total ? Number(Dollar_Total) : null,
+      Actual_Fees_Payment ? Number(Actual_Fees_Payment) : null,
+      Fees_Full_Payment ? Number(Fees_Full_Payment) : null,
+      Fees_Installment_Payment ? Number(Fees_Installment_Payment) : null,
+    ]);
+
+    return NextResponse.json({
+      success: true,
+      Batch_Id: result.insertId,
+      message: 'Batch created successfully',
+    });
+  } catch (err: unknown) {
+    console.error('Batch POST error:', err);
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

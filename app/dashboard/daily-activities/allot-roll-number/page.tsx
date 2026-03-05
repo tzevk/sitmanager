@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -43,6 +45,7 @@ interface Pagination {
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
 export default function AllotRollNumberPage() {
+  const { canView, canUpdate, loading: permLoading } = useResourcePermissions('roll_number');
 
   /* ---- Dropdown data ---- */
   const [courses, setCourses] = useState<Course[]>([]);
@@ -221,6 +224,9 @@ export default function AllotRollNumberPage() {
   /* ================================================================ */
   /*  Render                                                          */
   /* ================================================================ */
+  if (permLoading) return <PermissionLoading />;
+  if (!canView) return <AccessDenied message="You do not have permission to view roll number allotment." />;
+
   return (
     <div className="space-y-6">
 
@@ -545,7 +551,7 @@ export default function AllotRollNumberPage() {
             </div>
 
             {/* Save */}
-            {rows.length > 0 && (
+            {rows.length > 0 && canUpdate && (
               <button
                 onClick={handleSave}
                 disabled={saving || !hasEdits}

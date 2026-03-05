@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -48,6 +49,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
 export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryFormProps) {
+  const router = useRouter();
+  
   /* tab state */
   const [activeTab, setActiveTab] = useState<'personal' | 'discussion'>('personal');
 
@@ -448,6 +451,13 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
                     </button>
                     <button
                       type="button"
+                      onClick={() => {
+                        if (editId) {
+                          router.push(`/dashboard/admission-form/${editId}`);
+                        } else {
+                          alert('Please save the inquiry first before sending admission form');
+                        }
+                      }}
                       className="flex-1 flex items-center justify-center gap-2 bg-[#2A6BB5] hover:bg-[#2360A0] text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

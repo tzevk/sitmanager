@@ -3,6 +3,8 @@
 import React, { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 import { 
   FaShieldAlt, FaSave, FaTimes, FaChevronDown, FaChevronUp, 
   FaCheckSquare, FaSquare, FaMinusSquare, FaSearch, FaInfoCircle, FaLock,
@@ -72,6 +74,7 @@ export default function EditRolePage({ params }: PageProps) {
   const resolvedParams = use(params);
   const roleId = parseInt(resolvedParams.id, 10);
   const router = useRouter();
+  const { canUpdate, loading: permLoading } = useResourcePermissions('role');
   
   const [role, setRole] = useState<Role | null>(null);
   const [title, setTitle] = useState('');
@@ -232,6 +235,9 @@ export default function EditRolePage({ params }: PageProps) {
   };
 
   const filteredGroups = getFilteredGroups();
+
+  if (permLoading) return <PermissionLoading />;
+  if (!canUpdate) return <AccessDenied message="You do not have permission to edit roles." />;
 
   if (loading) {
     return (

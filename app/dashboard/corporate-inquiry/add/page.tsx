@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FaSave, FaTimes } from 'react-icons/fa';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 interface Course {
   Course_Id: number;
@@ -11,6 +13,7 @@ interface Course {
 
 export default function AddCorporateInquiryPage() {
   const router = useRouter();
+  const { canCreate, loading: permLoading } = useResourcePermissions('corporate_inquiry');
   const [loading, setLoading] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
   const [form, setForm] = useState({
@@ -72,6 +75,9 @@ export default function AddCorporateInquiryPage() {
   const inputClass =
     'max-w-[220px] w-full px-2 py-1.5 border-2 border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-xs';
   const labelClass = 'block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1';
+
+  if (permLoading) return <PermissionLoading />;
+  if (!canCreate) return <AccessDenied message="You do not have permission to add corporate inquiries." />;
 
   return (
     <div className="space-y-3">

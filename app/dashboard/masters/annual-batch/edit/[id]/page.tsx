@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 interface Course {
   Course_Id: number;
@@ -37,6 +39,7 @@ export default function EditAnnualBatchPage() {
   const router = useRouter();
   const params = useParams();
   const batchId = params.id as string;
+  const { canUpdate, loading: permLoading } = useResourcePermissions('annual_batch');
 
   /* Inquiry Information */
   const [firstName, setFirstName] = useState('');
@@ -214,6 +217,9 @@ export default function EditAnnualBatchPage() {
       </div>
     );
   }
+
+  if (permLoading) return <PermissionLoading />;
+  if (!canUpdate) return <AccessDenied message="You do not have permission to edit annual batches." />;
 
   return (
     <div className="space-y-3">

@@ -39,8 +39,10 @@ export default function RootLayout({
         {/* DNS prefetch for external resources */}
         <link rel="dns-prefetch" href="//fonts.googleapis.com" />
         <link rel="dns-prefetch" href="//fonts.gstatic.com" />
+        <link rel="dns-prefetch" href="//cdnjs.cloudflare.com" />
         <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-full`}

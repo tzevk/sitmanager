@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 interface Batch {
   id: number;
@@ -23,6 +25,7 @@ interface Pagination {
 
 export default function BatchPage() {
   const router = useRouter();
+  const { canView, canCreate, canUpdate, loading: permLoading } = useResourcePermissions('batch');
 
   /* ---- List state ---- */
   const [rows, setRows] = useState<Batch[]>([]);
@@ -123,6 +126,9 @@ export default function BatchPage() {
 
   const totalPages = pagination.totalPages;
 
+  if (permLoading) return <PermissionLoading />;
+  if (!canView) return <AccessDenied message="You do not have permission to view batches." />;
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -136,6 +142,7 @@ export default function BatchPage() {
           <h1 className="text-xl font-bold text-gray-800 tracking-tight">Batch</h1>
           <p className="text-xs text-gray-400">Manage batches</p>
         </div>
+        {canCreate && (
         <button
           onClick={() => router.push('/dashboard/masters/batch/add')}
           className="flex items-center gap-2 bg-[#2E3093] hover:bg-[#252780] text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-md"
@@ -145,6 +152,7 @@ export default function BatchPage() {
           </svg>
           Add +
         </button>
+        )}
       </div>
 
       {/* List Card */}
@@ -267,6 +275,7 @@ export default function BatchPage() {
                     <td className="py-2.5 px-4 text-gray-600 text-xs">{r.trainingCoordinator || '—'}</td>
                     <td className="py-2.5 px-4 text-center">
                       <div className="flex items-center justify-center gap-1">
+                        {canUpdate && (
                         <button
                           title="Edit"
                           onClick={() => router.push(`/dashboard/masters/batch/edit/${r.id}`)}
@@ -276,6 +285,7 @@ export default function BatchPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
                         </button>
+                        )}
                         <button
                           title="View"
                           onClick={() => router.push(`/dashboard/masters/batch/${r.id}`)}

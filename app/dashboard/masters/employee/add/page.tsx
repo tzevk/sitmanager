@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 const labelCls = 'block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-0.5';
 const inputCls = 'max-w-[220px] w-full border-2 border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-gray-700 placeholder:text-gray-300';
@@ -9,6 +11,7 @@ const selectCls = 'max-w-[220px] w-full border-2 border-gray-300 rounded px-2 py
 
 export default function AddEmployeePage() {
   const router = useRouter();
+  const { canCreate, loading: permLoading } = useResourcePermissions('employee');
   const [submitting, setSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -49,6 +52,9 @@ export default function AddEmployeePage() {
       setSubmitting(false);
     }
   };
+
+  if (permLoading) return <PermissionLoading />;
+  if (!canCreate) return <AccessDenied message="You do not have permission to create employees." />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 p-4">

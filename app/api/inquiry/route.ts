@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
         Course_Id, Batch_Category_id, Batch_Code,
         Qualification, Discipline, Percentage,
         IsDelete, Inquiry, created_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, NOW())
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'Inquiry', NOW())
     `;
 
     const params = [
@@ -72,6 +72,15 @@ export async function POST(req: NextRequest) {
 
     const [result] = await pool.query(sql, params);
     const insertId = (result as any).insertId;
+
+    // Also insert into awt_inquirydiscussion so it shows in the list's Discussion column
+    if (Discussion?.trim()) {
+      await pool.query(
+        `INSERT INTO awt_inquirydiscussion (Inquiry_id, date, discussion, deleted, created_by, created_date)
+         VALUES (?, CURDATE(), ?, 0, 1, NOW())`,
+        [insertId, Discussion.trim()]
+      );
+    }
 
     return NextResponse.json({ success: true, Student_Id: insertId });
   } catch (error: any) {
@@ -131,6 +140,7 @@ export async function GET(req: NextRequest) {
     // Build WHERE clauses for student_master filters
     const conditions: string[] = [
       '(sm.IsDelete = 0 OR sm.IsDelete IS NULL)',
+      "sm.Inquiry = 'Inquiry'",
     ];
     const params: any[] = [];
 
@@ -169,78 +179,112 @@ export async function GET(req: NextRequest) {
 
     const whereClause = conditions.length > 0 ? `WHERE (${conditions.join(') AND (')})` : '';
 
-    // ── Sequential queries to avoid exhausting MySQL connection pool ──
+    // ── Two-step temp table approach for fast activity-based sorting ──
 
-    // 1. Count
-    const countSql = `
-      SELECT COUNT(*) as total
-      FROM student_master sm
-      LEFT JOIN course_mst c ON sm.Course_Id = c.Course_Id
-      ${whereClause}
-    `;
-    const [countResult] = await pool.query(countSql, params);
+    // Step 1: Pre-aggregate latest discussion id per inquiry (single GROUP BY, ~300ms)
+    await pool.query(`DROP TEMPORARY TABLE IF EXISTS tmp_latest_disc`);
+    await pool.query(
+      `CREATE TEMPORARY TABLE tmp_latest_disc (
+         Inquiry_id INT PRIMARY KEY,
+         max_id INT,
+         INDEX(max_id)
+       ) ENGINE=MEMORY
+       SELECT CAST(Inquiry_id AS UNSIGNED) as Inquiry_id, MAX(id) as max_id
+       FROM awt_inquirydiscussion
+       WHERE deleted = 0 AND Inquiry_id IS NOT NULL AND Inquiry_id != ''
+       GROUP BY Inquiry_id`
+    );
+
+    // Step 2: Build sort-key table via LEFT JOIN (much faster than correlated subquery)
+    await pool.query(`DROP TEMPORARY TABLE IF EXISTS tmp_sort_keys`);
+    await pool.query(
+      `CREATE TEMPORARY TABLE tmp_sort_keys (
+         Student_Id INT PRIMARY KEY,
+         sort_key INT DEFAULT 0,
+         INDEX(sort_key)
+       ) ENGINE=MEMORY
+       SELECT sm.Student_Id, COALESCE(tld.max_id, 0) as sort_key
+       FROM student_master sm
+       LEFT JOIN tmp_latest_disc tld ON tld.Inquiry_id = sm.Student_Id
+       LEFT JOIN course_mst c ON sm.Course_Id = c.Course_Id
+       ${whereClause}`
+    , params);
+    await pool.query(`DROP TEMPORARY TABLE IF EXISTS tmp_latest_disc`);
+
+    // 2. Count (fast — just count the temp table)
+    const [countResult] = await pool.query(`SELECT COUNT(*) as total FROM tmp_sort_keys`);
     const total = (countResult as any[])[0]?.total || 0;
 
-    // 2. Paginated data — simple Student_Id DESC ordering (fast, uses PK index)
-    const dataSql = `
-      SELECT 
-        sm.Student_Id,
-        sm.Student_Name,
-        c.Course_Name as CourseName,
-        sm.Inquiry_Dt,
-        sm.Present_Mobile,
-        sm.Email,
-        sm.Discipline,
-        sm.Inquiry_Type,
-        sm.Status_id
-      FROM student_master sm
-      LEFT JOIN course_mst c ON sm.Course_Id = c.Course_Id
-      ${whereClause}
-      ORDER BY sm.Student_Id DESC
-      LIMIT ? OFFSET ?
-    `;
-    const [dataRows] = await pool.query(dataSql, [...params, limit, offset]);
-    const studentIds = (dataRows as any[]).map((r: any) => r.Student_Id);
+    // 3. Get sorted paginated Student_Ids (fast — indexed sort on MEMORY table)
+    const [sortedIds] = await pool.query(
+      `SELECT Student_Id, sort_key FROM tmp_sort_keys ORDER BY sort_key DESC, Student_Id DESC LIMIT ? OFFSET ?`,
+      [limit, offset]
+    );
+    const pageIds = (sortedIds as any[]).map((r: any) => r.Student_Id);
+    const sortOrder = new Map((sortedIds as any[]).map((r: any, i: number) => [r.Student_Id, i]));
 
-    // 3. Fetch latest discussions for just these student IDs (fast — only 25 IDs)
-    let discMap = new Map<string, { discussion: string; date: string; created_date: string }>();
-    if (studentIds.length > 0) {
-      const placeholders = studentIds.map(() => '?').join(',');
-      const [discRows] = await pool.query(
-        `SELECT d.Inquiry_id, d.discussion, d.date as disc_date, d.created_date
-         FROM awt_inquirydiscussion d
-         INNER JOIN (
-           SELECT Inquiry_id, MAX(id) as max_id
-           FROM awt_inquirydiscussion
-           WHERE deleted = 0 AND Inquiry_id IN (${placeholders})
-           GROUP BY Inquiry_id
-         ) latest ON d.id = latest.max_id`,
-        studentIds.map(String)
+    // Clean up temp table
+    await pool.query(`DROP TEMPORARY TABLE IF EXISTS tmp_sort_keys`);
+
+    // 4. Fetch full data + discussions for just these IDs (fast — only 25 IDs)
+    let dataRows: any[] = [];
+    if (pageIds.length > 0) {
+      const placeholders = pageIds.map(() => '?').join(',');
+      const [rows] = await pool.query(
+        `SELECT 
+          sm.Student_Id,
+          sm.Student_Name,
+          c.Course_Name as CourseName,
+          sm.Inquiry_Dt,
+          sm.Present_Mobile,
+          sm.Email,
+          sm.Discipline,
+          sm.Inquiry_Type,
+          sm.Status_id,
+          sm.Discussion as InlineDiscussion,
+          ld.discussion as LatestDiscussion,
+          ld.date as LatestDiscDate
+        FROM student_master sm
+        LEFT JOIN course_mst c ON sm.Course_Id = c.Course_Id
+        LEFT JOIN (
+          SELECT Inquiry_id, MAX(id) as max_id
+          FROM awt_inquirydiscussion
+          WHERE deleted = 0 AND Inquiry_id IN (${placeholders})
+          GROUP BY Inquiry_id
+        ) tld ON tld.Inquiry_id = sm.Student_Id
+        LEFT JOIN awt_inquirydiscussion ld ON ld.id = tld.max_id
+        WHERE sm.Student_Id IN (${placeholders})`,
+        [...pageIds, ...pageIds]
       );
-      discMap = new Map(
-        (discRows as any[]).map((d: any) => [
-          String(d.Inquiry_id),
-          { discussion: d.discussion, date: d.disc_date, created_date: d.created_date },
-        ])
+      // Re-sort by the original sort order
+      dataRows = (rows as any[]).sort((a: any, b: any) => 
+        (sortOrder.get(a.Student_Id) ?? 0) - (sortOrder.get(b.Student_Id) ?? 0)
       );
     }
 
-    // 4. Filter options (lightweight queries)
+    // 5. Filter options (lightweight queries)
     const [disciplinesResult] = await pool.query(
-      "SELECT DISTINCT Discipline FROM student_master WHERE Discipline IS NOT NULL AND Discipline != '' AND Discipline != 'NULL' AND Discipline != 'Select' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Discipline"
+      "SELECT DISTINCT Discipline FROM student_master WHERE Discipline IS NOT NULL AND Discipline != '' AND Discipline != 'NULL' AND Discipline != 'Select' AND (IsDelete = 0 OR IsDelete IS NULL) AND Inquiry = 'Inquiry' ORDER BY Discipline"
     );
     const [typesResult] = await pool.query(
-      "SELECT DISTINCT Inquiry_Type FROM student_master WHERE Inquiry_Type IS NOT NULL AND Inquiry_Type != '' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Inquiry_Type"
+      "SELECT DISTINCT Inquiry_Type FROM student_master WHERE Inquiry_Type IS NOT NULL AND Inquiry_Type != '' AND (IsDelete = 0 OR IsDelete IS NULL) AND Inquiry = 'Inquiry' ORDER BY Inquiry_Type"
     );
 
     // Build enriched rows
     const rows = (dataRows as any[]).map((r: any) => {
-      const disc = discMap.get(String(r.Student_Id));
+      const inlineDisc = r.InlineDiscussion && r.InlineDiscussion !== 'NULL' ? r.InlineDiscussion : null;
       return {
-        ...r,
+        Student_Id: r.Student_Id,
+        Student_Name: r.Student_Name,
+        CourseName: r.CourseName,
+        Inquiry_Dt: r.Inquiry_Dt,
+        Present_Mobile: r.Present_Mobile,
+        Email: r.Email,
         Discipline: r.Discipline && r.Discipline !== 'NULL' && r.Discipline !== 'Select' ? r.Discipline : null,
-        Discussion: disc?.discussion || null,
-        DiscussionDate: disc?.date || null,
+        Inquiry_Type: r.Inquiry_Type,
+        Status_id: r.Status_id,
+        Discussion: r.LatestDiscussion || inlineDisc || null,
+        DiscussionDate: r.LatestDiscDate || null,
       };
     });
 
@@ -355,6 +399,15 @@ export async function PUT(req: NextRequest) {
     ];
 
     await pool.query(sql, params);
+
+    // Also insert into awt_inquirydiscussion if Discussion was provided/changed
+    if (body.Discussion?.trim()) {
+      await pool.query(
+        `INSERT INTO awt_inquirydiscussion (Inquiry_id, date, discussion, deleted, created_by, created_date)
+         VALUES (?, CURDATE(), ?, 0, 1, NOW())`,
+        [Student_Id, body.Discussion.trim()]
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {

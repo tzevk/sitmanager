@@ -2,11 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 export default function EditBatchCategoryPage() {
   const router = useRouter();
   const params = useParams();
   const categoryId = params.id as string;
+  const { canUpdate, loading: permLoading } = useResourcePermissions('batch_category');
 
   /* Form state */
   const [batch, setBatch] = useState('');
@@ -100,6 +103,9 @@ export default function EditBatchCategoryPage() {
       </div>
     );
   }
+
+  if (permLoading) return <PermissionLoading />;
+  if (!canUpdate) return <AccessDenied message="You do not have permission to edit batch categories." />;
 
   return (
     <div className="space-y-3">
