@@ -202,15 +202,6 @@ export default function PublicAdmissionFormPage() {
     }
   }, [formData.workingFromYears, formData.workingFromMonths, formData.totalOccupationYears]);
 
-  // Auto-trigger consent modal for experienced candidates (10+ years)
-  useEffect(() => {
-    const totalYears = parseFloat(formData.totalOccupationYears) || 0;
-    if (formData.occupationalStatus === 'Employee' && totalYears >= 10 && !experiencedConsentAcknowledged && !showConsentModal) {
-      setConsentType('experienced');
-      setShowConsentModal(true);
-    }
-  }, [formData.totalOccupationYears, formData.occupationalStatus, experiencedConsentAcknowledged, showConsentModal]);
-
   const fetchCourses = async () => {
     setLoadingCourses(true);
     try {
