@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, useCallback } from 'react';
 import { PermissionProvider } from '@/lib/permissions-context';
+import Image from 'next/image';
 
 // ── Static data hoisted outside component to avoid re-creation ──────
 const MENU_ITEMS = [
@@ -57,6 +58,8 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Placement > CV Shortlisted': '/dashboard/cv-shortlisted',
   'Placement > Shortlisted By SIT': '/dashboard/shortlisted-by-sit',
   'Placement > Consultancy Report': '/dashboard/reports/consultancy',
+  'Placement > Job Postings': '/dashboard/placement',
+  'Placement > Email Company': '/dashboard/placement/email-company',
 };
 
 const SUB_MENUS: Record<string, string[]> = {
@@ -179,6 +182,8 @@ const SUB_MENUS: Record<string, string[]> = {
     'Email Master',
   ],
   'Placement': [
+    'Job Postings',
+    'Email Company',
     'Consultancy Master',
     'CV Shortlisted',
     'Latest CV Updated',
@@ -225,6 +230,7 @@ export default function DashboardLayout({
         {/* Top bar */}
         <header className="h-10 bg-[#2E3093] flex items-center justify-between px-4 shrink-0 z-40">
           <div className="flex items-center gap-2">
+            <Image src="/sit.png" alt="SIT Logo" width={28} height={28} className="h-7 w-auto object-contain" />
             <span className="text-base font-bold text-[#FAE452]">SIT</span>
             <span className="text-base font-bold text-white">Manager</span>
           </div>

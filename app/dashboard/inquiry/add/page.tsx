@@ -631,7 +631,7 @@ export default function AddInquiryPage() {
                     type="button"
                     onClick={() => {
                       if (editId) {
-                        router.push(`/dashboard/admission-form/${editId}`);
+                        window.open(`/admission/${editId}`, '_blank');
                       } else {
                         alert('Please save the inquiry first before sending admission form');
                       }

@@ -38,10 +38,16 @@ const PUBLIC_ROUTES = [
   '/api/auth/logout',
   '/api/auth/session',
   '/api/health',
+  '/api/student-portal/auth/login',
+  '/api/student-portal/auth/session',
+  '/api/student-portal/auth/logout',
+  '/api/trainer-portal/auth/login',
+  '/api/trainer-portal/auth/session',
+  '/api/trainer-portal/auth/logout',
 ];
 
 // Prefixes that are always public (static assets, etc.)
-const PUBLIC_PREFIXES = ['/_next', '/favicon', '/static'];
+const PUBLIC_PREFIXES = ['/_next', '/favicon', '/static', '/student-portal', '/company', '/api/public', '/api/student-portal', '/trainer-portal', '/api/trainer-portal'];
 
 // File extensions that should always be served publicly
 const PUBLIC_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp', '.css', '.js', '.woff', '.woff2', '.ttf'];

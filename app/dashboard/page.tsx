@@ -38,15 +38,19 @@ function Sparkline({ data, color = '#2E3093' }: { data: number[]; color?: string
 }
 
 // --- Stat Card ---
-function StatCard({ icon, label, value, color, bg }: { icon: React.ReactNode; label: string; value: number | string; color: string; bg: string }) {
+function StatCard({ icon, label, value, color, glow }: { icon: React.ReactNode; label: string; value: number | string; color: string; glow: string }) {
   return (
-    <div className={`${bg} rounded-2xl p-4 flex items-center gap-4 shadow-sm border border-white/60`}>
-      <div className={`w-11 h-11 rounded-xl ${color} flex items-center justify-center text-white shrink-0 shadow-md`}>
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <p className="text-2xl font-extrabold text-gray-800 leading-none">{typeof value === 'number' ? value.toLocaleString() : value}</p>
-        <p className="text-[11px] text-gray-500 mt-0.5 font-medium">{label}</p>
+    <div className="relative overflow-hidden rounded-3xl p-6 flex flex-col justify-center gap-3 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100/80 transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] hover:-translate-y-1 group">
+      {/* Background soft glow */ }
+      <div className={`absolute -right-6 -top-6 w-32 h-32 rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity duration-500 ${glow} pointer-events-none`}></div>
+      <div className="flex items-center gap-4 relative z-10">
+        <div className={`w-14 h-14 rounded-2xl ${color} flex items-center justify-center text-white shrink-0 shadow-lg`}>
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <p className="text-3xl font-black text-gray-900 leading-none tracking-tight">{typeof value === 'number' ? value.toLocaleString() : value}</p>
+          <p className="text-[11px] text-gray-500 mt-1.5 font-bold uppercase tracking-widest">{label}</p>
+        </div>
       </div>
     </div>
   );
@@ -55,7 +59,7 @@ function StatCard({ icon, label, value, color, bg }: { icon: React.ReactNode; la
 // --- Widget Card Wrapper ---
 function Widget({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`bg-white rounded-2xl shadow-sm border border-gray-100/80 overflow-hidden flex flex-col ${className}`}>
+    <div className={`bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100/50 overflow-hidden flex flex-col backdrop-blur-sm ${className}`}>
       {children}
     </div>
   );
@@ -63,11 +67,12 @@ function Widget({ children, className = '' }: { children: React.ReactNode; class
 
 function WidgetHeader({ title, icon, badge, accent = 'from-[#2E3093] to-[#2A6BB5]' }: { title: string; icon: React.ReactNode; badge?: string | number; accent?: string }) {
   return (
-    <div className={`bg-gradient-to-r ${accent} px-5 py-3 flex items-center gap-2.5`}>
-      <div className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center text-white">{icon}</div>
-      <h2 className="text-white font-semibold text-sm tracking-wide flex-1">{title}</h2>
+    <div className={`bg-gradient-to-r ${accent} px-6 py-4 flex items-center gap-3 relative overflow-hidden`}>
+      <div className="absolute inset-0 bg-white/5 mix-blend-overlay"></div>
+      <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shadow-inner relative z-10 border border-white/20">{icon}</div>
+      <h2 className="text-white font-bold text-[15px] tracking-wide flex-1 relative z-10">{title}</h2>
       {badge !== undefined && (
-        <span className="text-[11px] bg-white/20 text-white rounded-full px-2.5 py-0.5 font-semibold">{badge}</span>
+        <span className="text-[11px] bg-white/25 backdrop-blur-md text-white border border-white/20 rounded-full px-3 py-1 font-bold relative z-10 shadow-sm">{badge}</span>
       )}
     </div>
   );
@@ -113,37 +118,37 @@ export default function DashboardPage() {
   const qs = data?.quickStats ?? { totalStudents: 0, activeCourses: 0, activeBatches: 0, totalFaculty: 0 };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6 pb-8">
       {/* ── Quick Stats Row ── */}
       {loading ? (
         <QuickStatsSkeleton />
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <StatCard
-          icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>}
+          icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>}
           label="Total Students" value={qs.totalStudents}
-          color="bg-[#2E3093]" bg="bg-indigo-50/70"
+          color="bg-gradient-to-br from-[#2E3093] to-[#4547B2]" glow="bg-[#2E3093]"
         />
         <StatCard
-          icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>}
+          icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>}
           label="Active Courses" value={qs.activeCourses}
-          color="bg-[#2A6BB5]" bg="bg-blue-50/70"
+          color="bg-gradient-to-br from-[#2A6BB5] to-[#4A90D9]" glow="bg-[#2A6BB5]"
         />
         <StatCard
-          icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>}
+          icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>}
           label="Active Batches" value={qs.activeBatches}
-          color="bg-emerald-600" bg="bg-emerald-50/70"
+          color="bg-gradient-to-br from-emerald-500 to-emerald-700" glow="bg-emerald-500"
         />
         <StatCard
-          icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>}
+          icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>}
           label="Faculty Members" value={qs.totalFaculty}
-          color="bg-amber-500" bg="bg-amber-50/70"
+          color="bg-gradient-to-br from-amber-400 to-amber-600" glow="bg-amber-500"
         />
       </div>
       )}
 
       {/* ── Main Grid ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* ── Annual Targets (full width) ── */}
         {loading ? (
@@ -167,21 +172,21 @@ export default function DashboardPage() {
               });
 
               return (
-                <table className="dashboard-table w-full text-xs">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-[11px] uppercase tracking-wider text-gray-400 bg-gray-50/80 border-b border-gray-100 sticky top-0 z-10">
-                      <th className="text-left py-2 px-2 font-semibold">#</th>
-                      <th className="text-left py-2 px-2 font-semibold">Training Program</th>
-                      <th className="text-center py-2 px-2 font-semibold">Duration</th>
-                      <th className="text-right py-2 px-2 font-semibold">Fees (₹)</th>
-                      <th className="text-center py-2 px-2 font-semibold">Freq.</th>
-                      <th className="text-center py-2 px-2 font-semibold">Target</th>
-                      <th className="text-center py-2 px-2 font-semibold">Min Stu.</th>
-                      <th className="text-center py-2 px-2 font-semibold">Admitted</th>
-                      <th className="text-center py-2 px-2 font-semibold">Stu. Target</th>
-                      <th className="text-center py-2 px-2 font-semibold w-[70px]">Trend</th>
-                      <th className="text-right py-2 px-2 font-semibold">Collected</th>
-                      <th className="text-right py-2 px-2 font-semibold">Fees Target</th>
+                    <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50/90 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+                      <th className="text-left py-3 px-4">#</th>
+                      <th className="text-left py-3 px-4">Training Program</th>
+                      <th className="text-center py-3 px-4">Duration</th>
+                      <th className="text-right py-3 px-4">Fees (₹)</th>
+                      <th className="text-center py-3 px-4">Freq.</th>
+                      <th className="text-center py-3 px-4">Target</th>
+                      <th className="text-center py-3 px-4 whitespace-nowrap">Min Stu.</th>
+                      <th className="text-center py-3 px-4">Admitted</th>
+                      <th className="text-center py-3 px-4 whitespace-nowrap">Stu. Target</th>
+                      <th className="text-center py-3 px-4 w-[80px]">Trend</th>
+                      <th className="text-right py-3 px-4">Collected</th>
+                      <th className="text-right py-3 px-4 whitespace-nowrap">Fees Target</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -198,41 +203,41 @@ export default function DashboardPage() {
                       const conducted = Number(t.frequency_conducted) || 0;
 
                       return (
-                        <tr key={t.Course_Id ?? i} className="border-b border-gray-50 hover:bg-blue-50/30 transition-colors">
-                          <td className="py-2 px-2 text-gray-300 font-semibold">{i + 1}</td>
-                          <td className="py-2 px-2 font-semibold text-gray-800 max-w-[200px]"><span className="truncate block">{t.CourseName || 'N/A'}</span></td>
-                          <td className="py-2 px-2 text-center"><span className="bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 text-[11px]">{t.Duration || '—'}</span></td>
-                          <td className="py-2 px-2 text-right font-semibold text-gray-700 whitespace-nowrap">{fees > 0 ? `₹${fees.toLocaleString('en-IN')}` : '—'}</td>
-                          <td className="py-2 px-2 text-center"><span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold ${conducted >= targetFreq ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{conducted}</span></td>
-                          <td className="py-2 px-2 text-center"><span className="inline-block px-2 py-0.5 rounded-full bg-indigo-50 text-[#2E3093] text-[11px] font-bold">{targetFreq}</span></td>
-                          <td className="py-2 px-2 text-center text-gray-600">{minStu}</td>
-                          <td className="py-2 px-2 text-center">
-                            <div className="flex flex-col items-center gap-0.5">
-                              <span className="font-bold text-gray-800">{admitted}</span>
-                              <div className="w-10 bg-gray-100 rounded-full h-1"><div className={`h-1 rounded-full ${adPct >= 80 ? 'bg-emerald-500' : adPct >= 40 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${adPct}%` }} /></div>
+                        <tr key={t.Course_Id ?? i} className="border-b border-gray-100 hover:bg-slate-50/80 transition-all duration-200 group">
+                          <td className="py-3 px-4 text-gray-400 font-semibold text-xs">{i + 1}</td>
+                          <td className="py-3 px-4 font-bold text-gray-800 max-w-[240px]"><span className="truncate block group-hover:text-[#2E3093] transition-colors">{t.CourseName || 'N/A'}</span></td>
+                          <td className="py-3 px-4 text-center"><span className="bg-slate-100 text-slate-600 rounded-md px-2 py-1 text-[11px] font-medium">{t.Duration || '—'}</span></td>
+                          <td className="py-3 px-4 text-right font-semibold text-slate-700 whitespace-nowrap">{fees > 0 ? `₹${fees.toLocaleString('en-IN')}` : '—'}</td>
+                          <td className="py-3 px-4 text-center"><span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-bold shadow-sm ${conducted >= targetFreq ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{conducted}</span></td>
+                          <td className="py-3 px-4 text-center"><span className="inline-block px-2.5 py-1 rounded-full bg-indigo-50 text-[#2E3093] text-[11px] font-bold shadow-sm">{targetFreq}</span></td>
+                          <td className="py-3 px-4 text-center text-slate-600 font-medium">{minStu}</td>
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="font-extrabold text-gray-900">{admitted}</span>
+                              <div className="w-12 bg-gray-100 rounded-full h-1.5 overflow-hidden"><div className={`h-full rounded-full transition-all duration-500 ${adPct >= 80 ? 'bg-emerald-500' : adPct >= 40 ? 'bg-amber-400' : 'bg-red-500'}`} style={{ width: `${adPct}%` }} /></div>
                             </div>
                           </td>
-                          <td className="py-2 px-2 text-center font-medium text-[#2E3093]">{yearlyTarget}</td>
-                          <td className="py-2 px-2 text-center"><Sparkline data={spark} color={conducted >= targetFreq ? '#059669' : '#2E3093'} /></td>
-                          <td className="py-2 px-2 text-right whitespace-nowrap">
-                            <span className="font-semibold text-gray-700">{feesCollected > 0 ? `₹${(feesCollected / 100000).toFixed(1)}L` : '—'}</span>
+                          <td className="py-3 px-4 text-center font-bold text-[#2E3093]">{yearlyTarget}</td>
+                          <td className="py-3 px-4 text-center"><Sparkline data={spark} color={conducted >= targetFreq ? '#10B981' : '#4F46E5'} /></td>
+                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                            <span className="font-bold text-slate-700">{feesCollected > 0 ? `₹${(feesCollected / 100000).toFixed(1)}L` : '—'}</span>
                           </td>
-                          <td className="py-2 px-2 text-right font-medium text-[#2E3093] whitespace-nowrap">{feesTarget > 0 ? `₹${(feesTarget / 100000).toFixed(1)}L` : '—'}</td>
+                          <td className="py-3 px-4 text-right font-extrabold text-[#2E3093] whitespace-nowrap">{feesTarget > 0 ? `₹${(feesTarget / 100000).toFixed(1)}L` : '—'}</td>
                         </tr>
                       );
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-gray-50/80 border-t border-gray-200 font-semibold text-[11px] sticky bottom-0">
-                      <td className="py-2 px-2" colSpan={4}><span className="text-gray-500">Totals</span></td>
-                      <td className="py-2 px-2 text-center text-gray-700">{(data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.frequency_conducted) || 0), 0)}</td>
-                      <td className="py-2 px-2 text-center text-[#2E3093]">{(data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.target_frequency) || 1), 0)}</td>
-                      <td className="py-2 px-2"></td>
-                      <td className="py-2 px-2 text-center text-gray-700">{(data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.students_admitted) || 0), 0)}</td>
-                      <td className="py-2 px-2 text-center text-[#2E3093]">{(data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => { const ms = parseInt(t.min_students_batch) || 15; const tf = Number(t.target_frequency) || 1; return s + ms * tf; }, 0)}</td>
-                      <td className="py-2 px-2"></td>
-                      <td className="py-2 px-2 text-right text-gray-700">₹{((data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.fees_collected) || 0), 0) / 100000).toFixed(1)}L</td>
-                      <td className="py-2 px-2 text-right text-[#2E3093]">₹{((data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => { const ms = parseInt(t.min_students_batch) || 15; const tf = Number(t.target_frequency) || 1; const f = Number(t.Fees) || 0; return s + ms * tf * f; }, 0) / 100000).toFixed(1)}L</td>
+                    <tr className="bg-slate-50/90 backdrop-blur-md border-t-2 border-slate-200 font-bold text-[12px] sticky bottom-0 z-10 shadow-[0_-2px_10px_rgba(0,0,0,0.02)]">
+                      <td className="py-3 px-4" colSpan={4}><span className="text-slate-500 uppercase tracking-widest">Totals</span></td>
+                      <td className="py-3 px-4 text-center text-slate-800">{(data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.frequency_conducted) || 0), 0)}</td>
+                      <td className="py-3 px-4 text-center text-[#2E3093]">{(data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.target_frequency) || 1), 0)}</td>
+                      <td className="py-3 px-4"></td>
+                      <td className="py-3 px-4 text-center text-slate-800">{(data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.students_admitted) || 0), 0)}</td>
+                      <td className="py-3 px-4 text-center text-[#2E3093]">{(data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => { const ms = parseInt(t.min_students_batch) || 15; const tf = Number(t.target_frequency) || 1; return s + ms * tf; }, 0)}</td>
+                      <td className="py-3 px-4"></td>
+                      <td className="py-3 px-4 text-right text-slate-800">₹{((data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.fees_collected) || 0), 0) / 100000).toFixed(1)}L</td>
+                      <td className="py-3 px-4 text-right text-[#2E3093]">₹{((data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => { const ms = parseInt(t.min_students_batch) || 15; const tf = Number(t.target_frequency) || 1; const f = Number(t.Fees) || 0; return s + ms * tf * f; }, 0) / 100000).toFixed(1)}L</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -256,20 +261,20 @@ export default function DashboardPage() {
             accent="from-[#E85D04] to-[#F48C06]"
           />
           <div className="p-4 flex-1 flex flex-col">
-            <div className="flex gap-2 mb-3">
+            <div className="flex gap-3 mb-4">
               <input
                 type="text"
                 value={newTodo}
                 onChange={(e) => setNewTodo(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addTodo()}
                 placeholder="Add a new task..."
-                className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#E85D04]/30 focus:border-[#E85D04] placeholder:text-gray-300"
+                className="flex-1 text-sm bg-gray-50/50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-4 focus:ring-[#E85D04]/10 focus:border-[#E85D04] placeholder:text-gray-400 transition-all font-medium"
               />
               <button
                 onClick={addTodo}
-                className="bg-[#E85D04] hover:bg-[#D95204] text-white px-3 py-2 rounded-lg transition-colors text-sm font-semibold shadow-sm"
+                className="bg-gradient-to-br from-[#E85D04] to-[#C94A02] hover:to-[#A33B00] text-white px-4 py-3 rounded-xl transition-all shadow-[0_4px_14px_rgba(232,93,4,0.3)] hover:shadow-[0_6px_20px_rgba(232,93,4,0.4)] hover:-translate-y-0.5 text-sm font-bold flex items-center justify-center min-w-[3.5rem]"
               >
-                +
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
               </button>
             </div>
             <div className="space-y-1.5 overflow-y-auto max-h-64 flex-1">
@@ -282,20 +287,20 @@ export default function DashboardPage() {
                 todos.map((todo) => (
                   <div
                     key={todo.id}
-                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all group ${
-                      todo.done ? 'bg-gray-50 opacity-60' : 'bg-gray-50/50 hover:bg-gray-50'
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group ${
+                      todo.done ? 'bg-gray-50/50 opacity-60' : 'bg-white border border-gray-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)] hover:border-[#E85D04]/30 hover:shadow-md hover:-translate-y-0.5'
                     }`}
                   >
-                    <button onClick={() => toggleTodo(todo.id)} className="shrink-0">
-                      <div className={`w-[18px] h-[18px] rounded-md border-2 flex items-center justify-center transition-all ${
-                        todo.done ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300 hover:border-[#E85D04]'
+                    <button onClick={() => toggleTodo(todo.id)} className="shrink-0 relative">
+                      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-300 ${
+                        todo.done ? 'bg-[#E85D04] border-[#E85D04]' : 'border-gray-300 group-hover:border-[#E85D04]'
                       }`}>
-                        {todo.done && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
+                        {todo.done && <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
                       </div>
                     </button>
-                    <span className={`flex-1 text-sm ${todo.done ? 'line-through text-gray-400' : 'text-gray-700'}`}>{todo.text}</span>
-                    <button onClick={() => removeTodo(todo.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-all p-0.5">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                    <span className={`flex-1 text-[13px] font-medium transition-all ${todo.done ? 'line-through text-gray-400' : 'text-slate-700'}`}>{todo.text}</span>
+                    <button onClick={() => removeTodo(todo.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1.5 bg-red-50 hover:bg-red-100 rounded-lg">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                   </div>
                 ))
@@ -319,25 +324,28 @@ export default function DashboardPage() {
             {(data?.upcomingBatches ?? []).length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-x-2 gap-y-1.5">
                 {(data?.upcomingBatches ?? []).map((b: any) => (
-                  <div key={b.Batch_Id} className="rounded-xl border border-gray-100 p-3.5 hover:border-[#2A6BB5]/30 hover:shadow-md transition-all group">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-gray-800 text-[13px] truncate">{b.CourseName || `Batch ${b.Batch_code}`}</p>
-                        <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-1">
-                          <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-[10px]">{b.Batch_code}</span>
-                          <span>&middot;</span>
-                          <span>{b.Category}</span>
-                        </p>
+                  <div key={b.Batch_Id} className="relative overflow-hidden rounded-2xl border border-sky-100/60 bg-white p-4 hover:border-sky-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:-translate-y-1 transition-all duration-300 group">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-sky-50 to-transparent rounded-bl-full opacity-50 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="relative z-10">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-slate-800 text-[14px] truncate group-hover:text-[#2A6BB5] transition-colors">{b.CourseName || `Batch ${b.Batch_code}`}</p>
+                          <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1.5 font-medium">
+                            <span className="font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md text-[10px] border border-slate-200/60">{b.Batch_code}</span>
+                            <span>&middot;</span>
+                            <span>{b.Category}</span>
+                          </p>
+                        </div>
+                        <span className="text-[11px] bg-gradient-to-r from-[#FAE452] to-[#FCD34D] text-amber-900 font-black px-3 py-1.5 rounded-xl whitespace-nowrap shadow-sm border border-[#FBE14F]/50 transform group-hover:scale-105 transition-transform">
+                          {b.SDate}
+                        </span>
                       </div>
-                      <span className="text-[11px] bg-[#FAE452] text-[#2E3093] font-bold px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm">
-                        {b.SDate}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500">
-                      {b.Duration && <span className="flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>{b.Duration}</span>}
-                      {b.Timings && <span>{b.Timings}</span>}
-                      {b.Training_Coordinator && <span className="flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>{b.Training_Coordinator}</span>}
-                      {b.INR_Basic ? <span className="font-semibold text-[#2E3093]">₹{Number(b.INR_Basic).toLocaleString()}</span> : null}
+                      <div className="flex flex-wrap gap-x-3 gap-y-2 text-[11px] text-slate-600 font-medium bg-slate-50/50 p-2.5 rounded-xl border border-slate-100">
+                        {b.Duration && <span className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-md shadow-sm border border-slate-100"><svg className="w-3.5 h-3.5 text-[#2A6BB5]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>{b.Duration}</span>}
+                        {b.Timings && <span className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-md shadow-sm border border-slate-100">{b.Timings}</span>}
+                        {b.Training_Coordinator && <span className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-md shadow-sm border border-slate-100"><svg className="w-3.5 h-3.5 text-[#2A6BB5]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>{b.Training_Coordinator}</span>}
+                        {b.INR_Basic ? <span className="font-extrabold text-[#2E3093] ml-auto self-center text-[13px]">₹{Number(b.INR_Basic).toLocaleString()}</span> : null}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -463,23 +471,23 @@ export default function DashboardPage() {
               const totalPct = totals.passed > 0 ? Math.round((totals.placed / totals.passed) * 1000) / 10 : 0;
 
               return (
-                <table className="dashboard-table w-full text-xs">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-[11px] uppercase tracking-wider text-gray-500 bg-emerald-50/70 border-b border-emerald-100 sticky top-0 z-20">
-                      <th className="py-2 px-2 font-semibold text-left" rowSpan={2}>Course</th>
-                      <th className="py-2 px-2 font-semibold text-center" rowSpan={2}>Batch</th>
-                      <th className="py-2 px-2 font-semibold text-center" rowSpan={2}>Conv. Date</th>
-                      <th className="py-2 px-2 font-semibold text-center" rowSpan={2}>Passed</th>
-                      <th className="py-1.5 px-2 font-bold text-center text-emerald-700 border-b border-emerald-200" colSpan={4}>Candidate Status</th>
-                      <th className="py-2 px-2 font-semibold text-center" rowSpan={2}>Intervw.</th>
-                      <th className="py-2 px-2 font-semibold text-center" rowSpan={2}>Placed</th>
-                      <th className="py-2 px-2 font-semibold text-center" rowSpan={2}>%</th>
+                    <tr className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50/90 backdrop-blur-md border-b border-emerald-100 sticky top-0 z-20 shadow-sm">
+                      <th className="py-3 px-4 text-left" rowSpan={2}>Course</th>
+                      <th className="py-3 px-4 text-center whitespace-nowrap" rowSpan={2}>Batch</th>
+                      <th className="py-3 px-4 text-center whitespace-nowrap" rowSpan={2}>Conv. Date</th>
+                      <th className="py-3 px-4 text-center" rowSpan={2}>Passed</th>
+                      <th className="py-2 px-4 text-center text-emerald-700 border-b border-emerald-200" colSpan={4}>Candidate Status</th>
+                      <th className="py-3 px-4 text-center" rowSpan={2}>Intervw.</th>
+                      <th className="py-3 px-4 text-center" rowSpan={2}>Placed</th>
+                      <th className="py-3 px-4 text-center" rowSpan={2}>%</th>
                     </tr>
-                    <tr className="text-[10px] uppercase tracking-wider text-gray-400 bg-emerald-50/40 border-b border-gray-100 sticky top-[30px] z-10">
-                      <th className="py-1.5 px-2 font-semibold text-center">CV Recv</th>
-                      <th className="py-1.5 px-2 font-semibold text-center">Self</th>
-                      <th className="py-1.5 px-2 font-semibold text-center">No Resume</th>
-                      <th className="py-1.5 px-2 font-semibold text-center">Others</th>
+                    <tr className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50/80 backdrop-blur-md border-b border-emerald-100 sticky top-[45px] z-10">
+                      <th className="py-2 px-4 text-center">CV Recv</th>
+                      <th className="py-2 px-4 text-center">Self</th>
+                      <th className="py-2 px-4 text-center whitespace-nowrap">No Resume</th>
+                      <th className="py-2 px-4 text-center">Others</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -487,33 +495,33 @@ export default function DashboardPage() {
                       const pct = r.placedPct ?? 0;
                       const pctColor = pct >= 70 ? 'text-emerald-600 bg-emerald-50' : pct >= 40 ? 'text-amber-600 bg-amber-50' : 'text-red-500 bg-red-50';
                       return (
-                        <tr key={r.batchCode ?? i} className="border-b border-gray-50 hover:bg-emerald-50/20 transition-colors">
-                          <td className="py-2 px-2 font-semibold text-gray-800 max-w-[200px]"><span className="truncate block">{r.courseName || 'N/A'}</span></td>
-                          <td className="py-2 px-2 text-center"><span className="font-mono bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 text-[11px]">{r.batchCode}</span></td>
-                          <td className="py-2 px-2 text-center text-gray-600 whitespace-nowrap">{r.convocationDate || '—'}</td>
-                          <td className="py-2 px-2 text-center font-bold text-gray-800">{r.passedStudent}</td>
-                          <td className="py-2 px-2 text-center text-[#2A6BB5] font-semibold">{r.totalCvReceived}</td>
-                          <td className="py-2 px-2 text-center text-purple-600 font-semibold">{r.selfPlacement}</td>
-                          <td className="py-2 px-2 text-center text-amber-600 font-semibold">{r.resumesNotReceived}</td>
-                          <td className="py-2 px-2 text-center text-gray-500">{r.others}</td>
-                          <td className="py-2 px-2 text-center text-[#2E3093] font-semibold">{r.totalInterviewed}</td>
-                          <td className="py-2 px-2 text-center font-bold text-emerald-700">{r.totalPlaced}</td>
-                          <td className="py-2 px-2 text-center"><span className={`inline-block min-w-[36px] px-1.5 py-0.5 rounded-full text-[11px] font-bold ${pctColor}`}>{pct}%</span></td>
+                        <tr key={r.batchCode ?? i} className="border-b border-gray-100 hover:bg-emerald-50/40 transition-all duration-200 group">
+                          <td className="py-3 px-4 font-bold text-gray-800 max-w-[240px]"><span className="truncate block group-hover:text-emerald-700 transition-colors">{r.courseName || 'N/A'}</span></td>
+                          <td className="py-3 px-4 text-center"><span className="font-mono bg-slate-100 text-slate-600 rounded-md px-2 py-1 text-[11px] font-medium">{r.batchCode}</span></td>
+                          <td className="py-3 px-4 text-center text-slate-500 whitespace-nowrap text-xs">{r.convocationDate || '—'}</td>
+                          <td className="py-3 px-4 text-center font-extrabold text-slate-800">{r.passedStudent}</td>
+                          <td className="py-3 px-4 text-center text-[#2A6BB5] font-bold">{r.totalCvReceived}</td>
+                          <td className="py-3 px-4 text-center text-purple-600 font-bold">{r.selfPlacement}</td>
+                          <td className="py-3 px-4 text-center text-amber-600 font-bold">{r.resumesNotReceived}</td>
+                          <td className="py-3 px-4 text-center text-slate-500 font-medium">{r.others}</td>
+                          <td className="py-3 px-4 text-center text-[#2E3093] font-bold">{r.totalInterviewed}</td>
+                          <td className="py-3 px-4 text-center font-black text-emerald-600">{r.totalPlaced}</td>
+                          <td className="py-3 px-4 text-center"><span className={`inline-block min-w-[40px] px-2 py-1 rounded-full text-[11px] font-bold shadow-sm ${pctColor}`}>{pct}%</span></td>
                         </tr>
                       );
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-emerald-50/60 border-t-2 border-emerald-200 font-semibold text-[11px] sticky bottom-0">
-                      <td className="py-2 px-2 text-gray-600" colSpan={3}>Totals</td>
-                      <td className="py-2 px-2 text-center font-bold text-gray-800">{totals.passed}</td>
-                      <td className="py-2 px-2 text-center text-[#2A6BB5] font-bold">{totals.cvReceived}</td>
-                      <td className="py-2 px-2 text-center text-purple-600 font-bold">{totals.selfPlacement}</td>
-                      <td className="py-2 px-2 text-center text-amber-600 font-bold">{totals.resumesNotReceived}</td>
-                      <td className="py-2 px-2 text-center text-gray-500 font-bold">{totals.others}</td>
-                      <td className="py-2 px-2 text-center text-[#2E3093] font-bold">{totals.interviewed}</td>
-                      <td className="py-2 px-2 text-center text-emerald-700 font-bold">{totals.placed}</td>
-                      <td className="py-2 px-2 text-center"><span className={`inline-block min-w-[36px] px-1.5 py-0.5 rounded-full text-[11px] font-bold ${totalPct >= 70 ? 'text-emerald-600 bg-emerald-100' : totalPct >= 40 ? 'text-amber-600 bg-amber-100' : 'text-red-500 bg-red-100'}`}>{totalPct}%</span></td>
+                    <tr className="bg-emerald-50/90 backdrop-blur-md border-t-2 border-emerald-200 font-bold text-[12px] sticky bottom-0 z-10 shadow-[0_-2px_10px_rgba(0,0,0,0.02)]">
+                      <td className="py-3 px-4 text-emerald-800 uppercase tracking-widest" colSpan={3}>Totals</td>
+                      <td className="py-3 px-4 text-center font-black text-slate-800">{totals.passed}</td>
+                      <td className="py-3 px-4 text-center text-[#2A6BB5] font-black">{totals.cvReceived}</td>
+                      <td className="py-3 px-4 text-center text-purple-600 font-black">{totals.selfPlacement}</td>
+                      <td className="py-3 px-4 text-center text-amber-600 font-black">{totals.resumesNotReceived}</td>
+                      <td className="py-3 px-4 text-center text-slate-500 font-bold">{totals.others}</td>
+                      <td className="py-3 px-4 text-center text-[#2E3093] font-black">{totals.interviewed}</td>
+                      <td className="py-3 px-4 text-center text-emerald-700 font-black text-[14px]">{totals.placed}</td>
+                      <td className="py-3 px-4 text-center"><span className={`inline-block min-w-[44px] px-2 py-1 rounded-full text-[12px] font-bold shadow-sm border border-white/50 ${totalPct >= 70 ? 'text-emerald-700 bg-emerald-100' : totalPct >= 40 ? 'text-amber-700 bg-amber-100' : 'text-red-600 bg-red-100'}`}>{totalPct}%</span></td>
                     </tr>
                   </tfoot>
                 </table>

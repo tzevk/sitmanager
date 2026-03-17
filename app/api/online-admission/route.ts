@@ -138,3 +138,106 @@ export async function GET(req: NextRequest) {
     const message = err instanceof Error ? err.message : "Unknown error"; return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export async function POST(req: NextRequest) {
+  try {
+    const pool = getPool();
+    const body = await req.json();
+
+    // Basic validation
+    if (!body.inquiryId) {
+      return NextResponse.json({ error: 'Inquiry ID is required' }, { status: 400 });
+    }
+    if (!body.firstName || !body.lastName) {
+      return NextResponse.json({ error: 'First name and last name are required' }, { status: 400 });
+    }
+    if (!body.email) {
+      return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+    }
+    if (!body.mobile) {
+      return NextResponse.json({ error: 'Mobile number is required' }, { status: 400 });
+    }
+    if (!body.ssc_board || !body.ssc_schoolName || !body.ssc_yearOfPassing || !body.ssc_percentage) {
+      return NextResponse.json({ error: 'SSC education details are required' }, { status: 400 });
+    }
+
+    // Construct full name
+    const fullName = [body.firstName, body.middleName, body.lastName].filter(Boolean).join(' ');
+
+    // Get the student_id from inquiry
+    const [inquiryRows] = await pool.query<any[]>(
+      'SELECT Student_Id, Batch_Id, Course_Id FROM student_master WHERE Student_Id = ?',
+      [body.inquiryId]
+    );
+
+    if (!inquiryRows || inquiryRows.length === 0) {
+      return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
+    }
+
+    const studentId = inquiryRows[0].Student_Id;
+    const batchId = inquiryRows[0].Batch_Id;
+    const courseId = inquiryRows[0].Course_Id;
+
+    // Update student_master with form data
+    await pool.query(
+      `UPDATE student_master SET
+        Student_Name = ?,
+        Email = ?,
+        Present_Mobile = ?,
+        Present_Mobile2 = ?,
+        Present_Address = ?,
+        Present_City = ?,
+        Present_PIN = ?,
+        Nationality = ?,
+        DOB = ?,
+        Sex = ?,
+        Status_id = 8
+      WHERE Student_Id = ?`,
+      [
+        fullName,
+        body.email,
+        body.mobile,
+        body.telephone || null,
+        body.presentAddress || null,
+        body.presentCity || null,
+        body.presentPin || null,
+        body.nationality || 'Indian',
+        body.dob || null,
+        body.gender || null,
+        studentId,
+      ]
+    );
+
+    // Insert into admission_master
+    const [admissionResult] = await pool.query<any>(
+      `INSERT INTO admission_master (
+        Student_Id,
+        Batch_Id,
+        Course_Id,
+        Admission_Date,
+        IsActive,
+        Cancel,
+        IsDelete
+      ) VALUES (?, ?, ?, NOW(), 1, 0, 0)`,
+      [studentId, batchId || null, courseId || null]
+    );
+
+    const admissionId = admissionResult.insertId;
+
+    // Store form submission timestamp
+    await pool.query(
+      `UPDATE student_master SET Modified_Date = NOW() WHERE Student_Id = ?`,
+      [studentId]
+    );
+
+    return NextResponse.json({
+      success: true,
+      admissionId,
+      message: 'Application submitted successfully',
+    });
+  } catch (err: unknown) {
+    console.error('Online Admission POST error:', err);
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

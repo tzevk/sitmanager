@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -26,6 +27,7 @@ interface Pagination {
 }
 
 export default function OnlineAdmissionPage() {
+  const router = useRouter();
   const { canView, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('online_admission');
   const [rows, setRows] = useState<AdmissionRow[]>([]);
   const [pagination, setPagination] = useState<Pagination>({
@@ -347,6 +349,7 @@ export default function OnlineAdmissionPage() {
                         {canUpdate && (
                         <button
                           title="Edit"
+                          onClick={() => router.push(`/dashboard/online-admission/edit/${r.Admission_Id}`)}
                           className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition-colors"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

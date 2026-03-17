@@ -447,6 +447,7 @@ export default function AdmissionFormPage() {
     try {
       const submitData = {
         Student_Id: parseInt(studentId),
+        inquiryId: studentId,
         firstName: formData.firstName,
         middleName: formData.middleName,
         lastName: formData.lastName,
@@ -513,7 +514,7 @@ export default function AdmissionFormPage() {
         idProofType: formData.idProofType,
       };
 
-      const res = await fetch('/api/admission-form', {
+      const res = await fetch('/api/online-admission', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(submitData),
@@ -522,7 +523,7 @@ export default function AdmissionFormPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         alert('Admission form submitted successfully!');
-        router.push('/dashboard/inquiry');
+        router.push('/dashboard/online-admission');
       } else {
         alert(data.error || 'Failed to submit form');
       }

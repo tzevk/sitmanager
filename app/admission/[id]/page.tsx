@@ -9,8 +9,7 @@ const STEPS = [
   { id: 2, title: 'Academic', icon: 'fa-graduation-cap', description: 'Educational qualifications' },
   { id: 3, title: 'Occupational Info', icon: 'fa-briefcase', description: 'Current occupational status' },
   { id: 4, title: 'Training', icon: 'fa-chalkboard-teacher', description: 'Training programme details' },
-  { id: 5, title: 'Documents', icon: 'fa-cloud-upload-alt', description: 'Upload required documents' },
-  { id: 6, title: 'Terms & Conditions', icon: 'fa-scroll', description: 'Read & accept terms' },
+  { id: 5, title: 'Terms & Conditions', icon: 'fa-scroll', description: 'Read & accept terms' },
 ];
 
 // Training Program Eligibility Map (based on educational background)
@@ -84,33 +83,39 @@ export default function PublicAdmissionFormPage() {
     permanentState: '',
     permanentCountry: 'India',
     sameAsPresent: false,
+    photoFile: null as File | null,
     ssc_board: '',
     ssc_schoolName: '',
     ssc_yearOfPassing: '',
     ssc_percentage: '',
+    ssc_marksheetFile: null as File | null,
     hsc_board: '',
     hsc_collegeName: '',
     hsc_stream: '',
     hsc_yearOfPassing: '',
     hsc_percentage: '',
+    hsc_marksheetFile: null as File | null,
     
     diploma_degree: '',
     diploma_specialization: '',
     diploma_institute: '',
     diploma_yearOfPassing: '',
     diploma_percentage: '',
+    diploma_marksheetFile: null as File | null,
     
     grad_degree: '',
     grad_specialization: '',
     grad_university: '',
     grad_yearOfPassing: '',
     grad_percentage: '',
+    grad_marksheetFile: null as File | null,
     
     postgrad_degree: '',
     postgrad_specialization: '',
     postgrad_university: '',
     postgrad_yearOfPassing: '',
     postgrad_percentage: '',
+    postgrad_marksheetFile: null as File | null,
     
     // KT Details - Per Education Level
     ssc_ktCount: '0',
@@ -177,11 +182,6 @@ export default function PublicAdmissionFormPage() {
     trainingCategory: '',
     batchCode: '',
     termsAgreed: false,
-    photoFile: null as File | null,
-    cvFile: null as File | null,
-    degreeFile: null as File | null,
-    idProofType: 'Aadhar Card',
-    idProofFile: null as File | null,
   });
 
   useEffect(() => {
@@ -280,14 +280,31 @@ export default function PublicAdmissionFormPage() {
       const res = await fetch(`/api/inquiry?id=${studentId}`);
       const data = await res.json();
       if (data.inquiry) {
+        // Split name into firstName, middleName, lastName
+        const nameParts = (data.inquiry.Student_Name || '').trim().split(/\s+/);
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
+        const middleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '';
+        
         setFormData(prev => ({
           ...prev,
+          firstName,
+          middleName,
+          lastName,
           email: data.inquiry.Email || '',
           mobile: data.inquiry.Present_Mobile || '',
+          telephone: data.inquiry.Present_Mobile2 || '',
           dob: data.inquiry.DOB || '',
           gender: data.inquiry.Sex || '',
           nationality: data.inquiry.Nationality || 'Indian',
+          presentCountry: data.inquiry.Present_Country || 'India',
           batchCode: data.inquiry.Batch_Code || '',
+          trainingProgrammeId: data.inquiry.Course_Id ? String(data.inquiry.Course_Id) : '',
+          trainingProgrammeName: data.inquiry.CourseName || '',
+          // Prefill education based on Qualification and Discipline
+          grad_degree: data.inquiry.Qualification || '',
+          grad_specialization: data.inquiry.Discipline || '',
+          grad_percentage: data.inquiry.Percentage || '',
         }));
       }
     } catch {
@@ -391,8 +408,8 @@ export default function PublicAdmissionFormPage() {
   };
 
   const jumpToStep = (step: number) => {
-    // Step 6 is locked until steps 1–5 are all completed
-    if (step === 6 && ![1, 2, 3, 4, 5].every((s) => completedSteps.includes(s))) return;
+    // Step 5 is locked until steps 1–4 are all completed
+    if (step === 5 && ![1, 2, 3, 4].every((s) => completedSteps.includes(s))) return;
     setCurrentStep(step);
   };
 
@@ -415,14 +432,15 @@ export default function PublicAdmissionFormPage() {
       return;
     }
     if (!allSectionsChecked || !formData.termsAgreed) {
-      alert('Please complete Step 6: Read and accept the Terms & Conditions');
-      setCurrentStep(6);
+      alert('Please complete Step 5: Read and accept the Terms & Conditions');
+      setCurrentStep(5);
       return;
     }
 
     setSubmitting(true);
     try {
       const submitData = {
+        inquiryId: studentId, // Inquiry ID from URL
         Student_Id: parseInt(studentId),
         firstName: formData.firstName,
         middleName: formData.middleName,
@@ -487,10 +505,12 @@ export default function PublicAdmissionFormPage() {
         trainingProgrammeName: formData.trainingProgrammeName,
         trainingCategory: formData.trainingCategory,
         batchCode: formData.batchCode,
-        idProofType: formData.idProofType,
+        consentAcknowledged: consentAcknowledged,
+        experiencedConsentAcknowledged: experiencedConsentAcknowledged,
+        termsAgreed: formData.termsAgreed,
       };
 
-      const res = await fetch('/api/admission-form', {
+      const res = await fetch('/api/online-admission', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(submitData),
@@ -508,6 +528,11 @@ export default function PublicAdmissionFormPage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSendEmail = async () => {
+    // TODO: Implement email sending functionality
+    alert('Email sending functionality will be implemented soon');
   };
 
   // ── Loading screen ────────────────────────────────────────────────────────────
@@ -578,15 +603,16 @@ export default function PublicAdmissionFormPage() {
     <div className="fixed inset-0 bg-white flex flex-col">
       {/* ── Header ── */}
       <header className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] shadow-lg flex-shrink-0 z-30">
-        <div className="max-w-full mx-auto px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="bg-white rounded-xl p-1.5 shadow-md flex-shrink-0 -my-3">
-              <Image src="/sit.png" alt="SIT Logo" width={72} height={72} className="rounded-lg block" />
+        <div className="max-w-full mx-auto px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="bg-white rounded-lg sm:rounded-xl p-1 sm:p-1.5 shadow-md flex-shrink-0 -my-2 sm:-my-3">
+              <Image src="/sit.png" alt="SIT Logo" width={48} height={48} className="block sm:hidden rounded-md" />
+              <Image src="/sit.png" alt="SIT Logo" width={72} height={72} className="hidden sm:block rounded-lg" />
             </div>
             <div>
-              <div className="text-white font-extrabold text-lg leading-tight tracking-tight">Suvidya Institute of Technology</div>
-              <div className="text-[#FAE452] text-xs font-semibold mt-0.5 flex items-center gap-1.5">
-                <i className="fas fa-file-alt text-[10px]"></i>
+              <div className="text-white font-extrabold text-sm sm:text-lg leading-tight tracking-tight">Suvidya Institute of Technology</div>
+              <div className="text-[#FAE452] text-[10px] sm:text-xs font-semibold mt-0.5 flex items-center gap-1.5">
+                <i className="fas fa-file-alt text-[8px] sm:text-[10px]"></i>
                 Online Admission Form
               </div>
             </div>
@@ -631,8 +657,8 @@ export default function PublicAdmissionFormPage() {
 
       {/* ── Body ── */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full w-full px-4 py-4 bg-gray-50">
-        <div className="flex gap-4 h-full">
+        <div className="h-full w-full px-2 sm:px-4 py-2 sm:py-4 bg-gray-50">
+        <div className="flex gap-2 sm:gap-4 h-full">
 
           {/* Sidebar (desktop only) */}
           <aside className="hidden lg:flex lg:flex-col w-72 flex-shrink-0 h-full overflow-y-auto">
@@ -649,7 +675,7 @@ export default function PublicAdmissionFormPage() {
                 {STEPS.map((step) => {
                   const isActive = currentStep === step.id;
                   const isCompleted = completedSteps.includes(step.id);
-                  const isLocked = step.id === 6 && ![1, 2, 3, 4, 5].every((s) => completedSteps.includes(s));
+                  const isLocked = step.id === 5 && ![1, 2, 3, 4].every((s) => completedSteps.includes(s));
                   return (
                     <button
                       key={step.id}
@@ -740,23 +766,23 @@ export default function PublicAdmissionFormPage() {
           <main className="flex-1 min-w-0 h-full">
             <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden h-full flex flex-col">
               {/* Step header */}
-              <div className="bg-gradient-to-r from-gray-50 to-white px-6 py-3 border-b border-gray-200">
+              <div className="bg-gradient-to-r from-gray-50 to-white px-3 sm:px-6 py-2 sm:py-3 border-b border-gray-200">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <h1 className="text-xl font-bold text-[#2E3093] flex items-center gap-2">
-                      <i className={`fas ${STEPS[currentStep - 1].icon} text-[#2A6BB5]`}></i>
-                      {STEPS[currentStep - 1].title}
+                  <div className="flex-1 min-w-0">
+                    <h1 className="text-base sm:text-xl font-bold text-[#2E3093] flex items-center gap-2">
+                      <i className={`fas ${STEPS[currentStep - 1].icon} text-[#2A6BB5] text-sm sm:text-base`}></i>
+                      <span className="truncate">{STEPS[currentStep - 1].title}</span>
                     </h1>
-                    <p className="text-xs text-gray-600 mt-0.5">{STEPS[currentStep - 1].description}</p>
+                    <p className="text-xs text-gray-600 mt-0.5 hidden sm:block">{STEPS[currentStep - 1].description}</p>
                   </div>
-                  <div className="text-right">
-                    <div className="text-xs text-gray-500">Step</div>
-                    <div className="text-2xl font-bold text-[#2E3093]">
-                      {currentStep}<span className="text-base text-gray-400">/{STEPS.length}</span>
+                  <div className="text-right flex-shrink-0 ml-2">
+                    <div className="text-[10px] sm:text-xs text-gray-500">Step</div>
+                    <div className="text-lg sm:text-2xl font-bold text-[#2E3093]">
+                      {currentStep}<span className="text-sm sm:text-base text-gray-400">/{STEPS.length}</span>
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-1.5 mt-2">
+                <div className="flex gap-1 sm:gap-1.5 mt-2">
                   {STEPS.map((step) => (
                     <div
                       key={step.id}
@@ -773,7 +799,7 @@ export default function PublicAdmissionFormPage() {
               </div>
 
               <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
-                <div className="flex-1 overflow-y-auto px-6 py-4">
+                <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4">
 
                   {/* ── STEP 1: Personal Info ── */}
                   {currentStep === 1 && (
@@ -899,6 +925,73 @@ export default function PublicAdmissionFormPage() {
                           </div>
                         </div>
                       </div>
+
+                      {/* Photo Upload */}
+                      <div>
+                        <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
+                          <i className="fas fa-camera text-[#2A6BB5]"></i>
+                          Photograph
+                        </h3>
+                        <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4">
+                          <div className="flex flex-col md:flex-row gap-4 items-start">
+                            <div className="flex-shrink-0">
+                              {formData.photoFile ? (
+                                <div className="relative w-32 h-40 border-2 border-[#2A6BB5] rounded-lg overflow-hidden shadow-md">
+                                  <img src={URL.createObjectURL(formData.photoFile)} alt="Preview" className="w-full h-full object-cover" />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleChange('photoFile', null)}
+                                    className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-all"
+                                  >
+                                    <i className="fas fa-times text-xs"></i>
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="w-32 h-40 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center bg-white">
+                                  <i className="fas fa-user text-4xl text-gray-300 mb-2"></i>
+                                  <span className="text-xs text-gray-400">No photo</span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Upload Passport Size Photo</label>
+                              <input
+                                type="file"
+                                onChange={(e) => handleChange('photoFile', e.target.files?.[0] || null)}
+                                accept=".jpg,.jpeg,.png"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] transition-all"
+                              />
+                              {formData.photoFile && (
+                                <span className="text-xs text-green-600 flex items-center gap-1 mt-2">
+                                  <i className="fas fa-check-circle"></i>
+                                  {formData.photoFile.name}
+                                </span>
+                              )}
+                              <div className="mt-3 bg-white border border-blue-200 rounded-lg p-3">
+                                <p className="text-xs font-semibold text-gray-800 mb-2">Photo Requirements:</p>
+                                <ul className="text-xs text-gray-600 space-y-1">
+                                  <li className="flex items-start gap-2">
+                                    <i className="fas fa-check text-green-500 mt-0.5"></i>
+                                    <span>Passport size photograph (recent)</span>
+                                  </li>
+                                  <li className="flex items-start gap-2">
+                                    <i className="fas fa-check text-green-500 mt-0.5"></i>
+                                    <span>Plain background (white/light colored)</span>
+                                  </li>
+                                  <li className="flex items-start gap-2">
+                                    <i className="fas fa-check text-green-500 mt-0.5"></i>
+                                    <span>JPG or PNG format, maximum 5MB</span>
+                                  </li>
+                                  <li className="flex items-start gap-2">
+                                    <i className="fas fa-check text-green-500 mt-0.5"></i>
+                                    <span>Clear, front-facing, formal attire</span>
+                                  </li>
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -999,6 +1092,25 @@ export default function PublicAdmissionFormPage() {
                               <div>
                                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">Percentage / CGPA <span className="text-red-500">*</span></label>
                                 <input type="text" value={formData.ssc_percentage} onChange={(e) => handleChange('ssc_percentage', e.target.value)} placeholder="e.g. 85% or 8.5 CGPA" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" required />
+                              </div>
+                              <div className="lg:col-span-3">
+                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                                  <i className="fas fa-file-upload text-[#2A6BB5] mr-1"></i>
+                                  Upload SSC Marksheet / Certificate
+                                </label>
+                                <input
+                                  type="file"
+                                  onChange={(e) => handleChange('ssc_marksheetFile', e.target.files?.[0] || null)}
+                                  accept=".pdf,.jpg,.jpeg,.png"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] transition-all"
+                                />
+                                {formData.ssc_marksheetFile && (
+                                  <span className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                                    <i className="fas fa-check-circle"></i>
+                                    {formData.ssc_marksheetFile.name}
+                                  </span>
+                                )}
+                                <p className="text-xs text-gray-500 mt-1">PDF, JPG, or PNG (max 5MB)</p>
                               </div>
                             </div>
                           </div>
@@ -1105,6 +1217,25 @@ export default function PublicAdmissionFormPage() {
                                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">Percentage / CGPA</label>
                                 <input type="text" value={formData.hsc_percentage} onChange={(e) => handleChange('hsc_percentage', e.target.value)} placeholder="e.g. 75% or 7.5 CGPA" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
                               </div>
+                              <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                                  <i className="fas fa-file-upload text-[#2A6BB5] mr-1"></i>
+                                  Upload HSC Marksheet / Certificate
+                                </label>
+                                <input
+                                  type="file"
+                                  onChange={(e) => handleChange('hsc_marksheetFile', e.target.files?.[0] || null)}
+                                  accept=".pdf,.jpg,.jpeg,.png"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] transition-all"
+                                />
+                                {formData.hsc_marksheetFile && (
+                                  <span className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                                    <i className="fas fa-check-circle"></i>
+                                    {formData.hsc_marksheetFile.name}
+                                  </span>
+                                )}
+                                <p className="text-xs text-gray-500 mt-1">PDF, JPG, or PNG (max 5MB)</p>
+                              </div>
                             </div>
                           </div>
 
@@ -1207,6 +1338,25 @@ export default function PublicAdmissionFormPage() {
                               <div>
                                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">Percentage / CGPA</label>
                                 <input type="text" value={formData.diploma_percentage} onChange={(e) => handleChange('diploma_percentage', e.target.value)} placeholder="e.g. 70% or 7.0 CGPA" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                              </div>
+                              <div className="lg:col-span-3">
+                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                                  <i className="fas fa-file-upload text-[#2A6BB5] mr-1"></i>
+                                  Upload Diploma Marksheet / Certificate
+                                </label>
+                                <input
+                                  type="file"
+                                  onChange={(e) => handleChange('diploma_marksheetFile', e.target.files?.[0] || null)}
+                                  accept=".pdf,.jpg,.jpeg,.png"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] transition-all"
+                                />
+                                {formData.diploma_marksheetFile && (
+                                  <span className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                                    <i className="fas fa-check-circle"></i>
+                                    {formData.diploma_marksheetFile.name}
+                                  </span>
+                                )}
+                                <p className="text-xs text-gray-500 mt-1">PDF, JPG, or PNG (max 5MB)</p>
                               </div>
                             </div>
                           </div>
@@ -1311,6 +1461,25 @@ export default function PublicAdmissionFormPage() {
                                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">Percentage / CGPA</label>
                                 <input type="text" value={formData.grad_percentage} onChange={(e) => handleChange('grad_percentage', e.target.value)} placeholder="e.g. 65% or 6.5 CGPA" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
                               </div>
+                              <div className="lg:col-span-3">
+                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                                  <i className="fas fa-file-upload text-[#2A6BB5] mr-1"></i>
+                                  Upload Graduation Marksheet / Certificate
+                                </label>
+                                <input
+                                  type="file"
+                                  onChange={(e) => handleChange('grad_marksheetFile', e.target.files?.[0] || null)}
+                                  accept=".pdf,.jpg,.jpeg,.png"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] transition-all"
+                                />
+                                {formData.grad_marksheetFile && (
+                                  <span className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                                    <i className="fas fa-check-circle"></i>
+                                    {formData.grad_marksheetFile.name}
+                                  </span>
+                                )}
+                                <p className="text-xs text-gray-500 mt-1">PDF, JPG, or PNG (max 5MB)</p>
+                              </div>
                             </div>
                           </div>
 
@@ -1413,6 +1582,25 @@ export default function PublicAdmissionFormPage() {
                               <div>
                                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">Percentage / CGPA</label>
                                 <input type="text" value={formData.postgrad_percentage} onChange={(e) => handleChange('postgrad_percentage', e.target.value)} placeholder="e.g. 70% or 7.0 CGPA" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                              </div>
+                              <div className="lg:col-span-3">
+                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                                  <i className="fas fa-file-upload text-[#2A6BB5] mr-1"></i>
+                                  Upload Post-Graduation Marksheet / Certificate
+                                </label>
+                                <input
+                                  type="file"
+                                  onChange={(e) => handleChange('postgrad_marksheetFile', e.target.files?.[0] || null)}
+                                  accept=".pdf,.jpg,.jpeg,.png"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] transition-all"
+                                />
+                                {formData.postgrad_marksheetFile && (
+                                  <span className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                                    <i className="fas fa-check-circle"></i>
+                                    {formData.postgrad_marksheetFile.name}
+                                  </span>
+                                )}
+                                <p className="text-xs text-gray-500 mt-1">PDF, JPG, or PNG (max 5MB)</p>
                               </div>
                             </div>
                           </div>
@@ -1713,83 +1901,8 @@ export default function PublicAdmissionFormPage() {
                     </div>
                   )}
 
-                  {/* ── STEP 5: Documents ── */}
+                  {/* ── STEP 5: Terms & Conditions ── */}
                   {currentStep === 5 && (
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
-                          <i className="fas fa-file-upload text-[#2A6BB5]"></i>
-                          Upload Required Documents
-                        </h3>
-                        <p className="text-sm text-gray-600 mb-6">Please upload the following documents. Supported formats: PDF, JPG, JPEG, PNG (Max 5MB each)</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {/* Passport Photo */}
-                          <div className="border border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-[#2A6BB5] hover:bg-[#2A6BB5]/5 transition-all">
-                            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                              <i className="fas fa-camera text-xl text-[#2A6BB5]"></i>
-                            </div>
-                            <label className="block text-xs font-semibold text-gray-800 mb-1.5">Passport Photo</label>
-                            <p className="text-xs text-gray-500 mb-3">Recent passport size photo</p>
-                            <input type="file" id="photoFile" accept="image/*" onChange={(e) => handleChange('photoFile', e.target.files?.[0])} className="hidden" />
-                            <button type="button" onClick={() => document.getElementById('photoFile')?.click()} className="px-4 py-2 bg-[#2A6BB5] text-white rounded-lg transition-all hover:bg-[#2E3093] text-xs font-semibold">
-                              <i className="fas fa-upload mr-2"></i>Choose File
-                            </button>
-                            {formData.photoFile && <div className="mt-3 p-2 bg-green-50 rounded flex items-center justify-center gap-2"><i className="fas fa-check-circle text-green-600"></i><p className="text-xs text-green-700 font-medium truncate">{formData.photoFile.name}</p></div>}
-                          </div>
-                          {/* CV */}
-                          <div className="border border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-[#2A6BB5] hover:bg-[#2A6BB5]/5 transition-all">
-                            <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                              <i className="fas fa-file-alt text-xl text-purple-600"></i>
-                            </div>
-                            <label className="block text-xs font-semibold text-gray-800 mb-1.5">CV/Resume</label>
-                            <p className="text-xs text-gray-500 mb-3">Upload your latest CV</p>
-                            <input type="file" id="cvFile" accept=".pdf,.doc,.docx" onChange={(e) => handleChange('cvFile', e.target.files?.[0])} className="hidden" />
-                            <button type="button" onClick={() => document.getElementById('cvFile')?.click()} className="px-4 py-2 bg-purple-600 text-white rounded-lg transition-all hover:bg-purple-700 text-xs font-semibold">
-                              <i className="fas fa-upload mr-2"></i>Choose File
-                            </button>
-                            {formData.cvFile && <div className="mt-3 p-2 bg-green-50 rounded flex items-center justify-center gap-2"><i className="fas fa-check-circle text-green-600"></i><p className="text-xs text-green-700 font-medium truncate">{formData.cvFile.name}</p></div>}
-                          </div>
-                          {/* Degree */}
-                          <div className="border border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-[#2A6BB5] hover:bg-[#2A6BB5]/5 transition-all">
-                            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                              <i className="fas fa-graduation-cap text-xl text-green-600"></i>
-                            </div>
-                            <label className="block text-xs font-semibold text-gray-800 mb-1.5">Degree Certificate</label>
-                            <p className="text-xs text-gray-500 mb-3">Latest degree/marksheet</p>
-                            <input type="file" id="degreeFile" accept=".pdf,image/*" onChange={(e) => handleChange('degreeFile', e.target.files?.[0])} className="hidden" />
-                            <button type="button" onClick={() => document.getElementById('degreeFile')?.click()} className="px-4 py-2 bg-green-600 text-white rounded-lg transition-all hover:bg-green-700 text-xs font-semibold">
-                              <i className="fas fa-upload mr-2"></i>Choose File
-                            </button>
-                            {formData.degreeFile && <div className="mt-3 p-2 bg-green-50 rounded flex items-center justify-center gap-2"><i className="fas fa-check-circle text-green-600"></i><p className="text-xs text-green-700 font-medium truncate">{formData.degreeFile.name}</p></div>}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
-                          <i className="fas fa-id-card text-[#2A6BB5]"></i>
-                          Identity Proof
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-semibold text-gray-700 mb-1.5">ID Proof Type</label>
-                            <select value={formData.idProofType} onChange={(e) => handleChange('idProofType', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all">
-                              <option>Aadhar Card</option><option>Passport</option><option>PAN Card</option>
-                              <option>Voter ID</option><option>Driving License</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Upload ID Proof</label>
-                            <input type="file" accept=".pdf,image/*" onChange={(e) => handleChange('idProofFile', e.target.files?.[0])} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#2A6BB5] file:text-white hover:file:bg-[#2E3093] file:cursor-pointer" />
-                            {formData.idProofFile && <p className="text-xs text-green-600 mt-2 flex items-center gap-1"><i className="fas fa-check-circle"></i>File uploaded successfully</p>}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── STEP 6: Terms & Conditions ── */}
-                  {currentStep === 6 && (
                     <div className="space-y-5">
                       <div>
                         <h3 className="text-base font-bold text-gray-800 mb-1 pb-1.5 border-b border-gray-200 flex items-center gap-2">
@@ -1886,29 +1999,30 @@ export default function PublicAdmissionFormPage() {
                 </div>
 
                 {/* Navigation buttons */}
-                <div className="flex-shrink-0 bg-white border-t border-gray-200 px-6 py-3 shadow-lg">
-                  <div className="flex justify-between items-center gap-3">
+                <div className="flex-shrink-0 bg-white border-t border-gray-200 px-3 sm:px-6 py-2 sm:py-3 shadow-lg">
+                  <div className="flex justify-between items-center gap-2 sm:gap-3">
                     {currentStep === 1 ? (
-                      <div className="text-xs text-gray-400 flex items-center gap-1">
+                      <div className="text-[10px] sm:text-xs text-gray-400 flex items-center gap-1">
                         <i className="fas fa-lock"></i>
-                        Your information is secure
+                        <span className="hidden sm:inline">Your information is secure</span>
+                        <span className="sm:hidden">Secure</span>
                       </div>
                     ) : (
-                      <button type="button" onClick={() => nextStep(currentStep - 1)} className="px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50 transition-all">
-                        <i className="fas fa-arrow-left mr-2"></i>Back
+                      <button type="button" onClick={() => nextStep(currentStep - 1)} className="px-3 sm:px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg text-xs sm:text-sm font-semibold hover:bg-gray-50 transition-all">
+                        <i className="fas fa-arrow-left mr-1 sm:mr-2"></i><span className="hidden sm:inline">Back</span><span className="sm:hidden">Back</span>
                       </button>
                     )}
 
                     {currentStep < 6 ? (
-                      <button type="button" onClick={() => nextStep(currentStep + 1)} className="px-6 py-2 bg-gradient-to-r from-[#FAE452] to-[#FDD835] text-[#2E3093] rounded-lg font-bold text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all">
-                        Continue <i className="fas fa-arrow-right ml-2"></i>
+                      <button type="button" onClick={() => nextStep(currentStep + 1)} className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#FAE452] to-[#FDD835] text-[#2E3093] rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all">
+                        <span className="hidden sm:inline">Continue</span><span className="sm:hidden">Next</span> <i className="fas fa-arrow-right ml-1 sm:ml-2"></i>
                       </button>
                     ) : (
-                      <button type="submit" disabled={submitting} className="px-6 py-2 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white rounded-lg font-bold text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                      <button type="submit" disabled={submitting} className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                         {submitting ? (
-                          <><i className="fas fa-spinner fa-spin mr-2"></i>Submitting...</>
+                          <><i className="fas fa-spinner fa-spin mr-1 sm:mr-2"></i><span className="hidden sm:inline">Submitting...</span><span className="sm:hidden">Wait...</span></>
                         ) : (
-                          <><i className="fas fa-check-circle mr-2"></i>Submit Application</>
+                          <><i className="fas fa-check-circle mr-1 sm:mr-2"></i><span className="hidden sm:inline">Submit Application</span><span className="sm:hidden">Submit</span></>
                         )}
                       </button>
                     )}
@@ -2262,14 +2376,25 @@ export default function PublicAdmissionFormPage() {
                     </label>
                   </div>
                   {formData.termsAgreed && allSectionsChecked && (
-                    <div className="mt-4 flex items-center gap-2.5 bg-green-50 border-2 border-green-400 rounded-xl px-4 py-3">
-                      <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-                        <i className="fas fa-check text-white text-sm"></i>
+                    <div className="mt-4 space-y-3">
+                      <div className="flex items-center gap-2.5 bg-green-50 border-2 border-green-400 rounded-xl px-4 py-3">
+                        <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
+                          <i className="fas fa-check text-white text-sm"></i>
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-sm font-bold text-green-800">Declaration Accepted</div>
+                          <div className="text-xs text-green-600 mt-0.5">You have acknowledged all sections and accepted the terms.</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-sm font-bold text-green-800">Declaration Accepted</div>
-                        <div className="text-xs text-green-600 mt-0.5">You have acknowledged all sections and accepted the terms. You may now close this window.</div>
-                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={handleSendEmail}
+                        className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] hover:from-[#252780] hover:to-[#2360A0] text-white px-6 py-3.5 rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+                      >
+                        <i className="fas fa-paper-plane text-lg"></i>
+                        <span>Send Admission Form to Email</span>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -2344,63 +2469,89 @@ export default function PublicAdmissionFormPage() {
 
       {/* ── Consent Form Modal ── */}
       {showConsentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-            <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] px-6 py-5 rounded-t-2xl flex-shrink-0 text-center">
-              <h2 className="text-white font-bold text-lg tracking-widest uppercase">Consent Form</h2>
-              <p className="text-white/80 text-xs mt-1">
-                {consentType === 'student' 
-                  ? 'For Candidates with Different Educational Background'
-                  : 'For Experienced Candidates (10+ Years)'}
-              </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
+          <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-3xl max-h-[95vh] sm:max-h-[92vh] flex flex-col transform transition-all animate-scaleIn">
+            {/* Enhanced Header with Icon */}
+            <div className="bg-gradient-to-br from-[#2E3093] via-[#2A6BB5] to-[#1e5a9e] px-4 sm:px-8 py-4 sm:py-6 rounded-t-2xl sm:rounded-t-3xl flex-shrink-0 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -mr-20 -mt-20"></div>
+              <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full -ml-16 -mb-16"></div>
+              <div className="relative z-10 flex items-center gap-2 sm:gap-4">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white/20 backdrop-blur-sm rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg">
+                  <i className="fas fa-file-signature text-2xl sm:text-3xl text-white"></i>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-white font-black text-lg sm:text-2xl tracking-tight uppercase mb-1 drop-shadow-lg">Consent Form</h2>
+                  <p className="text-white/90 text-xs sm:text-sm font-semibold">
+                    {consentType === 'student' 
+                      ? '🎓 For Candidates with Different Educational Background'
+                      : '💼 For Experienced Candidates (10+ Years Experience)'}
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Name of the Candidate</label>
-                  <input readOnly value={[formData.firstName, formData.middleName, formData.lastName].filter(Boolean).join(' ')}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-700 cursor-not-allowed" />
+            <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 bg-gradient-to-b from-gray-50 to-white">
+              {/* Candidate Information Card */}
+              <div className="bg-white border-2 border-[#2E3093]/20 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm">
+                <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] rounded-lg sm:rounded-xl flex items-center justify-center">
+                    <i className="fas fa-user text-white text-sm sm:text-lg"></i>
+                  </div>
+                  <h3 className="font-black text-[#2E3093] text-base sm:text-lg">Candidate Information</h3>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Course Name</label>
-                  <input readOnly value={formData.trainingProgrammeName || '—'}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-700 cursor-not-allowed" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Batch No.</label>
-                  <input readOnly value={formData.batchCode || '—'}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-700 cursor-not-allowed" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Eligibility for the Course</label>
-                  <input type="text" value={consentData.eligibility}
-                    onChange={(e) => setConsentData(p => ({ ...p, eligibility: e.target.value }))}
-                    placeholder="e.g. 10th + 3 yrs experience"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Qualification of the Candidate</label>
-                  <input type="text" value={consentData.qualification}
-                    onChange={(e) => setConsentData(p => ({ ...p, qualification: e.target.value }))}
-                    placeholder="e.g. HSC, Diploma"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Experience of the Candidate (Dept &amp; Company)</label>
-                  <input readOnly
-                    value={[formData.jobDesignation, formData.jobOrganisation].filter(Boolean).join(' at ') ||
-                      (formData.workingFromYears ? `${formData.workingFromYears} yr${parseInt(formData.workingFromYears) !== 1 ? 's' : ''}${formData.workingFromMonths ? ` ${formData.workingFromMonths} month${parseInt(formData.workingFromMonths) !== 1 ? 's' : ''}` : ''}` : '—')}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-700 cursor-not-allowed" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">Name of the Candidate</label>
+                    <input readOnly value={[formData.firstName, formData.middleName, formData.lastName].filter(Boolean).join(' ')}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold bg-gradient-to-r from-blue-50 to-purple-50 text-[#2E3093] cursor-not-allowed" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">Course Name</label>
+                    <input readOnly value={formData.trainingProgrammeName || '—'}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm font-semibold bg-blue-50 text-gray-700 cursor-not-allowed" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">Batch No.</label>
+                    <input readOnly value={formData.batchCode || '—'}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm font-semibold bg-blue-50 text-gray-700 cursor-not-allowed" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">Eligibility for the Course</label>
+                    <input type="text" value={consentData.eligibility}
+                      onChange={(e) => setConsentData(p => ({ ...p, eligibility: e.target.value }))}
+                      placeholder="e.g. 10th + 3 yrs experience"
+                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2A6BB5] focus:ring-2 focus:ring-[#2A6BB5]/20 transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">Qualification of the Candidate</label>
+                    <input type="text" value={consentData.qualification}
+                      onChange={(e) => setConsentData(p => ({ ...p, qualification: e.target.value }))}
+                      placeholder="e.g. HSC, Diploma"
+                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2A6BB5] focus:ring-2 focus:ring-[#2A6BB5]/20 transition-all" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">Experience of the Candidate (Dept &amp; Company)</label>
+                    <input readOnly
+                      value={[formData.jobDesignation, formData.jobOrganisation].filter(Boolean).join(' at ') ||
+                        (formData.workingFromYears ? `${formData.workingFromYears} yr${parseInt(formData.workingFromYears) !== 1 ? 's' : ''}${formData.workingFromMonths ? ` ${formData.workingFromMonths} month${parseInt(formData.workingFromMonths) !== 1 ? 's' : ''}` : ''}` : '—')}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm font-semibold bg-blue-50 text-gray-700 cursor-not-allowed" />
+                  </div>
                 </div>
               </div>
 
-              <div className="border-t border-gray-200 pt-4">
-                <h3 className="text-sm font-bold text-[#2E3093] mb-1">Consent Declaration</h3>
-                <p className="text-xs text-gray-600 mb-4">
-                  I, the undersigned <span className="font-semibold">{[formData.firstName, formData.middleName, formData.lastName].filter(Boolean).join(' ') || '…'}</span>, hereby declare and accept the following:
+              {/* Consent Declaration Section */}
+              <div className="bg-white border-2 border-amber-400/30 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm">
+                <div className="flex items-center gap-2 sm:gap-3 mb-3">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-amber-400 to-orange-500 rounded-lg sm:rounded-xl flex items-center justify-center">
+                    <i className="fas fa-exclamation-triangle text-white text-sm sm:text-lg"></i>
+                  </div>
+                  <h3 className="text-sm sm:text-base font-black text-[#2E3093]">Consent Declaration</h3>
+                </div>
+                <p className="text-xs sm:text-sm text-gray-700 mb-3 sm:mb-4 font-semibold leading-relaxed bg-amber-50 border border-amber-200 rounded-lg sm:rounded-xl p-3 sm:p-4">
+                  <i className="fas fa-hand-point-right text-amber-600 mr-2"></i>
+                  I, the undersigned <span className="font-black text-[#2E3093] underline">{[formData.firstName, formData.middleName, formData.lastName].filter(Boolean).join(' ') || '…'}</span>, hereby declare and accept the following:
                 </p>
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
                   {[
                     `I am enrolling in the Training Program "${formData.trainingCategory || '…'}" voluntarily and with full understanding of the Training Program structure, objectives, and outcomes.`,
                     'I have been informed of the eligibility criteria and understand that my admission is being considered as an exception based on my interest, motivation, and willingness to learn.',
@@ -2408,58 +2559,93 @@ export default function PublicAdmissionFormPage() {
                     'On account of my educational background, I will be solely responsible for my training, performance, and placement.',
                     'I confirm that I am joining the Training Program with a clear understanding of the above.',
                   ].map((text, i) => (
-                    <label key={i} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                      consentChecks[i] ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200 hover:border-[#2A6BB5]/40'
+                    <label key={i} className={`flex items-start gap-2 sm:gap-4 p-3 sm:p-4 rounded-lg sm:rounded-xl border-2 cursor-pointer transition-all shadow-sm hover:shadow-md ${
+                      consentChecks[i] 
+                        ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-500 shadow-green-200' 
+                        : 'bg-white border-gray-300 hover:border-[#2A6BB5]'
                     }`}>
-                      <input type="checkbox" checked={consentChecks[i]}
+                      <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-md sm:rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${
+                        consentChecks[i] ? 'bg-green-500' : 'bg-gray-200 border-2 border-gray-400'
+                      }`}>
+                        {consentChecks[i] && <i className="fas fa-check text-white text-xs sm:text-sm font-bold"></i>}
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={consentChecks[i]}
                         onChange={(e) => {
                           const updated = [...consentChecks];
                           updated[i] = e.target.checked;
                           setConsentChecks(updated);
                         }}
-                        className="w-4 h-4 mt-0.5 flex-shrink-0 accent-[#2E3093] cursor-pointer" />
-                      <span className="text-xs text-gray-700 leading-relaxed">
-                        <span className="font-semibold text-[#2E3093] mr-1">{i + 1}.</span>{text}
+                        className="hidden" 
+                      />
+                      <span className={`text-xs sm:text-sm leading-relaxed font-medium ${
+                        consentChecks[i] ? 'text-gray-800' : 'text-gray-700'
+                      }`}>
+                        <span className="inline-flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#2E3093] text-white text-[10px] sm:text-xs font-bold mr-1 sm:mr-2">{i + 1}</span>
+                        {text}
                       </span>
                     </label>
                   ))}
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Candidate Remark</label>
+              {/* Candidate Remark */}
+              <div className="bg-white border-2 border-purple-200 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm">
+                <label className="block text-xs sm:text-sm font-black text-[#2E3093] mb-2 sm:mb-3 flex items-center gap-2">
+                  <i className="fas fa-comment-dots text-purple-500"></i>
+                  Candidate Remark
+                </label>
                 <textarea value={consentData.candidateRemark}
                   onChange={(e) => setConsentData(p => ({ ...p, candidateRemark: e.target.value }))}
-                  placeholder="Any remarks (optional)"
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all resize-none" />
+                  placeholder="Any additional remarks or comments (optional)"
+                  rows={3}
+                  className="w-full px-3 sm:px-4 py-2 sm:py-3 border-2 border-gray-300 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all resize-none" />
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-xs font-semibold text-blue-800 mb-2">In Presence of <span className="font-normal text-blue-600">(to be completed by departments)</span>:</p>
-                <div className="grid grid-cols-3 gap-2">
+              {/* Department Signatures Section */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm">
+                <p className="text-xs sm:text-sm font-black text-blue-900 mb-2 sm:mb-3 flex items-center gap-2">
+                  <i className="fas fa-pen text-blue-600"></i>
+                  <span>In Presence of <span className="hidden sm:inline font-semibold text-blue-600">(to be completed by departments)</span></span>
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
                   {['CBD Dept', 'Training Dept', 'Placement Dept'].map((dept) => (
-                    <div key={dept} className="text-xs text-blue-700 flex items-center gap-1">
-                      <i className="fas fa-pen-nib text-blue-400 text-xs"></i> {dept}
+                    <div key={dept} className="bg-white rounded-lg sm:rounded-xl p-2 sm:p-3 border-2 border-blue-200 shadow-sm">
+                      <div className="text-xs sm:text-sm font-bold text-blue-800 flex items-center gap-2">
+                        <i className="fas fa-pen-nib text-blue-500 text-xs"></i>
+                        {dept}
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
 
+              {/* Validation Message */}
               {!allConsentChecked && (
-                <p className="text-xs text-orange-600 flex items-center gap-1.5">
-                  <i className="fas fa-exclamation-circle"></i>
-                  Please acknowledge all 5 declarations before confirming.
-                </p>
+                <div className="bg-orange-50 border-2 border-orange-400 rounded-lg sm:rounded-xl p-3 sm:p-4 flex items-center gap-2 sm:gap-3 shadow-sm animate-pulse">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <i className="fas fa-exclamation-circle text-white text-base sm:text-lg"></i>
+                  </div>
+                  <p className="text-xs sm:text-sm font-bold text-orange-800">
+                    Please acknowledge all 5 declarations before confirming.
+                  </p>
+                </div>
               )}
             </div>
 
-            <div className="flex-shrink-0 border-t border-gray-200 px-6 py-4 flex gap-3 bg-gray-50 rounded-b-2xl">
-              <button type="button" onClick={() => setShowConsentModal(false)}
-                className="flex-1 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50 transition-all">
-                <i className="fas fa-times mr-2"></i>Close
+            {/* Enhanced Footer */}
+            <div className="flex-shrink-0 border-t-2 border-gray-200 px-3 sm:px-8 py-3 sm:py-5 flex gap-2 sm:gap-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-b-2xl sm:rounded-b-3xl">
+              <button 
+                type="button" 
+                onClick={() => setShowConsentModal(false)}
+                className="flex-1 px-4 sm:px-6 py-3 sm:py-4 bg-white border-2 border-gray-400 text-gray-700 rounded-lg sm:rounded-xl text-sm sm:text-base font-black hover:bg-gray-100 hover:border-gray-500 transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+              >
+                <i className="fas fa-times mr-1 sm:mr-2"></i><span className="hidden sm:inline">Close</span><span className="sm:hidden">Close</span>
               </button>
-              <button type="button" disabled={!allConsentChecked}
+              <button 
+                type="button" 
+                disabled={!allConsentChecked}
                 onClick={() => { 
                   if (consentType === 'student') {
                     setConsentAcknowledged(true);
@@ -2468,8 +2654,9 @@ export default function PublicAdmissionFormPage() {
                   }
                   setShowConsentModal(false); 
                 }}
-                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white rounded-lg text-sm font-bold hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none">
-                <i className="fas fa-check-circle mr-2"></i>Confirm &amp; Acknowledge
+                className="flex-1 px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-[#2E3093] via-[#2A6BB5] to-[#1e5a9e] text-white rounded-lg sm:rounded-xl text-sm sm:text-base font-black hover:shadow-2xl transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none shadow-lg transform hover:-translate-y-1 hover:scale-105"
+              >
+                <i className="fas fa-check-double mr-1 sm:mr-2 text-base sm:text-lg"></i><span className="hidden sm:inline">Confirm &amp; Acknowledge</span><span className="sm:hidden">Confirm</span>
               </button>
             </div>
           </div>
