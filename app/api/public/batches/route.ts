@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { RowDataPacket } from 'mysql2';
 
 // Public endpoint — no auth required (used by online admission form)
 export async function GET(req: NextRequest) {
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
 
     // If no category yet, return distinct categories for this course
     if (!category) {
-      const [cats] = await pool.query<{ category: string }[]>(
+      const [cats] = await pool.query<(RowDataPacket & { category: string })[]>(
         `SELECT DISTINCT Category AS category
          FROM batch_mst
          WHERE Course_Id = ? AND IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL)
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Return batch codes for this course + category
-    const [batches] = await pool.query<{ batchCode: string; timings: string | null }[]>(
+    const [batches] = await pool.query<(RowDataPacket & { batchCode: string; timings: string | null })[]>(
       `SELECT Batch_code AS batchCode, Timings AS timings
        FROM batch_mst
        WHERE Course_Id = ? AND Category = ? AND IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL)

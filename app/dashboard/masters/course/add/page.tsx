@@ -54,21 +54,21 @@ export default function AddCoursePage() {
   };
 
   /* ---- shared classes ---- */
-  const labelCls = 'block text-[11px] font-semibold text-gray-600 mb-0.5';
+  const labelCls = 'block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5';
   const inputCls =
-    'max-w-[220px] w-full bg-white border-2 border-gray-300 rounded px-2 py-1.5 text-xs text-gray-900 shadow-sm hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] placeholder:text-gray-400 transition-colors';
+    'max-w-md w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] placeholder:text-slate-400 transition-all font-medium';
 
   const SectionCard = ({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) => (
-    <div className="rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-      <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-3 py-1.5 border-b border-gray-200">
-        <h3 className="text-[13px] font-bold text-[#2E3093] flex items-center gap-2">
-          <span className="w-6 h-6 rounded-md bg-[#2E3093]/10 flex items-center justify-center">
+    <div className="rounded-2xl border border-gray-200 overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.03)] bg-white">
+      <div className="bg-gradient-to-r from-gray-50 to-white px-5 py-4 border-b border-gray-100">
+        <h3 className="text-[14px] font-black text-[#2E3093] flex items-center gap-2.5 tracking-tight">
+          <span className="w-8 h-8 rounded-xl bg-[#2E3093]/10 text-[#2A6BB5] flex items-center justify-center border border-[#2A6BB5]/20 shadow-sm">
             {icon}
           </span>
           {title}
         </h3>
       </div>
-      <div className="px-3 py-2">{children}</div>
+      <div className="px-5 py-5">{children}</div>
     </div>
   );
 
@@ -76,27 +76,28 @@ export default function AddCoursePage() {
   if (!canCreate) return <AccessDenied message="You do not have permission to create courses." />;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-4 shadow-md">
-        <div className="flex items-center gap-3">
+      <div className="bg-gradient-to-r from-[#2E3093] to-[#4547B2] rounded-2xl px-6 py-5 shadow-lg relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+        <div className="flex items-center gap-4 relative z-10">
           <button
             onClick={() => router.push('/dashboard/masters/course')}
-            className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
+            className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all shadow-sm border border-white/10 hover:scale-105"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
           <div>
-            <h2 className="text-base font-bold text-white">Add New Course</h2>
-            <p className="text-xs text-white/70">Masters &gt; Course &gt; Add</p>
+            <h2 className="text-xl font-black text-white tracking-tight">Add New Course</h2>
+            <p className="text-[13px] text-white/70 font-medium mt-0.5">Masters &gt; Course &gt; Add</p>
           </div>
         </div>
       </div>
 
       {/* Card */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         {/* Error */}
         {error && (
           <div className="mx-5 mt-3 px-3 py-2 rounded-md bg-red-50 border border-red-200 text-sm text-red-600 font-medium flex items-center gap-2">
@@ -115,11 +116,11 @@ export default function AddCoursePage() {
               title="Course Information"
               icon={<svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>}
             >
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-2 gap-y-1.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {/* Course Name */}
-                <div>
+                <div className="md:col-span-2 lg:col-span-1">
                   <label className={labelCls}>
-                    Course Name <span className="text-red-400">*</span>
+                    Course Name <span className="text-red-500 text-sm leading-none">*</span>
                   </label>
                   <input
                     type="text"
@@ -148,18 +149,18 @@ export default function AddCoursePage() {
                     value={eligibility}
                     onChange={(e) => setEligibility(e.target.value)}
                     placeholder="Enter eligibility criteria"
-                    className={inputCls}
+                    className={inputCls + ' max-w-none'}
                   />
                 </div>
                 {/* Introduction */}
-                <div className="md:col-span-2">
+                <div className="md:col-span-2 lg:col-span-3 xl:col-span-4">
                   <label className={labelCls}>Introduction</label>
                   <textarea
                     value={introduction}
                     onChange={(e) => setIntroduction(e.target.value)}
                     placeholder="Enter course introduction"
-                    rows={3}
-                    className={inputCls + ' resize-none'}
+                    rows={2}
+                    className={inputCls + ' max-w-none resize-none'}
                   />
                 </div>
               </div>
@@ -178,8 +179,8 @@ export default function AddCoursePage() {
                     value={basicSubject}
                     onChange={(e) => setBasicSubject(e.target.value)}
                     placeholder="Enter key points of the syllabus"
-                    rows={4}
-                    className={inputCls + ' resize-none'}
+                    rows={3}
+                    className={inputCls + ' max-w-none resize-none'}
                   />
                 </div>
                 {/* Objective */}
@@ -189,8 +190,8 @@ export default function AddCoursePage() {
                     value={objective}
                     onChange={(e) => setObjective(e.target.value)}
                     placeholder="Enter course objectives"
-                    rows={4}
-                    className={inputCls + ' resize-none'}
+                    rows={3}
+                    className={inputCls + ' max-w-none resize-none'}
                   />
                 </div>
                 {/* Basic Study Preparation required */}
@@ -200,30 +201,30 @@ export default function AddCoursePage() {
                     value={coursePreparation}
                     onChange={(e) => setCoursePreparation(e.target.value)}
                     placeholder="Enter basic study preparation requirements"
-                    rows={4}
-                    className={inputCls + ' resize-none'}
+                    rows={3}
+                    className={inputCls + ' max-w-none resize-none'}
                   />
                 </div>
 
                 {/* Action buttons */}
-                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200">
+                <div className="flex items-center gap-3 mt-4 pt-5 border-t border-gray-100">
                   <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="flex items-center justify-center gap-2 bg-[#2E3093] hover:bg-[#252780] text-white px-4 py-1.5 rounded text-xs font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 bg-gradient-to-br from-[#2E3093] to-[#4547B2] hover:to-[#23257A] text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-[0_4px_14px_rgba(46,48,147,0.3)] hover:shadow-[0_6px_20px_rgba(46,48,147,0.4)] hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
                   >
                     {saving ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                     )}
-                    Submit
+                    Save Course
                   </button>
                   <button
                     onClick={() => router.push('/dashboard/masters/course')}
-                    className="px-6 py-2.5 text-sm font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all shadow-sm"
+                    className="px-6 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
                   >
                     Cancel
                   </button>
