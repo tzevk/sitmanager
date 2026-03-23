@@ -142,13 +142,54 @@ export default function AllotRollNumberPage() {
   /* ================================================================ */
   /*  Auto-generate roll numbers                                     */
   /* ================================================================ */
+  const deriveYear2 = (batchCode: string | undefined, sampleAdmissionDate: string | null | undefined) => {
+    const yearFromDate = (() => {
+      if (!sampleAdmissionDate) return null;
+      const d = new Date(sampleAdmissionDate);
+      const y = d.getFullYear();
+      return Number.isFinite(y) ? y : null;
+    })();
+
+    const yearFromBatchCode = (() => {
+      const code = (batchCode || '').replace(/\s+/g, '');
+      const match4 = code.match(/20(\d{2})/);
+      if (match4) return 2000 + Number(match4[1]);
+      const match2 = code.match(/(?:^|\D)(\d{2})(?:\D|$)/);
+      if (match2) return 2000 + Number(match2[1]);
+      return null;
+    })();
+
+    const y = yearFromDate ?? yearFromBatchCode ?? new Date().getFullYear();
+    return String(y % 100).padStart(2, '0');
+  };
+
+  const deriveBatchNo = (batchCode: string | undefined, year2: string, fallbackBatchId: string) => {
+    const code = (batchCode || '').replace(/\s+/g, '');
+
+    // Pull numeric chunks from batch code.
+    let digits = (code.match(/\d+/g) || []).join('');
+
+    // Remove year tokens once (handles both 2025 and 25 patterns).
+    if (digits) {
+      digits = digits.replace(`20${year2}`, '');
+      digits = digits.replace(year2, '');
+    }
+
+    const raw = digits || String(fallbackBatchId || '').replace(/\D/g, '') || '0';
+    return raw.length === 1 ? raw.padStart(2, '0') : raw;
+  };
+
   const handleAutoGenerate = () => {
     const newEdits = { ...rollEdits };
     const batchObj = batches.find(b => String(b.Batch_Id) === batchId);
-    const prefix = batchObj?.Batch_code?.replace(/\s/g, '') || 'ROLL';
+    const sampleAdmissionDate = rows.find((r) => r.admissionDate)?.admissionDate;
+    const year2 = deriveYear2(batchObj?.Batch_code, sampleAdmissionDate);
+    const batchNo = deriveBatchNo(batchObj?.Batch_code, year2, batchId);
 
     rows.forEach((s, idx) => {
-      newEdits[s.id] = `${prefix}-${String(idx + 1).padStart(3, '0')}`;
+      // Keep sequence global across pagination.
+      const seq = String((page - 1) * pagination.limit + idx + 1).padStart(3, '0');
+      newEdits[s.id] = `${year2}${batchNo}${seq}`;
     });
     setRollEdits(newEdits);
     setHasEdits(true);
@@ -194,7 +235,7 @@ export default function AllotRollNumberPage() {
       ...rows.map((r, i) => [
         i + 1,
         r.studentCode,
-        `"${(r.studentName || '').replace(/"/g, '""')}"`,
+        `"${formatStudentName(r.studentName).replace(/"/g, '""')}"`,
         `"${formatDate(r.admissionDate)}"`,
         `"${(r.phase || '').replace(/"/g, '""')}"`,
         `"${(rollEdits[r.id] || r.rollNo || '').replace(/"/g, '""')}"`,
@@ -217,6 +258,22 @@ export default function AllotRollNumberPage() {
     try { return new Date(d).toLocaleDateString('en-GB'); } catch { return d; }
   };
 
+  const formatStudentName = (name: string | null | undefined) => {
+    const normalized = (name ?? '').replace(/\s+/g, ' ').trim();
+    if (!normalized) return '';
+
+    const lower = normalized.toLocaleLowerCase();
+    return lower
+      .split(' ')
+      .map((word) => {
+        if (!word) return word;
+        const first = word[0]?.toLocaleUpperCase() ?? '';
+        const rest = word.slice(1);
+        return `${first}${rest}`;
+      })
+      .join(' ');
+  };
+
   const selectedCourseName = courses.find(c => String(c.Course_Id) === courseId)?.Course_Name || '';
   const selectedBatchCode = batches.find(b => String(b.Batch_Id) === batchId)?.Batch_code || '';
   const totalPages = pagination.totalPages;
@@ -233,7 +290,7 @@ export default function AllotRollNumberPage() {
       {/* ──── Page Header ──── */}
       <div className="flex items-center gap-3">
         <div className="p-2.5 bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] rounded-xl shadow-lg">
-          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
           </svg>
         </div>
@@ -247,7 +304,7 @@ export default function AllotRollNumberPage() {
       {allocatedBatches.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
           <h3 className="text-xs font-bold text-[#2E3093] uppercase tracking-wider mb-3 flex items-center gap-2">
-            <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             Roll No. Allocated Batches
@@ -317,7 +374,7 @@ export default function AllotRollNumberPage() {
             <span className="px-2.5 py-1 rounded-full bg-[#2E3093]/10 text-[#2E3093] font-semibold">
               {selectedCourseName}
             </span>
-            <svg className="w-3.5 h-3.5 text-gray-300" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-gray-300" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
             <span className="px-2.5 py-1 rounded-full bg-[#2A6BB5]/10 text-[#2A6BB5] font-semibold">
@@ -335,7 +392,7 @@ export default function AllotRollNumberPage() {
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
           <div className="flex flex-col items-center justify-center py-16 text-center px-4">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#2E3093]/10 to-[#2A6BB5]/10 flex items-center justify-center mb-4">
-              <svg className="w-8 h-8 text-[#2E3093]/40" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-[#2E3093]/40" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
               </svg>
             </div>
@@ -366,12 +423,12 @@ export default function AllotRollNumberPage() {
               <button
                 onClick={handleAutoGenerate}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#2A6BB5] text-[#2A6BB5] hover:bg-[#2A6BB5]/5 transition-colors"
-                title="Auto-generate roll numbers using batch code as prefix"
+                title="Auto-generate roll numbers in YY + batchNo + 001 format"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                Auto Generate
+                Generate
               </button>
 
               {/* Export */}
@@ -379,7 +436,7 @@ export default function AllotRollNumberPage() {
                 onClick={handleExport}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 Export
@@ -396,7 +453,7 @@ export default function AllotRollNumberPage() {
                   placeholder="Search…"
                   className="w-44 pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-400"
                 />
-                <svg className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </div>
@@ -411,11 +468,11 @@ export default function AllotRollNumberPage() {
                 : 'bg-red-50 border border-red-200 text-red-600'
             }`}>
               {saveMsg.type === 'success' ? (
-                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               ) : (
-                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               )}
@@ -469,7 +526,7 @@ export default function AllotRollNumberPage() {
                           {s.studentCode}
                         </span>
                       </td>
-                      <td className="py-2.5 px-4 font-semibold text-gray-800">{s.studentName}</td>
+                      <td className="py-2.5 px-4 font-semibold text-gray-800">{formatStudentName(s.studentName)}</td>
                       <td className="py-2.5 px-4 text-gray-600 text-xs">{formatDate(s.admissionDate)}</td>
                       <td className="py-2.5 px-4">
                         {s.phase ? (
@@ -514,7 +571,7 @@ export default function AllotRollNumberPage() {
                       disabled={page === 1}
                       className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
                       </svg>
                     </button>
@@ -523,7 +580,7 @@ export default function AllotRollNumberPage() {
                       disabled={page === 1}
                       className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                       </svg>
                     </button>
@@ -532,7 +589,7 @@ export default function AllotRollNumberPage() {
                       disabled={page === totalPages}
                       className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                       </svg>
                     </button>
@@ -541,7 +598,7 @@ export default function AllotRollNumberPage() {
                       disabled={page === totalPages}
                       className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                       </svg>
                     </button>
@@ -560,7 +617,7 @@ export default function AllotRollNumberPage() {
                 {saving && (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 )}
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 Allot Roll Number

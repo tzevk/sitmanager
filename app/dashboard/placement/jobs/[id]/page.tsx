@@ -105,10 +105,9 @@ export default function EditJobPage() {
           {/* Company */}
           <div className="rounded-lg border border-gray-200 overflow-hidden shadow-sm">
             <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-3 py-1.5 border-b"><h3 className="text-[13px] font-bold text-[#2E3093]">Company Details</h3></div>
-            <div className="px-3 py-2 grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
+            <div className="px-3 py-2 grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-2">
               <div><label className={labelCls}>Company Name</label><input type="text" value={form.Company_Name} onChange={e => set('Company_Name', e.target.value)} className={inputCls} /></div>
               <div><label className={labelCls}>Email</label><input type="email" value={form.Company_Email} onChange={e => set('Company_Email', e.target.value)} className={inputCls} /></div>
-              <div><label className={labelCls}>Location</label><input type="text" value={form.Location} onChange={e => set('Location', e.target.value)} className={inputCls} /></div>
               <div><label className={labelCls}>Status</label>
                 <select value={form.Status} onChange={e => set('Status', e.target.value)} className={selectCls}>
                   <option value="Open">Open</option><option value="Closed">Closed</option><option value="Completed">Completed</option>
@@ -121,16 +120,17 @@ export default function EditJobPage() {
             <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-3 py-1.5 border-b"><h3 className="text-[13px] font-bold text-[#2E3093]">Job Details</h3></div>
             <div className="px-3 py-2 grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-2">
               <div><label className={labelCls}>Job Title</label><input type="text" value={form.Job_Title} onChange={e => set('Job_Title', e.target.value)} className={inputCls} /></div>
+              <div><label className={labelCls}>Location</label><input type="text" value={form.Location} onChange={e => set('Location', e.target.value)} className={inputCls} /></div>
               <div><label className={labelCls}>Package</label><input type="text" value={form.Package} onChange={e => set('Package', e.target.value)} className={inputCls} /></div>
-              <div><label className={labelCls}>Deadline</label><input type="date" value={form.Application_Deadline} onChange={e => set('Application_Deadline', e.target.value)} className={inputCls} /></div>
               <div className="col-span-2 md:col-span-3"><label className={labelCls}>Description</label><textarea value={form.Job_Description} onChange={e => set('Job_Description', e.target.value)} rows={4} className={textareaCls} /></div>
-              <div className="col-span-2 md:col-span-3"><label className={labelCls}>Requirements</label><textarea value={form.Requirements} onChange={e => set('Requirements', e.target.value)} rows={3} className={textareaCls} /></div>
             </div>
           </div>
-          {/* Eligibility */}
+          {/* Application Requirements */}
           <div className="rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-            <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-3 py-1.5 border-b"><h3 className="text-[13px] font-bold text-[#2E3093]">Eligibility</h3></div>
+            <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-3 py-1.5 border-b"><h3 className="text-[13px] font-bold text-[#2E3093]">Application Requirements</h3></div>
             <div className="px-3 py-2 grid grid-cols-2 gap-x-3 gap-y-2">
+              <div><label className={labelCls}>Deadline</label><input type="date" value={form.Application_Deadline} onChange={e => set('Application_Deadline', e.target.value)} className={inputCls} /></div>
+              <div className="col-span-2"><label className={labelCls}>Requirements</label><textarea value={form.Requirements} onChange={e => set('Requirements', e.target.value)} rows={3} className={textareaCls} /></div>
               <div><label className={labelCls}>Min %</label><input type="number" step="0.01" value={form.Min_Percentage} onChange={e => set('Min_Percentage', e.target.value)} className={inputCls} /></div>
               <div><label className={labelCls}>Max Backlogs</label><input type="number" value={form.Max_Backlogs} onChange={e => set('Max_Backlogs', e.target.value)} className={inputCls} /></div>
               <div className="col-span-2">

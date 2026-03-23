@@ -5,6 +5,53 @@ import { useRouter } from 'next/navigation';
 import { PermissionGate } from '@/components/ui/PermissionGate';
 
 /* ------------------------------------------------------------------ */
+/*  Dedupe                                                             */
+/* ------------------------------------------------------------------ */
+function normalizeTextKey(v: string | null) {
+  return (v ?? '').trim().toLowerCase();
+}
+
+function normalizeDateKey(v: string | null) {
+  if (!v) return '';
+  // Most DB date strings are ISO-ish; slice to the date part for stability.
+  return v.length >= 10 ? v.slice(0, 10) : v;
+}
+
+function dedupeLectures(input: Lecture[]) {
+  const seenIds = new Set<number>();
+  const seenComposite = new Set<string>();
+  const output: Lecture[] = [];
+
+  for (const r of input) {
+    const id = Number(r.Take_Id);
+    if (Number.isFinite(id)) {
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+    }
+
+    // Practical duplicate definition for display: same batch + faculty + date + lecture.
+    // Prefer Lecture_Id when present; otherwise fall back to Lecture_Name + Topic.
+    const lectureKey = r.Lecture_Id != null
+      ? `lid:${String(r.Lecture_Id)}`
+      : `ln:${normalizeTextKey(r.Lecture_Name)}|tp:${normalizeTextKey(r.Topic)}`;
+
+    const composite = [
+      `b:${String(r.Batch_Id ?? '')}`,
+      `f:${String(r.Faculty_Id ?? '')}`,
+      `d:${normalizeDateKey(r.Take_Dt)}`,
+      lectureKey,
+    ].join('|');
+
+    if (seenComposite.has(composite)) continue;
+    seenComposite.add(composite);
+
+    output.push(r);
+  }
+
+  return { rows: output, hidden: Math.max(0, input.length - output.length) };
+}
+
+/* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 interface Lecture {
@@ -52,9 +99,11 @@ function LectureTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [hiddenDuplicates, setHiddenDuplicates] = useState(0);
 
   /* ---- Refs ---- */
   const searchRef = useRef<HTMLInputElement>(null);
+  const searchValueRef = useRef('');
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const fetchLectures = useCallback(async () => {
     setLoading(true);
@@ -62,18 +111,20 @@ function LectureTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
       const params = new URLSearchParams();
       params.set('page', String(page));
       params.set('limit', '25');
-      if (search) params.set('search', search);
+      if (searchValueRef.current) params.set('search', searchValueRef.current);
 
       const res = await fetch(`/api/daily-activities/lecture-taken?${params}`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
-      setRows(data.rows ?? []);
+      const deduped = dedupeLectures(data.rows ?? []);
+      setRows(deduped.rows);
+      setHiddenDuplicates(deduped.hidden);
       setPagination(data.pagination ?? { page: 1, limit: 25, total: 0, totalPages: 0 });
     } catch {
       /* ignore */
     }
     setLoading(false);
-  }, [page, search, fetchTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, fetchTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchLectures(); }, [fetchLectures]);
 
@@ -87,6 +138,7 @@ function LectureTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
 
   const handleClear = () => {
     setSearch('');
+    searchValueRef.current = '';
     setPage(1);
     setFetchTrigger(t => t + 1);
   };
@@ -125,15 +177,31 @@ function LectureTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
     <div className="space-y-6">
 
       {/* ──── Page Header ──── */}
-      <div className="flex items-center gap-3">
-        <div className="p-2.5 bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] rounded-xl shadow-lg">
-          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-          </svg>
-        </div>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold text-gray-800 tracking-tight">Lecture Taken</h1>
-          <p className="text-xs text-gray-400">Daily Activities / Lecture Taken</p>
+      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-4 shadow-md">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-white/15">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-base font-bold text-white">Lecture Taken</h1>
+              <p className="text-xs text-white/70">Daily Activities / Lecture Taken</p>
+            </div>
+          </div>
+
+          {canCreate && (
+            <button
+              onClick={() => router.push('/dashboard/daily-activities/lecture-taken/add')}
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg bg-white text-[#2E3093] hover:bg-white/90 transition-colors shadow-sm"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add Lecture Details
+            </button>
+          )}
         </div>
       </div>
 
@@ -149,7 +217,11 @@ function LectureTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
                 ref={searchRef}
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setSearch(v);
+                  searchValueRef.current = v;
+                }}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
                 placeholder="Search…"
                 className="w-56 pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-400"
@@ -175,24 +247,16 @@ function LectureTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
               Clear
             </button>
 
-            {/* Total students badge */}
+            {/* Total records badge */}
             <span className="text-[11px] font-bold text-[#2E3093] bg-[#2E3093]/10 rounded-full px-2.5 py-0.5">
               Total Records: {pagination.total}
             </span>
-          </div>
 
-          <div className="flex items-center gap-2">
-            {/* Add Lecture Details */}
-            {canCreate && (
-            <button
-              onClick={() => router.push('/dashboard/daily-activities/lecture-taken/add')}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg bg-[#2E3093] text-white hover:bg-[#23257A] transition-colors shadow-sm"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              Add Lecture Details
-            </button>
+            {/* Hidden duplicates badge */}
+            {hiddenDuplicates > 0 && (
+              <span className="text-[11px] font-bold text-amber-700 bg-amber-50 rounded-full px-2.5 py-0.5 border border-amber-100">
+                Duplicates hidden: {hiddenDuplicates}
+              </span>
             )}
           </div>
         </div>

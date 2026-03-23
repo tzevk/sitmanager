@@ -7,19 +7,20 @@ export async function GET() {
     const batchTypes = await cached('batch-category-options', 300_000, async () => {
       const pool = getPool();
 
-      // Fetch distinct batch types from awt_batch_category table
+      // Fetch distinct batch types from mst_batchcategory table (primary master source)
       const [rows] = await pool.query<RowDataPacket[]>(`
-        SELECT DISTINCT batchtype 
-        FROM awt_batch_category 
-        WHERE deleted = 0 
-          AND batchtype IS NOT NULL 
-          AND batchtype != '' 
-        ORDER BY batchtype
+        SELECT DISTINCT Batch_Type AS batchtype
+        FROM mst_batchcategory
+        WHERE IsActive = 1
+          AND (IsDelete IS NULL OR IsDelete = 0)
+          AND Batch_Type IS NOT NULL
+          AND Batch_Type != ''
+        ORDER BY Batch_Type
       `);
 
       let types = rows.map((r) => r.batchtype);
 
-      // If no batch types in awt_batch_category, fetch from batch_mst.Category as fallback
+      // Fallback: if no batch types in mst_batchcategory, fetch from batch_mst.Category
       if (types.length === 0) {
         const [catRows] = await pool.query<RowDataPacket[]>(`
           SELECT DISTINCT Category 

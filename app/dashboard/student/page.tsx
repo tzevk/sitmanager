@@ -131,75 +131,86 @@ export default function StudentPage() {
     URL.revokeObjectURL(url);
   };
 
+  /* ---- shared classes (match Inquiry / Online Admission styling) ---- */
+  const labelCls = 'block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5';
+  const inputCls =
+    'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] placeholder:text-slate-400 transition-all font-medium';
+  const selectCls =
+    'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] transition-all font-medium';
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
       {permLoading ? <PermissionLoading /> : !canView ? <AccessDenied message="You do not have permission to view students." /> : (<>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-gray-800">Student</h2>
-          <p className="text-sm text-gray-400">
-            {pagination.total.toLocaleString()} total students
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Search input */}
-          <div className="relative">
-            <input
-              ref={searchRef}
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Search name, email, mobile, city..."
-              className="w-64 border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 bg-white shadow-sm"
-            />
-            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+      {/* Header (match Inquiry styling) */}
+      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-2xl px-8 py-6 shadow-[0_10px_30px_rgba(46,48,147,0.18)] relative overflow-hidden">
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
+
+        <div className="flex items-start justify-between gap-4 flex-wrap relative z-10">
+          <div>
+            <h2 className="text-2xl font-black text-white tracking-tight">Student</h2>
+            <p className="text-[14px] text-white/80 font-medium mt-1">
+              {pagination.total.toLocaleString()} total students
+            </p>
           </div>
 
-          {/* Filters toggle */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm border ${
-              showFilters
-                ? 'bg-[#2E3093] text-white border-[#2E3093]'
-                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-            </svg>
-            Filters
-          </button>
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Search */}
+            <div className="relative w-full sm:w-[320px]">
+              <input
+                ref={searchRef}
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                placeholder="Search name, email, mobile, city..."
+                className="w-full bg-white/95 border border-white/30 rounded-xl pl-10 pr-3 py-2.5 text-sm font-semibold text-slate-800 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-4 focus:ring-[#FAE452]/20 focus:border-[#FAE452]"
+              />
+              <svg className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
 
-          {/* Export */}
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-1.5 bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Export
-          </button>
+            {/* Filters toggle */}
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black transition-all shadow-sm border ${
+                showFilters
+                  ? 'bg-[#FAE452] text-[#2E3093] border-[#FAE452]'
+                  : 'bg-white/15 text-white border-white/20 hover:bg-white/25'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Filters
+            </button>
+
+            {/* Export */}
+            <button
+              onClick={handleExport}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black bg-white/15 text-white border border-white/20 hover:bg-white/25 transition-all shadow-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Export
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Expandable filters panel */}
       {showFilters && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm animate-in slide-in-from-top-2 duration-200">
+        <div className="bg-white rounded-2xl border border-slate-200 px-5 py-5 shadow-[0_8px_30px_rgb(0,0,0,0.03)] animate-in slide-in-from-top-2 duration-200">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {/* Course */}
             <div>
-              <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                Course
-              </label>
+              <label className={labelCls}>Course</label>
               <select
                 value={courseId}
                 onChange={(e) => setCourseId(e.target.value)}
-                className="max-w-[220px] w-full border-2 border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-gray-600"
+                className={selectCls}
               >
                 <option value="">All Courses</option>
                 {courses.map((c) => (
@@ -210,13 +221,11 @@ export default function StudentPage() {
 
             {/* Gender */}
             <div>
-              <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                Gender
-              </label>
+              <label className={labelCls}>Gender</label>
               <select
                 value={sex}
                 onChange={(e) => setSex(e.target.value)}
-                className="max-w-[220px] w-full border-2 border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-gray-600"
+                className={selectCls}
               >
                 <option value="">All</option>
                 <option value="Male">Male</option>
@@ -225,10 +234,10 @@ export default function StudentPage() {
             </div>
 
             {/* Buttons */}
-            <div className="flex items-end gap-2 col-span-2">
+            <div className="flex items-end gap-3 col-span-2">
               <button
                 onClick={handleSearch}
-                className="flex items-center gap-1.5 bg-[#2A6BB5] hover:bg-[#2360A0] text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+                className="flex items-center justify-center gap-2 bg-[#2E3093] text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -237,11 +246,8 @@ export default function StudentPage() {
               </button>
               <button
                 onClick={handleClear}
-                className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                className="px-5 py-2.5 text-sm font-bold text-[#2E3093] bg-white border border-slate-200 rounded-xl hover:border-[#2E3093]/30 transition-all shadow-sm"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
                 Clear
               </button>
             </div>
@@ -250,19 +256,19 @@ export default function StudentPage() {
       )}
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.03)] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="dashboard-table w-full text-sm">
             <thead>
-              <tr className="text-[11px] uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100">
-                <th className="text-left py-3 px-4 font-semibold">Id</th>
-                <th className="text-left py-3 px-4 font-semibold">Student Name</th>
-                <th className="text-left py-3 px-4 font-semibold">Email</th>
-                <th className="text-left py-3 px-4 font-semibold">Mobile</th>
-                <th className="text-left py-3 px-4 font-semibold">Course</th>
-                <th className="text-left py-3 px-4 font-semibold">City</th>
-                <th className="text-left py-3 px-4 font-semibold">Qualification</th>
-                <th className="text-center py-3 px-4 font-semibold">Action</th>
+              <tr className="text-[11px] uppercase tracking-wider text-slate-500 bg-slate-50 border-b border-slate-200">
+                <th className="text-left py-3 px-4 font-bold">Id</th>
+                <th className="text-left py-3 px-4 font-bold">Student Name</th>
+                <th className="text-left py-3 px-4 font-bold">Email</th>
+                <th className="text-left py-3 px-4 font-bold">Mobile</th>
+                <th className="text-left py-3 px-4 font-bold">Course</th>
+                <th className="text-left py-3 px-4 font-bold">City</th>
+                <th className="text-left py-3 px-4 font-bold">Qualification</th>
+                <th className="text-center py-3 px-4 font-bold">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -271,14 +277,14 @@ export default function StudentPage() {
                   <td colSpan={8} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-8 h-8 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
-                      <span className="text-sm text-gray-400">Loading students...</span>
+                      <span className="text-sm text-slate-500">Loading students...</span>
                     </div>
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-16 text-center">
-                    <div className="flex flex-col items-center gap-2 text-gray-300">
+                    <div className="flex flex-col items-center gap-2 text-slate-300">
                       <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                       </svg>
@@ -290,18 +296,18 @@ export default function StudentPage() {
                 rows.map((r) => (
                   <tr
                     key={r.Student_Id}
-                    className="border-b border-gray-50 hover:bg-blue-50/30 transition-colors"
+                    className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors"
                   >
-                    <td className="py-2.5 px-4 text-gray-400 font-mono text-xs">
+                    <td className="py-2.5 px-4 text-slate-500 font-mono text-xs">
                       {r.Student_Id}
                     </td>
-                    <td className="py-2.5 px-4 font-semibold text-gray-800 max-w-[200px]">
+                    <td className="py-2.5 px-4 font-semibold text-slate-900 max-w-[200px]">
                       <span className="truncate block">{r.Student_Name || '—'}</span>
                     </td>
-                    <td className="py-2.5 px-4 text-gray-600 max-w-[200px]">
+                    <td className="py-2.5 px-4 text-slate-700 max-w-[220px]">
                       <span className="truncate block text-xs">{r.Email || '—'}</span>
                     </td>
-                    <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap font-mono text-xs">
+                    <td className="py-2.5 px-4 text-slate-700 whitespace-nowrap font-mono text-xs">
                       {r.Present_Mobile || '—'}
                     </td>
                     <td className="py-2.5 px-4 whitespace-nowrap">
@@ -310,13 +316,13 @@ export default function StudentPage() {
                           {r.Course_Name}
                         </span>
                       ) : (
-                        <span className="text-gray-300">—</span>
+                        <span className="text-slate-300">—</span>
                       )}
                     </td>
-                    <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap text-xs">
+                    <td className="py-2.5 px-4 text-slate-700 whitespace-nowrap text-xs">
                       {r.Present_City || '—'}
                     </td>
-                    <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap text-xs">
+                    <td className="py-2.5 px-4 text-slate-700 whitespace-nowrap text-xs">
                       {r.Qualification || '—'}
                     </td>
                     <td className="py-2.5 px-4 text-center">
@@ -363,18 +369,18 @@ export default function StudentPage() {
 
         {/* Pagination */}
         {pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/50">
-            <p className="text-xs text-gray-400">
+          <div className="flex items-center justify-between px-5 py-4 border-t border-slate-200 bg-slate-50/50">
+            <p className="text-xs text-slate-500">
               Showing{' '}
-              <span className="font-semibold text-gray-600">
+              <span className="font-semibold text-slate-700">
                 {(pagination.page - 1) * pagination.limit + 1}
               </span>
               {' '}-{' '}
-              <span className="font-semibold text-gray-600">
+              <span className="font-semibold text-slate-700">
                 {Math.min(pagination.page * pagination.limit, pagination.total)}
               </span>
               {' '}of{' '}
-              <span className="font-semibold text-gray-600">
+              <span className="font-semibold text-slate-700">
                 {pagination.total.toLocaleString()}
               </span>
             </p>
@@ -383,14 +389,14 @@ export default function StudentPage() {
               <button
                 onClick={() => setPage(1)}
                 disabled={pagination.page <= 1}
-                className="px-2 py-1 text-xs rounded-md border border-gray-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-semibold text-slate-700"
               >
                 First
               </button>
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={pagination.page <= 1}
-                className="px-2 py-1 text-xs rounded-md border border-gray-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-slate-700"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -408,10 +414,10 @@ export default function StudentPage() {
                   <button
                     key={p}
                     onClick={() => setPage(p)}
-                    className={`w-8 h-8 text-xs rounded-md border transition-colors ${
+                    className={`w-8 h-8 text-xs rounded-lg border transition-colors ${
                       p === current
                         ? 'bg-[#2E3093] text-white border-[#2E3093]'
-                        : 'border-gray-200 hover:bg-white text-gray-600'
+                        : 'border-slate-200 hover:bg-white text-slate-700'
                     }`}
                   >
                     {p}
@@ -422,7 +428,7 @@ export default function StudentPage() {
               <button
                 onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
                 disabled={pagination.page >= pagination.totalPages}
-                className="px-2 py-1 text-xs rounded-md border border-gray-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-slate-700"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -431,7 +437,7 @@ export default function StudentPage() {
               <button
                 onClick={() => setPage(pagination.totalPages)}
                 disabled={pagination.page >= pagination.totalPages}
-                className="px-2 py-1 text-xs rounded-md border border-gray-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-semibold text-slate-700"
               >
                 Last
               </button>

@@ -125,75 +125,85 @@ export default function OnlineAdmissionPage() {
     return 'bg-gray-100 text-gray-600';
   };
 
+  /* ---- shared classes (match Inquiry / Annual Batch styling) ---- */
+  const labelCls = 'block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5';
+  const inputCls =
+    'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] placeholder:text-slate-400 transition-all font-medium';
+  const selectCls =
+    'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] transition-all font-medium';
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
       {permLoading ? <PermissionLoading /> : !canView ? <AccessDenied message="You do not have permission to view online admissions." /> : (<>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-gray-800">Online Admission</h2>
-          <p className="text-sm text-gray-400">
-            {pagination.total.toLocaleString()} total admissions
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Search button */}
-          <div className="relative">
-            <input
-              ref={searchRef}
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Search name, email, mobile, batch..."
-              className="w-64 border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 bg-white shadow-sm"
-            />
-            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+      {/* Header (match Inquiry styling) */}
+      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-2xl px-8 py-6 shadow-[0_10px_30px_rgba(46,48,147,0.18)] relative overflow-hidden">
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
+        <div className="flex items-start justify-between gap-4 flex-wrap relative z-10">
+          <div>
+            <h2 className="text-2xl font-black text-white tracking-tight">Online Admission</h2>
+            <p className="text-[14px] text-white/80 font-medium mt-1">
+              {pagination.total.toLocaleString()} total admissions
+            </p>
           </div>
 
-          {/* Filters toggle */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm border ${
-              showFilters
-                ? 'bg-[#2E3093] text-white border-[#2E3093]'
-                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-            </svg>
-            Filters
-          </button>
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Search */}
+            <div className="relative w-full sm:w-[320px]">
+              <input
+                ref={searchRef}
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                placeholder="Search name, email, mobile, batch..."
+                className="w-full bg-white/95 border border-white/30 rounded-xl pl-10 pr-3 py-2.5 text-sm font-semibold text-slate-800 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-4 focus:ring-[#FAE452]/20 focus:border-[#FAE452]"
+              />
+              <svg className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
 
-          {/* Export */}
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-1.5 bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Export
-          </button>
+            {/* Filters toggle */}
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black transition-all shadow-sm border ${
+                showFilters
+                  ? 'bg-[#FAE452] text-[#2E3093] border-[#FAE452]'
+                  : 'bg-white/15 text-white border-white/20 hover:bg-white/25'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Filters
+            </button>
+
+            {/* Export */}
+            <button
+              onClick={handleExport}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black bg-white/15 text-white border border-white/20 hover:bg-white/25 transition-all shadow-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Export
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Expandable filters panel */}
       {showFilters && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm animate-in slide-in-from-top-2 duration-200">
+        <div className="bg-white rounded-2xl border border-slate-200 px-5 py-5 shadow-[0_8px_30px_rgb(0,0,0,0.03)] animate-in slide-in-from-top-2 duration-200">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {/* Status */}
             <div>
-              <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                Status
-              </label>
+              <label className={labelCls}>Status</label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                className="max-w-[220px] w-full border-2 border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-gray-600"
+                className={selectCls}
               >
                 <option value="">All Statuses</option>
                 {statusOptions.map((s) => (
@@ -204,27 +214,23 @@ export default function OnlineAdmissionPage() {
 
             {/* Date From */}
             <div>
-              <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                Date From
-              </label>
+              <label className={labelCls}>Date From</label>
               <input
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="max-w-[220px] w-full border-2 border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-gray-600"
+                className={inputCls}
               />
             </div>
 
             {/* Date To */}
             <div>
-              <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                Date To
-              </label>
+              <label className={labelCls}>Date To</label>
               <input
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="max-w-[220px] w-full border-2 border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-gray-600"
+                className={inputCls}
               />
             </div>
 
@@ -232,20 +238,17 @@ export default function OnlineAdmissionPage() {
             <div className="flex items-end gap-2">
               <button
                 onClick={handleSearch}
-                className="flex items-center gap-1.5 bg-[#2A6BB5] hover:bg-[#2360A0] text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+                className="w-full flex items-center justify-center gap-2 bg-[#2E3093] text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 Apply
               </button>
               <button
                 onClick={handleClear}
-                className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                className="w-full px-5 py-2.5 text-sm font-bold text-[#2E3093] bg-white border border-slate-200 rounded-xl hover:border-[#2E3093]/30 transition-all shadow-sm"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
                 Clear
               </button>
             </div>
@@ -254,19 +257,19 @@ export default function OnlineAdmissionPage() {
       )}
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.03)] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="dashboard-table w-full text-sm">
             <thead>
-              <tr className="text-[11px] uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100">
-                <th className="text-left py-3 px-4 font-semibold">Id</th>
-                <th className="text-left py-3 px-4 font-semibold">Student Name</th>
-                <th className="text-left py-3 px-4 font-semibold">Email</th>
-                <th className="text-left py-3 px-4 font-semibold">Mobile</th>
-                <th className="text-left py-3 px-4 font-semibold">Batch Code</th>
-                <th className="text-left py-3 px-4 font-semibold">Admission Date</th>
-                <th className="text-center py-3 px-4 font-semibold">Status</th>
-                <th className="text-center py-3 px-4 font-semibold">Action</th>
+              <tr className="text-[11px] uppercase tracking-wider text-slate-500 bg-slate-50 border-b border-slate-200">
+                <th className="text-left py-3 px-4 font-bold">Id</th>
+                <th className="text-left py-3 px-4 font-bold">Student Name</th>
+                <th className="text-left py-3 px-4 font-bold">Email</th>
+                <th className="text-left py-3 px-4 font-bold">Mobile</th>
+                <th className="text-left py-3 px-4 font-bold">Batch Code</th>
+                <th className="text-left py-3 px-4 font-bold">Admission Date</th>
+                <th className="text-center py-3 px-4 font-bold">Status</th>
+                <th className="text-center py-3 px-4 font-bold">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -294,7 +297,7 @@ export default function OnlineAdmissionPage() {
                 rows.map((r) => (
                   <tr
                     key={r.Admission_Id}
-                    className="border-b border-gray-50 hover:bg-blue-50/30 transition-colors"
+                    className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors"
                   >
                     <td className="py-2.5 px-4 text-gray-400 font-mono text-xs">
                       {r.Admission_Id}
@@ -339,7 +342,7 @@ export default function OnlineAdmissionPage() {
                       <div className="flex items-center justify-center gap-1">
                         <button
                           title="View"
-                          className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-[#2A6BB5] transition-colors"
+                          className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-[#2A6BB5] transition-colors"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -350,7 +353,7 @@ export default function OnlineAdmissionPage() {
                         <button
                           title="Edit"
                           onClick={() => router.push(`/dashboard/online-admission/edit/${r.Admission_Id}`)}
-                          className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition-colors"
+                          className="p-1.5 rounded-lg hover:bg-amber-50 text-slate-400 hover:text-amber-600 transition-colors"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -360,7 +363,7 @@ export default function OnlineAdmissionPage() {
                         {canDelete && (
                         <button
                           title="Delete"
-                          className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                          className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -378,18 +381,18 @@ export default function OnlineAdmissionPage() {
 
         {/* Pagination */}
         {pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/50">
-            <p className="text-xs text-gray-400">
+          <div className="flex items-center justify-between px-5 py-4 border-t border-slate-200 bg-slate-50/50">
+            <p className="text-xs text-slate-500">
               Showing{' '}
-              <span className="font-semibold text-gray-600">
+              <span className="font-semibold text-slate-700">
                 {(pagination.page - 1) * pagination.limit + 1}
               </span>
               {' '}-{' '}
-              <span className="font-semibold text-gray-600">
+              <span className="font-semibold text-slate-700">
                 {Math.min(pagination.page * pagination.limit, pagination.total)}
               </span>
               {' '}of{' '}
-              <span className="font-semibold text-gray-600">
+              <span className="font-semibold text-slate-700">
                 {pagination.total.toLocaleString()}
               </span>
             </p>
@@ -398,14 +401,14 @@ export default function OnlineAdmissionPage() {
               <button
                 onClick={() => setPage(1)}
                 disabled={pagination.page <= 1}
-                className="px-2 py-1 text-xs rounded-md border border-gray-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-semibold text-slate-700"
               >
                 First
               </button>
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={pagination.page <= 1}
-                className="px-2 py-1 text-xs rounded-md border border-gray-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-slate-700"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -423,10 +426,10 @@ export default function OnlineAdmissionPage() {
                   <button
                     key={p}
                     onClick={() => setPage(p)}
-                    className={`w-8 h-8 text-xs rounded-md border transition-colors ${
+                    className={`w-8 h-8 text-xs rounded-lg border transition-colors font-semibold ${
                       p === current
                         ? 'bg-[#2E3093] text-white border-[#2E3093]'
-                        : 'border-gray-200 hover:bg-white text-gray-600'
+                        : 'border-slate-200 hover:bg-white text-slate-700'
                     }`}
                   >
                     {p}
@@ -437,7 +440,7 @@ export default function OnlineAdmissionPage() {
               <button
                 onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
                 disabled={pagination.page >= pagination.totalPages}
-                className="px-2 py-1 text-xs rounded-md border border-gray-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-slate-700"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -446,7 +449,7 @@ export default function OnlineAdmissionPage() {
               <button
                 onClick={() => setPage(pagination.totalPages)}
                 disabled={pagination.page >= pagination.totalPages}
-                className="px-2 py-1 text-xs rounded-md border border-gray-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-semibold text-slate-700"
               >
                 Last
               </button>

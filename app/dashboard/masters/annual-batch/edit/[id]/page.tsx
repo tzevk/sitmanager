@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -10,29 +10,58 @@ interface Course {
   Course_Name: string;
 }
 
-/* ---- shared classes ---- */
-const labelCls = 'block text-[11px] font-semibold text-gray-600 mb-0.5';
-const inputCls =
-  'w-full bg-white border border-gray-300 rounded-md px-2.5 py-1.5 text-xs text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] placeholder:text-gray-400 transition-colors';
-const selectCls =
-  'w-full bg-white border border-gray-300 rounded-md px-2.5 py-1.5 text-xs text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] transition-colors';
-const textareaCls =
-  'w-full bg-white border border-gray-300 rounded-md px-2.5 py-1.5 text-xs text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] placeholder:text-gray-400 transition-colors resize-none';
+interface BatchCategory {
+  id: number;
+  BatchCategory: string;
+  Batch_Type: string;
+  Prefix: string | null;
+  Description: string | null;
+}
 
-function SectionCard({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-      <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-3 py-1.5 border-b border-gray-200">
-        <h3 className="text-[13px] font-bold text-[#2E3093] flex items-center gap-2">
-          <span className="w-6 h-6 rounded-md bg-[#2E3093]/10 flex items-center justify-center">
-            {icon}
-          </span>
-          {title}
-        </h3>
-      </div>
-      <div className="px-3 py-2">{children}</div>
-    </div>
-  );
+type BatchDetails = {
+  Batch_Id: number;
+  Course_Id: number | null;
+  Course_Name?: string | null;
+  Batch_code: string | null;
+  Category: string | null;
+  Timings: string | null;
+  SDate: string | null;
+  ActualDate: string | null;
+  Admission_Date: string | null;
+  EDate: string | null;
+  Duration: string | null;
+  Training_Coordinator: string | null;
+  INR_Basic: number | null;
+  INR_ServiceTax?: number | null;
+  INR_Total: number | null;
+  Dollar_Basic: number | null;
+  Dollar_ServiceTax?: number | null;
+  Dollar_Total: number | null;
+  CourseName: string | null;
+  Course_description: string | null;
+  Batch_Category_id: number | null;
+  IsActive: number;
+};
+
+function formatDateForInput(d: string | null | undefined): string {
+  if (!d) return '';
+  try {
+    const date = new Date(d);
+    return date.toISOString().split('T')[0];
+  } catch {
+    return '';
+  }
+}
+
+function toNumberOrNull(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const num = Number(trimmed);
+  return Number.isFinite(num) ? num : null;
+}
+
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 export default function EditAnnualBatchPage() {
@@ -41,170 +70,257 @@ export default function EditAnnualBatchPage() {
   const batchId = params.id as string;
   const { canUpdate, loading: permLoading } = useResourcePermissions('annual_batch');
 
-  /* Inquiry Information */
-  const [firstName, setFirstName] = useState('');
-  const [middleName, setMiddleName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [mobile, setMobile] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [business, setBusiness] = useState('');
-  const [companyName, setCompanyName] = useState('');
-  const [designation, setDesignation] = useState('');
-  const [discussion, setDiscussion] = useState('');
-
-  /* Training Programme & Batch Details */
+  /* --- form state --- */
   const [courseId, setCourseId] = useState('');
-  const [dateOfInquiry, setDateOfInquiry] = useState('');
+  const [courseName, setCourseName] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [batchCode, setBatchCode] = useState('');
+  const [description, setDescription] = useState('');
 
-  /* Address Details */
-  const [state, setState] = useState('');
-  const [pin, setPin] = useState('');
-  const [city, setCity] = useState('');
-  const [place, setPlace] = useState('');
-  const [country, setCountry] = useState('');
-  const [address, setAddress] = useState('');
+  const [plannedStartDate, setPlannedStartDate] = useState('');
+  const [trainingCompletionDate, setTrainingCompletionDate] = useState('');
+  const [lastAdmissionDate, setLastAdmissionDate] = useState('');
+  const [actualDate, setActualDate] = useState('');
 
-  /* courses dropdown */
+  const [duration, setDuration] = useState('');
+  const [timings, setTimings] = useState('');
+  const [trainingCoordinator, setTrainingCoordinator] = useState('');
+
+  const [publish, setPublish] = useState<'0' | '1'>('1');
+
+  // Fees
+  const [taxRate, setTaxRate] = useState('0');
+
+  const [inrBasic, setInrBasic] = useState('');
+  const [inrServiceTax, setInrServiceTax] = useState('');
+  const [inrTotal, setInrTotal] = useState('');
+
+  const [dollarBasic, setDollarBasic] = useState('');
+  const [dollarServiceTax, setDollarServiceTax] = useState('');
+  const [dollarTotal, setDollarTotal] = useState('');
+
+  /* --- dropdown data --- */
   const [courses, setCourses] = useState<Course[]>([]);
+  const [categories, setCategories] = useState<BatchCategory[]>([]);
 
-  /* ui state */
+  /* --- ui --- */
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  /* format date for input */
-  const formatDateForInput = (d: string | null) => {
-    if (!d) return '';
-    try {
-      const date = new Date(d);
-      return date.toISOString().split('T')[0];
-    } catch {
-      return '';
-    }
-  };
+  const selectedCourse = useMemo(() => {
+    if (!courseId) return null;
+    return courses.find((c) => c.Course_Id === Number(courseId)) ?? null;
+  }, [courseId, courses]);
 
   useEffect(() => {
-    const fetchCourses = async () => {
+    const fetchOptions = async () => {
       try {
-        const res = await fetch('/api/masters/course?limit=1000');
-        const json = await res.json();
-        setCourses(json.rows || []);
+        const [courseRes, catRes] = await Promise.all([
+          fetch('/api/masters/course?limit=1000'),
+          fetch('/api/masters/annual-batch/categories'),
+        ]);
+        const courseJson = await courseRes.json();
+        const catJson = await catRes.json();
+        setCourses(courseJson.rows || []);
+        setCategories(Array.isArray(catJson) ? catJson : []);
       } catch {
         /* ignore */
       }
     };
-    fetchCourses();
+    fetchOptions();
   }, []);
 
+  // Auto-fill course name when course changes (still editable)
+  useEffect(() => {
+    if (!selectedCourse) return;
+    setCourseName((prev) => {
+      // If empty or still matches old selected course name, keep auto-updating.
+      if (!prev.trim()) return selectedCourse.Course_Name;
+      return prev;
+    });
+  }, [selectedCourse]);
+
+  // Load existing batch
   useEffect(() => {
     const fetchData = async () => {
       try {
         const res = await fetch(`/api/masters/annual-batch/${batchId}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-        
-        // Map API response to form fields
-        setFirstName(data.FirstName || '');
-        setMiddleName(data.MiddleName || '');
-        setLastName(data.LastName || '');
-        setMobile(data.Mobile || '');
-        setPhone(data.Phone || '');
-        setEmail(data.Email || '');
-        setBusiness(data.Business || '');
-        setCompanyName(data.CompanyName || '');
-        setDesignation(data.Designation || '');
-        setDiscussion(data.Discussion || '');
-        setCourseId(data.Course_Id?.toString() || '');
-        setDateOfInquiry(formatDateForInput(data.DateOfInquiry));
-        setState(data.State || '');
-        setPin(data.Pin || '');
-        setCity(data.City || '');
-        setPlace(data.Place || '');
-        setCountry(data.Country || '');
-        setAddress(data.Address || '');
+        const json = (await res.json()) as unknown;
+
+        if (!res.ok) {
+          const message =
+            typeof json === 'object' && json !== null && 'error' in json && typeof (json as { error?: unknown }).error === 'string'
+              ? (json as { error: string }).error
+              : 'Failed to load batch';
+          throw new Error(message);
+        }
+
+        const data = json as BatchDetails;
+
+        setCourseId(data.Course_Id ? String(data.Course_Id) : '');
+        setCourseName(data.CourseName || data.Course_Name || '');
+        setCategoryId(data.Batch_Category_id ? String(data.Batch_Category_id) : '');
+        setBatchCode(data.Batch_code || '');
+        setDescription(data.Course_description || '');
+
+        setPlannedStartDate(formatDateForInput(data.SDate));
+        setTrainingCompletionDate(formatDateForInput(data.EDate));
+        setLastAdmissionDate(formatDateForInput(data.Admission_Date));
+        setActualDate(formatDateForInput(data.ActualDate));
+
+        setDuration(data.Duration || '');
+        setTimings(data.Timings || '');
+        setTrainingCoordinator(data.Training_Coordinator || '');
+
+        setPublish(String(data.IsActive ?? 1) === '0' ? '0' : '1');
+
+        // Pricing values (fall back to totals - basic if service tax missing)
+        const inrBasicNum = data.INR_Basic ?? null;
+        const inrServiceNum = (data.INR_ServiceTax ?? null) ??
+          (data.INR_Total != null && inrBasicNum != null ? data.INR_Total - inrBasicNum : null);
+        const inrTotalNum = (data.INR_Total ?? null) ??
+          (inrBasicNum != null && inrServiceNum != null ? inrBasicNum + inrServiceNum : null);
+
+        const usdBasicNum = data.Dollar_Basic ?? null;
+        const usdServiceNum = (data.Dollar_ServiceTax ?? null) ??
+          (data.Dollar_Total != null && usdBasicNum != null ? data.Dollar_Total - usdBasicNum : null);
+        const usdTotalNum = (data.Dollar_Total ?? null) ??
+          (usdBasicNum != null && usdServiceNum != null ? usdBasicNum + usdServiceNum : null);
+
+        setInrBasic(inrBasicNum != null ? String(inrBasicNum) : '');
+        setInrServiceTax(inrServiceNum != null ? String(roundMoney(inrServiceNum)) : '0');
+        setInrTotal(inrTotalNum != null ? String(roundMoney(inrTotalNum)) : '0');
+
+        setDollarBasic(usdBasicNum != null ? String(usdBasicNum) : '');
+        setDollarServiceTax(usdServiceNum != null ? String(roundMoney(usdServiceNum)) : '0');
+        setDollarTotal(usdTotalNum != null ? String(roundMoney(usdTotalNum)) : '0');
+
+        // Derive tax rate from INR if possible
+        const derivedRate =
+          inrBasicNum && inrBasicNum > 0 && inrServiceNum != null
+            ? roundMoney((inrServiceNum / inrBasicNum) * 100)
+            : 0;
+        setTaxRate(String(derivedRate));
       } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : 'Failed to load data';
-        setError(message);
+        setError(e instanceof Error ? e.message : 'Failed to load batch');
       } finally {
         setLoading(false);
       }
     };
 
-    if (batchId) {
-      fetchData();
-    }
+    if (batchId) fetchData();
   }, [batchId]);
 
-  /* ---- save ---- */
+  // Recompute service tax and totals when basic/taxRate changes
+  useEffect(() => {
+    const rate = toNumberOrNull(taxRate) ?? 0;
+
+    const inrBasicNum = toNumberOrNull(inrBasic) ?? 0;
+    const inrService = roundMoney((inrBasicNum * rate) / 100);
+    const inrTot = roundMoney(inrBasicNum + inrService);
+    setInrServiceTax(String(inrService));
+    setInrTotal(String(inrTot));
+
+    const usdBasicNum = toNumberOrNull(dollarBasic) ?? 0;
+    const usdService = roundMoney((usdBasicNum * rate) / 100);
+    const usdTot = roundMoney(usdBasicNum + usdService);
+    setDollarServiceTax(String(usdService));
+    setDollarTotal(String(usdTot));
+  }, [inrBasic, dollarBasic, taxRate]);
+
+  const labelCls = 'block text-[11px] font-semibold text-gray-600 mb-0.5';
+  const inputCls =
+    'w-full bg-white border-2 border-gray-300 rounded px-2 py-1.5 text-xs text-gray-900 shadow-sm hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] placeholder:text-gray-400 transition-colors';
+  const selectCls =
+    'w-full bg-white border-2 border-gray-300 rounded px-2 py-1.5 text-xs text-gray-900 shadow-sm hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] transition-colors';
+  const textareaCls =
+    'w-full bg-white border-2 border-gray-300 rounded px-2 py-1.5 text-xs text-gray-900 shadow-sm hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] placeholder:text-gray-400 transition-colors resize-none';
+
+  const SectionCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
+    <div className="rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+      <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-3 py-1.5 border-b border-gray-200">
+        <h3 className="text-[13px] font-bold text-[#2E3093]">{title}</h3>
+      </div>
+      <div className="px-3 py-2">{children}</div>
+    </div>
+  );
+
   const handleSave = async () => {
-    if (!firstName.trim()) {
-      setError('First Name is required');
-      return;
-    }
-    if (!middleName.trim()) {
-      setError('Middle Name is required');
-      return;
-    }
-    if (!lastName.trim()) {
-      setError('Last Name is required');
-      return;
-    }
-    if (!mobile.trim()) {
-      setError('Mobile is required');
-      return;
-    }
-    if (!email.trim()) {
-      setError('Email ID is required');
-      return;
-    }
-    if (!discussion.trim()) {
-      setError('Topic Discussed is required');
-      return;
-    }
     if (!courseId) {
+      setError('Please select a course');
+      return;
+    }
+    if (!courseName.trim()) {
       setError('Course Name is required');
       return;
     }
-    if (!dateOfInquiry) {
-      setError('Date of Inquiry is required');
+    if (!categoryId) {
+      setError('Category is required');
       return;
     }
+    if (!plannedStartDate) {
+      setError('Planned Start Date is required');
+      return;
+    }
+    if (!trainingCompletionDate) {
+      setError('Training completion Date is required');
+      return;
+    }
+    if (!lastAdmissionDate) {
+      setError('Last Date of Admission is required');
+      return;
+    }
+    if (!duration.trim()) {
+      setError('Duration is required');
+      return;
+    }
+    if (!timings.trim()) {
+      setError('Timings is required');
+      return;
+    }
+
+    const selectedCat = categories.find((c) => c.id === Number(categoryId));
+
     setError('');
     setSaving(true);
+
     try {
       const res = await fetch('/api/masters/annual-batch', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          Batch_Id: batchId,
-          FirstName: firstName,
-          MiddleName: middleName,
-          LastName: lastName,
-          Mobile: mobile,
-          Phone: phone || null,
-          Email: email,
-          Business: business || null,
-          CompanyName: companyName || null,
-          Designation: designation || null,
-          Discussion: discussion,
-          Course_Id: courseId,
-          DateOfInquiry: dateOfInquiry,
-          State: state || null,
-          Pin: pin || null,
-          City: city || null,
-          Place: place || null,
-          Country: country || null,
-          Address: address || null,
+          Batch_Id: Number(batchId),
+          Course_Id: Number(courseId),
+          Batch_code: batchCode || null,
+          Category: selectedCat?.BatchCategory || null,
+          Batch_Category_id: Number(categoryId),
+          Timings: timings || null,
+          SDate: plannedStartDate || null,
+          ActualDate: actualDate || null,
+          Admission_Date: lastAdmissionDate || null,
+          EDate: trainingCompletionDate || null,
+          Duration: duration || null,
+          Training_Coordinator: trainingCoordinator || null,
+          INR_Basic: toNumberOrNull(inrBasic),
+          INR_ServiceTax: toNumberOrNull(inrServiceTax),
+          INR_Total: toNumberOrNull(inrTotal),
+          Dollar_Basic: toNumberOrNull(dollarBasic),
+          Dollar_ServiceTax: toNumberOrNull(dollarServiceTax),
+          Dollar_Total: toNumberOrNull(dollarTotal),
+          CourseName: courseName || null,
+          Course_description: description || null,
+          IsActive: Number(publish),
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save');
       router.push('/dashboard/masters/annual-batch');
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to save');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to save');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   if (loading) {
@@ -225,25 +341,45 @@ export default function EditAnnualBatchPage() {
     <div className="space-y-3">
       {/* Header */}
       <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-4 shadow-md">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push('/dashboard/masters/annual-batch')}
-            className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <div>
-            <h2 className="text-base font-bold text-white">Edit Annual Batch</h2>
-            <p className="text-xs text-white/70">Masters &gt; Annual Batch &gt; Edit</p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push('/dashboard/masters/annual-batch')}
+              className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div>
+              <h2 className="text-base font-bold text-white">Edit Annual Batch</h2>
+              <p className="text-xs text-white/70">Masters &gt; Annual Batch &gt; Edit</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => router.push('/dashboard/masters/annual-batch')}
+              className="px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition-colors"
+              type="button"
+              disabled={saving}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-3 py-2 rounded-lg bg-[#FAE452] hover:bg-[#f3de4f] text-[#2E3093] text-xs font-bold transition-colors disabled:opacity-70"
+              type="button"
+              disabled={saving}
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
           </div>
         </div>
       </div>
 
       {/* Card */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        {/* Error */}
         {error && (
           <div className="mx-5 mt-3 px-3 py-2 rounded-md bg-red-50 border border-red-200 text-sm text-red-600 font-medium flex items-center gap-2">
             <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -253,157 +389,16 @@ export default function EditAnnualBatchPage() {
           </div>
         )}
 
-        {/* Body */}
         <div className="px-3 py-2 bg-gray-50/40">
           <div className="space-y-3">
-            {/* Section: Inquiry Information */}
-            <SectionCard
-              title="Inquiry Information"
-              icon={<svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>}
-            >
+            <SectionCard title="Batch Details">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
-                {/* FirstName */}
                 <div>
                   <label className={labelCls}>
-                    FirstName <span className="text-red-400">*</span>
+                    Select Course <span className="text-red-400">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="Enter Fname"
-                    className={inputCls}
-                  />
-                </div>
-                {/* MiddleName */}
-                <div>
-                  <label className={labelCls}>
-                    MiddleName <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={middleName}
-                    onChange={(e) => setMiddleName(e.target.value)}
-                    placeholder="Enter MName"
-                    className={inputCls}
-                  />
-                </div>
-                {/* LastName */}
-                <div>
-                  <label className={labelCls}>
-                    LastName <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Enter Lname"
-                    className={inputCls}
-                  />
-                </div>
-                {/* Mobile */}
-                <div>
-                  <label className={labelCls}>
-                    Mobile <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={mobile}
-                    onChange={(e) => setMobile(e.target.value)}
-                    placeholder="Enter Mobile Number"
-                    className={inputCls}
-                  />
-                </div>
-                {/* Phone */}
-                <div>
-                  <label className={labelCls}>Phone</label>
-                  <input
-                    type="text"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="Enter Phone Number"
-                    className={inputCls}
-                  />
-                </div>
-                {/* Email ID */}
-                <div>
-                  <label className={labelCls}>
-                    Email ID <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Enter Email ID"
-                    className={inputCls}
-                  />
-                </div>
-                {/* Business */}
-                <div>
-                  <label className={labelCls}>Business</label>
-                  <input
-                    type="text"
-                    value={business}
-                    onChange={(e) => setBusiness(e.target.value)}
-                    placeholder="Enter business"
-                    className={inputCls}
-                  />
-                </div>
-                {/* Company Name */}
-                <div>
-                  <label className={labelCls}>Company Name</label>
-                  <input
-                    type="text"
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="Enter CompanyName"
-                    className={inputCls}
-                  />
-                </div>
-                {/* Designation */}
-                <div>
-                  <label className={labelCls}>Designation</label>
-                  <input
-                    type="text"
-                    value={designation}
-                    onChange={(e) => setDesignation(e.target.value)}
-                    placeholder="Enter Designation"
-                    className={inputCls}
-                  />
-                </div>
-                {/* Discussion / Topic Discussed */}
-                <div className="col-span-2 md:col-span-3 lg:col-span-4">
-                  <label className={labelCls}>
-                    Discussion / Topic Discussed <span className="text-red-400">*</span>
-                  </label>
-                  <textarea
-                    value={discussion}
-                    onChange={(e) => setDiscussion(e.target.value)}
-                    placeholder="Topic Discussed"
-                    rows={2}
-                    className={textareaCls}
-                  />
-                </div>
-              </div>
-            </SectionCard>
-
-            {/* Section: Training Programme & Batch Details */}
-            <SectionCard
-              title="Training Programme & Batch Details"
-              icon={<svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>}
-            >
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
-                {/* Course Name */}
-                <div>
-                  <label className={labelCls}>
-                    Course Name <span className="text-red-400">*</span>
-                  </label>
-                  <select
-                    value={courseId}
-                    onChange={(e) => setCourseId(e.target.value)}
-                    className={selectCls}
-                  >
-                    <option value="">--Select Course--</option>
+                  <select value={courseId} onChange={(e) => setCourseId(e.target.value)} className={selectCls}>
+                    <option value="">--Select--</option>
                     {courses.map((c) => (
                       <option key={c.Course_Id} value={c.Course_Id}>
                         {c.Course_Name}
@@ -411,117 +406,170 @@ export default function EditAnnualBatchPage() {
                     ))}
                   </select>
                 </div>
-                {/* Date of Inquiry */}
+
                 <div>
                   <label className={labelCls}>
-                    Date of Inquiry <span className="text-red-400">*</span>
+                    Course Name (if changed) <span className="text-red-400">*</span>
                   </label>
                   <input
-                    type="date"
-                    value={dateOfInquiry}
-                    onChange={(e) => setDateOfInquiry(e.target.value)}
+                    value={courseName}
+                    onChange={(e) => setCourseName(e.target.value)}
+                    placeholder="Course Name"
                     className={inputCls}
                   />
                 </div>
-              </div>
-            </SectionCard>
 
-            {/* Section: Address Details */}
-            <SectionCard
-              title="Address Details"
-              icon={<svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
-            >
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
-                {/* State */}
                 <div>
-                  <label className={labelCls}>State</label>
+                  <label className={labelCls}>
+                    Category <span className="text-red-400">*</span>
+                  </label>
+                  <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={selectCls}>
+                    <option value="">--Select--</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.BatchCategory}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className={labelCls}>Batch Code</label>
                   <input
-                    type="text"
-                    value={state}
-                    onChange={(e) => setState(e.target.value)}
-                    placeholder="Enter State"
+                    value={batchCode}
+                    onChange={(e) => setBatchCode(e.target.value)}
+                    placeholder="Batch Code"
                     className={inputCls}
                   />
                 </div>
-                {/* Pin */}
-                <div>
-                  <label className={labelCls}>Pin</label>
-                  <input
-                    type="text"
-                    value={pin}
-                    onChange={(e) => setPin(e.target.value)}
-                    placeholder="Enter Pin"
-                    className={inputCls}
-                  />
-                </div>
-                {/* City */}
-                <div>
-                  <label className={labelCls}>City</label>
-                  <input
-                    type="text"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder="Enter City"
-                    className={inputCls}
-                  />
-                </div>
-                {/* Place */}
-                <div>
-                  <label className={labelCls}>Place</label>
-                  <input
-                    type="text"
-                    value={place}
-                    onChange={(e) => setPlace(e.target.value)}
-                    placeholder="Enter Place"
-                    className={inputCls}
-                  />
-                </div>
-                {/* Country */}
-                <div>
-                  <label className={labelCls}>Country</label>
-                  <input
-                    type="text"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    placeholder="Enter Country"
-                    className={inputCls}
-                  />
-                </div>
-                {/* Address */}
+
                 <div className="col-span-2 md:col-span-3 lg:col-span-4">
-                  <label className={labelCls}>Address</label>
+                  <label className={labelCls}>Description</label>
                   <textarea
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="Enter Address"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Description"
                     rows={2}
                     className={textareaCls}
                   />
                 </div>
-              </div>
 
-              {/* Action buttons */}
-              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200">
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="flex items-center justify-center gap-2 bg-[#2E3093] hover:bg-[#252780] text-white px-4 py-1.5 rounded text-xs font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50"
-                >
-                  {saving ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                  Submit
-                </button>
-                <button
-                  onClick={() => router.push('/dashboard/masters/annual-batch')}
-                  className="px-4 py-1.5 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-all shadow-sm"
-                >
-                  Cancel
-                </button>
+                <div>
+                  <label className={labelCls}>
+                    Planned Start Date <span className="text-red-400">*</span>
+                  </label>
+                  <input type="date" value={plannedStartDate} onChange={(e) => setPlannedStartDate(e.target.value)} className={inputCls} />
+                </div>
+
+                <div>
+                  <label className={labelCls}>
+                    Training completion Date <span className="text-red-400">*</span>
+                  </label>
+                  <input type="date" value={trainingCompletionDate} onChange={(e) => setTrainingCompletionDate(e.target.value)} className={inputCls} />
+                </div>
+
+                <div>
+                  <label className={labelCls}>
+                    Last Date of Admission <span className="text-red-400">*</span>
+                  </label>
+                  <input type="date" value={lastAdmissionDate} onChange={(e) => setLastAdmissionDate(e.target.value)} className={inputCls} />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Actual Date</label>
+                  <input type="date" value={actualDate} onChange={(e) => setActualDate(e.target.value)} className={inputCls} />
+                </div>
+
+                <div>
+                  <label className={labelCls}>
+                    Duration <span className="text-red-400">*</span>
+                  </label>
+                  <input value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="Duration" className={inputCls} />
+                </div>
+
+                <div className="col-span-2 md:col-span-3">
+                  <label className={labelCls}>
+                    Timings <span className="text-red-400">*</span>
+                  </label>
+                  <input value={timings} onChange={(e) => setTimings(e.target.value)} placeholder="Timings" className={inputCls} />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Training Coordinator</label>
+                  <input
+                    value={trainingCoordinator}
+                    onChange={(e) => setTrainingCoordinator(e.target.value)}
+                    placeholder="Training Coordinator"
+                    className={inputCls}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Publish</label>
+                  <select value={publish} onChange={(e) => setPublish(e.target.value as '0' | '1')} className={selectCls}>
+                    <option value="1">Yes</option>
+                    <option value="0">No</option>
+                  </select>
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Fees">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
+                <div>
+                  <label className={labelCls}>
+                    Tax Rate <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    value={taxRate}
+                    onChange={(e) => setTaxRate(e.target.value)}
+                    placeholder="0.00"
+                    className={inputCls}
+                    inputMode="decimal"
+                  />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Basic (INR)</label>
+                  <input
+                    value={inrBasic}
+                    onChange={(e) => setInrBasic(e.target.value)}
+                    placeholder="0.00"
+                    className={inputCls}
+                    inputMode="decimal"
+                  />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Service Tax (INR)</label>
+                  <input value={inrServiceTax} readOnly className={inputCls + ' bg-gray-50'} />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Total (INR)</label>
+                  <input value={inrTotal} readOnly className={inputCls + ' bg-gray-50'} />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Basic ($)</label>
+                  <input
+                    value={dollarBasic}
+                    onChange={(e) => setDollarBasic(e.target.value)}
+                    placeholder="0.00"
+                    className={inputCls}
+                    inputMode="decimal"
+                  />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Service Tax ($)</label>
+                  <input value={dollarServiceTax} readOnly className={inputCls + ' bg-gray-50'} />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Total ($)</label>
+                  <input value={dollarTotal} readOnly className={inputCls + ' bg-gray-50'} />
+                </div>
               </div>
             </SectionCard>
           </div>

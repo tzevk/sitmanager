@@ -9,7 +9,20 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '\u2014';
   try {
-    const d = new Date(dateStr);
+    const raw = String(dateStr).trim();
+    let d = new Date(raw);
+
+    // Handle legacy formats explicitly when Date.parse fails.
+    if (isNaN(d.getTime())) {
+      const m1 = raw.match(/^(\d{2})[-\/](\d{2})[-\/](\d{4})/);
+      if (m1) {
+        const day = parseInt(m1[1], 10);
+        const mon = parseInt(m1[2], 10) - 1;
+        const year = parseInt(m1[3], 10);
+        d = new Date(year, mon, day);
+      }
+    }
+
     if (isNaN(d.getTime())) return '\u2014';
     const day = String(d.getDate()).padStart(2, '0');
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -19,6 +32,17 @@ function formatDate(dateStr: string | null): string {
   } catch {
     return '\u2014';
   }
+}
+
+function formatStudentName(name: string | null | undefined): string {
+  const trimmed = String(name ?? '').trim();
+  if (!trimmed) return '\u2014';
+  const parts = trimmed.split(/\s+/);
+  const first = parts[0] || '';
+  const formattedFirst = first
+    ? first.charAt(0).toUpperCase() + first.slice(1).toLowerCase()
+    : '';
+  return [formattedFirst, ...parts.slice(1)].filter(Boolean).join(' ');
 }
 
 interface InquiryRow {
@@ -31,6 +55,7 @@ interface InquiryRow {
   Present_Mobile: string | null;
   Email: string | null;
   Discipline: string | null;
+  Inquiry_From: string | null;
   Inquiry_Type: string | null;
   Status_id: number | null;
   StatusLabel: string;
@@ -51,7 +76,7 @@ interface Filters {
 
 export default function InquiryPage() {
   const router = useRouter();
-  const { canView, canCreate, canUpdate, loading: permLoading } = useResourcePermissions('inquiry');
+  const { canView, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('inquiry');
   const [rows, setRows] = useState<InquiryRow[]>([]);
   const [pagination, setPagination] = useState<Pagination>({
     page: 1, limit: 25, total: 0, totalPages: 0,
@@ -85,7 +110,8 @@ export default function InquiryPage() {
       if (dateTo) params.set('dateTo', dateTo);
 
       const res = await fetch(`/api/inquiry?${params.toString()}`);
-      const data = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      const data = contentType.includes('application/json') ? await res.json() : { rows: [], pagination: null, filters: null };
       setRows(data.rows ?? []);
       setPagination(data.pagination ?? { page: 1, limit: 25, total: 0, totalPages: 0 });
       if (data.filters) setFilters(data.filters);
@@ -117,15 +143,23 @@ export default function InquiryPage() {
     setFetchTrigger(t => t + 1);
   };
 
-  const handleAdd = () => {
-    router.push('/dashboard/inquiry/add');
-  };
-
   const handleEdit = (studentId: number) => {
     router.push(`/dashboard/inquiry/add?editId=${studentId}`);
   };
 
-  const statusColor = (label: string) => {
+  const statusPillColor = (statusId: number | null, label: string) => {
+    // Prefer id grouping (stable), fallback to label
+    if (statusId != null) {
+      if ([7, 10, 27].includes(statusId)) return 'bg-emerald-100 text-emerald-700'; // admitted/converted/enrolled
+      if ([1, 2, 3].includes(statusId)) return 'bg-blue-100 text-blue-700'; // new/contacted/inquiry
+      if ([5, 24].includes(statusId)) return 'bg-orange-100 text-orange-700'; // interested/hot lead
+      if ([4, 15, 25].includes(statusId)) return 'bg-amber-100 text-amber-700'; // follow up/callback/warm lead
+      if ([6, 9, 19, 29].includes(statusId)) return 'bg-red-100 text-red-600'; // not interested/dnc/lost/dropped
+      if ([8, 33].includes(statusId)) return 'bg-gray-100 text-gray-600'; // closed/archived
+      if ([12, 16].includes(statusId)) return 'bg-purple-100 text-purple-700'; // pending/visited
+      if ([18, 26].includes(statusId)) return 'bg-slate-100 text-slate-600'; // on hold/cold lead
+    }
+
     const l = label.toLowerCase();
     if (['admitted', 'converted', 'enrolled'].includes(l)) return 'bg-emerald-100 text-emerald-700';
     if (['inquiry', 'new', 'contacted'].includes(l)) return 'bg-blue-100 text-blue-700';
@@ -138,53 +172,106 @@ export default function InquiryPage() {
     return 'bg-gray-100 text-gray-600';
   };
 
+  const statusBarColor = (statusId: number | null, label: string) => {
+    if (statusId != null) {
+      if ([7, 10, 27].includes(statusId)) return 'bg-emerald-400';
+      if ([1, 2, 3].includes(statusId)) return 'bg-blue-400';
+      if ([5, 24].includes(statusId)) return 'bg-orange-400';
+      if ([4, 15, 25].includes(statusId)) return 'bg-amber-400';
+      if ([6, 9, 19, 29].includes(statusId)) return 'bg-red-400';
+      if ([8, 33].includes(statusId)) return 'bg-slate-300';
+      if ([12, 16].includes(statusId)) return 'bg-purple-400';
+      if ([18, 26].includes(statusId)) return 'bg-slate-400';
+    }
+
+    const l = label.toLowerCase();
+    if (['admitted', 'converted', 'enrolled'].includes(l)) return 'bg-emerald-400';
+    if (['inquiry', 'new', 'contacted'].includes(l)) return 'bg-blue-400';
+    if (['hot lead', 'interested'].includes(l)) return 'bg-orange-400';
+    if (['warm lead', 'follow up', 'callback'].includes(l)) return 'bg-amber-400';
+    if (['not interested', 'lost', 'dropped', 'dnc'].includes(l)) return 'bg-red-400';
+    if (['visited', 'pending'].includes(l)) return 'bg-purple-400';
+    if (['closed', 'archived'].includes(l)) return 'bg-slate-300';
+    if (['on hold', 'cold lead'].includes(l)) return 'bg-slate-400';
+    return 'bg-slate-300';
+  };
+
+  const statusRowStrip = (statusId: number | null, label: string) => {
+    if (statusId != null) {
+      if ([7, 10, 27].includes(statusId)) return 'bg-emerald-200/45';
+      if ([1, 2, 3].includes(statusId)) return 'bg-blue-200/45';
+      if ([5, 24].includes(statusId)) return 'bg-orange-200/40';
+      if ([4, 15, 25].includes(statusId)) return 'bg-amber-200/45';
+      if ([6, 9, 19, 29].includes(statusId)) return 'bg-red-200/35';
+      if ([12, 16].includes(statusId)) return 'bg-purple-200/40';
+      if ([18, 26].includes(statusId)) return 'bg-slate-200/45';
+      if ([8, 33].includes(statusId)) return 'bg-slate-200/45';
+    }
+
+    const l = label.toLowerCase();
+    if (['admitted', 'converted', 'enrolled'].includes(l)) return 'bg-emerald-200/45';
+    if (['inquiry', 'new', 'contacted'].includes(l)) return 'bg-blue-200/45';
+    if (['hot lead', 'interested'].includes(l)) return 'bg-orange-200/40';
+    if (['warm lead', 'follow up', 'callback'].includes(l)) return 'bg-amber-200/45';
+    if (['not interested', 'lost', 'dropped', 'dnc'].includes(l)) return 'bg-red-200/35';
+    if (['visited', 'pending'].includes(l)) return 'bg-purple-200/40';
+    if (['on hold', 'cold lead'].includes(l)) return 'bg-slate-200/45';
+    if (['closed', 'archived'].includes(l)) return 'bg-slate-200/45';
+    return 'bg-white';
+  };
+
+  const isOnlineInquiry = (typeValue: string | null, fromValue: string | null) => {
+    const value = `${typeValue || ''} ${fromValue || ''}`.toLowerCase();
+    return value.includes('online') || value.includes('website') || value.includes('web') || value.includes('php');
+  };
+
+  /* ---- shared classes (match Annual Batch styling) ---- */
+  const labelCls = 'block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5';
+  const inputCls =
+    'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] placeholder:text-slate-400 transition-all font-medium';
+  const selectCls =
+    'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] transition-all font-medium';
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
       {permLoading ? <PermissionLoading /> : !canView ? <AccessDenied message="You do not have permission to view inquiries." /> : (<>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-gray-800">Inquiry Listing</h2>
-          <p className="text-sm text-gray-400">
-            {pagination.total.toLocaleString()} total inquiries
-          </p>
+      {/* Header (match Annual Batch styling) */}
+      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-2xl px-8 py-6 shadow-[0_10px_30px_rgba(46,48,147,0.18)] relative overflow-hidden">
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
+        <div className="flex items-center justify-between gap-4 flex-wrap relative z-10">
+          <div>
+            <h2 className="text-2xl font-black text-white tracking-tight">Inquiry Listing</h2>
+            <p className="text-[14px] text-white/80 font-medium mt-1">
+              {pagination.total.toLocaleString()} total inquiries
+            </p>
+          </div>
         </div>
-        {canCreate && (
-        <button
-          onClick={handleAdd}
-          className="flex items-center gap-2 bg-[#2E3093] hover:bg-[#252780] text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Add Inquiry
-        </button>
-        )}
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 shadow-sm">
-        <div className="flex flex-wrap items-end gap-2">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.03)] px-5 py-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
           {/* Search */}
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Search</label>
+          <div className="w-full sm:w-[260px]">
+            <label className={labelCls}>Search</label>
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               placeholder="Name, email, mobile..."
-              className="w-[160px] border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300"
+              className={inputCls}
             />
           </div>
 
           {/* Discipline */}
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Discipline</label>
+          <div className="w-full sm:w-[200px]">
+            <label className={labelCls}>Discipline</label>
             <select
               value={discipline}
               onChange={(e) => setDiscipline(e.target.value)}
-              className="w-[110px] border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-gray-600"
+              className={selectCls}
             >
               <option value="">All</option>
               {filters.disciplines.map((d) => (
@@ -194,12 +281,12 @@ export default function InquiryPage() {
           </div>
 
           {/* Inquiry Type */}
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Type</label>
+          <div className="w-full sm:w-[200px]">
+            <label className={labelCls}>Type</label>
             <select
               value={inquiryType}
               onChange={(e) => setInquiryType(e.target.value)}
-              className="w-[110px] border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-gray-600"
+              className={selectCls}
             >
               <option value="">All</option>
               {filters.inquiryTypes.map((t) => (
@@ -209,12 +296,12 @@ export default function InquiryPage() {
           </div>
 
           {/* Status */}
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Status</label>
+          <div className="w-full sm:w-[200px]">
+            <label className={labelCls}>Status</label>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              className="w-[110px] border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-gray-600"
+              className={selectCls}
             >
               <option value="">All</option>
               {filters.statusOptions.map((s) => (
@@ -224,66 +311,68 @@ export default function InquiryPage() {
           </div>
 
           {/* Date From */}
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">From</label>
+          <div className="w-full sm:w-[200px]">
+            <label className={labelCls}>From</label>
             <input
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="w-[130px] border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-gray-600"
+              className={inputCls}
             />
           </div>
 
           {/* Date To */}
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">To</label>
+          <div className="w-full sm:w-[200px]">
+            <label className={labelCls}>To</label>
             <input
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="w-[130px] border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-gray-600"
+              className={inputCls}
             />
           </div>
 
           {/* Buttons */}
-          <button
-            onClick={handleSearch}
-            className="flex items-center gap-1 bg-[#2A6BB5] hover:bg-[#2360A0] text-white px-3 py-1.5 rounded text-xs font-semibold transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            Search
-          </button>
-          <button
-            onClick={handleClear}
-            className="flex items-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded text-xs font-semibold transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-            Clear
-          </button>
+          <div className="w-full lg:w-auto">
+            <div className={labelCls}>Actions</div>
+            <div className="flex gap-3">
+              <button
+                onClick={handleSearch}
+                className="w-full lg:w-[140px] flex items-center justify-center gap-2 bg-[#2E3093] text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                Search
+              </button>
+              <button
+                onClick={handleClear}
+                className="w-full lg:w-[140px] px-5 py-2.5 text-sm font-bold text-[#2E3093] bg-white border border-slate-200 rounded-xl hover:border-[#2E3093]/30 transition-all shadow-sm"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.03)] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="dashboard-table w-full text-sm">
             <thead>
-              <tr className="text-[11px] uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100">
-                <th className="text-left py-3 px-4 font-semibold">#</th>
-                <th className="text-left py-3 px-4 font-semibold">Student Name</th>
-                <th className="text-left py-3 px-4 font-semibold">Course Name</th>
-                <th className="text-left py-3 px-4 font-semibold">Mobile</th>
-                <th className="text-left py-3 px-4 font-semibold">Email</th>
-                <th className="text-left py-3 px-4 font-semibold">Discipline</th>
-                <th className="text-left py-3 px-4 font-semibold">Inquiry Type</th>
-                <th className="text-left py-3 px-4 font-semibold">Inquiry Date</th>
-                <th className="text-left py-3 px-4 font-semibold">Discussion</th>
-                <th className="text-center py-3 px-4 font-semibold">Status</th>
-                <th className="text-center py-3 px-4 font-semibold">Action</th>
+              <tr className="text-[11px] uppercase tracking-wider text-slate-500 bg-slate-50 border-b border-slate-200">
+                <th className="text-left py-3 px-4 font-bold">#</th>
+                <th className="text-left py-3 px-4 font-bold">Student Name</th>
+                <th className="text-left py-3 px-4 font-bold">Course Name</th>
+                <th className="text-left py-3 px-4 font-bold">Mobile</th>
+                <th className="text-left py-3 px-4 font-bold">Email</th>
+                <th className="text-left py-3 px-4 font-bold">Discipline</th>
+                <th className="text-left py-3 px-4 font-bold">Inquiry Type</th>
+                <th className="text-left py-3 px-4 font-bold">Inquiry Date</th>
+                <th className="text-left py-3 px-4 font-bold">Discussion</th>
+                <th className="text-center py-3 px-4 font-bold">Status</th>
+                <th className="text-center py-3 px-4 font-bold">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -311,40 +400,48 @@ export default function InquiryPage() {
                 rows.map((r, i) => (
                   <tr
                     key={r.Student_Id}
-                    className="border-b border-gray-50 hover:bg-blue-50/30 transition-colors"
+                    className={`border-b border-slate-100 transition-[filter] ${statusRowStrip(
+                      r.Status_id,
+                      r.StatusLabel
+                    )} ${isOnlineInquiry(r.Inquiry_Type, r.Inquiry_From) ? '[&>td]:text-red-600' : ''} hover:brightness-[0.98]`}
                   >
-                    <td className="py-2.5 px-4 text-gray-300 font-medium">
+                    <td className="py-2.5 px-4 text-slate-400 font-semibold relative pl-6">
+                      <span
+                        aria-hidden
+                        className={`absolute left-0 inset-y-0 w-1.5 ${statusBarColor(r.Status_id, r.StatusLabel)} rounded-r`}
+                      />
                       {(pagination.page - 1) * pagination.limit + i + 1}
                     </td>
-                    <td className="py-2.5 px-4 font-semibold text-gray-800 max-w-[180px]">
-                      <span className="truncate block">{r.Student_Name || '—'}</span>
+                    <td className="py-2.5 px-4 font-semibold text-slate-900 max-w-[180px]">
+                      <span className="truncate block">{formatStudentName(r.Student_Name)}</span>
                     </td>
-                    <td className="py-2.5 px-4 text-gray-600 max-w-[160px]">
+                    <td className="py-2.5 px-4 text-slate-600 max-w-[160px]">
                       <span className="truncate block">{r.CourseName || '—'}</span>
                     </td>
-                    <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap font-mono text-xs">
+                    <td className="py-2.5 px-4 text-slate-600 whitespace-nowrap font-mono text-xs">
                       {r.Present_Mobile || '—'}
                     </td>
-                    <td className="py-2.5 px-4 text-gray-600 max-w-[180px]">
+                    <td className="py-2.5 px-4 text-slate-600 max-w-[180px]">
                       <span className="truncate block text-xs">{r.Email || '—'}</span>
                     </td>
-                    <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap text-xs">
+                    <td className="py-2.5 px-4 text-slate-600 whitespace-nowrap text-xs">
                       {r.Discipline && r.Discipline !== 'NULL' && r.Discipline !== 'Select' ? r.Discipline : '—'}
                     </td>
-                    <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap text-xs">
-                      {r.Inquiry_Type || '—'}
+                    <td className="py-2.5 px-4 whitespace-nowrap text-xs">
+                      {r.Inquiry_Type || r.Inquiry_From || '—'}
                     </td>
-                    <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap">
-                      {formatDate(r.DiscussionDate || r.Inquiry_Dt)}
+                    <td className="py-2.5 px-4 text-slate-600 whitespace-nowrap">
+                      {formatDate(r.Inquiry_Dt)}
                     </td>
-                    <td className="py-2.5 px-4 text-gray-500 max-w-[220px]">
+                    <td className="py-2.5 px-4 text-slate-600 max-w-[220px]">
                       <span className="truncate block text-xs" title={r.Discussion && r.Discussion !== 'NULL' ? r.Discussion : ''}>
                         {r.Discussion && r.Discussion !== 'NULL' ? r.Discussion : '\u2014'}
                       </span>
                     </td>
                     <td className="py-2.5 px-4 text-center">
                       <span
-                        className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold ${statusColor(
+                        className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold ${statusPillColor(
+                          r.Status_id,
                           r.StatusLabel
                         )}`}
                       >
@@ -355,7 +452,7 @@ export default function InquiryPage() {
                       <div className="flex items-center justify-center gap-1">
                         <button
                           title="View"
-                          className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-[#2A6BB5] transition-colors"
+                          className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-[#2A6BB5] transition-colors"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -365,7 +462,11 @@ export default function InquiryPage() {
                         <button
                           title="Edit"
                           onClick={() => handleEdit(r.Student_Id)}
-                          className={`p-1.5 rounded-lg hover:bg-amber-50 transition-colors ${canUpdate ? 'text-gray-400 hover:text-amber-600' : 'text-gray-200 cursor-not-allowed'}`}
+                          className={
+                            canUpdate
+                              ? 'p-1.5 rounded-lg hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition-colors'
+                              : 'p-1.5 rounded-lg text-slate-200 cursor-not-allowed'
+                          }
                           disabled={!canUpdate}
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -374,7 +475,12 @@ export default function InquiryPage() {
                         </button>
                         <button
                           title="Delete"
-                          className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                          className={
+                            canDelete
+                              ? 'p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors'
+                              : 'p-1.5 rounded-lg text-slate-200 cursor-not-allowed'
+                          }
+                          disabled={!canDelete}
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -391,18 +497,18 @@ export default function InquiryPage() {
 
         {/* Pagination */}
         {pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/50">
-            <p className="text-xs text-gray-400">
+          <div className="flex items-center justify-between px-5 py-4 border-t border-slate-200 bg-slate-50/50">
+            <p className="text-xs text-slate-500">
               Showing{' '}
-              <span className="font-semibold text-gray-600">
+              <span className="font-semibold text-slate-700">
                 {(pagination.page - 1) * pagination.limit + 1}
               </span>
               {' '}-{' '}
-              <span className="font-semibold text-gray-600">
+              <span className="font-semibold text-slate-700">
                 {Math.min(pagination.page * pagination.limit, pagination.total)}
               </span>
               {' '}of{' '}
-              <span className="font-semibold text-gray-600">
+              <span className="font-semibold text-slate-700">
                 {pagination.total.toLocaleString()}
               </span>
             </p>
@@ -411,14 +517,14 @@ export default function InquiryPage() {
               <button
                 onClick={() => setPage(1)}
                 disabled={pagination.page <= 1}
-                className="px-2 py-1 text-xs rounded-md border border-gray-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-semibold text-slate-700"
               >
                 First
               </button>
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={pagination.page <= 1}
-                className="px-2 py-1 text-xs rounded-md border border-gray-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-slate-700"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -437,10 +543,10 @@ export default function InquiryPage() {
                   <button
                     key={p}
                     onClick={() => setPage(p)}
-                    className={`w-8 h-8 text-xs rounded-md border transition-colors ${
+                    className={`w-8 h-8 text-xs rounded-lg border transition-colors font-semibold ${
                       p === current
                         ? 'bg-[#2E3093] text-white border-[#2E3093]'
-                        : 'border-gray-200 hover:bg-white text-gray-600'
+                        : 'border-slate-200 hover:bg-white text-slate-700'
                     }`}
                   >
                     {p}
@@ -451,7 +557,7 @@ export default function InquiryPage() {
               <button
                 onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
                 disabled={pagination.page >= pagination.totalPages}
-                className="px-2 py-1 text-xs rounded-md border border-gray-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-slate-700"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -460,7 +566,7 @@ export default function InquiryPage() {
               <button
                 onClick={() => setPage(pagination.totalPages)}
                 disabled={pagination.page >= pagination.totalPages}
-                className="px-2 py-1 text-xs rounded-md border border-gray-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1 text-xs rounded-lg border border-slate-200 hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-semibold text-slate-700"
               >
                 Last
               </button>

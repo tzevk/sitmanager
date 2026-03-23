@@ -6,6 +6,40 @@ First, run the development server:
 
 ```bash
 npm run dev
+
+## Cron: legacy → new DB sync
+
+This project supports syncing reference data from a legacy (old) MySQL database into the current (new) database via a cron-triggered API route.
+
+### Environment variables
+
+New DB (existing):
+
+- `DB_HOST`, `DB_PORT` (optional), `DB_NAME`, `DB_USER`, `DB_PASSWORD`
+
+Old DB (source, read-only):
+
+- `OLD_DB_HOST`, `OLD_DB_PORT` (optional), `OLD_DB_NAME`, `OLD_DB_USER`, `OLD_DB_PASSWORD`
+- Optional: `OLD_DB_CONNECTION_LIMIT`, `OLD_DB_SSL`
+
+Cron auth (recommended in production):
+
+- `CRON_SECRET` (send as request header `x-cron-secret` when triggering manually)
+
+### Endpoints
+
+- `GET /api/cron/sync-all` — Incrementally upserts **all** base tables (requires primary keys) from old → new.
+- `GET /api/cron/sync-courses` — Incrementally upserts `course_mst` from old → new.
+
+### Manual run (local)
+
+1. Ensure `BASE_URL` is set (or it defaults to `http://localhost:3000`).
+2. Run `npm run cron:sync-all`.
+
+Notes:
+
+- Tables without a primary key are skipped.
+- Use `SYNC_EXCLUDE_TABLES` (comma-separated) to skip specific tables (e.g. `SYNC_EXCLUDE_TABLES=logs,tmp_table`).
 # or
 yarn dev
 # or

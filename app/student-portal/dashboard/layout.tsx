@@ -88,109 +88,135 @@ export default function StudentDashboardLayout({ children }: { children: React.R
   const isActive = (href: string) =>
     href === '/student-portal/dashboard' ? pathname === href : pathname.startsWith(href);
 
+  const currentItem = navItems.find(item => isActive(item.href));
+  const firstName = studentName.split(' ')[0] || 'Student';
+  const initials = (studentName || 'S').charAt(0).toUpperCase();
+
   return (
-    <div className="flex h-screen overflow-hidden bg-[#f0f2f5]">
+    <div className="flex h-screen overflow-hidden bg-[linear-gradient(180deg,_rgba(255,255,255,1)_0%,_rgba(42,107,181,0.08)_100%)]">
       {/* Mobile overlay */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-20 bg-black/50 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 z-20 bg-[#2E3093]/30 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar — dark gradient */}
-      <aside className={`fixed inset-y-0 left-0 z-30 w-[260px] flex flex-col transform transition-all duration-300 ease-out
+      {/* Sidebar */}
+      <aside className={`fixed inset-y-0 left-0 z-30 w-[260px] flex flex-col overflow-hidden border-r border-white/20 transform transition-all duration-300 ease-out
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:flex`}
-        style={{ background: 'linear-gradient(180deg, #1a1d5e 0%, #2E3093 40%, #2A6BB5 100%)' }}
+        style={{ background: 'linear-gradient(180deg, #2E3093 0%, #2A6BB5 100%)' }}
       >
-        {/* Decorative glow */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-[#FAE452]/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-20 left-0 w-40 h-40 bg-[#2A6BB5]/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute inset-x-0 top-0 h-1 bg-[#FAE452]" />
+        <div className="absolute -top-10 right-0 h-36 w-36 rounded-full bg-[#FAE452]/12 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-12 -left-12 h-40 w-40 rounded-full bg-white/10 blur-3xl pointer-events-none" />
 
         {/* Logo area */}
-        <div className="relative flex items-center justify-center px-4 py-6">
-          <div className="w-full h-20 rounded-2xl overflow-hidden bg-white flex items-center justify-center shrink-0 border-2 border-[#FAE452] shadow-lg shadow-[#FAE452]/20 px-4">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/sit.png" alt="SIT" className="h-14 w-auto object-contain" />
+        <div className="relative px-4 pb-5 pt-6">
+          <div className="rounded-[24px] border border-white/20 bg-white/96 px-4 py-4 shadow-[0_18px_45px_rgba(46,48,147,0.18)] backdrop-blur-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="rounded-full bg-[#FAE452] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-[#2E3093]">
+                Student Portal
+              </span>
+              <span className="h-2 w-2 rounded-full bg-[#2A6BB5]" />
+            </div>
+            <div className="flex h-16 items-center justify-center rounded-2xl border border-[#2A6BB5]/12 bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/sit.png" alt="SIT" className="h-12 w-auto object-contain" />
+            </div>
           </div>
         </div>
 
-        {/* Divider */}
-        <div className="mx-5 h-px bg-white/10" />
-
         {/* Nav items */}
-        <nav className="flex-1 px-3 py-5 space-y-1 overflow-y-auto">
-          <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-white/30">Menu</p>
+        <nav className="flex-1 overflow-y-auto px-4 py-2">
+          <div className="mb-4 px-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/55">Navigation</p>
+            <p className="mt-1 text-xs text-white/70">Focused access to your academic workspace.</p>
+          </div>
           {navItems.map(item => (
             <Link
               key={item.href}
               href={item.href}
               onClick={() => setSidebarOpen(false)}
-              className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200
+              className={`group relative mb-1.5 flex items-center gap-3 rounded-2xl px-3 py-3 text-[13px] font-medium transition-all duration-200
                 ${isActive(item.href)
-                  ? 'bg-white/15 text-white shadow-lg shadow-black/10 backdrop-blur-sm'
-                  : 'text-white/60 hover:bg-white/8 hover:text-white'}`}
+                  ? 'bg-white text-[#2E3093] shadow-[0_16px_35px_rgba(46,48,147,0.18)]'
+                  : 'text-white/78 hover:bg-white/10 hover:text-white'}`}
             >
-              {isActive(item.href) && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#FAE452]" />
-              )}
-              <span className={`transition-colors ${isActive(item.href) ? 'text-[#FAE452]' : 'text-white/40 group-hover:text-white/70'}`}>
+              <span className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${isActive(item.href)
+                ? 'border-[#FAE452] bg-[#FAE452] text-[#2E3093]'
+                : 'border-white/12 bg-white/8 text-white/78 group-hover:border-white/20 group-hover:bg-white/12 group-hover:text-white'}`}>
                 {item.icon}
               </span>
-              {item.label}
+              <span className="flex-1 truncate">{item.label}</span>
+              <span className={`h-2 w-2 rounded-full transition-all ${isActive(item.href) ? 'bg-[#2A6BB5]' : 'bg-transparent group-hover:bg-[#FAE452]'}`} />
             </Link>
           ))}
         </nav>
 
         {/* Student info + logout */}
-        <div className="relative px-4 py-4">
-          <div className="mx-1 mb-3 h-px bg-white/10" />
-          {studentName && (
-            <div className="flex items-center gap-2.5 mb-3 px-1">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#FAE452] to-[#f0c030] flex items-center justify-center text-[#2E3093] text-xs font-black shrink-0 shadow-lg shadow-[#FAE452]/20">
-                {studentName.charAt(0).toUpperCase()}
+        <div className="relative px-4 pb-4 pt-3">
+          <div className="rounded-[24px] border border-white/14 bg-white/10 p-3 backdrop-blur-sm">
+            {studentName && (
+              <div className="mb-3 flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#FAE452] text-xs font-black text-[#2E3093] shadow-[0_10px_24px_rgba(250,228,82,0.24)]">
+                  {initials}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-[12px] font-semibold text-white">{studentName}</p>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/58">Student</p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-[12px] font-semibold text-white truncate">{studentName}</p>
-                <p className="text-[10px] text-white/35">Student</p>
-              </div>
-            </div>
-          )}
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-white/50 hover:text-red-300 hover:bg-white/5 transition-all"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            Sign Out
-          </button>
+            )}
+            <div className="mb-3 h-px bg-white/12" />
+            <p className="mb-3 text-[11px] leading-5 text-white/72">Keep track of attendance, assignments, placements, and applications from one place.</p>
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl border border-white/14 bg-white/8 px-3 py-2.5 text-xs font-semibold text-white transition-all hover:bg-white/14"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Sign Out
+            </button>
+          </div>
         </div>
       </aside>
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
-        <header className="bg-white/80 backdrop-blur-md border-b border-gray-200/60 px-5 py-3.5 flex items-center gap-3 shrink-0 sticky top-0 z-10">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="lg:hidden p-2 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <div className="flex items-center gap-2 min-w-0">
-            <h1 className="text-[15px] font-bold text-gray-900 truncate">
-              {navItems.find(n => isActive(n.href))?.label ?? 'Dashboard'}
-            </h1>
-          </div>
-          <div className="ml-auto flex items-center gap-3">
-            {studentName && (
-              <div className="hidden sm:flex items-center gap-2">
-                <span className="text-xs text-gray-500">Welcome,</span>
-                <span className="text-xs font-semibold text-gray-800">{studentName.split(' ')[0]}</span>
+        <header className="sticky top-0 z-10 shrink-0 border-b border-[#2A6BB5]/10 bg-white/88 backdrop-blur-xl">
+          <div className="h-1 w-full bg-[linear-gradient(90deg,_#FAE452_0%,_#2A6BB5_50%,_#2E3093_100%)]" />
+          <div className="flex items-center gap-3 px-4 py-4 sm:px-5 lg:px-6">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden flex h-10 w-10 items-center justify-center rounded-2xl border border-[#2A6BB5]/12 bg-white text-[#2E3093] transition-colors hover:bg-[#FAE452]"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#2A6BB5]">
+                <span>Student Portal</span>
+                <span className="h-1 w-1 rounded-full bg-[#FAE452]" />
+                <span>{currentItem?.label ?? 'Dashboard'}</span>
               </div>
-            )}
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] flex items-center justify-center text-white text-[11px] font-bold lg:hidden">
-              {(studentName || 'S').charAt(0).toUpperCase()}
+              <h1 className="mt-1 truncate text-lg font-semibold text-[#2E3093]">
+                {currentItem?.label ?? 'Dashboard'}
+              </h1>
+            </div>
+
+            <div className="ml-auto flex items-center gap-3">
+              <div className="hidden items-center rounded-full border border-[#2A6BB5]/12 bg-[#2A6BB5]/[0.06] px-3 py-2 sm:flex">
+                <div className="mr-2 h-2 w-2 rounded-full bg-[#FAE452]" />
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#2A6BB5]">Active</p>
+                  <p className="text-xs font-medium text-[#2E3093]">{firstName}</p>
+                </div>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,_#2E3093_0%,_#2A6BB5_100%)] text-[11px] font-bold text-white shadow-[0_12px_28px_rgba(42,107,181,0.22)]">
+                {initials}
+              </div>
             </div>
           </div>
         </header>
