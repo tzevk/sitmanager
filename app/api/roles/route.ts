@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { ALL_PERMISSIONS, PERMISSION_GROUPS } from '@/lib/rbac';
 import { getSession } from '@/lib/session';
+import { isSuperAdminRole } from '@/lib/super-admin';
 
 // Ensure role_permissions table exists
 async function ensureTable(pool: any) {
@@ -63,14 +64,14 @@ export async function GET(request: NextRequest) {
       }
 
       // Attach permissions to roles
-      (roles as any[]).forEach(role => {
+      for (const role of roles as any[]) {
         role.permissions = permissionMap.get(role.id) || [];
-        // Special case: Administration/Super Admin has all permissions
-        if (role.id === 1) {
+        // Special case: Super Admin has all permissions
+        if (await isSuperAdminRole(role.id, pool)) {
           role.permissions = ALL_PERMISSIONS.map(p => p.id);
           role.isSystemRole = true;
         }
-      });
+      }
     }
 
     return NextResponse.json({

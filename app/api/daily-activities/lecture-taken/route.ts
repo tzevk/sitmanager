@@ -3,6 +3,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
+function normalizeTextKey(v: unknown) {
+  return String(v ?? '').trim().toLowerCase();
+}
+
+function normalizeDateKey(v: unknown) {
+  const s = String(v ?? '');
+  return s.length >= 10 ? s.slice(0, 10) : s;
+}
+
 /* ---------- GET — List lectures OR single lecture ---------- */
 export async function GET(req: NextRequest) {
   try {
@@ -138,25 +147,25 @@ export async function GET(req: NextRequest) {
 
     const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
-    // Count
-    const [countResult] = await pool.query(
-      `SELECT COUNT(*) as total
-       FROM lecture_taken_master lt
-       LEFT JOIN batch_mst b ON lt.Batch_Id = b.Batch_Id
-       LEFT JOIN faculty_master f ON lt.Faculty_Id = f.Faculty_Id
-       ${whereClause}`,
-      params
-    );
+    // Count (avoid joins unless needed for search)
+    const countSql = search
+      ? `SELECT COUNT(*) as total
+         FROM lecture_taken_master lt
+         LEFT JOIN batch_mst b ON lt.Batch_Id = b.Batch_Id
+         LEFT JOIN faculty_master f ON lt.Faculty_Id = f.Faculty_Id
+         ${whereClause}`
+      : `SELECT COUNT(*) as total
+         FROM lecture_taken_master lt
+         ${whereClause}`;
+
+    const [countResult] = await pool.query(countSql, params);
     const total = (countResult as any[])[0]?.total || 0;
 
-    // Fetch rows
-    const [rows] = await pool.query(
+    // Fetch rows (no per-row subquery)
+    const [rowsRaw] = await pool.query(
       `SELECT lt.Take_Id, lt.Lecture_Name, lt.Topic, lt.Take_Dt, lt.Duration,
               lt.ClassRoom, lt.Faculty_Id, lt.Course_Id, lt.Batch_Id, lt.Lecture_Id,
-              f.Faculty_Name, b.Batch_code, c.Course_Name,
-              (SELECT COUNT(*) FROM lecture_taken_child lc
-               WHERE lc.Take_Id = lt.Take_Id AND (lc.IsDelete = 0 OR lc.IsDelete IS NULL)
-              ) as studentCount
+              f.Faculty_Name, b.Batch_code, c.Course_Name
        FROM lecture_taken_master lt
        LEFT JOIN faculty_master f ON lt.Faculty_Id = f.Faculty_Id
        LEFT JOIN batch_mst b ON lt.Batch_Id = b.Batch_Id
@@ -166,6 +175,44 @@ export async function GET(req: NextRequest) {
        LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
+
+    // Dedupe within the current page results (keeps the latest Take_Id due to ORDER BY Take_Id DESC).
+    const seen = new Set<string>();
+    const rows = (rowsRaw as any[])
+      .filter((r) => {
+        const lectureKey = r.Lecture_Id != null && String(r.Lecture_Id).trim() !== ''
+          ? `lid:${String(r.Lecture_Id).trim()}`
+          : `ln:${normalizeTextKey(r.Lecture_Name)}|tp:${normalizeTextKey(r.Topic)}`;
+
+        const key = [
+          `b:${String(r.Batch_Id ?? '')}`,
+          `f:${String(r.Faculty_Id ?? '')}`,
+          `d:${normalizeDateKey(r.Take_Dt)}`,
+          lectureKey,
+        ].join('|');
+
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((r) => ({ ...r, studentCount: 0 }));
+
+    // Student counts for current page in one query
+    const takeIds = rows.map((r) => Number(r.Take_Id)).filter((n) => Number.isFinite(n));
+    if (takeIds.length > 0) {
+      const placeholders = takeIds.map(() => '?').join(',');
+      const [countRows] = await pool.query<any[]>(
+        `SELECT Take_Id, COUNT(*) AS studentCount
+         FROM lecture_taken_child
+         WHERE Take_Id IN (${placeholders})
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+         GROUP BY Take_Id`,
+        takeIds
+      );
+      const countMap = new Map<number, number>();
+      for (const cr of countRows) countMap.set(Number(cr.Take_Id), Number(cr.studentCount) || 0);
+      for (const r of rows) r.studentCount = countMap.get(Number(r.Take_Id)) ?? 0;
+    }
 
     return NextResponse.json({
       rows,

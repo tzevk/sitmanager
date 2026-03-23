@@ -123,48 +123,75 @@ export default function CompanyJDSubmitPage() {
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             {error && <div className="px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">{error}</div>}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelCls}>Job Title <span className="text-red-400">*</span></label>
-                <input type="text" value={form.Job_Title} onChange={e => set('Job_Title', e.target.value)} className={inputCls} required />
+            {/* Company Details */}
+            <div className="rounded-xl border border-gray-200 overflow-hidden">
+              <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
+                <h3 className="text-sm font-bold text-gray-900">Company Details</h3>
               </div>
-              <div>
-                <label className={labelCls}>Location</label>
-                <input type="text" value={form.Location} onChange={e => set('Location', e.target.value)} className={inputCls} />
-              </div>
-            </div>
-
-            <div>
-              <label className={labelCls}>Job Description <span className="text-red-400">*</span></label>
-              <textarea value={form.Job_Description} onChange={e => set('Job_Description', e.target.value)} rows={6} className={textareaCls}
-                placeholder="Describe the role, responsibilities, and expectations..." required />
-            </div>
-
-            <div>
-              <label className={labelCls}>Requirements / Qualifications</label>
-              <textarea value={form.Requirements} onChange={e => set('Requirements', e.target.value)} rows={4} className={textareaCls}
-                placeholder="e.g. Skills required, educational qualifications, experience..." />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelCls}>CTC / Package</label>
-                <input type="text" value={form.Package} onChange={e => set('Package', e.target.value)} className={inputCls} placeholder="e.g. 4-6 LPA" />
-              </div>
-              <div>
-                <label className={labelCls}>Application Deadline</label>
-                <input type="date" value={form.Application_Deadline} onChange={e => set('Application_Deadline', e.target.value)} className={inputCls} />
+              <div className="px-4 py-3">
+                <div className="text-sm text-gray-700">
+                  <span className="font-semibold">Company Name:</span> {companyName || '—'}
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelCls}>Minimum Percentage</label>
-                <input type="number" step="0.01" value={form.Min_Percentage} onChange={e => set('Min_Percentage', e.target.value)} className={inputCls} placeholder="e.g. 60" />
+            {/* Job Details */}
+            <div className="rounded-xl border border-gray-200 overflow-hidden">
+              <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
+                <h3 className="text-sm font-bold text-gray-900">Job Details</h3>
               </div>
-              <div>
-                <label className={labelCls}>Max Backlogs Allowed</label>
-                <input type="number" value={form.Max_Backlogs} onChange={e => set('Max_Backlogs', e.target.value)} className={inputCls} />
+              <div className="px-4 py-3 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls}>Job Title <span className="text-red-400">*</span></label>
+                    <input type="text" value={form.Job_Title} onChange={e => set('Job_Title', e.target.value)} className={inputCls} required />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Location</label>
+                    <input type="text" value={form.Location} onChange={e => set('Location', e.target.value)} className={inputCls} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelCls}>Job Description <span className="text-red-400">*</span></label>
+                  <textarea value={form.Job_Description} onChange={e => set('Job_Description', e.target.value)} rows={6} className={textareaCls}
+                    placeholder="Describe the role, responsibilities, and expectations..." required />
+                </div>
+
+                <div>
+                  <label className={labelCls}>CTC / Package</label>
+                  <input type="text" value={form.Package} onChange={e => set('Package', e.target.value)} className={inputCls} placeholder="e.g. 4-6 LPA" />
+                </div>
+              </div>
+            </div>
+
+            {/* Application Requirements */}
+            <div className="rounded-xl border border-gray-200 overflow-hidden">
+              <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
+                <h3 className="text-sm font-bold text-gray-900">Application Requirements</h3>
+              </div>
+              <div className="px-4 py-3 space-y-4">
+                <div>
+                  <label className={labelCls}>Requirements / Qualifications</label>
+                  <textarea value={form.Requirements} onChange={e => set('Requirements', e.target.value)} rows={4} className={textareaCls}
+                    placeholder="e.g. Skills required, educational qualifications, experience..." />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls}>Application Deadline</label>
+                    <input type="date" value={form.Application_Deadline} onChange={e => set('Application_Deadline', e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Minimum Percentage</label>
+                    <input type="number" step="0.01" value={form.Min_Percentage} onChange={e => set('Min_Percentage', e.target.value)} className={inputCls} placeholder="e.g. 60" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelCls}>Max Backlogs Allowed</label>
+                  <input type="number" value={form.Max_Backlogs} onChange={e => set('Max_Backlogs', e.target.value)} className={inputCls} />
+                </div>
               </div>
             </div>
 

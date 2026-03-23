@@ -30,31 +30,50 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<UserSession | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+
+  const normalizeTitle = (t: unknown) =>
+    String(t ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
 
   const fetchSession = useCallback(async () => {
     try {
+      const readJson = async (res: Response) => {
+        const ct = res.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) {
+          const text = await res.text().catch(() => '');
+          throw new Error(`Expected JSON but got ${ct || 'non-JSON'} (HTTP ${res.status})${text ? `: ${text.slice(0, 120)}` : ''}`);
+        }
+        return res.json();
+      };
+
       // Fetch session
       const sessionRes = await fetch('/api/auth/session');
-      const sessionData = await sessionRes.json();
+      const sessionData = await readJson(sessionRes);
       
       if (sessionData.success && sessionData.session) {
         setSession(sessionData.session);
+
+        // Fetch role info (title + permissions)
+        const roleRes = await fetch(`/api/roles/${sessionData.session.role}`);
+        const roleData = await readJson(roleRes);
+
+        const roleTitle = normalizeTitle(roleData?.data?.title);
+        const superAdminByTitle = roleTitle === 'super admin' || roleTitle === 'superadmin' || roleTitle === 'administration';
+        setIsSuperAdmin(superAdminByTitle || sessionData.session.role === 1);
+
+        if (roleData?.success) {
+          setPermissions(roleData.data.permissions || []);
+          return;
+        }
         
-        // Fetch permissions for user's role
-        if (sessionData.session.role === 1) {
-          // Super admin gets all permissions
+        // Fallback (should rarely happen): fetch flat permissions list for super admin.
+        if (superAdminByTitle || sessionData.session.role === 1) {
           const permRes = await fetch('/api/roles/permissions?flat=true');
-          const permData = await permRes.json();
-          if (permData.success) {
-            setPermissions(permData.data.map((p: { id: string }) => p.id));
-          }
-        } else {
-          // Regular user - fetch role permissions
-          const roleRes = await fetch(`/api/roles/${sessionData.session.role}`);
-          const roleData = await roleRes.json();
-          if (roleData.success) {
-            setPermissions(roleData.data.permissions || []);
-          }
+          const permData = await readJson(permRes);
+          if (permData.success) setPermissions(permData.data.map((p: { id: string }) => p.id));
         }
       }
     } catch (error) {
@@ -62,7 +81,6 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -77,9 +95,9 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
     hasAnyPermission: (required: string[]) => hasAnyPermission(permissions, required),
     canAccess: (resource: string, action: PermissionAction) => 
       canAccessResource(permissions, resource, action),
-    isSuperAdmin: session?.role === 1,
+    isSuperAdmin,
     refreshSession: fetchSession,
-  }), [session, loading, permissions, fetchSession]);
+  }), [session, loading, permissions, isSuperAdmin, fetchSession]);
 
   return (
     <PermissionContext.Provider value={value}>

@@ -69,6 +69,7 @@ function WidgetHeader({ title, icon, badge, accent = 'from-[#2E3093] to-[#2A6BB5
   return (
     <div className={`bg-gradient-to-r ${accent} px-6 py-4 flex items-center gap-3 relative overflow-hidden`}>
       <div className="absolute inset-0 bg-white/5 mix-blend-overlay"></div>
+      <div className="absolute left-0 right-0 bottom-0 h-1 bg-[#FAE452] opacity-80"></div>
       <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shadow-inner relative z-10 border border-white/20">{icon}</div>
       <h2 className="text-white font-bold text-[15px] tracking-wide flex-1 relative z-10">{title}</h2>
       {badge !== undefined && (
@@ -118,7 +119,11 @@ export default function DashboardPage() {
   const qs = data?.quickStats ?? { totalStudents: 0, activeCourses: 0, activeBatches: 0, totalFaculty: 0 };
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="relative space-y-6 pb-8">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_rgba(46,48,147,0.08),_transparent_55%),radial-gradient(ellipse_at_top_right,_rgba(42,107,181,0.08),_transparent_55%),radial-gradient(ellipse_at_bottom_left,_rgba(250,228,82,0.10),_transparent_50%)]"
+      />
       {/* ── Quick Stats Row ── */}
       {loading ? (
         <QuickStatsSkeleton />
@@ -127,22 +132,22 @@ export default function DashboardPage() {
         <StatCard
           icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>}
           label="Total Students" value={qs.totalStudents}
-          color="bg-gradient-to-br from-[#2E3093] to-[#4547B2] text-white" glow="bg-[#2E3093]"
+          color="bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] text-white" glow="bg-[#2E3093]"
         />
         <StatCard
           icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>}
           label="Active Courses" value={qs.activeCourses}
-          color="bg-gradient-to-br from-[#2A6BB5] to-[#4A90D9] text-white" glow="bg-[#2A6BB5]"
+          color="bg-gradient-to-br from-[#2A6BB5] to-[#2E3093] text-white" glow="bg-[#2A6BB5]"
         />
         <StatCard
           icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>}
           label="Active Batches" value={qs.activeBatches}
-          color="bg-gradient-to-br from-[#FAE452] to-[#FBEA75] text-[#2E3093]" glow="bg-[#FAE452]"
+          color="bg-gradient-to-br from-[#FAE452] to-[#FAE452] text-[#2E3093]" glow="bg-[#FAE452]"
         />
         <StatCard
           icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>}
           label="Faculty Members" value={qs.totalFaculty}
-          color="bg-gradient-to-br from-white to-gray-50 text-[#2A6BB5] border border-gray-100" glow="bg-gray-200"
+          color="bg-gradient-to-br from-white to-white text-[#2A6BB5] border border-[#2A6BB5]/15" glow="bg-[#2A6BB5]"
         />
       </div>
       )}
@@ -208,17 +213,17 @@ export default function DashboardPage() {
                           <td className="py-3 px-4 font-bold text-gray-800 max-w-[240px]"><span className="truncate block group-hover:text-[#2E3093] transition-colors">{t.CourseName || 'N/A'}</span></td>
                           <td className="py-3 px-4 text-center"><span className="bg-slate-100 text-slate-600 rounded-md px-2 py-1 text-[11px] font-medium">{t.Duration || '—'}</span></td>
                           <td className="py-3 px-4 text-right font-semibold text-slate-700 whitespace-nowrap">{fees > 0 ? `₹${fees.toLocaleString('en-IN')}` : '—'}</td>
-                          <td className="py-3 px-4 text-center"><span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-bold shadow-sm ${conducted >= targetFreq ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{conducted}</span></td>
-                          <td className="py-3 px-4 text-center"><span className="inline-block px-2.5 py-1 rounded-full bg-indigo-50 text-[#2E3093] text-[11px] font-bold shadow-sm">{targetFreq}</span></td>
+                          <td className="py-3 px-4 text-center"><span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-bold shadow-sm ${conducted >= targetFreq ? 'bg-[#2A6BB5]/10 text-[#2A6BB5]' : 'bg-[#FAE452]/60 text-[#2E3093]'}`}>{conducted}</span></td>
+                          <td className="py-3 px-4 text-center"><span className="inline-block px-2.5 py-1 rounded-full bg-[#2E3093]/8 text-[#2E3093] text-[11px] font-bold shadow-sm">{targetFreq}</span></td>
                           <td className="py-3 px-4 text-center text-slate-600 font-medium">{minStu}</td>
                           <td className="py-3 px-4 text-center">
                             <div className="flex flex-col items-center gap-1">
                               <span className="font-extrabold text-gray-900">{admitted}</span>
-                              <div className="w-12 bg-gray-100 rounded-full h-1.5 overflow-hidden"><div className={`h-full rounded-full transition-all duration-500 ${adPct >= 80 ? 'bg-emerald-500' : adPct >= 40 ? 'bg-amber-400' : 'bg-red-500'}`} style={{ width: `${adPct}%` }} /></div>
+                              <div className="w-12 bg-gray-100 rounded-full h-1.5 overflow-hidden"><div className={`h-full rounded-full transition-all duration-500 ${adPct >= 80 ? 'bg-[#2A6BB5]' : adPct >= 40 ? 'bg-[#FAE452]' : 'bg-[#2E3093]/40'}`} style={{ width: `${adPct}%` }} /></div>
                             </div>
                           </td>
                           <td className="py-3 px-4 text-center font-bold text-[#2E3093]">{yearlyTarget}</td>
-                          <td className="py-3 px-4 text-center"><Sparkline data={spark} color={conducted >= targetFreq ? '#10B981' : '#4F46E5'} /></td>
+                          <td className="py-3 px-4 text-center"><Sparkline data={spark} color={conducted >= targetFreq ? '#2A6BB5' : '#2E3093'} /></td>
                           <td className="py-3 px-4 text-right whitespace-nowrap">
                             <span className="font-bold text-slate-700">{feesCollected > 0 ? `₹${(feesCollected / 100000).toFixed(1)}L` : '—'}</span>
                           </td>
@@ -263,14 +268,14 @@ export default function DashboardPage() {
               title="Upcoming Batches"
               icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>}
               badge={(data?.upcomingBatches ?? []).length}
-              accent="from-[#2A6BB5] to-[#4A90D9]"
+              accent="from-[#2A6BB5] to-[#2E3093]"
             />
             <div className="p-4 flex-1 overflow-auto max-h-80">
               {(data?.upcomingBatches ?? []).length > 0 ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-x-2 gap-y-1.5">
                   {(data?.upcomingBatches ?? []).map((b: any) => (
-                    <div key={b.Batch_Id} className="relative overflow-hidden rounded-2xl border border-sky-100/60 bg-white p-4 hover:border-sky-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:-translate-y-1 transition-all duration-300 group">
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-sky-50 to-transparent rounded-bl-full opacity-50 group-hover:opacity-100 transition-opacity"></div>
+                    <div key={b.Batch_Id} className="relative overflow-hidden rounded-2xl border border-[#2A6BB5]/15 bg-white p-4 hover:border-[#2A6BB5]/35 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:-translate-y-1 transition-all duration-300 group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-[#2A6BB5]/10 to-transparent rounded-bl-full opacity-60 group-hover:opacity-100 transition-opacity"></div>
                       <div className="relative z-10">
                         <div className="flex items-start justify-between mb-3">
                           <div className="min-w-0 flex-1">
@@ -281,7 +286,7 @@ export default function DashboardPage() {
                               <span>{b.Category}</span>
                             </p>
                           </div>
-                          <span className="text-[11px] bg-gradient-to-r from-[#FAE452] to-[#FCD34D] text-[#2E3093] font-black px-3 py-1.5 rounded-xl whitespace-nowrap shadow-sm border border-[#FBE14F]/50 transform group-hover:scale-105 transition-transform">
+                          <span className="text-[11px] bg-[#FAE452] text-[#2E3093] font-black px-3 py-1.5 rounded-xl whitespace-nowrap shadow-sm border border-[#FAE452]/70 transform group-hover:scale-105 transition-transform">
                             {b.SDate}
                           </span>
                         </div>
@@ -311,7 +316,7 @@ export default function DashboardPage() {
               title="To-Do List"
               icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>}
               badge={`${todos.filter(t => !t.done).length} pending`}
-              accent="from-[#2E3093] to-[#4547B2]"
+              accent="from-[#2E3093] to-[#2A6BB5]"
             />
             <div className="p-4 flex-1 flex flex-col">
               <div className="flex gap-3 mb-4">
@@ -352,7 +357,7 @@ export default function DashboardPage() {
                         </div>
                       </button>
                       <span className={`flex-1 text-[13px] font-medium transition-all ${todo.done ? 'line-through text-gray-400' : 'text-slate-700'}`}>{todo.text}</span>
-                      <button onClick={() => removeTodo(todo.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1.5 bg-red-50 hover:bg-red-100 rounded-lg">
+                      <button onClick={() => removeTodo(todo.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-[#2E3093] transition-all p-1.5 bg-slate-50 hover:bg-[#FAE452]/25 rounded-lg border border-transparent hover:border-[#FAE452]/40">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                       </button>
                     </div>
@@ -373,19 +378,19 @@ export default function DashboardPage() {
             <WidgetHeader
               title="Notice Board"
               icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/></svg>}
-              accent="from-[#2A6BB5] to-[#4A90D9]"
+              accent="from-[#2A6BB5] to-[#2E3093]"
             />
             <div className="p-4 flex-1 overflow-auto max-h-80">
             {(data?.notices ?? []).length > 0 ? (
               <div className="space-y-3">
                 {(data?.notices ?? []).map((n: any) => (
-                  <div key={n.id} className="p-4 rounded-2xl bg-gradient-to-br from-purple-50/80 to-purple-100/30 border border-purple-100/50 hover:shadow-md hover:border-purple-200 transition-all duration-300 relative overflow-hidden group">
-                    <div className="absolute top-0 left-0 w-1 h-full bg-purple-400 opacity-50 group-hover:opacity-100 transition-opacity"></div>
+                  <div key={n.id} className="p-4 rounded-2xl bg-gradient-to-br from-[#2A6BB5]/5 to-white border border-[#2A6BB5]/12 hover:shadow-md hover:border-[#2A6BB5]/25 transition-all duration-300 relative overflow-hidden group">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-[#FAE452] opacity-60 group-hover:opacity-100 transition-opacity"></div>
                     <div className="text-[13px] text-slate-700 font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: n.specification }} />
-                    <div className="flex items-center gap-3 mt-3 text-[10px] text-purple-600/70 font-semibold uppercase tracking-wider">
+                    <div className="flex items-center gap-3 mt-3 text-[10px] text-[#2A6BB5]/80 font-semibold uppercase tracking-wider">
                       {n.startdate && <span className="flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg> {n.startdate}</span>}
                       {n.enddate && <span className="flex items-center gap-1">To: {n.enddate}</span>}
-                      {n.created_date && <span className="ml-auto bg-purple-100 text-purple-700 px-2 py-0.5 rounded-md">{new Date(n.created_date).toLocaleDateString()}</span>}
+                      {n.created_date && <span className="ml-auto bg-[#FAE452]/35 text-[#2E3093] px-2 py-0.5 rounded-md border border-[#FAE452]/50">{new Date(n.created_date).toLocaleDateString()}</span>}
                     </div>
                   </div>
                 ))}
@@ -408,24 +413,24 @@ export default function DashboardPage() {
             <WidgetHeader
               title="Enquiry Report"
               icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>}
-              accent="from-[#2E3093] to-[#4547B2]"
+              accent="from-[#2E3093] to-[#2A6BB5]"
             />
             <div className="p-4 flex-1 overflow-auto max-h-80">
             <div className="grid grid-cols-3 gap-3 mb-5">
-              <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/50 rounded-2xl p-4 text-center border border-indigo-100/50 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+              <div className="bg-gradient-to-br from-[#2A6BB5]/8 to-white rounded-2xl p-4 text-center border border-[#2A6BB5]/12 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
                 <div className="absolute inset-0 bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <p className="text-2xl font-black text-[#2E3093] relative z-10">{data?.enquiryReport?.summary?.total_enquiries ?? 0}</p>
-                <p className="text-[10px] text-indigo-600/70 mt-1 font-bold uppercase tracking-widest relative z-10">Student</p>
+                <p className="text-[10px] text-[#2A6BB5]/80 mt-1 font-bold uppercase tracking-widest relative z-10">Student</p>
               </div>
-              <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-2xl p-4 text-center border border-emerald-100/50 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+              <div className="bg-gradient-to-br from-[#FAE452]/35 to-white rounded-2xl p-4 text-center border border-[#FAE452]/60 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
                 <div className="absolute inset-0 bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <p className="text-2xl font-black text-emerald-600 relative z-10">{data?.enquiryReport?.corporateTotal ?? 0}</p>
-                <p className="text-[10px] text-emerald-600/70 mt-1 font-bold uppercase tracking-widest relative z-10">Corporate</p>
+                <p className="text-2xl font-black text-[#2E3093] relative z-10">{data?.enquiryReport?.corporateTotal ?? 0}</p>
+                <p className="text-[10px] text-[#2E3093]/75 mt-1 font-bold uppercase tracking-widest relative z-10">Corporate</p>
               </div>
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-2xl p-4 text-center border border-purple-100/50 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+              <div className="bg-gradient-to-br from-[#2E3093]/6 to-white rounded-2xl p-4 text-center border border-[#2E3093]/12 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
                 <div className="absolute inset-0 bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <p className="text-2xl font-black text-purple-600 relative z-10">{(data?.enquiryReport?.summary?.total_enquiries ?? 0) + (data?.enquiryReport?.corporateTotal ?? 0)}</p>
-                <p className="text-[10px] text-purple-600/70 mt-1 font-bold uppercase tracking-widest relative z-10">Total</p>
+                <p className="text-2xl font-black text-[#2A6BB5] relative z-10">{(data?.enquiryReport?.summary?.total_enquiries ?? 0) + (data?.enquiryReport?.corporateTotal ?? 0)}</p>
+                <p className="text-[10px] text-[#2A6BB5]/75 mt-1 font-bold uppercase tracking-widest relative z-10">Total</p>
               </div>
             </div>
             <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
@@ -434,8 +439,8 @@ export default function DashboardPage() {
             <div className="space-y-2 overflow-y-auto max-h-48 pr-1">
               {(data?.enquiryReport?.recentCorporate ?? []).length > 0 ? (
                 (data?.enquiryReport?.recentCorporate ?? []).map((e: any) => (
-                  <div key={e.Id} className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100 hover:bg-white hover:border-indigo-100 hover:shadow-[0_4px_20px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 transition-all duration-300">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-100 to-indigo-50 text-[#2E3093] flex items-center justify-center text-[14px] font-black shrink-0 shadow-inner border border-indigo-100/50">
+                  <div key={e.Id} className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100 hover:bg-white hover:border-[#2A6BB5]/20 hover:shadow-[0_4px_20px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 transition-all duration-300">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#2A6BB5]/15 to-white text-[#2E3093] flex items-center justify-center text-[14px] font-black shrink-0 shadow-inner border border-[#2A6BB5]/15">
                       {(e.FullName || '?')[0]}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -465,19 +470,19 @@ export default function DashboardPage() {
               title="Company Requirements"
               icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>}
               badge={`${data?.placementReport?.activeRequirements ?? 0} active`}
-              accent="from-[#2A6BB5] to-[#4A90D9]"
+              accent="from-[#2A6BB5] to-[#2E3093]"
             />
             <div className="p-4 flex-1 overflow-auto max-h-80">
               {(data?.placementReport?.companyRequirements ?? []).length > 0 ? (
                 <div className="space-y-3 pr-1">
                   {(data?.placementReport?.companyRequirements ?? []).map((r: any) => (
-                    <div key={r.CompReqId} className="p-4 rounded-2xl border border-sky-100/50 bg-gradient-to-br from-white to-sky-50/20 hover:border-sky-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:-translate-y-1 transition-all duration-300 group">
+                    <div key={r.CompReqId} className="p-4 rounded-2xl border border-[#2A6BB5]/15 bg-gradient-to-br from-white to-[#2A6BB5]/5 hover:border-[#2A6BB5]/35 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:-translate-y-1 transition-all duration-300 group">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-[14px] font-bold text-slate-800 truncate group-hover:text-[#2A6BB5] transition-colors">{r.Profile || 'Open Position'}</p>
                           <p className="text-[11px] text-slate-500 font-medium mt-1 inline-flex items-center gap-1.5"><svg className="w-3.5 h-3.5 text-[#2A6BB5]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg> {r.CompanyName || 'Company'}{r.Location ? ` · ${r.Location}` : ''}</p>
                         </div>
-                        {r.PostedDate && <span className="text-[10px] text-sky-600/70 font-bold whitespace-nowrap bg-sky-50 px-2 py-1 rounded-md border border-sky-100">{r.PostedDate}</span>}
+                        {r.PostedDate && <span className="text-[10px] text-[#2A6BB5]/80 font-bold whitespace-nowrap bg-[#2A6BB5]/5 px-2 py-1 rounded-md border border-[#2A6BB5]/12">{r.PostedDate}</span>}
                       </div>
                       {r.Eligibility && <p className="text-[12px] text-slate-600 mt-2.5 leading-relaxed bg-slate-50/50 p-2.5 rounded-xl border border-slate-100">{r.Eligibility}</p>}
                     </div>
@@ -503,7 +508,7 @@ export default function DashboardPage() {
             title="Placement Report"
             icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>}
             badge={`${(data?.placementReport?.rows ?? []).length} batches`}
-            accent="from-[#2E3093] to-[#4547B2]"
+            accent="from-[#2E3093] to-[#2A6BB5]"
           />
           <div className="p-0 flex-1 overflow-auto max-h-[420px]">
             {(data?.placementReport?.rows ?? []).length > 0 ? (() => {
@@ -524,59 +529,63 @@ export default function DashboardPage() {
 
               return (
                 <table className="w-full text-sm border-collapse">
-                  <thead className="shadow-[0_4px_20px_rgb(0,0,0,0.03)] bg-teal-50/95 backdrop-blur-xl sticky top-0 z-20 before:content-[''] before:absolute before:inset-0 before:border-b before:border-teal-100/60 before:z-[-1]">
-                    <tr className="text-[11px] font-bold uppercase tracking-widest text-teal-800">
-                      <th className="py-3 px-5 text-left border-b border-teal-100/50" rowSpan={2}>Course</th>
-                      <th className="py-3 px-4 text-center whitespace-nowrap border-b border-teal-100/50" rowSpan={2}>Batch</th>
-                      <th className="py-3 px-4 text-center whitespace-nowrap border-b border-teal-100/50" rowSpan={2}>Conv. Date</th>
-                      <th className="py-3 px-4 text-center border-b border-r border-teal-100/50" rowSpan={2}>Passed</th>
-                      <th className="py-2 px-4 text-center text-teal-700 border-b border-teal-100/50" colSpan={4}>Candidate Status</th>
-                      <th className="py-3 px-4 text-center border-b border-l border-teal-100/50" rowSpan={2}>Intervw.</th>
-                      <th className="py-3 px-4 text-center border-b border-teal-100/50" rowSpan={2}>Placed</th>
-                      <th className="py-3 px-5 text-center border-b border-teal-100/50" rowSpan={2}>Conv. Rate</th>
+                  <thead className="shadow-[0_4px_20px_rgb(0,0,0,0.03)] bg-gradient-to-r from-slate-50/95 to-white/95 backdrop-blur-xl sticky top-0 z-20 before:content-[''] before:absolute before:inset-0 before:border-b before:border-slate-200/60 before:z-[-1]">
+                    <tr className="text-[11px] font-bold uppercase tracking-widest text-slate-600">
+                      <th className="py-3 px-5 text-left border-b border-slate-200/50" rowSpan={2}>Course</th>
+                      <th className="py-3 px-4 text-center whitespace-nowrap border-b border-slate-200/50" rowSpan={2}>Batch</th>
+                      <th className="py-3 px-4 text-center whitespace-nowrap border-b border-slate-200/50" rowSpan={2}>Conv. Date</th>
+                      <th className="py-3 px-4 text-center border-b border-r border-slate-200/60" rowSpan={2}>Passed</th>
+                      <th className="py-2 px-4 text-center text-[#2E3093] border-b border-slate-200/50" colSpan={4}>Candidate Status</th>
+                      <th className="py-3 px-4 text-center border-b border-l border-slate-200/60" rowSpan={2}>Intervw.</th>
+                      <th className="py-3 px-4 text-center border-b border-slate-200/50" rowSpan={2}>Placed</th>
+                      <th className="py-3 px-5 text-center border-b border-slate-200/50" rowSpan={2}>Conv. Rate</th>
                     </tr>
-                    <tr className="text-[10px] font-bold uppercase tracking-widest text-teal-700 bg-teal-50/50">
-                      <th className="py-2.5 px-4 text-center border-l border-b border-teal-100/50">CV Recv</th>
-                      <th className="py-2.5 px-4 text-center border-b border-teal-100/50">Self</th>
-                      <th className="py-2.5 px-4 text-center whitespace-nowrap border-b border-teal-100/50">No Resume</th>
-                      <th className="py-2.5 px-4 text-center border-b border-teal-100/50">Others</th>
+                    <tr className="text-[10px] font-bold uppercase tracking-widest text-slate-500 bg-white/60">
+                      <th className="py-2.5 px-4 text-center border-l border-b border-slate-200/50">CV Recv</th>
+                      <th className="py-2.5 px-4 text-center border-b border-slate-200/50">Self</th>
+                      <th className="py-2.5 px-4 text-center whitespace-nowrap border-b border-slate-200/50">No Resume</th>
+                      <th className="py-2.5 px-4 text-center border-b border-slate-200/50">Others</th>
                     </tr>
                   </thead>
-                    <tbody className="divide-y divide-teal-50">
+                    <tbody className="divide-y divide-slate-100">
                     {rows.map((r: any, i: number) => {
                       const pct = r.placedPct ?? 0;
-                      const pctColor = pct >= 70 ? 'text-teal-700 bg-teal-100/80 ring-teal-600/20' : pct >= 40 ? 'text-amber-700 bg-amber-100/80 ring-amber-600/20' : 'text-rose-700 bg-rose-100/80 ring-rose-600/20';
+                      const pctColor = pct >= 70
+                        ? 'text-[#2E3093] bg-[#FAE452]/70 ring-[#FAE452]/50'
+                        : pct >= 40
+                          ? 'text-[#2A6BB5] bg-[#2A6BB5]/10 ring-[#2A6BB5]/20'
+                          : 'text-[#2E3093] bg-[#2E3093]/8 ring-[#2E3093]/15';
                       return (
-                        <tr key={r.batchCode ?? i} className="group hover:bg-gradient-to-r hover:from-teal-50/40 hover:to-white transition-all duration-300">
+                        <tr key={r.batchCode ?? i} className="group hover:bg-gradient-to-r hover:from-[#2A6BB5]/5 hover:to-white transition-all duration-300">
                           <td className="py-3.5 px-5 font-bold text-slate-800 max-w-[240px] relative">
-                            <span className="absolute inset-y-0 left-0 w-1 bg-teal-400 opacity-0 group-hover:opacity-100 transition-opacity"></span>
-                            <span className="truncate block group-hover:text-teal-700 transition-colors drop-shadow-sm pl-1">{r.courseName || 'N/A'}</span>
+                            <span className="absolute inset-y-0 left-0 w-1 bg-[#FAE452] opacity-0 group-hover:opacity-100 transition-opacity"></span>
+                            <span className="truncate block group-hover:text-[#2A6BB5] transition-colors drop-shadow-sm pl-1">{r.courseName || 'N/A'}</span>
                           </td>
                           <td className="py-3.5 px-4 text-center"><span className="font-mono bg-slate-50 border border-slate-200 text-slate-600 shadow-sm rounded-lg px-2.5 py-1 text-[11px] font-semibold">{r.batchCode}</span></td>
                           <td className="py-3.5 px-4 text-center text-slate-500 whitespace-nowrap text-xs font-medium">{r.convocationDate || '—'}</td>
-                          <td className="py-3.5 px-4 text-center font-black text-slate-800 border-r border-teal-50/50 group-hover:border-transparent drop-shadow-sm">{r.passedStudent}</td>
-                          <td className="py-3.5 px-4 text-center text-indigo-600 font-extrabold">{r.totalCvReceived}</td>
-                          <td className="py-3.5 px-4 text-center text-purple-600 font-extrabold">{r.selfPlacement}</td>
-                          <td className="py-3.5 px-4 text-center text-amber-600 font-extrabold">{r.resumesNotReceived}</td>
+                          <td className="py-3.5 px-4 text-center font-black text-slate-800 border-r border-slate-100 group-hover:border-transparent drop-shadow-sm">{r.passedStudent}</td>
+                          <td className="py-3.5 px-4 text-center text-[#2A6BB5] font-extrabold">{r.totalCvReceived}</td>
+                          <td className="py-3.5 px-4 text-center text-[#2E3093] font-extrabold">{r.selfPlacement}</td>
+                          <td className="py-3.5 px-4 text-center text-[#2E3093] font-extrabold">{r.resumesNotReceived}</td>
                           <td className="py-3.5 px-4 text-center text-slate-400 font-semibold">{r.others}</td>
-                          <td className="py-3.5 px-4 text-center text-[#2E3093] font-black border-l border-teal-50/50 group-hover:border-transparent drop-shadow-sm">{r.totalInterviewed}</td>
-                          <td className="py-3.5 px-4 text-center font-black text-teal-600 drop-shadow-sm">{r.totalPlaced}</td>
+                          <td className="py-3.5 px-4 text-center text-[#2E3093] font-black border-l border-slate-100 group-hover:border-transparent drop-shadow-sm">{r.totalInterviewed}</td>
+                          <td className="py-3.5 px-4 text-center font-black text-[#2A6BB5] drop-shadow-sm">{r.totalPlaced}</td>
                           <td className="py-3.5 px-5 text-center"><span className={`inline-flex items-center justify-center min-w-[48px] px-2.5 py-1.5 rounded-xl text-[12px] font-black shadow-sm ring-1 ring-inset ${pctColor}`}>{pct}%</span></td>
                         </tr>
                       );
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-gradient-to-r from-teal-50/95 to-teal-100/95 backdrop-blur-xl border-t-2 border-teal-200/60 font-black text-[12px] sticky bottom-0 z-20 shadow-[0_-8px_30px_rgba(0,0,0,0.04)]">
-                      <td className="py-4 px-5 text-teal-800 uppercase tracking-widest drop-shadow-sm" colSpan={3}>Totals</td>
-                      <td className="py-4 px-4 text-center text-slate-900 border-r border-teal-200/40 text-[13px]">{totals.passed}</td>
-                      <td className="py-4 px-4 text-center text-indigo-700 text-[13px]">{totals.cvReceived}</td>
-                      <td className="py-4 px-4 text-center text-purple-700 text-[13px]">{totals.selfPlacement}</td>
-                      <td className="py-4 px-4 text-center text-amber-700 text-[13px]">{totals.resumesNotReceived}</td>
+                    <tr className="bg-gradient-to-r from-slate-50/95 to-white/95 backdrop-blur-xl border-t-2 border-slate-200/60 font-black text-[12px] sticky bottom-0 z-20 shadow-[0_-8px_30px_rgba(0,0,0,0.04)]">
+                      <td className="py-4 px-5 text-slate-600 uppercase tracking-widest drop-shadow-sm" colSpan={3}>Totals</td>
+                      <td className="py-4 px-4 text-center text-slate-900 border-r border-slate-200/60 text-[13px]">{totals.passed}</td>
+                      <td className="py-4 px-4 text-center text-[#2A6BB5] text-[13px]">{totals.cvReceived}</td>
+                      <td className="py-4 px-4 text-center text-[#2E3093] text-[13px]">{totals.selfPlacement}</td>
+                      <td className="py-4 px-4 text-center text-[#2E3093] text-[13px]">{totals.resumesNotReceived}</td>
                       <td className="py-4 px-4 text-center text-slate-500 text-[13px]">{totals.others}</td>
-                      <td className="py-4 px-4 text-center text-[#2E3093] border-l border-teal-200/40 text-[13px]">{totals.interviewed}</td>
-                      <td className="py-4 px-4 text-center text-teal-700 text-[15px] drop-shadow-sm">{totals.placed}</td>
-                      <td className="py-4 px-5 text-center"><span className={`inline-flex items-center justify-center min-w-[52px] px-3 py-1.5 rounded-xl text-[13px] font-black shadow-md border border-white/60 ${totalPct >= 70 ? 'text-teal-800 bg-teal-100' : totalPct >= 40 ? 'text-amber-800 bg-amber-100' : 'text-rose-800 bg-rose-100'}`}>{totalPct}%</span></td>
+                      <td className="py-4 px-4 text-center text-[#2E3093] border-l border-slate-200/60 text-[13px]">{totals.interviewed}</td>
+                      <td className="py-4 px-4 text-center text-[#2A6BB5] text-[15px] drop-shadow-sm">{totals.placed}</td>
+                      <td className="py-4 px-5 text-center"><span className={`inline-flex items-center justify-center min-w-[52px] px-3 py-1.5 rounded-xl text-[13px] font-black shadow-md border border-white/60 ${totalPct >= 70 ? 'text-[#2E3093] bg-[#FAE452]/75 border-[#FAE452]/60' : totalPct >= 40 ? 'text-[#2A6BB5] bg-[#2A6BB5]/10 border-[#2A6BB5]/15' : 'text-[#2E3093] bg-[#2E3093]/8 border-[#2E3093]/12'}`}>{totalPct}%</span></td>
                     </tr>
                   </tfoot>
                 </table>

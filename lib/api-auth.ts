@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession, SessionData } from '@/lib/session';
 import { getPool } from '@/lib/db';
 import { ALL_PERMISSIONS } from '@/lib/rbac';
+import { isSuperAdminRole } from '@/lib/super-admin';
 
 // ── Cache role permissions in-memory (per serverless instance) ──────
 interface PermissionCacheEntry {
@@ -25,8 +26,8 @@ const PERMISSION_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
  * Get permissions for a role, with in-memory caching
  */
 async function getRolePermissions(roleId: number): Promise<string[]> {
-  // Super admin (role 1) gets all permissions
-  if (roleId === 1) {
+  // Super admin gets all permissions (do not assume a fixed role id)
+  if (await isSuperAdminRole(roleId)) {
     return ALL_PERMISSIONS.map(p => p.id);
   }
 

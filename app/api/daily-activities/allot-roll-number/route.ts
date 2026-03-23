@@ -190,6 +190,17 @@ export async function PUT(req: NextRequest) {
     const rollValues = rollNumbers
       .map((r) => r.rollNo?.trim())
       .filter(Boolean);
+
+    // Basic format validation: YY + batchNo + 001 (all digits, ends with 3-digit sequence)
+    // Example: 2501001 (YY=25, batchNo=01, seq=001)
+    const invalid = rollValues.filter((v) => !/^\d{2}\d+\d{3}$/.test(v));
+    if (invalid.length > 0) {
+      return NextResponse.json(
+        { error: `Invalid roll number format: ${invalid.slice(0, 10).join(', ')}. Expected YY + batchNo + 001 (digits only, ending in 3 digits).` },
+        { status: 400 }
+      );
+    }
+
     const duplicates = rollValues.filter(
       (v, i) => rollValues.indexOf(v) !== i
     );
@@ -198,6 +209,30 @@ export async function PUT(req: NextRequest) {
         { error: `Duplicate roll numbers found: ${[...new Set(duplicates)].join(', ')}` },
         { status: 400 }
       );
+    }
+
+    // Detect duplicates already present in DB for the same batch (important when saving page-by-page)
+    if (rollValues.length > 0) {
+      const admissionIds = rollNumbers.map((r) => Number(r.admissionId)).filter((n) => Number.isFinite(n));
+      const inPlaceholders = rollValues.map(() => '?').join(',');
+      const idPlaceholders = admissionIds.map(() => '?').join(',');
+
+      const [existing] = await pool.query<any[]>(
+        `SELECT Admission_Id, Roll_No
+         FROM admission_master
+         WHERE Batch_Id = ?
+           AND Roll_No IN (${inPlaceholders})
+           AND (Admission_Id NOT IN (${idPlaceholders || '0'}))`,
+        [batchId, ...rollValues, ...(admissionIds.length ? admissionIds : [0])]
+      );
+
+      if (existing.length > 0) {
+        const existingRolls = [...new Set(existing.map((r) => String(r.Roll_No)).filter(Boolean))];
+        return NextResponse.json(
+          { error: `Roll number(s) already allocated in this batch: ${existingRolls.join(', ')}` },
+          { status: 400 }
+        );
+      }
     }
 
     // Update each admission record with its roll number

@@ -3,6 +3,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { ALL_PERMISSIONS } from '@/lib/rbac';
 import { getSession } from '@/lib/session';
+import { isSuperAdminRole } from '@/lib/super-admin';
+
+// Ensure role_permissions table exists (shared schema with /api/roles)
+async function ensureRolePermissionsTable(pool: any) {
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS role_permissions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      role_id INT NOT NULL,
+      permission_id VARCHAR(100) NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_role_permission (role_id, permission_id),
+      INDEX idx_role_id (role_id),
+      FOREIGN KEY (role_id) REFERENCES role(id) ON DELETE CASCADE
+    )
+  `);
+}
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -27,6 +43,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const pool = getPool();
+    await ensureRolePermissionsTable(pool);
 
     const [roles] = await pool.execute(
       `SELECT id, title, description, created_by, created_date, 
@@ -49,8 +66,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       [roleId]
     );
 
-    // Special case: Administration/Super Admin (id=1) has all permissions
-    if (roleId === 1) {
+    // Special case: Super Admin has all permissions (avoid assuming a fixed role id)
+    if (await isSuperAdminRole(roleId, pool)) {
       role.permissions = ALL_PERMISSIONS.map(p => p.id);
       role.isSystemRole = true;
     } else {
@@ -97,6 +114,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const pool = getPool();
+    await ensureRolePermissionsTable(pool);
     const body = await request.json();
     const { title, description, permissions } = body;
 

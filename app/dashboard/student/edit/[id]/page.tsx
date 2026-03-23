@@ -53,16 +53,16 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-      <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-3 py-1.5 border-b border-gray-200">
-        <h3 className="text-[13px] font-bold text-[#2E3093] flex items-center gap-2">
-          <span className="w-6 h-6 rounded-md bg-[#2E3093]/10 flex items-center justify-center">
+    <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
+      <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-5 py-3 border-b border-slate-200">
+        <h3 className="text-[13px] font-black text-[#2E3093] flex items-center gap-2">
+          <span className="w-7 h-7 rounded-lg bg-[#2E3093]/10 flex items-center justify-center">
             {icon}
           </span>
           {title}
         </h3>
       </div>
-      <div className="px-3 py-2">{children}</div>
+      <div className="px-5 py-4">{children}</div>
     </div>
   );
 }
@@ -254,49 +254,52 @@ export default function EditStudentPage() {
   if (permLoading || loading) return <PermissionLoading />;
   if (!canUpdate) return <AccessDenied />;
 
-  /* Shared CSS — identical to inquiry / edit online admission */
-  const labelCls = 'block text-[11px] font-semibold text-gray-600 mb-0.5';
+  /* Shared CSS — match Inquiry / Online Admission styling */
+  const labelCls = 'block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5';
   const inputCls =
-    'w-full bg-white border border-gray-300 rounded-md px-2.5 py-1.5 text-xs text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] placeholder:text-gray-400 transition-colors';
+    'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] placeholder:text-slate-400 transition-all font-medium';
   const selectCls =
-    'w-full bg-white border border-gray-300 rounded-md px-2.5 py-1.5 text-xs text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] transition-colors';
+    'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] transition-all font-medium';
   const textareaCls =
-    'w-full bg-white border border-gray-300 rounded-md px-2.5 py-1.5 text-xs text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] placeholder:text-gray-400 transition-colors resize-none';
+    'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] placeholder:text-slate-400 transition-all font-medium resize-none';
 
   const filteredBatches = form.Course_Id
     ? batches.filter((b) => String(b.Course_Id) === form.Course_Id)
     : batches;
 
   return (
-    <div className="space-y-3">
-      {/* ── Gradient header ── */}
-      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-4 shadow-md">
-        <div className="flex items-center gap-3">
+    <div className="space-y-6">
+      {/* Header (match Inquiry styling) */}
+      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-2xl px-8 py-6 shadow-[0_10px_30px_rgba(46,48,147,0.18)] relative overflow-hidden">
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
+
+        <div className="flex items-center gap-4 relative z-10">
           <button
             type="button"
             onClick={() => router.push('/dashboard/student')}
-            className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
+            className="p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
           <div>
-            <h2 className="text-base font-bold text-white">
+            <h2 className="text-2xl font-black text-white tracking-tight">
               Edit Student
               {form.Student_Name && (
-                <span className="ml-2 text-white/80 font-normal text-sm">— {form.Student_Name}</span>
+                <span className="ml-2 text-white/80 font-semibold text-base">— {form.Student_Name}</span>
               )}
             </h2>
-            <p className="text-xs text-white/70">Students &gt; Edit &gt; #{studentId}</p>
+            <p className="text-[13px] text-white/80 font-medium mt-1">Students &gt; Edit &gt; #{studentId}</p>
           </div>
         </div>
       </div>
 
       {/* ── Card ── */}
-      <form onSubmit={handleSave} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <form onSubmit={handleSave} className="bg-white rounded-2xl border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.03)] overflow-hidden">
         {/* Tabs */}
-        <div className="flex border-b border-gray-200 px-5 bg-gray-50/80 overflow-x-auto">
+        <div className="flex border-b border-slate-200 px-5 bg-slate-50/80 overflow-x-auto">
           {TABS.map((tab) => (
             <button
               key={tab.id}
@@ -305,7 +308,7 @@ export default function EditStudentPage() {
               className={`flex items-center gap-1.5 px-4 py-3 text-sm font-bold border-b-2 transition-all whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'border-[#2E3093] text-[#2E3093] bg-white -mb-px rounded-t-lg'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
             >
               {tab.label}
@@ -324,7 +327,7 @@ export default function EditStudentPage() {
         )}
 
         {/* Body */}
-        <div className="px-3 py-2 bg-gray-50/40">
+        <div className="px-5 py-5 bg-slate-50/40">
 
           {/* ════════════ PERSONAL INFO ════════════ */}
           {activeTab === 'personal' && (

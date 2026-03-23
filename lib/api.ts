@@ -72,13 +72,53 @@ export async function apiFetch<T>(
         },
       });
 
-      // Parse response
-      const data = await response.json();
+      const contentType = response.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+
+      // Parse response safely. If the server returned HTML/text (common for 404/redirect pages),
+      // avoid throwing a JSON parse error and instead surface a helpful message.
+      let data: unknown = null;
+      let bodyText: string | null = null;
+      if (isJson) {
+        try {
+          data = await response.json();
+        } catch {
+          bodyText = await response.text().catch(() => null);
+        }
+      } else {
+        bodyText = await response.text().catch(() => null);
+      }
+
+      if (!isJson) {
+        const snippet = (bodyText || '').slice(0, 200).replace(/\s+/g, ' ').trim();
+        return {
+          data: null,
+          error: `Expected JSON but received ${contentType || 'non-JSON'} (HTTP ${response.status}) from ${url}${snippet ? `: ${snippet}` : ''}`,
+          status: response.status,
+        };
+      }
+
+      if (data == null) {
+        const snippet = (bodyText || '').slice(0, 200).replace(/\s+/g, ' ').trim();
+        return {
+          data: null,
+          error: `Failed to parse JSON response (HTTP ${response.status}) from ${url}${snippet ? `: ${snippet}` : ''}`,
+          status: response.status,
+        };
+      }
+
+      const extractErrorMessage = (payload: unknown): string | null => {
+        if (!payload || typeof payload !== 'object') return null;
+        const maybe = payload as { error?: unknown; message?: unknown };
+        const err = typeof maybe.error === 'string' ? maybe.error : null;
+        const msg = typeof maybe.message === 'string' ? maybe.message : null;
+        return err || msg;
+      };
 
       if (!response.ok) {
         return {
           data: null,
-          error: data.error || data.message || `HTTP ${response.status}`,
+          error: extractErrorMessage(data) || `HTTP ${response.status}`,
           status: response.status,
         };
       }
@@ -88,7 +128,7 @@ export async function apiFetch<T>(
         requestCache.set(url, { data, expiry: Date.now() + CACHE_TTL });
       }
 
-      return { data, error: null, status: response.status };
+      return { data: data as T, error: null, status: response.status };
     } catch (error) {
       lastError = error as Error;
       attempt++;

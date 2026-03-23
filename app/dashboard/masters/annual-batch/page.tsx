@@ -45,9 +45,6 @@ export default function AnnualBatchPage() {
   const [limit] = useState(10);
   const [fetchTrigger, setFetchTrigger] = useState(0);
 
-  /* ---- filter panel ---- */
-  const [showFilters, setShowFilters] = useState(false);
-
   /* ---- delete modal ---- */
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -165,29 +162,15 @@ export default function AnnualBatchPage() {
   const selectCls =
     'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] transition-all font-medium';
 
-  const SectionCard = ({ title, icon, children, badge }: { title: string; icon: React.ReactNode; children: React.ReactNode; badge?: React.ReactNode }) => (
-    <div className="rounded-2xl border border-gray-200 overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.03)] bg-white">
-      <div className="bg-gradient-to-r from-gray-50 to-white px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-        <h3 className="text-[14px] font-black text-[#2E3093] flex items-center gap-2.5 tracking-tight">
-          <span className="w-8 h-8 rounded-xl bg-[#2E3093]/10 text-[#2A6BB5] flex items-center justify-center border border-[#2A6BB5]/20 shadow-sm">
-            {icon}
-          </span>
-          {title}
-        </h3>
-        {badge}
-      </div>
-      <div className="px-5 py-5">{children}</div>
-    </div>
-  );
-
   if (permLoading) return <PermissionLoading />;
   if (!canView) return <AccessDenied message="You do not have permission to view annual batches." />;
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-[#2E3093] to-[#4547B2] rounded-2xl px-8 py-6 shadow-lg relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-2xl px-8 py-6 shadow-[0_10px_30px_rgba(46,48,147,0.18)] relative overflow-hidden">
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
         <div className="flex items-center justify-between relative z-10">
           <div>
             <h2 className="text-2xl font-black text-white tracking-tight">Annual Batch</h2>
@@ -196,7 +179,7 @@ export default function AnnualBatchPage() {
           {canCreate && (
           <button
             onClick={() => router.push('/dashboard/masters/annual-batch/add')}
-            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-[#2E3093] px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-[0_4px_14px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] hover:-translate-y-0.5"
+            className="flex items-center gap-2 bg-[#FAE452] text-[#2E3093] px-5 py-2.5 rounded-xl text-sm font-extrabold transition-all shadow-[0_10px_24px_rgba(0,0,0,0.14)] hover:shadow-[0_12px_28px_rgba(0,0,0,0.18)] hover:-translate-y-0.5"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -207,17 +190,12 @@ export default function AnnualBatchPage() {
         </div>
       </div>
 
-      {/* Filter Form Card */}
-      <SectionCard
-        title="Filter Batches"
-        icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Filters (single line) */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.03)] px-5 py-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:flex-nowrap lg:items-end">
           {/* Course */}
-          <div>
-            <label className={labelCls}>
-              Course <span className="text-red-500 text-sm leading-none">*</span>
-            </label>
+          <div className="w-full lg:flex-1 lg:min-w-[260px]">
+            <label className={labelCls}>Course</label>
             <select value={courseId} onChange={(e) => setCourseId(e.target.value)} className={selectCls}>
               <option value="">Select</option>
               {courses.map((c) => (
@@ -228,8 +206,8 @@ export default function AnnualBatchPage() {
             </select>
           </div>
           {/* From Date */}
-          <div>
-            <label className={labelCls}>From Date <span className="text-red-500 text-sm leading-none">*</span></label>
+          <div className="w-full lg:w-[190px]">
+            <label className={labelCls}>From Date</label>
             <input
               type="date"
               value={fromDate}
@@ -238,8 +216,8 @@ export default function AnnualBatchPage() {
             />
           </div>
           {/* To Date */}
-          <div>
-            <label className={labelCls}>To Date <span className="text-red-500 text-sm leading-none">*</span></label>
+          <div className="w-full lg:w-[190px]">
+            <label className={labelCls}>To Date</label>
             <input
               type="date"
               value={toDate}
@@ -248,50 +226,42 @@ export default function AnnualBatchPage() {
             />
           </div>
           {/* Buttons */}
-          <div className="flex items-end gap-3 h-full">
-            <button
-              onClick={handleSubmit}
-              className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-br from-[#2E3093] to-[#4547B2] hover:to-[#23257A] text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-              Submit
-            </button>
-            <button
-              onClick={handleClear}
-              className="flex-1 px-5 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
-            >
-              Clear
-            </button>
+          <div className="w-full lg:w-auto">
+            <div className={labelCls}>Actions</div>
+            <div className="flex gap-3">
+              <button
+                onClick={handleSubmit}
+                className="w-full lg:w-[140px] flex items-center justify-center gap-2 bg-[#2E3093] text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Submit
+              </button>
+              <button
+                onClick={handleClear}
+                className="w-full lg:w-[140px] px-5 py-2.5 text-sm font-bold text-[#2E3093] bg-white border border-slate-200 rounded-xl hover:border-[#2E3093]/30 transition-all shadow-sm"
+              >
+                Clear
+              </button>
+            </div>
           </div>
         </div>
-      </SectionCard>
+      </div>
 
       {/* Table Card */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.03)] overflow-hidden">
         {/* Toolbar */}
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-gray-500 bg-gray-100 rounded-full px-2.5 py-1">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xs font-bold text-[#2E3093] bg-[#FAE452]/60 border border-[#FAE452] rounded-full px-3 py-1">
               {total}
             </span>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                showFilters ? 'bg-[#2E3093] text-white border-[#2E3093]' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-              </svg>
-              Filters
-            </button>
-            <button
               onClick={handleExport}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl text-[#2E3093] bg-white hover:border-[#2E3093]/30 transition-colors"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -305,56 +275,35 @@ export default function AnnualBatchPage() {
                 onChange={(e) => {
                   setSearch(e.target.value);
                   setPage(1);
+                  setFetchTrigger(t => t + 1);
                 }}
                 placeholder="Search…"
-                className="w-44 pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-400"
+                className="w-48 pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] placeholder:text-slate-400 transition-all"
               />
-              <svg className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
           </div>
         </div>
 
-        {/* Filters Panel */}
-        {showFilters && (
-          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50">
-            <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-3 text-xs">
-              <div>
-                <label className="block font-medium text-gray-500 mb-1">Status</label>
-                <select className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-xs">
-                  <option value="">All</option>
-                  <option value="1">Active</option>
-                  <option value="0">Inactive</option>
-                </select>
-              </div>
-              <div>
-                <label className="block font-medium text-gray-500 mb-1">Category</label>
-                <select className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-xs">
-                  <option value="">All</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="dashboard-table w-full text-xs">
+          <table className="dashboard-table w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="text-left px-3 py-2 font-semibold text-gray-600">Id</th>
-                <th className="text-left px-3 py-2 font-semibold text-gray-600">Course Name</th>
-                <th className="text-left px-3 py-2 font-semibold text-gray-600">Batch No.</th>
-                <th className="text-left px-3 py-2 font-semibold text-gray-600">Category</th>
-                <th className="text-left px-3 py-2 font-semibold text-gray-600">Timings</th>
-                <th className="text-left px-3 py-2 font-semibold text-gray-600">Planned Start Date</th>
-                <th className="text-left px-3 py-2 font-semibold text-gray-600">Actual Start Date</th>
-                <th className="text-left px-3 py-2 font-semibold text-gray-600">Last Date of Admission</th>
-                <th className="text-left px-3 py-2 font-semibold text-gray-600">Training Completion Date</th>
-                <th className="text-left px-3 py-2 font-semibold text-gray-600">Duration</th>
-                <th className="text-left px-3 py-2 font-semibold text-gray-600">Training Coordinator</th>
-                <th className="text-center px-3 py-2 font-semibold text-gray-600">Action</th>
+              <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="text-left px-4 py-3 font-bold text-slate-600">Id</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-600">Course Name</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-600">Batch No.</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-600">Category</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-600">Timings</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-600">Planned Start Date</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-600">Actual Start Date</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-600">Last Date of Admission</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-600">Training Completion Date</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-600">Duration</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-600">Training Coordinator</th>
+                <th className="text-center px-4 py-3 font-bold text-slate-600">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -369,30 +318,30 @@ export default function AnnualBatchPage() {
                 </tr>
               ) : batches.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-12 text-gray-400">
+                  <td colSpan={12} className="text-center py-12 text-slate-400">
                     No batches found
                   </td>
                 </tr>
               ) : (
                 batches.map((b) => (
-                  <tr key={b.Batch_Id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                    <td className="px-3 py-2.5 text-gray-700">{b.Batch_Id}</td>
-                    <td className="px-3 py-2.5 text-gray-900 font-medium">{b.Course_Name || '-'}</td>
-                    <td className="px-3 py-2.5 text-gray-700">{b.Batch_code || '-'}</td>
-                    <td className="px-3 py-2.5 text-gray-700">{b.Category || '-'}</td>
-                    <td className="px-3 py-2.5 text-gray-700">{b.Timings || '-'}</td>
-                    <td className="px-3 py-2.5 text-gray-700">{formatDate(b.SDate)}</td>
-                    <td className="px-3 py-2.5 text-gray-700">{formatDate(b.ActualDate)}</td>
-                    <td className="px-3 py-2.5 text-gray-700">{formatDate(b.Admission_Date)}</td>
-                    <td className="px-3 py-2.5 text-gray-700">{formatDate(b.EDate)}</td>
-                    <td className="px-3 py-2.5 text-gray-700">{b.Duration || '-'}</td>
-                    <td className="px-3 py-2.5 text-gray-700">{b.Training_Coordinator || '-'}</td>
-                    <td className="px-3 py-2.5">
+                  <tr key={b.Batch_Id} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
+                    <td className="px-4 py-3 text-slate-700">{b.Batch_Id}</td>
+                    <td className="px-4 py-3 text-slate-900 font-semibold">{b.Course_Name || '-'}</td>
+                    <td className="px-4 py-3 text-slate-700">{b.Batch_code || '-'}</td>
+                    <td className="px-4 py-3 text-slate-700">{b.Category || '-'}</td>
+                    <td className="px-4 py-3 text-slate-700">{b.Timings || '-'}</td>
+                    <td className="px-4 py-3 text-slate-700">{formatDate(b.SDate)}</td>
+                    <td className="px-4 py-3 text-slate-700">{formatDate(b.ActualDate)}</td>
+                    <td className="px-4 py-3 text-slate-700">{formatDate(b.Admission_Date)}</td>
+                    <td className="px-4 py-3 text-slate-700">{formatDate(b.EDate)}</td>
+                    <td className="px-4 py-3 text-slate-700">{b.Duration || '-'}</td>
+                    <td className="px-4 py-3 text-slate-700">{b.Training_Coordinator || '-'}</td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
                         {canUpdate && (
                         <button
                           onClick={() => router.push(`/dashboard/masters/annual-batch/edit/${b.Batch_Id}`)}
-                          className="p-1.5 rounded-md hover:bg-[#2E3093]/10 text-[#2E3093] transition-colors"
+                          className="p-2 rounded-lg hover:bg-[#FAE452]/70 text-[#2E3093] transition-colors"
                           title="Edit"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -422,15 +371,15 @@ export default function AnnualBatchPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
-            <span className="text-xs text-gray-500">
+          <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-between">
+            <span className="text-sm text-slate-500 font-medium">
               Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total}
             </span>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-2 text-sm border border-slate-200 rounded-xl hover:border-[#2E3093]/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Prev
               </button>
@@ -442,8 +391,8 @@ export default function AnnualBatchPage() {
                   <button
                     key={p}
                     onClick={() => setPage(p)}
-                    className={`px-2.5 py-1.5 text-xs border rounded-md transition-colors ${
-                      page === p ? 'bg-[#2E3093] text-white border-[#2E3093]' : 'border-gray-200 hover:bg-gray-50'
+                    className={`px-3 py-2 text-sm border rounded-xl transition-colors ${
+                      page === p ? 'bg-[#2E3093] text-white border-[#2E3093]' : 'border-slate-200 hover:border-[#2E3093]/30'
                     }`}
                   >
                     {p}
@@ -453,7 +402,7 @@ export default function AnnualBatchPage() {
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-2 text-sm border border-slate-200 rounded-xl hover:border-[#2E3093]/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Next
               </button>

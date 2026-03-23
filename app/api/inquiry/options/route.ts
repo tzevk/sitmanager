@@ -45,30 +45,47 @@ export async function GET() {
       const nationalities = (nationalitiesRes[0] as any[]).map((r) => r.Nationality);
       const countries = (countriesRes[0] as any[]).map((r) => r.Present_Country);
 
-      // Statuses (hardcoded since awt_status is empty)
-      const statuses = [
-        { id: 1, label: 'New' },
-        { id: 2, label: 'Contacted' },
-        { id: 3, label: 'Inquiry' },
-        { id: 4, label: 'Follow Up' },
-        { id: 5, label: 'Interested' },
-        { id: 6, label: 'Not Interested' },
-        { id: 7, label: 'Admitted' },
-        { id: 8, label: 'Closed' },
-        { id: 9, label: 'DNC' },
-        { id: 10, label: 'Converted' },
-        { id: 12, label: 'Pending' },
-        { id: 15, label: 'Callback' },
-        { id: 16, label: 'Visited' },
-        { id: 18, label: 'On Hold' },
-        { id: 19, label: 'Lost' },
-        { id: 24, label: 'Hot Lead' },
-        { id: 25, label: 'Warm Lead' },
-        { id: 26, label: 'Cold Lead' },
-        { id: 27, label: 'Enrolled' },
-        { id: 29, label: 'Dropped' },
-        { id: 33, label: 'Archived' },
-      ];
+      // Statuses (prefer DB; fallback to common labels)
+      let statuses: Array<{ id: number; label: string }> = [];
+      try {
+        const [statusRows] = await pool.query(
+          `SELECT Status_id as id, Status as label
+           FROM awt_status
+           WHERE (IsDelete = 0 OR IsDelete IS NULL)
+           ORDER BY Status_id`
+        );
+        statuses = (statusRows as any[])
+          .map((r) => ({ id: Number(r.id), label: String(r.label ?? '').trim() }))
+          .filter((s) => Number.isFinite(s.id) && s.id > 0 && s.label.length > 0);
+      } catch {
+        // ignore and fallback
+      }
+
+      if (statuses.length === 0) {
+        statuses = [
+          { id: 1, label: 'New' },
+          { id: 2, label: 'Contacted' },
+          { id: 3, label: 'Inquiry' },
+          { id: 4, label: 'Follow Up' },
+          { id: 5, label: 'Interested' },
+          { id: 6, label: 'Not Interested' },
+          { id: 7, label: 'Admitted' },
+          { id: 8, label: 'Closed' },
+          { id: 9, label: 'DNC' },
+          { id: 10, label: 'Converted' },
+          { id: 12, label: 'Pending' },
+          { id: 15, label: 'Callback' },
+          { id: 16, label: 'Visited' },
+          { id: 18, label: 'On Hold' },
+          { id: 19, label: 'Lost' },
+          { id: 24, label: 'Hot Lead' },
+          { id: 25, label: 'Warm Lead' },
+          { id: 26, label: 'Cold Lead' },
+          { id: 27, label: 'Enrolled' },
+          { id: 29, label: 'Dropped' },
+          { id: 33, label: 'Archived' },
+        ];
+      }
 
       const genders = ['Male', 'Female'];
 

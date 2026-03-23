@@ -10,11 +10,54 @@ export async function GET(req: NextRequest) {
     const pool = getPool();
     const { searchParams } = new URL(req.url);
 
+    const mode = (searchParams.get('mode') || '').toLowerCase();
+
     const page = Math.max(1, Number(searchParams.get('page')) || 1);
     const limit = Math.min(100, Math.max(10, Number(searchParams.get('limit')) || 25));
     const offset = (page - 1) * limit;
 
     const search = searchParams.get('search')?.trim() || '';
+
+    // Master mode: manage mst_batchcategory (supports full edit/delete)
+    if (mode === 'master') {
+      const conditions: string[] = ['IsActive = 1', '(IsDelete IS NULL OR IsDelete = 0)'];
+      const params: (string | number)[] = [];
+
+      if (search) {
+        conditions.push('(BatchCategory LIKE ? OR Batch_Type LIKE ? OR Prefix LIKE ? OR Description LIKE ?)');
+        const q = `%${search}%`;
+        params.push(q, q, q, q);
+      }
+
+      const where = conditions.join(' AND ');
+
+      const countSql = `SELECT COUNT(*) AS total FROM mst_batchcategory WHERE ${where}`;
+      const [countRows] = await pool.query<any[]>(countSql, params);
+      const total = countRows[0]?.total ?? 0;
+
+      const dataSql = `
+        SELECT id,
+               BatchCategory AS batch,
+               Batch_Type AS batchtype,
+               Prefix AS prefix,
+               Description AS description
+        FROM mst_batchcategory
+        WHERE ${where}
+        ORDER BY BatchCategory ASC
+        LIMIT ? OFFSET ?
+      `;
+      const [rows] = await pool.query<any[]>(dataSql, [...params, limit, offset]);
+
+      return NextResponse.json({
+        rows,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
+    }
 
     /* ---- Build WHERE ---- */
     const conditions: string[] = [
@@ -83,8 +126,8 @@ export async function POST(req: NextRequest) {
     }
 
     const sql = `
-      INSERT INTO awt_batch_category (batch, batchtype, prefix, description, deleted)
-      VALUES (?, ?, ?, ?, 0)
+      INSERT INTO mst_batchcategory (BatchCategory, Batch_Type, Prefix, Description, IsActive, IsDelete)
+      VALUES (?, ?, ?, ?, 1, 0)
     `;
     const [result] = await pool.query<any>(sql, [
       batch.trim(),
@@ -110,7 +153,39 @@ export async function PUT(req: NextRequest) {
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
     const body = await req.json();
-    const { batch, originalBatch } = body;
+    const { id, batch, batchtype, prefix, description, originalBatch } = body;
+
+    // If an id is provided, update mst_batchcategory (full editable fields)
+    if (id !== undefined && id !== null && String(id).trim() !== '') {
+      if (!batch?.trim()) {
+        return NextResponse.json({ error: 'Batch Category is required' }, { status: 400 });
+      }
+      if (!description?.trim()) {
+        return NextResponse.json({ error: 'Description is required' }, { status: 400 });
+      }
+
+      const sql = `
+        UPDATE mst_batchcategory
+        SET BatchCategory = ?, Batch_Type = ?, Prefix = ?, Description = ?
+        WHERE id = ? AND (IsDelete IS NULL OR IsDelete = 0)
+      `;
+      const [result] = await pool.query<any>(sql, [
+        batch.trim(),
+        batchtype?.trim() || null,
+        prefix?.trim() || null,
+        description.trim(),
+        Number(id),
+      ]);
+
+      if (!result.affectedRows) {
+        return NextResponse.json({ error: 'Batch Category not found' }, { status: 404 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Batch Category updated successfully',
+      });
+    }
 
     if (!originalBatch?.trim()) {
       return NextResponse.json({ error: 'Original category is required' }, { status: 400 });
@@ -152,8 +227,8 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Batch Category ID is required' }, { status: 400 });
     }
 
-    const sql = `UPDATE awt_batch_category SET deleted = 1 WHERE id = ?`;
-    await pool.query(sql, [id]);
+  const sql = `UPDATE mst_batchcategory SET IsDelete = 1 WHERE id = ?`;
+  await pool.query(sql, [id]);
 
     return NextResponse.json({
       success: true,
