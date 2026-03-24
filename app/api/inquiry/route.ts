@@ -133,9 +133,37 @@ export async function GET(req: NextRequest) {
     const search = url.searchParams.get('search')?.trim() || '';
     const discipline = url.searchParams.get('discipline') || '';
     const inquiryType = url.searchParams.get('inquiryType') || '';
+    const location = (url.searchParams.get('location') || '').trim();
     const statusId = url.searchParams.get('status') || '';
     const dateFrom = url.searchParams.get('dateFrom') || '';
     const dateTo = url.searchParams.get('dateTo') || '';
+
+    // Optional: detect which column stores location/city.
+    // Many legacy schemas use Student_Inquiry.Present_City.
+    const allowedLocations = new Set(['pune', 'mumbai']);
+    const normalizedLocation = location ? location.toLowerCase() : '';
+    if (normalizedLocation && !allowedLocations.has(normalizedLocation)) {
+      return NextResponse.json({ error: 'Invalid location filter' }, { status: 400 });
+    }
+
+    let locationColumn: string | null = null;
+    try {
+      const [colRows] = await pool.query(
+        `SELECT COLUMN_NAME
+         FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = 'Student_Inquiry'`
+      );
+      const columnSet = new Set((colRows as any[]).map((r: any) => String(r.COLUMN_NAME)));
+      for (const candidate of ['Present_City', 'City', 'Location', 'Branch']) {
+        if (columnSet.has(candidate)) {
+          locationColumn = candidate;
+          break;
+        }
+      }
+    } catch {
+      // Best-effort only; leave locationColumn as null.
+    }
 
     // Inquiry_Dt is stored as VARCHAR in some DBs. Parse it to a real DATE for
     // correct sorting/filtering across common legacy formats.
@@ -172,6 +200,11 @@ export async function GET(req: NextRequest) {
     if (inquiryType) {
       conditions.push('si.Inquiry_Type = ?');
       params.push(inquiryType);
+    }
+
+    if (normalizedLocation && locationColumn) {
+      conditions.push(`LOWER(TRIM(si.${locationColumn})) = ?`);
+      params.push(normalizedLocation);
     }
 
     if (statusId) {
@@ -231,6 +264,9 @@ export async function GET(req: NextRequest) {
     let dataRows: any[] = [];
     if (pageIds.length > 0) {
       const placeholders = pageIds.map(() => '?').join(',');
+      const locationSelect = locationColumn
+        ? `si.${locationColumn} as Location,`
+        : `NULL as Location,`;
       const [rows] = await pool.query(
         `SELECT 
           si.Inquiry_Id as Student_Id,
@@ -240,6 +276,7 @@ export async function GET(req: NextRequest) {
           si.Inquiry_Dt,
           si.Present_Mobile,
           si.Email,
+          ${locationSelect}
           si.Discipline,
           si.Inquiry_From,
           si.Inquiry_Type,
@@ -291,6 +328,7 @@ export async function GET(req: NextRequest) {
         Inquiry_Dt: r.Inquiry_Dt,
         Present_Mobile: r.Present_Mobile,
         Email: r.Email,
+        Location: r.Location && String(r.Location).trim() ? String(r.Location).trim() : null,
         Discipline: r.Discipline && r.Discipline !== 'NULL' && r.Discipline !== 'Select' ? r.Discipline : null,
         Inquiry_From: r.Inquiry_From,
         Inquiry_Type: inquiryType,

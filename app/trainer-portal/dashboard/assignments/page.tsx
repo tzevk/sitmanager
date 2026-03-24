@@ -21,12 +21,57 @@ interface Student {
   Late: number;
 }
 
+interface Discipline {
+  name: string;
+  subtopics: string[];
+}
+
+interface CreateQuestion {
+  id: string;
+  text: string;
+  attachment: File | null;
+}
+
+function newQuestion(): CreateQuestion {
+  return {
+    id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    text: '',
+    attachment: null,
+  };
+}
+
+function pad2(n: number) {
+  return String(n).padStart(2, '0');
+}
+
+function yyyyMm(date: Date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`;
+}
+
+function yyyyMmDd(date: Date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
 export default function AssignmentsPage() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
   const [lectures, setLectures] = useState<LectureSummary[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(true);
   const [loadingLectures, setLoadingLectures] = useState(false);
+
+  // Create assignment modal
+  const [showCreate, setShowCreate] = useState(false);
+  const [createTakeId, setCreateTakeId] = useState<number | null>(null);
+  const [assignmentName, setAssignmentName] = useState('');
+  const [assignmentDate, setAssignmentDate] = useState(() => yyyyMmDd(new Date()));
+  const [dueDate, setDueDate] = useState(() => yyyyMmDd(new Date()));
+  const [disciplines, setDisciplines] = useState<Discipline[]>([]);
+  const [topicsLoading, setTopicsLoading] = useState(false);
+  const [topic, setTopic] = useState('');
+  const [subTopics, setSubTopics] = useState<string[]>([]);
+  const [questions, setQuestions] = useState<CreateQuestion[]>([newQuestion()]);
+  const [creating, setCreating] = useState(false);
+  const [createMsg, setCreateMsg] = useState('');
 
   // Student assignment modal
   const [selectedLecture, setSelectedLecture] = useState<LectureSummary | null>(null);
@@ -60,6 +105,127 @@ export default function AssignmentsPage() {
   }, [selectedBatch]);
 
   useEffect(() => { loadLectures(); }, [loadLectures]);
+
+  // Load topic/subtopic options when create modal opens
+  useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      if (!showCreate || !selectedBatch) return;
+      setTopicsLoading(true);
+      try {
+        const res = await fetch(`/api/trainer-portal/lecture-topics?batchId=${selectedBatch}&month=${encodeURIComponent(yyyyMm(new Date()))}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setDisciplines(Array.isArray(data?.disciplines) ? data.disciplines : []);
+      } catch {
+        if (!cancelled) setDisciplines([]);
+      } finally {
+        if (!cancelled) setTopicsLoading(false);
+      }
+    }
+    run();
+    return () => { cancelled = true; };
+  }, [showCreate, selectedBatch]);
+
+  function openCreate() {
+    setCreateMsg('');
+    setShowCreate(true);
+    setCreateTakeId(null);
+    setAssignmentName('');
+    setAssignmentDate(yyyyMmDd(new Date()));
+    setDueDate(yyyyMmDd(new Date()));
+    setTopic('');
+    setSubTopics([]);
+    setQuestions([newQuestion()]);
+  }
+
+  function closeCreate() {
+    setShowCreate(false);
+    setCreateMsg('');
+    setCreating(false);
+  }
+
+  function selectLectureForCreate(takeId: number) {
+    setCreateTakeId(takeId);
+    const l = lectures.find(x => x.Take_Id === takeId);
+    const name = (l?.Topic || l?.Lecture_Name || '').trim();
+    setAssignmentName(name);
+  }
+
+  function toggleSubTopic(val: string) {
+    setSubTopics(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val]);
+  }
+
+  function updateQuestionText(idx: number, text: string) {
+    setQuestions(prev => prev.map((q, i) => (i === idx ? { ...q, text } : q)));
+  }
+
+  function updateQuestionAttachment(idx: number, file: File | null) {
+    setQuestions(prev => prev.map((q, i) => (i === idx ? { ...q, attachment: file } : q)));
+  }
+
+  function addQuestion() {
+    setQuestions(prev => [...prev, newQuestion()]);
+  }
+
+  function removeQuestion(idx: number) {
+    setQuestions(prev => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((_, i) => i !== idx);
+    });
+  }
+
+  async function handleCreateAssignment() {
+    if (!selectedBatch) return;
+    if (!createTakeId) {
+      setCreateMsg('Please select a lecture.');
+      return;
+    }
+    if (!assignmentName.trim()) {
+      setCreateMsg('Assignment name is required.');
+      return;
+    }
+    if (!assignmentDate || !dueDate) {
+      setCreateMsg('Assignment date and due date are required.');
+      return;
+    }
+    if (!topic) {
+      setCreateMsg('Please select a topic.');
+      return;
+    }
+    setCreating(true);
+    setCreateMsg('');
+    try {
+      const fd = new FormData();
+      fd.append('batch_id', String(selectedBatch));
+      fd.append('take_id', String(createTakeId));
+      fd.append('assignment_name', assignmentName.trim());
+      fd.append('assignment_date', assignmentDate);
+      fd.append('due_date', dueDate);
+      fd.append('topic', topic);
+      fd.append('subtopics', JSON.stringify(subTopics));
+      fd.append('questions', JSON.stringify(questions.map(q => ({ text: q.text }))));
+      questions.forEach((q, i) => {
+        if (q.attachment) fd.append(`attachment_${i}`, q.attachment);
+      });
+
+      const res = await fetch('/api/trainer-portal/assignments/create', {
+        method: 'POST',
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCreateMsg(data?.error || 'Failed to create assignment');
+        return;
+      }
+      setCreateMsg('Assignment created successfully!');
+      setTimeout(() => closeCreate(), 600);
+    } catch {
+      setCreateMsg('Network error');
+    } finally {
+      setCreating(false);
+    }
+  }
 
   async function openStudents(lecture: LectureSummary) {
     setSelectedLecture(lecture);
@@ -126,15 +292,25 @@ export default function AssignmentsPage() {
           <h1 className="text-2xl font-bold text-gray-800">Student Assignments</h1>
           <p className="text-sm text-gray-500">Track and update assignment submissions per lecture</p>
         </div>
-        <select
-          value={selectedBatch || ''}
-          onChange={e => setSelectedBatch(Number(e.target.value))}
-          className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5] bg-white w-fit"
-        >
-          {batches.map(b => (
-            <option key={b.Batch_Id} value={b.Batch_Id}>{b.Batch_code}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={openCreate}
+            disabled={!selectedBatch}
+            className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
+            style={{ background: '#2E3093' }}
+          >
+            + Add Assignment
+          </button>
+          <select
+            value={selectedBatch || ''}
+            onChange={e => setSelectedBatch(Number(e.target.value))}
+            className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5] bg-white w-fit"
+          >
+            {batches.map(b => (
+              <option key={b.Batch_Id} value={b.Batch_Id}>{b.Batch_code}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Lectures grid */}
@@ -283,6 +459,205 @@ export default function AssignmentsPage() {
                 style={{ background: '#2E3093' }}
               >
                 {saving ? 'Saving…' : `Save Changes${hasChanges ? ` (${Object.keys(changes).length})` : ''}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create assignment modal */}
+      {showCreate && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={closeCreate}>
+          <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800">Add Assignment</h3>
+                <p className="text-sm text-gray-500">Create an assignment with questions and attachments</p>
+              </div>
+              <button onClick={closeCreate} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Lecture + assignment name */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Lecture</label>
+                  <select
+                    value={createTakeId || ''}
+                    onChange={e => selectLectureForCreate(Number(e.target.value))}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5] bg-white"
+                  >
+                    <option value="" disabled>Select a lecture</option>
+                    {lectures.map(l => (
+                      <option key={l.Take_Id} value={l.Take_Id}>
+                        {new Date(l.Take_Dt).toLocaleDateString()} — {(l.Topic || l.Lecture_Name || 'Untitled')}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[11px] text-gray-400">Assignment name is auto-filled from the lecture.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Assignment Name</label>
+                  <input
+                    value={assignmentName}
+                    onChange={e => setAssignmentName(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]"
+                    placeholder="Assignment name"
+                  />
+                </div>
+              </div>
+
+              {/* Dates */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Assignment Date</label>
+                  <input
+                    type="date"
+                    value={assignmentDate}
+                    onChange={e => setAssignmentDate(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Due Date</label>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={e => setDueDate(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]"
+                  />
+                </div>
+              </div>
+
+              {/* Topic/subtopic */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Topic</label>
+                  <select
+                    value={topic}
+                    onChange={e => {
+                      setTopic(e.target.value);
+                      setSubTopics([]);
+                    }}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5] bg-white disabled:opacity-60"
+                    disabled={topicsLoading}
+                  >
+                    <option value="" disabled>{topicsLoading ? 'Loading topics…' : 'Select a topic'}</option>
+                    {disciplines.map(d => (
+                      <option key={d.name} value={d.name}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Sub Topic</label>
+                  <div className="border border-gray-200 rounded-xl p-3 max-h-36 overflow-y-auto">
+                    {!topic ? (
+                      <p className="text-sm text-gray-400">Select a topic to see sub topics</p>
+                    ) : (
+                      (disciplines.find(d => d.name === topic)?.subtopics || []).length === 0 ? (
+                        <p className="text-sm text-gray-400">No sub topics available</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {(disciplines.find(d => d.name === topic)?.subtopics || []).map(st => (
+                            <label key={st} className="flex items-center gap-2 text-sm text-gray-700">
+                              <input
+                                type="checkbox"
+                                checked={subTopics.includes(st)}
+                                onChange={() => toggleSubTopic(st)}
+                                className="w-4 h-4"
+                              />
+                              <span className="truncate">{st}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Questions */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-800">Questions</h4>
+                    <p className="text-xs text-gray-500">Add questions and optional attachments per question</p>
+                  </div>
+                  <button
+                    onClick={addQuestion}
+                    className="px-3 py-2 rounded-xl text-sm font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700"
+                    type="button"
+                  >
+                    + Add Question
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {questions.map((q, idx) => (
+                    <div key={q.id} className="border border-gray-100 rounded-xl p-4 bg-white">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-semibold text-gray-800">Question {idx + 1}</p>
+                        <div className="flex items-center gap-3 min-w-0">
+                          {q.attachment ? (
+                            <p className="text-xs text-gray-500 truncate max-w-[50vw] md:max-w-[360px]">Attachment: {q.attachment.name}</p>
+                          ) : (
+                            <p className="text-xs text-gray-400">No attachment</p>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeQuestion(idx)}
+                            disabled={questions.length <= 1}
+                            className="text-xs font-semibold text-red-600 disabled:opacity-40"
+                            title={questions.length <= 1 ? 'At least one question is required' : 'Delete this question'}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                      <textarea
+                        value={q.text}
+                        onChange={e => updateQuestionText(idx, e.target.value)}
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5] min-h-[92px]"
+                        placeholder="Type the question here…"
+                      />
+                      <div className="mt-2">
+                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Attachment (optional)</label>
+                        <input
+                          type="file"
+                          onChange={e => updateQuestionAttachment(idx, e.target.files?.[0] || null)}
+                          className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {createMsg && (
+              <div className={`px-6 py-2 text-sm font-medium ${createMsg.includes('success') ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'}`}>
+                {createMsg}
+              </div>
+            )}
+
+            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between flex-shrink-0">
+              <button
+                onClick={closeCreate}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateAssignment}
+                disabled={creating}
+                className="px-5 py-2 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-40"
+                style={{ background: '#2E3093' }}
+              >
+                {creating ? 'Creating…' : 'Create Assignment'}
               </button>
             </div>
           </div>

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { FaPlus, FaFilter, FaFileExport, FaEdit, FaTrashAlt, FaSearch, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
+import { FaPlus, FaFilter, FaFileExport, FaEdit, FaTrashAlt, FaSearch, FaChevronLeft, FaChevronRight, FaTimesCircle, FaCheckCircle } from 'react-icons/fa';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -28,6 +28,7 @@ interface CorporateInquiry {
   Remark: string;
   Idate: string;
   IsActive: number;
+  InquiryStatus?: string | null;
 }
 
 interface Pagination {
@@ -51,6 +52,7 @@ export default function CorporateInquiryPage() {
     totalPages: 0,
   });
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [updating, setUpdating] = useState<number | null>(null);
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -112,6 +114,33 @@ export default function CorporateInquiryPage() {
       console.error(e);
     } finally {
       setDeleting(null);
+    }
+  };
+
+  const updateStatus = async (id: number, status: 'Rejected' | 'UnderDiscussion') => {
+    const verb = status === 'Rejected' ? 'reject' : 'move to under discussion';
+    if (!confirm(`Are you sure you want to ${verb} this inquiry?`)) return;
+    setUpdating(id);
+    try {
+      const res = await fetch('/api/admission-activity/corporate-inquiry', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Id: id, InquiryStatus: status }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Update failed');
+
+      if (status === 'UnderDiscussion') {
+        router.push(`/dashboard/corporate-inquiry/convert/${id}`);
+        return;
+      }
+
+      fetchInquiries();
+    } catch (e) {
+      alert('Update failed');
+      console.error(e);
+    } finally {
+      setUpdating(null);
     }
   };
 
@@ -222,13 +251,14 @@ export default function CorporateInquiryPage() {
                 <th className="text-left py-3 px-4 font-semibold">Course</th>
                 <th className="text-left py-3 px-4 font-semibold">Email</th>
                 <th className="text-left py-3 px-4 font-semibold">Phone</th>
+                <th className="text-left py-3 px-4 font-semibold">Status</th>
                 <th className="text-center py-3 px-4 font-semibold">Action</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center">
+                  <td colSpan={8} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-8 h-8 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                       <span className="text-sm text-gray-400">Loading inquiries...</span>
@@ -237,7 +267,7 @@ export default function CorporateInquiryPage() {
                 </tr>
               ) : inquiries.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center">
+                  <td colSpan={8} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2 text-gray-300">
                       <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -258,6 +288,7 @@ export default function CorporateInquiryPage() {
                     <td className="py-3 px-4 text-gray-600">{inq.Course_Id || '-'}</td>
                     <td className="py-3 px-4 text-gray-600">{inq.Email || '-'}</td>
                     <td className="py-3 px-4 text-gray-600">{inq.Mobile || inq.Phone || '-'}</td>
+                    <td className="py-3 px-4 text-gray-600">{inq.InquiryStatus || '-'}</td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1">
                         {canUpdate && (
@@ -269,10 +300,33 @@ export default function CorporateInquiryPage() {
                           <FaEdit className="w-4 h-4" />
                         </button>
                         )}
+
+                        {canUpdate && (
+                        <button
+                          onClick={() => updateStatus(inq.Id, 'Rejected')}
+                          disabled={updating === inq.Id}
+                          className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                          title="Reject"
+                        >
+                          <FaTimesCircle className="w-4 h-4" />
+                        </button>
+                        )}
+
+                        {canUpdate && (
+                        <button
+                          onClick={() => updateStatus(inq.Id, 'UnderDiscussion')}
+                          disabled={updating === inq.Id}
+                          className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600 transition-colors disabled:opacity-50"
+                          title="Under Discussion"
+                        >
+                          <FaCheckCircle className="w-4 h-4" />
+                        </button>
+                        )}
+
                         {canDelete && (
                         <button
                           onClick={() => handleDelete(inq.Id)}
-                          disabled={deleting === inq.Id}
+                          disabled={deleting === inq.Id || updating === inq.Id}
                           className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
                           title="Delete"
                         >

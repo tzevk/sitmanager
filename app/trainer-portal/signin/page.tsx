@@ -23,7 +23,10 @@ export default function TrainerSignIn() {
         body: JSON.stringify({ username, password }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Login failed'); return; }
+      if (!res.ok) {
+        setError(data.message || data.error || 'Login failed');
+        return;
+      }
       router.push('/trainer-portal/dashboard');
     } catch {
       setError('Network error');

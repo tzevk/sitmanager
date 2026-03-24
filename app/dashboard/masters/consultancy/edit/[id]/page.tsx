@@ -79,6 +79,7 @@ export default function EditConsultancyPage() {
     Comp_Name: '', Designation: '', City: '', State: '', Tel: '', Fax: '', Mobile: '',
     Date_Added: today(), Industry: '', Remark: '', Contact_Person: '', Address: '', Pin: '',
     Country: '', EMail: '', Purpose: '', Website: '', Company_Status: '',
+    Company_Type: '',
     Course_Id1: '', Course_Id2: '', Course_Id3: '', Course_Id4: '', Course_Id5: '', Course_Id6: '',
   });
   const [loadingData, setLoadingData] = useState(true);
@@ -124,6 +125,7 @@ export default function EditConsultancyPage() {
           Contact_Person: r.Contact_Person || '', Address: r.Address || '', Pin: r.Pin || '',
           Country: r.Country || '', EMail: r.EMail || '', Purpose: r.Purpose || '',
           Website: r.Website || '', Company_Status: r.Company_Status || '',
+          Company_Type: r.Company_Type || '',
           Course_Id1: r.Course_Id1 || '', Course_Id2: r.Course_Id2 || '', Course_Id3: r.Course_Id3 || '',
           Course_Id4: r.Course_Id4 || '', Course_Id5: r.Course_Id5 || '', Course_Id6: r.Course_Id6 || '',
         });
@@ -402,6 +404,14 @@ export default function EditConsultancyPage() {
                     <option value="Active">Active</option>
                     <option value="Inactive">Inactive</option>
                     <option value="Prospect">Prospect</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Company Type</label>
+                  <select className={selectCls} value={form.Company_Type} onChange={e => handleChange('Company_Type', e.target.value)}>
+                    <option value="">--Select--</option>
+                    <option value="Local">Local</option>
+                    <option value="International">International</option>
                   </select>
                 </div>
                 {[1, 2, 3, 4, 5, 6].map(n => (

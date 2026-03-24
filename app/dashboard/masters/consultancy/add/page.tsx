@@ -71,6 +71,7 @@ export default function AddConsultancyPage() {
     Comp_Name: '', Designation: '', City: '', State: '', Tel: '', Fax: '', Mobile: '',
     Date_Added: today(), Industry: '', Remark: '', Contact_Person: '', Address: '', Pin: '',
     Country: '', EMail: '', Purpose: '', Website: '', Company_Status: '',
+    Company_Type: '',
     Course_Id1: '', Course_Id2: '', Course_Id3: '', Course_Id4: '', Course_Id5: '', Course_Id6: '',
   });
 
@@ -363,6 +364,14 @@ export default function AddConsultancyPage() {
                     <option value="Active">Active</option>
                     <option value="Inactive">Inactive</option>
                     <option value="Prospect">Prospect</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Company Type</label>
+                  <select className={selectCls} value={form.Company_Type} onChange={e => handleChange('Company_Type', e.target.value)}>
+                    <option value="">--Select--</option>
+                    <option value="Local">Local</option>
+                    <option value="International">International</option>
                   </select>
                 </div>
                 {[1, 2, 3, 4, 5, 6].map(n => (

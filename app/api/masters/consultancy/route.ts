@@ -3,12 +3,28 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
+async function ensureCompanyTypeColumn(pool: any) {
+  const [rows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS cnt
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'consultant_mst'
+       AND COLUMN_NAME = 'Company_Type'`
+  );
+
+  const cnt = rows?.[0]?.cnt ?? 0;
+  if (cnt === 0) {
+    await pool.query(`ALTER TABLE consultant_mst ADD COLUMN Company_Type VARCHAR(20) NULL`);
+  }
+}
+
 // GET - list consultancies with pagination, search
 export async function GET(req: NextRequest) {
   try {
     const auth = await requirePermission(req, 'consultancy.view');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
+    await ensureCompanyTypeColumn(pool);
     const { searchParams } = new URL(req.url);
 
     const page = Math.max(1, Number(searchParams.get('page')) || 1);
@@ -32,6 +48,7 @@ export async function GET(req: NextRequest) {
     const [rows] = await pool.query<any[]>(
       `SELECT Const_Id, Comp_Name, Contact_Person, Designation, Address, City, State, Pin, Tel, Fax,
               Mobile, EMail, Date_Added, Industry, Remark, Country, Purpose, Website, Company_Status,
+              Company_Type,
               Course_Id1, CourseName1, Course_Id2, CourseName2, Course_Id3, CourseName3,
               Course_Id4, CourseName4, Course_Id5, CourseName5, Course_Id6, CourseName6, IsActive
        FROM consultant_mst
@@ -58,11 +75,13 @@ export async function POST(req: NextRequest) {
     const auth = await requirePermission(req, 'consultancy.create');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
+    await ensureCompanyTypeColumn(pool);
     const body = await req.json();
 
     const {
       Comp_Name, Contact_Person, Designation, Address, City, State, Pin, Tel, Fax,
       Mobile, EMail, Date_Added, Industry, Remark, Country, Purpose, Website, Company_Status,
+      Company_Type,
       Course_Id1, Course_Id2, Course_Id3, Course_Id4, Course_Id5, Course_Id6,
     } = body;
 
@@ -77,6 +96,7 @@ export async function POST(req: NextRequest) {
       `INSERT INTO consultant_mst (
         Comp_Name, Contact_Person, Designation, Address, City, State, Pin, Tel, Fax,
         Mobile, EMail, Date_Added, Industry, Remark, Country, Purpose, Website, Company_Status,
+        Company_Type,
         Course_Id1, Course_Id2, Course_Id3, Course_Id4, Course_Id5, Course_Id6, IsActive, IsDelete
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
       [
@@ -85,7 +105,9 @@ export async function POST(req: NextRequest) {
         Tel?.trim() || null, Fax?.trim() || null, Mobile?.trim() || null, EMail?.trim() || null,
         Date_Added || null, Industry?.trim() || null, Remark?.trim() || null,
         Country?.trim() || null, Purpose?.trim() || null, Website?.trim() || null,
-        Company_Status?.trim() || null, Course_Id1 || null, Course_Id2 || null, Course_Id3 || null,
+        Company_Status?.trim() || null,
+        Company_Type?.trim() || null,
+        Course_Id1 || null, Course_Id2 || null, Course_Id3 || null,
         Course_Id4 || null, Course_Id5 || null, Course_Id6 || null,
       ]
     );
@@ -104,6 +126,7 @@ export async function PUT(req: NextRequest) {
     const auth = await requirePermission(req, 'consultancy.update');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
+    await ensureCompanyTypeColumn(pool);
     const body = await req.json();
     const { Const_Id, ...fields } = body;
 
@@ -115,6 +138,7 @@ export async function PUT(req: NextRequest) {
       `UPDATE consultant_mst SET
         Comp_Name=?, Contact_Person=?, Designation=?, Address=?, City=?, State=?, Pin=?, Tel=?, Fax=?,
         Mobile=?, EMail=?, Date_Added=?, Industry=?, Remark=?, Country=?, Purpose=?, Website=?, Company_Status=?,
+        Company_Type=?,
         Course_Id1=?, Course_Id2=?, Course_Id3=?, Course_Id4=?, Course_Id5=?, Course_Id6=?
        WHERE Const_Id=?`,
       [
@@ -123,7 +147,9 @@ export async function PUT(req: NextRequest) {
         fields.Tel?.trim() || null, fields.Fax?.trim() || null, fields.Mobile?.trim() || null, fields.EMail?.trim() || null,
         fields.Date_Added || null, fields.Industry?.trim() || null, fields.Remark?.trim() || null,
         fields.Country?.trim() || null, fields.Purpose?.trim() || null, fields.Website?.trim() || null,
-        fields.Company_Status?.trim() || null, fields.Course_Id1 || null, fields.Course_Id2 || null, fields.Course_Id3 || null,
+        fields.Company_Status?.trim() || null,
+        fields.Company_Type?.trim() || null,
+        fields.Course_Id1 || null, fields.Course_Id2 || null, fields.Course_Id3 || null,
         fields.Course_Id4 || null, fields.Course_Id5 || null, fields.Course_Id6 || null, Const_Id,
       ]
     );

@@ -38,12 +38,14 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Admission Activity > Online Admission': '/dashboard/online-admission',
   'Admission Activity > Student': '/dashboard/student',
   'Corporate Training > Corporate Inquiry': '/dashboard/corporate-inquiry',
+  'Corporate Training > Under Discussion': '/dashboard/corporate-inquiry/convert',
   'Reports > Inquiry': '/dashboard/reports/inquiry',
   'Reports > Inquiry Report': '/dashboard/reports/inquiry',
   'Reports > Online Students': '/dashboard/reports/online-student',
   'Reports > Full Attendance Report': '/dashboard/reports/attendance',
   'Role Right > Roles & Permissions': '/dashboard/role-right',
   'Role Right > Create User': '/dashboard/role-right?tab=create-user',
+  'Role Right > Portal Accounts': '/dashboard/portal-accounts',
   'Daily Activities > Allot Roll Number': '/dashboard/daily-activities/allot-roll-number',
   'Daily Activities > Lecture Taken': '/dashboard/daily-activities/lecture-taken',
   'Daily Activities > Assignments Taken': '/dashboard/daily-activities/assignments-taken',
@@ -160,10 +162,8 @@ const SUB_MENUS: Record<string, string[]> = {
     'Employee Training',
   ],
   'Corporate Training': [
-    'Corporate Clients',
-    'Corporate Batches',
-    'Corporate Reports',
     'Corporate Inquiry',
+    'Under Discussion',
   ],
   'Utility': [
     'Festival Photo Upload',
@@ -195,6 +195,7 @@ const SUB_MENUS: Record<string, string[]> = {
   'Role Right': [
     'Roles & Permissions',
     'Create User',
+    'Portal Accounts',
   ],
 };
 
@@ -239,6 +240,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     if (path.startsWith('/dashboard/account-master')) return 'Admin/Accounts';
     if (path.startsWith('/dashboard/reports')) return 'Reports';
     if (path.startsWith('/dashboard/role-right')) return 'Role Right';
+    if (path.startsWith('/dashboard/portal-accounts')) return 'Role Right';
     if (path.startsWith('/dashboard/corporate-inquiry')) return 'Corporate Training';
     if (path.startsWith('/dashboard/inquiry') || path.startsWith('/dashboard/online-admission') || path.startsWith('/dashboard/student')) return 'Admission Activity';
     if (path.startsWith('/dashboard/placement') || path.startsWith('/dashboard/cv-shortlisted')) return 'Placement';

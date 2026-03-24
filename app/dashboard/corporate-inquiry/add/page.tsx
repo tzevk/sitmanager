@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FaSave, FaTimes } from 'react-icons/fa';
 import { useResourcePermissions } from '@/lib/permissions-context';
@@ -11,37 +11,79 @@ interface Course {
   Course_Name: string;
 }
 
+interface Consultancy {
+  Const_Id: number;
+  Comp_Name: string;
+  Contact_Person?: string | null;
+  Designation?: string | null;
+  Mobile?: string | null;
+  EMail?: string | null;
+}
+
+type Tab = 'details' | 'discussion' | 'followup';
+
+type FollowUpItem = {
+  date: string;
+  note: string;
+};
+
+function todayISO(): string {
+  // yyyy-mm-dd
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export default function AddCorporateInquiryPage() {
   const router = useRouter();
   const { canCreate, loading: permLoading } = useResourcePermissions('corporate_inquiry');
   const [loading, setLoading] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [consultancies, setConsultancies] = useState<Consultancy[]>([]);
+  const [activeTab, setActiveTab] = useState<Tab>('details');
   const [form, setForm] = useState({
-    Fname: '',
-    MName: '',
-    Lname: '',
+    Idate: todayISO(),
+    Course_Id: '',
+    Consultancy_Id: '',
     CompanyName: '',
+    CompanyAuthority: '',
+    FullName: '',
     Designation: '',
-    Address: '',
-    City: '',
-    State: '',
-    Country: '',
-    Pin: '',
     Phone: '',
     Mobile: '',
     Email: '',
-    Course_Id: '',
-    Place: '',
-    business: '',
-    Remark: '',
+    TrainingMode: 'offline' as 'online' | 'offline',
+    Participants_Fresher: '',
+    Participants_Experienced: '',
+    TrainingLocation: '',
+    Discussion: '',
+    InitialFollowUpDate: '',
+    NextFollowUpDate: '',
   });
 
+  const [followUps, setFollowUps] = useState<FollowUpItem[]>([]);
+  const [followUpDraft, setFollowUpDraft] = useState<FollowUpItem>({ date: '', note: '' });
+
   useEffect(() => {
-    // Fetch courses for dropdown
-    fetch('/api/admission-activity/corporate-inquiry')
-      .then((res) => res.json())
-      .then((data) => setCourses(data.courses || []))
-      .catch(() => {});
+    let alive = true;
+    async function loadMeta() {
+      try {
+        const res = await fetch('/api/admission-activity/corporate-inquiry/meta', { method: 'GET' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return;
+        if (!alive) return;
+        setCourses(Array.isArray(data?.courses) ? data.courses : []);
+        setConsultancies(Array.isArray(data?.consultancies) ? data.consultancies : []);
+      } catch {
+        // ignore
+      }
+    }
+    loadMeta();
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -49,14 +91,44 @@ export default function AddCorporateInquiryPage() {
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  const companyOptions = useMemo(() => {
+    return consultancies
+      .slice()
+      .sort((a, b) => String(a.Comp_Name || '').localeCompare(String(b.Comp_Name || '')));
+  }, [consultancies]);
+
+  function handleCompanyChange(constId: string) {
+    const idNum = Number(constId);
+    const selected = companyOptions.find((c) => Number(c.Const_Id) === idNum);
+    setForm((prev) => {
+      const next: typeof prev = {
+        ...prev,
+        Consultancy_Id: constId,
+        CompanyName: selected?.Comp_Name || '',
+      };
+      if (!prev.CompanyAuthority?.trim() && selected?.Contact_Person) {
+        next.CompanyAuthority = selected.Contact_Person;
+      }
+      return next;
+    });
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
+      const payload = {
+        ...form,
+        FollowUp: JSON.stringify({
+          initialDate: form.InitialFollowUpDate || null,
+          nextDate: form.NextFollowUpDate || null,
+          items: followUps,
+        }),
+      };
       const res = await fetch('/api/admission-activity/corporate-inquiry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.success) {
@@ -73,8 +145,14 @@ export default function AddCorporateInquiryPage() {
   };
 
   const inputClass =
-    'max-w-[220px] w-full px-2 py-1.5 border-2 border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-xs';
-  const labelClass = 'block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1';
+    'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 bg-white shadow-sm';
+  const labelClass = 'block text-[11px] uppercase tracking-wider text-gray-400 font-semibold mb-1';
+  const textareaClass =
+    'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 bg-white shadow-sm';
+  const tabBtn = (isActive: boolean) =>
+    isActive
+      ? 'px-4 py-2 rounded-lg bg-[#2E3093] text-white text-sm font-semibold shadow-sm'
+      : 'px-4 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-sm font-semibold text-gray-700 shadow-sm';
 
   if (permLoading) return <PermissionLoading />;
   if (!canCreate) return <AccessDenied message="You do not have permission to add corporate inquiries." />;
@@ -101,231 +179,303 @@ export default function AddCorporateInquiryPage() {
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-4">\
-        {/* Personal Info */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Personal Information</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-2 gap-y-1.5">
-            <div>
-              <label className={labelClass}>First Name</label>
-              <input
-                type="text"
-                name="Fname"
-                value={form.Fname}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="First Name"
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Middle Name</label>
-              <input
-                type="text"
-                name="MName"
-                value={form.MName}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="Middle Name"
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Last Name</label>
-              <input
-                type="text"
-                name="Lname"
-                value={form.Lname}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="Last Name"
-              />
-            </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+            <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className={tabBtn(activeTab === 'details')} onClick={() => setActiveTab('details')}>
+              Inquiry Details
+            </button>
+            <button
+              type="button"
+              className={tabBtn(activeTab === 'discussion')}
+              onClick={() => setActiveTab('discussion')}
+            >
+              Discussion
+            </button>
+            <button type="button" className={tabBtn(activeTab === 'followup')} onClick={() => setActiveTab('followup')}>
+              Follow Up
+            </button>
           </div>
-        </div>
-
-        {/* Company Info */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Company Information</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-2 gap-y-1.5">
-            <div>
-              <label className={labelClass}>Company Name</label>
-              <input
-                type="text"
-                name="CompanyName"
-                value={form.CompanyName}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="Company Name"
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Designation</label>
-              <input
-                type="text"
-                name="Designation"
-                value={form.Designation}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="Designation"
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Business</label>
-              <input
-                type="text"
-                name="business"
-                value={form.business}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="Type of Business"
-              />
-            </div>
           </div>
-        </div>
 
-        {/* Contact Info */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Contact Information</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-2 gap-y-1.5">
-            <div>
-              <label className={labelClass}>Email</label>
-              <input
-                type="email"
-                name="Email"
-                value={form.Email}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="Email"
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Phone</label>
-              <input
-                type="text"
-                name="Phone"
-                value={form.Phone}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="Phone"
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Mobile</label>
-              <input
-                type="text"
-                name="Mobile"
-                value={form.Mobile}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="Mobile"
-              />
-            </div>
-          </div>
-        </div>
+          <div className="p-5">
+            {activeTab === 'details' && (
+              <>
+                <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Inquiry Details</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className={labelClass}>Date</label>
+                <input type="date" name="Idate" value={form.Idate} onChange={handleChange} className={inputClass} />
+              </div>
 
-        {/* Address */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Address</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-2 gap-y-1.5">
-            <div className="md:col-span-3">
-              <label className={labelClass}>Address</label>
-              <input
-                type="text"
-                name="Address"
-                value={form.Address}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="Address"
-              />
-            </div>
-            <div>
-              <label className={labelClass}>City</label>
-              <input
-                type="text"
-                name="City"
-                value={form.City}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="City"
-              />
-            </div>
-            <div>
-              <label className={labelClass}>State</label>
-              <input
-                type="text"
-                name="State"
-                value={form.State}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="State"
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Country</label>
-              <input
-                type="text"
-                name="Country"
-                value={form.Country}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="Country"
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Pin Code</label>
-              <input
-                type="text"
-                name="Pin"
-                value={form.Pin}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="Pin Code"
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Place</label>
-              <input
-                type="text"
-                name="Place"
-                value={form.Place}
-                onChange={handleChange}
-                className={inputClass}
-                placeholder="Place"
-              />
-            </div>
-          </div>
-        </div>
+              <div>
+                <label className={labelClass}>Training Programme</label>
+                <select name="Course_Id" value={form.Course_Id} onChange={handleChange} className={inputClass}>
+                  <option value="">Select Programme</option>
+                  {courses.map((c) => (
+                    <option key={c.Course_Id} value={String(c.Course_Id)}>
+                      {c.Course_Name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-        {/* Course & Remarks */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Course & Remarks</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-2 gap-y-1.5">
-            <div>
-              <label className={labelClass}>Course</label>
-              <select
-                name="Course_Id"
-                value={form.Course_Id}
-                onChange={handleChange}
-                className={inputClass}
-              >
-                <option value="">Select Course</option>
-                {courses.map((c) => (
-                  <option key={c.Course_Id} value={c.Course_Name}>
-                    {c.Course_Name}
-                  </option>
-                ))}
-              </select>
+              <div>
+                <label className={labelClass}>Company Name</label>
+                <select
+                  name="Consultancy_Id"
+                  value={form.Consultancy_Id}
+                  onChange={(e) => handleCompanyChange(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Select Company</option>
+                  {companyOptions.map((c) => (
+                    <option key={c.Const_Id} value={String(c.Const_Id)}>
+                      {c.Comp_Name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className={labelClass}>Company Authority</label>
+                <input
+                  type="text"
+                  name="CompanyAuthority"
+                  value={form.CompanyAuthority}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="Last contacted person"
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Name</label>
+                <input
+                  type="text"
+                  name="FullName"
+                  value={form.FullName}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="Contact name"
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Position</label>
+                <input
+                  type="text"
+                  name="Designation"
+                  value={form.Designation}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="Designation"
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Email</label>
+                <input type="email" name="Email" value={form.Email} onChange={handleChange} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Mobile</label>
+                <input type="text" name="Mobile" value={form.Mobile} onChange={handleChange} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Phone</label>
+                <input type="text" name="Phone" value={form.Phone} onChange={handleChange} className={inputClass} />
+              </div>
+
+              <div>
+                <label className={labelClass}>Training Mode</label>
+                <div className="flex items-center gap-4 pt-1">
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="radio"
+                      name="TrainingMode"
+                      value="online"
+                      checked={form.TrainingMode === 'online'}
+                      onChange={handleChange}
+                    />
+                    Online
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="radio"
+                      name="TrainingMode"
+                      value="offline"
+                      checked={form.TrainingMode === 'offline'}
+                      onChange={handleChange}
+                    />
+                    Offline
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className={labelClass}>Participants (Fresher)</label>
+                <input
+                  type="number"
+                  name="Participants_Fresher"
+                  value={form.Participants_Fresher}
+                  onChange={handleChange}
+                  className={inputClass}
+                  min={0}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Participants (Experienced)</label>
+                <input
+                  type="number"
+                  name="Participants_Experienced"
+                  value={form.Participants_Experienced}
+                  onChange={handleChange}
+                  className={inputClass}
+                  min={0}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Training Location</label>
+                <input
+                  type="text"
+                  name="TrainingLocation"
+                  value={form.TrainingLocation}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="Location"
+                />
+              </div>
             </div>
-            <div>
-              <label className={labelClass}>Remark</label>
-              <textarea
-                name="Remark"
-                value={form.Remark}
-                onChange={handleChange}
-                className={inputClass}
-                rows={2}
-                placeholder="Remarks"
-              />
-            </div>
+              </>
+            )}
+
+            {activeTab === 'discussion' && (
+              <>
+                <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Discussion</h2>
+                <label className={labelClass}>Discussion Notes</label>
+                <textarea
+                  name="Discussion"
+                  value={form.Discussion}
+                  onChange={handleChange}
+                  className={textareaClass}
+                  rows={8}
+                  placeholder="Enter discussion details"
+                />
+              </>
+            )}
+
+            {activeTab === 'followup' && (
+              <>
+                <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Follow Up</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelClass}>Initial Follow Up Date</label>
+                    <input
+                      type="date"
+                      name="InitialFollowUpDate"
+                      value={form.InitialFollowUpDate}
+                      onChange={handleChange}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Next Follow Up Date</label>
+                    <input
+                      type="date"
+                      name="NextFollowUpDate"
+                      value={form.NextFollowUpDate}
+                      onChange={handleChange}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+                    <div className="text-sm font-semibold text-gray-700">Add Inline Follow Up</div>
+                  </div>
+
+                  <div className="p-4 grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
+                    <div className="sm:col-span-1">
+                      <label className={labelClass}>Date</label>
+                      <input
+                        type="date"
+                        value={followUpDraft.date}
+                        onChange={(e) => setFollowUpDraft((p) => ({ ...p, date: e.target.value }))}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div className="sm:col-span-3">
+                      <label className={labelClass}>Remark</label>
+                      <input
+                        type="text"
+                        value={followUpDraft.note}
+                        onChange={(e) => setFollowUpDraft((p) => ({ ...p, note: e.target.value }))}
+                        className={inputClass}
+                        placeholder="Follow up remark"
+                      />
+                    </div>
+                    <div className="sm:col-span-1 flex gap-2">
+                      <button
+                        type="button"
+                        className="flex-1 px-4 py-2 rounded-lg bg-[#2E3093] hover:bg-[#252773] text-white text-sm font-semibold shadow-sm disabled:opacity-50"
+                        disabled={!followUpDraft.date && !followUpDraft.note.trim()}
+                        onClick={() => {
+                          const item: FollowUpItem = {
+                            date: followUpDraft.date,
+                            note: followUpDraft.note.trim(),
+                          };
+                          if (!item.date && !item.note) return;
+                          setFollowUps((prev) => [...prev, item]);
+                          setFollowUpDraft({ date: '', note: '' });
+                        }}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-gray-100 overflow-x-auto">
+                    <table className="min-w-[600px] w-full text-sm">
+                      <thead className="bg-white">
+                        <tr className="text-[11px] uppercase tracking-wider text-gray-400 border-b border-gray-100">
+                          <th className="text-left py-3 px-4 font-semibold">#</th>
+                          <th className="text-left py-3 px-4 font-semibold">Date</th>
+                          <th className="text-left py-3 px-4 font-semibold">Remark</th>
+                          <th className="text-left py-3 px-4 font-semibold w-[120px]">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {followUps.map((fu, idx) => (
+                          <tr key={`${fu.date}-${idx}`} className="border-b border-gray-50 hover:bg-gray-50/50">
+                            <td className="py-3 px-4 text-gray-500">{idx + 1}</td>
+                            <td className="py-3 px-4 text-gray-800">{fu.date || '—'}</td>
+                            <td className="py-3 px-4 text-gray-800">{fu.note || '—'}</td>
+                            <td className="py-3 px-4">
+                              <button
+                                type="button"
+                                className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-sm font-semibold text-gray-700"
+                                onClick={() => setFollowUps((prev) => prev.filter((_, i) => i !== idx))}
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {followUps.length === 0 && (
+                          <tr>
+                            <td className="py-4 px-4 text-gray-500" colSpan={4}>
+                              No follow ups added.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 

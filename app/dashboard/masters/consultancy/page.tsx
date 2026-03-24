@@ -8,6 +8,7 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 interface Consultancy {
   Const_Id: number;
   Comp_Name: string;
+  Company_Type?: string | null;
   Contact_Person: string | null;
   Designation: string | null;
   Address: string | null;
@@ -64,8 +65,8 @@ export default function ConsultancyPage() {
   };
 
   const handleExport = () => {
-    const headers = ['Consultancy Name', 'Contact Person', 'Designation', 'Address', 'City', 'Telephone', 'Email'];
-    const csvRows = rows.map(r => [r.Comp_Name || '', r.Contact_Person || '', r.Designation || '', r.Address || '', r.City || '', r.Tel || '', r.EMail || '']);
+    const headers = ['Consultancy Name', 'Company Type', 'Contact Person', 'Designation', 'Address', 'City', 'Telephone', 'Email'];
+    const csvRows = rows.map(r => [r.Comp_Name || '', r.Company_Type || '', r.Contact_Person || '', r.Designation || '', r.Address || '', r.City || '', r.Tel || '', r.EMail || '']);
     const csv = [headers.join(','), ...csvRows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -151,6 +152,7 @@ export default function ConsultancyPage() {
                 <thead className="sticky top-0 z-10 bg-white">
                   <tr className="bg-gradient-to-r from-[#2E3093]/10 to-[#2A6BB5]/10">
                     <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Consultancy Name</th>
+                    <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Company Type</th>
                     <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Contact Person</th>
                     <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Designation</th>
                     <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Address</th>
@@ -162,14 +164,15 @@ export default function ConsultancyPage() {
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">
+                    <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">
                       <div className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />Loading...</div>
                     </td></tr>
                   ) : rows.length === 0 ? (
-                    <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No records found</td></tr>
+                    <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No records found</td></tr>
                   ) : rows.map(row => (
                     <tr key={row.Const_Id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                       <td className="px-3 py-2.5 text-gray-900 font-medium truncate max-w-[180px]" title={row.Comp_Name || ''}>{row.Comp_Name || '-'}</td>
+                      <td className="px-3 py-2.5 text-gray-700">{row.Company_Type || '-'}</td>
                       <td className="px-3 py-2.5 text-gray-700 truncate max-w-[130px]">{row.Contact_Person || '-'}</td>
                       <td className="px-3 py-2.5 text-gray-700 truncate max-w-[100px]">{row.Designation || '-'}</td>
                       <td className="px-3 py-2.5 text-gray-700 truncate max-w-[160px]" title={row.Address || ''}>{row.Address || '-'}</td>

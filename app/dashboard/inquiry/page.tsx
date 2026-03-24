@@ -54,6 +54,7 @@ interface InquiryRow {
   DiscussionDate: string | null;
   Present_Mobile: string | null;
   Email: string | null;
+  Location: string | null;
   Discipline: string | null;
   Inquiry_From: string | null;
   Inquiry_Type: string | null;
@@ -90,6 +91,7 @@ export default function InquiryPage() {
   const [search, setSearch] = useState('');
   const [discipline, setDiscipline] = useState('');
   const [inquiryType, setInquiryType] = useState('');
+  const [location, setLocation] = useState<'' | 'pune' | 'mumbai'>('');
   const [status, setStatus] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -105,6 +107,7 @@ export default function InquiryPage() {
       if (search) params.set('search', search);
       if (discipline) params.set('discipline', discipline);
       if (inquiryType) params.set('inquiryType', inquiryType);
+      if (location) params.set('location', location);
       if (status) params.set('status', status);
       if (dateFrom) params.set('dateFrom', dateFrom);
       if (dateTo) params.set('dateTo', dateTo);
@@ -136,6 +139,7 @@ export default function InquiryPage() {
     setSearch('');
     setDiscipline('');
     setInquiryType('');
+    setLocation('');
     setStatus('');
     setDateFrom('');
     setDateTo('');
@@ -295,6 +299,35 @@ export default function InquiryPage() {
             </select>
           </div>
 
+          {/* Location */}
+          <div className="w-full sm:w-[200px]">
+            <label className={labelCls}>Location</label>
+            <div className="flex w-full rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-sm">
+              {[{ key: '', label: 'All' }, { key: 'pune', label: 'Pune' }, { key: 'mumbai', label: 'Mumbai' }].map((opt) => {
+                const active = location === (opt.key as any);
+                return (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    onClick={() => {
+                      setLocation(opt.key as any);
+                      setPage(1);
+                      setFetchTrigger(t => t + 1);
+                    }}
+                    className={
+                      (active
+                        ? 'bg-[#2E3093] text-white shadow-sm'
+                        : 'text-slate-600 hover:bg-white')
+                      + ' flex-1 rounded-lg px-3 py-2 text-sm font-bold transition-colors'
+                    }
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Status */}
           <div className="w-full sm:w-[200px]">
             <label className={labelCls}>Status</label>
@@ -367,6 +400,7 @@ export default function InquiryPage() {
                 <th className="text-left py-3 px-4 font-bold">Course Name</th>
                 <th className="text-left py-3 px-4 font-bold">Mobile</th>
                 <th className="text-left py-3 px-4 font-bold">Email</th>
+                <th className="text-left py-3 px-4 font-bold">Location</th>
                 <th className="text-left py-3 px-4 font-bold">Discipline</th>
                 <th className="text-left py-3 px-4 font-bold">Inquiry Type</th>
                 <th className="text-left py-3 px-4 font-bold">Inquiry Date</th>
@@ -378,7 +412,7 @@ export default function InquiryPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="py-16 text-center">
+                  <td colSpan={12} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-8 h-8 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                       <span className="text-sm text-gray-400">Loading inquiries...</span>
@@ -387,7 +421,7 @@ export default function InquiryPage() {
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-16 text-center">
+                  <td colSpan={12} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2 text-gray-300">
                       <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -423,6 +457,9 @@ export default function InquiryPage() {
                     </td>
                     <td className="py-2.5 px-4 text-slate-600 max-w-[180px]">
                       <span className="truncate block text-xs">{r.Email || '—'}</span>
+                    </td>
+                    <td className="py-2.5 px-4 text-slate-600 whitespace-nowrap text-xs">
+                      {r.Location || '—'}
                     </td>
                     <td className="py-2.5 px-4 text-slate-600 whitespace-nowrap text-xs">
                       {r.Discipline && r.Discipline !== 'NULL' && r.Discipline !== 'Select' ? r.Discipline : '—'}
