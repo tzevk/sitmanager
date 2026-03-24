@@ -29,6 +29,8 @@ function isAuthorized(request: Request): boolean {
 
   const secret = process.env.CRON_SECRET;
   if (secret) {
+    const auth = request.headers.get('authorization');
+    if (auth && auth.trim() === `Bearer ${secret}`) return true;
     return request.headers.get('x-cron-secret') === secret;
   }
 
