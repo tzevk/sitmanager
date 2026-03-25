@@ -608,7 +608,10 @@ export default function TrainerDashboardPage() {
       {/* Attendance Modal */}
       {attendanceOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setAttendanceOpen(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div
+            className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[calc(100dvh-2rem)] flex flex-col min-h-0"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-gray-800">Mark Attendance</h3>
@@ -623,7 +626,7 @@ export default function TrainerDashboardPage() {
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto min-h-0">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Main Topic</label>
