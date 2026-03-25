@@ -2,25 +2,20 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FaSearch, FaChevronLeft, FaChevronRight, FaEdit, FaTrashAlt, FaTimesCircle, FaCheckCircle } from 'react-icons/fa';
+import { FaSearch, FaChevronLeft, FaChevronRight, FaEdit, FaCheckCircle } from 'react-icons/fa';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 interface ConvertedInquiryRow {
   Id: number;
-  FullName: string | null;
+  Idate: string | null;
+  Course_Id: string | null;
   CompanyName: string | null;
-  Email: string | null;
-  Mobile: string | null;
-  Phone: string | null;
-  InquiryStatus: string | null;
-
-  TrainingNumber: string | null;
-  TrainingDate: string | null;
-  TrainerName: string | null;
-  NumberOfDays: number | null;
-  TotalStudents: number | null;
-  TrainingCoordinator: string | null;
+  TrainingMode: string | null;
+  DiscussionOutcome: string | null;
+  InitialFollowUpDate: string | null;
+  NextFollowUpDate: string | null;
+  FollowUp: string | null;
 }
 
 interface Pagination {
@@ -39,9 +34,30 @@ const toDate = (v: string | null | undefined) => {
   }
 };
 
+function getRecentFollowUp(raw: unknown, nextDate: string | null | undefined): string {
+  const fallback = toDate(nextDate);
+  if (!raw) return fallback;
+  const s = String(raw);
+  if (!s.trim()) return fallback;
+  try {
+    const obj = JSON.parse(s) as unknown;
+    const rec: Record<string, unknown> = typeof obj === 'object' && obj !== null ? (obj as Record<string, unknown>) : {};
+    const items = Array.isArray(rec.items) ? (rec.items as unknown[]) : [];
+    const last = items.length ? items[items.length - 1] : null;
+    const lastRec: Record<string, unknown> = typeof last === 'object' && last !== null ? (last as Record<string, unknown>) : {};
+    const lastDate = String(lastRec.date ?? '').trim();
+    if (lastDate) return toDate(lastDate);
+    const next = String(rec.nextDate ?? '').trim();
+    if (next) return toDate(next);
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export default function TrainingDiscussionIndexPage() {
   const router = useRouter();
-  const { canView, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('corporate_inquiry');
+  const { canView, canUpdate, loading: permLoading } = useResourcePermissions('corporate_inquiry');
 
   const [rows, setRows] = useState<ConvertedInquiryRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,43 +106,19 @@ export default function TrainingDiscussionIndexPage() {
     }
   };
 
-  const updateStatus = async (id: number, status: 'Final' | 'Rejected') => {
-    const verb = status === 'Final' ? 'convert to final phase' : 'reject';
-    if (!confirm(`Are you sure you want to ${verb}?`)) return;
+  const handleConvert = async (id: number) => {
+    if (!confirm('Are you sure you want to convert to training execution?')) return;
     try {
       const res = await fetch('/api/admission-activity/corporate-inquiry', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ Id: id, InquiryStatus: status }),
+        body: JSON.stringify({ Id: id, InquiryStatus: 'Final' }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Update failed');
-
-      if (status === 'Final') {
-        router.push(`/dashboard/corporate-inquiry/final/${id}`);
-        return;
-      }
-
-      setPagination((p) => ({ ...p, page: 1 }));
-      setFetchTrigger((t) => t + 1);
+      if (!res.ok) throw new Error(data.error || 'Convert failed');
+      router.push(`/dashboard/corporate-inquiry/final/${id}`);
     } catch (e) {
-      alert('Update failed');
-      console.error(e);
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this inquiry?')) return;
-    try {
-      const res = await fetch(`/api/admission-activity/corporate-inquiry?id=${id}`, { method: 'DELETE' });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Delete failed');
-      }
-      setPagination((p) => ({ ...p, page: 1 }));
-      setFetchTrigger((t) => t + 1);
-    } catch (e) {
-      alert('Delete failed');
+      alert('Convert failed');
       console.error(e);
     }
   };
@@ -139,7 +131,7 @@ export default function TrainingDiscussionIndexPage() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h2 className="text-lg font-bold text-gray-800">Under Discussion</h2>
+            <h2 className="text-lg font-bold text-gray-800">Training Discussion</h2>
             <p className="text-sm text-gray-400">Corporate inquiries under discussion</p>
           </div>
           <div className="relative min-w-[220px] max-w-md flex-1">
@@ -168,22 +160,20 @@ export default function TrainingDiscussionIndexPage() {
           <table className="dashboard-table w-full text-sm">
             <thead>
               <tr className="text-[11px] uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100">
-                <th className="text-left py-3 px-4 font-semibold">Id</th>
-                <th className="text-left py-3 px-4 font-semibold">Company</th>
-                <th className="text-left py-3 px-4 font-semibold">Inquirer</th>
-                <th className="text-left py-3 px-4 font-semibold">Training No.</th>
-                <th className="text-left py-3 px-4 font-semibold">Training Date</th>
-                <th className="text-left py-3 px-4 font-semibold">Trainer</th>
-                <th className="text-left py-3 px-4 font-semibold">Days</th>
-                <th className="text-left py-3 px-4 font-semibold">Students</th>
-                <th className="text-left py-3 px-4 font-semibold">Co-ordinator</th>
+                <th className="text-left py-3 px-4 font-semibold">Enquiry Date</th>
+                <th className="text-left py-3 px-4 font-semibold">Training Programme</th>
+                <th className="text-left py-3 px-4 font-semibold">Company Name</th>
+                <th className="text-left py-3 px-4 font-semibold">Training Mode</th>
+                <th className="text-left py-3 px-4 font-semibold">Discussion Outcome</th>
+                <th className="text-left py-3 px-4 font-semibold">Meeting Date</th>
+                <th className="text-left py-3 px-4 font-semibold">Recent Follow Up</th>
                 <th className="text-center py-3 px-4 font-semibold">Action</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center">
+                  <td colSpan={8} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-8 h-8 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                       <span className="text-sm text-gray-400">Loading...</span>
@@ -192,20 +182,18 @@ export default function TrainingDiscussionIndexPage() {
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center text-gray-400">No under discussion inquiries found</td>
+                  <td colSpan={8} className="py-16 text-center text-gray-400">No training discussion inquiries found</td>
                 </tr>
               ) : (
                 rows.map((r, idx) => (
                   <tr key={r.Id} className={`hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                    <td className="py-3 px-4 text-gray-600">{r.Id}</td>
+                    <td className="py-3 px-4 text-gray-700">{toDate(r.Idate)}</td>
+                    <td className="py-3 px-4 text-gray-700">{r.Course_Id || '-'}</td>
                     <td className="py-3 px-4 text-gray-700">{r.CompanyName || '-'}</td>
-                    <td className="py-3 px-4 text-gray-700">{r.FullName || '-'}</td>
-                    <td className="py-3 px-4 text-gray-700">{r.TrainingNumber || '-'}</td>
-                    <td className="py-3 px-4 text-gray-700">{toDate(r.TrainingDate)}</td>
-                    <td className="py-3 px-4 text-gray-700">{r.TrainerName || '-'}</td>
-                    <td className="py-3 px-4 text-gray-700">{r.NumberOfDays ?? '-'}</td>
-                    <td className="py-3 px-4 text-gray-700">{r.TotalStudents ?? '-'}</td>
-                    <td className="py-3 px-4 text-gray-700">{r.TrainingCoordinator || '-'}</td>
+                    <td className="py-3 px-4 text-gray-700">{r.TrainingMode || '-'}</td>
+                    <td className="py-3 px-4 text-gray-700">{r.DiscussionOutcome || '-'}</td>
+                    <td className="py-3 px-4 text-gray-700">{toDate(r.InitialFollowUpDate)}</td>
+                    <td className="py-3 px-4 text-gray-700">{getRecentFollowUp(r.FollowUp, r.NextFollowUpDate)}</td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1">
                         {canUpdate && (
@@ -220,31 +208,11 @@ export default function TrainingDiscussionIndexPage() {
 
                         {canUpdate && (
                           <button
-                            onClick={() => updateStatus(r.Id, 'Final')}
+                            onClick={() => handleConvert(r.Id)}
                             className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600 transition-colors"
-                            title="Convert"
+                            title="Convert to Training Execution"
                           >
                             <FaCheckCircle className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        {canUpdate && (
-                          <button
-                            onClick={() => updateStatus(r.Id, 'Rejected')}
-                            className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-                            title="Reject"
-                          >
-                            <FaTimesCircle className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        {canDelete && (
-                          <button
-                            onClick={() => handleDelete(r.Id)}
-                            className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-                            title="Delete"
-                          >
-                            <FaTrashAlt className="w-4 h-4" />
                           </button>
                         )}
                       </div>

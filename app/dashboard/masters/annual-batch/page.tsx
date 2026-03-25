@@ -120,7 +120,7 @@ export default function AnnualBatchPage() {
   };
 
   const handleExport = () => {
-    const headers = ['Id', 'Course Name', 'Batch No.', 'Category', 'Timings', 'Planned Start Date', 'Actual Start Date', 'Last Date of Admission', 'Training Completion Date', 'Duration', 'Training Coordinator'];
+    const headers = ['Id', 'Training Name', 'Batch No.', 'Category', 'Timings', 'Planned Start Date', 'Actual Start Date', 'Last Date of Admission', 'Training Completion Date', 'Duration', 'Training Coordinator'];
     const rows = batches.map((b) => [
       b.Batch_Id,
       b.Course_Name || '',
@@ -293,7 +293,7 @@ export default function AnnualBatchPage() {
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
                 <th className="text-left px-4 py-3 font-bold text-slate-600">Id</th>
-                <th className="text-left px-4 py-3 font-bold text-slate-600">Course Name</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-600">Training Name</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-600">Batch No.</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-600">Category</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-600">Timings</th>

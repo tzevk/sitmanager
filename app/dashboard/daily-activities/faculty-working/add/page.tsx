@@ -47,7 +47,7 @@ const emptyForm: FormData = {
 /* ------------------------------------------------------------------ */
 export default function AddFacultyWorkingPage() {
   return (
-    <PermissionGate resource="faculty_working_hours" deniedMessage="You do not have permission to add faculty working hours.">
+    <PermissionGate resource="faculty_working_hours" deniedMessage="You do not have permission to add trainer working hours.">
       {(perms) => <AddFacultyWorkingContent {...perms} />}
     </PermissionGate>
   );
@@ -132,7 +132,7 @@ function AddFacultyWorkingContent({ canCreate, canUpdate }: { canCreate: boolean
     
     // Validate
     if (!form.Course_Id || !form.Batch_Id || !form.faculty) {
-      setError('Please fill in required fields (Course, Batch, Faculty).');
+      setError('Please fill in required fields (Course, Batch, Trainer).');
       setSaving(false);
       return;
     }
@@ -178,7 +178,7 @@ function AddFacultyWorkingContent({ canCreate, canUpdate }: { canCreate: boolean
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
           <h1 className="text-lg font-bold text-gray-800">
-            {isEdit ? 'Edit Faculty Working Hours' : 'View Faculty Working Hours Info'}
+            {isEdit ? 'Edit Trainer Working Hours' : 'View Trainer Working Hours Info'}
           </h1>
         </div>
         
@@ -236,9 +236,9 @@ function AddFacultyWorkingContent({ canCreate, canUpdate }: { canCreate: boolean
             </div>
           </div>
 
-          {/* Faculty */}
+          {/* Trainer */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Faculty</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Trainer</label>
             <select
               required
               value={form.faculty}
@@ -255,7 +255,7 @@ function AddFacultyWorkingContent({ canCreate, canUpdate }: { canCreate: boolean
           {/* Time */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Faculty Time From</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Trainer Time From</label>
               <input
                 type="time"
                 value={form.facultytime}
@@ -264,7 +264,7 @@ function AddFacultyWorkingContent({ canCreate, canUpdate }: { canCreate: boolean
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Faculty Time To</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Trainer Time To</label>
               <input
                 type="time"
                 value={form.to}

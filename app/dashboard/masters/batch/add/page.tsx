@@ -84,7 +84,7 @@ export default function AddBatchPage() {
 
   /* ---- Save ---- */
   const handleSave = async () => {
-    if (!formData.Course_Id) { setError('Course Name is required'); return; }
+    if (!formData.Course_Id) { setError('Training Name is required'); return; }
     if (!formData.Min_Qualification.trim()) { setError('Eligibility is required'); return; }
     if (!formData.Max_Students.trim()) { setError('Target Student is required'); return; }
     if (!formData.Documents_Required.trim()) { setError('Documents Required is required'); return; }
@@ -198,13 +198,13 @@ export default function AddBatchPage() {
                     {/* Row 1 */}
                     <div className="grid grid-cols-3 gap-2">
                       <div>
-                        <label className={labelCls}>Course Name <span className="text-red-500">*</span></label>
+                        <label className={labelCls}>Training Name <span className="text-red-500">*</span></label>
                         <select
                           value={formData.Course_Id}
                           onChange={(e) => handleChange('Course_Id', e.target.value)}
                           className={selectCls}
                         >
-                          <option value="">Select Course</option>
+                            <option value="">Select Training</option>
                           {courses.map(c => (
                             <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>
                           ))}
@@ -260,8 +260,8 @@ export default function AddBatchPage() {
                     {/* Row 4 */}
                     <div className="grid grid-cols-3 gap-2">
                       <div>
-                        <label className={labelCls}>Course Name (if changed)</label>
-                        <input type="text" value={formData.CourseName} onChange={(e) => handleChange('CourseName', e.target.value)} className={inputCls} placeholder="Course Name" />
+                        <label className={labelCls}>Training Name (if changed)</label>
+                        <input type="text" value={formData.CourseName} onChange={(e) => handleChange('CourseName', e.target.value)} className={inputCls} placeholder="Training Name" />
                       </div>
                       <div>
                         <label className={labelCls}>Duration</label>

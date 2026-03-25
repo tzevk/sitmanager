@@ -95,7 +95,7 @@ export default function EditFacultyPage({ params }: { params: Promise<{ id: stri
           });
         }
       } catch {
-        alert('Failed to fetch faculty');
+        alert('Failed to fetch trainer');
       } finally {
         setLoading(false);
       }
@@ -110,7 +110,7 @@ export default function EditFacultyPage({ params }: { params: Promise<{ id: stri
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.Faculty_Name.trim()) {
-      alert('Faculty Name is required');
+      alert('Trainer Name is required');
       return;
     }
     setSubmitting(true);
@@ -145,7 +145,7 @@ export default function EditFacultyPage({ params }: { params: Promise<{ id: stri
   }
 
   if (permLoading) return <PermissionLoading />;
-  if (!canUpdate) return <AccessDenied message="You do not have permission to edit faculty." />;
+  if (!canUpdate) return <AccessDenied message="You do not have permission to edit trainer." />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 p-6">
@@ -156,13 +156,13 @@ export default function EditFacultyPage({ params }: { params: Promise<{ id: stri
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
           </svg>
-          <Link href="/dashboard/masters/faculty" className="hover:text-[#2E3093]">Faculty</Link>
+          <Link href="/dashboard/masters/faculty" className="hover:text-[#2E3093]">Trainer</Link>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
           </svg>
           <span className="text-[#2E3093] font-medium">Edit</span>
         </div>
-        <h1 className="text-2xl font-bold text-gray-800">Edit Faculty</h1>
+        <h1 className="text-2xl font-bold text-gray-800">Edit Trainer</h1>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -170,15 +170,15 @@ export default function EditFacultyPage({ params }: { params: Promise<{ id: stri
         <SectionCard title="Basic Information">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <label className={labelCls}>Faculty Name *</label>
+              <label className={labelCls}>Trainer Name *</label>
               <input type="text" value={formData.Faculty_Name} onChange={e => handleChange('Faculty_Name', e.target.value)} className={inputCls} required />
             </div>
             <div>
-              <label className={labelCls}>Faculty Code</label>
+              <label className={labelCls}>Trainer Code</label>
               <input type="text" value={formData.Faculty_Code} onChange={e => handleChange('Faculty_Code', e.target.value)} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Faculty Type</label>
+              <label className={labelCls}>Trainer Type</label>
               <input type="text" value={formData.Faculty_Type} onChange={e => handleChange('Faculty_Type', e.target.value)} className={inputCls} />
             </div>
             <div>
@@ -423,7 +423,7 @@ export default function EditFacultyPage({ params }: { params: Promise<{ id: stri
             disabled={submitting}
             className="px-6 py-2.5 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white text-sm font-semibold rounded-lg shadow hover:shadow-md transition-all disabled:opacity-50"
           >
-            {submitting ? 'Updating...' : 'Update Faculty'}
+            {submitting ? 'Updating...' : 'Update Trainer'}
           </button>
           <Link
             href="/dashboard/masters/faculty"

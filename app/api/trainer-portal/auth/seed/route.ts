@@ -102,9 +102,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            error: 'No faculty records found',
+            error: 'No trainer records found',
             message:
-              'Could not create a faculty record automatically. Create one in Masters → Faculty (or insert into faculty_master), then retry seed.\n' +
+              'Could not create a trainer record automatically. Create one in Masters → Trainer (or insert into faculty_master), then retry seed.\n' +
               `DB error: ${message}`,
           },
           { status: 400 }

@@ -11,6 +11,8 @@
     "lint": "eslint",
     "build:check": "npx tsc --noEmit && next build",
     "vercel:env": "node -e \"const e=['DB_HOST','DB_NAME','DB_USER','DB_PASSWORD','JWT_SECRET'];const m=e.filter(k=>!process.env[k]);if(m.length){console.error('Missing:',m.join(', '));process.exit(1)}else console.log('All env vars set')\"",
+    "db:import-ct": "node scripts/db/import-ct-xlsx.mjs --file ct.xlsx",
+    "db:sync-ct-enquires": "node scripts/db/sync-ct-training-enquires-to-corporate-inquiry.mjs",
     "cron:sync-courses": "node scripts/cron/run-sync-courses.mjs",
     "cron:sync-all": "node scripts/cron/run-sync-all.mjs",
     "cron:sync-inquiry": "node scripts/cron/run-sync-inquiry.mjs"
@@ -21,6 +23,7 @@
     "@tiptap/react": "^3.19.0",
     "@tiptap/starter-kit": "^3.19.0",
     "cors": "^2.8.6",
+    "critters": "^0.0.23",
     "dotenv": "^17.2.4",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
@@ -28,11 +31,11 @@
     "jose": "^6.1.3",
     "lucide-react": "^0.564.0",
     "mysql2": "^3.16.3",
-    "next": "16.1.6",
+    "next": "^16.2.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-icons": "^5.5.0",
-    "vercel": "^50.18.2",
+    "vercel": "^32.3.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

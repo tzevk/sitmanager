@@ -42,7 +42,7 @@ export default function AddFacultyPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.Faculty_Name.trim()) {
-      alert('Faculty Name is required');
+      alert('Trainer Name is required');
       return;
     }
     setSubmitting(true);
@@ -66,7 +66,7 @@ export default function AddFacultyPage() {
   };
 
   if (permLoading) return <PermissionLoading />;
-  if (!canCreate) return <AccessDenied message="You do not have permission to create faculty." />;
+  if (!canCreate) return <AccessDenied message="You do not have permission to create trainer." />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 p-6">
@@ -77,13 +77,13 @@ export default function AddFacultyPage() {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
           </svg>
-          <Link href="/dashboard/masters/faculty" className="hover:text-[#2E3093]">Faculty</Link>
+            <Link href="/dashboard/masters/faculty" className="hover:text-[#2E3093]">Trainer</Link>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
           </svg>
           <span className="text-[#2E3093] font-medium">Add</span>
         </div>
-        <h1 className="text-2xl font-bold text-gray-800">Add Faculty</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Add Trainer</h1>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -91,15 +91,15 @@ export default function AddFacultyPage() {
         <SectionCard title="Basic Information">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <label className={labelCls}>Faculty Name *</label>
+              <label className={labelCls}>Trainer Name *</label>
               <input type="text" value={formData.Faculty_Name} onChange={e => handleChange('Faculty_Name', e.target.value)} className={inputCls} required />
             </div>
             <div>
-              <label className={labelCls}>Faculty Code</label>
+              <label className={labelCls}>Trainer Code</label>
               <input type="text" value={formData.Faculty_Code} onChange={e => handleChange('Faculty_Code', e.target.value)} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Faculty Type</label>
+              <label className={labelCls}>Trainer Type</label>
               <input type="text" value={formData.Faculty_Type} onChange={e => handleChange('Faculty_Type', e.target.value)} className={inputCls} />
             </div>
             <div>
@@ -344,7 +344,7 @@ export default function AddFacultyPage() {
             disabled={submitting}
             className="px-6 py-2.5 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white text-sm font-semibold rounded-lg shadow hover:shadow-md transition-all disabled:opacity-50"
           >
-            {submitting ? 'Saving...' : 'Save Faculty'}
+            {submitting ? 'Saving...' : 'Save Trainer'}
           </button>
           <Link
             href="/dashboard/masters/faculty"

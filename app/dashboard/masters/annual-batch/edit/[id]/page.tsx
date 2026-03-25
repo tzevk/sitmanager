@@ -131,11 +131,11 @@ export default function EditAnnualBatchPage() {
     fetchOptions();
   }, []);
 
-  // Auto-fill course name when course changes (still editable)
+  // Auto-fill training name when course changes (still editable)
   useEffect(() => {
     if (!selectedCourse) return;
     setCourseName((prev) => {
-      // If empty or still matches old selected course name, keep auto-updating.
+      // If empty or still matches old selected training name, keep auto-updating.
       if (!prev.trim()) return selectedCourse.Course_Name;
       return prev;
     });
@@ -252,7 +252,7 @@ export default function EditAnnualBatchPage() {
       return;
     }
     if (!courseName.trim()) {
-      setError('Course Name is required');
+      setError('Training Name is required');
       return;
     }
     if (!categoryId) {
@@ -409,12 +409,12 @@ export default function EditAnnualBatchPage() {
 
                 <div>
                   <label className={labelCls}>
-                    Course Name (if changed) <span className="text-red-400">*</span>
+                    Training Name (if changed) <span className="text-red-400">*</span>
                   </label>
                   <input
                     value={courseName}
                     onChange={(e) => setCourseName(e.target.value)}
-                    placeholder="Course Name"
+                    placeholder="Training Name"
                     className={inputCls}
                   />
                 </div>

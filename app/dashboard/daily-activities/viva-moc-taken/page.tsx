@@ -102,7 +102,7 @@ function VivaMocTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
   };
 
   const handleExport = () => {
-    const headers = ['Id', 'Batch Code', 'Course Name', 'Viva/Moc Name', 'Date', 'Marks'];
+    const headers = ['Id', 'Batch Code', 'Training Name', 'Viva/Moc Name', 'Date', 'Marks'];
     const csvRows = [
       headers.join(','),
       ...rows.map(r => [
@@ -252,7 +252,7 @@ function VivaMocTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
               <tr className="text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 <th className="py-3 px-4 border-b border-gray-200 w-16">Id</th>
                 <th className="py-3 px-4 border-b border-gray-200">Batch Code</th>
-                <th className="py-3 px-4 border-b border-gray-200">Course Name</th>
+                <th className="py-3 px-4 border-b border-gray-200">Training Name</th>
                 <th className="py-3 px-4 border-b border-gray-200">Viva/Moc Name</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-28">Date</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-28 text-center">Action</th>

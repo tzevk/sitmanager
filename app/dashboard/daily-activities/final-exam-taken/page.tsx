@@ -107,7 +107,7 @@ function FinalExamTakenContent({ canCreate, canUpdate, canDelete }: { canView: b
   };
 
   const handleExport = () => {
-    const headers = ['Id', 'Course Name', 'Batch Code', 'Exam Name', 'Exam Date', 'Max Marks'];
+    const headers = ['Id', 'Training Name', 'Batch Code', 'Exam Name', 'Exam Date', 'Max Marks'];
     const csvRows = [
       headers.join(','),
       ...rows.map(r => [
@@ -256,7 +256,7 @@ function FinalExamTakenContent({ canCreate, canUpdate, canDelete }: { canView: b
             <thead className="sticky top-0 bg-gradient-to-r from-gray-50 to-gray-100/80 z-10">
               <tr className="text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 <th className="py-3 px-4 border-b border-gray-200 w-16">Id</th>
-                <th className="py-3 px-4 border-b border-gray-200">Course Name</th>
+                <th className="py-3 px-4 border-b border-gray-200">Training Name</th>
                 <th className="py-3 px-4 border-b border-gray-200">Batch Code</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-28">Exam Date</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-28 text-center">Action</th>

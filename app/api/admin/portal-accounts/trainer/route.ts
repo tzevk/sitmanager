@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
 
     if (!facultyRows.length) {
       return NextResponse.json(
-        { success: false, message: 'Faculty not found or deleted. Create/select a valid faculty record first.' },
+        { success: false, message: 'Trainer not found or deleted. Create/select a valid trainer record first.' },
         { status: 400 }
       );
     }

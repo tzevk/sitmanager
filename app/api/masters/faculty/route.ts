@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     } = body;
 
     if (!Faculty_Name?.trim()) {
-      return NextResponse.json({ error: 'Faculty Name is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Trainer Name is required' }, { status: 400 });
     }
 
     const [result] = await pool.query(
@@ -130,10 +130,10 @@ export async function PUT(req: NextRequest) {
     } = body;
 
     if (!Faculty_Id) {
-      return NextResponse.json({ error: 'Faculty ID is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Trainer ID is required' }, { status: 400 });
     }
     if (!Faculty_Name?.trim()) {
-      return NextResponse.json({ error: 'Faculty Name is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Trainer Name is required' }, { status: 400 });
     }
 
     await pool.query(

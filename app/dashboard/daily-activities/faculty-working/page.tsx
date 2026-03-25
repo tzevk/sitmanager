@@ -26,7 +26,7 @@ interface FacultyWorking {
 /* ------------------------------------------------------------------ */
 export default function FacultyWorkingPage() {
   return (
-    <PermissionGate resource="faculty_working_hours" deniedMessage="You do not have permission to view faculty working hours.">
+    <PermissionGate resource="faculty_working_hours" deniedMessage="You do not have permission to view trainer working hours.">
       {(perms) => <FacultyWorkingContent {...perms} />}
     </PermissionGate>
   );
@@ -78,8 +78,8 @@ function FacultyWorkingContent({ canCreate, canUpdate, canDelete }: { canView: b
       {/* Header */}
       <div className="flex items-center justify-between p-4 bg-white border-b border-gray-200">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Faculty Working Hours</h1>
-          <p className="text-sm text-gray-500">Manage faculty daily working reports</p>
+          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Trainer Working Hours</h1>
+          <p className="text-sm text-gray-500">Manage trainer daily working reports</p>
         </div>
         <div className="flex gap-2">
           {canCreate && (
@@ -104,7 +104,7 @@ function FacultyWorkingContent({ canCreate, canUpdate, canDelete }: { canView: b
               <tr>
                 <th className="px-4 py-3">ID</th>
                 <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Faculty</th>
+                <th className="px-4 py-3">Trainer</th>
                 <th className="px-4 py-3">Course</th>
                 <th className="px-4 py-3">Batch</th>
                 <th className="px-4 py-3">Time</th>

@@ -65,7 +65,7 @@ export default function AddAnnualBatchPage() {
     fetchOptions();
   }, []);
 
-  /* Auto-fill course name when course changes */
+  /* Auto-fill training name when course changes */
   useEffect(() => {
     if (courseId) {
       const selected = courses.find((c) => c.Course_Id === Number(courseId));
@@ -96,7 +96,7 @@ export default function AddAnnualBatchPage() {
       return;
     }
     if (!courseName.trim()) {
-      setError('Course Name is required');
+      setError('Training Name is required');
       return;
     }
     if (!trainingCompletionDate) {
@@ -383,16 +383,16 @@ export default function AddAnnualBatchPage() {
                   />
                 </div>
 
-                {/* Course Name (if changed) */}
+                {/* Training Name (if changed) */}
                 <div>
                   <label className={labelCls}>
-                    Course Name (if changed) <span className="text-red-400">*</span>
+                    Training Name (if changed) <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
                     value={courseName}
                     onChange={(e) => setCourseName(e.target.value)}
-                    placeholder="Course Name"
+                    placeholder="Training Name"
                     className={inputCls}
                   />
                 </div>

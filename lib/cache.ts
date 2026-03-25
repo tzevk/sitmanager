@@ -90,8 +90,8 @@ export const cache = new MemoryCache();
 // Cache key generators
 export const cacheKeys = {
   corporateInquiry: {
-    list: (params: { page: number; limit: number; search: string }) =>
-      `corporate_inquiry:list:${params.page}:${params.limit}:${params.search}`,
+    list: (params: { page: number; limit: number; search: string; status?: string }) =>
+      `corporate_inquiry:list:${params.page}:${params.limit}:${params.search}:${params.status ?? ''}`,
     single: (id: number) => `corporate_inquiry:single:${id}`,
     prefix: 'corporate_inquiry:',
   },

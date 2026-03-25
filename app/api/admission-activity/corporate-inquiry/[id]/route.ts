@@ -6,11 +6,13 @@ import { requirePermission } from '@/lib/api-auth';
 async function ensureCorporateInquiryColumns(pool: ReturnType<typeof getPool>) {
   const wanted = [
     'Consultancy_Id',
+    'CompanyType',
     'CompanyAuthority',
     'TrainingMode',
     'Participants_Fresher',
     'Participants_Experienced',
     'TrainingLocation',
+    'TrainingDates',
     'Discussion',
     'FollowUp',
     'InitialFollowUpDate',
@@ -24,10 +26,17 @@ async function ensureCorporateInquiryColumns(pool: ReturnType<typeof getPool>) {
     'TotalStudents',
     'TrainingCoordinator',
 
+    'DiscussionOutcome',
+
     'ConfirmDate',
-    'PerformanceEvaluation',
-    'TrainingFeedback',
-    'SitCertification',
+    'PerformanceEvaluation_PreTest',
+    'PerformanceEvaluation_Assessment',
+    'PerformanceEvaluation_Assignment',
+    'PerformanceEvaluation_FinalExam',
+    'PerformanceEvaluation_TrainingMaterial',
+    'PerformanceEvaluation_Attendance',
+    'TrainingFeedbackObtained',
+    'SitCertIssuedOnPerformanceOnAttendance',
   ] as const;
 
   const [rows] = await pool.query<any[]>(
@@ -42,11 +51,13 @@ async function ensureCorporateInquiryColumns(pool: ReturnType<typeof getPool>) {
 
   const alters: string[] = [];
   if (!existing.has('Consultancy_Id')) alters.push(`ADD COLUMN Consultancy_Id INT NULL`);
+  if (!existing.has('CompanyType')) alters.push(`ADD COLUMN CompanyType VARCHAR(20) NULL`);
   if (!existing.has('CompanyAuthority')) alters.push(`ADD COLUMN CompanyAuthority VARCHAR(255) NULL`);
   if (!existing.has('TrainingMode')) alters.push(`ADD COLUMN TrainingMode VARCHAR(20) NULL`);
   if (!existing.has('Participants_Fresher')) alters.push(`ADD COLUMN Participants_Fresher INT NULL`);
   if (!existing.has('Participants_Experienced')) alters.push(`ADD COLUMN Participants_Experienced INT NULL`);
   if (!existing.has('TrainingLocation')) alters.push(`ADD COLUMN TrainingLocation VARCHAR(255) NULL`);
+  if (!existing.has('TrainingDates')) alters.push(`ADD COLUMN TrainingDates TEXT NULL`);
   if (!existing.has('Discussion')) alters.push(`ADD COLUMN Discussion TEXT NULL`);
   if (!existing.has('FollowUp')) alters.push(`ADD COLUMN FollowUp TEXT NULL`);
   if (!existing.has('InitialFollowUpDate')) alters.push(`ADD COLUMN InitialFollowUpDate DATE NULL`);
@@ -60,10 +71,17 @@ async function ensureCorporateInquiryColumns(pool: ReturnType<typeof getPool>) {
   if (!existing.has('TotalStudents')) alters.push(`ADD COLUMN TotalStudents INT NULL`);
   if (!existing.has('TrainingCoordinator')) alters.push(`ADD COLUMN TrainingCoordinator VARCHAR(255) NULL`);
 
+  if (!existing.has('DiscussionOutcome')) alters.push(`ADD COLUMN DiscussionOutcome VARCHAR(20) NULL`);
+
   if (!existing.has('ConfirmDate')) alters.push(`ADD COLUMN ConfirmDate DATE NULL`);
-  if (!existing.has('PerformanceEvaluation')) alters.push(`ADD COLUMN PerformanceEvaluation TEXT NULL`);
-  if (!existing.has('TrainingFeedback')) alters.push(`ADD COLUMN TrainingFeedback TEXT NULL`);
-  if (!existing.has('SitCertification')) alters.push(`ADD COLUMN SitCertification VARCHAR(3) NULL`);
+  if (!existing.has('PerformanceEvaluation_PreTest')) alters.push(`ADD COLUMN PerformanceEvaluation_PreTest TEXT NULL`);
+  if (!existing.has('PerformanceEvaluation_Assessment')) alters.push(`ADD COLUMN PerformanceEvaluation_Assessment TEXT NULL`);
+  if (!existing.has('PerformanceEvaluation_Assignment')) alters.push(`ADD COLUMN PerformanceEvaluation_Assignment TEXT NULL`);
+  if (!existing.has('PerformanceEvaluation_FinalExam')) alters.push(`ADD COLUMN PerformanceEvaluation_FinalExam TEXT NULL`);
+  if (!existing.has('PerformanceEvaluation_TrainingMaterial')) alters.push(`ADD COLUMN PerformanceEvaluation_TrainingMaterial TEXT NULL`);
+  if (!existing.has('PerformanceEvaluation_Attendance')) alters.push(`ADD COLUMN PerformanceEvaluation_Attendance TEXT NULL`);
+  if (!existing.has('TrainingFeedbackObtained')) alters.push(`ADD COLUMN TrainingFeedbackObtained TEXT NULL`);
+  if (!existing.has('SitCertIssuedOnPerformanceOnAttendance')) alters.push(`ADD COLUMN SitCertIssuedOnPerformanceOnAttendance TEXT NULL`);
 
   for (const alter of alters) {
     await pool.query(`ALTER TABLE corporate_inquiry ${alter}`);
@@ -92,10 +110,17 @@ export async function GET(
       `SELECT Id, Fname, Lname, MName, FullName, CompanyName, Designation,
               Address, City, State, Country, Pin, Phone, Mobile, Email,
               Course_Id, Place, business, Remark, Idate, IsActive,
-              Consultancy_Id, CompanyAuthority, TrainingMode, Participants_Fresher, Participants_Experienced,
-              TrainingLocation, Discussion, FollowUp, InitialFollowUpDate, NextFollowUpDate,
+              Consultancy_Id, CompanyType, CompanyAuthority,
+              TrainingMode, Participants_Fresher, Participants_Experienced,
+              TrainingLocation, TrainingDates,
+              Discussion, FollowUp, InitialFollowUpDate, NextFollowUpDate,
               InquiryStatus, TrainingNumber, TrainingDate, TrainerName, NumberOfDays, TotalStudents, TrainingCoordinator,
-              ConfirmDate, PerformanceEvaluation, TrainingFeedback, SitCertification
+              DiscussionOutcome,
+              ConfirmDate,
+              PerformanceEvaluation_PreTest, PerformanceEvaluation_Assessment, PerformanceEvaluation_Assignment,
+              PerformanceEvaluation_FinalExam, PerformanceEvaluation_TrainingMaterial, PerformanceEvaluation_Attendance,
+              TrainingFeedbackObtained,
+              SitCertIssuedOnPerformanceOnAttendance
        FROM corporate_inquiry 
        WHERE Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
       [id]

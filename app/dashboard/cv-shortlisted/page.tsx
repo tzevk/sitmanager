@@ -65,7 +65,7 @@ export default function CVShortlistedPage() {
   };
 
   const handleExport = () => {
-    const headers = ['Batch Code', 'Course Name', 'Company Name', 'Date'];
+    const headers = ['Batch Code', 'Training Name', 'Company Name', 'Date'];
     const csvRows = rows.map(r => [r.Batch_Code || '', r.Course_Name || '', r.CompanyName || '', r.TDate || '']);
     const csv = [headers.join(','), ...csvRows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -160,7 +160,7 @@ export default function CVShortlistedPage() {
                 <thead className="sticky top-0 z-10 bg-white">
                   <tr className="bg-gradient-to-r from-[#2E3093]/10 to-[#2A6BB5]/10">
                     <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Batch Code</th>
-                    <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Course Name</th>
+                    <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Training Name</th>
                     <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Company Name</th>
                     <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Date</th>
                     <th className="text-center px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Action</th>

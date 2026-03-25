@@ -20,8 +20,6 @@ interface Consultancy {
   EMail?: string | null;
 }
 
-type Tab = 'details' | 'discussion' | 'followup';
-
 type FollowUpItem = {
   date: string;
   note: string;
@@ -43,13 +41,14 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
   const [saving, setSaving] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
   const [consultancies, setConsultancies] = useState<Consultancy[]>([]);
-  const [activeTab, setActiveTab] = useState<Tab>('details');
   const [form, setForm] = useState({
     Id: 0,
     Idate: '',
     Course_Id: '',
     Consultancy_Id: '',
     CompanyName: '',
+    Place: '',
+    CompanyType: '' as '' | 'Local' | 'International',
     CompanyAuthority: '',
     FullName: '',
     Designation: '',
@@ -60,13 +59,23 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
     Participants_Fresher: '',
     Participants_Experienced: '',
     TrainingLocation: '',
+    business: '',
+    Remark: '',
+
+    InquiryStatus: '',
+    TrainingNumber: '',
+    TrainingDate: '',
+    TrainerName: '',
+    NumberOfDays: '',
+    TotalStudents: '',
+    TrainingCoordinator: '',
+
     Discussion: '',
     InitialFollowUpDate: '',
     NextFollowUpDate: '',
   });
 
   const [followUps, setFollowUps] = useState<FollowUpItem[]>([]);
-  const [followUpDraft, setFollowUpDraft] = useState<FollowUpItem>({ date: '', note: '' });
 
   useEffect(() => {
     let alive = true;
@@ -91,9 +100,13 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
         if (inq) {
           const fullName = String(inq?.FullName || inq?.Fname || '').trim();
           const discussion = String(inq?.Discussion ?? inq?.Remark ?? '').trim();
+          const remark = String(inq?.Remark ?? '').trim();
           const followUpRaw = inq?.FollowUp;
           const consultancyId = String(inq?.Consultancy_Id ?? '').trim();
           const companyName = String(inq?.CompanyName ?? '').trim();
+          const rawCompanyType = String(inq?.CompanyType ?? '').trim();
+          const companyType: '' | 'Local' | 'International' =
+            rawCompanyType === 'Local' || rawCompanyType === 'International' ? rawCompanyType : '';
 
           // Parse follow-up JSON if present.
           let parsedInitial = '';
@@ -106,7 +119,11 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
               parsedNext = String(obj?.nextDate ?? '').trim();
               const items = Array.isArray(obj?.items) ? obj.items : [];
               parsedItems = items
-                .map((it: any) => ({ date: String(it?.date ?? '').trim(), note: String(it?.note ?? '').trim() }))
+                .map((it: unknown) => {
+                  const rec: Record<string, unknown> =
+                    typeof it === 'object' && it !== null ? (it as Record<string, unknown>) : {};
+                  return { date: String(rec.date ?? '').trim(), note: String(rec.note ?? '').trim() };
+                })
                 .filter((it: FollowUpItem) => Boolean(it.date || it.note));
             } catch {
               parsedItems = [{ date: '', note: String(followUpRaw).trim() }].filter((it) => Boolean(it.note));
@@ -121,6 +138,8 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
               Course_Id: String(inq?.Course_Id ?? ''),
               Consultancy_Id: consultancyId,
               CompanyName: companyName,
+              Place: String(inq?.Place ?? '').trim(),
+              CompanyType: companyType,
               CompanyAuthority: String(inq?.CompanyAuthority ?? '').trim(),
               FullName: fullName,
               Designation: String(inq?.Designation ?? '').trim(),
@@ -132,7 +151,18 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                 | 'offline',
               Participants_Fresher: String(inq?.Participants_Fresher ?? ''),
               Participants_Experienced: String(inq?.Participants_Experienced ?? ''),
-              TrainingLocation: String(inq?.TrainingLocation ?? inq?.Place ?? '').trim(),
+              TrainingLocation: String(inq?.TrainingLocation ?? '').trim(),
+              business: String(inq?.business ?? '').trim(),
+              Remark: remark,
+
+              InquiryStatus: String(inq?.InquiryStatus ?? '').trim(),
+              TrainingNumber: String(inq?.TrainingNumber ?? '').trim(),
+              TrainingDate: toDateInputValue(inq?.TrainingDate),
+              TrainerName: String(inq?.TrainerName ?? '').trim(),
+              NumberOfDays: String(inq?.NumberOfDays ?? ''),
+              TotalStudents: String(inq?.TotalStudents ?? ''),
+              TrainingCoordinator: String(inq?.TrainingCoordinator ?? '').trim(),
+
               Discussion: discussion,
               InitialFollowUpDate: String(inq?.InitialFollowUpDate ?? parsedInitial ?? '').trim(),
               NextFollowUpDate: String(inq?.NextFollowUpDate ?? parsedNext ?? '').trim(),
@@ -229,12 +259,10 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
   };
 
   const inputClass =
-    'max-w-[220px] w-full px-2 py-1.5 border-2 border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-xs';
-  const labelClass = 'block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1';
-  const tabBtn = (isActive: boolean) =>
-    isActive
-      ? 'px-3 py-1.5 rounded-lg bg-[#2E3093] text-white text-xs font-semibold'
-      : 'px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700';
+    'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 bg-white shadow-sm';
+  const labelClass = 'block text-[11px] uppercase tracking-wider text-gray-400 font-semibold mb-1';
+  const textareaClass =
+    'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 bg-white shadow-sm';
 
   if (permLoading) return <PermissionLoading />;
   if (!canUpdate) return <AccessDenied message="You do not have permission to edit corporate inquiries." />;
@@ -261,39 +289,64 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
               <h2 className="text-lg font-bold text-gray-800">Edit Corporate Inquiry</h2>
               <p className="text-sm text-gray-400">Update inquiry details below</p>
             </div>
-            <button
-              onClick={() => router.push('/dashboard/corporate-inquiry')}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 font-semibold text-sm shadow-sm transition"
-            >
-              <FaTimes className="w-4 h-4" /> Cancel
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                form="edit-corporate-inquiry-form"
+                disabled={saving}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#2A6BB5] hover:bg-[#2360A0] text-white font-semibold text-sm shadow-sm transition-colors disabled:opacity-50"
+              >
+                <FaSave className="w-4 h-4" /> {saving ? 'Saving...' : 'Update Inquiry'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard/corporate-inquiry')}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 font-semibold text-sm shadow-sm transition"
+              >
+                <FaTimes className="w-4 h-4" /> Cancel
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={tabBtn(activeTab === 'details')} onClick={() => setActiveTab('details')}>
-              Inquiry Details
-            </button>
-            <button type="button" className={tabBtn(activeTab === 'discussion')} onClick={() => setActiveTab('discussion')}>
-              Discussion
-            </button>
-            <button type="button" className={tabBtn(activeTab === 'followup')} onClick={() => setActiveTab('followup')}>
-              Follow Up
-            </button>
-          </div>
-        </div>
-
-        {activeTab === 'details' && (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+      <form id="edit-corporate-inquiry-form" onSubmit={handleSubmit} className="space-y-4">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="p-5">
             <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Inquiry Details</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-2 gap-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
-                <label className={labelClass}>Date</label>
+                <label className={labelClass}>Status</label>
+                <select name="InquiryStatus" value={form.InquiryStatus} onChange={handleChange} className={inputClass}>
+                  <option value="">—</option>
+                  <option value="UnderDiscussion">Under Discussion</option>
+                  <option value="Rejected">Cancelled</option>
+                  <option value="Final">Final</option>
+                </select>
+              </div>
+
+              <div>
+                <label className={labelClass}>Inquiry Date</label>
                 <input type="date" name="Idate" value={form.Idate} onChange={handleChange} className={inputClass} />
+              </div>
+
+              <div>
+                <label className={labelClass}>Training Batch No.</label>
+                <input
+                  type="text"
+                  name="TrainingNumber"
+                  value={form.TrainingNumber}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="Batch / training no."
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Training Date</label>
+                <input type="date" name="TrainingDate" value={form.TrainingDate} onChange={handleChange} className={inputClass} />
               </div>
 
               <div>
@@ -323,6 +376,41 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className={labelClass}>Company Location</label>
+                <input
+                  type="text"
+                  name="Place"
+                  value={form.Place}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="City / location"
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Company Type</label>
+                <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm">
+                  {(['Local', 'International'] as const).map((opt) => {
+                    const active = form.CompanyType === opt;
+                    return (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, CompanyType: opt }))}
+                        className={`px-4 py-2 text-sm font-semibold transition-colors ${
+                          active
+                            ? 'bg-[#2A6BB5] text-white'
+                            : 'bg-white text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div>
@@ -376,7 +464,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
 
               <div>
                 <label className={labelClass}>Training Mode</label>
-                <div className="flex items-center gap-3 pt-1">
+                <div className="flex items-center gap-4 pt-1">
                   <label className="flex items-center gap-1 text-xs text-gray-700">
                     <input
                       type="radio"
@@ -398,6 +486,40 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                     Offline
                   </label>
                 </div>
+              </div>
+
+              <div>
+                <label className={labelClass}>Trainer</label>
+                <input
+                  type="text"
+                  name="TrainerName"
+                  value={form.TrainerName}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="Trainer"
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Total Days</label>
+                <input type="number" name="NumberOfDays" value={form.NumberOfDays} onChange={handleChange} className={inputClass} min={0} />
+              </div>
+
+              <div>
+                <label className={labelClass}>Total Participants</label>
+                <input type="number" name="TotalStudents" value={form.TotalStudents} onChange={handleChange} className={inputClass} min={0} />
+              </div>
+
+              <div>
+                <label className={labelClass}>Training Co-ordinator</label>
+                <input
+                  type="text"
+                  name="TrainingCoordinator"
+                  value={form.TrainingCoordinator}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="Co-ordinator"
+                />
               </div>
 
               <div>
@@ -434,145 +556,32 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                   placeholder="Location"
                 />
               </div>
-            </div>
-          </div>
-        )}
 
-        {activeTab === 'discussion' && (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-            <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Discussion</h2>
-            <label className={labelClass}>Discussion Notes</label>
-            <textarea
-              name="Discussion"
-              value={form.Discussion}
-              onChange={handleChange}
-              className={'w-full px-2 py-2 border-2 border-gray-300 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-xs'}
-              rows={6}
-              placeholder="Enter discussion details"
-            />
-          </div>
-        )}
-
-        {activeTab === 'followup' && (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-            <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Follow Up</h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div>
-                <label className={labelClass}>Initial Follow Up Date</label>
-                <input
-                  type="date"
-                  name="InitialFollowUpDate"
-                  value={form.InitialFollowUpDate}
+              <div className="sm:col-span-2 lg:col-span-3">
+                <label className={labelClass}>Disciplines</label>
+                <textarea
+                  name="business"
+                  value={form.business}
                   onChange={handleChange}
-                  className={inputClass}
+                  className={textareaClass}
+                  rows={3}
+                  placeholder="Disciplines / departments"
                 />
               </div>
-              <div>
-                <label className={labelClass}>Next Follow Up Date</label>
-                <input
-                  type="date"
-                  name="NextFollowUpDate"
-                  value={form.NextFollowUpDate}
+
+              <div className="sm:col-span-2 lg:col-span-3">
+                <label className={labelClass}>Remarks</label>
+                <textarea
+                  name="Remark"
+                  value={form.Remark}
                   onChange={handleChange}
-                  className={inputClass}
+                  className={textareaClass}
+                  rows={3}
+                  placeholder="Any additional remarks"
                 />
               </div>
             </div>
-
-            <div className="mt-5 rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-              <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-                <div className="text-[12px] font-bold text-gray-800">Add Inline Follow Up</div>
-                <div className="text-[11px] text-gray-600">Add entries and they will be saved with the inquiry</div>
-              </div>
-
-              <div className="p-4 grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
-                <div className="sm:col-span-1">
-                  <label className={labelClass}>Date</label>
-                  <input
-                    type="date"
-                    value={followUpDraft.date}
-                    onChange={(e) => setFollowUpDraft((p) => ({ ...p, date: e.target.value }))}
-                    className={inputClass}
-                  />
-                </div>
-                <div className="sm:col-span-3">
-                  <label className={labelClass}>Remark</label>
-                  <input
-                    type="text"
-                    value={followUpDraft.note}
-                    onChange={(e) => setFollowUpDraft((p) => ({ ...p, note: e.target.value }))}
-                    className={inputClass}
-                    placeholder="Follow up remark"
-                  />
-                </div>
-                <div className="sm:col-span-1 flex gap-2">
-                  <button
-                    type="button"
-                    className="flex-1 px-4 py-2 rounded-lg bg-[#2A6BB5] hover:bg-[#2360A0] text-white text-xs font-semibold shadow-sm disabled:opacity-50"
-                    disabled={!followUpDraft.date && !followUpDraft.note.trim()}
-                    onClick={() => {
-                      const item: FollowUpItem = { date: followUpDraft.date, note: followUpDraft.note.trim() };
-                      if (!item.date && !item.note) return;
-                      setFollowUps((prev) => [...prev, item]);
-                      setFollowUpDraft({ date: '', note: '' });
-                    }}
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-
-              <div className="border-t border-gray-100 overflow-x-auto">
-                <table className="min-w-[600px] w-full text-xs">
-                  <thead className="bg-white">
-                    <tr className="text-[10px] uppercase tracking-wider text-gray-400 border-b border-gray-100">
-                      <th className="text-left py-3 px-4 font-semibold">#</th>
-                      <th className="text-left py-3 px-4 font-semibold">Date</th>
-                      <th className="text-left py-3 px-4 font-semibold">Remark</th>
-                      <th className="text-left py-3 px-4 font-semibold w-[120px]">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {followUps.map((fu, idx) => (
-                      <tr key={`${fu.date}-${idx}`} className="border-b border-gray-50 hover:bg-gray-50/40">
-                        <td className="py-3 px-4 text-gray-500">{idx + 1}</td>
-                        <td className="py-3 px-4 text-gray-800">{fu.date || '—'}</td>
-                        <td className="py-3 px-4 text-gray-800">{fu.note || '—'}</td>
-                        <td className="py-3 px-4">
-                          <button
-                            type="button"
-                            className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700"
-                            onClick={() => setFollowUps((prev) => prev.filter((_, i) => i !== idx))}
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {followUps.length === 0 && (
-                      <tr>
-                        <td className="py-4 px-4 text-gray-500" colSpan={4}>
-                          No follow ups added.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
           </div>
-        )}
-
-        {/* Submit Button */}
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={saving}
-            className="flex items-center gap-2 px-6 py-2.5 bg-[#2A6BB5] hover:bg-[#2360A0] text-white rounded-lg font-semibold shadow-sm transition-colors disabled:opacity-50"
-          >
-            <FaSave /> {saving ? 'Saving...' : 'Update Inquiry'}
-          </button>
         </div>
       </form>
     </div>

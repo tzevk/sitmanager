@@ -294,10 +294,10 @@ export default function AddAssignmentTakenPage() {
 
               {/* Faculty */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Faculty</label>
+                <label className="text-xs font-semibold text-gray-600">Trainer</label>
                 <select value={form.Faculty_Id} onChange={set('Faculty_Id')}
                   className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white">
-                  <option value="">— Select Faculty —</option>
+                  <option value="">— Select Trainer —</option>
                   {faculties.map(f => <option key={f.Faculty_Id} value={f.Faculty_Id}>{f.Faculty_Name}</option>)}
                 </select>
               </div>

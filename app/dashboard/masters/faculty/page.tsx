@@ -53,7 +53,7 @@ export default function FacultyPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this faculty?')) return;
+    if (!confirm('Are you sure you want to delete this trainer?')) return;
     try {
       const res = await fetch(`/api/masters/faculty?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -65,14 +65,14 @@ export default function FacultyPage() {
   };
 
   const handleExport = () => {
-    const headers = ['Id', 'Faculty Name'];
+    const headers = ['Id', 'Trainer Name'];
     const csvRows = rows.map(r => [r.Faculty_Id, r.Faculty_Name || '']);
     const csv = [headers.join(','), ...csvRows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'faculty_list.csv';
+    link.download = 'trainer_list.csv';
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -85,7 +85,7 @@ export default function FacultyPage() {
   };
 
   if (permLoading) return <PermissionLoading />;
-  if (!canView) return <AccessDenied message="You do not have permission to view faculty." />;
+  if (!canView) return <AccessDenied message="You do not have permission to view trainer." />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 p-6">
@@ -100,10 +100,10 @@ export default function FacultyPage() {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
           </svg>
-          <span className="text-[#2E3093] font-medium">Faculty</span>
+          <span className="text-[#2E3093] font-medium">Trainer</span>
         </div>
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-800">Faculty Master</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Trainer Master</h1>
           {canCreate && (
           <Link
             href="/dashboard/masters/faculty/add"
@@ -112,7 +112,7 @@ export default function FacultyPage() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            Add Faculty
+            Add Trainer
           </Link>
           )}
         </div>
@@ -122,7 +122,7 @@ export default function FacultyPage() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         {/* Card Header */}
         <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] px-6 py-4">
-          <h2 className="text-lg font-bold text-white">List of Faculty</h2>
+          <h2 className="text-lg font-bold text-white">List of Trainers</h2>
         </div>
 
         {/* Toolbar */}
@@ -180,7 +180,7 @@ export default function FacultyPage() {
             <thead>
               <tr className="bg-gradient-to-r from-[#2E3093]/10 to-[#2A6BB5]/10">
                 <th className="text-left px-6 py-3 font-semibold text-[#2E3093] whitespace-nowrap">Id</th>
-                <th className="text-left px-6 py-3 font-semibold text-[#2E3093] whitespace-nowrap">Faculty Name</th>
+                <th className="text-left px-6 py-3 font-semibold text-[#2E3093] whitespace-nowrap">Trainer Name</th>
                 <th className="text-center px-6 py-3 font-semibold text-[#2E3093] whitespace-nowrap">Action</th>
               </tr>
             </thead>

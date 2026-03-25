@@ -3,7 +3,7 @@ export default function RecentActivity() {
     { action: 'New student enrolled', name: 'Priya Sharma', time: '2 min ago', color: 'bg-[#2A6BB5]' },
     { action: 'Fee payment received', name: 'Rahul Patil', time: '15 min ago', color: 'bg-green-500' },
     { action: 'Assignment submitted', name: 'Batch A-12', time: '1 hr ago', color: 'bg-[#FAE452]' },
-    { action: 'Faculty leave request', name: 'Dr. Mehta', time: '2 hr ago', color: 'bg-orange-400' },
+    { action: 'Trainer leave request', name: 'Dr. Mehta', time: '2 hr ago', color: 'bg-orange-400' },
     { action: 'Course updated', name: 'Advanced Java', time: '3 hr ago', color: 'bg-[#2E3093]' },
   ];
 

@@ -2962,7 +2962,7 @@ export default function AdmissionFormPage() {
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-700 cursor-not-allowed" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Course Name</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Training Name</label>
                   <input readOnly value={formData.trainingProgram || '—'}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-700 cursor-not-allowed" />
                 </div>
@@ -2972,7 +2972,7 @@ export default function AdmissionFormPage() {
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-700 cursor-not-allowed" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Eligibility for the Course</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Eligibility for the Training</label>
                   <input type="text" value={consentData.eligibility}
                     onChange={(e) => setConsentData(p => ({ ...p, eligibility: e.target.value }))}
                     placeholder="e.g. 10th + 3 yrs experience"

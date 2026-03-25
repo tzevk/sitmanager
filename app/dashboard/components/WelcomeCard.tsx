@@ -24,7 +24,7 @@ export default function WelcomeCard() {
         </div>
         <div>
           <p className="text-2xl font-bold text-[#FAE452]">126</p>
-          <p className="text-white/60 text-xs mt-0.5">Faculty</p>
+          <p className="text-white/60 text-xs mt-0.5">Trainers</p>
         </div>
       </div>
     </div>

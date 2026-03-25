@@ -21,6 +21,7 @@ type Inquiry = {
   Mobile?: string | null;
   Phone?: string | null;
   Course_Id?: string | null;
+  Place?: string | null;
 
   InquiryStatus?: string | null;
 
@@ -31,49 +32,63 @@ type Inquiry = {
   TotalStudents?: number | null;
   TrainingCoordinator?: string | null;
 
+  DiscussionOutcome?: 'Awarded' | 'Regretted' | 'On Hold' | null;
+
   ConfirmDate?: string | null;
-  PerformanceEvaluation?: string | null;
-  TrainingFeedback?: string | null;
-  SitCertification?: string | null;
+  PerformanceEvaluation_PreTest?: string | null;
+  PerformanceEvaluation_Assessment?: string | null;
+  PerformanceEvaluation_FinalExam?: string | null;
+  PerformanceEvaluation_TrainingMaterial?: string | null;
+  PerformanceEvaluation_Attendance?: string | null;
+  TrainingFeedbackObtained?: string | null;
+  SitCertIssuedOnPerformanceOnAttendance?: string | null;
 };
 
-type PerformanceRow = {
-  key: 'pre_test' | 'assessment' | 'final_exam' | 'training_material' | 'attendance';
-  label: string;
+type EvalKey = 'pre_test' | 'assessment' | 'final_test' | 'training_material' | 'attendance';
+
+type EvalItem = {
   completed: boolean;
   remarks: string;
 };
 
 const toDateInput = (v: string | null | undefined) => {
   if (!v) return '';
-  try { return new Date(v).toISOString().slice(0, 10); } catch { return ''; }
+  try {
+    return new Date(v).toISOString().slice(0, 10);
+  } catch {
+    return '';
+  }
 };
 
-function safeJsonParse<T>(value: string | null | undefined, fallback: T): T {
-  if (!value) return fallback;
+function parseEvalItem(value: string | null | undefined): EvalItem {
+  if (!value) return { completed: false, remarks: '' };
   try {
-    return JSON.parse(value) as T;
+    const parsed = JSON.parse(value) as Partial<EvalItem>;
+    return {
+      completed: Boolean(parsed?.completed),
+      remarks: typeof parsed?.remarks === 'string' ? parsed.remarks : '',
+    };
   } catch {
-    return fallback;
+    return { completed: false, remarks: String(value) };
   }
 }
 
-const defaultPerformanceRows = (): PerformanceRow[] => ([
-  { key: 'pre_test', label: 'Pre Test', completed: false, remarks: '' },
-  { key: 'assessment', label: 'Assessment', completed: false, remarks: '' },
-  { key: 'final_exam', label: 'Final Exam', completed: false, remarks: '' },
-  { key: 'training_material', label: 'Training Material', completed: false, remarks: '' },
-  { key: 'attendance', label: 'Attendance', completed: false, remarks: '' },
-]);
+const defaultEval = (): Record<EvalKey, EvalItem> => ({
+  pre_test: { completed: false, remarks: '' },
+  assessment: { completed: false, remarks: '' },
+  final_test: { completed: false, remarks: '' },
+  training_material: { completed: false, remarks: '' },
+  attendance: { completed: false, remarks: '' },
+});
 
-export default function CorporateInquiryFinalPage() {
+export default function TrainingExecutionPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const inquiryId = useMemo(() => Number(id), [id]);
 
   const { canUpdate, loading: permLoading } = useResourcePermissions('corporate_inquiry');
 
-  const [activeTab, setActiveTab] = useState<'inquiry' | 'discussion' | 'schedule' | 'feedback' | 'certification'>('inquiry');
+  const [activeTab, setActiveTab] = useState<'inquiry' | 'discussion' | 'execution' | 'feedback' | 'certificate'>('inquiry');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -81,18 +96,17 @@ export default function CorporateInquiryFinalPage() {
 
   const [inquiry, setInquiry] = useState<Inquiry | null>(null);
 
-  const [scheduleForm, setScheduleForm] = useState({
+  const [executionForm, setExecutionForm] = useState({
     TrainingNumber: '',
-    TrainingDate: '',
     TrainerName: '',
     NumberOfDays: '',
     TotalStudents: '',
     TrainingCoordinator: '',
-    ConfirmDate: '',
   });
-  const [performanceRows, setPerformanceRows] = useState<PerformanceRow[]>(defaultPerformanceRows());
-  const [trainingFeedback, setTrainingFeedback] = useState('');
-  const [sitCertification, setSitCertification] = useState<'Yes' | 'No' | ''>('');
+  const [evaluation, setEvaluation] = useState<Record<EvalKey, EvalItem>>(defaultEval());
+  const [feedback, setFeedback] = useState('');
+  const [certificate, setCertificate] = useState<'Yes' | 'No' | ''>('');
+  const [confirmDate, setConfirmDate] = useState('');
 
   useEffect(() => {
     if (!inquiryId) return;
@@ -106,31 +120,26 @@ export default function CorporateInquiryFinalPage() {
         const r = data.inquiry as Inquiry;
         setInquiry(r);
 
-        setScheduleForm({
+        setExecutionForm({
           TrainingNumber: r.TrainingNumber || '',
-          TrainingDate: toDateInput(r.TrainingDate),
           TrainerName: r.TrainerName || '',
           NumberOfDays: r.NumberOfDays === null || r.NumberOfDays === undefined ? '' : String(r.NumberOfDays),
           TotalStudents: r.TotalStudents === null || r.TotalStudents === undefined ? '' : String(r.TotalStudents),
           TrainingCoordinator: r.TrainingCoordinator || '',
-          ConfirmDate: toDateInput(r.ConfirmDate),
         });
 
-        const parsed = safeJsonParse<Partial<PerformanceRow>[]>(r.PerformanceEvaluation, []);
-        const defaults = defaultPerformanceRows();
-        const merged = defaults.map(d => {
-          const found = parsed.find(p => p.key === d.key);
-          return {
-            ...d,
-            completed: Boolean(found?.completed ?? d.completed),
-            remarks: String(found?.remarks ?? d.remarks),
-          };
+        setEvaluation({
+          pre_test: parseEvalItem(r.PerformanceEvaluation_PreTest),
+          assessment: parseEvalItem(r.PerformanceEvaluation_Assessment),
+          final_test: parseEvalItem(r.PerformanceEvaluation_FinalExam),
+          training_material: parseEvalItem(r.PerformanceEvaluation_TrainingMaterial),
+          attendance: parseEvalItem(r.PerformanceEvaluation_Attendance),
         });
-        setPerformanceRows(merged);
 
-        setTrainingFeedback(r.TrainingFeedback || '');
-        const cert = r.SitCertification;
-        setSitCertification(cert === 'Yes' || cert === 'No' ? cert : '');
+        setFeedback(r.TrainingFeedbackObtained || '');
+        const certRaw = (r.SitCertIssuedOnPerformanceOnAttendance || '').trim();
+        setCertificate(certRaw === 'Yes' || certRaw === 'No' ? certRaw : '');
+        setConfirmDate(toDateInput(r.ConfirmDate));
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed to load inquiry');
       } finally {
@@ -149,22 +158,28 @@ export default function CorporateInquiryFinalPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           Id: inquiryId,
-          InquiryStatus: 'Final',
-          TrainingNumber: scheduleForm.TrainingNumber,
-          TrainingDate: scheduleForm.TrainingDate,
-          TrainerName: scheduleForm.TrainerName,
-          NumberOfDays: scheduleForm.NumberOfDays,
-          TotalStudents: scheduleForm.TotalStudents,
-          TrainingCoordinator: scheduleForm.TrainingCoordinator,
-          ConfirmDate: scheduleForm.ConfirmDate,
-          PerformanceEvaluation: JSON.stringify(performanceRows),
-          TrainingFeedback: trainingFeedback,
-          SitCertification: sitCertification,
+          InquiryStatus: inquiry?.InquiryStatus || 'Final',
+
+          TrainingNumber: executionForm.TrainingNumber,
+          TrainerName: executionForm.TrainerName,
+          NumberOfDays: executionForm.NumberOfDays,
+          TotalStudents: executionForm.TotalStudents,
+          TrainingCoordinator: executionForm.TrainingCoordinator,
+
+          PerformanceEvaluation_PreTest: JSON.stringify(evaluation.pre_test),
+          PerformanceEvaluation_Assessment: JSON.stringify(evaluation.assessment),
+          PerformanceEvaluation_FinalExam: JSON.stringify(evaluation.final_test),
+          PerformanceEvaluation_TrainingMaterial: JSON.stringify(evaluation.training_material),
+          PerformanceEvaluation_Attendance: JSON.stringify(evaluation.attendance),
+
+          TrainingFeedbackObtained: feedback,
+          SitCertIssuedOnPerformanceOnAttendance: certificate,
+          ConfirmDate: confirmDate,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
-      setSuccess('Final phase saved');
+      setSuccess('Training execution saved');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
@@ -173,14 +188,14 @@ export default function CorporateInquiryFinalPage() {
   };
 
   if (permLoading || loading) return <PermissionLoading />;
-  if (!canUpdate) return <AccessDenied message="You do not have permission to update corporate inquiries." />;
+  if (!canUpdate) return <AccessDenied message="You do not have permission to update training execution." />;
 
   return (
     <div className="space-y-3">
       <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-4 shadow-md">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => router.push('/dashboard/corporate-inquiry/convert')}
+            onClick={() => router.push('/dashboard/corporate-inquiry/execution')}
             className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
             title="Back"
           >
@@ -189,7 +204,7 @@ export default function CorporateInquiryFinalPage() {
             </svg>
           </button>
           <div className="flex-1">
-            <h2 className="text-base font-bold text-white">Final Phase</h2>
+            <h2 className="text-base font-bold text-white">Training Execution</h2>
             <p className="text-xs text-white/70">
               Corporate Inquiry #{inquiryId}{inquiry?.CompanyName ? ` • ${inquiry.CompanyName}` : ''}
             </p>
@@ -216,11 +231,11 @@ export default function CorporateInquiryFinalPage() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="flex border-b border-gray-200 px-5 bg-gray-50/80">
           {([
-            ['inquiry', 'Inquiry'],
-            ['discussion', 'Training Discussion'],
-            ['schedule', 'Schedule Plan'],
+            ['inquiry', 'Inquiry Details'],
+            ['discussion', 'Under Discussion Details'],
+            ['execution', 'Execution Details'],
             ['feedback', 'Training Feedback'],
-            ['certification', 'SIT Certification'],
+            ['certificate', 'SIT Certificate'],
           ] as const).map(([key, label]) => (
             <button
               key={key}
@@ -251,11 +266,11 @@ export default function CorporateInquiryFinalPage() {
                 <input className={inputCls} value={inquiry?.CompanyName || ''} disabled />
               </div>
               <div>
-                <label className={labelCls}>Inquirer</label>
+                <label className={labelCls}>Coordinator</label>
                 <input className={inputCls} value={inquiry?.FullName || ''} disabled />
               </div>
               <div>
-                <label className={labelCls}>Course</label>
+                <label className={labelCls}>Training Programme</label>
                 <input className={inputCls} value={inquiry?.Course_Id || ''} disabled />
               </div>
               <div>
@@ -267,8 +282,8 @@ export default function CorporateInquiryFinalPage() {
                 <input className={inputCls} value={inquiry?.Mobile || inquiry?.Phone || ''} disabled />
               </div>
               <div>
-                <label className={labelCls}>Status</label>
-                <input className={inputCls} value={inquiry?.InquiryStatus || ''} disabled />
+                <label className={labelCls}>Company Location</label>
+                <input className={inputCls} value={inquiry?.Place || ''} disabled />
               </div>
             </div>
           )}
@@ -277,76 +292,60 @@ export default function CorporateInquiryFinalPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
               <div>
                 <label className={labelCls}>Training Number</label>
-                <input className={inputCls} value={scheduleForm.TrainingNumber} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Training Date</label>
-                <input className={inputCls} value={scheduleForm.TrainingDate} disabled />
+                <input className={inputCls} value={inquiry?.TrainingNumber || ''} disabled />
               </div>
               <div>
                 <label className={labelCls}>Trainer Name</label>
-                <input className={inputCls} value={scheduleForm.TrainerName} disabled />
+                <input className={inputCls} value={inquiry?.TrainerName || ''} disabled />
               </div>
               <div>
                 <label className={labelCls}>Number Of Days</label>
-                <input className={inputCls} value={scheduleForm.NumberOfDays} disabled />
+                <input className={inputCls} value={inquiry?.NumberOfDays === null || inquiry?.NumberOfDays === undefined ? '' : String(inquiry.NumberOfDays)} disabled />
               </div>
               <div>
                 <label className={labelCls}>Total Students</label>
-                <input className={inputCls} value={scheduleForm.TotalStudents} disabled />
+                <input className={inputCls} value={inquiry?.TotalStudents === null || inquiry?.TotalStudents === undefined ? '' : String(inquiry.TotalStudents)} disabled />
               </div>
               <div>
                 <label className={labelCls}>Training Co-ordinator</label>
-                <input className={inputCls} value={scheduleForm.TrainingCoordinator} disabled />
+                <input className={inputCls} value={inquiry?.TrainingCoordinator || ''} disabled />
               </div>
-              <div className="md:col-span-3">
-                <button
-                  onClick={() => router.push(`/dashboard/corporate-inquiry/convert/${inquiryId}`)}
-                  className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50"
-                >
-                  Edit Under Discussion
-                </button>
+              <div>
+                <label className={labelCls}>Discussion Outcome</label>
+                <input className={inputCls} value={inquiry?.DiscussionOutcome || ''} disabled />
               </div>
             </div>
           )}
 
-          {activeTab === 'schedule' && (
+          {activeTab === 'execution' && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
                 <div>
                   <label className={labelCls}>Training Number</label>
-                  <input className={inputCls} value={scheduleForm.TrainingNumber} onChange={(e) => setScheduleForm((f) => ({ ...f, TrainingNumber: e.target.value }))} />
+                  <input className={inputCls} value={executionForm.TrainingNumber} onChange={(e) => setExecutionForm((f) => ({ ...f, TrainingNumber: e.target.value }))} />
                 </div>
                 <div>
                   <label className={labelCls}>Trainer Name</label>
-                  <input className={inputCls} value={scheduleForm.TrainerName} onChange={(e) => setScheduleForm((f) => ({ ...f, TrainerName: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={labelCls}>Training Date</label>
-                  <input type="date" className={inputCls} value={scheduleForm.TrainingDate} onChange={(e) => setScheduleForm((f) => ({ ...f, TrainingDate: e.target.value }))} />
+                  <input className={inputCls} value={executionForm.TrainerName} onChange={(e) => setExecutionForm((f) => ({ ...f, TrainerName: e.target.value }))} />
                 </div>
                 <div>
                   <label className={labelCls}>Number Of Days</label>
-                  <input type="number" min={0} className={inputCls} value={scheduleForm.NumberOfDays} onChange={(e) => setScheduleForm((f) => ({ ...f, NumberOfDays: e.target.value }))} />
+                  <input type="number" min={0} className={inputCls} value={executionForm.NumberOfDays} onChange={(e) => setExecutionForm((f) => ({ ...f, NumberOfDays: e.target.value }))} />
                 </div>
                 <div>
                   <label className={labelCls}>Total Students</label>
-                  <input type="number" min={0} className={inputCls} value={scheduleForm.TotalStudents} onChange={(e) => setScheduleForm((f) => ({ ...f, TotalStudents: e.target.value }))} />
+                  <input type="number" min={0} className={inputCls} value={executionForm.TotalStudents} onChange={(e) => setExecutionForm((f) => ({ ...f, TotalStudents: e.target.value }))} />
                 </div>
                 <div>
                   <label className={labelCls}>Training Co-ordinator</label>
-                  <input className={inputCls} value={scheduleForm.TrainingCoordinator} onChange={(e) => setScheduleForm((f) => ({ ...f, TrainingCoordinator: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={labelCls}>Confirm Date</label>
-                  <input type="date" className={inputCls} value={scheduleForm.ConfirmDate} onChange={(e) => setScheduleForm((f) => ({ ...f, ConfirmDate: e.target.value }))} />
+                  <input className={inputCls} value={executionForm.TrainingCoordinator} onChange={(e) => setExecutionForm((f) => ({ ...f, TrainingCoordinator: e.target.value }))} />
                 </div>
               </div>
 
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
                   <h3 className="text-sm font-bold text-gray-800">Performance Evaluation</h3>
-                  <p className="text-xs text-gray-500">Pre Test, Assessment, Final Exam, Training Material, Attendance</p>
+                  <p className="text-xs text-gray-500">Pre Test, Assessment, Final Test, Training Material, Attendance</p>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -358,15 +357,21 @@ export default function CorporateInquiryFinalPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {performanceRows.map((row, idx) => (
-                        <tr key={row.key} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                          <td className="py-2 px-4 text-gray-700">{row.label}</td>
+                      {([
+                        { key: 'pre_test', label: 'Pre Test' },
+                        { key: 'assessment', label: 'Assessment' },
+                        { key: 'final_test', label: 'Final Test' },
+                        { key: 'training_material', label: 'Training Material' },
+                        { key: 'attendance', label: 'Attendance' },
+                      ] as const).map(({ key, label }, idx) => (
+                        <tr key={key} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                          <td className="py-2 px-4 text-gray-700">{label}</td>
                           <td className="py-2 px-4">
                             <label className="inline-flex items-center gap-2 text-xs text-gray-700">
                               <input
                                 type="checkbox"
-                                checked={row.completed}
-                                onChange={(e) => setPerformanceRows((rows) => rows.map(r => r.key === row.key ? { ...r, completed: e.target.checked } : r))}
+                                checked={evaluation[key].completed}
+                                onChange={(e) => setEvaluation((ev) => ({ ...ev, [key]: { ...ev[key], completed: e.target.checked } }))}
                               />
                               Completed
                             </label>
@@ -374,8 +379,8 @@ export default function CorporateInquiryFinalPage() {
                           <td className="py-2 px-4">
                             <input
                               className={inputCls}
-                              value={row.remarks}
-                              onChange={(e) => setPerformanceRows((rows) => rows.map(r => r.key === row.key ? { ...r, remarks: e.target.value } : r))}
+                              value={evaluation[key].remarks}
+                              onChange={(e) => setEvaluation((ev) => ({ ...ev, [key]: { ...ev[key], remarks: e.target.value } }))}
                               placeholder="Remarks"
                             />
                           </td>
@@ -390,21 +395,21 @@ export default function CorporateInquiryFinalPage() {
 
           {activeTab === 'feedback' && (
             <div>
-              <label className={labelCls}>Training Feedback</label>
-              <textarea className={textareaCls} rows={5} value={trainingFeedback} onChange={(e) => setTrainingFeedback(e.target.value)} placeholder="Training feedback" />
+              <label className={labelCls}>Feedback</label>
+              <textarea className={textareaCls} rows={5} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="Training feedback" />
             </div>
           )}
 
-          {activeTab === 'certification' && (
+          {activeTab === 'certificate' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
               <div>
-                <label className={labelCls}>SIT Certification</label>
+                <label className={labelCls}>Confirm Certificate</label>
                 <select
                   className={selectCls}
-                  value={sitCertification}
+                  value={certificate}
                   onChange={(e) => {
                     const v = e.target.value;
-                    setSitCertification(v === 'Yes' || v === 'No' ? v : '');
+                    setCertificate(v === 'Yes' || v === 'No' ? v : '');
                   }}
                 >
                   <option value="">Select...</option>
@@ -412,12 +417,16 @@ export default function CorporateInquiryFinalPage() {
                   <option value="No">No</option>
                 </select>
               </div>
+              <div>
+                <label className={labelCls}>Confirm Date</label>
+                <input type="date" className={inputCls} value={confirmDate} onChange={(e) => setConfirmDate(e.target.value)} />
+              </div>
             </div>
           )}
 
           <div className="flex justify-end mt-5 gap-2">
             <button
-              onClick={() => router.push('/dashboard/corporate-inquiry/convert')}
+              onClick={() => router.push('/dashboard/corporate-inquiry/execution')}
               className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50"
             >
               Close

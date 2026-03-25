@@ -121,7 +121,7 @@ export default function EditCoursePage() {
   /* ---------------- SAVE COURSE ---------------- */
   const handleSave = async () => {
     if (!courseName.trim()) {
-      setError('Course Name is required');
+      setError('Training Name is required');
       return;
     }
 
@@ -218,16 +218,16 @@ export default function EditCoursePage() {
               }
             >
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {/* Course Name */}
+                {/* Training Name */}
                 <div className="md:col-span-2 lg:col-span-1">
                   <label className={labelCls}>
-                    Course Name <span className="text-red-500 text-sm leading-none">*</span>
+                    Training Name <span className="text-red-500 text-sm leading-none">*</span>
                   </label>
                   <input
                     type="text"
                     value={courseName}
                     onChange={(e) => setCourseName(e.target.value)}
-                    placeholder="Enter course name"
+                    placeholder="Enter training name"
                     className={inputCls}
                   />
                 </div>

@@ -1,7 +1,7 @@
 export default function UpcomingEvents() {
   const events = [
     { title: 'Batch A-15 Orientation', date: 'Feb 12', time: '10:00 AM', tag: 'Event' },
-    { title: 'Faculty Meeting', date: 'Feb 13', time: '2:00 PM', tag: 'Meeting' },
+    { title: 'Trainer Meeting', date: 'Feb 13', time: '2:00 PM', tag: 'Meeting' },
     { title: 'Placement Drive - TCS', date: 'Feb 15', time: '9:00 AM', tag: 'Placement' },
     { title: 'Mid-term Exam', date: 'Feb 18', time: '11:00 AM', tag: 'Exam' },
   ];

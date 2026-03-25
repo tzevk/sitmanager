@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { FaPlus, FaFilter, FaFileExport, FaEdit, FaTrashAlt, FaSearch, FaChevronLeft, FaChevronRight, FaTimesCircle, FaCheckCircle } from 'react-icons/fa';
+import { FaPlus, FaFilter, FaFileExport, FaEdit, FaSearch, FaChevronLeft, FaChevronRight, FaTimesCircle, FaCheckCircle } from 'react-icons/fa';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -29,6 +29,13 @@ interface CorporateInquiry {
   Idate: string;
   IsActive: number;
   InquiryStatus?: string | null;
+
+  CompanyType?: string | null;
+  CompanyAuthority?: string | null;
+  TrainingMode?: string | null;
+  Participants_Fresher?: number | null;
+  Participants_Experienced?: number | null;
+  TrainingLocation?: string | null;
 }
 
 interface Pagination {
@@ -40,7 +47,7 @@ interface Pagination {
 
 export default function CorporateInquiryPage() {
   const router = useRouter();
-  const { canView, canCreate, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('corporate_inquiry');
+  const { canView, canCreate, canUpdate, loading: permLoading } = useResourcePermissions('corporate_inquiry');
   const [inquiries, setInquiries] = useState<CorporateInquiry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -51,10 +58,10 @@ export default function CorporateInquiryPage() {
     total: 0,
     totalPages: 0,
   });
-  const [deleting, setDeleting] = useState<number | null>(null);
   const [updating, setUpdating] = useState<number | null>(null);
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchInquiries = useCallback(async () => {
     setLoading(true);
@@ -85,7 +92,21 @@ export default function CorporateInquiryPage() {
     fetchInquiries();
   }, [fetchInquiries]);
 
+  // Debounced search: typing should actually update results.
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setPagination((prev) => ({ ...prev, page: 1 }));
+      setFetchTrigger((t) => t + 1);
+    }, 400);
+
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, [search]);
+
   const handleSearch = () => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     setPagination((prev) => ({ ...prev, page: 1 }));
     setFetchTrigger((t) => t + 1);
   };
@@ -103,24 +124,13 @@ export default function CorporateInquiryPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this inquiry?')) return;
-    setDeleting(id);
-    try {
-      await fetch(`/api/admission-activity/corporate-inquiry?id=${id}`, { method: 'DELETE' });
-      fetchInquiries();
-    } catch (e) {
-      alert('Delete failed');
-      console.error(e);
-    } finally {
-      setDeleting(null);
-    }
-  };
-
   const updateStatus = async (id: number, status: 'Rejected' | 'UnderDiscussion') => {
-    const verb = status === 'Rejected' ? 'reject' : 'move to under discussion';
+    const verb = status === 'Rejected' ? 'cancel' : 'move to under discussion';
     if (!confirm(`Are you sure you want to ${verb} this inquiry?`)) return;
+    const prevStatus = inquiries.find((r) => r.Id === id)?.InquiryStatus ?? null;
     setUpdating(id);
+    // Optimistic UI: immediately reflect status + row color.
+    setInquiries((prev) => prev.map((r) => (r.Id === id ? { ...r, InquiryStatus: status } : r)));
     try {
       const res = await fetch('/api/admission-activity/corporate-inquiry', {
         method: 'PATCH',
@@ -137,6 +147,8 @@ export default function CorporateInquiryPage() {
 
       fetchInquiries();
     } catch (e) {
+      // Revert optimistic update on failure.
+      setInquiries((prev) => prev.map((r) => (r.Id === id ? { ...r, InquiryStatus: prevStatus } : r)));
       alert('Update failed');
       console.error(e);
     } finally {
@@ -145,18 +157,42 @@ export default function CorporateInquiryPage() {
   };
 
   const handleExport = () => {
-    const headers = ['Id', 'Inquirer', 'Company', 'Course', 'Email', 'Phone', 'City'];
+    const headers = [
+      'Id',
+      'Enquiry Date',
+      'Training Programme',
+      'Company Name',
+      'Company Location',
+      'Company Type',
+      'Company Authority',
+      'Coordinator Name',
+      'Coordinator Mobile',
+      'Coordinator Email',
+      'Training Mode',
+      'Training Location',
+      'Status',
+      'Disciplines',
+      'Remarks',
+    ];
     const csvContent = [
       headers.join(','),
       ...inquiries.map((inq) =>
         [
           inq.Id,
-          `"${(inq.FullName || '').replace(/"/g, '""')}"`,
-          `"${(inq.CompanyName || '').replace(/"/g, '""')}"`,
-          `"${(inq.Course_Id || '').replace(/"/g, '""')}"`,
-          `"${(inq.Email || '').replace(/"/g, '""')}"`,
-          `"${(inq.Mobile || inq.Phone || '').replace(/"/g, '""')}"`,
-          `"${(inq.City || '').replace(/"/g, '""')}"`,
+          `"${String(inq.Idate || '').replace(/"/g, '""')}"`,
+          `"${String(inq.Course_Id || '').replace(/"/g, '""')}"`,
+          `"${String(inq.CompanyName || '').replace(/"/g, '""')}"`,
+          `"${String(inq.Place || '').replace(/"/g, '""')}"`,
+          `"${String(inq.CompanyType || '').replace(/"/g, '""')}"`,
+          `"${String(inq.CompanyAuthority || '').replace(/"/g, '""')}"`,
+          `"${String(inq.FullName || `${inq.Fname || ''} ${inq.Lname || ''}`.trim()).replace(/"/g, '""')}"`,
+          `"${String(inq.Mobile || inq.Phone || '').replace(/"/g, '""')}"`,
+          `"${String(inq.Email || '').replace(/"/g, '""')}"`,
+          `"${String(inq.TrainingMode || '').replace(/"/g, '""')}"`,
+          `"${String(inq.TrainingLocation || '').replace(/"/g, '""')}"`,
+          `"${String(inq.InquiryStatus === 'Rejected' ? 'Cancelled' : (inq.InquiryStatus || '')).replace(/"/g, '""')}"`,
+          `"${String(inq.business || '').replace(/"/g, '""')}"`,
+          `"${String(inq.Remark || '').replace(/"/g, '""')}"`,
         ].join(',')
       ),
     ].join('\n');
@@ -246,11 +282,17 @@ export default function CorporateInquiryPage() {
             <thead>
               <tr className="text-[11px] uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100">
                 <th className="text-left py-3 px-4 font-semibold">Id</th>
-                <th className="text-left py-3 px-4 font-semibold">Inquirer</th>
+                <th className="text-left py-3 px-4 font-semibold">Enquiry Date</th>
+                <th className="text-left py-3 px-4 font-semibold">Training Programme</th>
                 <th className="text-left py-3 px-4 font-semibold">Company</th>
-                <th className="text-left py-3 px-4 font-semibold">Course</th>
+                <th className="text-left py-3 px-4 font-semibold">Company Location</th>
+                <th className="text-left py-3 px-4 font-semibold">Company Type</th>
+                <th className="text-left py-3 px-4 font-semibold">Authority</th>
+                <th className="text-left py-3 px-4 font-semibold">Coordinator</th>
+                <th className="text-left py-3 px-4 font-semibold">Mobile</th>
                 <th className="text-left py-3 px-4 font-semibold">Email</th>
-                <th className="text-left py-3 px-4 font-semibold">Phone</th>
+                <th className="text-left py-3 px-4 font-semibold">Mode</th>
+                <th className="text-left py-3 px-4 font-semibold">Training Location</th>
                 <th className="text-left py-3 px-4 font-semibold">Status</th>
                 <th className="text-center py-3 px-4 font-semibold">Action</th>
               </tr>
@@ -258,7 +300,7 @@ export default function CorporateInquiryPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center">
+                  <td colSpan={14} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-8 h-8 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                       <span className="text-sm text-gray-400">Loading inquiries...</span>
@@ -267,7 +309,7 @@ export default function CorporateInquiryPage() {
                 </tr>
               ) : inquiries.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center">
+                  <td colSpan={14} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2 text-gray-300">
                       <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -277,18 +319,32 @@ export default function CorporateInquiryPage() {
                   </td>
                 </tr>
               ) : (
-                inquiries.map((inq, idx) => (
-                  <tr
-                    key={inq.Id}
-                    className={`hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
-                  >
+                inquiries.map((inq, idx) => {
+                  const isRejected = inq.InquiryStatus === 'Rejected';
+                  const isUnderDiscussion = inq.InquiryStatus === 'UnderDiscussion';
+                  const rowBase = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50';
+                  const rowBg = isRejected ? 'bg-red-50' : isUnderDiscussion ? 'bg-blue-50' : rowBase;
+                  const rowHover = isRejected
+                    ? 'hover:bg-red-100'
+                    : isUnderDiscussion
+                      ? 'hover:bg-blue-100'
+                      : 'hover:bg-gray-50';
+
+                  return (
+                    <tr key={inq.Id} className={`${rowHover} transition-colors ${rowBg}`}>
                     <td className="py-3 px-4 text-gray-600">{inq.Id}</td>
-                    <td className="py-3 px-4 font-medium text-gray-800">{inq.FullName || `${inq.Fname || ''} ${inq.Lname || ''}`.trim()}</td>
-                    <td className="py-3 px-4 text-gray-600">{inq.CompanyName || '-'}</td>
+                    <td className="py-3 px-4 text-gray-600">{inq.Idate ? String(inq.Idate).slice(0, 10) : '-'}</td>
                     <td className="py-3 px-4 text-gray-600">{inq.Course_Id || '-'}</td>
-                    <td className="py-3 px-4 text-gray-600">{inq.Email || '-'}</td>
+                    <td className="py-3 px-4 text-gray-600">{inq.CompanyName || '-'}</td>
+                    <td className="py-3 px-4 text-gray-600">{inq.Place || '-'}</td>
+                    <td className="py-3 px-4 text-gray-600">{inq.CompanyType || '-'}</td>
+                    <td className="py-3 px-4 text-gray-600">{inq.CompanyAuthority || '-'}</td>
+                    <td className="py-3 px-4 font-medium text-gray-800">{inq.FullName || `${inq.Fname || ''} ${inq.Lname || ''}`.trim()}</td>
                     <td className="py-3 px-4 text-gray-600">{inq.Mobile || inq.Phone || '-'}</td>
-                    <td className="py-3 px-4 text-gray-600">{inq.InquiryStatus || '-'}</td>
+                    <td className="py-3 px-4 text-gray-600">{inq.Email || '-'}</td>
+                    <td className="py-3 px-4 text-gray-600">{inq.TrainingMode || '-'}</td>
+                    <td className="py-3 px-4 text-gray-600">{inq.TrainingLocation || '-'}</td>
+                    <td className="py-3 px-4 text-gray-600">{inq.InquiryStatus === 'Rejected' ? 'Cancelled' : (inq.InquiryStatus || '-')}</td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1">
                         {canUpdate && (
@@ -306,7 +362,7 @@ export default function CorporateInquiryPage() {
                           onClick={() => updateStatus(inq.Id, 'Rejected')}
                           disabled={updating === inq.Id}
                           className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
-                          title="Reject"
+                          title="Cancel"
                         >
                           <FaTimesCircle className="w-4 h-4" />
                         </button>
@@ -322,21 +378,11 @@ export default function CorporateInquiryPage() {
                           <FaCheckCircle className="w-4 h-4" />
                         </button>
                         )}
-
-                        {canDelete && (
-                        <button
-                          onClick={() => handleDelete(inq.Id)}
-                          disabled={deleting === inq.Id || updating === inq.Id}
-                          className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
-                          title="Delete"
-                        >
-                          <FaTrashAlt className="w-4 h-4" />
-                        </button>
-                        )}
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

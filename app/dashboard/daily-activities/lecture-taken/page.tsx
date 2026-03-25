@@ -270,7 +270,7 @@ function LectureTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
                 <th className="py-3 px-4 border-b border-gray-200">Topic</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-28">Date</th>
                 <th className="py-3 px-4 border-b border-gray-200">Batch Code</th>
-                <th className="py-3 px-4 border-b border-gray-200">Faculty Name</th>
+                <th className="py-3 px-4 border-b border-gray-200">Trainer Name</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-24 text-center">Students</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-28 text-center">Action</th>
               </tr>

@@ -108,7 +108,7 @@ function UnitTestTakenContent({ canCreate, canUpdate, canDelete }: { canView: bo
   };
 
   const handleExport = () => {
-    const headers = ['Id', 'Batch Code', 'Course Name', 'Test Name', 'Date', 'Marks', 'Students'];
+    const headers = ['Id', 'Batch Code', 'Training Name', 'Test Name', 'Date', 'Marks', 'Students'];
     const csvRows = [
       headers.join(','),
       ...rows.map(r => [
@@ -259,7 +259,7 @@ function UnitTestTakenContent({ canCreate, canUpdate, canDelete }: { canView: bo
               <tr className="text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 <th className="py-3 px-4 border-b border-gray-200 w-16">Id</th>
                 <th className="py-3 px-4 border-b border-gray-200">Batch Code</th>
-                <th className="py-3 px-4 border-b border-gray-200">Course Name</th>
+                <th className="py-3 px-4 border-b border-gray-200">Training Name</th>
                 <th className="py-3 px-4 border-b border-gray-200">Test Name</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-28">Date</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-20 text-center">Marks</th>

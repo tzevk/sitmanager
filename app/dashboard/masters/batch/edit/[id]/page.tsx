@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -607,7 +607,7 @@ export default function EditBatchPage() {
   }, [activeTab, batchId]);
 
   /* Fetch lectures for this batch */
-  const fetchLectures = async () => {
+  const fetchLectures = useCallback(async () => {
     setLoadingLectures(true);
     try {
       const res = await fetch(`/api/masters/batch/${batchId}/lectures`);
@@ -616,16 +616,16 @@ export default function EditBatchPage() {
       setFacultyList(json.facultyList || []);
     } catch { /* ignore */ }
     setLoadingLectures(false);
-  };
+  }, [batchId]);
 
   useEffect(() => {
     if (activeTab === 'lecture-plan' && batchId) {
       fetchLectures();
     }
-  }, [activeTab, batchId]);
+  }, [activeTab, batchId, fetchLectures]);
 
   /* Fetch final exams for this batch */
-  const fetchFinalExams = async () => {
+  const fetchFinalExams = useCallback(async () => {
     setLoadingFinalExams(true);
     try {
       const res = await fetch(`/api/masters/batch/${batchId}/finalexams`);
@@ -633,13 +633,13 @@ export default function EditBatchPage() {
       setFinalExams(json.finalexams || []);
     } catch { /* ignore */ }
     setLoadingFinalExams(false);
-  };
+  }, [batchId]);
 
   useEffect(() => {
     if (activeTab === 'final-exam-details' && batchId) {
       fetchFinalExams();
     }
-  }, [activeTab, batchId]);
+  }, [activeTab, batchId, fetchFinalExams]);
 
   /* Fetch convocation for this batch */
   const fetchConvocation = async () => {
@@ -742,7 +742,7 @@ export default function EditBatchPage() {
   const handleSave = async () => {
     // Validation
     if (!formData.Course_Id) {
-      setError('Course Name is required');
+      setError('Training Name is required');
       return;
     }
     if (!formData.Min_Qualification.trim()) {
@@ -762,7 +762,7 @@ export default function EditBatchPage() {
       return;
     }
     if (!formData.Course_description.trim()) {
-      setError('Brief Description of Course is required');
+      setError('Brief Description of Training is required');
       return;
     }
 
@@ -828,13 +828,13 @@ export default function EditBatchPage() {
         {/* Row 1 */}
         <div className="grid grid-cols-3 gap-2">
           <div>
-            <label className={labelCls}>Course Name <span className="text-red-500">*</span></label>
+            <label className={labelCls}>Training Name <span className="text-red-500">*</span></label>
             <select
               value={formData.Course_Id}
               onChange={(e) => handleChange('Course_Id', e.target.value)}
               className={selectCls}
             >
-              <option value="">Select Course</option>
+              <option value="">Select Training</option>
               {courses.map(c => (
                 <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>
               ))}
@@ -934,13 +934,13 @@ export default function EditBatchPage() {
         {/* Row 4 */}
         <div className="grid grid-cols-3 gap-2">
           <div>
-            <label className={labelCls}>Course Name (if changed)</label>
+            <label className={labelCls}>Training Name (if changed)</label>
             <input
               type="text"
               value={formData.CourseName}
               onChange={(e) => handleChange('CourseName', e.target.value)}
               className={inputCls}
-              placeholder="Course Name"
+              placeholder="Training Name"
             />
           </div>
           <div>
@@ -1986,7 +1986,7 @@ export default function EditBatchPage() {
   };
 
   const handleExportSLectures = () => {
-    const headers = ['Id', 'LectureNo', 'Subject', 'SubjectTopics', 'Date', 'StartTime', 'EndTime', 'Assignment', 'AssignmentDate', 'FacultyName', 'ClassRoom', 'Documents', 'UnitTest', 'Publish'];
+    const headers = ['Id', 'LectureNo', 'Subject', 'SubjectTopics', 'Date', 'StartTime', 'EndTime', 'Assignment', 'AssignmentDate', 'TrainerName', 'ClassRoom', 'Documents', 'UnitTest', 'Publish'];
     const rows = filteredSLectures.map(l => [
       l.id,
       l.lecture_no || '',
@@ -2132,13 +2132,13 @@ export default function EditBatchPage() {
                 />
               </div>
               <div>
-                <label className={labelCls}>Faculty Name</label>
+                <label className={labelCls}>Trainer Name</label>
                 <select
                   value={editSLecture.faculty_name}
                   onChange={(e) => setEditSLecture({ ...editSLecture, faculty_name: e.target.value })}
                   className={selectCls}
                 >
-                  <option value="">Select Faculty</option>
+                  <option value="">Select Trainer</option>
                   {facultyList.map(f => (
                     <option key={f.Faculty_Id} value={f.Faculty_Name}>{f.Faculty_Name}</option>
                   ))}
@@ -2245,7 +2245,7 @@ export default function EditBatchPage() {
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">End</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Assign</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">AssignDt</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Faculty</th>
+              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Trainer</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Room</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Docs</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">UT</th>
@@ -2564,7 +2564,7 @@ export default function EditBatchPage() {
   };
 
   const handleExportLectures = () => {
-    const headers = ['Id', 'LectureNo', 'Subject', 'SubjectTopics', 'Date', 'StartTime', 'EndTime', 'Assignment', 'AssignmentDate', 'FacultyName', 'ClassRoom', 'Documents', 'UnitTest', 'Publish'];
+    const headers = ['Id', 'LectureNo', 'Subject', 'SubjectTopics', 'Date', 'StartTime', 'EndTime', 'Assignment', 'AssignmentDate', 'TrainerName', 'ClassRoom', 'Documents', 'UnitTest', 'Publish'];
     const rows = filteredLectures.map(l => [
       l.id,
       l.lecture_no || '',
@@ -2742,13 +2742,13 @@ export default function EditBatchPage() {
                 />
               </div>
               <div>
-                <label className={labelCls}>Faculty Name</label>
+                <label className={labelCls}>Trainer Name</label>
                 <select
                   value={newLecture.faculty_id}
                   onChange={(e) => setNewLecture({ ...newLecture, faculty_id: e.target.value })}
                   className={selectCls}
                 >
-                  <option value="">Select Faculty</option>
+                  <option value="">Select Trainer</option>
                   {facultyList.map(f => (
                     <option key={f.Faculty_Id} value={f.Faculty_Id.toString()}>{f.Faculty_Name}</option>
                   ))}
@@ -2900,13 +2900,13 @@ export default function EditBatchPage() {
                 />
               </div>
               <div>
-                <label className={labelCls}>Faculty Name</label>
+                <label className={labelCls}>Trainer Name</label>
                 <select
                   value={editLecture.faculty_id}
                   onChange={(e) => setEditLecture({ ...editLecture, faculty_id: e.target.value })}
                   className={selectCls}
                 >
-                  <option value="">Select Faculty</option>
+                  <option value="">Select Trainer</option>
                   {facultyList.map(f => (
                     <option key={f.Faculty_Id} value={f.Faculty_Id.toString()}>{f.Faculty_Name}</option>
                   ))}
@@ -3022,7 +3022,7 @@ export default function EditBatchPage() {
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">End</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Assign</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">AssignDt</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Faculty</th>
+              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Trainer</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Room</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Docs</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">UT</th>
@@ -3097,7 +3097,7 @@ export default function EditBatchPage() {
   /* Convocation Details Tab - Table with Add Modal */
   const handleAddConvocation = async () => {
     if (!newConvocation.faculty_name.trim() && !newConvocation.guest_name.trim()) {
-      alert('Please fill at least Faculty Name or Guest Name');
+      alert('Please fill at least Trainer Name or Guest Name');
       return;
     }
     setSavingConvocation(true);
@@ -3237,7 +3237,7 @@ export default function EditBatchPage() {
           <thead>
             <tr className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5">
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b w-10">Id</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b">Faculty</th>
+              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b">Trainer</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b">Guest</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b w-24">Mobile</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b">Email</th>
@@ -3312,7 +3312,7 @@ export default function EditBatchPage() {
             </div>
             <div className="p-3 grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Faculty Name</label>
+                <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Trainer Name</label>
                 <select
                   value={newConvocation.faculty_name}
                   onChange={(e) => setNewConvocation(prev => ({ ...prev, faculty_name: e.target.value }))}
@@ -3484,19 +3484,6 @@ export default function EditBatchPage() {
             placeholder="Address"
           />
         </div>
-      </div>
-    </div>
-  );
-
-  /* Tab Placeholder for other tabs */
-  const TabPlaceholder = ({ name }: { name: string }) => (
-    <div className="flex items-center justify-center py-16 text-gray-400">
-      <div className="text-center">
-        <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-        </svg>
-        <p className="text-sm font-medium">{name}</p>
-        <p className="text-xs mt-1">Form content will be added here</p>
       </div>
     </div>
   );

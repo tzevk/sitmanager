@@ -141,7 +141,7 @@ export default function LibraryBookPage() {
       return;
     }
     if (!formData.Course_Id) {
-      alert('Course Name is required');
+      alert('Training Name is required');
       return;
     }
     setSubmitting(true);
@@ -217,7 +217,7 @@ export default function LibraryBookPage() {
   };
 
   const handleExport = () => {
-    const headers = ['Id', 'Book Name', 'Book Number', 'Course Name', 'Purchase Date', 'Rack No.'];
+    const headers = ['Id', 'Book Name', 'Book Number', 'Training Name', 'Purchase Date', 'Rack No.'];
     const csvRows = rows.map(r => [
       r.Book_Id,
       r.Book_Name || '',
@@ -360,7 +360,7 @@ return (
   {/* Row 2: 7 columns */}
   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '6px', alignItems: 'end' }}>
     <div className="min-w-0">
-      <label className={labelCls}>Course Name *</label>
+      <label className={labelCls}>Training Name *</label>
       <select
         value={formData.Course_Id}
         onChange={(e) => handleFormChange('Course_Id', e.target.value)}
@@ -517,7 +517,7 @@ return (
                 <th className="text-left py-3 px-4 font-semibold whitespace-nowrap">Id</th>
                 <th className="text-left py-3 px-4 font-semibold whitespace-nowrap">Book Name</th>
                 <th className="text-left py-3 px-4 font-semibold whitespace-nowrap">Book Number</th>
-                <th className="text-left py-3 px-4 font-semibold whitespace-nowrap">Course Name</th>
+                <th className="text-left py-3 px-4 font-semibold whitespace-nowrap">Training Name</th>
                 <th className="text-left py-3 px-4 font-semibold whitespace-nowrap">Purchase Date</th>
                 <th className="text-left py-3 px-4 font-semibold whitespace-nowrap">Rack No.</th>
                 <th className="text-center py-3 px-4 font-semibold whitespace-nowrap">Action</th>

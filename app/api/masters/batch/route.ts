@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
     } = body;
 
     if (!Course_Id) {
-      return NextResponse.json({ error: 'Course Name is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Training Name is required' }, { status: 400 });
     }
     if (!Min_Qualification?.toString().trim()) {
       return NextResponse.json({ error: 'Eligibility is required' }, { status: 400 });

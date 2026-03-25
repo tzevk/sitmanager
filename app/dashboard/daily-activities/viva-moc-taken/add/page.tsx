@@ -220,9 +220,9 @@ export default function AddVivaMocTakenPage() {
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
             <h3 className="text-sm font-bold text-[#2E3093] uppercase tracking-wider mb-4">Viva / MOC Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Course Name */}
+              {/* Training Name */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Course Name <span className="text-red-400">*</span></label>
+                <label className="text-xs font-semibold text-gray-600">Training Name <span className="text-red-400">*</span></label>
                 <select value={form.Course_Id} onChange={set('Course_Id')} required
                   className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white">
                   <option value="">Select</option>

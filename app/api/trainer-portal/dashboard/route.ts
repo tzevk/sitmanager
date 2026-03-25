@@ -3,6 +3,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { getTrainerSession } from '@/app/api/trainer-portal/auth/session/route';
 
+async function ensureBreakTimeColumn(pool: any) {
+  const [cRows] = await pool.query(
+    `SELECT COUNT(*) as cnt
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'faculty_master'
+       AND COLUMN_NAME = 'BreakTimeMinutes'`
+  );
+  const cnt = Number((cRows as any)?.[0]?.cnt ?? 0);
+  if (cnt > 0) return;
+
+  await pool.query(
+    `ALTER TABLE faculty_master
+     ADD COLUMN BreakTimeMinutes INT NULL DEFAULT 60`
+  );
+}
+
 /* GET — Dashboard overview for the trainer */
 export async function GET(req: NextRequest) {
   try {
@@ -12,9 +29,11 @@ export async function GET(req: NextRequest) {
     const pool = getPool();
     const facultyId = session.facultyId;
 
+    await ensureBreakTimeColumn(pool);
+
     // Faculty info
     const [fRows] = await pool.query<any[]>(
-      `SELECT Faculty_Id, Faculty_Name, EMail, Mobile, Specialization, Faculty_Type
+      `SELECT Faculty_Id, Faculty_Name, EMail, Mobile, Specialization, Faculty_Type, BreakTimeMinutes
        FROM faculty_master WHERE Faculty_Id = ?`,
       [facultyId]
     );
@@ -81,6 +100,7 @@ export async function GET(req: NextRequest) {
         mobile: faculty?.Mobile,
         specialization: faculty?.Specialization,
         type: faculty?.Faculty_Type,
+        breakTimeMinutes: faculty?.BreakTimeMinutes ?? null,
       },
       batches: batchRows,
       total_lectures: totalLectures,

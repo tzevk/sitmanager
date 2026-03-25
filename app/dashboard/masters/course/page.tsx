@@ -79,7 +79,7 @@ const handleClear = () => {
 
   const handleExport = () => {
     /* Build CSV from current rows */
-    const headers = ['Id', 'Course Name', 'Course Code', 'Introduction', 'Status'];
+    const headers = ['Id', 'Training Name', 'Course Code', 'Introduction', 'Status'];
     const csvRows = [
       headers.join(','),
       ...rows.map((r) =>
@@ -196,7 +196,7 @@ return (
           <thead className="bg-slate-50/80 backdrop-blur-xl border-b-2 border-[#2A6BB5]/30 shadow-sm sticky top-0 z-10 before:content-[''] before:absolute before:inset-0 before:bg-gradient-to-r before:from-[#2E3093]/[0.02] before:to-[#2A6BB5]/[0.02] before:z-[-1]">
             <tr className="text-[11px] font-black uppercase tracking-widest text-[#2E3093] divide-x divide-[#2A6BB5]/30">
               <th className="text-left px-6 py-4 w-[70px]">ID</th>
-              <th className="text-left px-6 py-4 w-[320px]">Course Name</th>
+              <th className="text-left px-6 py-4 w-[320px]">Training Name</th>
               <th className="text-left px-6 py-4 w-[90px]">Code</th>
               <th className="text-left px-6 py-4">Introduction</th>
               <th className="text-center px-6 py-4 w-[110px]">Status</th>
@@ -234,7 +234,7 @@ return (
                     <span className="pl-1 drop-shadow-sm">{r.Course_Id}</span>
                   </td>
 
-                  {/* Course Name */}
+                  {/* Training Name */}
                   <td className="px-6 py-4.5 font-bold text-slate-800 max-w-[320px]">
                     <span className="truncate block group-hover:text-[#2E3093] transition-colors drop-shadow-sm text-[14px]">
                       {r.Course_Name || '—'}

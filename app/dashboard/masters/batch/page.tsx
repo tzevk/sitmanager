@@ -92,7 +92,7 @@ export default function BatchPage() {
   };
 
   const handleExport = () => {
-    const headers = ['Id', 'Batch No.', 'Course Name', 'Category', 'Timings', 'Planned Start Date', 'Last Date of Admission', 'Training Coordinator'];
+    const headers = ['Id', 'Batch No.', 'Training Name', 'Category', 'Timings', 'Planned Start Date', 'Last Date of Admission', 'Training Coordinator'];
     const csvRows = [
       headers.join(','),
       ...rows.map(r => [
@@ -231,7 +231,7 @@ export default function BatchPage() {
               <tr className="text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 <th className="py-3 px-4 border-b border-gray-200">Id</th>
                 <th className="py-3 px-4 border-b border-gray-200">Batch No.</th>
-                <th className="py-3 px-4 border-b border-gray-200">Course Name</th>
+                <th className="py-3 px-4 border-b border-gray-200">Training Name</th>
                 <th className="py-3 px-4 border-b border-gray-200">Category</th>
                 <th className="py-3 px-4 border-b border-gray-200">Timings</th>
                 <th className="py-3 px-4 border-b border-gray-200">Planned Start Date</th>

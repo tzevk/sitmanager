@@ -319,7 +319,7 @@ export default function StudentDashboardPage() {
                     <tr className="bg-gray-50/60">
                       <th className="text-left px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Date</th>
                       <th className="text-left px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Topic</th>
-                      <th className="text-left px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider hidden md:table-cell">Faculty</th>
+                      <th className="text-left px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider hidden md:table-cell">Trainer</th>
                       <th className="text-center px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Status</th>
                     </tr>
                   </thead>

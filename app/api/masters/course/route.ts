@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     const { Course_Name, Course_Code, Introduction, Eligibility, Basic_Subject, Objective, course_Preparation } = body;
 
     if (!Course_Name?.trim()) {
-      return NextResponse.json({ error: 'Course Name is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Training Name is required' }, { status: 400 });
     }
 
     const sql = `
@@ -127,7 +127,7 @@ export async function PUT(req: NextRequest) {
     }
 
     if (!Course_Name?.trim()) {
-      return NextResponse.json({ error: 'Course Name is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Training Name is required' }, { status: 400 });
     }
 
     const sql = `

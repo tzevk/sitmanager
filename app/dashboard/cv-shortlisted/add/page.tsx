@@ -281,9 +281,9 @@ export default function AddCVShortlistedPage() {
 
               {/* Course */}
               <div>
-                <label className={labelCls}>Course Name <span className="text-red-500">*</span></label>
+                <label className={labelCls}>Training Name <span className="text-red-500">*</span></label>
                 <select name="Course_id" value={form.Course_id} onChange={handleChange} className={selectCls} required>
-                  <option value="">--Select Course--</option>
+                  <option value="">--Select Training--</option>
                   {courses.map((c) => (
                     <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>
                   ))}

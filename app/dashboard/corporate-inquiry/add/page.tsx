@@ -48,6 +48,8 @@ export default function AddCorporateInquiryPage() {
     Course_Id: '',
     Consultancy_Id: '',
     CompanyName: '',
+    Place: '',
+    CompanyType: '' as '' | 'Local' | 'International',
     CompanyAuthority: '',
     FullName: '',
     Designation: '',
@@ -236,6 +238,41 @@ export default function AddCorporateInquiryPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className={labelClass}>Company Location</label>
+                <input
+                  type="text"
+                  name="Place"
+                  value={form.Place}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="City / location"
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Company Type</label>
+                <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm">
+                  {(['Local', 'International'] as const).map((opt) => {
+                    const active = form.CompanyType === opt;
+                    return (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, CompanyType: opt }))}
+                        className={`px-4 py-2 text-sm font-semibold transition-colors ${
+                          active
+                            ? 'bg-[#2A6BB5] text-white'
+                            : 'bg-white text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div>

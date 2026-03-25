@@ -25,7 +25,7 @@ export default function AddCoursePage() {
   /* ---- save course ---- */
   const handleSave = async () => {
     if (!courseName.trim()) {
-      setError('Course Name is required');
+      setError('Training Name is required');
       return;
     }
     setError('');
@@ -117,16 +117,16 @@ export default function AddCoursePage() {
               icon={<svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>}
             >
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {/* Course Name */}
+                {/* Training Name */}
                 <div className="md:col-span-2 lg:col-span-1">
                   <label className={labelCls}>
-                    Course Name <span className="text-red-500 text-sm leading-none">*</span>
+                    Training Name <span className="text-red-500 text-sm leading-none">*</span>
                   </label>
                   <input
                     type="text"
                     value={courseName}
                     onChange={(e) => setCourseName(e.target.value)}
-                    placeholder="Enter course name"
+                    placeholder="Enter training name"
                     className={inputCls}
                   />
                 </div>

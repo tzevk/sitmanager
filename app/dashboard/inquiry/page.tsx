@@ -397,7 +397,7 @@ export default function InquiryPage() {
               <tr className="text-[11px] uppercase tracking-wider text-slate-500 bg-slate-50 border-b border-slate-200">
                 <th className="text-left py-3 px-4 font-bold">#</th>
                 <th className="text-left py-3 px-4 font-bold">Student Name</th>
-                <th className="text-left py-3 px-4 font-bold">Course Name</th>
+                <th className="text-left py-3 px-4 font-bold">Training Name</th>
                 <th className="text-left py-3 px-4 font-bold">Mobile</th>
                 <th className="text-left py-3 px-4 font-bold">Email</th>
                 <th className="text-left py-3 px-4 font-bold">Location</th>

@@ -10,6 +10,7 @@ interface DashboardData {
     mobile: string;
     specialization: string;
     type: string;
+    breakTimeMinutes?: number | null;
   };
   batches: {
     Batch_Id: number;
@@ -57,13 +58,54 @@ function monthKey(d: Date) {
 
 function parseTimeToMinutes(t?: string | null): number | null {
   if (!t) return null;
-  const parts = t.trim().split(':');
-  if (parts.length < 2) return null;
-  const hh = Number(parts[0]);
-  const mm = Number(parts[1]);
+  const raw = t.trim();
+  if (!raw) return null;
+
+  // Supports: HH:mm, HH:mm:ss, h:mm am/pm, h:mma, h:mmA (legacy-like)
+  const m = raw
+    .replace(/\./g, '')
+    .trim()
+    .match(/^\s*(\d{1,2})\s*:\s*(\d{2})(?:\s*:\s*(\d{2}))?\s*([aApP])?\s*([mM])?\s*$/);
+
+  if (!m) return null;
+
+  let hh = Number(m[1]);
+  const mm = Number(m[2]);
   if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
-  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+  if (mm < 0 || mm > 59) return null;
+
+  const hasMeridiem = Boolean(m[4]);
+  if (hasMeridiem) {
+    const ap = String(m[4]).toLowerCase();
+    if (hh < 1 || hh > 12) return null;
+    if (ap === 'a') {
+      if (hh === 12) hh = 0;
+    } else if (ap === 'p') {
+      if (hh !== 12) hh += 12;
+    }
+  }
+
+  if (hh < 0 || hh > 23) return null;
   return hh * 60 + mm;
+}
+
+function formatTimeAmPm(t?: string | null): string {
+  if (!t) return '—';
+  const minutes = parseTimeToMinutes(t);
+  if (minutes == null) {
+    // Fallback: best-effort insert space before AM/PM and lower-case.
+    const compact = String(t).trim();
+    const normalized = compact
+      .replace(/\s+/g, '')
+      .replace(/([0-9])([aApP])([mM])?$/, '$1 $2m')
+      .replace(/\s([aApP])m$/, (s) => s.toLowerCase());
+    return normalized || '—';
+  }
+  const hh24 = Math.floor(minutes / 60);
+  const mm = minutes % 60;
+  const suffix = hh24 >= 12 ? 'pm' : 'am';
+  const hh12 = (hh24 % 12) || 12;
+  return `${hh12}:${String(mm).padStart(2, '0')} ${suffix}`;
 }
 
 function formatHmFromMinutes(totalMinutes: number) {
@@ -75,12 +117,12 @@ function formatHmFromMinutes(totalMinutes: number) {
   return `${h}h ${rem}m`;
 }
 
-function computeMinutesMinusLunch(startMin: number, endMin: number) {
+function computeMinutesMinusBreak(startMin: number, endMin: number, breakMinutes: number) {
   if (endMin <= startMin) return 0;
   const total = endMin - startMin;
-  const lunchStart = 13 * 60;
-  const lunchEnd = 14 * 60;
-  const overlap = Math.max(0, Math.min(endMin, lunchEnd) - Math.max(startMin, lunchStart));
+  const breakStart = 13 * 60;
+  const breakEnd = breakStart + Math.max(0, Math.round(breakMinutes));
+  const overlap = Math.max(0, Math.min(endMin, breakEnd) - Math.max(startMin, breakStart));
   return Math.max(0, total - overlap);
 }
 
@@ -262,14 +304,17 @@ export default function TrainerDashboardPage() {
     }
   }
 
+  const breakMinutes = Math.max(0, Math.round(Number(data.faculty.breakTimeMinutes ?? 60)));
+  const breakLabel = breakMinutes === 0 ? 'No break deduction' : `Break overlap deducts ${breakMinutes} min max (from 1:00 PM)`;
+
   const recentLectureRows = data.recent_lectures.map(l => {
     const startMin = parseTimeToMinutes(l.Faculty_Start);
     const endMin = parseTimeToMinutes(l.Faculty_End);
-    const minutes = startMin != null && endMin != null ? computeMinutesMinusLunch(startMin, endMin) : null;
+    const minutes = startMin != null && endMin != null ? computeMinutesMinusBreak(startMin, endMin, breakMinutes) : null;
     return {
       ...l,
-      _in: l.Faculty_Start ? l.Faculty_Start.slice(0, 5) : '-',
-      _out: l.Faculty_End ? l.Faculty_End.slice(0, 5) : '-',
+      _in: formatTimeAmPm(l.Faculty_Start),
+      _out: formatTimeAmPm(l.Faculty_End),
       _hours: minutes == null ? '-' : formatHmFromMinutes(minutes),
       _summary: (l.Topic || l.Lecture_Name || '—').trim(),
       _date: new Date(l.Take_Dt),
@@ -364,7 +409,7 @@ export default function TrainerDashboardPage() {
           )}
 
           <div className="px-4 py-3 border-t border-gray-100">
-            <p className="text-[11px] text-gray-500">Total time deducts lunch overlap (1:00–2:00 PM).</p>
+            <p className="text-[11px] text-gray-500">{breakLabel}.</p>
           </div>
         </div>
       </div>
@@ -387,8 +432,8 @@ export default function TrainerDashboardPage() {
           {data.today_attendance && (
             <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 text-sm">
               <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              Checked in at {data.today_attendance.Check_In?.slice(0, 5)}
-              {data.today_attendance.Check_Out && ` — Out at ${data.today_attendance.Check_Out.slice(0, 5)}`}
+              Checked in at {formatTimeAmPm(data.today_attendance.Check_In)}
+              {data.today_attendance.Check_Out && ` — Out at ${formatTimeAmPm(data.today_attendance.Check_Out)}`}
             </div>
           )}
         </div>
@@ -453,8 +498,8 @@ export default function TrainerDashboardPage() {
               </button>
               {data.today_attendance && (
                 <p className="mt-2 text-xs text-gray-500">
-                  In: {data.today_attendance.Check_In?.slice(0, 5) || '—'}
-                  {data.today_attendance.Check_Out ? ` | Out: ${data.today_attendance.Check_Out.slice(0, 5)}` : ''}
+                  In: {formatTimeAmPm(data.today_attendance.Check_In)}
+                  {data.today_attendance.Check_Out ? ` | Out: ${formatTimeAmPm(data.today_attendance.Check_Out)}` : ''}
                 </p>
               )}
             </div>
@@ -511,7 +556,7 @@ export default function TrainerDashboardPage() {
           )}
 
           <div className="px-6 py-3 border-t border-gray-100">
-            <p className="text-xs text-gray-500">Total Hours deducts lunch overlap (1:00–2:00 PM).</p>
+            <p className="text-xs text-gray-500">{breakLabel}.</p>
           </div>
         </div>
 
@@ -548,7 +593,7 @@ export default function TrainerDashboardPage() {
                         <p className="text-xs text-gray-500 truncate">Lecture {p.lecture_no}</p>
                       </td>
                       <td className="px-6 py-3 whitespace-nowrap text-gray-700">
-                        {(p.starttime || '').slice(0, 5)}{p.endtime ? `–${p.endtime.slice(0, 5)}` : ''}
+                        {formatTimeAmPm(p.starttime)}{p.endtime ? `–${formatTimeAmPm(p.endtime)}` : ''}
                       </td>
                     </tr>
                   ))}
@@ -672,6 +717,17 @@ export default function TrainerDashboardPage() {
                   )}
                   <p className="mt-1 text-[11px] text-gray-500">Select one or more.</p>
                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="text-[11px] font-semibold text-gray-500">Selected</p>
+                <p className="mt-1 text-sm text-gray-800">
+                  <span className="font-semibold">Topic:</span> {attendanceForm.discipline?.trim() || '—'}
+                </p>
+                <p className="mt-1 text-sm text-gray-800">
+                  <span className="font-semibold">Sub Topic:</span>{' '}
+                  {attendanceForm.subTopics.length ? attendanceForm.subTopics.join(', ') : '—'}
+                </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

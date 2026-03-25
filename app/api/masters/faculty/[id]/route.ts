@@ -16,7 +16,7 @@ export async function GET(
     );
 
     if (rows.length === 0) {
-      return NextResponse.json({ error: 'Faculty not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Trainer not found' }, { status: 404 });
     }
 
     return NextResponse.json({ faculty: rows[0] });

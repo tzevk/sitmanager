@@ -138,8 +138,8 @@ export async function GET(req: NextRequest) {
     const dateFrom = url.searchParams.get('dateFrom') || '';
     const dateTo = url.searchParams.get('dateTo') || '';
 
-    // Optional: detect which column stores location/city.
-    // Many legacy schemas use Student_Inquiry.Present_City.
+    // Optional: detect which column stores branch/location.
+    // Prefer Branch (business location) over student city.
     const allowedLocations = new Set(['pune', 'mumbai']);
     const normalizedLocation = location ? location.toLowerCase() : '';
     if (normalizedLocation && !allowedLocations.has(normalizedLocation)) {
@@ -155,7 +155,7 @@ export async function GET(req: NextRequest) {
            AND TABLE_NAME = 'Student_Inquiry'`
       );
       const columnSet = new Set((colRows as any[]).map((r: any) => String(r.COLUMN_NAME)));
-      for (const candidate of ['Present_City', 'City', 'Location', 'Branch']) {
+      for (const candidate of ['Branch', 'Location', 'Present_City', 'City']) {
         if (columnSet.has(candidate)) {
           locationColumn = candidate;
           break;
@@ -178,6 +178,11 @@ export async function GET(req: NextRequest) {
       + `DATE('1970-01-01')`
       + `)`;
 
+    // Resolve Discipline display name. In some DBs `Student_Inquiry.Discipline` stores
+    // a numeric FK to `MST_Deciplin.Id`; in others it may already store the text.
+    const disciplineNameExpr =
+      `COALESCE(NULLIF(TRIM(md.Deciplin), ''), NULLIF(TRIM(si.Discipline), ''))`;
+
     // Build WHERE clauses for Student_Inquiry filters
     const conditions: string[] = [
       '(si.IsDelete = 0 OR si.IsDelete IS NULL)',
@@ -193,7 +198,8 @@ export async function GET(req: NextRequest) {
     }
 
     if (discipline) {
-      conditions.push('si.Discipline = ?');
+      // Filter by resolved discipline name to keep UI values human-readable.
+      conditions.push(`${disciplineNameExpr} = ?`);
       params.push(discipline);
     }
 
@@ -203,8 +209,9 @@ export async function GET(req: NextRequest) {
     }
 
     if (normalizedLocation && locationColumn) {
-      conditions.push(`LOWER(TRIM(si.${locationColumn})) = ?`);
-      params.push(normalizedLocation);
+      // Use substring match so 'pune' matches values like 'Pune Branch'.
+      conditions.push(`LOWER(TRIM(si.${locationColumn})) LIKE ?`);
+      params.push(`%${normalizedLocation}%`);
     }
 
     if (statusId) {
@@ -239,6 +246,7 @@ export async function GET(req: NextRequest) {
          ${inquiryDtAsDate} as sort_date
        FROM Student_Inquiry si
        LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
+       LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline), '') AS UNSIGNED)
        ${whereClause}`
     , params);
 
@@ -278,6 +286,7 @@ export async function GET(req: NextRequest) {
           si.Email,
           ${locationSelect}
           si.Discipline,
+          ${disciplineNameExpr} as DisciplineName,
           si.Inquiry_From,
           si.Inquiry_Type,
           si.OnlineState as OnlineStateRaw,
@@ -287,6 +296,7 @@ export async function GET(req: NextRequest) {
           ld.date as LatestDiscDate
         FROM Student_Inquiry si
         LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
+        LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline), '') AS UNSIGNED)
         LEFT JOIN (
           SELECT Inquiry_id, MAX(id) as max_id
           FROM awt_inquirydiscussion
@@ -305,7 +315,14 @@ export async function GET(req: NextRequest) {
 
     // 5. Filter options (lightweight queries)
     const [disciplinesResult] = await pool.query(
-      "SELECT DISTINCT Discipline FROM Student_Inquiry WHERE Discipline IS NOT NULL AND Discipline != '' AND Discipline != 'NULL' AND Discipline != 'Select' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Discipline"
+      `SELECT DISTINCT ${disciplineNameExpr} as Discipline
+       FROM Student_Inquiry si
+       LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline), '') AS UNSIGNED)
+       WHERE ${disciplineNameExpr} IS NOT NULL
+         AND ${disciplineNameExpr} != 'NULL'
+         AND ${disciplineNameExpr} != 'Select'
+         AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
+       ORDER BY Discipline`
     );
     const [typesResult] = await pool.query(
       "SELECT DISTINCT Inquiry_Type FROM Student_Inquiry WHERE Inquiry_Type IS NOT NULL AND Inquiry_Type != '' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Inquiry_Type"
@@ -321,6 +338,10 @@ export async function GET(req: NextRequest) {
           ? 'Online Inquiry'
           : null;
 
+      const disciplineValue =
+        (r.DisciplineName && String(r.DisciplineName).trim() ? String(r.DisciplineName).trim() : null)
+        || (r.Discipline && String(r.Discipline).trim() ? String(r.Discipline).trim() : null);
+
       return {
         Student_Id: r.Student_Id,
         Student_Name: r.Student_Name,
@@ -329,7 +350,7 @@ export async function GET(req: NextRequest) {
         Present_Mobile: r.Present_Mobile,
         Email: r.Email,
         Location: r.Location && String(r.Location).trim() ? String(r.Location).trim() : null,
-        Discipline: r.Discipline && r.Discipline !== 'NULL' && r.Discipline !== 'Select' ? r.Discipline : null,
+        Discipline: disciplineValue && disciplineValue !== 'NULL' && disciplineValue !== 'Select' ? disciplineValue : null,
         Inquiry_From: r.Inquiry_From,
         Inquiry_Type: inquiryType,
         Status_id: r.Status_id,
