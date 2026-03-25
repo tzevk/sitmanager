@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
-async function ensureCompanyTypeColumn(pool: any) {
+async function ensureCompanyTypeColumn(pool: ReturnType<typeof getPool>) {
   const [rows] = await pool.query<any[]>(
     `SELECT COUNT(*) AS cnt
      FROM INFORMATION_SCHEMA.COLUMNS
