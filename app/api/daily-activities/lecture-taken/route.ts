@@ -4,7 +4,6 @@ import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
 export const dynamic = 'force-dynamic';
-
 function normalizeTextKey(v: unknown) {
   return String(v ?? '').trim().toLowerCase();
 }
@@ -166,6 +165,7 @@ export async function GET(req: NextRequest) {
     // Fetch rows (no per-row subquery)
     const [rowsRaw] = await pool.query(
       `SELECT lt.Take_Id, lt.Lecture_Name, lt.Topic, lt.Take_Dt,
+              lt.Duration, lt.ClassRoom,
               lt.Faculty_Start, lt.Faculty_End,
               lt.Faculty_Id, lt.Course_Id, lt.Batch_Id, lt.Lecture_Id,
               COALESCE(

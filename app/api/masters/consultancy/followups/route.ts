@@ -4,6 +4,21 @@ import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { getSession } from '@/lib/session';
 
+async function ensureFollowupColumn(pool: ReturnType<typeof getPool>, columnName: string, columnType: string) {
+  const [rows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS cnt
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'consultant_followup'
+       AND COLUMN_NAME = ?`,
+    [columnName]
+  );
+  const cnt = rows?.[0]?.cnt ?? 0;
+  if (cnt === 0) {
+    await pool.query(`ALTER TABLE consultant_followup ADD COLUMN ${columnName} ${columnType}`);
+  }
+}
+
 // GET - list follow-ups for a consultancy
 export async function GET(req: NextRequest) {
   try {
@@ -11,7 +26,7 @@ export async function GET(req: NextRequest) {
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
     const { searchParams } = new URL(req.url);
-    const constId = searchParams.get('constId');
+    const constId = searchParams.get('constId') || searchParams.get('Const_Id') || searchParams.get('id');
     const search = searchParams.get('search')?.trim() || '';
 
     if (!constId) return NextResponse.json({ error: 'constId is required' }, { status: 400 });
@@ -36,6 +51,21 @@ export async function GET(req: NextRequest) {
         INDEX idx_const_id (Const_Id)
       )
     `);
+
+    // Backfill columns for older installs where table existed with partial schema.
+    await ensureFollowupColumn(pool, 'Const_Id', 'INT NOT NULL DEFAULT 0');
+    await ensureFollowupColumn(pool, 'Followup_Date', 'DATE NULL');
+    await ensureFollowupColumn(pool, 'Contact_Person', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Designation', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Mobile', 'VARCHAR(50) NULL');
+    await ensureFollowupColumn(pool, 'email', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Purpose', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Course', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Direct_Line', 'VARCHAR(100) NULL');
+    await ensureFollowupColumn(pool, 'Remarks', 'TEXT NULL');
+    await ensureFollowupColumn(pool, 'Added_By', 'INT NULL');
+    await ensureFollowupColumn(pool, 'IsDelete', 'TINYINT DEFAULT 0');
+    await ensureFollowupColumn(pool, 'Date_Added', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
     let where = 'f.Const_Id = ? AND (f.IsDelete = 0 OR f.IsDelete IS NULL)';
     const params: any[] = [constId];
@@ -73,7 +103,8 @@ export async function POST(req: NextRequest) {
     const pool = getPool();
     const body = await req.json();
 
-    const { constId, Followup_Date, Contact_Person, Designation, Mobile, email, Purpose, Course, Direct_Line, Remarks } = body;
+    const constId = body.constId || body.Const_Id || body.id;
+    const { Followup_Date, Contact_Person, Designation, Mobile, email, Purpose, Course, Direct_Line, Remarks } = body;
     if (!constId) return NextResponse.json({ error: 'constId is required' }, { status: 400 });
 
     // Ensure table
@@ -96,6 +127,21 @@ export async function POST(req: NextRequest) {
         INDEX idx_const_id (Const_Id)
       )
     `);
+
+    // Backfill columns for older installs where table existed with partial schema.
+    await ensureFollowupColumn(pool, 'Const_Id', 'INT NOT NULL DEFAULT 0');
+    await ensureFollowupColumn(pool, 'Followup_Date', 'DATE NULL');
+    await ensureFollowupColumn(pool, 'Contact_Person', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Designation', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Mobile', 'VARCHAR(50) NULL');
+    await ensureFollowupColumn(pool, 'email', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Purpose', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Course', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Direct_Line', 'VARCHAR(100) NULL');
+    await ensureFollowupColumn(pool, 'Remarks', 'TEXT NULL');
+    await ensureFollowupColumn(pool, 'Added_By', 'INT NULL');
+    await ensureFollowupColumn(pool, 'IsDelete', 'TINYINT DEFAULT 0');
+    await ensureFollowupColumn(pool, 'Date_Added', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
     await pool.query(
       `INSERT INTO consultant_followup (Const_Id, Followup_Date, Contact_Person, Designation, Mobile, email, Purpose, Course, Direct_Line, Remarks, Added_By)

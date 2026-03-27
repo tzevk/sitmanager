@@ -107,6 +107,8 @@ export default function EditConsultancyPage() {
   /* ---- follow ups ---- */
   const [followups, setFollowups] = useState<FollowUp[]>([]);
   const [followupSearch, setFollowupSearch] = useState('');
+  const [followupsLoading, setFollowupsLoading] = useState(false);
+  const [followupsError, setFollowupsError] = useState('');
   const [followupForm, setFollowupForm] = useState<FollowUp>({
     Followup_Date: today(), Contact_Person: '', Designation: '', Mobile: '', email: '',
     Purpose: '', Course: '', Direct_Line: '', Remarks: '',
@@ -229,13 +231,21 @@ export default function EditConsultancyPage() {
   /* ---- Follow up helpers ---- */
   const fetchFollowups = useCallback(async () => {
     if (!consultancyId) return;
+    setFollowupsLoading(true);
+    setFollowupsError('');
     try {
       const params = new URLSearchParams({ constId: String(consultancyId) });
       if (followupSearch) params.set('search', followupSearch);
       const res = await fetch(`/api/masters/consultancy/followups?${params}`);
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load follow-ups');
       setFollowups(data.rows ?? []);
-    } catch { /* ignore */ }
+    } catch (err: unknown) {
+      setFollowupsError(err instanceof Error ? err.message : 'Failed to load follow-ups');
+      setFollowups([]);
+    } finally {
+      setFollowupsLoading(false);
+    }
   }, [consultancyId, followupSearch]);
 
   useEffect(() => { fetchFollowups(); }, [fetchFollowups]);
@@ -256,6 +266,10 @@ export default function EditConsultancyPage() {
       setStudentsLoading(false);
     }
   }, [consultancyId]);
+
+  useEffect(() => {
+    fetchStudents();
+  }, [fetchStudents]);
 
   useEffect(() => {
     if (activeTab !== 'student') return;
@@ -652,6 +666,12 @@ export default function EditConsultancyPage() {
           {/* =============== FOLLOW UPS TAB =============== */}
           {activeTab === 'followups' && (
             <div className="space-y-4">
+              {followupsError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+                  {followupsError}
+                </div>
+              )}
+
               {/* Add Follow Up Form */}
               <SectionCard title="View Consultancy Info" icon={<svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2 mt-1">
@@ -741,7 +761,9 @@ export default function EditConsultancyPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {followups.length === 0 ? (
+                      {followupsLoading ? (
+                        <tr><td colSpan={11} className="px-4 py-6 text-center text-gray-400 text-xs">Loading…</td></tr>
+                      ) : followups.length === 0 ? (
                         <tr><td colSpan={11} className="px-4 py-6 text-center text-gray-400 text-xs">No follow-ups yet</td></tr>
                       ) : followups.map(f => (
                         <tr key={f.Followup_Id} className="border-b border-gray-100 hover:bg-gray-50">

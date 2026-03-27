@@ -186,11 +186,11 @@ export default function AllotRollNumberPage() {
     const year2 = deriveYear2(batchObj?.Batch_code, sampleAdmissionDate);
     const batchNo = deriveBatchNo(batchObj?.Batch_code, year2, batchId);
 
-    rows.forEach((s, idx) => {
+        rows.forEach((s, idx) => {
       // Keep sequence global across pagination.
       const seq = String((page - 1) * pagination.limit + idx + 1).padStart(4, '0');
       newEdits[s.id] = `${year2}${batchNo}${seq}`;
-    });
+        });
     setRollEdits(newEdits);
     setHasEdits(true);
   };
@@ -229,11 +229,12 @@ export default function AllotRollNumberPage() {
   /*  Export CSV                                                       */
   /* ================================================================ */
   const handleExport = () => {
-    const headers = ['Sr.', 'Student Name', 'Admission Date', 'Phase', 'Roll No'];
+    const headers = ['Sr.', 'Student Code', 'Student Name', 'Admission Date', 'Phase', 'Roll No'];
     const csvRows = [
       headers.join(','),
       ...rows.map((r, i) => [
         i + 1,
+        `${String(r.studentCode ?? '').replace(/"/g, '""')}`,
         `"${formatStudentName(r.studentName).replace(/"/g, '""')}"`,
         `"${formatDate(r.admissionDate)}"`,
         `"${(r.phase || '').replace(/"/g, '""')}"`,
@@ -508,6 +509,7 @@ export default function AllotRollNumberPage() {
               <thead className="sticky top-0 bg-gradient-to-r from-gray-50 to-gray-100/80 z-10">
                 <tr className="text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                   <th className="py-3 px-4 border-b border-gray-200 w-12">Sr.</th>
+                  <th className="py-3 px-4 border-b border-gray-200">Student Code</th>
                   <th className="py-3 px-4 border-b border-gray-200">Student Name</th>
                   <th className="py-3 px-4 border-b border-gray-200">Admission Date</th>
                   <th className="py-3 px-4 border-b border-gray-200">Phase</th>
@@ -517,7 +519,7 @@ export default function AllotRollNumberPage() {
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center">
+                    <td colSpan={6} className="py-12 text-center">
                       <div className="flex justify-center items-center gap-2 text-gray-400">
                         <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                         Loading students...
@@ -526,7 +528,7 @@ export default function AllotRollNumberPage() {
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-gray-400 text-sm">
+                    <td colSpan={6} className="py-12 text-center text-gray-400 text-sm">
                       No students found in this batch
                     </td>
                   </tr>
@@ -535,6 +537,11 @@ export default function AllotRollNumberPage() {
                     <tr key={s.id} className="border-b border-gray-50 hover:bg-blue-50/30 transition-colors">
                       <td className="py-2.5 px-4 text-gray-400 font-mono text-xs">
                         {(page - 1) * pagination.limit + idx + 1}
+                      </td>
+                      <td className="py-2.5 px-4">
+                        <span className="inline-flex items-center px-2 py-0.5 text-xs font-mono font-semibold bg-[#2E3093]/8 text-[#2E3093] rounded">
+                          {s.studentCode}
+                        </span>
                       </td>
                       <td className="py-2.5 px-4 font-semibold text-gray-800">{formatStudentName(s.studentName)}</td>
                       <td className="py-2.5 px-4 text-gray-600 text-xs">{formatDate(s.admissionDate)}</td>
