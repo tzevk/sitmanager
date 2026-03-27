@@ -7,7 +7,7 @@ import { getSession } from '@/lib/session';
 // GET - list follow-ups for a consultancy
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requirePermission(req, 'consultancy.view');
+    const auth = await requirePermission(req, ['consultancy.view', 'consultancy.update', 'consultancy.create']);
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
     const { searchParams } = new URL(req.url);
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
 // POST - add follow-up
 export async function POST(req: NextRequest) {
   try {
-    const auth = await requirePermission(req, 'consultancy.create');
+    const auth = await requirePermission(req, ['consultancy.create', 'consultancy.update']);
     if (auth instanceof NextResponse) return auth;
     const session = await getSession(req);
     const pool = getPool();

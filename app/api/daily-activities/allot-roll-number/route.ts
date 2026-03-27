@@ -191,12 +191,12 @@ export async function PUT(req: NextRequest) {
       .map((r) => r.rollNo?.trim())
       .filter(Boolean);
 
-    // Basic format validation: YY + batchNo + 001 (all digits, ends with 3-digit sequence)
-    // Example: 2501001 (YY=25, batchNo=01, seq=001)
-    const invalid = rollValues.filter((v) => !/^\d{2}\d+\d{3}$/.test(v));
+    // Basic format validation: YY + batchNo + seq (digits only, ends with a sequence)
+    // Backward compatible: accepts legacy 3-digit seq (001) and new 4-digit seq (0001).
+    const invalid = rollValues.filter((v) => !/^\d{2}\d+\d{3,4}$/.test(v));
     if (invalid.length > 0) {
       return NextResponse.json(
-        { error: `Invalid roll number format: ${invalid.slice(0, 10).join(', ')}. Expected YY + batchNo + 001 (digits only, ending in 3 digits).` },
+        { error: `Invalid roll number format: ${invalid.slice(0, 10).join(', ')}. Expected YY + batchNo + 0001 (digits only, ending in 3 or 4 digits).` },
         { status: 400 }
       );
     }

@@ -59,8 +59,10 @@ interface Lecture {
   Lecture_Name: string | null;
   Topic: string | null;
   Take_Dt: string | null;
-  Duration: string | null;
-  ClassRoom: string | null;
+  Faculty_Start?: string | null;
+  Faculty_End?: string | null;
+  Subject?: string | null;
+  Subject_Name?: string | null;
   Faculty_Id: number | null;
   Faculty_Name: string | null;
   Course_Id: number | null;
@@ -113,7 +115,7 @@ function LectureTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
       params.set('limit', '25');
       if (searchValueRef.current) params.set('search', searchValueRef.current);
 
-      const res = await fetch(`/api/daily-activities/lecture-taken?${params}`);
+      const res = await fetch(`/api/daily-activities/lecture-taken?${params}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       const deduped = dedupeLectures(data.rows ?? []);
@@ -169,6 +171,11 @@ function LectureTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
     } catch {
       return d;
     }
+  };
+
+  const formatTime = (t?: string | null) => {
+    const s = (t ?? '').trim();
+    return s ? s : '—';
   };
 
   const totalPages = pagination.totalPages;
@@ -263,14 +270,16 @@ function LectureTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
 
         {/* Table */}
         <div className="overflow-x-auto flex-1">
-          <table className="dashboard-table w-full text-sm min-w-[900px]">
+          <table className="dashboard-table w-full text-sm min-w-[1100px]">
             <thead className="sticky top-0 bg-gradient-to-r from-gray-50 to-gray-100/80 z-10">
               <tr className="text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                <th className="py-3 px-4 border-b border-gray-200 w-16">Id</th>
-                <th className="py-3 px-4 border-b border-gray-200">Topic</th>
+                <th className="py-3 px-4 border-b border-gray-200 w-16 text-center">Sr No</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-28">Date</th>
+                <th className="py-3 px-4 border-b border-gray-200">Lecture Taken Name</th>
                 <th className="py-3 px-4 border-b border-gray-200">Batch Code</th>
                 <th className="py-3 px-4 border-b border-gray-200">Trainer Name</th>
+                <th className="py-3 px-4 border-b border-gray-200 w-32">Trainer In Time</th>
+                <th className="py-3 px-4 border-b border-gray-200 w-32">Trainer Out Time</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-24 text-center">Students</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-28 text-center">Action</th>
               </tr>
@@ -278,7 +287,7 @@ function LectureTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
             <tbody className="divide-y divide-gray-50">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center">
+                  <td colSpan={9} className="py-12 text-center">
                     <div className="flex justify-center items-center gap-2 text-gray-400">
                       <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                       Loading lectures...
@@ -287,7 +296,7 @@ function LectureTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center">
+                  <td colSpan={9} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center">
                         <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
@@ -299,27 +308,25 @@ function LectureTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
                   </td>
                 </tr>
               ) : (
-                rows.map((r) => (
+                rows.map((r, idx) => (
                   <tr key={r.Take_Id} className="border-b border-gray-50 hover:bg-blue-50/30 transition-colors">
-                    <td className="py-2.5 px-4">
-                      <span className="inline-flex items-center px-2 py-0.5 text-xs font-mono font-semibold bg-[#2E3093]/8 text-[#2E3093] rounded">
-                        {r.Take_Id}
+                    <td className="py-2.5 px-4 text-center">
+                      <span className="inline-flex items-center justify-center w-8 h-6 text-xs font-bold bg-[#2E3093]/8 text-[#2E3093] rounded-full">
+                        {(page - 1) * pagination.limit + idx + 1}
                       </span>
-                    </td>
-                    <td className="py-2.5 px-4">
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-gray-800 text-sm leading-tight">
-                          {r.Topic || r.Lecture_Name || '—'}
-                        </span>
-                        {r.Lecture_Name && r.Topic && r.Lecture_Name !== r.Topic && (
-                          <span className="text-[11px] text-gray-400 mt-0.5 truncate max-w-xs">
-                            {r.Lecture_Name}
-                          </span>
-                        )}
-                      </div>
                     </td>
                     <td className="py-2.5 px-4 text-gray-600 text-xs font-medium">
                       {formatDate(r.Take_Dt)}
+                    </td>
+                    <td className="py-2.5 px-4">
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-gray-800 text-sm leading-tight truncate max-w-[420px]" title={(r.Subject_Name || r.Topic || r.Lecture_Name || '').toString()}>
+                          {r.Subject_Name || r.Topic || r.Lecture_Name || '—'}
+                        </span>
+                        <span className="text-[11px] text-gray-400 mt-0.5 truncate max-w-[420px]" title={(r.Subject || '').toString()}>
+                          {r.Subject || '—'}
+                        </span>
+                      </div>
                     </td>
                     <td className="py-2.5 px-4">
                       <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 rounded">
@@ -328,6 +335,12 @@ function LectureTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
                     </td>
                     <td className="py-2.5 px-4 text-gray-700 text-sm">
                       {r.Faculty_Name || '—'}
+                    </td>
+                    <td className="py-2.5 px-4 text-gray-700 text-sm">
+                      {formatTime(r.Faculty_Start)}
+                    </td>
+                    <td className="py-2.5 px-4 text-gray-700 text-sm">
+                      {formatTime(r.Faculty_End)}
                     </td>
                     <td className="py-2.5 px-4 text-center">
                       <span className="inline-flex items-center justify-center w-8 h-6 text-xs font-bold bg-green-50 text-green-700 rounded-full">

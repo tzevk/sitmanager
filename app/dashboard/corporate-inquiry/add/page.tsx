@@ -20,12 +20,7 @@ interface Consultancy {
   EMail?: string | null;
 }
 
-type Tab = 'details' | 'discussion' | 'followup';
-
-type FollowUpItem = {
-  date: string;
-  note: string;
-};
+type Tab = 'details' | 'discussion';
 
 function todayISO(): string {
   // yyyy-mm-dd
@@ -43,6 +38,7 @@ export default function AddCorporateInquiryPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [consultancies, setConsultancies] = useState<Consultancy[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>('details');
+  const [companyMode, setCompanyMode] = useState<'master' | 'manual'>('master');
   const [form, setForm] = useState({
     Idate: todayISO(),
     Course_Id: '',
@@ -61,12 +57,7 @@ export default function AddCorporateInquiryPage() {
     Participants_Experienced: '',
     TrainingLocation: '',
     Discussion: '',
-    InitialFollowUpDate: '',
-    NextFollowUpDate: '',
   });
-
-  const [followUps, setFollowUps] = useState<FollowUpItem[]>([]);
-  const [followUpDraft, setFollowUpDraft] = useState<FollowUpItem>({ date: '', note: '' });
 
   useEffect(() => {
     let alive = true;
@@ -119,14 +110,7 @@ export default function AddCorporateInquiryPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const payload = {
-        ...form,
-        FollowUp: JSON.stringify({
-          initialDate: form.InitialFollowUpDate || null,
-          nextDate: form.NextFollowUpDate || null,
-          items: followUps,
-        }),
-      };
+      const payload = { ...form };
       const res = await fetch('/api/admission-activity/corporate-inquiry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -185,20 +169,13 @@ export default function AddCorporateInquiryPage() {
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
             <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={tabBtn(activeTab === 'details')} onClick={() => setActiveTab('details')}>
-              Inquiry Details
-            </button>
-            <button
-              type="button"
-              className={tabBtn(activeTab === 'discussion')}
-              onClick={() => setActiveTab('discussion')}
-            >
-              Discussion
-            </button>
-            <button type="button" className={tabBtn(activeTab === 'followup')} onClick={() => setActiveTab('followup')}>
-              Follow Up
-            </button>
-          </div>
+              <button type="button" className={tabBtn(activeTab === 'details')} onClick={() => setActiveTab('details')}>
+                Inquiry Details
+              </button>
+              <button type="button" className={tabBtn(activeTab === 'discussion')} onClick={() => setActiveTab('discussion')}>
+                Discussion
+              </button>
+            </div>
           </div>
 
           <div className="p-5">
@@ -228,10 +205,20 @@ export default function AddCorporateInquiryPage() {
                 <select
                   name="Consultancy_Id"
                   value={form.Consultancy_Id}
-                  onChange={(e) => handleCompanyChange(e.target.value)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '__manual__') {
+                      setCompanyMode('manual');
+                      setForm((prev) => ({ ...prev, Consultancy_Id: '', CompanyName: '' }));
+                      return;
+                    }
+                    setCompanyMode('master');
+                    handleCompanyChange(v);
+                  }}
                   className={inputClass}
                 >
                   <option value="">Select Company</option>
+                  <option value="__manual__">Other / Not in list</option>
                   {companyOptions.map((c) => (
                     <option key={c.Const_Id} value={String(c.Const_Id)}>
                       {c.Comp_Name}
@@ -239,6 +226,20 @@ export default function AddCorporateInquiryPage() {
                   ))}
                 </select>
               </div>
+
+              {companyMode === 'manual' && (
+                <div>
+                  <label className={labelClass}>Company Name (Manual)</label>
+                  <input
+                    type="text"
+                    name="CompanyName"
+                    value={form.CompanyName}
+                    onChange={handleChange}
+                    className={inputClass}
+                    placeholder="Enter company name"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className={labelClass}>Company Location</label>
@@ -399,118 +400,6 @@ export default function AddCorporateInquiryPage() {
                   rows={8}
                   placeholder="Enter discussion details"
                 />
-              </>
-            )}
-
-            {activeTab === 'followup' && (
-              <>
-                <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Follow Up</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelClass}>Initial Follow Up Date</label>
-                    <input
-                      type="date"
-                      name="InitialFollowUpDate"
-                      value={form.InitialFollowUpDate}
-                      onChange={handleChange}
-                      className={inputClass}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Next Follow Up Date</label>
-                    <input
-                      type="date"
-                      name="NextFollowUpDate"
-                      value={form.NextFollowUpDate}
-                      onChange={handleChange}
-                      className={inputClass}
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-                    <div className="text-sm font-semibold text-gray-700">Add Inline Follow Up</div>
-                  </div>
-
-                  <div className="p-4 grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
-                    <div className="sm:col-span-1">
-                      <label className={labelClass}>Date</label>
-                      <input
-                        type="date"
-                        value={followUpDraft.date}
-                        onChange={(e) => setFollowUpDraft((p) => ({ ...p, date: e.target.value }))}
-                        className={inputClass}
-                      />
-                    </div>
-                    <div className="sm:col-span-3">
-                      <label className={labelClass}>Remark</label>
-                      <input
-                        type="text"
-                        value={followUpDraft.note}
-                        onChange={(e) => setFollowUpDraft((p) => ({ ...p, note: e.target.value }))}
-                        className={inputClass}
-                        placeholder="Follow up remark"
-                      />
-                    </div>
-                    <div className="sm:col-span-1 flex gap-2">
-                      <button
-                        type="button"
-                        className="flex-1 px-4 py-2 rounded-lg bg-[#2E3093] hover:bg-[#252773] text-white text-sm font-semibold shadow-sm disabled:opacity-50"
-                        disabled={!followUpDraft.date && !followUpDraft.note.trim()}
-                        onClick={() => {
-                          const item: FollowUpItem = {
-                            date: followUpDraft.date,
-                            note: followUpDraft.note.trim(),
-                          };
-                          if (!item.date && !item.note) return;
-                          setFollowUps((prev) => [...prev, item]);
-                          setFollowUpDraft({ date: '', note: '' });
-                        }}
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-gray-100 overflow-x-auto">
-                    <table className="min-w-[600px] w-full text-sm">
-                      <thead className="bg-white">
-                        <tr className="text-[11px] uppercase tracking-wider text-gray-400 border-b border-gray-100">
-                          <th className="text-left py-3 px-4 font-semibold">#</th>
-                          <th className="text-left py-3 px-4 font-semibold">Date</th>
-                          <th className="text-left py-3 px-4 font-semibold">Remark</th>
-                          <th className="text-left py-3 px-4 font-semibold w-[120px]">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {followUps.map((fu, idx) => (
-                          <tr key={`${fu.date}-${idx}`} className="border-b border-gray-50 hover:bg-gray-50/50">
-                            <td className="py-3 px-4 text-gray-500">{idx + 1}</td>
-                            <td className="py-3 px-4 text-gray-800">{fu.date || '—'}</td>
-                            <td className="py-3 px-4 text-gray-800">{fu.note || '—'}</td>
-                            <td className="py-3 px-4">
-                              <button
-                                type="button"
-                                className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-sm font-semibold text-gray-700"
-                                onClick={() => setFollowUps((prev) => prev.filter((_, i) => i !== idx))}
-                              >
-                                Remove
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                        {followUps.length === 0 && (
-                          <tr>
-                            <td className="py-4 px-4 text-gray-500" colSpan={4}>
-                              No follow ups added.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
               </>
             )}
           </div>

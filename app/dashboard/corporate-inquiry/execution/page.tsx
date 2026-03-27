@@ -129,15 +129,13 @@ export default function TrainingExecutionIndexPage() {
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="dashboard-table w-full text-sm min-w-[900px]">
+          <table className="dashboard-table w-full text-sm min-w-[760px]">
             <thead>
               <tr className="bg-gray-50 text-gray-600 text-xs">
                 <th className="text-left p-3">ID</th>
                 <th className="text-left p-3">Company</th>
                 <th className="text-left p-3">Coordinator</th>
-                <th className="text-left p-3">Training No.</th>
                 <th className="text-left p-3">Trainer</th>
-                <th className="text-left p-3">Training Date</th>
                 <th className="text-left p-3">Students</th>
                 <th className="text-left p-3">Actions</th>
               </tr>
@@ -145,7 +143,7 @@ export default function TrainingExecutionIndexPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td className="p-6 text-center text-gray-400" colSpan={8}>
+                  <td className="p-6 text-center text-gray-400" colSpan={6}>
                     No records found
                   </td>
                 </tr>
@@ -155,9 +153,7 @@ export default function TrainingExecutionIndexPage() {
                     <td className="p-3 text-gray-700">{r.Id}</td>
                     <td className="p-3 text-gray-700">{r.CompanyName || '-'}</td>
                     <td className="p-3 text-gray-700">{r.FullName || '-'}</td>
-                    <td className="p-3 text-gray-700">{r.TrainingNumber || '-'}</td>
                     <td className="p-3 text-gray-700">{r.TrainerName || '-'}</td>
-                    <td className="p-3 text-gray-700">{toDate(r.TrainingDate)}</td>
                     <td className="p-3 text-gray-700">{r.TotalStudents ?? '-'}</td>
                     <td className="p-3">
                       <div className="flex gap-2">

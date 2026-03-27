@@ -23,6 +23,17 @@ type Inquiry = {
   Course_Id?: string | null;
   Place?: string | null;
 
+  Idate?: string | null;
+  CompanyType?: string | null;
+  CompanyAuthority?: string | null;
+  Designation?: string | null;
+  TrainingMode?: string | null;
+  Participants_Fresher?: number | string | null;
+  Participants_Experienced?: number | string | null;
+  TrainingLocation?: string | null;
+  business?: string | null;
+  Remark?: string | null;
+
   InquiryStatus?: string | null;
 
   TrainingNumber?: string | null;
@@ -34,6 +45,9 @@ type Inquiry = {
 
   DiscussionOutcome?: 'Awarded' | 'Regretted' | 'On Hold' | null;
 
+  Discussion?: string | null;
+  FollowUp?: string | null;
+
   ConfirmDate?: string | null;
   PerformanceEvaluation_PreTest?: string | null;
   PerformanceEvaluation_Assessment?: string | null;
@@ -42,6 +56,19 @@ type Inquiry = {
   PerformanceEvaluation_Attendance?: string | null;
   TrainingFeedbackObtained?: string | null;
   SitCertIssuedOnPerformanceOnAttendance?: string | null;
+};
+
+type MeetingDetailsItem = {
+  meetingDate: string;
+  attendeeClient: string;
+  attendeeSIT: string;
+  meetingAgenda: string;
+};
+
+type FollowUpItem = {
+  date: string;
+  nextDate?: string;
+  remarks: string;
 };
 
 type EvalKey = 'pre_test' | 'assessment' | 'final_test' | 'training_material' | 'attendance';
@@ -81,6 +108,75 @@ const defaultEval = (): Record<EvalKey, EvalItem> => ({
   attendance: { completed: false, remarks: '' },
 });
 
+function splitList(value: string | null | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(/\r?\n|,/g)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function parseFollowUpJson(raw: string | null | undefined): { meetingDetails: MeetingDetailsItem[]; followUps: FollowUpItem[] } {
+  if (!raw || !raw.trim()) return { meetingDetails: [], followUps: [] };
+  let obj: any = null;
+  try {
+    obj = JSON.parse(raw);
+  } catch {
+    return { meetingDetails: [], followUps: [] };
+  }
+
+  const meetingDetailsRaw = obj && Array.isArray(obj.meetingDetails) ? obj.meetingDetails : [];
+  let meetingDetails: MeetingDetailsItem[] = meetingDetailsRaw
+    .map((rec: any) => ({
+      meetingDate: typeof rec?.meetingDate === 'string' ? rec.meetingDate : '',
+      attendeeClient: typeof rec?.attendeeClient === 'string' ? rec.attendeeClient : '',
+      attendeeSIT:
+        typeof rec?.attendeeSIT === 'string'
+          ? rec.attendeeSIT
+          : typeof rec?.attendeeSit === 'string'
+            ? rec.attendeeSit
+            : '',
+      meetingAgenda: typeof rec?.meetingAgenda === 'string' ? rec.meetingAgenda : '',
+    }))
+    .filter((x: MeetingDetailsItem) => Boolean(x.meetingDate || x.attendeeClient || x.attendeeSIT || x.meetingAgenda));
+
+  if (
+    meetingDetails.length === 0 &&
+    (typeof obj?.meetingDate === 'string' || typeof obj?.attendeeClient === 'string' || typeof obj?.attendeeSIT === 'string' || typeof obj?.meetingAgenda === 'string')
+  ) {
+    meetingDetails = [
+      {
+        meetingDate: typeof obj?.meetingDate === 'string' ? obj.meetingDate : '',
+        attendeeClient: typeof obj?.attendeeClient === 'string' ? obj.attendeeClient : '',
+        attendeeSIT:
+          typeof obj?.attendeeSIT === 'string'
+            ? obj.attendeeSIT
+            : typeof obj?.attendeeSit === 'string'
+              ? obj.attendeeSit
+              : '',
+        meetingAgenda: typeof obj?.meetingAgenda === 'string' ? obj.meetingAgenda : '',
+      },
+    ].filter((x) => Boolean(x.meetingDate || x.attendeeClient || x.attendeeSIT || x.meetingAgenda));
+  }
+
+  const followUpsRaw =
+    obj && Array.isArray(obj.followUps)
+      ? obj.followUps
+      : obj && Array.isArray(obj.meetings)
+        ? obj.meetings
+        : [];
+
+  const followUps: FollowUpItem[] = followUpsRaw
+    .map((rec: any) => ({
+      date: typeof rec?.date === 'string' ? rec.date : '',
+      nextDate: typeof rec?.nextDate === 'string' ? rec.nextDate : undefined,
+      remarks: typeof rec?.remarks === 'string' ? rec.remarks : '',
+    }))
+    .filter((x: FollowUpItem) => Boolean(x.date || x.nextDate || x.remarks));
+
+  return { meetingDetails, followUps };
+}
+
 export default function TrainingExecutionPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
@@ -95,6 +191,8 @@ export default function TrainingExecutionPage() {
   const [success, setSuccess] = useState('');
 
   const [inquiry, setInquiry] = useState<Inquiry | null>(null);
+  const [meetingDetails, setMeetingDetails] = useState<MeetingDetailsItem[]>([]);
+  const [followUps, setFollowUps] = useState<FollowUpItem[]>([]);
 
   const [executionForm, setExecutionForm] = useState({
     TrainingNumber: '',
@@ -119,6 +217,10 @@ export default function TrainingExecutionPage() {
         if (!res.ok) throw new Error(data.error || 'Failed to load inquiry');
         const r = data.inquiry as Inquiry;
         setInquiry(r);
+
+        const parsedFU = parseFollowUpJson(r.FollowUp);
+        setMeetingDetails(parsedFU.meetingDetails);
+        setFollowUps(parsedFU.followUps);
 
         setExecutionForm({
           TrainingNumber: r.TrainingNumber || '',
@@ -262,6 +364,10 @@ export default function TrainingExecutionPage() {
           {activeTab === 'inquiry' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
               <div>
+                <label className={labelCls}>Enquiry Date</label>
+                <input className={inputCls} value={toDateInput(inquiry?.Idate) || ''} disabled />
+              </div>
+              <div>
                 <label className={labelCls}>Company</label>
                 <input className={inputCls} value={inquiry?.CompanyName || ''} disabled />
               </div>
@@ -274,6 +380,22 @@ export default function TrainingExecutionPage() {
                 <input className={inputCls} value={inquiry?.Course_Id || ''} disabled />
               </div>
               <div>
+                <label className={labelCls}>Company Location</label>
+                <input className={inputCls} value={inquiry?.Place || ''} disabled />
+              </div>
+              <div>
+                <label className={labelCls}>Company Type</label>
+                <input className={inputCls} value={inquiry?.CompanyType || ''} disabled />
+              </div>
+              <div>
+                <label className={labelCls}>Company Authority</label>
+                <input className={inputCls} value={inquiry?.CompanyAuthority || ''} disabled />
+              </div>
+              <div>
+                <label className={labelCls}>Designation</label>
+                <input className={inputCls} value={inquiry?.Designation || ''} disabled />
+              </div>
+              <div>
                 <label className={labelCls}>Email</label>
                 <input className={inputCls} value={inquiry?.Email || ''} disabled />
               </div>
@@ -281,19 +403,38 @@ export default function TrainingExecutionPage() {
                 <label className={labelCls}>Phone</label>
                 <input className={inputCls} value={inquiry?.Mobile || inquiry?.Phone || ''} disabled />
               </div>
+
               <div>
-                <label className={labelCls}>Company Location</label>
-                <input className={inputCls} value={inquiry?.Place || ''} disabled />
+                <label className={labelCls}>Training Mode</label>
+                <input className={inputCls} value={inquiry?.TrainingMode || ''} disabled />
+              </div>
+              <div>
+                <label className={labelCls}>Participants (Fresher)</label>
+                <input className={inputCls} value={inquiry?.Participants_Fresher === null || inquiry?.Participants_Fresher === undefined ? '' : String(inquiry.Participants_Fresher)} disabled />
+              </div>
+              <div>
+                <label className={labelCls}>Participants (Experienced)</label>
+                <input className={inputCls} value={inquiry?.Participants_Experienced === null || inquiry?.Participants_Experienced === undefined ? '' : String(inquiry.Participants_Experienced)} disabled />
+              </div>
+              <div>
+                <label className={labelCls}>Training Location</label>
+                <input className={inputCls} value={inquiry?.TrainingLocation || ''} disabled />
+              </div>
+
+              <div className="md:col-span-3">
+                <label className={labelCls}>Disciplines</label>
+                <textarea className={textareaCls} rows={3} value={(inquiry?.business || '').trim()} disabled />
+              </div>
+              <div className="md:col-span-3">
+                <label className={labelCls}>Remarks</label>
+                <textarea className={textareaCls} rows={3} value={(inquiry?.Remark || '').trim()} disabled />
               </div>
             </div>
           )}
 
           {activeTab === 'discussion' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
-              <div>
-                <label className={labelCls}>Training Number</label>
-                <input className={inputCls} value={inquiry?.TrainingNumber || ''} disabled />
-              </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
               <div>
                 <label className={labelCls}>Trainer Name</label>
                 <input className={inputCls} value={inquiry?.TrainerName || ''} disabled />
@@ -314,16 +455,108 @@ export default function TrainingExecutionPage() {
                 <label className={labelCls}>Discussion Outcome</label>
                 <input className={inputCls} value={inquiry?.DiscussionOutcome || ''} disabled />
               </div>
+              </div>
+
+              <div>
+                <label className={labelCls}>Minutes of Meeting</label>
+                <textarea className={textareaCls} rows={5} value={(inquiry?.Discussion || '').trim()} disabled />
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+                <table className="min-w-full text-xs">
+                  <thead className="bg-gray-50 text-gray-700">
+                    <tr className="border-b border-gray-100">
+                      <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Meeting Date</th>
+                      <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Attendee (Client)</th>
+                      <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Attendee (SIT)</th>
+                      <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Meeting Agenda</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {meetingDetails.length === 0 ? (
+                      <tr>
+                        <td className="px-3 py-3 text-gray-500" colSpan={4}>
+                          No meeting details
+                        </td>
+                      </tr>
+                    ) : (
+                      meetingDetails.map((m, idx) => (
+                        <tr
+                          key={`${m.meetingDate}-${idx}`}
+                          className={`hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                        >
+                          <td className="px-3 py-2 text-gray-900">{toDateInput(m.meetingDate) || '—'}</td>
+                          <td className="px-3 py-2 text-gray-900">
+                            {splitList(m.attendeeClient).length === 0 ? (
+                              <span className="text-gray-400">—</span>
+                            ) : (
+                              <ul className="list-disc pl-4 space-y-0.5">
+                                {splitList(m.attendeeClient).map((x, i) => (
+                                  <li key={i} className="text-gray-900">
+                                    {x}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-gray-900">
+                            {splitList(m.attendeeSIT).length === 0 ? (
+                              <span className="text-gray-400">—</span>
+                            ) : (
+                              <ul className="list-disc pl-4 space-y-0.5">
+                                {splitList(m.attendeeSIT).map((x, i) => (
+                                  <li key={i} className="text-gray-900">
+                                    {x}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-gray-900 whitespace-pre-wrap">{(m.meetingAgenda || '').trim() || '—'}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+                <table className="min-w-full text-xs">
+                  <thead className="bg-gray-50 text-gray-700">
+                    <tr className="border-b border-gray-100">
+                      <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Follow Up Date</th>
+                      <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Next Follow Up Date</th>
+                      <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {followUps.length === 0 ? (
+                      <tr>
+                        <td className="px-3 py-3 text-gray-500" colSpan={3}>
+                          No follow ups
+                        </td>
+                      </tr>
+                    ) : (
+                      followUps.map((f, idx) => (
+                        <tr
+                          key={`${f.date}-${idx}`}
+                          className={`hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                        >
+                          <td className="px-3 py-2 text-gray-900">{toDateInput(f.date) || '—'}</td>
+                          <td className="px-3 py-2 text-gray-900">{toDateInput(f.nextDate) || '—'}</td>
+                          <td className="px-3 py-2 text-gray-900 whitespace-pre-wrap">{(f.remarks || '').trim() || '—'}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
           {activeTab === 'execution' && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
-                <div>
-                  <label className={labelCls}>Training Number</label>
-                  <input className={inputCls} value={executionForm.TrainingNumber} onChange={(e) => setExecutionForm((f) => ({ ...f, TrainingNumber: e.target.value }))} />
-                </div>
                 <div>
                   <label className={labelCls}>Trainer Name</label>
                   <input className={inputCls} value={executionForm.TrainerName} onChange={(e) => setExecutionForm((f) => ({ ...f, TrainerName: e.target.value }))} />

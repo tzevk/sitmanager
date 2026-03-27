@@ -70,7 +70,8 @@ export async function GET(
           class_room,
           documents,
           unit_test,
-          publish
+          publish,
+          lecturecontent
         FROM batch_slecture_master
         WHERE batch_id = ? AND (deleted IS NULL OR deleted = '0')
         ORDER BY lecture_no ASC, date ASC
@@ -111,7 +112,8 @@ export async function GET(
             class_room,
             documents,
             unit_test,
-            publish
+            publish,
+            lecturecontent
           FROM batch_slecture_master
           WHERE batch_id = ? AND (deleted IS NULL OR deleted = '0')
           ORDER BY lecture_no ASC, date ASC
@@ -131,9 +133,9 @@ export async function GET(
           const [insertResult] = await pool.query(`
             INSERT INTO batch_slecture_master 
             (batch_id, lecture_no, subject, subject_topic, date, starttime, endtime, 
-             assignment, assignment_date, faculty_name, class_room, documents, unit_test, publish, 
-             deleted, created_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
+             assignment, assignment_date, faculty_name, class_room, documents, unit_test, publish,
+             lecturecontent, deleted, created_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
           `, [
             batchId,
             lec.lecture_no,
@@ -149,6 +151,7 @@ export async function GET(
             lec.documents,
             lec.unit_test,
             lec.publish || 'No',
+            lec.lecturecontent,
           ]);
           
           lectures.push({
@@ -166,6 +169,7 @@ export async function GET(
             documents: lec.documents,
             unit_test: lec.unit_test,
             publish: lec.publish,
+            lecturecontent: lec.lecturecontent,
           } as RowDataPacket);
         }
       }
@@ -199,9 +203,9 @@ export async function POST(
     const [result] = await pool.query(`
       INSERT INTO batch_slecture_master 
       (batch_id, lecture_no, subject, subject_topic, date, starttime, endtime, 
-       assignment, assignment_date, faculty_name, class_room, documents, unit_test, publish, 
+       assignment, assignment_date, faculty_name, class_room, documents, unit_test, publish, lecturecontent,
        deleted, created_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
     `, [
       batchId,
       body.lecture_no || null,
@@ -217,6 +221,7 @@ export async function POST(
       body.documents || null,
       body.unit_test || null,
       body.publish || 'No',
+      body.lecturecontent || null,
     ]);
 
     return NextResponse.json({ success: true, insertId: (result as { insertId: number }).insertId });
@@ -251,7 +256,8 @@ export async function PUT(request: NextRequest) {
         class_room = ?,
         documents = ?,
         unit_test = ?,
-        publish = ?
+        publish = ?,
+        lecturecontent = ?
       WHERE id = ?
     `, [
       data.lecture_no || null,
@@ -267,6 +273,7 @@ export async function PUT(request: NextRequest) {
       data.documents || null,
       data.unit_test || null,
       data.publish || 'No',
+      data.lecturecontent || null,
       id,
     ]);
 

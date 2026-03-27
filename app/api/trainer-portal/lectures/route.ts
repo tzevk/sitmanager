@@ -40,15 +40,22 @@ export async function GET(req: NextRequest) {
       params.push(`${month}%`);
     }
 
-    const [lectures] = await pool.query<any[]>(
+    const [lecturesRaw] = await pool.query<any[]>(
       `SELECT id, lecture_no, subject_topic, subject, faculty_name, date,
               starttime, endtime, duration, class_room, assignment, unit_test,
-              module, planned, status, marks
+              module, planned, status, marks,
+              lecturecontent
        FROM batch_lecture_master
        WHERE batch_id = ? AND (deleted = '0' OR deleted IS NULL)${dateFilter}
        ORDER BY date ASC, lecture_no ASC`,
       params
     );
+
+    // Normalize lecture content field (DB may return `lecturecontent` or `lecture_content`)
+    const lectures = (lecturesRaw || []).map((l: any) => ({
+      ...l,
+      lecturecontent: l.lecturecontent ?? l.lecture_content ?? null,
+    }));
 
     return NextResponse.json({ lectures });
   } catch (err: unknown) {

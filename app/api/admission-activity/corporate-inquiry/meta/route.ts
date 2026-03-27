@@ -26,7 +26,6 @@ export async function GET(req: NextRequest) {
       FROM consultant_mst
       WHERE (IsDelete = 0 OR IsDelete IS NULL)
       ORDER BY Comp_Name ASC
-      LIMIT 500
     `);
 
     return NextResponse.json({ courses, consultancies });

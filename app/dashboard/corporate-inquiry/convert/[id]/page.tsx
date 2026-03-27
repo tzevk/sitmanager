@@ -32,8 +32,6 @@ type Inquiry = {
 
   Discussion?: string | null;
   FollowUp?: string | null;
-  InitialFollowUpDate?: string | null;
-  NextFollowUpDate?: string | null;
 
   TrainingNumber?: string | null;
   TrainingDate?: string | null;
@@ -45,14 +43,25 @@ type Inquiry = {
   DiscussionOutcome?: 'Awarded' | 'Regretted' | 'On Hold' | null;
 };
 
-type FollowUpItem = {
+type MeetingItem = {
   date: string;
+  nextDate?: string;
   remark: string;
 };
 
-type MeetingItem = {
-  date: string;
-  remark: string;
+type FollowUpData = {
+  meetingDate: string;
+  attendeeClient: string;
+  attendeeSIT: string;
+  meetingAgenda: string;
+  meetings: MeetingItem[];
+};
+
+type MeetingDetailsItem = {
+  meetingDate: string;
+  attendeeClient: string;
+  attendeeSIT: string;
+  meetingAgenda: string;
 };
 
 const toDateInput = (v: string | null | undefined) => {
@@ -64,52 +73,87 @@ const toDateInput = (v: string | null | undefined) => {
   }
 };
 
-function parseFollowUpJson(raw: string | null | undefined): {
-  initialDate: string;
-  nextDate: string;
-  meetings: MeetingItem[];
-  items: FollowUpItem[];
-} {
-  if (!raw) return { initialDate: '', nextDate: '', meetings: [], items: [] };
+const splitList = (raw: string | null | undefined) => {
+  const s = String(raw ?? '');
+  return s
+    .split(/\r?\n|,/g)
+    .map((x) => x.trim())
+    .filter(Boolean);
+};
+
+function parseFollowUpJson(raw: string | null | undefined): FollowUpData {
+  if (!raw)
+    return {
+      meetingDate: '',
+      attendeeClient: '',
+      attendeeSIT: '',
+      meetingAgenda: '',
+      meetings: [],
+    };
   try {
     const parsed: unknown = JSON.parse(raw);
     const parsedObj = typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : null;
 
-    const rawItems = parsedObj && Array.isArray(parsedObj.items) ? parsedObj.items : [];
-    const items: FollowUpItem[] = rawItems
-      .map((it: unknown) => {
-        const obj = typeof it === 'object' && it !== null ? (it as Record<string, unknown>) : {};
-        return {
-          date: typeof obj.date === 'string' ? obj.date : '',
-          remark: typeof obj.remark === 'string' ? obj.remark : '',
-        };
-      })
-      .filter((it) => Boolean(it.date || it.remark));
-
-    const rawMeetings = parsedObj && Array.isArray(parsedObj.meetings) ? parsedObj.meetings : [];
+    const rawMeetings =
+      parsedObj && Array.isArray(parsedObj.meetings)
+        ? parsedObj.meetings
+        : parsedObj && Array.isArray(parsedObj.followUps)
+          ? parsedObj.followUps
+          : [];
     let meetings: MeetingItem[] = rawMeetings
       .map((it: unknown) => {
         const obj = typeof it === 'object' && it !== null ? (it as Record<string, unknown>) : {};
         return {
           date: typeof obj.date === 'string' ? obj.date : '',
+          nextDate:
+            typeof obj.nextDate === 'string'
+              ? obj.nextDate
+              : typeof obj.nextFollowUpDate === 'string'
+                ? obj.nextFollowUpDate
+                : typeof obj.next_follow_up_date === 'string'
+                  ? obj.next_follow_up_date
+                  : '',
           remark: typeof obj.remark === 'string' ? obj.remark : '',
         };
       })
-      .filter((it) => Boolean(it.date || it.remark));
+      .filter((it) => Boolean(it.date || it.nextDate || it.remark));
 
     const initialDate = parsedObj && typeof parsedObj.initialDate === 'string' ? parsedObj.initialDate : '';
+    const meetingDate =
+      parsedObj && typeof parsedObj.meetingDate === 'string'
+        ? parsedObj.meetingDate
+        : initialDate;
+
+    const attendeeClient = parsedObj && typeof parsedObj.attendeeClient === 'string' ? parsedObj.attendeeClient : '';
+    const attendeeSIT =
+      parsedObj && (typeof parsedObj.attendeeSIT === 'string' || typeof parsedObj.attendeeSit === 'string')
+        ? String((parsedObj.attendeeSIT ?? parsedObj.attendeeSit) as string)
+        : '';
+    const meetingAgenda =
+      parsedObj && (typeof parsedObj.meetingAgenda === 'string' || typeof parsedObj.agenda === 'string')
+        ? String((parsedObj.meetingAgenda ?? parsedObj.agenda) as string)
+        : '';
+
+    // Legacy safety: some older data used initialDate as a meeting marker.
     if (initialDate && !meetings.some((m) => toDateInput(m.date) === toDateInput(initialDate))) {
       meetings = [{ date: initialDate, remark: '' }, ...meetings];
     }
 
     return {
-      initialDate,
-      nextDate: parsedObj && typeof parsedObj.nextDate === 'string' ? parsedObj.nextDate : '',
+      meetingDate: toDateInput(meetingDate),
+      attendeeClient,
+      attendeeSIT,
+      meetingAgenda,
       meetings,
-      items,
     };
   } catch {
-    return { initialDate: '', nextDate: '', meetings: [], items: [] };
+    return {
+      meetingDate: '',
+      attendeeClient: '',
+      attendeeSIT: '',
+      meetingAgenda: '',
+      meetings: [],
+    };
   }
 }
 
@@ -136,13 +180,20 @@ export default function ConvertInquiryPage() {
     DiscussionOutcome: '' as '' | 'Awarded' | 'Regretted' | 'On Hold',
   });
 
-  const [activeTab, setActiveTab] = useState<'meeting' | 'followups' | 'discussion'>('meeting');
-  const [nextFollowUpDate, setNextFollowUpDate] = useState('');
-  const [discussionText, setDiscussionText] = useState('');
-  const [followUps, setFollowUps] = useState<FollowUpItem[]>([]);
-  const [followUpDraft, setFollowUpDraft] = useState<FollowUpItem>({ date: '', remark: '' });
-  const [meetings, setMeetings] = useState<MeetingItem[]>([]);
-  const [meetingDraft, setMeetingDraft] = useState<MeetingItem>({ date: '', remark: '' });
+  const [activeTab, setActiveTab] = useState<'inquiry' | 'meeting' | 'discussion' | 'followups'>('inquiry');
+  const [minutesOfMeeting, setMinutesOfMeeting] = useState('');
+
+  const [meetingDetails, setMeetingDetails] = useState<MeetingDetailsItem[]>([]);
+  const [meetingDraft, setMeetingDraft] = useState<MeetingDetailsItem>({
+    meetingDate: '',
+    attendeeClient: '',
+    attendeeSIT: '',
+    meetingAgenda: '',
+  });
+
+  const [followUps, setFollowUps] = useState<MeetingItem[]>([]);
+  const [followUpDraft, setFollowUpDraft] = useState<MeetingItem>({ date: '', nextDate: '', remark: '' });
+  const [editingFollowUpIndex, setEditingFollowUpIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!inquiryId) return;
@@ -157,10 +208,60 @@ export default function ConvertInquiryPage() {
         setInquiry(r);
 
         const parsedFollowUp = parseFollowUpJson(r.FollowUp);
-        setNextFollowUpDate(toDateInput(r.NextFollowUpDate) || toDateInput(parsedFollowUp.nextDate));
-        setFollowUps(parsedFollowUp.items);
-        setMeetings(parsedFollowUp.meetings);
-        setDiscussionText(typeof r.Discussion === 'string' ? r.Discussion : '');
+        setFollowUps(parsedFollowUp.meetings);
+
+        // Meeting details: support both the new list format and legacy single-row keys.
+        let loadedMeetingDetails: MeetingDetailsItem[] = [];
+        try {
+          const parsed: unknown = r.FollowUp ? JSON.parse(r.FollowUp) : null;
+          const obj = typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : null;
+          const rawMeetingDetails = obj && Array.isArray(obj.meetingDetails) ? obj.meetingDetails : [];
+          loadedMeetingDetails = rawMeetingDetails
+            .map((it: unknown) => {
+              const rec = typeof it === 'object' && it !== null ? (it as Record<string, unknown>) : {};
+              const md = typeof rec.meetingDate === 'string' ? toDateInput(rec.meetingDate) : '';
+              return {
+                meetingDate: md,
+                attendeeClient: typeof rec.attendeeClient === 'string' ? rec.attendeeClient : '',
+                attendeeSIT:
+                  typeof rec.attendeeSIT === 'string'
+                    ? rec.attendeeSIT
+                    : typeof rec.attendeeSit === 'string'
+                      ? (rec.attendeeSit as string)
+                      : '',
+                meetingAgenda:
+                  typeof rec.meetingAgenda === 'string'
+                    ? rec.meetingAgenda
+                    : typeof rec.agenda === 'string'
+                      ? (rec.agenda as string)
+                      : '',
+              };
+            })
+            .filter((x) => Boolean(x.meetingDate || x.attendeeClient || x.attendeeSIT || x.meetingAgenda));
+        } catch {
+          // ignore
+        }
+
+        if (loadedMeetingDetails.length === 0 && (parsedFollowUp.meetingDate || parsedFollowUp.attendeeClient || parsedFollowUp.attendeeSIT || parsedFollowUp.meetingAgenda)) {
+          loadedMeetingDetails = [
+            {
+              meetingDate: parsedFollowUp.meetingDate,
+              attendeeClient: parsedFollowUp.attendeeClient,
+              attendeeSIT: parsedFollowUp.attendeeSIT,
+              meetingAgenda: parsedFollowUp.meetingAgenda,
+            },
+          ];
+        }
+        setMeetingDetails(loadedMeetingDetails);
+        setMeetingDraft({
+          meetingDate: '',
+          attendeeClient: '',
+          attendeeSIT: '',
+          meetingAgenda: '',
+        });
+        setMinutesOfMeeting(typeof r.Discussion === 'string' ? r.Discussion : '');
+        setFollowUpDraft({ date: '', nextDate: '', remark: '' });
+        setEditingFollowUpIndex(null);
 
         setForm({
           TrainingNumber: r.TrainingNumber || '',
@@ -179,17 +280,18 @@ export default function ConvertInquiryPage() {
     })();
   }, [inquiryId]);
 
-  const latestMeetingDate = useMemo(() => {
-    if (meetings.length === 0) return '';
-    return meetings[meetings.length - 1]?.date || '';
-  }, [meetings]);
-
   const buildFollowUpJson = () =>
     JSON.stringify({
-      initialDate: latestMeetingDate || '',
-      nextDate: nextFollowUpDate || '',
-      meetings,
-      items: followUps,
+      // Keep these keys for backward compatibility with existing readers.
+      initialDate: (meetingDetails[meetingDetails.length - 1]?.meetingDate || '') as string,
+      meetingDate: (meetingDetails[meetingDetails.length - 1]?.meetingDate || '') as string,
+      attendeeClient: (meetingDetails[meetingDetails.length - 1]?.attendeeClient || '') as string,
+      attendeeSIT: (meetingDetails[meetingDetails.length - 1]?.attendeeSIT || '') as string,
+      meetingAgenda: (meetingDetails[meetingDetails.length - 1]?.meetingAgenda || '') as string,
+      meetingDetails,
+      meetings: followUps,
+      // Optional alias to make the intent obvious for future code.
+      followUps: followUps,
     });
 
   const handleSave = async () => {
@@ -212,9 +314,7 @@ export default function ConvertInquiryPage() {
       TrainingCoordinator: form.TrainingCoordinator,
       DiscussionOutcome: form.DiscussionOutcome || null,
 
-      Discussion: discussionText,
-      InitialFollowUpDate: latestMeetingDate,
-      NextFollowUpDate: nextFollowUpDate,
+      Discussion: minutesOfMeeting,
       FollowUp: buildFollowUpJson(),
     };
 
@@ -255,9 +355,7 @@ export default function ConvertInquiryPage() {
       TrainingCoordinator: form.TrainingCoordinator,
       DiscussionOutcome: form.DiscussionOutcome || null,
 
-      Discussion: discussionText,
-      InitialFollowUpDate: latestMeetingDate,
-      NextFollowUpDate: nextFollowUpDate,
+      Discussion: minutesOfMeeting,
       FollowUp: buildFollowUpJson(),
     };
 
@@ -317,98 +415,19 @@ export default function ConvertInquiryPage() {
         <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-sm text-green-700">{success}</div>
       )}
 
-      {/* Inquiry Information */}
+      {/* Tabbed: Inquiry Information / Meeting Details */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
-          <div className="text-sm font-bold text-gray-800">Inquiry Information</div>
-          <div className="text-xs text-gray-500">All details from the inquiry</div>
-        </div>
-        <div className="p-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <div className={labelCls}>Enquiry Date</div>
-              <div className="text-sm text-gray-800">{toDateInput(inquiry?.Idate) || '—'}</div>
-            </div>
-            <div>
-              <div className={labelCls}>Training Programme</div>
-              <div className="text-sm text-gray-800">{inquiry?.Course_Id || '—'}</div>
-            </div>
-            <div>
-              <div className={labelCls}>Company</div>
-              <div className="text-sm text-gray-800">{inquiry?.CompanyName || '—'}</div>
-            </div>
-
-            <div>
-              <div className={labelCls}>Company Location</div>
-              <div className="text-sm text-gray-800">{inquiry?.Place || '—'}</div>
-            </div>
-            <div>
-              <div className={labelCls}>Company Type</div>
-              <div className="text-sm text-gray-800">{inquiry?.CompanyType || '—'}</div>
-            </div>
-            <div>
-              <div className={labelCls}>Company Authority</div>
-              <div className="text-sm text-gray-800">{inquiry?.CompanyAuthority || '—'}</div>
-            </div>
-
-            <div>
-              <div className={labelCls}>Coordinator</div>
-              <div className="text-sm text-gray-800">{inquiry?.FullName || '—'}</div>
-            </div>
-            <div>
-              <div className={labelCls}>Designation</div>
-              <div className="text-sm text-gray-800">{inquiry?.Designation || '—'}</div>
-            </div>
-            <div>
-              <div className={labelCls}>Mobile / Phone</div>
-              <div className="text-sm text-gray-800">{inquiry?.Mobile || inquiry?.Phone || '—'}</div>
-            </div>
-            <div>
-              <div className={labelCls}>Email</div>
-              <div className="text-sm text-gray-800">{inquiry?.Email || '—'}</div>
-            </div>
-
-            <div>
-              <div className={labelCls}>Training Mode</div>
-              <div className="text-sm text-gray-800">{inquiry?.TrainingMode || '—'}</div>
-            </div>
-            <div>
-              <div className={labelCls}>Participants (Fresher)</div>
-              <div className="text-sm text-gray-800">{inquiry?.Participants_Fresher ?? '—'}</div>
-            </div>
-            <div>
-              <div className={labelCls}>Participants (Experienced)</div>
-              <div className="text-sm text-gray-800">{inquiry?.Participants_Experienced ?? '—'}</div>
-            </div>
-            <div>
-              <div className={labelCls}>Training Location</div>
-              <div className="text-sm text-gray-800">{inquiry?.TrainingLocation || '—'}</div>
-            </div>
-
-            <div className="sm:col-span-2 lg:col-span-3">
-              <div className={labelCls}>Disciplines</div>
-              <div className="text-sm text-gray-800 whitespace-pre-wrap">{(inquiry?.business || '').trim() || '—'}</div>
-            </div>
-            <div className="sm:col-span-2 lg:col-span-3">
-              <div className={labelCls}>Remarks</div>
-              <div className="text-sm text-gray-800 whitespace-pre-wrap">{(inquiry?.Remark || '').trim() || '—'}</div>
-            </div>
+        <div className="px-5 py-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <div className="text-sm font-bold text-gray-800">Training Discussion</div>
+            <div className="text-xs text-gray-500">Inquiry information and meeting details</div>
           </div>
-        </div>
-      </div>
-
-      {/* Meeting / Follow Ups / Discussion */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
-          <div className="text-sm font-bold text-gray-800">Meeting Details</div>
-          <div className="text-xs text-gray-500">Add meeting, follow ups and discussion notes</div>
-        </div>
-        <div className="p-5 space-y-4">
           <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden bg-white">
             {([
-              { key: 'meeting', label: 'Add Meeting' },
-              { key: 'followups', label: 'Add Follow Ups' },
-              { key: 'discussion', label: 'Add Discussion' },
+              { key: 'inquiry', label: 'Inquiry Information' },
+              { key: 'meeting', label: 'Meeting Details' },
+              { key: 'discussion', label: 'Discussion' },
+              { key: 'followups', label: 'Follow Ups' },
             ] as const).map((t) => {
               const active = activeTab === t.key;
               return (
@@ -429,192 +448,235 @@ export default function ConvertInquiryPage() {
               );
             })}
           </div>
+        </div>
 
-          {activeTab === 'meeting' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                <div className="md:col-span-3">
-                  <label className={labelCls}>Meeting Date</label>
-                  <input
-                    type="date"
-                    className={inputCls}
-                    value={meetingDraft.date}
-                    onChange={(e) => setMeetingDraft((d) => ({ ...d, date: e.target.value }))}
-                  />
-                </div>
-                <div className="md:col-span-7">
-                  <label className={labelCls}>Meeting Remark</label>
-                  <input
-                    className={inputCls}
-                    value={meetingDraft.remark}
-                    onChange={(e) => setMeetingDraft((d) => ({ ...d, remark: e.target.value }))}
-                    placeholder="Remark"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!meetingDraft.date && !meetingDraft.remark) return;
-                      setMeetings((prev) => [...prev, meetingDraft]);
-                      setMeetingDraft({ date: '', remark: '' });
-                    }}
-                    className="w-full px-4 py-2 rounded-lg bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white text-sm font-semibold shadow hover:shadow-md transition-all disabled:opacity-60"
-                    disabled={saving}
-                  >
-                    Add
-                  </button>
-                </div>
+        {activeTab === 'inquiry' && (
+          <div className="p-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <div className={labelCls}>Enquiry Date</div>
+                <div className="text-sm text-gray-800">{toDateInput(inquiry?.Idate) || '—'}</div>
+              </div>
+              <div>
+                <div className={labelCls}>Training Programme</div>
+                <div className="text-sm text-gray-800">{inquiry?.Course_Id || '—'}</div>
+              </div>
+              <div>
+                <div className={labelCls}>Company</div>
+                <div className="text-sm text-gray-800">{inquiry?.CompanyName || '—'}</div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className={labelCls}>Next Follow Up Date</label>
-                  <input
-                    type="date"
-                    className={inputCls}
-                    value={nextFollowUpDate}
-                    onChange={(e) => setNextFollowUpDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <div className={labelCls}>Latest Meeting Date</div>
-                  <div className="text-sm text-gray-800">{toDateInput(latestMeetingDate) || '—'}</div>
-                </div>
+              <div>
+                <div className={labelCls}>Company Location</div>
+                <div className="text-sm text-gray-800">{inquiry?.Place || '—'}</div>
+              </div>
+              <div>
+                <div className={labelCls}>Company Type</div>
+                <div className="text-sm text-gray-800">{inquiry?.CompanyType || '—'}</div>
+              </div>
+              <div>
+                <div className={labelCls}>Company Authority</div>
+                <div className="text-sm text-gray-800">{inquiry?.CompanyAuthority || '—'}</div>
               </div>
 
-              <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <table className="min-w-full text-xs">
-                  <thead className="bg-gray-50 text-gray-700">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-semibold">Date</th>
-                      <th className="px-3 py-2 text-left font-semibold">Remark</th>
-                      <th className="px-3 py-2 text-right font-semibold">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {meetings.length === 0 ? (
-                      <tr>
-                        <td className="px-3 py-3 text-gray-500" colSpan={3}>
-                          No meetings yet
-                        </td>
-                      </tr>
-                    ) : (
-                      meetings.map((m, idx) => (
-                        <tr key={`${m.date}-${idx}`} className="bg-white">
-                          <td className="px-3 py-2 text-gray-900">{toDateInput(m.date) || '—'}</td>
-                          <td className="px-3 py-2 text-gray-900">{(m.remark || '').trim() || '—'}</td>
-                          <td className="px-3 py-2 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setMeetings((prev) => prev.filter((_, i) => i !== idx))}
-                              className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50"
-                            >
-                              Remove
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+              <div>
+                <div className={labelCls}>Coordinator</div>
+                <div className="text-sm text-gray-800">{inquiry?.FullName || '—'}</div>
+              </div>
+              <div>
+                <div className={labelCls}>Designation</div>
+                <div className="text-sm text-gray-800">{inquiry?.Designation || '—'}</div>
+              </div>
+              <div>
+                <div className={labelCls}>Mobile / Phone</div>
+                <div className="text-sm text-gray-800">{inquiry?.Mobile || inquiry?.Phone || '—'}</div>
+              </div>
+              <div>
+                <div className={labelCls}>Email</div>
+                <div className="text-sm text-gray-800">{inquiry?.Email || '—'}</div>
+              </div>
+
+              <div>
+                <div className={labelCls}>Training Mode</div>
+                <div className="text-sm text-gray-800">{inquiry?.TrainingMode || '—'}</div>
+              </div>
+              <div>
+                <div className={labelCls}>Participants (Fresher)</div>
+                <div className="text-sm text-gray-800">{inquiry?.Participants_Fresher ?? '—'}</div>
+              </div>
+              <div>
+                <div className={labelCls}>Participants (Experienced)</div>
+                <div className="text-sm text-gray-800">{inquiry?.Participants_Experienced ?? '—'}</div>
+              </div>
+              <div>
+                <div className={labelCls}>Training Location</div>
+                <div className="text-sm text-gray-800">{inquiry?.TrainingLocation || '—'}</div>
+              </div>
+
+              <div className="sm:col-span-2 lg:col-span-3">
+                <div className={labelCls}>Disciplines</div>
+                <div className="text-sm text-gray-800 whitespace-pre-wrap">{(inquiry?.business || '').trim() || '—'}</div>
+              </div>
+              <div className="sm:col-span-2 lg:col-span-3">
+                <div className={labelCls}>Remarks</div>
+                <div className="text-sm text-gray-800 whitespace-pre-wrap">{(inquiry?.Remark || '').trim() || '—'}</div>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {activeTab === 'followups' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                <div className="md:col-span-3">
-                  <label className={labelCls}>Follow Up Date</label>
-                  <input
-                    type="date"
-                    className={inputCls}
-                    value={followUpDraft.date}
-                    onChange={(e) => setFollowUpDraft((d) => ({ ...d, date: e.target.value }))}
-                  />
-                </div>
-                <div className="md:col-span-7">
-                  <label className={labelCls}>Remark</label>
-                  <input
-                    className={inputCls}
-                    value={followUpDraft.remark}
-                    onChange={(e) => setFollowUpDraft((d) => ({ ...d, remark: e.target.value }))}
-                    placeholder="Remark"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!followUpDraft.date && !followUpDraft.remark) return;
-                      setFollowUps((prev) => [...prev, followUpDraft]);
-                      setFollowUpDraft({ date: '', remark: '' });
-                    }}
-                    className="w-full px-4 py-2 rounded-lg bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white text-sm font-semibold shadow hover:shadow-md transition-all"
-                  >
-                    Add
-                  </button>
-                </div>
+        {activeTab === 'meeting' && (
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+              <div className="md:col-span-3">
+                <label className={labelCls}>Meeting Date</label>
+                <input
+                  type="date"
+                  className={inputCls + ' h-[38px]'}
+                  value={meetingDraft.meetingDate}
+                  onChange={(e) => setMeetingDraft((d) => ({ ...d, meetingDate: e.target.value }))}
+                />
               </div>
 
-              <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <table className="min-w-full text-xs">
-                  <thead className="bg-gray-50 text-gray-700">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-semibold">Date</th>
-                      <th className="px-3 py-2 text-left font-semibold">Remark</th>
-                      <th className="px-3 py-2 text-right font-semibold">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {followUps.length === 0 ? (
-                      <tr>
-                        <td className="px-3 py-3 text-gray-500" colSpan={3}>
-                          No follow ups yet
-                        </td>
-                      </tr>
-                    ) : (
-                      followUps.map((fu, idx) => (
-                        <tr key={`${fu.date}-${idx}`} className="bg-white">
-                          <td className="px-3 py-2 text-gray-900">{toDateInput(fu.date) || '—'}</td>
-                          <td className="px-3 py-2 text-gray-900">{(fu.remark || '').trim() || '—'}</td>
-                          <td className="px-3 py-2 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setFollowUps((prev) => prev.filter((_, i) => i !== idx))}
-                              className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50"
-                            >
-                              Remove
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+              <div className="md:col-span-7">
+                <label className={labelCls}>Meeting Agenda</label>
+                <textarea
+                  rows={1}
+                  className={inputCls + ' h-[38px] resize-none'}
+                  value={meetingDraft.meetingAgenda}
+                  onChange={(e) => setMeetingDraft((d) => ({ ...d, meetingAgenda: e.target.value }))}
+                  placeholder="Meeting agenda"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const hasAny =
+                      Boolean(meetingDraft.meetingDate) ||
+                      Boolean(meetingDraft.meetingAgenda?.trim()) ||
+                      Boolean(meetingDraft.attendeeClient?.trim()) ||
+                      Boolean(meetingDraft.attendeeSIT?.trim());
+                    if (!hasAny) return;
+                    setMeetingDetails((prev) => [...prev, meetingDraft]);
+                    setMeetingDraft({ meetingDate: '', attendeeClient: '', attendeeSIT: '', meetingAgenda: '' });
+                  }}
+                  className="w-full h-[38px] px-4 rounded-lg bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white text-sm font-semibold shadow hover:shadow-md transition-all disabled:opacity-60"
+                  disabled={saving}
+                >
+                  Add
+                </button>
+              </div>
+
+              <div className="md:col-span-12">
+                <div className={labelCls}>Attendee</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <div className={labelCls}>Client</div>
+                    <textarea
+                      className={inputCls + ' min-h-[70px]'}
+                      value={meetingDraft.attendeeClient}
+                      onChange={(e) => setMeetingDraft((d) => ({ ...d, attendeeClient: e.target.value }))}
+                      placeholder="Client attendees (one per line)"
+                    />
+                  </div>
+                  <div>
+                    <div className={labelCls}>SIT</div>
+                    <textarea
+                      className={inputCls + ' min-h-[70px]'}
+                      value={meetingDraft.attendeeSIT}
+                      onChange={(e) => setMeetingDraft((d) => ({ ...d, attendeeSIT: e.target.value }))}
+                      placeholder="SIT attendees (one per line)"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-          )}
 
-          {activeTab === 'discussion' && (
+            <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+              <table className="min-w-full text-xs">
+                <thead className="bg-gray-50 text-gray-700">
+                  <tr className="border-b border-gray-100">
+                    <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Meeting Date</th>
+                    <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Attendee (Client)</th>
+                    <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Attendee (SIT)</th>
+                    <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Meeting Agenda</th>
+                    <th className="px-3 py-3 text-right font-semibold text-[11px] uppercase tracking-wider text-gray-400">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {meetingDetails.length === 0 ? (
+                    <tr>
+                      <td className="px-3 py-3 text-gray-500" colSpan={5}>
+                        No meeting details yet
+                      </td>
+                    </tr>
+                  ) : (
+                    meetingDetails.map((m, idx) => (
+                      <tr
+                        key={`${m.meetingDate}-${idx}`}
+                        className={`hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                      >
+                        <td className="px-3 py-2 text-gray-900">{toDateInput(m.meetingDate) || '—'}</td>
+                        <td className="px-3 py-2 text-gray-900">
+                          {splitList(m.attendeeClient).length === 0 ? (
+                            <span className="text-gray-400">—</span>
+                          ) : (
+                            <ul className="list-disc pl-4 space-y-0.5">
+                              {splitList(m.attendeeClient).map((x, i) => (
+                                <li key={i} className="text-gray-900">
+                                  {x}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-gray-900">
+                          {splitList(m.attendeeSIT).length === 0 ? (
+                            <span className="text-gray-400">—</span>
+                          ) : (
+                            <ul className="list-disc pl-4 space-y-0.5">
+                              {splitList(m.attendeeSIT).map((x, i) => (
+                                <li key={i} className="text-gray-900">
+                                  {x}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-gray-900 whitespace-pre-wrap">{(m.meetingAgenda || '').trim() || '—'}</td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setMeetingDetails((prev) => prev.filter((_, i) => i !== idx))}
+                            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50"
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'discussion' && (
+          <div className="p-5 space-y-4">
             <div>
-              <label className={labelCls}>Discussion</label>
+              <label className={labelCls}>Minutes of Meeting</label>
               <textarea
                 className={inputCls + ' min-h-[140px]'}
-                value={discussionText}
-                onChange={(e) => setDiscussionText(e.target.value)}
-                placeholder="Enter discussion notes"
+                value={minutesOfMeeting}
+                onChange={(e) => setMinutesOfMeeting(e.target.value)}
+                placeholder="Minutes of meeting"
               />
             </div>
-          )}
-        </div>
-      </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="p-5">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
-            <div className="md:col-span-3">
+            <div>
               <label className={labelCls}>Discussion Outcome</label>
               <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden bg-white">
                 {([
@@ -642,72 +704,140 @@ export default function ConvertInquiryPage() {
                 })}
               </div>
             </div>
+          </div>
+        )}
 
-            <div>
-              <label className={labelCls}>Training Number</label>
-              <input
-                className={inputCls}
-                value={form.TrainingNumber}
-                onChange={(e) => setForm((f) => ({ ...f, TrainingNumber: e.target.value }))}
-                placeholder="Training number"
-              />
+        {activeTab === 'followups' && (
+          <div className="p-5 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+              <div className="md:col-span-3">
+                <label className={labelCls}>Follow Up Date</label>
+                <input
+                  type="date"
+                  className={inputCls}
+                  value={followUpDraft.date}
+                  onChange={(e) => setFollowUpDraft((d) => ({ ...d, date: e.target.value }))}
+                />
+              </div>
+              <div className="md:col-span-3">
+                <label className={labelCls}>Next Follow Up Date</label>
+                <input
+                  type="date"
+                  className={inputCls}
+                  value={followUpDraft.nextDate || ''}
+                  onChange={(e) => setFollowUpDraft((d) => ({ ...d, nextDate: e.target.value }))}
+                />
+              </div>
+              <div className="md:col-span-4">
+                <label className={labelCls}>Follow Up Remarks</label>
+                <input
+                  className={inputCls}
+                  value={followUpDraft.remark}
+                  onChange={(e) => setFollowUpDraft((d) => ({ ...d, remark: e.target.value }))}
+                  placeholder="Remark"
+                />
+              </div>
+              <div className="md:col-span-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const hasAny = Boolean(followUpDraft.date) || Boolean(followUpDraft.nextDate) || Boolean(followUpDraft.remark?.trim());
+                    if (!hasAny) return;
+                    setFollowUps((prev) => {
+                      if (editingFollowUpIndex === null) return [...prev, followUpDraft];
+                      return prev.map((it, idx) => (idx === editingFollowUpIndex ? followUpDraft : it));
+                    });
+                    setFollowUpDraft({ date: '', nextDate: '', remark: '' });
+                    setEditingFollowUpIndex(null);
+                  }}
+                  className="w-full px-4 py-2 rounded-lg bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white text-sm font-semibold shadow hover:shadow-md transition-all disabled:opacity-60"
+                  disabled={saving}
+                >
+                  {editingFollowUpIndex === null ? 'Add' : 'Update'}
+                </button>
+
+                {editingFollowUpIndex !== null && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFollowUpDraft({ date: '', nextDate: '', remark: '' });
+                      setEditingFollowUpIndex(null);
+                    }}
+                    className="w-full px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50"
+                    disabled={saving}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div>
-              <label className={labelCls}>Training Date</label>
-              <input
-                type="date"
-                className={inputCls}
-                value={form.TrainingDate}
-                onChange={(e) => setForm((f) => ({ ...f, TrainingDate: e.target.value }))}
-              />
-            </div>
-
-            <div>
-              <label className={labelCls}>Trainer Name</label>
-              <input
-                className={inputCls}
-                value={form.TrainerName}
-                onChange={(e) => setForm((f) => ({ ...f, TrainerName: e.target.value }))}
-                placeholder="Trainer name"
-              />
-            </div>
-
-            <div>
-              <label className={labelCls}>Number Of Days</label>
-              <input
-                type="number"
-                className={inputCls}
-                value={form.NumberOfDays}
-                onChange={(e) => setForm((f) => ({ ...f, NumberOfDays: e.target.value }))}
-                placeholder="0"
-                min={0}
-              />
-            </div>
-
-            <div>
-              <label className={labelCls}>Total Students</label>
-              <input
-                type="number"
-                className={inputCls}
-                value={form.TotalStudents}
-                onChange={(e) => setForm((f) => ({ ...f, TotalStudents: e.target.value }))}
-                placeholder="0"
-                min={0}
-              />
-            </div>
-
-            <div>
-              <label className={labelCls}>Training Co-ordinator</label>
-              <input
-                className={inputCls}
-                value={form.TrainingCoordinator}
-                onChange={(e) => setForm((f) => ({ ...f, TrainingCoordinator: e.target.value }))}
-                placeholder="Training co-ordinator"
-              />
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="min-w-full text-xs">
+                <thead className="bg-gray-50 text-gray-700">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold">Date</th>
+                    <th className="px-3 py-2 text-left font-semibold">Next Follow Up Date</th>
+                    <th className="px-3 py-2 text-left font-semibold">Remark</th>
+                    <th className="px-3 py-2 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {followUps.length === 0 ? (
+                    <tr>
+                      <td className="px-3 py-3 text-gray-500" colSpan={4}>
+                        No follow ups yet
+                      </td>
+                    </tr>
+                  ) : (
+                    followUps.map((m, idx) => (
+                      <tr key={`${m.date}-${m.nextDate || ''}-${idx}`} className="bg-white">
+                        <td className="px-3 py-2 text-gray-900">{toDateInput(m.date) || '—'}</td>
+                        <td className="px-3 py-2 text-gray-900">{toDateInput(m.nextDate) || '—'}</td>
+                        <td className="px-3 py-2 text-gray-900">{(m.remark || '').trim() || '—'}</td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingFollowUpIndex(idx);
+                                setFollowUpDraft({
+                                  date: m.date || '',
+                                  nextDate: m.nextDate || '',
+                                  remark: m.remark || '',
+                                });
+                              }}
+                              className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFollowUps((prev) => prev.filter((_, i) => i !== idx));
+                                if (editingFollowUpIndex === idx) {
+                                  setFollowUpDraft({ date: '', nextDate: '', remark: '' });
+                                  setEditingFollowUpIndex(null);
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-xs font-semibold hover:bg-red-50"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
+        )}
+      </div>
 
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="p-5">
           <div className="flex justify-end mt-4 gap-2">
             <button
               onClick={() => router.push('/dashboard/corporate-inquiry/convert')}

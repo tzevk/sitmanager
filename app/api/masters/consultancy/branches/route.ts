@@ -3,10 +3,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
+async function ensureBranchColumn(pool: ReturnType<typeof getPool>, columnName: string, columnType: string) {
+  const [rows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS cnt
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'consultant_branch'
+       AND COLUMN_NAME = ?`,
+    [columnName]
+  );
+  const cnt = rows?.[0]?.cnt ?? 0;
+  if (cnt === 0) {
+    await pool.query(`ALTER TABLE consultant_branch ADD COLUMN ${columnName} ${columnType}`);
+  }
+}
+
 // GET - list branches for a consultancy
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requirePermission(req, 'consultancy.view');
+    const auth = await requirePermission(req, ['consultancy.view', 'consultancy.update', 'consultancy.create']);
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
     const { searchParams } = new URL(req.url);
@@ -40,6 +55,15 @@ export async function GET(req: NextRequest) {
         INDEX idx_const_id (Const_Id)
       )
     `);
+
+    // Backfill columns for older installs (table existed without some columns)
+    await ensureBranchColumn(pool, 'Contact_Person', 'VARCHAR(255) NULL');
+    await ensureBranchColumn(pool, 'Designation', 'VARCHAR(255) NULL');
+    await ensureBranchColumn(pool, 'Branch_Address', 'TEXT NULL');
+    await ensureBranchColumn(pool, 'City', 'VARCHAR(100) NULL');
+    await ensureBranchColumn(pool, 'Telephone', 'VARCHAR(50) NULL');
+    await ensureBranchColumn(pool, 'Mobile', 'VARCHAR(50) NULL');
+    await ensureBranchColumn(pool, 'email', 'VARCHAR(255) NULL');
 
     const [rows] = await pool.query<any[]>(
       `SELECT Branch_Id, Const_Id, Contact_Person, Designation, Branch_Address, City, Telephone, Mobile, email
@@ -85,6 +109,15 @@ export async function POST(req: NextRequest) {
         INDEX idx_const_id (Const_Id)
       )
     `);
+
+    // Backfill columns for older installs
+    await ensureBranchColumn(pool, 'Contact_Person', 'VARCHAR(255) NULL');
+    await ensureBranchColumn(pool, 'Designation', 'VARCHAR(255) NULL');
+    await ensureBranchColumn(pool, 'Branch_Address', 'TEXT NULL');
+    await ensureBranchColumn(pool, 'City', 'VARCHAR(100) NULL');
+    await ensureBranchColumn(pool, 'Telephone', 'VARCHAR(50) NULL');
+    await ensureBranchColumn(pool, 'Mobile', 'VARCHAR(50) NULL');
+    await ensureBranchColumn(pool, 'email', 'VARCHAR(255) NULL');
 
     for (const b of branches) {
       await pool.query(

@@ -14,8 +14,6 @@ interface ConvertedInquiryRow {
   TrainingMode: string | null;
   DiscussionOutcome: string | null;
   InitialFollowUpDate: string | null;
-  NextFollowUpDate: string | null;
-  FollowUp: string | null;
 }
 
 interface Pagination {
@@ -33,27 +31,6 @@ const toDate = (v: string | null | undefined) => {
     return String(v);
   }
 };
-
-function getRecentFollowUp(raw: unknown, nextDate: string | null | undefined): string {
-  const fallback = toDate(nextDate);
-  if (!raw) return fallback;
-  const s = String(raw);
-  if (!s.trim()) return fallback;
-  try {
-    const obj = JSON.parse(s) as unknown;
-    const rec: Record<string, unknown> = typeof obj === 'object' && obj !== null ? (obj as Record<string, unknown>) : {};
-    const items = Array.isArray(rec.items) ? (rec.items as unknown[]) : [];
-    const last = items.length ? items[items.length - 1] : null;
-    const lastRec: Record<string, unknown> = typeof last === 'object' && last !== null ? (last as Record<string, unknown>) : {};
-    const lastDate = String(lastRec.date ?? '').trim();
-    if (lastDate) return toDate(lastDate);
-    const next = String(rec.nextDate ?? '').trim();
-    if (next) return toDate(next);
-    return fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 export default function TrainingDiscussionIndexPage() {
   const router = useRouter();
@@ -166,14 +143,13 @@ export default function TrainingDiscussionIndexPage() {
                 <th className="text-left py-3 px-4 font-semibold">Training Mode</th>
                 <th className="text-left py-3 px-4 font-semibold">Discussion Outcome</th>
                 <th className="text-left py-3 px-4 font-semibold">Meeting Date</th>
-                <th className="text-left py-3 px-4 font-semibold">Recent Follow Up</th>
                 <th className="text-center py-3 px-4 font-semibold">Action</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center">
+                  <td colSpan={7} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-8 h-8 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                       <span className="text-sm text-gray-400">Loading...</span>
@@ -182,7 +158,7 @@ export default function TrainingDiscussionIndexPage() {
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center text-gray-400">No training discussion inquiries found</td>
+                  <td colSpan={7} className="py-16 text-center text-gray-400">No training discussion inquiries found</td>
                 </tr>
               ) : (
                 rows.map((r, idx) => (
@@ -193,7 +169,6 @@ export default function TrainingDiscussionIndexPage() {
                     <td className="py-3 px-4 text-gray-700">{r.TrainingMode || '-'}</td>
                     <td className="py-3 px-4 text-gray-700">{r.DiscussionOutcome || '-'}</td>
                     <td className="py-3 px-4 text-gray-700">{toDate(r.InitialFollowUpDate)}</td>
-                    <td className="py-3 px-4 text-gray-700">{getRecentFollowUp(r.FollowUp, r.NextFollowUpDate)}</td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1">
                         {canUpdate && (

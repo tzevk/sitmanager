@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -37,6 +37,8 @@ interface Student { Student_Id: number; Student_Name: string; Batch_Code: string
 
 interface StudentRow {
   _key: string;
+  Batch_Id: number | null;
+  Batch_Code: string;
   Student_Id: number | null;
   Student_Name: string;
   Student_Code: string;
@@ -53,6 +55,8 @@ interface StudentRow {
 
 const emptyStudentRow = (): StudentRow => ({
   _key: Math.random().toString(36).slice(2),
+  Batch_Id: null,
+  Batch_Code: '',
   Student_Id: null,
   Student_Name: '',
   Student_Code: '',
@@ -74,9 +78,14 @@ export default function AddCVShortlistedPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(false);
-  const [loadingStudents, setLoadingStudents] = useState(false);
+
+  // Student picker modal state
+  const [showStudentModal, setShowStudentModal] = useState(false);
+  const [modalBatchId, setModalBatchId] = useState('');
+  const [modalStudentsByBatchCode, setModalStudentsByBatchCode] = useState<Record<string, Student[]>>({});
+  const [modalSelectedByBatchCode, setModalSelectedByBatchCode] = useState<Record<string, Record<number, boolean>>>({});
+  const [modalLoadingBatchCode, setModalLoadingBatchCode] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     TDate: '',
@@ -112,17 +121,52 @@ export default function AddCVShortlistedPage() {
     finally { setLoadingBatches(false); }
   }, []);
 
-  // Fetch students when batch changes
-  const fetchStudents = useCallback(async (batchCode: string) => {
-    if (!batchCode) { setStudents([]); return; }
-    setLoadingStudents(true);
-    try {
-      const res = await fetch(`/api/admission-activity/cv-shortlisted/students?batchCode=${batchCode}`);
-      const data = await res.json();
-      setStudents(data.students || []);
-    } catch { setStudents([]); }
-    finally { setLoadingStudents(false); }
+  const batchById = useMemo(() => {
+    const map = new Map<string, Batch>();
+    for (const b of batches) map.set(String(b.Batch_Id), b);
+    return map;
+  }, [batches]);
+
+  const selectedBatchCodes = useMemo(() => {
+    const codes = Array.from(new Set(studentRows.map((r) => r.Batch_Code).filter(Boolean)));
+    return codes;
+  }, [studentRows]);
+
+  const fetchStudentsForBatchCode = useCallback(async (batchCode: string): Promise<Student[]> => {
+    if (!batchCode) return [];
+    const res = await fetch(`/api/admission-activity/cv-shortlisted/students?batchCode=${encodeURIComponent(batchCode)}`);
+    const data = await res.json();
+    return data.students || [];
   }, []);
+
+  const ensureModalStudentsLoaded = useCallback(
+    async (batchCode: string) => {
+      if (!batchCode) return;
+      if (modalStudentsByBatchCode[batchCode]) return;
+      setModalLoadingBatchCode(batchCode);
+      try {
+        const list = await fetchStudentsForBatchCode(batchCode);
+        setModalStudentsByBatchCode((prev) => ({ ...prev, [batchCode]: list }));
+      } finally {
+        setModalLoadingBatchCode((prev) => (prev === batchCode ? null : prev));
+      }
+    },
+    [fetchStudentsForBatchCode, modalStudentsByBatchCode]
+  );
+
+  useEffect(() => {
+    if (!showStudentModal) return;
+    if (!modalBatchId && batches.length > 0) {
+      setModalBatchId(String(batches[0].Batch_Id));
+    }
+  }, [batches, modalBatchId, showStudentModal]);
+
+  useEffect(() => {
+    if (!showStudentModal) return;
+    const batchCode = batchById.get(modalBatchId)?.Batch_Code || '';
+    if (!batchCode) return;
+    ensureModalStudentsLoaded(batchCode);
+  }, [batchById, ensureModalStudentsLoaded, modalBatchId, showStudentModal]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -137,34 +181,88 @@ export default function AddCVShortlistedPage() {
         updated.Batch_Id = '';
         updated.Batch_Code = '';
         setBatches([]);
-        setStudents([]);
         setStudentRows([]);
+        setModalStudentsByBatchCode({});
+        setModalSelectedByBatchCode({});
+        setModalBatchId('');
         fetchBatches(value);
       }
       if (name === 'Batch_Id') {
         const batch = batches.find((b) => String(b.Batch_Id) === value);
         updated.Batch_Code = batch?.Batch_Code || '';
-        setStudents([]);
-        setStudentRows([]);
-        if (batch) fetchStudents(batch.Batch_Code);
       }
       return updated;
     });
   };
 
-  const handleAddStudents = () => {
-    const existingIds = new Set(studentRows.map((r) => r.Student_Id));
-    const newStudents = students.filter((s) => !existingIds.has(s.Student_Id));
-    if (newStudents.length === 0) {
-      alert('No more students available to add from this batch.');
+  const openStudentModal = async () => {
+    if (!form.Course_id) {
+      alert('Please select Training first.');
       return;
     }
-    const newRows: StudentRow[] = newStudents.map((s) => ({
-      ...emptyStudentRow(),
-      Student_Id: s.Student_Id,
-      Student_Name: s.Student_Name,
-    }));
-    setStudentRows((prev) => [...prev, ...newRows]);
+
+    if (!batches.length && !loadingBatches) {
+      fetchBatches(form.Course_id);
+    }
+
+    setModalBatchId(form.Batch_Id || '');
+    setShowStudentModal(true);
+  };
+
+  const toggleModalStudent = (batchCode: string, studentId: number, checked: boolean) => {
+    setModalSelectedByBatchCode((prev) => {
+      const nextForBatch = { ...(prev[batchCode] || {}) };
+      if (checked) nextForBatch[studentId] = true;
+      else delete nextForBatch[studentId];
+      return { ...prev, [batchCode]: nextForBatch };
+    });
+  };
+
+  const setModalSelectAll = (batchCode: string, studentIds: number[], checked: boolean) => {
+    setModalSelectedByBatchCode((prev) => {
+      if (!checked) {
+        const next = { ...prev };
+        delete next[batchCode];
+        return next;
+      }
+      const nextForBatch: Record<number, boolean> = {};
+      for (const id of studentIds) nextForBatch[id] = true;
+      return { ...prev, [batchCode]: nextForBatch };
+    });
+  };
+
+  const addSelectedStudentsFromModal = () => {
+    const existingIds = new Set(studentRows.map((r) => r.Student_Id).filter((x) => x != null));
+    const rowsToAdd: StudentRow[] = [];
+
+    for (const [batchCode, selectedMap] of Object.entries(modalSelectedByBatchCode)) {
+      const studentList = modalStudentsByBatchCode[batchCode] || [];
+      if (!studentList.length) continue;
+      const batch = batches.find((b) => b.Batch_Code === batchCode);
+      const batchId = batch?.Batch_Id ?? null;
+
+      for (const s of studentList) {
+        if (!selectedMap?.[s.Student_Id]) continue;
+        if (existingIds.has(s.Student_Id)) continue;
+        existingIds.add(s.Student_Id);
+        rowsToAdd.push({
+          ...emptyStudentRow(),
+          Batch_Id: batchId,
+          Batch_Code: batchCode,
+          Student_Id: s.Student_Id,
+          Student_Name: s.Student_Name,
+        });
+      }
+    }
+
+    if (rowsToAdd.length === 0) {
+      alert('No new students selected to add.');
+      return;
+    }
+
+    setStudentRows((prev) => [...prev, ...rowsToAdd]);
+    setModalSelectedByBatchCode({});
+    setShowStudentModal(false);
   };
 
   const handleStudentRowChange = (key: string, field: keyof StudentRow, value: string) => {
@@ -179,43 +277,67 @@ export default function AddCVShortlistedPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.TDate || !form.Company_Id || !form.Course_id || !form.Batch_Id) {
-      alert('Please fill all required fields: Date, Company, Course and Batch.');
+    if (!form.TDate || !form.Company_Id || !form.Course_id) {
+      alert('Please fill all required fields: Date, Company and Training.');
       return;
     }
+
+    const batchIdsFromRows = Array.from(
+      new Set(studentRows.map((r) => r.Batch_Id).filter((x): x is number => typeof x === 'number'))
+    );
+
+    if (studentRows.length === 0 && !form.Batch_Id) {
+      alert('Please select a Batch Code or add students.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await fetch('/api/admission-activity/cv-shortlisted', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          CompanyName: form.CompanyName,
-          TDate: form.TDate,
-          Course_id: Number(form.Course_id),
-          Batch_Id: Number(form.Batch_Id),
-          Company_Id: Number(form.Company_Id),
-          students: studentRows.map((r) => ({
-            Student_Id: r.Student_Id,
-            Student_Name: r.Student_Name,
-            Student_Code: r.Student_Code || null,
-            Result: r.Result,
-            Placement: r.Placement,
-            Sended: r.Sended,
-            Remark: r.Remark,
-            PlacedBy: r.PlacedBy,
-            Placement_Type: r.Placement_Type,
-            Placement_Block: r.Placement_Block,
-            Placement_BlockReason: r.Placement_BlockReason,
-            BlockReason_Remark: r.BlockReason_Remark,
-          })),
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        router.push('/dashboard/cv-shortlisted');
-      } else {
-        alert(data.error || 'Failed to save');
+      // If rows span multiple batches, create one parent record per batch (backend expects a single Batch_Id per record)
+      const batchesToCreate = batchIdsFromRows.length
+        ? batchIdsFromRows
+        : [Number(form.Batch_Id)];
+
+      for (const batchId of batchesToCreate) {
+        const studentsForBatch = batchIdsFromRows.length
+          ? studentRows.filter((r) => r.Batch_Id === batchId)
+          : studentRows;
+
+        const res = await fetch('/api/admission-activity/cv-shortlisted', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            CompanyName: form.CompanyName,
+            TDate: form.TDate,
+            Course_id: Number(form.Course_id),
+            Batch_Id: batchId,
+            Company_Id: Number(form.Company_Id),
+            students: studentsForBatch.map((r) => ({
+              Student_Id: r.Student_Id,
+              Student_Name: r.Student_Name,
+              Student_Code: r.Student_Code || null,
+              Result: r.Result,
+              Placement: r.Placement,
+              Sended: r.Sended,
+              Remark: r.Remark,
+              PlacedBy: r.PlacedBy,
+              Placement_Type: r.Placement_Type,
+              Placement_Block: r.Placement_Block,
+              Placement_BlockReason: r.Placement_BlockReason,
+              BlockReason_Remark: r.BlockReason_Remark,
+            })),
+          }),
+        });
+
+        const data = await res.json();
+        if (!data.success) {
+          alert(data.error || 'Failed to save');
+          setLoading(false);
+          return;
+        }
       }
+
+      router.push('/dashboard/cv-shortlisted');
     } catch (err) {
       console.error(err);
       alert('An error occurred');
@@ -261,51 +383,69 @@ export default function AddCVShortlistedPage() {
             title="CV Shortlisted Details"
             icon={<svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>}
           >
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3">
-              {/* Date */}
-              <div>
-                <label className={labelCls}>Date <span className="text-red-500">*</span></label>
-                <input type="date" name="TDate" value={form.TDate} onChange={handleChange} className={inputCls} required />
+            <div className="border border-gray-200 rounded-md overflow-hidden bg-white">
+              <div className="grid grid-cols-[160px_14px_1fr] items-center border-b border-gray-200">
+                <div className="px-3 py-2 text-xs font-semibold text-gray-600 text-center">Date <span className="text-red-500">*</span></div>
+                <div className="px-2 py-2 text-xs font-semibold text-gray-600 text-center">:</div>
+                <div className="px-3 py-2">
+                  <input type="date" name="TDate" value={form.TDate} onChange={handleChange} className={inputCls} required />
+                </div>
               </div>
 
-              {/* Company */}
-              <div>
-                <label className={labelCls}>Company Name <span className="text-red-500">*</span></label>
-                <select name="Company_Id" value={form.Company_Id} onChange={handleChange} className={selectCls} required>
-                  <option value="">--Select Company--</option>
-                  {companies.map((c) => (
-                    <option key={c.Const_Id} value={c.Const_Id}>{c.Comp_Name}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-[160px_14px_1fr] items-center border-b border-gray-200">
+                <div className="px-3 py-2 text-xs font-semibold text-gray-600 text-center">Company Name <span className="text-red-500">*</span></div>
+                <div className="px-2 py-2 text-xs font-semibold text-gray-600 text-center">:</div>
+                <div className="px-3 py-2">
+                  <select name="Company_Id" value={form.Company_Id} onChange={handleChange} className={selectCls} required>
+                    <option value="">--Select Company--</option>
+                    {companies.map((c) => (
+                      <option key={c.Const_Id} value={c.Const_Id}>{c.Comp_Name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              {/* Course */}
-              <div>
-                <label className={labelCls}>Training Name <span className="text-red-500">*</span></label>
-                <select name="Course_id" value={form.Course_id} onChange={handleChange} className={selectCls} required>
-                  <option value="">--Select Training--</option>
-                  {courses.map((c) => (
-                    <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-[160px_14px_1fr] items-center border-b border-gray-200">
+                <div className="px-3 py-2 text-xs font-semibold text-gray-600 text-center">Training Name <span className="text-red-500">*</span></div>
+                <div className="px-2 py-2 text-xs font-semibold text-gray-600 text-center">:</div>
+                <div className="px-3 py-2">
+                  <select name="Course_id" value={form.Course_id} onChange={handleChange} className={selectCls} required>
+                    <option value="">--Select Training--</option>
+                    {courses.map((c) => (
+                      <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              {/* Batch Code */}
-              <div>
-                <label className={labelCls}>Batch Code <span className="text-red-500">*</span></label>
-                <select name="Batch_Id" value={form.Batch_Id} onChange={handleChange} className={selectCls} required disabled={loadingBatches || !form.Course_id}>
-                  <option value="">--Select Batch Code--</option>
-                  {batches.map((b) => (
-                    <option key={b.Batch_Id} value={b.Batch_Id}>{b.Batch_Code}</option>
-                  ))}
-                </select>
-                {loadingBatches && <p className="text-[10px] text-gray-400 mt-0.5">Loading batches...</p>}
+              <div className="grid grid-cols-[160px_14px_1fr] items-center">
+                <div className="px-3 py-2 text-xs font-semibold text-gray-600 text-center">Batch Code <span className="text-red-500">*</span></div>
+                <div className="px-2 py-2 text-xs font-semibold text-gray-600 text-center">:</div>
+                <div className="px-3 py-2 space-y-1">
+                  <select
+                    name="Batch_Id"
+                    value={form.Batch_Id}
+                    onChange={handleChange}
+                    className={selectCls}
+                    required={studentRows.length === 0}
+                    disabled={loadingBatches || !form.Course_id}
+                  >
+                    <option value="">--Select Batch Code--</option>
+                    {batches.map((b) => (
+                      <option key={b.Batch_Id} value={b.Batch_Id}>{b.Batch_Code}</option>
+                    ))}
+                  </select>
+                  {loadingBatches && <p className="text-[10px] text-gray-400">Loading batches...</p>}
+                  {selectedBatchCodes.length > 0 && (
+                    <p className="text-[10px] text-gray-500">Selected: {selectedBatchCodes.join(', ')}</p>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Action Buttons */}
             <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100">
-              <button type="button" onClick={handleAddStudents} disabled={!form.Batch_Id || loadingStudents}
+              <button type="button" onClick={openStudentModal} disabled={!form.Course_id || loadingBatches}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-semibold text-xs shadow hover:shadow-md transition-all disabled:opacity-50">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                 Add more Students
@@ -315,7 +455,6 @@ export default function AddCVShortlistedPage() {
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
                 {loading ? 'Saving...' : 'Save'}
               </button>
-              {loadingStudents && <span className="text-xs text-gray-400">Loading students...</span>}
             </div>
           </SectionCard>
 
@@ -329,6 +468,7 @@ export default function AddCVShortlistedPage() {
                 <table className="dashboard-table w-full text-xs">
                   <thead>
                     <tr className="bg-gradient-to-r from-[#2E3093]/10 to-[#2A6BB5]/10">
+                      <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Batch ID</th>
                       <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Batch Code</th>
                       <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Student Name</th>
                       <th className="text-center px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">CV Sent</th>
@@ -346,7 +486,8 @@ export default function AddCVShortlistedPage() {
                   <tbody>
                     {studentRows.map((row) => (
                       <tr key={row._key} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                        <td className="px-3 py-1.5 text-gray-600">{form.Batch_Code || '-'}</td>
+                        <td className="px-3 py-1.5 text-gray-600">{row.Batch_Id ?? '-'}</td>
+                        <td className="px-3 py-1.5 text-gray-600">{row.Batch_Code || '-'}</td>
                         <td className="px-3 py-1.5 font-medium text-gray-900 whitespace-nowrap">{row.Student_Name}</td>
                         <td className="px-3 py-1.5 text-center">
                           <select value={row.Sended} onChange={(e) => handleStudentRowChange(row._key, 'Sended', e.target.value)} className={tblSelectCls}>
@@ -402,6 +543,137 @@ export default function AddCVShortlistedPage() {
           )}
         </form>
       </div>
+
+      {/* Student Picker Modal */}
+      {showStudentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
+          <div className="fixed inset-0 bg-black/50" onClick={() => setShowStudentModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
+            {/* Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-5 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-gray-800">Add Students</h3>
+                  <p className="text-xs text-gray-400">Select one or more students (you can switch batches).</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowStudentModal(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  aria-label="Close"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4 space-y-3 overflow-y-auto max-h-[calc(90vh-132px)]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Batch Code</label>
+                  <select
+                    value={modalBatchId}
+                    onChange={async (e) => {
+                      const nextId = e.target.value;
+                      setModalBatchId(nextId);
+                      const batchCode = batchById.get(nextId)?.Batch_Code || '';
+                      if (batchCode) await ensureModalStudentsLoaded(batchCode);
+                    }}
+                    className={selectCls}
+                    disabled={loadingBatches}
+                  >
+                    <option value="">--Select Batch Code--</option>
+                    {batches.map((b) => (
+                      <option key={b.Batch_Id} value={b.Batch_Id}>{b.Batch_Code}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-end">
+                  <div className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+                    <div className="text-[10px] text-gray-400">Selected students</div>
+                    <div className="text-xs font-semibold text-gray-700">
+                      {Object.values(modalSelectedByBatchCode).reduce((sum, m) => sum + Object.keys(m || {}).length, 0)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {(() => {
+                const activeBatchCode = batchById.get(modalBatchId)?.Batch_Code || '';
+                const list = activeBatchCode ? modalStudentsByBatchCode[activeBatchCode] || [] : [];
+                const selectedMap = activeBatchCode ? modalSelectedByBatchCode[activeBatchCode] || {} : {};
+                const allIds = list.map((s) => s.Student_Id);
+                const selectedCount = Object.keys(selectedMap).length;
+                const allChecked = list.length > 0 && selectedCount === list.length;
+
+                if (!modalBatchId) {
+                  return <div className="text-xs text-gray-500">Select a batch to view students.</div>;
+                }
+
+                return (
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 border-b border-gray-200">
+                      <label className="flex items-center gap-2 text-xs font-semibold text-[#2E3093]">
+                        <input
+                          type="checkbox"
+                          checked={allChecked}
+                          onChange={(e) => setModalSelectAll(activeBatchCode, allIds, e.target.checked)}
+                          className="h-4 w-4"
+                        />
+                        Select all in {activeBatchCode}
+                      </label>
+                      {modalLoadingBatchCode === activeBatchCode && (
+                        <span className="text-xs text-gray-400">Loading students...</span>
+                      )}
+                    </div>
+
+                    <div className="max-h-[50vh] overflow-y-auto">
+                      {list.length === 0 && modalLoadingBatchCode !== activeBatchCode && (
+                        <div className="px-4 py-6 text-center text-xs text-gray-500">No students found for this batch.</div>
+                      )}
+
+                      {list.map((s) => (
+                        <label key={s.Student_Id} className="flex items-center gap-3 px-4 py-2 border-b border-gray-100 hover:bg-gray-50">
+                          <input
+                            type="checkbox"
+                            checked={!!selectedMap[s.Student_Id]}
+                            onChange={(e) => toggleModalStudent(activeBatchCode, s.Student_Id, e.target.checked)}
+                            className="h-4 w-4"
+                          />
+                          <div className="flex-1">
+                            <div className="text-xs font-medium text-gray-900">{s.Student_Name}</div>
+                            <div className="text-[10px] text-gray-400">ID: {s.Student_Id}</div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Footer */}
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-5 py-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowStudentModal(false)}
+                className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-xs font-semibold hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={addSelectedStudentsFromModal}
+                className="px-4 py-2 rounded-lg bg-[#2E3093] hover:bg-[#252780] text-white text-xs font-semibold transition-colors"
+              >
+                Add Selected
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

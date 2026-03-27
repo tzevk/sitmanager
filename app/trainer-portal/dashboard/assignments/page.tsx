@@ -113,10 +113,13 @@ export default function AssignmentsPage() {
       if (!showCreate || !selectedBatch) return;
       setTopicsLoading(true);
       try {
-        const res = await fetch(`/api/trainer-portal/lecture-topics?batchId=${selectedBatch}&month=${encodeURIComponent(yyyyMm(new Date()))}`);
+        const res = await fetch(`/api/trainer-portal/lecture-topics?batchId=${selectedBatch}`);
         const data = await res.json();
         if (cancelled) return;
-        setDisciplines(Array.isArray(data?.disciplines) ? data.disciplines : []);
+        const opts = Array.isArray(data?.disciplines) ? data.disciplines : [];
+        setDisciplines(opts);
+        setTopic(prev => (prev && opts.some((d: any) => d?.name === prev)) ? prev : (opts[0]?.name || ''));
+        setSubTopics([]);
       } catch {
         if (!cancelled) setDisciplines([]);
       } finally {
@@ -562,7 +565,7 @@ export default function AssignmentsPage() {
                         <p className="text-sm text-gray-400">No sub topics available</p>
                       ) : (
                         <div className="space-y-2">
-                          {(disciplines.find(d => d.name === topic)?.subtopics || []).map(st => (
+                          {(disciplines.find(d => d.name === topic)?.subtopics || []).map((st, i) => (
                             <label key={st} className="flex items-center gap-2 text-sm text-gray-700">
                               <input
                                 type="checkbox"
@@ -570,7 +573,7 @@ export default function AssignmentsPage() {
                                 onChange={() => toggleSubTopic(st)}
                                 className="w-4 h-4"
                               />
-                              <span className="truncate">{st}</span>
+                              <span className="truncate">{i + 1}. {st}</span>
                             </label>
                           ))}
                         </div>

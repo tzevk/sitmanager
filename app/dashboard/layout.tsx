@@ -39,7 +39,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Admission Activity > Online Admission': '/dashboard/online-admission',
   'Admission Activity > Student': '/dashboard/student',
   'Corporate Training > Corporate Inquiry': '/dashboard/corporate-inquiry',
-  'Corporate Training > Training Conducted': '/dashboard/corporate-inquiry/convert',
+  'Corporate Training > Training Discussion': '/dashboard/corporate-inquiry/convert',
   'Corporate Training > Training Execution': '/dashboard/corporate-inquiry/execution',
   'Reports > Inquiry': '/dashboard/reports/inquiry',
   'Reports > Inquiry Report': '/dashboard/reports/inquiry',
@@ -166,7 +166,7 @@ const SUB_MENUS: Record<string, string[]> = {
   ],
   'Corporate Training': [
     'Corporate Inquiry',
-    'Training Conducted',
+    'Training Discussion',
     'Training Execution',
   ],
   'Utility': [

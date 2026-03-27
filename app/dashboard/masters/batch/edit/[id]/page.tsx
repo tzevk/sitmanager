@@ -63,6 +63,7 @@ interface StandardLecture {
   lecture_no: number | null;
   subject: string | null;
   subject_topic: string | null;
+  lecturecontent?: string | null;
   date: string | null;
   starttime: string | null;
   endtime: string | null;
@@ -183,11 +184,47 @@ const selectCls = 'max-w-[280px] w-full bg-white border-[1.5px] border-gray-300 
 const formatDateForInput = (d: string | null) => {
   if (!d) return '';
   try {
-    const date = new Date(d);
+    const raw = String(d).trim();
+    if (!raw) return '';
+    // Prefer keeping the literal date portion (avoids timezone shifts)
+    if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+
+    // Common local formats (assume dd/mm/yyyy or dd-mm-yyyy)
+    const dmySlash = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (dmySlash) {
+      const dd = dmySlash[1].padStart(2, '0');
+      const mm = dmySlash[2].padStart(2, '0');
+      const yyyy = dmySlash[3];
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    const dmyDash = raw.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (dmyDash) {
+      const dd = dmyDash[1].padStart(2, '0');
+      const mm = dmyDash[2].padStart(2, '0');
+      const yyyy = dmyDash[3];
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    const date = new Date(raw);
     return date.toISOString().split('T')[0];
   } catch {
     return '';
   }
+};
+
+type UnknownRecord = Record<string, unknown>;
+
+const pickFirstNonNull = (obj: UnknownRecord, keys: string[]): unknown => {
+  for (const k of keys) {
+    if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+  }
+  return null;
+};
+
+const toStringOrNull = (value: unknown): string | null => {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string') return value;
+  return String(value);
 };
 
 export default function EditBatchPage() {
@@ -287,46 +324,11 @@ export default function EditBatchPage() {
 
   /* Standard Lecture Plan state */
   const [standardLectures, setStandardLectures] = useState<StandardLecture[]>([]);
+  const [stdPlanLocked, setStdPlanLocked] = useState(false);
+  const [savingSLectureRowId, setSavingSLectureRowId] = useState<number | null>(null);
   const [sLectureSearch, setSLectureSearch] = useState('');
   const [loadingSLectures, setLoadingSLectures] = useState(false);
-  const [showEditSLectureModal, setShowEditSLectureModal] = useState(false);
-  const [editingSLectureId, setEditingSLectureId] = useState<number | null>(null);
-  const [savingSLecture, setSavingSLecture] = useState(false);
-  const [editSLecture, setEditSLecture] = useState({
-    lecture_no: '',
-    subject: '',
-    subject_topic: '',
-    date: '',
-    starttime: '',
-    endtime: '',
-    assignment: '',
-    assignment_date: '',
-    faculty_name: '',
-    class_room: '',
-    documents: '',
-    unit_test: '',
-    publish: 'No',
-  });
-
-  const handleEditSLecture = (l: StandardLecture) => {
-    setEditingSLectureId(l.id);
-    setEditSLecture({
-      lecture_no: l.lecture_no?.toString() || '',
-      subject: l.subject || '',
-      subject_topic: l.subject_topic || '',
-      date: l.date || '',
-      starttime: l.starttime || '',
-      endtime: l.endtime || '',
-      assignment: l.assignment || '',
-      assignment_date: l.assignment_date || '',
-      faculty_name: l.faculty_name || '',
-      class_room: l.class_room || '',
-      documents: l.documents || '',
-      unit_test: l.unit_test || '',
-      publish: l.publish || 'No',
-    });
-    setShowEditSLectureModal(true);
-  };
+  // Standard Lecture Plan is edited inline (no modal)
 
   /* Final Exam Details state */
   const [finalExams, setFinalExams] = useState<FinalExam[]>([]);
@@ -343,11 +345,10 @@ export default function EditBatchPage() {
 
   /* Lecture Plan state */
   const [lectures, setLectures] = useState<Lecture[]>([]);
+  const [savingLectureRowId, setSavingLectureRowId] = useState<number | null>(null);
   const [lectureSearch, setLectureSearch] = useState('');
   const [loadingLectures, setLoadingLectures] = useState(false);
   const [showAddLectureModal, setShowAddLectureModal] = useState(false);
-  const [showEditLectureModal, setShowEditLectureModal] = useState(false);
-  const [editingLectureId, setEditingLectureId] = useState<number | null>(null);
   const [savingLecture, setSavingLecture] = useState(false);
   const [newLecture, setNewLecture] = useState({
     lecture_no: '',
@@ -364,40 +365,74 @@ export default function EditBatchPage() {
     unit_test: '',
     publish: 'No',
   });
-  const [editLecture, setEditLecture] = useState({
-    lecture_no: '',
-    subject: '',
-    subject_topic: '',
-    date: '',
-    starttime: '',
-    endtime: '',
-    assignment: '',
-    assignment_date: '',
-    faculty_id: '',
-    class_room: '',
-    documents: '',
-    unit_test: '',
-    publish: 'No',
-  });
+  // Lecture Plan is edited inline (no modal)
 
-  const handleEditLecture = (l: Lecture) => {
-    setEditingLectureId(l.id);
-    setEditLecture({
-      lecture_no: l.lecture_no?.toString() || '',
-      subject: l.subject || '',
-      subject_topic: l.subject_topic || '',
-      date: l.date || '',
-      starttime: l.starttime || '',
-      endtime: l.endtime || '',
-      assignment: l.assignment || '',
-      assignment_date: l.assignment_date || '',
-      faculty_id: l.faculty_id || '',
-      class_room: l.class_room || '',
-      documents: l.documents || '',
-      unit_test: l.unit_test || '',
-      publish: l.publish || 'No',
-    });
-    setShowEditLectureModal(true);
+  const updateStandardLectureInline = (id: number, patch: Partial<StandardLecture>) => {
+    setStandardLectures(prev => prev.map(l => (l.id === id ? { ...l, ...patch } : l)));
+  };
+
+  const updateLectureInline = (id: number, patch: Partial<Lecture>) => {
+    setLectures(prev => prev.map(l => (l.id === id ? { ...l, ...patch } : l)));
+  };
+
+  const handleSaveSLectureInline = async (row: StandardLecture) => {
+    if (stdPlanLocked) return;
+    setSavingSLectureRowId(row.id);
+    try {
+      await fetch(`/api/masters/batch/${batchId}/slectures`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: row.id,
+          lecture_no: row.lecture_no,
+          subject: (row.subject ?? null),
+          subject_topic: (row.subject_topic ?? null),
+          lecturecontent: (row.lecturecontent ?? null),
+          date: formatDateForInput(row.date) || null,
+          starttime: row.starttime,
+          endtime: row.endtime,
+          assignment: row.assignment,
+          assignment_date: formatDateForInput(row.assignment_date) || null,
+          faculty_name: row.faculty_name,
+          class_room: row.class_room,
+          documents: row.documents,
+          unit_test: row.unit_test,
+          publish: row.publish,
+        }),
+      });
+      // Refresh to reflect any server-side normalization
+      fetchStandardLectures();
+    } catch { /* ignore */ }
+    setSavingSLectureRowId(null);
+  };
+
+  const handleSaveLectureInline = async (row: Lecture) => {
+    setSavingLectureRowId(row.id);
+    try {
+      await fetch(`/api/masters/batch/${batchId}/lectures`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: row.id,
+          lecture_no: row.lecture_no,
+          subject: row.subject,
+          lecturecontent: row.lecturecontent ?? row.subject,
+          subject_topic: row.subject_topic,
+          date: formatDateForInput(row.date) || null,
+          starttime: row.starttime,
+          endtime: row.endtime,
+          assignment: row.assignment,
+          assignment_date: formatDateForInput(row.assignment_date) || null,
+          faculty_id: row.faculty_id,
+          class_room: row.class_room,
+          documents: row.documents,
+          unit_test: row.unit_test,
+          publish: row.publish,
+        }),
+      });
+      fetchLectures();
+    } catch { /* ignore */ }
+    setSavingLectureRowId(null);
   };
 
   /* Batch Details form state */
@@ -585,7 +620,41 @@ export default function EditBatchPage() {
     try {
       const res = await fetch(`/api/masters/batch/${batchId}/slectures`);
       const json = await res.json();
-      setStandardLectures(json.lectures || []);
+      // Normalize fields that may come back with different key names across environments
+      const normalizedLectures: StandardLecture[] = (json.lectures || []).map((row: unknown) => {
+        const l = (row ?? {}) as UnknownRecord;
+
+        const lecturecontent = toStringOrNull(
+          pickFirstNonNull(l, ['lecturecontent', 'lecture_content'])
+        );
+        const assignmentRaw = toStringOrNull(
+          pickFirstNonNull(l, ['assignment', 'Assign', 'assign', 'Assignment'])
+        );
+        const assignmentDateRaw = toStringOrNull(
+          pickFirstNonNull(l, [
+            'assignment_date',
+            'assignmentDate',
+            'assignmentdate',
+            'AssignDt',
+            'AssignDT',
+            'Assign_Dt',
+            'Assign_Date',
+            'assignDt',
+            'AssignmentDate',
+          ])
+        );
+
+        const assignment = (assignmentRaw ?? '').trim() || null;
+        const assignment_date = (assignmentDateRaw ?? '').trim() || null;
+
+        return {
+          ...(l as unknown as StandardLecture),
+          lecturecontent,
+          assignment,
+          assignment_date,
+        };
+      });
+      setStandardLectures(normalizedLectures);
     } catch { /* ignore */ }
     setLoadingSLectures(false);
   };
@@ -597,7 +666,40 @@ export default function EditBatchPage() {
         try {
           const res = await fetch(`/api/masters/batch/${batchId}/slectures`);
           const json = await res.json();
-          setStandardLectures(json.lectures || []);
+          const normalizedLectures: StandardLecture[] = (json.lectures || []).map((row: unknown) => {
+            const l = (row ?? {}) as UnknownRecord;
+
+            const lecturecontent = toStringOrNull(
+              pickFirstNonNull(l, ['lecturecontent', 'lecture_content'])
+            );
+            const assignmentRaw = toStringOrNull(
+              pickFirstNonNull(l, ['assignment', 'Assign', 'assign', 'Assignment'])
+            );
+            const assignmentDateRaw = toStringOrNull(
+              pickFirstNonNull(l, [
+                'assignment_date',
+                'assignmentDate',
+                'assignmentdate',
+                'AssignDt',
+                'AssignDT',
+                'Assign_Dt',
+                'Assign_Date',
+                'assignDt',
+                'AssignmentDate',
+              ])
+            );
+
+            const assignment = (assignmentRaw ?? '').trim() || null;
+            const assignment_date = (assignmentDateRaw ?? '').trim() || null;
+
+            return {
+              ...(l as unknown as StandardLecture),
+              lecturecontent,
+              assignment,
+              assignment_date,
+            };
+          });
+          setStandardLectures(normalizedLectures);
           setFacultyList(json.facultyList || []);
         } catch { /* ignore */ }
         setLoadingSLectures(false);
@@ -612,7 +714,41 @@ export default function EditBatchPage() {
     try {
       const res = await fetch(`/api/masters/batch/${batchId}/lectures`);
       const json = await res.json();
-      setLectures(json.lectures || []);
+      // Normalize fields that may come back with different key names across environments
+      const normalizedLectures: Lecture[] = (json.lectures || []).map((row: unknown) => {
+        const l = (row ?? {}) as UnknownRecord;
+
+        const lecturecontent = toStringOrNull(
+          pickFirstNonNull(l, ['lecturecontent', 'lecture_content', 'subject'])
+        );
+        const assignmentRaw = toStringOrNull(
+          pickFirstNonNull(l, ['assignment', 'Assign', 'assign', 'Assignment'])
+        );
+        const assignmentDateRaw = toStringOrNull(
+          pickFirstNonNull(l, [
+            'assignment_date',
+            'assignmentDate',
+            'assignmentdate',
+            'AssignDt',
+            'AssignDT',
+            'Assign_Dt',
+            'Assign_Date',
+            'assignDt',
+            'AssignmentDate',
+          ])
+        );
+
+        const assignment = (assignmentRaw ?? '').trim() || null;
+        const assignment_date = (assignmentDateRaw ?? '').trim() || null;
+
+        return {
+          ...(l as unknown as Lecture),
+          lecturecontent,
+          assignment,
+          assignment_date,
+        };
+      });
+      setLectures(normalizedLectures);
       setFacultyList(json.facultyList || []);
     } catch { /* ignore */ }
     setLoadingLectures(false);
@@ -1969,7 +2105,7 @@ export default function EditBatchPage() {
 
   /* Standard Lecture Plan Tab */
   const filteredSLectures = standardLectures.filter(l =>
-    l.subject?.toLowerCase().includes(sLectureSearch.toLowerCase()) ||
+    (l.lecturecontent || l.subject)?.toLowerCase().includes(sLectureSearch.toLowerCase()) ||
     l.subject_topic?.toLowerCase().includes(sLectureSearch.toLowerCase())
   );
 
@@ -1986,11 +2122,10 @@ export default function EditBatchPage() {
   };
 
   const handleExportSLectures = () => {
-    const headers = ['Id', 'LectureNo', 'Subject', 'SubjectTopics', 'Date', 'StartTime', 'EndTime', 'Assignment', 'AssignmentDate', 'TrainerName', 'ClassRoom', 'Documents', 'UnitTest', 'Publish'];
+    const headers = ['LectureNo', 'LectureContent', 'SubjectTopics', 'Date', 'StartTime', 'EndTime', 'Assignment', 'AssignmentDate', 'TrainerName', 'ClassRoom', 'Documents', 'UnitTest', 'Publish'];
     const rows = filteredSLectures.map(l => [
-      l.id,
       l.lecture_no || '',
-      l.subject || '',
+      l.lecturecontent || l.subject || '',
       l.subject_topic || '',
       l.date || '',
       l.starttime || '',
@@ -2012,201 +2147,19 @@ export default function EditBatchPage() {
     link.click();
   };
 
-  const handleSaveSLecture = async () => {
-    if (!editSLecture.subject.trim() || !editingSLectureId) return;
-    setSavingSLecture(true);
-    try {
-      const res = await fetch(`/api/masters/batch/${batchId}/slectures`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editingSLectureId, ...editSLecture }),
-      });
-      if (res.ok) {
-        setShowEditSLectureModal(false);
-        setEditingSLectureId(null);
-        setEditSLecture({
-          lecture_no: '',
-          subject: '',
-          subject_topic: '',
-          date: '',
-          starttime: '',
-          endtime: '',
-          assignment: '',
-          assignment_date: '',
-          faculty_name: '',
-          class_room: '',
-          documents: '',
-          unit_test: '',
-          publish: 'No',
-        });
-        fetchStandardLectures();
-      }
-    } catch { /* ignore */ }
-    setSavingSLecture(false);
-  };
-
   const StandardLecturePlanTab = () => (
     <div className="space-y-2">
-      {/* Edit Lecture Modal */}
-      {showEditSLectureModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4">
-            <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] px-3 py-2">
-              <h3 className="text-xs font-bold text-white">Edit Standard Lecture</h3>
-            </div>
-            <div className="p-3 grid grid-cols-4 gap-2">
-              <div>
-                <label className={labelCls}>Lecture No</label>
-                <input
-                  type="number"
-                  value={editSLecture.lecture_no}
-                  onChange={(e) => setEditSLecture({ ...editSLecture, lecture_no: e.target.value })}
-                  className={inputCls}
-                  placeholder="No"
-                />
-              </div>
-              <div className="col-span-2">
-                <label className={labelCls}>Subject</label>
-                <input
-                  type="text"
-                  value={editSLecture.subject}
-                  onChange={(e) => setEditSLecture({ ...editSLecture, subject: e.target.value })}
-                  className={inputCls}
-                  placeholder="Subject"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Date</label>
-                <input
-                  type="date"
-                  value={editSLecture.date}
-                  onChange={(e) => setEditSLecture({ ...editSLecture, date: e.target.value })}
-                  className={inputCls}
-                />
-              </div>
-              <div className="col-span-2">
-                <label className={labelCls}>Subject Topics</label>
-                <input
-                  type="text"
-                  value={editSLecture.subject_topic}
-                  onChange={(e) => setEditSLecture({ ...editSLecture, subject_topic: e.target.value })}
-                  className={inputCls}
-                  placeholder="Topics"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Start Time</label>
-                <input
-                  type="time"
-                  value={editSLecture.starttime}
-                  onChange={(e) => setEditSLecture({ ...editSLecture, starttime: e.target.value })}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>End Time</label>
-                <input
-                  type="time"
-                  value={editSLecture.endtime}
-                  onChange={(e) => setEditSLecture({ ...editSLecture, endtime: e.target.value })}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Assignment</label>
-                <input
-                  type="text"
-                  value={editSLecture.assignment}
-                  onChange={(e) => setEditSLecture({ ...editSLecture, assignment: e.target.value })}
-                  className={inputCls}
-                  placeholder="Assignment"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Assignment Date</label>
-                <input
-                  type="date"
-                  value={editSLecture.assignment_date}
-                  onChange={(e) => setEditSLecture({ ...editSLecture, assignment_date: e.target.value })}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Trainer Name</label>
-                <select
-                  value={editSLecture.faculty_name}
-                  onChange={(e) => setEditSLecture({ ...editSLecture, faculty_name: e.target.value })}
-                  className={selectCls}
-                >
-                  <option value="">Select Trainer</option>
-                  {facultyList.map(f => (
-                    <option key={f.Faculty_Id} value={f.Faculty_Name}>{f.Faculty_Name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Class Room</label>
-                <input
-                  type="text"
-                  value={editSLecture.class_room}
-                  onChange={(e) => setEditSLecture({ ...editSLecture, class_room: e.target.value })}
-                  className={inputCls}
-                  placeholder="Room"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Documents</label>
-                <input
-                  type="text"
-                  value={editSLecture.documents}
-                  onChange={(e) => setEditSLecture({ ...editSLecture, documents: e.target.value })}
-                  className={inputCls}
-                  placeholder="Documents"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Unit Test</label>
-                <input
-                  type="text"
-                  value={editSLecture.unit_test}
-                  onChange={(e) => setEditSLecture({ ...editSLecture, unit_test: e.target.value })}
-                  className={inputCls}
-                  placeholder="Unit Test"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Publish</label>
-                <select
-                  value={editSLecture.publish}
-                  onChange={(e) => setEditSLecture({ ...editSLecture, publish: e.target.value })}
-                  className={selectCls}
-                >
-                  <option value="No">No</option>
-                  <option value="Yes">Yes</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 px-3 py-2 bg-gray-50 border-t">
-              <button
-                onClick={() => setShowEditSLectureModal(false)}
-                className="px-3 py-1 text-xs font-medium text-gray-600 hover:text-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveSLecture}
-                disabled={!editSLecture.subject.trim() || savingSLecture}
-                className="px-3 py-1 bg-[#2E3093] text-white text-xs font-medium rounded disabled:opacity-50"
-              >
-                {savingSLecture ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Toolbar: Export, Search */}
       <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => setStdPlanLocked(v => !v)}
+          className={`flex items-center gap-1 px-2 py-1 border text-xs font-medium rounded h-7 hover:bg-gray-50 ${
+            stdPlanLocked ? 'border-red-300 text-red-700 bg-red-50' : 'border-gray-300 text-gray-600'
+          }`}
+          title={stdPlanLocked ? 'Unlock to edit' : 'Lock to prevent edits'}
+        >
+          {stdPlanLocked ? 'Locked' : 'Unlocked'}
+        </button>
         <button
           onClick={handleExportSLectures}
           className="flex items-center gap-1 px-2 py-1 border border-gray-300 text-gray-600 text-xs font-medium rounded h-7 hover:bg-gray-50"
@@ -2236,10 +2189,9 @@ export default function EditBatchPage() {
         <table className="dashboard-table w-full text-xs">
           <thead>
             <tr className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5">
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Id</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Lec#</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Subject</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Topics</th>
+              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Subject Topic</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Date</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Start</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">End</th>
@@ -2256,7 +2208,7 @@ export default function EditBatchPage() {
           <tbody>
             {loadingSLectures ? (
               <tr>
-                <td colSpan={15} className="px-2 py-4 text-center text-gray-400">
+                <td colSpan={14} className="px-2 py-4 text-center text-gray-400">
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-3 h-3 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                     Loading...
@@ -2265,36 +2217,154 @@ export default function EditBatchPage() {
               </tr>
             ) : filteredSLectures.length === 0 ? (
               <tr>
-                <td colSpan={15} className="px-2 py-4 text-center text-gray-400">
+                <td colSpan={14} className="px-2 py-4 text-center text-gray-400">
                   No lecture plan found. Lectures are auto-loaded from previous batch of same course.
                 </td>
               </tr>
             ) : (
               filteredSLectures.map((l) => (
                 <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-2 py-1.5 text-gray-700">{l.id}</td>
-                  <td className="px-2 py-1.5 text-gray-700">{l.lecture_no || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-900 font-medium truncate max-w-[100px]">{l.subject || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700 truncate max-w-[100px]">{l.subject_topic || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">{l.date || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">{l.starttime || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">{l.endtime || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700 truncate max-w-[60px]">{l.assignment || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">{l.assignment_date || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700 truncate max-w-[80px]">{l.faculty_name || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700">{l.class_room || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700">{l.documents || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700">{l.unit_test || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700">{l.publish || '-'}</td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <input
+                      type="number"
+                      value={l.lecture_no ?? ''}
+                      disabled={stdPlanLocked}
+                      onChange={(e) => updateStandardLectureInline(l.id, { lecture_no: e.target.value ? Number(e.target.value) : null })}
+                      className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-900 font-medium">
+                    <input
+                      type="text"
+                      value={(l.lecturecontent ?? l.subject ?? '').toString()}
+                      disabled={stdPlanLocked}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        updateStandardLectureInline(l.id, { lecturecontent: v, subject: v });
+                      }}
+                      className="w-full min-w-[140px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                      placeholder="Subject"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <input
+                      type="text"
+                      value={(l.subject_topic ?? '').toString()}
+                      disabled={stdPlanLocked}
+                      onChange={(e) => updateStandardLectureInline(l.id, { subject_topic: e.target.value })}
+                      className="w-full min-w-[120px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                      placeholder="Subject Topic"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
+                    <input
+                      type="date"
+                      value={formatDateForInput(l.date)}
+                      disabled={stdPlanLocked}
+                      onChange={(e) => updateStandardLectureInline(l.id, { date: e.target.value })}
+                      className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
+                    <input
+                      type="time"
+                      value={(l.starttime ?? '').toString()}
+                      disabled={stdPlanLocked}
+                      onChange={(e) => updateStandardLectureInline(l.id, { starttime: e.target.value })}
+                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
+                    <input
+                      type="time"
+                      value={(l.endtime ?? '').toString()}
+                      disabled={stdPlanLocked}
+                      onChange={(e) => updateStandardLectureInline(l.id, { endtime: e.target.value })}
+                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <input
+                      type="text"
+                      value={(l.assignment ?? '').toString()}
+                      disabled={stdPlanLocked}
+                      onChange={(e) => updateStandardLectureInline(l.id, { assignment: e.target.value })}
+                      className="w-full min-w-[110px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                      placeholder="Assignment"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
+                    <input
+                      type="date"
+                      value={formatDateForInput(l.assignment_date)}
+                      disabled={stdPlanLocked}
+                      onChange={(e) => updateStandardLectureInline(l.id, { assignment_date: e.target.value })}
+                      className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <input
+                      type="text"
+                      value={(l.faculty_name ?? '').toString()}
+                      disabled={stdPlanLocked}
+                      onChange={(e) => updateStandardLectureInline(l.id, { faculty_name: e.target.value })}
+                      className="w-full min-w-[120px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                      placeholder="Trainer"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <input
+                      type="text"
+                      value={(l.class_room ?? '').toString()}
+                      disabled={stdPlanLocked}
+                      onChange={(e) => updateStandardLectureInline(l.id, { class_room: e.target.value })}
+                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                      placeholder="Room"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <input
+                      type="text"
+                      value={(l.documents ?? '').toString()}
+                      disabled={stdPlanLocked}
+                      onChange={(e) => updateStandardLectureInline(l.id, { documents: e.target.value })}
+                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                      placeholder="Docs"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <input
+                      type="text"
+                      value={(l.unit_test ?? '').toString()}
+                      disabled={stdPlanLocked}
+                      onChange={(e) => updateStandardLectureInline(l.id, { unit_test: e.target.value })}
+                      className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                      placeholder="UT"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <select
+                      value={(l.publish ?? 'No').toString()}
+                      disabled={stdPlanLocked}
+                      onChange={(e) => updateStandardLectureInline(l.id, { publish: e.target.value })}
+                      className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                    >
+                      <option value="No">No</option>
+                      <option value="Yes">Yes</option>
+                    </select>
+                  </td>
                   <td className="px-2 py-1.5 text-center">
                     <div className="flex items-center justify-center gap-0.5">
-                      <button 
-                        onClick={() => handleEditSLecture(l)}
-                        className="p-1 text-blue-600 hover:bg-blue-50 rounded" 
-                        title="Edit"
+                      <button
+                        onClick={() => handleSaveSLectureInline(l)}
+                        disabled={stdPlanLocked || savingSLectureRowId === l.id}
+                        className="p-1 text-green-700 hover:bg-green-50 rounded disabled:opacity-50"
+                        title={stdPlanLocked ? 'Locked' : 'Save'}
                       >
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 21V13H7v8" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v4h8" />
                         </svg>
                       </button>
                       <button
@@ -2546,10 +2616,12 @@ export default function EditBatchPage() {
   );
 
   /* Lecture Plan handlers */
-  const filteredLectures = lectures.filter((l) =>
-    l.subject?.toLowerCase().includes(lectureSearch.toLowerCase()) ||
-    l.subject_topic?.toLowerCase().includes(lectureSearch.toLowerCase())
-  );
+  const filteredLectures = lectures.filter((l) => {
+    const q = lectureSearch.toLowerCase();
+    const subject = (l.subject || l.lecturecontent || '').toLowerCase();
+    const topics = (l.subject_topic || '').toLowerCase();
+    return subject.includes(q) || topics.includes(q);
+  });
 
   const handleDeleteLecture = async (lectureId: number) => {
     if (!confirm('Are you sure you want to delete this lecture?')) return;
@@ -2564,11 +2636,10 @@ export default function EditBatchPage() {
   };
 
   const handleExportLectures = () => {
-    const headers = ['Id', 'LectureNo', 'Subject', 'SubjectTopics', 'Date', 'StartTime', 'EndTime', 'Assignment', 'AssignmentDate', 'TrainerName', 'ClassRoom', 'Documents', 'UnitTest', 'Publish'];
+    const headers = ['LectureNo', 'Subject', 'SubjectTopics', 'Date', 'StartTime', 'EndTime', 'Assignment', 'AssignmentDate', 'TrainerName', 'ClassRoom', 'Documents', 'UnitTest', 'Publish'];
     const rows = filteredLectures.map(l => [
-      l.id,
       l.lecture_no || '',
-      l.subject || '',
+      l.subject || l.lecturecontent || '',
       l.subject_topic || '',
       l.date || '',
       l.starttime || '',
@@ -2602,39 +2673,6 @@ export default function EditBatchPage() {
       if (res.ok) {
         setShowAddLectureModal(false);
         setNewLecture({
-          lecture_no: '',
-          subject: '',
-          subject_topic: '',
-          date: '',
-          starttime: '',
-          endtime: '',
-          assignment: '',
-          assignment_date: '',
-          faculty_id: '',
-          class_room: '',
-          documents: '',
-          unit_test: '',
-          publish: 'No',
-        });
-        fetchLectures();
-      }
-    } catch { /* ignore */ }
-    setSavingLecture(false);
-  };
-
-  const handleUpdateLecture = async () => {
-    if (!editLecture.subject.trim() || !editingLectureId) return;
-    setSavingLecture(true);
-    try {
-      const res = await fetch(`/api/masters/batch/${batchId}/lectures`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editingLectureId, ...editLecture }),
-      });
-      if (res.ok) {
-        setShowEditLectureModal(false);
-        setEditingLectureId(null);
-        setEditLecture({
           lecture_no: '',
           subject: '',
           subject_topic: '',
@@ -2815,164 +2853,6 @@ export default function EditBatchPage() {
         </div>
       )}
 
-      {/* Edit Lecture Modal */}
-      {showEditLectureModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4">
-            <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] px-3 py-2">
-              <h3 className="text-xs font-bold text-white">Edit Lecture</h3>
-            </div>
-            <div className="p-3 grid grid-cols-4 gap-2">
-              <div>
-                <label className={labelCls}>Lecture No</label>
-                <input
-                  type="number"
-                  value={editLecture.lecture_no}
-                  onChange={(e) => setEditLecture({ ...editLecture, lecture_no: e.target.value })}
-                  className={inputCls}
-                  placeholder="No"
-                />
-              </div>
-              <div className="col-span-2">
-                <label className={labelCls}>Subject</label>
-                <input
-                  type="text"
-                  value={editLecture.subject}
-                  onChange={(e) => setEditLecture({ ...editLecture, subject: e.target.value })}
-                  className={inputCls}
-                  placeholder="Subject"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Date</label>
-                <input
-                  type="date"
-                  value={editLecture.date}
-                  onChange={(e) => setEditLecture({ ...editLecture, date: e.target.value })}
-                  className={inputCls}
-                />
-              </div>
-              <div className="col-span-2">
-                <label className={labelCls}>Subject Topics</label>
-                <input
-                  type="text"
-                  value={editLecture.subject_topic}
-                  onChange={(e) => setEditLecture({ ...editLecture, subject_topic: e.target.value })}
-                  className={inputCls}
-                  placeholder="Topics"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Start Time</label>
-                <input
-                  type="time"
-                  value={editLecture.starttime}
-                  onChange={(e) => setEditLecture({ ...editLecture, starttime: e.target.value })}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>End Time</label>
-                <input
-                  type="time"
-                  value={editLecture.endtime}
-                  onChange={(e) => setEditLecture({ ...editLecture, endtime: e.target.value })}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Assignment</label>
-                <input
-                  type="text"
-                  value={editLecture.assignment}
-                  onChange={(e) => setEditLecture({ ...editLecture, assignment: e.target.value })}
-                  className={inputCls}
-                  placeholder="Assignment"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Assignment Date</label>
-                <input
-                  type="date"
-                  value={editLecture.assignment_date}
-                  onChange={(e) => setEditLecture({ ...editLecture, assignment_date: e.target.value })}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Trainer Name</label>
-                <select
-                  value={editLecture.faculty_id}
-                  onChange={(e) => setEditLecture({ ...editLecture, faculty_id: e.target.value })}
-                  className={selectCls}
-                >
-                  <option value="">Select Trainer</option>
-                  {facultyList.map(f => (
-                    <option key={f.Faculty_Id} value={f.Faculty_Id.toString()}>{f.Faculty_Name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Class Room</label>
-                <input
-                  type="text"
-                  value={editLecture.class_room}
-                  onChange={(e) => setEditLecture({ ...editLecture, class_room: e.target.value })}
-                  className={inputCls}
-                  placeholder="Room"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Documents</label>
-                <input
-                  type="text"
-                  value={editLecture.documents}
-                  onChange={(e) => setEditLecture({ ...editLecture, documents: e.target.value })}
-                  className={inputCls}
-                  placeholder="Documents"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Unit Test</label>
-                <input
-                  type="text"
-                  value={editLecture.unit_test}
-                  onChange={(e) => setEditLecture({ ...editLecture, unit_test: e.target.value })}
-                  className={inputCls}
-                  placeholder="Unit Test"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Publish</label>
-                <select
-                  value={editLecture.publish}
-                  onChange={(e) => setEditLecture({ ...editLecture, publish: e.target.value })}
-                  className={selectCls}
-                >
-                  <option value="No">No</option>
-                  <option value="Yes">Yes</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 px-3 py-2 bg-gray-50 border-t">
-              <button
-                onClick={() => setShowEditLectureModal(false)}
-                className="px-3 py-1 text-xs font-medium text-gray-600 hover:text-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleUpdateLecture}
-                disabled={!editLecture.subject.trim() || savingLecture}
-                className="px-3 py-1 bg-[#2E3093] text-white text-xs font-medium rounded disabled:opacity-50"
-              >
-                {savingLecture ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Toolbar: Add, Export, Search */}
       <div className="flex flex-wrap items-center gap-2">
         <button
@@ -3013,7 +2893,6 @@ export default function EditBatchPage() {
         <table className="dashboard-table w-full text-xs">
           <thead>
             <tr className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5">
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Id</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Lec#</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Subject</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Topics</th>
@@ -3033,7 +2912,7 @@ export default function EditBatchPage() {
           <tbody>
             {loadingLectures ? (
               <tr>
-                <td colSpan={15} className="px-2 py-4 text-center text-gray-400">
+                <td colSpan={14} className="px-2 py-4 text-center text-gray-400">
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-3 h-3 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                     Loading...
@@ -3042,36 +2921,155 @@ export default function EditBatchPage() {
               </tr>
             ) : filteredLectures.length === 0 ? (
               <tr>
-                <td colSpan={15} className="px-2 py-4 text-center text-gray-400">
+                <td colSpan={14} className="px-2 py-4 text-center text-gray-400">
                   No records found. Click &quot;Add&quot; to create.
                 </td>
               </tr>
             ) : (
               filteredLectures.map((l) => (
                 <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-2 py-1.5 text-gray-700">{l.id}</td>
-                  <td className="px-2 py-1.5 text-gray-700">{l.lecture_no || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-900 font-medium truncate max-w-[100px]">{l.subject || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700 truncate max-w-[100px]">{l.subject_topic || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">{l.date || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">{l.starttime || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">{l.endtime || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700 truncate max-w-[60px]">{l.assignment || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">{l.assignment_date || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700 truncate max-w-[80px]">{l.faculty_name_display || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700">{l.class_room || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700">{l.documents || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700">{l.unit_test || '-'}</td>
-                  <td className="px-2 py-1.5 text-gray-700">{l.publish || '-'}</td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <input
+                      type="number"
+                      value={l.lecture_no ?? ''}
+                      onChange={(e) => updateLectureInline(l.id, { lecture_no: e.target.value ? Number(e.target.value) : null })}
+                      className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-900 font-medium">
+                    <input
+                      type="text"
+                      value={(l.subject ?? l.lecturecontent ?? '').toString()}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        updateLectureInline(l.id, { subject: v, lecturecontent: v });
+                      }}
+                      className="w-full min-w-[140px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                      placeholder="Subject"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <input
+                      type="text"
+                      value={(l.subject_topic ?? '').toString()}
+                      onChange={(e) => updateLectureInline(l.id, { subject_topic: e.target.value })}
+                      className="w-full min-w-[120px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                      placeholder="Topics"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
+                    <input
+                      type="date"
+                      value={formatDateForInput(l.date)}
+                      onChange={(e) => updateLectureInline(l.id, { date: e.target.value })}
+                      className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
+                    <input
+                      type="time"
+                      value={(l.starttime ?? '').toString()}
+                      onChange={(e) => updateLectureInline(l.id, { starttime: e.target.value })}
+                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
+                    <input
+                      type="time"
+                      value={(l.endtime ?? '').toString()}
+                      onChange={(e) => updateLectureInline(l.id, { endtime: e.target.value })}
+                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <input
+                      type="text"
+                      value={(l.assignment ?? '').toString()}
+                      onChange={(e) => updateLectureInline(l.id, { assignment: e.target.value })}
+                      className="w-full min-w-[110px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                      placeholder="Assignment"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
+                    <input
+                      type="date"
+                      value={formatDateForInput(l.assignment_date)}
+                      onChange={(e) => updateLectureInline(l.id, { assignment_date: e.target.value })}
+                      className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    {(() => {
+                      const currentVal = (l.faculty_id ?? '').toString();
+                      const hasMatch = currentVal
+                        ? facultyList.some(f => String(f.Faculty_Id) === currentVal)
+                        : true;
+                      return (
+                        <select
+                          value={currentVal}
+                          onChange={(e) => updateLectureInline(l.id, { faculty_id: e.target.value })}
+                          className="w-full min-w-[140px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                        >
+                          <option value="">Select Trainer</option>
+                          {currentVal && !hasMatch && (
+                            <option value={currentVal}>{l.faculty_name_display || currentVal}</option>
+                          )}
+                          {facultyList.map(f => (
+                            <option key={f.Faculty_Id} value={String(f.Faculty_Id)}>{f.Faculty_Name}</option>
+                          ))}
+                        </select>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <input
+                      type="text"
+                      value={(l.class_room ?? '').toString()}
+                      onChange={(e) => updateLectureInline(l.id, { class_room: e.target.value })}
+                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                      placeholder="Room"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <input
+                      type="text"
+                      value={(l.documents ?? '').toString()}
+                      onChange={(e) => updateLectureInline(l.id, { documents: e.target.value })}
+                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                      placeholder="Docs"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <input
+                      type="text"
+                      value={(l.unit_test ?? '').toString()}
+                      onChange={(e) => updateLectureInline(l.id, { unit_test: e.target.value })}
+                      className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                      placeholder="UT"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <select
+                      value={(l.publish ?? 'No').toString()}
+                      onChange={(e) => updateLectureInline(l.id, { publish: e.target.value })}
+                      className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                    >
+                      <option value="No">No</option>
+                      <option value="Yes">Yes</option>
+                    </select>
+                  </td>
                   <td className="px-2 py-1.5 text-center">
                     <div className="flex items-center justify-center gap-0.5">
-                      <button 
-                        onClick={() => handleEditLecture(l)}
-                        className="p-1 text-blue-600 hover:bg-blue-50 rounded" 
-                        title="Edit"
+                      <button
+                        onClick={() => handleSaveLectureInline(l)}
+                        disabled={savingLectureRowId === l.id}
+                        className="p-1 text-green-700 hover:bg-green-50 rounded disabled:opacity-50"
+                        title="Save"
                       >
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 21V13H7v8" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v4h8" />
                         </svg>
                       </button>
                       <button

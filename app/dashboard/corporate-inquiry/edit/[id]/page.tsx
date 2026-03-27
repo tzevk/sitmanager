@@ -20,10 +20,7 @@ interface Consultancy {
   EMail?: string | null;
 }
 
-type FollowUpItem = {
-  date: string;
-  note: string;
-};
+type Tab = 'details' | 'discussion';
 
 function toDateInputValue(value: unknown): string {
   if (!value) return '';
@@ -41,6 +38,8 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
   const [saving, setSaving] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
   const [consultancies, setConsultancies] = useState<Consultancy[]>([]);
+  const [activeTab, setActiveTab] = useState<Tab>('details');
+  const [companyMode, setCompanyMode] = useState<'master' | 'manual'>('master');
   const [form, setForm] = useState({
     Id: 0,
     Idate: '',
@@ -71,11 +70,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
     TrainingCoordinator: '',
 
     Discussion: '',
-    InitialFollowUpDate: '',
-    NextFollowUpDate: '',
   });
-
-  const [followUps, setFollowUps] = useState<FollowUpItem[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -101,34 +96,11 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
           const fullName = String(inq?.FullName || inq?.Fname || '').trim();
           const discussion = String(inq?.Discussion ?? inq?.Remark ?? '').trim();
           const remark = String(inq?.Remark ?? '').trim();
-          const followUpRaw = inq?.FollowUp;
           const consultancyId = String(inq?.Consultancy_Id ?? '').trim();
           const companyName = String(inq?.CompanyName ?? '').trim();
           const rawCompanyType = String(inq?.CompanyType ?? '').trim();
           const companyType: '' | 'Local' | 'International' =
             rawCompanyType === 'Local' || rawCompanyType === 'International' ? rawCompanyType : '';
-
-          // Parse follow-up JSON if present.
-          let parsedInitial = '';
-          let parsedNext = '';
-          let parsedItems: FollowUpItem[] = [];
-          if (typeof followUpRaw === 'string' && followUpRaw.trim()) {
-            try {
-              const obj = JSON.parse(followUpRaw);
-              parsedInitial = String(obj?.initialDate ?? '').trim();
-              parsedNext = String(obj?.nextDate ?? '').trim();
-              const items = Array.isArray(obj?.items) ? obj.items : [];
-              parsedItems = items
-                .map((it: unknown) => {
-                  const rec: Record<string, unknown> =
-                    typeof it === 'object' && it !== null ? (it as Record<string, unknown>) : {};
-                  return { date: String(rec.date ?? '').trim(), note: String(rec.note ?? '').trim() };
-                })
-                .filter((it: FollowUpItem) => Boolean(it.date || it.note));
-            } catch {
-              parsedItems = [{ date: '', note: String(followUpRaw).trim() }].filter((it) => Boolean(it.note));
-            }
-          }
 
           setForm((prev) => {
             const next = {
@@ -164,13 +136,11 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
               TrainingCoordinator: String(inq?.TrainingCoordinator ?? '').trim(),
 
               Discussion: discussion,
-              InitialFollowUpDate: String(inq?.InitialFollowUpDate ?? parsedInitial ?? '').trim(),
-              NextFollowUpDate: String(inq?.NextFollowUpDate ?? parsedNext ?? '').trim(),
             };
             return next;
           });
 
-          setFollowUps(parsedItems);
+          setCompanyMode(consultancyId ? 'master' : 'manual');
 
           // If we don't have a consultancy id but we have a company name, try to map it.
           if (!consultancyId && companyName) {
@@ -205,11 +175,22 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
 
   useEffect(() => {
     // Backfill consultancy selection by company name if possible.
+    if (companyMode === 'manual') return;
     if (form.Consultancy_Id || !form.CompanyName || companyOptions.length === 0) return;
     const match = companyOptions.find((c) => String(c.Comp_Name || '').trim() === String(form.CompanyName || '').trim());
     if (!match) return;
     setForm((prev) => ({ ...prev, Consultancy_Id: String(match.Const_Id) }));
-  }, [companyOptions, form.CompanyName, form.Consultancy_Id]);
+  }, [companyMode, companyOptions, form.CompanyName, form.Consultancy_Id]);
+
+  useEffect(() => {
+    // If an old Consultancy_Id no longer exists in master, fall back to manual mode.
+    if (companyMode === 'manual') return;
+    if (!form.Consultancy_Id || companyOptions.length === 0) return;
+    const hasMatch = companyOptions.some((c) => String(c.Const_Id) === String(form.Consultancy_Id));
+    if (hasMatch) return;
+    setCompanyMode('manual');
+    setForm((prev) => ({ ...prev, Consultancy_Id: '' }));
+  }, [companyMode, companyOptions, form.Consultancy_Id]);
 
   function handleCompanyChange(constId: string) {
     const idNum = Number(constId);
@@ -231,14 +212,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
     e.preventDefault();
     setSaving(true);
     try {
-      const payload = {
-        ...form,
-        FollowUp: JSON.stringify({
-          initialDate: form.InitialFollowUpDate || null,
-          nextDate: form.NextFollowUpDate || null,
-          items: followUps,
-        }),
-      };
+      const payload = { ...form };
       const res = await fetch('/api/admission-activity/corporate-inquiry', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -263,6 +237,11 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
   const labelClass = 'block text-[11px] uppercase tracking-wider text-gray-400 font-semibold mb-1';
   const textareaClass =
     'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 bg-white shadow-sm';
+
+  const tabBtn = (isActive: boolean) =>
+    isActive
+      ? 'px-4 py-2 rounded-lg bg-[#2E3093] text-white text-sm font-semibold shadow-sm'
+      : 'px-4 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-sm font-semibold text-gray-700 shadow-sm';
 
   if (permLoading) return <PermissionLoading />;
   if (!canUpdate) return <AccessDenied message="You do not have permission to edit corporate inquiries." />;
@@ -314,250 +293,233 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
       {/* Form */}
       <form id="edit-corporate-inquiry-form" onSubmit={handleSubmit} className="space-y-4">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" className={tabBtn(activeTab === 'details')} onClick={() => setActiveTab('details')}>
+                Inquiry Details
+              </button>
+              <button type="button" className={tabBtn(activeTab === 'discussion')} onClick={() => setActiveTab('discussion')}>
+                Discussion
+              </button>
+            </div>
+          </div>
+
           <div className="p-5">
-            <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Inquiry Details</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div>
-                <label className={labelClass}>Status</label>
-                <select name="InquiryStatus" value={form.InquiryStatus} onChange={handleChange} className={inputClass}>
-                  <option value="">—</option>
-                  <option value="UnderDiscussion">Under Discussion</option>
-                  <option value="Rejected">Cancelled</option>
-                  <option value="Final">Final</option>
-                </select>
-              </div>
+            {activeTab === 'details' && (
+              <>
+                <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Inquiry Details</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <label className={labelClass}>Status</label>
+                    <select name="InquiryStatus" value={form.InquiryStatus} onChange={handleChange} className={inputClass}>
+                      <option value="">—</option>
+                      <option value="UnderDiscussion">Under Discussion</option>
+                      <option value="Rejected">Cancelled</option>
+                      <option value="Final">Final</option>
+                    </select>
+                  </div>
 
-              <div>
-                <label className={labelClass}>Inquiry Date</label>
-                <input type="date" name="Idate" value={form.Idate} onChange={handleChange} className={inputClass} />
-              </div>
+                  <div>
+                    <label className={labelClass}>Inquiry Date</label>
+                    <input type="date" name="Idate" value={form.Idate} onChange={handleChange} className={inputClass} />
+                  </div>
 
-              <div>
-                <label className={labelClass}>Training Batch No.</label>
-                <input
-                  type="text"
-                  name="TrainingNumber"
-                  value={form.TrainingNumber}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="Batch / training no."
-                />
-              </div>
+                  <div>
+                    <label className={labelClass}>Training Programme</label>
+                    <select name="Course_Id" value={form.Course_Id} onChange={handleChange} className={inputClass}>
+                      <option value="">Select Programme</option>
+                      {courses.map((c) => (
+                        <option key={c.Course_Id} value={String(c.Course_Id)}>
+                          {c.Course_Name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div>
-                <label className={labelClass}>Training Date</label>
-                <input type="date" name="TrainingDate" value={form.TrainingDate} onChange={handleChange} className={inputClass} />
-              </div>
+                  <div>
+                    <label className={labelClass}>Company Name</label>
+                    <select
+                      name="Consultancy_Id"
+                      value={form.Consultancy_Id}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === '__manual__') {
+                          setCompanyMode('manual');
+                          setForm((prev) => ({ ...prev, Consultancy_Id: '', CompanyName: '' }));
+                          return;
+                        }
+                        setCompanyMode('master');
+                        handleCompanyChange(v);
+                      }}
+                      className={inputClass}
+                    >
+                      <option value="">Select Company</option>
+                      <option value="__manual__">Other / Not in list</option>
+                      {companyOptions.map((c) => (
+                        <option key={c.Const_Id} value={String(c.Const_Id)}>
+                          {c.Comp_Name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div>
-                <label className={labelClass}>Training Programme</label>
-                <select name="Course_Id" value={form.Course_Id} onChange={handleChange} className={inputClass}>
-                  <option value="">Select Programme</option>
-                  {courses.map((c) => (
-                    <option key={c.Course_Id} value={String(c.Course_Id)}>
-                      {c.Course_Name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  {companyMode === 'manual' && (
+                    <div>
+                      <label className={labelClass}>Company Name (Manual)</label>
+                      <input
+                        type="text"
+                        name="CompanyName"
+                        value={form.CompanyName}
+                        onChange={handleChange}
+                        className={inputClass}
+                        placeholder="Enter company name"
+                      />
+                    </div>
+                  )}
 
-              <div>
-                <label className={labelClass}>Company Name</label>
-                <select
-                  name="Consultancy_Id"
-                  value={form.Consultancy_Id}
-                  onChange={(e) => handleCompanyChange(e.target.value)}
-                  className={inputClass}
-                >
-                  <option value="">Select Company</option>
-                  {companyOptions.map((c) => (
-                    <option key={c.Const_Id} value={String(c.Const_Id)}>
-                      {c.Comp_Name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className={labelClass}>Company Location</label>
-                <input
-                  type="text"
-                  name="Place"
-                  value={form.Place}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="City / location"
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Company Type</label>
-                <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm">
-                  {(['Local', 'International'] as const).map((opt) => {
-                    const active = form.CompanyType === opt;
-                    return (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setForm((prev) => ({ ...prev, CompanyType: opt }))}
-                        className={`px-4 py-2 text-sm font-semibold transition-colors ${
-                          active
-                            ? 'bg-[#2A6BB5] text-white'
-                            : 'bg-white text-gray-600 hover:bg-gray-50'
-                        }`}
-                      >
-                        {opt}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <label className={labelClass}>Company Authority</label>
-                <input
-                  type="text"
-                  name="CompanyAuthority"
-                  value={form.CompanyAuthority}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="Last contacted person"
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Name</label>
-                <input
-                  type="text"
-                  name="FullName"
-                  value={form.FullName}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="Contact name"
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Position</label>
-                <input
-                  type="text"
-                  name="Designation"
-                  value={form.Designation}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="Designation"
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Email</label>
-                <input type="email" name="Email" value={form.Email} onChange={handleChange} className={inputClass} />
-              </div>
-              <div>
-                <label className={labelClass}>Mobile</label>
-                <input type="text" name="Mobile" value={form.Mobile} onChange={handleChange} className={inputClass} />
-              </div>
-              <div>
-                <label className={labelClass}>Phone</label>
-                <input type="text" name="Phone" value={form.Phone} onChange={handleChange} className={inputClass} />
-              </div>
-
-              <div>
-                <label className={labelClass}>Training Mode</label>
-                <div className="flex items-center gap-4 pt-1">
-                  <label className="flex items-center gap-1 text-xs text-gray-700">
+                  <div>
+                    <label className={labelClass}>Company Location</label>
                     <input
-                      type="radio"
-                      name="TrainingMode"
-                      value="online"
-                      checked={form.TrainingMode === 'online'}
+                      type="text"
+                      name="Place"
+                      value={form.Place}
                       onChange={handleChange}
+                      className={inputClass}
+                      placeholder="City / location"
                     />
-                    Online
-                  </label>
-                  <label className="flex items-center gap-1 text-xs text-gray-700">
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Company Type</label>
+                    <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm">
+                      {(['Local', 'International'] as const).map((opt) => {
+                        const active = form.CompanyType === opt;
+                        return (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => setForm((prev) => ({ ...prev, CompanyType: opt }))}
+                            className={`px-4 py-2 text-sm font-semibold transition-colors ${
+                              active ? 'bg-[#2A6BB5] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                            }`}
+                          >
+                            {opt}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-2 lg:col-span-3">
+                    <div className="pt-2 mt-1 border-t border-gray-100">
+                      <div className="text-xs font-bold text-gray-700 uppercase tracking-wider">Company Authority</div>
+                    </div>
+                    <input type="hidden" name="CompanyAuthority" value={form.CompanyAuthority} />
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Full Name</label>
+                    <input type="text" name="FullName" value={form.FullName} onChange={handleChange} className={inputClass} />
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Position</label>
                     <input
-                      type="radio"
-                      name="TrainingMode"
-                      value="offline"
-                      checked={form.TrainingMode === 'offline'}
+                      type="text"
+                      name="Designation"
+                      value={form.Designation}
                       onChange={handleChange}
+                      className={inputClass}
+                      placeholder="Designation"
                     />
-                    Offline
-                  </label>
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Email</label>
+                    <input type="email" name="Email" value={form.Email} onChange={handleChange} className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Mobile</label>
+                    <input type="text" name="Mobile" value={form.Mobile} onChange={handleChange} className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Phone</label>
+                    <input type="text" name="Phone" value={form.Phone} onChange={handleChange} className={inputClass} />
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Training Mode</label>
+                    <div className="flex items-center gap-4 pt-1">
+                      <label className="flex items-center gap-1 text-xs text-gray-700">
+                        <input
+                          type="radio"
+                          name="TrainingMode"
+                          value="online"
+                          checked={form.TrainingMode === 'online'}
+                          onChange={handleChange}
+                        />
+                        Online
+                      </label>
+                      <label className="flex items-center gap-1 text-xs text-gray-700">
+                        <input
+                          type="radio"
+                          name="TrainingMode"
+                          value="offline"
+                          checked={form.TrainingMode === 'offline'}
+                          onChange={handleChange}
+                        />
+                        Offline
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Total Participants</label>
+                    <input type="number" name="TotalStudents" value={form.TotalStudents} onChange={handleChange} className={inputClass} min={0} />
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Participants (Fresher)</label>
+                    <input
+                      type="number"
+                      name="Participants_Fresher"
+                      value={form.Participants_Fresher}
+                      onChange={handleChange}
+                      className={inputClass}
+                      min={0}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Participants (Experienced)</label>
+                    <input
+                      type="number"
+                      name="Participants_Experienced"
+                      value={form.Participants_Experienced}
+                      onChange={handleChange}
+                      className={inputClass}
+                      min={0}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Training Location</label>
+                    <input
+                      type="text"
+                      name="TrainingLocation"
+                      value={form.TrainingLocation}
+                      onChange={handleChange}
+                      className={inputClass}
+                      placeholder="Location"
+                    />
+                  </div>
                 </div>
-              </div>
+              </>
+            )}
 
-              <div>
-                <label className={labelClass}>Trainer</label>
-                <input
-                  type="text"
-                  name="TrainerName"
-                  value={form.TrainerName}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="Trainer"
-                />
-              </div>
+            {activeTab === 'discussion' && (
+              <>
+                <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Discussion</h2>
 
-              <div>
-                <label className={labelClass}>Total Days</label>
-                <input type="number" name="NumberOfDays" value={form.NumberOfDays} onChange={handleChange} className={inputClass} min={0} />
-              </div>
-
-              <div>
-                <label className={labelClass}>Total Participants</label>
-                <input type="number" name="TotalStudents" value={form.TotalStudents} onChange={handleChange} className={inputClass} min={0} />
-              </div>
-
-              <div>
-                <label className={labelClass}>Training Co-ordinator</label>
-                <input
-                  type="text"
-                  name="TrainingCoordinator"
-                  value={form.TrainingCoordinator}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="Co-ordinator"
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Participants (Fresher)</label>
-                <input
-                  type="number"
-                  name="Participants_Fresher"
-                  value={form.Participants_Fresher}
-                  onChange={handleChange}
-                  className={inputClass}
-                  min={0}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Participants (Experienced)</label>
-                <input
-                  type="number"
-                  name="Participants_Experienced"
-                  value={form.Participants_Experienced}
-                  onChange={handleChange}
-                  className={inputClass}
-                  min={0}
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Training Location</label>
-                <input
-                  type="text"
-                  name="TrainingLocation"
-                  value={form.TrainingLocation}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="Location"
-                />
-              </div>
-
-              <div className="sm:col-span-2 lg:col-span-3">
                 <label className={labelClass}>Disciplines</label>
                 <textarea
                   name="business"
@@ -567,20 +529,33 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                   rows={3}
                   placeholder="Disciplines / departments"
                 />
-              </div>
 
-              <div className="sm:col-span-2 lg:col-span-3">
-                <label className={labelClass}>Remarks</label>
-                <textarea
-                  name="Remark"
-                  value={form.Remark}
-                  onChange={handleChange}
-                  className={textareaClass}
-                  rows={3}
-                  placeholder="Any additional remarks"
-                />
-              </div>
-            </div>
+                <div className="mt-4">
+                  <label className={labelClass}>Discussion Notes</label>
+                  <textarea
+                    name="Discussion"
+                    value={form.Discussion}
+                    onChange={handleChange}
+                    className={textareaClass}
+                    rows={8}
+                    placeholder="Enter discussion details"
+                  />
+                </div>
+
+                <div className="mt-4">
+                  <label className={labelClass}>Remarks</label>
+                  <textarea
+                    name="Remark"
+                    value={form.Remark}
+                    onChange={handleChange}
+                    className={textareaClass}
+                    rows={3}
+                    placeholder="Any additional remarks"
+                  />
+                </div>
+              </>
+            )}
+
           </div>
         </div>
       </form>

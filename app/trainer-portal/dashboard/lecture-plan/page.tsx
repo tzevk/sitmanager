@@ -8,6 +8,7 @@ interface Lecture {
   lecture_no: number;
   subject_topic: string;
   subject: string;
+  lecturecontent?: string | null;
   faculty_name: string;
   date: string;
   starttime: string;
@@ -219,6 +220,9 @@ export default function LecturePlanPage() {
                     </td>
                     <td className="px-6 py-3">
                       <p className="font-medium text-gray-800 truncate max-w-xs">{l.subject_topic || l.subject || '—'}</p>
+                      {l.lecturecontent ? (
+                        <p className="text-xs text-gray-500 truncate max-w-xs">Subject: {String(l.lecturecontent).trim()}</p>
+                      ) : null}
                       {l.subject && l.subject_topic && (
                         <p className="text-xs text-gray-400 truncate max-w-xs">{l.subject}</p>
                       )}

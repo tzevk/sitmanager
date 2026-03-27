@@ -22,8 +22,8 @@ export async function GET(
         l.endtime,
         l.assignment,
         l.assignment_date,
-        l.faculty_name AS faculty_id,
-        f.Faculty_Name AS faculty_name_display,
+        COALESCE(fId.Faculty_Id, fName.Faculty_Id, l.faculty_name) AS faculty_id,
+        COALESCE(fId.Faculty_Name, fName.Faculty_Name) AS faculty_name_display,
         l.class_room,
         l.documents,
         l.unit_test,
@@ -38,7 +38,8 @@ export async function GET(
         l.lecturecontent,
         l.status
       FROM batch_lecture_master l
-      LEFT JOIN faculty_master f ON l.faculty_name = f.Faculty_Id
+      LEFT JOIN faculty_master fId ON l.faculty_name = fId.Faculty_Id
+      LEFT JOIN faculty_master fName ON l.faculty_name = fName.Faculty_Name
       WHERE l.batch_id = ? AND (l.deleted IS NULL OR l.deleted = '0')
       ORDER BY l.lecture_no ASC, l.date ASC
     `, [batchId]);
@@ -71,9 +72,9 @@ export async function POST(
     const [result] = await pool.query(`
       INSERT INTO batch_lecture_master 
       (batch_id, lecture_no, subject, subject_topic, date, starttime, endtime, 
-       assignment, assignment_date, faculty_name, class_room, documents, unit_test, publish, 
-       deleted, created_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
+       assignment, assignment_date, faculty_name, class_room, documents, unit_test, publish,
+       lecturecontent, deleted, created_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
     `, [
       batchId,
       body.lecture_no || null,
@@ -89,6 +90,7 @@ export async function POST(
       body.documents || null,
       body.unit_test || null,
       body.publish || 'No',
+      body.lecturecontent || body.subject || null,
     ]);
 
     return NextResponse.json({ success: true, insertId: (result as { insertId: number }).insertId });
@@ -123,7 +125,8 @@ export async function PUT(request: NextRequest) {
         class_room = ?,
         documents = ?,
         unit_test = ?,
-        publish = ?
+        publish = ?,
+        lecturecontent = ?
       WHERE id = ?
     `, [
       data.lecture_no || null,
@@ -139,6 +142,7 @@ export async function PUT(request: NextRequest) {
       data.documents || null,
       data.unit_test || null,
       data.publish || 'No',
+      data.lecturecontent || data.subject || null,
       id,
     ]);
 

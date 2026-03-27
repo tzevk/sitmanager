@@ -4,6 +4,101 @@ import { getPool } from '@/lib/db';
 import { cache, cacheKeys, cacheTTL } from '@/lib/cache';
 import { requirePermission } from '@/lib/api-auth';
 
+async function ensureConsultancyCompanyTypeColumn(pool: ReturnType<typeof getPool>) {
+  const [rows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS cnt
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'consultant_mst'
+       AND COLUMN_NAME = 'Company_Type'`
+  );
+
+  const cnt = rows?.[0]?.cnt ?? 0;
+  if (cnt === 0) {
+    await pool.query(`ALTER TABLE consultant_mst ADD COLUMN Company_Type VARCHAR(20) NULL`);
+  }
+}
+
+async function getOrCreateConsultancyFromInquiry(opts: {
+  pool: ReturnType<typeof getPool>;
+  companyName: string;
+  contactPerson?: string | null;
+  designation?: string | null;
+  phone?: string | null;
+  mobile?: string | null;
+  email?: string | null;
+  city?: string | null;
+  companyType?: string | null;
+  dateAdded?: string | null;
+}): Promise<number> {
+  const name = (opts.companyName || '').trim();
+  if (!name) throw new Error('CompanyName is required to create consultancy');
+
+  await ensureConsultancyCompanyTypeColumn(opts.pool);
+
+  const [existing] = await opts.pool.query<any[]>(
+    `SELECT Const_Id
+     FROM consultant_mst
+     WHERE (IsDelete = 0 OR IsDelete IS NULL)
+       AND LOWER(TRIM(Comp_Name)) = LOWER(TRIM(?))
+     LIMIT 1`,
+    [name]
+  );
+
+  const existingId = existing?.[0]?.Const_Id ? Number(existing[0].Const_Id) : null;
+  if (existingId) {
+    // Only fill blanks; do not overwrite existing master data.
+    await opts.pool.query(
+      `UPDATE consultant_mst SET
+         Contact_Person = CASE WHEN (Contact_Person IS NULL OR TRIM(Contact_Person) = '') THEN ? ELSE Contact_Person END,
+         Designation = CASE WHEN (Designation IS NULL OR TRIM(Designation) = '') THEN ? ELSE Designation END,
+         Tel = CASE WHEN (Tel IS NULL OR TRIM(Tel) = '') THEN ? ELSE Tel END,
+         Mobile = CASE WHEN (Mobile IS NULL OR TRIM(Mobile) = '') THEN ? ELSE Mobile END,
+         EMail = CASE WHEN (EMail IS NULL OR TRIM(EMail) = '') THEN ? ELSE EMail END,
+         City = CASE WHEN (City IS NULL OR TRIM(City) = '') THEN ? ELSE City END,
+         Company_Type = CASE WHEN (Company_Type IS NULL OR TRIM(Company_Type) = '') THEN ? ELSE Company_Type END,
+         Date_Added = CASE WHEN Date_Added IS NULL THEN ? ELSE Date_Added END
+       WHERE Const_Id = ?`,
+      [
+        opts.contactPerson || null,
+        opts.designation || null,
+        opts.phone || null,
+        opts.mobile || null,
+        opts.email || null,
+        opts.city || null,
+        opts.companyType || null,
+        opts.dateAdded || null,
+        existingId,
+      ]
+    );
+    return existingId;
+  }
+
+  // Create a minimal master record.
+  // Keep Address as empty string to satisfy potential NOT NULL constraints.
+  const [result] = await opts.pool.query<any>(
+    `INSERT INTO consultant_mst (
+      Comp_Name, Contact_Person, Designation, Address, City, Tel,
+      Mobile, EMail, Date_Added, Company_Type,
+      IsActive, IsDelete
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+    [
+      name,
+      opts.contactPerson || null,
+      opts.designation || null,
+      '',
+      opts.city || null,
+      opts.phone || null,
+      opts.mobile || null,
+      opts.email || null,
+      opts.dateAdded || null,
+      opts.companyType || null,
+    ]
+  );
+
+  return Number(result.insertId);
+}
+
 async function ensureCorporateInquiryColumns(pool: ReturnType<typeof getPool>) {
   const wanted = [
     'Consultancy_Id',
@@ -373,7 +468,7 @@ export async function POST(req: NextRequest) {
     const Email = body?.Email;
     const Course_Id = body?.Course_Id;
 
-    const Consultancy_Id = toNullableInt(body?.Consultancy_Id);
+    let Consultancy_Id = toNullableInt(body?.Consultancy_Id);
     const CompanyType = body?.CompanyType;
     const CompanyAuthority = body?.CompanyAuthority;
     const TrainingMode = body?.TrainingMode;
@@ -392,6 +487,28 @@ export async function POST(req: NextRequest) {
     const Remark = body?.Remark ?? Discussion;
 
     const Idate = body?.Idate;
+
+    // If the user selected "Other / Not in list", they will send CompanyName without Consultancy_Id.
+    // Auto-save it into Consultancy Master and link this inquiry to the created/reused master record.
+    const companyNameTrimmed = String(CompanyName || '').trim();
+    if (!Consultancy_Id && companyNameTrimmed) {
+      const contactPerson = String((CompanyAuthority && String(CompanyAuthority).trim()) || '').trim()
+        || String((FullName && String(FullName).trim()) || '').trim()
+        || '';
+
+      Consultancy_Id = await getOrCreateConsultancyFromInquiry({
+        pool,
+        companyName: companyNameTrimmed,
+        contactPerson: contactPerson || null,
+        designation: (Designation && String(Designation).trim()) || null,
+        phone: (Phone && String(Phone).trim()) || null,
+        mobile: (Mobile && String(Mobile).trim()) || null,
+        email: (Email && String(Email).trim()) || null,
+        city: (Place && String(Place).trim()) || null,
+        companyType: (CompanyType && String(CompanyType).trim()) || null,
+        dateAdded: (Idate && String(Idate).trim()) || null,
+      });
+    }
 
     const [result] = await pool.query(
       `INSERT INTO corporate_inquiry (

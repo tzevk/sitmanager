@@ -39,6 +39,7 @@ interface PlannedLecture {
   lecture_no: number;
   subject_topic: string;
   subject?: string;
+  lecturecontent?: string | null;
   faculty_name?: string;
   date: string; // YYYY-MM-DD
   starttime?: string;
@@ -183,9 +184,8 @@ export default function TrainerDashboardPage() {
   useEffect(() => {
     if (!attendanceOpen) return;
     if (!currentBatch?.Batch_Id) return;
-    const m = monthKey(new Date());
     setTopicLoading(true);
-    fetch(`/api/trainer-portal/lecture-topics?batchId=${currentBatch.Batch_Id}&month=${m}`)
+    fetch(`/api/trainer-portal/lecture-topics?batchId=${currentBatch.Batch_Id}`)
       .then(r => r.json())
       .then(d => {
         const opts = Array.isArray(d?.disciplines) ? d.disciplines : [];
@@ -590,6 +590,9 @@ export default function TrainerDashboardPage() {
                       <td className="px-6 py-3 whitespace-nowrap text-gray-700 font-medium">{p.date}</td>
                       <td className="px-6 py-3 text-gray-800">
                         <p className="font-medium truncate max-w-xs">{(p.subject_topic || p.subject || '—').trim()}</p>
+                        {p.lecturecontent ? (
+                          <p className="text-xs text-gray-500 truncate max-w-xs">Subject: {String(p.lecturecontent).trim()}</p>
+                        ) : null}
                         <p className="text-xs text-gray-500 truncate">Lecture {p.lecture_no}</p>
                       </td>
                       <td className="px-6 py-3 whitespace-nowrap text-gray-700">
@@ -649,7 +652,7 @@ export default function TrainerDashboardPage() {
                       ))
                     )}
                   </select>
-                  <p className="mt-1 text-[11px] text-gray-500">Derived from lectures assigned to you.</p>
+                  <p className="mt-1 text-[11px] text-gray-500">Derived from the batch standard lecture plan.</p>
                 </div>
 
                 <div className="relative">
@@ -673,7 +676,7 @@ export default function TrainerDashboardPage() {
                         }
                         return (
                           <div className="space-y-2">
-                            {subs.map(s => {
+                            {subs.map((s, i) => {
                               const checked = attendanceForm.subTopics.includes(s);
                               return (
                                 <label key={s} className="flex items-start gap-2 text-sm text-gray-700">
@@ -690,7 +693,7 @@ export default function TrainerDashboardPage() {
                                       });
                                     }}
                                   />
-                                  <span className="leading-snug">{s}</span>
+                                  <span className="leading-snug">{i + 1}. {s}</span>
                                 </label>
                               );
                             })}

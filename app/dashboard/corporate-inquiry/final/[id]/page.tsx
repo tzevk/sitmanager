@@ -276,14 +276,6 @@ export default function CorporateInquiryFinalPage() {
           {activeTab === 'discussion' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
               <div>
-                <label className={labelCls}>Training Number</label>
-                <input className={inputCls} value={scheduleForm.TrainingNumber} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Training Date</label>
-                <input className={inputCls} value={scheduleForm.TrainingDate} disabled />
-              </div>
-              <div>
                 <label className={labelCls}>Trainer Name</label>
                 <input className={inputCls} value={scheduleForm.TrainerName} disabled />
               </div>
@@ -314,16 +306,8 @@ export default function CorporateInquiryFinalPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
                 <div>
-                  <label className={labelCls}>Training Number</label>
-                  <input className={inputCls} value={scheduleForm.TrainingNumber} onChange={(e) => setScheduleForm((f) => ({ ...f, TrainingNumber: e.target.value }))} />
-                </div>
-                <div>
                   <label className={labelCls}>Trainer Name</label>
                   <input className={inputCls} value={scheduleForm.TrainerName} onChange={(e) => setScheduleForm((f) => ({ ...f, TrainerName: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={labelCls}>Training Date</label>
-                  <input type="date" className={inputCls} value={scheduleForm.TrainingDate} onChange={(e) => setScheduleForm((f) => ({ ...f, TrainingDate: e.target.value }))} />
                 </div>
                 <div>
                   <label className={labelCls}>Number Of Days</label>

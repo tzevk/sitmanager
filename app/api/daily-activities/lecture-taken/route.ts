@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
+export const dynamic = 'force-dynamic';
+
 function normalizeTextKey(v: unknown) {
   return String(v ?? '').trim().toLowerCase();
 }
@@ -163,13 +165,29 @@ export async function GET(req: NextRequest) {
 
     // Fetch rows (no per-row subquery)
     const [rowsRaw] = await pool.query(
-      `SELECT lt.Take_Id, lt.Lecture_Name, lt.Topic, lt.Take_Dt, lt.Duration,
-              lt.ClassRoom, lt.Faculty_Id, lt.Course_Id, lt.Batch_Id, lt.Lecture_Id,
+      `SELECT lt.Take_Id, lt.Lecture_Name, lt.Topic, lt.Take_Dt,
+              lt.Faculty_Start, lt.Faculty_End,
+              lt.Faculty_Id, lt.Course_Id, lt.Batch_Id, lt.Lecture_Id,
+              COALESCE(
+                s.lecturecontent, s.subject,
+                l.lecturecontent, l.subject
+              ) AS Subject,
+              COALESCE(s.subject_topic, l.subject_topic) AS Subject_Name,
               f.Faculty_Name, b.Batch_code, c.Course_Name
        FROM lecture_taken_master lt
        LEFT JOIN faculty_master f ON lt.Faculty_Id = f.Faculty_Id
        LEFT JOIN batch_mst b ON lt.Batch_Id = b.Batch_Id
        LEFT JOIN course_mst c ON lt.Course_Id = c.Course_Id
+       -- Standard Lecture Plan (primary Trainer Portal source)
+       LEFT JOIN batch_slecture_master s
+         ON s.id = lt.Lecture_Id
+        AND s.batch_id = lt.Batch_Id
+        AND (s.deleted IS NULL OR s.deleted = '0' OR s.deleted = 0)
+       -- Lecture Plan (fallback)
+       LEFT JOIN batch_lecture_master l
+         ON l.id = lt.Lecture_Id
+        AND l.batch_id = lt.Batch_Id
+        AND (l.deleted IS NULL OR l.deleted = '0' OR l.deleted = 0)
        ${whereClause}
        ORDER BY lt.Take_Id DESC
        LIMIT ? OFFSET ?`,
@@ -214,15 +232,22 @@ export async function GET(req: NextRequest) {
       for (const r of rows) r.studentCount = countMap.get(Number(r.Take_Id)) ?? 0;
     }
 
-    return NextResponse.json({
-      rows,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
+    return NextResponse.json(
+      {
+        rows,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
       },
-    });
+      {
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      }
+    );
   } catch (error: any) {
     console.error('Lecture taken GET error:', error);
     return NextResponse.json(
