@@ -32,12 +32,37 @@ interface Batch {
 interface Discussion {
   id: number;
   date: string;
+  nextdate?: string | null;
   discussion: string;
   created_by: number;
   created_date: string;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+function formatDisplayDate(value?: string | null): string {
+  if (!value) return '—';
+  const raw = String(value).trim();
+  if (!raw) return '—';
+
+  let d = new Date(raw);
+  if (isNaN(d.getTime())) {
+    const m = raw.match(/^(\d{2})[-\/.](\d{2})[-\/.](\d{4})/);
+    if (m) {
+      const day = parseInt(m[1], 10);
+      const month = parseInt(m[2], 10) - 1;
+      const year = parseInt(m[3], 10);
+      d = new Date(year, month, day);
+    }
+  }
+
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
 
 /* ---- shared classes ---- */
 const labelCls = 'block text-[11px] font-semibold text-gray-600 mb-0.5';
@@ -114,6 +139,7 @@ export default function AddInquiryPage() {
   /* discussion tab */
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
   const [newDiscussion, setNewDiscussion] = useState('');
+  const [newNextFollowUpDate, setNewNextFollowUpDate] = useState(today());
   const [discussionLoading, setDiscussionLoading] = useState(false);
 
   /* ui state */
@@ -178,8 +204,12 @@ export default function AddInquiryPage() {
     try {
       const res = await fetch(`/api/inquiry/discussions?inquiryId=${editId}`);
       const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed to load discussions');
       setDiscussions(data.discussions ?? []);
-    } catch { /* ignore */ }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load discussions');
+      setDiscussions([]);
+    }
     setDiscussionLoading(false);
   }, [editId]);
 
@@ -233,16 +263,21 @@ export default function AddInquiryPage() {
 
   /* ---- add discussion ---- */
   const handleAddDiscussion = async () => {
-    if (!newDiscussion.trim() || !editId) return;
+    if (!newDiscussion.trim() || !newNextFollowUpDate || !editId) return;
     setDiscussionLoading(true);
     try {
       const res = await fetch('/api/inquiry/discussions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId: editId, discussion: newDiscussion }),
+        body: JSON.stringify({
+          inquiryId: editId,
+          discussion: newDiscussion,
+          nextFollowUpDate: newNextFollowUpDate,
+        }),
       });
       if (!res.ok) throw new Error('Failed');
       setNewDiscussion('');
+      setNewNextFollowUpDate(today());
       fetchDiscussions();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to add discussion');
@@ -674,6 +709,15 @@ export default function AddInquiryPage() {
                     title="New Discussion"
                     icon={<svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>}
                   >
+                    <div className="mb-3 max-w-[220px]">
+                      <label className={labelCls}>Next Follow Up Date</label>
+                      <input
+                        type="date"
+                        value={newNextFollowUpDate}
+                        onChange={(e) => setNewNextFollowUpDate(e.target.value)}
+                        className={inputCls}
+                      />
+                    </div>
                     <textarea
                       value={newDiscussion}
                       onChange={(e) => setNewDiscussion(e.target.value)}
@@ -683,7 +727,7 @@ export default function AddInquiryPage() {
                     />
                     <button
                       onClick={handleAddDiscussion}
-                      disabled={discussionLoading || !newDiscussion.trim()}
+                      disabled={discussionLoading || !newDiscussion.trim() || !newNextFollowUpDate}
                       className="mt-3 flex items-center gap-2 bg-[#2E3093] hover:bg-[#252780] text-white px-4 py-1.5 rounded text-xs font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50"
                     >
                       {discussionLoading ? (
@@ -724,15 +768,20 @@ export default function AddInquiryPage() {
                               </div>
                               <div className="flex-1 bg-gray-50 rounded-lg p-3 border border-gray-100">
                                 <p className="text-sm text-gray-800">{d.discussion}</p>
-                                <p className="text-[11px] text-gray-400 mt-1.5 font-medium">
-                                  {d.date
-                                    ? new Date(d.date).toLocaleDateString('en-IN', {
-                                        day: '2-digit',
-                                        month: 'short',
-                                        year: 'numeric',
-                                      })
-                                    : '—'}
-                                </p>
+                                <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-medium text-gray-500">
+                                  <p>
+                                    Discussion Date:{' '}
+                                    <span className="text-gray-400">
+                                      {formatDisplayDate(d.date)}
+                                    </span>
+                                  </p>
+                                  <p>
+                                    Next Follow Up Date:{' '}
+                                    <span className="text-[#2E3093]">
+                                      {formatDisplayDate(d.nextdate)}
+                                    </span>
+                                  </p>
+                                </div>
                               </div>
                             </div>
                           ))}

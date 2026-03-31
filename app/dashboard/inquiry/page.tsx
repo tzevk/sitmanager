@@ -52,6 +52,7 @@ interface InquiryRow {
   Inquiry_Dt: string | null;
   Discussion: string | null;
   DiscussionDate: string | null;
+  NextFollowUpDate?: string | null;
   Present_Mobile: string | null;
   Email: string | null;
   Location: string | null;
@@ -60,6 +61,17 @@ interface InquiryRow {
   Inquiry_Type: string | null;
   Status_id: number | null;
   StatusLabel: string;
+  FollowUpBy?: string | null;
+}
+
+function hasLatestFollowUp(row: InquiryRow): boolean {
+  return Boolean(row.Discussion && row.Discussion !== 'NULL' && row.Discussion.trim());
+}
+
+function isPendingFollowUp(row: InquiryRow): boolean {
+  if (row.Status_id != null && [4, 12, 15].includes(row.Status_id)) return true;
+  const label = String(row.StatusLabel || '').toLowerCase();
+  return label.includes('follow up') || label.includes('pending') || label.includes('callback');
 }
 
 interface Pagination {
@@ -198,35 +210,6 @@ export default function InquiryPage() {
     if (['closed', 'archived'].includes(l)) return 'bg-slate-300';
     if (['on hold', 'cold lead'].includes(l)) return 'bg-slate-400';
     return 'bg-slate-300';
-  };
-
-  const statusRowStrip = (statusId: number | null, label: string) => {
-    if (statusId != null) {
-      if ([7, 10, 27].includes(statusId)) return 'bg-emerald-200/45';
-      if ([1, 2, 3].includes(statusId)) return 'bg-blue-200/45';
-      if ([5, 24].includes(statusId)) return 'bg-orange-200/40';
-      if ([4, 15, 25].includes(statusId)) return 'bg-amber-200/45';
-      if ([6, 9, 19, 29].includes(statusId)) return 'bg-red-200/35';
-      if ([12, 16].includes(statusId)) return 'bg-purple-200/40';
-      if ([18, 26].includes(statusId)) return 'bg-slate-200/45';
-      if ([8, 33].includes(statusId)) return 'bg-slate-200/45';
-    }
-
-    const l = label.toLowerCase();
-    if (['admitted', 'converted', 'enrolled'].includes(l)) return 'bg-emerald-200/45';
-    if (['inquiry', 'new', 'contacted'].includes(l)) return 'bg-blue-200/45';
-    if (['hot lead', 'interested'].includes(l)) return 'bg-orange-200/40';
-    if (['warm lead', 'follow up', 'callback'].includes(l)) return 'bg-amber-200/45';
-    if (['not interested', 'lost', 'dropped', 'dnc'].includes(l)) return 'bg-red-200/35';
-    if (['visited', 'pending'].includes(l)) return 'bg-purple-200/40';
-    if (['on hold', 'cold lead'].includes(l)) return 'bg-slate-200/45';
-    if (['closed', 'archived'].includes(l)) return 'bg-slate-200/45';
-    return 'bg-white';
-  };
-
-  const isOnlineInquiry = (typeValue: string | null, fromValue: string | null) => {
-    const value = `${typeValue || ''} ${fromValue || ''}`.toLowerCase();
-    return value.includes('online') || value.includes('website') || value.includes('web') || value.includes('php');
   };
 
   /* ---- shared classes (match Annual Batch styling) ---- */
@@ -404,7 +387,6 @@ export default function InquiryPage() {
                 <th className="text-left py-3 px-4 font-bold">Discipline</th>
                 <th className="text-left py-3 px-4 font-bold">Inquiry Type</th>
                 <th className="text-left py-3 px-4 font-bold">Inquiry Date</th>
-                <th className="text-left py-3 px-4 font-bold">Discussion</th>
                 <th className="text-center py-3 px-4 font-bold">Status</th>
                 <th className="text-center py-3 px-4 font-bold">Action</th>
               </tr>
@@ -412,7 +394,7 @@ export default function InquiryPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={12} className="py-16 text-center">
+                  <td colSpan={11} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-8 h-8 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                       <span className="text-sm text-gray-400">Loading inquiries...</span>
@@ -421,7 +403,7 @@ export default function InquiryPage() {
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-16 text-center">
+                  <td colSpan={11} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2 text-gray-300">
                       <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -431,49 +413,49 @@ export default function InquiryPage() {
                   </td>
                 </tr>
               ) : (
-                rows.map((r, i) => (
+                rows.map((r, i) => {
+                  const attended = hasLatestFollowUp(r);
+                  const rowTextColorClass = isPendingFollowUp(r)
+                    ? '[&>td]:text-purple-600'
+                    : attended
+                      ? '[&>td]:text-black'
+                      : '[&>td]:text-red-600';
+
+                  return (
                   <tr
                     key={r.Student_Id}
-                    className={`border-b border-slate-100 transition-[filter] ${statusRowStrip(
-                      r.Status_id,
-                      r.StatusLabel
-                    )} ${isOnlineInquiry(r.Inquiry_Type, r.Inquiry_From) ? '[&>td]:text-red-600' : ''} hover:brightness-[0.98]`}
+                    className={`border-b border-slate-100 bg-white transition-[filter] ${rowTextColorClass} hover:brightness-[0.98]`}
                   >
-                    <td className="py-2.5 px-4 text-slate-400 font-semibold relative pl-6">
+                    <td className="py-2.5 px-4 font-semibold relative pl-6">
                       <span
                         aria-hidden
                         className={`absolute left-0 inset-y-0 w-1.5 ${statusBarColor(r.Status_id, r.StatusLabel)} rounded-r`}
                       />
                       {(pagination.page - 1) * pagination.limit + i + 1}
                     </td>
-                    <td className="py-2.5 px-4 font-semibold text-slate-900 max-w-[180px]">
+                    <td className="py-2.5 px-4 font-semibold max-w-[180px]">
                       <span className="truncate block">{formatStudentName(r.Student_Name)}</span>
                     </td>
-                    <td className="py-2.5 px-4 text-slate-600 max-w-[160px]">
+                    <td className="py-2.5 px-4 max-w-[160px]">
                       <span className="truncate block">{r.CourseName || '—'}</span>
                     </td>
-                    <td className="py-2.5 px-4 text-slate-600 whitespace-nowrap font-mono text-xs">
+                    <td className="py-2.5 px-4 whitespace-nowrap font-mono text-xs">
                       {r.Present_Mobile || '—'}
                     </td>
-                    <td className="py-2.5 px-4 text-slate-600 max-w-[180px]">
+                    <td className="py-2.5 px-4 max-w-[180px]">
                       <span className="truncate block text-xs">{r.Email || '—'}</span>
                     </td>
-                    <td className="py-2.5 px-4 text-slate-600 whitespace-nowrap text-xs">
+                    <td className="py-2.5 px-4 whitespace-nowrap text-xs">
                       {r.Location || '—'}
                     </td>
-                    <td className="py-2.5 px-4 text-slate-600 whitespace-nowrap text-xs">
+                    <td className="py-2.5 px-4 whitespace-nowrap text-xs">
                       {r.Discipline && r.Discipline !== 'NULL' && r.Discipline !== 'Select' ? r.Discipline : '—'}
                     </td>
                     <td className="py-2.5 px-4 whitespace-nowrap text-xs">
                       {r.Inquiry_Type || r.Inquiry_From || '—'}
                     </td>
-                    <td className="py-2.5 px-4 text-slate-600 whitespace-nowrap">
+                    <td className="py-2.5 px-4 whitespace-nowrap">
                       {formatDate(r.Inquiry_Dt)}
-                    </td>
-                    <td className="py-2.5 px-4 text-slate-600 max-w-[220px]">
-                      <span className="truncate block text-xs" title={r.Discussion && r.Discussion !== 'NULL' ? r.Discussion : ''}>
-                        {r.Discussion && r.Discussion !== 'NULL' ? r.Discussion : '\u2014'}
-                      </span>
                     </td>
                     <td className="py-2.5 px-4 text-center">
                       <span
@@ -526,7 +508,7 @@ export default function InquiryPage() {
                       </div>
                     </td>
                   </tr>
-                ))
+                )})
               )}
             </tbody>
           </table>
@@ -609,6 +591,60 @@ export default function InquiryPage() {
               </button>
             </div>
           </div>
+        )}
+      </div>
+
+      {/* Next Date Follow Up */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.03)] px-5 py-5">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h3 className="text-base font-black text-slate-900 tracking-tight">Next Date Follow Up</h3>
+          <span className="text-xs font-semibold text-slate-500">
+            {rows.filter((r) => hasLatestFollowUp(r)).length} inquiries
+          </span>
+        </div>
+
+        {loading ? (
+          <p className="text-sm text-slate-400">Loading discussion details...</p>
+        ) : rows.some((r) => hasLatestFollowUp(r)) ? (
+          <div className="space-y-2.5">
+            {rows
+              .filter((r) => hasLatestFollowUp(r))
+              .map((r) => (
+                <div key={`followup-${r.Student_Id}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
+                  <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
+                    <div>
+                      <p className="text-sm font-bold text-black">{formatStudentName(r.Student_Name)}</p>
+                      <p className="text-[11px] font-semibold text-slate-500 mt-0.5">{r.CourseName || '—'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Next Date Follow Up</p>
+                      <p className="text-xs font-semibold text-slate-700 mt-0.5">{formatDate(r.NextFollowUpDate || null)}</p>
+                      <p className="text-[11px] font-bold text-[#2E3093] mt-0.5">Interacted by: {r.FollowUpBy || 'System'}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2.5">
+                    <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Mobile</p>
+                      <p className="text-xs font-semibold text-slate-700 mt-0.5">{r.Present_Mobile || '—'}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Inquiry Type</p>
+                      <p className="text-xs font-semibold text-slate-700 mt-0.5">{r.Inquiry_Type || r.Inquiry_From || '—'}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Status</p>
+                      <p className="text-xs font-semibold text-slate-700 mt-0.5">{r.StatusLabel}</p>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Latest Interaction Note</p>
+                    <p className="text-sm text-slate-700">{r.Discussion}</p>
+                  </div>
+                </div>
+              ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">No discussion notes available for current listing.</p>
         )}
       </div>
       </>)}

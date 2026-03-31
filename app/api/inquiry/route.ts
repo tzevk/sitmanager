@@ -293,17 +293,33 @@ export async function GET(req: NextRequest) {
           CAST(NULLIF(si.OnlineState, '') AS UNSIGNED) as Status_id,
           si.Discussion as InlineDiscussion,
           ld.discussion as LatestDiscussion,
-          ld.date as LatestDiscDate
+          ld.date as LatestDiscDate,
+          ld.nextdate as NextFollowUpDate,
+          ld.created_by as LatestDiscussionById,
+          COALESCE(
+            NULLIF(TRIM(CONCAT(COALESCE(au.firstname, ''), ' ', COALESCE(au.lastname, ''))), ''),
+            NULLIF(TRIM(au.username), ''),
+            NULLIF(TRIM(au.email), ''),
+            NULLIF(TRIM(oe.Employee_Name), '')
+          ) as LatestDiscussionByName
         FROM Student_Inquiry si
         LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
         LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline), '') AS UNSIGNED)
         LEFT JOIN (
-          SELECT Inquiry_id, MAX(id) as max_id
-          FROM awt_inquirydiscussion
-          WHERE deleted = 0 AND Inquiry_id IN (${placeholders})
-          GROUP BY Inquiry_id
-        ) tld ON tld.Inquiry_id = si.Inquiry_Id
+          SELECT si_map.Inquiry_Id as InquiryId, MAX(d.id) as max_id
+          FROM Student_Inquiry si_map
+          INNER JOIN awt_inquirydiscussion d
+            ON d.deleted = 0
+           AND (
+             d.Inquiry_id = si_map.Inquiry_Id
+             OR d.Inquiry_id = si_map.Student_Id
+           )
+          WHERE si_map.Inquiry_Id IN (${placeholders})
+          GROUP BY si_map.Inquiry_Id
+        ) tld ON tld.InquiryId = si.Inquiry_Id
         LEFT JOIN awt_inquirydiscussion ld ON ld.id = tld.max_id
+        LEFT JOIN awt_adminuser au ON au.id = ld.created_by
+        LEFT JOIN office_employee_mst oe ON oe.Emp_Id = ld.created_by
         WHERE si.Inquiry_Id IN (${placeholders})`,
         [...pageIds, ...pageIds]
       );
@@ -356,6 +372,8 @@ export async function GET(req: NextRequest) {
         Status_id: r.Status_id,
         Discussion: r.LatestDiscussion || inlineDisc || null,
         DiscussionDate: r.LatestDiscDate || null,
+        NextFollowUpDate: r.NextFollowUpDate || null,
+        FollowUpBy: r.LatestDiscussionByName || (r.LatestDiscussionById != null ? `User ${r.LatestDiscussionById}` : null),
       };
     });
 

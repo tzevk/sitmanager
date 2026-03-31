@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
-/* hardcoded status map (same as inquiry) */
-const statusMap: Record<number, string> = {
+/* fallback labels for older DBs */
+const fallbackStatusMap: Record<number, string> = {
   0: 'New Inquiry',
   1: 'Follow Up',
   2: 'Interested',
@@ -45,33 +45,49 @@ export async function GET(req: NextRequest) {
     const offset = (page - 1) * limit;
 
     const search = searchParams.get('search')?.trim() || '';
-    const statusFilter = searchParams.get('status') || '';
+    const statusCategory = (searchParams.get('statusCategory') || '').trim().toLowerCase();
     const dateFrom = searchParams.get('dateFrom') || '';
     const dateTo = searchParams.get('dateTo') || '';
 
+    const statusIdExpr = `CAST(NULLIF(TRIM(CAST(s.Status_id AS CHAR)), '') AS UNSIGNED)`;
+    const statusTextExpr = `LOWER(TRIM(COALESCE(stm.Status, '')))`;
+    const closedExpr = `(${statusTextExpr} LIKE '%closed%' OR ${statusTextExpr} REGEXP 'declin|reject|cancel|not interested|drop|left')`;
+    const acceptedExpr = `(${statusTextExpr} LIKE '%accepted%' OR ${statusTextExpr} LIKE '%admitted%' OR ${statusTextExpr} LIKE '%confirm%')`;
+    const openExpr = `(${statusTextExpr} LIKE '%open%' OR ${statusTextExpr} LIKE '%pending%')`;
     /* ---- Build WHERE ---- */
-    const conditions: string[] = ['a.IsDelete = 0'];
+    const conditions: string[] = [
+      '(s.IsDelete = 0 OR s.IsDelete IS NULL)',
+      "s.Admission != 1",
+      "s.IsAdmOpen = 'open'",
+      "s.Status_id != 8",
+      "s.Admission_Dt IS NOT NULL"
+    ];
     const params: (string | number)[] = [];
 
     if (search) {
       conditions.push(
-        `(s.Student_Name LIKE ? OR s.Email LIKE ? OR s.Present_Mobile LIKE ? OR b.Batch_code LIKE ?)`
+        `(s.Student_Name LIKE ? OR s.Email LIKE ? OR s.Present_Mobile LIKE ? OR s.Batch_Code LIKE ?)`
       );
       const like = `%${search}%`;
       params.push(like, like, like, like);
     }
 
-    if (statusFilter !== '') {
-      conditions.push('s.Status_id = ?');
-      params.push(Number(statusFilter));
+    if (statusCategory) {
+      if (statusCategory === 'closed') {
+        conditions.push(closedExpr);
+      } else if (statusCategory === 'open') {
+        conditions.push(`(${openExpr} OR (NOT ${closedExpr} AND NOT ${acceptedExpr}))`);
+      } else if (statusCategory === 'accepted') {
+        conditions.push(acceptedExpr);
+      }
     }
 
     if (dateFrom) {
-      conditions.push('a.Admission_Date >= ?');
+      conditions.push('s.Admission_Dt >= ?');
       params.push(dateFrom);
     }
     if (dateTo) {
-      conditions.push('a.Admission_Date <= ?');
+      conditions.push('s.Admission_Dt <= ?');
       params.push(dateTo);
     }
 
@@ -80,9 +96,8 @@ export async function GET(req: NextRequest) {
     /* ---- Count ---- */
     const countSql = `
       SELECT COUNT(*) AS total
-      FROM admission_master a
-      LEFT JOIN student_master s ON a.Student_Id = s.Student_Id
-      LEFT JOIN batch_mst b ON a.Batch_Id = b.Batch_Id
+      FROM student_master s
+      LEFT JOIN Status_Master stm ON stm.Id = ${statusIdExpr}
       WHERE ${where}
     `;
     const [countRows] = await pool.query<any[]>(countSql, params);
@@ -91,36 +106,125 @@ export async function GET(req: NextRequest) {
     /* ---- Data ---- */
     const dataSql = `
       SELECT
-        a.Admission_Id,
-        a.Student_Id,
+        s.Student_Id as Admission_Id,
+        s.Student_Id,
         s.Student_Name,
         s.Email,
         s.Present_Mobile,
-        b.Batch_code,
-        a.Admission_Date,
-        s.Status_id,
-        a.Cancel,
-        a.IsActive
-      FROM admission_master a
-      LEFT JOIN student_master s ON a.Student_Id = s.Student_Id
-      LEFT JOIN batch_mst b ON a.Batch_Id = b.Batch_Id
+        s.Batch_Code as Batch_code,
+        s.Admission_Dt as Admission_Date,
+        s.Status_id as OnlineStateRaw,
+        ${statusIdExpr} as OnlineStateId,
+        COALESCE(stm.Status, '') as StatusText
+      FROM student_master s
+      LEFT JOIN Status_Master stm ON stm.Id = ${statusIdExpr}
       WHERE ${where}
-      ORDER BY a.Admission_Id DESC
+      ORDER BY s.Student_Id DESC
       LIMIT ? OFFSET ?
     `;
     const dataParams = [...params, limit, offset];
     const [rows] = await pool.query<any[]>(dataSql, dataParams);
 
+    // Load all status labels from DB (support both new and legacy table names).
+    let statusOptions: { id: number; label: string }[] = [];
+    const pushStatuses = (rows: any[]) => {
+      for (const r of rows) {
+        const id = Number(r?.id);
+        const label = String(r?.label ?? '').trim();
+        if (!Number.isFinite(id) || !label) continue;
+        if (!statusOptions.some((s) => s.id === id)) {
+          statusOptions.push({ id, label });
+        }
+      }
+    };
+
+    try {
+      const [statusRows] = await pool.query<any[]>(
+        `SELECT Status_id as id, Status as label
+         FROM awt_status
+         WHERE Status_id IS NOT NULL
+         ORDER BY Status_id`
+      );
+      pushStatuses(statusRows as any[]);
+    } catch {
+      // Ignore and continue with other sources.
+    }
+
+    try {
+      const [legacyRows] = await pool.query<any[]>(
+        `SELECT Id as id, Status as label
+         FROM Status_Master
+         WHERE Id IS NOT NULL
+         ORDER BY Id`
+      );
+      pushStatuses(legacyRows as any[]);
+    } catch {
+      // Ignore and continue with fallback map.
+    }
+
+    if (statusOptions.length === 0) {
+      statusOptions = Object.entries(fallbackStatusMap).map(([id, label]) => ({
+        id: Number(id),
+        label,
+      }));
+    }
+
+    // Ensure every status present in admissions data is included in options.
+    const [statusInAdmissions] = await pool.query<any[]>(
+      `SELECT DISTINCT ${statusIdExpr} as id
+       FROM student_master s
+       WHERE (s.IsDelete = 0 OR s.IsDelete IS NULL)
+         AND s.Admission != 1
+         AND ${statusIdExpr} IS NOT NULL`
+    );
+
+    const seen = new Set(statusOptions.map((s) => s.id));
+    for (const r of statusInAdmissions as any[]) {
+      const id = Number(r?.id);
+      if (!Number.isFinite(id) || seen.has(id)) continue;
+      statusOptions.push({
+        id,
+        label: fallbackStatusMap[id] ?? `Status ${id}`,
+      });
+      seen.add(id);
+    }
+
+    // Also include statuses in the current paginated result set.
+    for (const r of rows) {
+      const id = Number(r?.OnlineStateId);
+      if (!Number.isFinite(id) || seen.has(id)) continue;
+      statusOptions.push({
+        id,
+        label: fallbackStatusMap[id] ?? `Status ${id}`,
+      });
+      seen.add(id);
+    }
+
+    statusOptions.sort((a, b) => a.id - b.id);
+
+    const statusLabelMap: Record<number, string> = Object.fromEntries(
+      statusOptions.map((s) => [s.id, s.label])
+    );
+
+    const categoryLabel = (r: any): 'Closed' | 'Open' | 'Accepted' => {
+      const base = String(r?.StatusText || statusLabelMap[r?.OnlineStateId] || '').toLowerCase();
+      const isClosed = /closed/.test(base) || /(declin|reject|cancel|not interested|drop|left)/.test(base);
+      if (isClosed) return 'Closed';
+
+      const isAccepted = /accepted|admitted|confirm/.test(base);
+      if (isAccepted) return 'Accepted';
+
+      const isOpen = /open|pending/.test(base) || base.length === 0;
+      if (isOpen) return 'Open';
+
+      return 'Open';
+    };
+
     /* map status labels */
     const mapped = rows.map((r: any) => ({
       ...r,
-      StatusLabel: statusMap[r.Status_id] ?? `Unknown (${r.Status_id})`,
-    }));
-
-    /* status options for filter dropdown */
-    const statusOptions = Object.entries(statusMap).map(([id, label]) => ({
-      id: Number(id),
-      label,
+      Status_id: r.OnlineStateId,
+      StatusLabel: categoryLabel(r),
     }));
 
     return NextResponse.json({
@@ -191,7 +295,8 @@ export async function POST(req: NextRequest) {
         Nationality = ?,
         DOB = ?,
         Sex = ?,
-        Status_id = 8
+        Status_id = 8,
+        Admission = 1
       WHERE Student_Id = ?`,
       [
         fullName,

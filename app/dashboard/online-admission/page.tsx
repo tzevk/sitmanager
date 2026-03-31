@@ -26,6 +26,12 @@ interface Pagination {
   totalPages: number;
 }
 
+const statusCategoryOptions = [
+  { id: 'open', label: 'Open' },
+  { id: 'accepted', label: 'Accepted' },
+  { id: 'closed', label: 'Closed' },
+] as const;
+
 export default function OnlineAdmissionPage() {
   const router = useRouter();
   const { canView, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('online_admission');
@@ -33,7 +39,6 @@ export default function OnlineAdmissionPage() {
   const [pagination, setPagination] = useState<Pagination>({
     page: 1, limit: 25, total: 0, totalPages: 0,
   });
-  const [statusOptions, setStatusOptions] = useState<{ id: number; label: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
   /* Filter state */
@@ -54,7 +59,7 @@ export default function OnlineAdmissionPage() {
       params.set('page', String(page));
       params.set('limit', '25');
       if (search) params.set('search', search);
-      if (status) params.set('status', status);
+      if (status) params.set('statusCategory', status);
       if (dateFrom) params.set('dateFrom', dateFrom);
       if (dateTo) params.set('dateTo', dateTo);
 
@@ -62,7 +67,6 @@ export default function OnlineAdmissionPage() {
       const data = await res.json();
       setRows(data.rows ?? []);
       setPagination(data.pagination ?? { page: 1, limit: 25, total: 0, totalPages: 0 });
-      if (data.statusOptions) setStatusOptions(data.statusOptions);
     } catch (e) {
       console.error('Failed to fetch admissions', e);
     } finally {
@@ -112,17 +116,17 @@ export default function OnlineAdmissionPage() {
 
   const statusColor = (label: string) => {
     const l = label.toLowerCase();
-    if (['admitted', 'converted', 'enrolled'].includes(l)) return 'bg-emerald-100 text-emerald-700';
-    if (['confirmed'].includes(l)) return 'bg-green-100 text-green-700';
-    if (['inquiry', 'new', 'new inquiry'].includes(l)) return 'bg-blue-100 text-blue-700';
-    if (['interested', 'hot lead'].includes(l)) return 'bg-orange-100 text-orange-700';
-    if (['follow up', 'callback'].includes(l)) return 'bg-amber-100 text-amber-700';
-    if (['not interested', 'lost', 'dropped'].includes(l)) return 'bg-red-100 text-red-600';
-    if (['cancelled', 'left'].includes(l)) return 'bg-red-50 text-red-500';
-    if (['batch started', 'batch completed'].includes(l)) return 'bg-teal-100 text-teal-700';
-    if (['transfer', 'duplicate'].includes(l)) return 'bg-slate-100 text-slate-600';
-    if (['fees pending', 'document pending'].includes(l)) return 'bg-yellow-100 text-yellow-700';
-    return 'bg-gray-100 text-gray-600';
+    if (l === 'accepted') return 'text-emerald-600';
+    if (l === 'closed') return 'text-red-500';
+    if (l === 'open') return 'text-black';
+    return 'text-black';
+  };
+
+  const statusRowTextColor = (label: string) => {
+    const l = label.toLowerCase();
+    if (l === 'accepted') return 'text-emerald-500';
+    if (l === 'closed') return 'text-red-500';
+    return 'text-black';
   };
 
   /* ---- shared classes (match Inquiry / Annual Batch styling) ---- */
@@ -206,7 +210,7 @@ export default function OnlineAdmissionPage() {
                 className={selectCls}
               >
                 <option value="">All Statuses</option>
-                {statusOptions.map((s) => (
+                {statusCategoryOptions.map((s) => (
                   <option key={s.id} value={s.id}>{s.label}</option>
                 ))}
               </select>
@@ -294,7 +298,9 @@ export default function OnlineAdmissionPage() {
                   </td>
                 </tr>
               ) : (
-                rows.map((r) => (
+                rows.map((r) => {
+                  const rowTone = statusRowTextColor(r.StatusLabel);
+                  return (
                   <tr
                     key={r.Admission_Id}
                     className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors"
@@ -302,25 +308,19 @@ export default function OnlineAdmissionPage() {
                     <td className="py-2.5 px-4 text-gray-400 font-mono text-xs">
                       {r.Admission_Id}
                     </td>
-                    <td className="py-2.5 px-4 font-semibold text-gray-800 max-w-[200px]">
+                    <td className={`py-2.5 px-4 font-semibold max-w-[200px] ${rowTone}`}>
                       <span className="truncate block">{r.Student_Name || '—'}</span>
                     </td>
-                    <td className="py-2.5 px-4 text-gray-600 max-w-[200px]">
+                    <td className={`py-2.5 px-4 max-w-[200px] ${rowTone}`}>
                       <span className="truncate block text-xs">{r.Email || '—'}</span>
                     </td>
-                    <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap font-mono text-xs">
+                    <td className={`py-2.5 px-4 whitespace-nowrap font-mono text-xs ${rowTone}`}>
                       {r.Present_Mobile || '—'}
                     </td>
-                    <td className="py-2.5 px-4 whitespace-nowrap">
-                      {r.Batch_code ? (
-                        <span className="inline-block px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-xs font-semibold">
-                          {r.Batch_code}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
+                    <td className={`py-2.5 px-4 whitespace-nowrap text-xs font-semibold ${rowTone}`}>
+                      {r.Batch_code || '—'}
                     </td>
-                    <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap text-xs">
+                    <td className={`py-2.5 px-4 whitespace-nowrap text-xs ${rowTone}`}>
                       {r.Admission_Date
                         ? new Date(r.Admission_Date).toLocaleDateString('en-IN', {
                             day: '2-digit',
@@ -329,14 +329,8 @@ export default function OnlineAdmissionPage() {
                           })
                         : '—'}
                     </td>
-                    <td className="py-2.5 px-4 text-center">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold ${statusColor(
-                          r.StatusLabel
-                        )}`}
-                      >
-                        {r.StatusLabel}
-                      </span>
+                    <td className={`py-2.5 px-4 text-center text-sm font-semibold ${statusColor(r.StatusLabel)}`}>
+                      {r.StatusLabel}
                     </td>
                     <td className="py-2.5 px-4 text-center">
                       <div className="flex items-center justify-center gap-1">
@@ -373,7 +367,7 @@ export default function OnlineAdmissionPage() {
                       </div>
                     </td>
                   </tr>
-                ))
+                )})
               )}
             </tbody>
           </table>
