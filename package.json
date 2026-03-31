@@ -14,6 +14,7 @@
     "db:import-ct": "node scripts/db/import-ct-xlsx.mjs --file ct.xlsx",
     "db:sync-ct-enquires": "node scripts/db/sync-ct-training-enquires-to-corporate-inquiry.mjs",
     "cron:sync-courses": "node scripts/cron/run-sync-courses.mjs",
+    "cron:sync-batch": "node scripts/cron/run-sync-batch.mjs",
     "cron:sync-all": "node scripts/cron/run-sync-all.mjs",
     "cron:sync-inquiry": "node scripts/cron/run-sync-inquiry.mjs"
   },

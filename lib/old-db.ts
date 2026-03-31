@@ -5,6 +5,27 @@ let oldPool: mysql.Pool | null = null;
 
 const isServerless = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
 
+const READ_ONLY_SQL_RE = /^(with|select|show|describe|desc|explain)\b/i;
+const LEADING_SQL_COMMENTS_RE = /^(?:\s|\/\*[\s\S]*?\*\/|--[^\n]*\n|#[^\n]*\n)*/;
+
+function isReadOnlySql(sql: string): boolean {
+  const normalized = sql.replace(LEADING_SQL_COMMENTS_RE, '').trim();
+  if (!normalized) return false;
+  return READ_ONLY_SQL_RE.test(normalized);
+}
+
+function assertReadOnlyQuery(sql: unknown): void {
+  const queryText = typeof sql === 'string'
+    ? sql
+    : (sql && typeof sql === 'object' && 'sql' in sql && typeof (sql as { sql: unknown }).sql === 'string'
+      ? (sql as { sql: string }).sql
+      : '');
+
+  if (!isReadOnlySql(queryText)) {
+    throw new Error('Blocked non-read query on OLD DB. OLD DB is configured as read-only.');
+  }
+}
+
 export function getOldPool(): mysql.Pool {
   if (!oldPool) {
     const env = getOldDbEnv();
@@ -40,6 +61,18 @@ export function getOldPool(): mysql.Pool {
         console.error('OLD DB connection error:', err.code);
       });
     });
+
+    const baseQuery = oldPool.query.bind(oldPool);
+    oldPool.query = ((sql: unknown, values?: unknown) => {
+      assertReadOnlyQuery(sql);
+      return baseQuery(sql as never, values as never);
+    }) as typeof oldPool.query;
+
+    const baseExecute = oldPool.execute.bind(oldPool);
+    oldPool.execute = ((sql: string, values?: unknown) => {
+      assertReadOnlyQuery(sql);
+      return baseExecute(sql as never, values as never);
+    }) as typeof oldPool.execute;
   }
   return oldPool;
 }

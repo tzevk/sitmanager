@@ -190,7 +190,11 @@ export default function BatchPage() {
                 ref={searchRef}
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                  setFetchTrigger((t) => t + 1);
+                }}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                 placeholder="Search…"
                 className="w-44 pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-400"
@@ -207,7 +211,11 @@ export default function BatchPage() {
           <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50 flex items-center gap-3 flex-wrap flex-shrink-0">
             <select
               value={categoryFilter}
-              onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
+              onChange={(e) => {
+                setCategoryFilter(e.target.value);
+                setPage(1);
+                setFetchTrigger((t) => t + 1);
+              }}
               className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
             >
               <option value="">All Categories</option>
