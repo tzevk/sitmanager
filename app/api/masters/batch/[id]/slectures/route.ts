@@ -57,24 +57,27 @@ export async function GET(
       // Current batch has lectures, fetch them
       const [rows] = await pool.query<RowDataPacket[]>(`
         SELECT 
-          id,
-          lecture_no,
-          subject,
-          subject_topic,
-          date,
-          starttime,
-          endtime,
-          assignment,
-          assignment_date,
-          faculty_name,
-          class_room,
-          documents,
-          unit_test,
-          publish,
-          lecturecontent
-        FROM batch_slecture_master
-        WHERE batch_id = ? AND (deleted IS NULL OR deleted = '0')
-        ORDER BY lecture_no ASC, date ASC
+          s.id,
+          s.lecture_no,
+          s.subject,
+          s.subject_topic,
+          s.date,
+          s.lectureday,
+          s.starttime,
+          s.endtime,
+          s.assignment,
+          s.assignment_date,
+          s.faculty_name,
+          s.class_room,
+          s.documents,
+          s.unit_test,
+          u.utdate AS unit_test_date,
+          s.publish,
+          s.lecturecontent
+        FROM batch_slecture_master s
+        LEFT JOIN awt_unittesttaken u ON u.id = CAST(s.unit_test AS UNSIGNED)
+        WHERE s.batch_id = ? AND (s.deleted IS NULL OR s.deleted = '0')
+        ORDER BY s.lecture_no ASC, s.date ASC
       `, [batchId]);
       lectures = rows;
     } else if (currentBatch.Course_Id && currentBatch.SDate && currentBatch.EDate) {
@@ -100,23 +103,26 @@ export async function GET(
         // Fetch lectures from previous batch
         const [prevLectures] = await pool.query<RowDataPacket[]>(`
           SELECT 
-            lecture_no,
-            subject,
-            subject_topic,
-            date,
-            starttime,
-            endtime,
-            assignment,
-            assignment_date,
-            faculty_name,
-            class_room,
-            documents,
-            unit_test,
-            publish,
-            lecturecontent
-          FROM batch_slecture_master
-          WHERE batch_id = ? AND (deleted IS NULL OR deleted = '0')
-          ORDER BY lecture_no ASC, date ASC
+            s.lecture_no,
+            s.subject,
+            s.subject_topic,
+            s.date,
+            s.lectureday,
+            s.starttime,
+            s.endtime,
+            s.assignment,
+            s.assignment_date,
+            s.faculty_name,
+            s.class_room,
+            s.documents,
+            s.unit_test,
+            u.utdate AS unit_test_date,
+            s.publish,
+            s.lecturecontent
+          FROM batch_slecture_master s
+          LEFT JOIN awt_unittesttaken u ON u.id = CAST(s.unit_test AS UNSIGNED)
+          WHERE s.batch_id = ? AND (s.deleted IS NULL OR s.deleted = '0')
+          ORDER BY s.lecture_no ASC, s.date ASC
         `, [prevBatch.Batch_Id]);
         
         // Adjust dates for current batch
@@ -132,16 +138,17 @@ export async function GET(
           
           const [insertResult] = await pool.query(`
             INSERT INTO batch_slecture_master 
-            (batch_id, lecture_no, subject, subject_topic, date, starttime, endtime, 
+            (batch_id, lecture_no, subject, subject_topic, date, lectureday, starttime, endtime, 
              assignment, assignment_date, faculty_name, class_room, documents, unit_test, publish,
              lecturecontent, deleted, created_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
           `, [
             batchId,
             lec.lecture_no,
             lec.subject,
             lec.subject_topic,
             adjustedDate,
+            lec.lectureday,
             lec.starttime,
             lec.endtime,
             lec.assignment,
@@ -160,6 +167,7 @@ export async function GET(
             subject: lec.subject,
             subject_topic: lec.subject_topic,
             date: adjustedDate,
+            lectureday: lec.lectureday,
             starttime: lec.starttime,
             endtime: lec.endtime,
             assignment: lec.assignment,
@@ -168,6 +176,7 @@ export async function GET(
             class_room: lec.class_room,
             documents: lec.documents,
             unit_test: lec.unit_test,
+            unit_test_date: lec.unit_test_date,
             publish: lec.publish,
             lecturecontent: lec.lecturecontent,
           } as RowDataPacket);
@@ -202,16 +211,17 @@ export async function POST(
 
     const [result] = await pool.query(`
       INSERT INTO batch_slecture_master 
-      (batch_id, lecture_no, subject, subject_topic, date, starttime, endtime, 
+      (batch_id, lecture_no, subject, subject_topic, date, lectureday, starttime, endtime, 
        assignment, assignment_date, faculty_name, class_room, documents, unit_test, publish, lecturecontent,
        deleted, created_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
     `, [
       batchId,
       body.lecture_no || null,
       body.subject || null,
       body.subject_topic || null,
       body.date || null,
+      body.lectureday || null,
       body.starttime || null,
       body.endtime || null,
       body.assignment || null,
@@ -248,6 +258,7 @@ export async function PUT(request: NextRequest) {
         subject = ?,
         subject_topic = ?,
         date = ?,
+        lectureday = ?,
         starttime = ?,
         endtime = ?,
         assignment = ?,
@@ -264,6 +275,7 @@ export async function PUT(request: NextRequest) {
       data.subject || null,
       data.subject_topic || null,
       data.date || null,
+      data.lectureday || null,
       data.starttime || null,
       data.endtime || null,
       data.assignment || null,

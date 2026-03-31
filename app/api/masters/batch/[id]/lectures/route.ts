@@ -71,16 +71,17 @@ export async function POST(
 
     const [result] = await pool.query(`
       INSERT INTO batch_lecture_master 
-      (batch_id, lecture_no, subject, subject_topic, date, starttime, endtime, 
+      (batch_id, lecture_no, subject, subject_topic, date, lectureday, starttime, endtime, 
        assignment, assignment_date, faculty_name, class_room, documents, unit_test, publish,
        lecturecontent, deleted, created_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
     `, [
       batchId,
       body.lecture_no || null,
       body.subject || null,
       body.subject_topic || null,
       body.date || null,
+      body.lectureday || null,
       body.starttime || null,
       body.endtime || null,
       body.assignment || null,
@@ -117,6 +118,7 @@ export async function PUT(request: NextRequest) {
         subject = ?,
         subject_topic = ?,
         date = ?,
+        lectureday = ?,
         starttime = ?,
         endtime = ?,
         assignment = ?,
@@ -133,6 +135,7 @@ export async function PUT(request: NextRequest) {
       data.subject || null,
       data.subject_topic || null,
       data.date || null,
+      data.lectureday || null,
       data.starttime || null,
       data.endtime || null,
       data.assignment || null,

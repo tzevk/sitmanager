@@ -65,6 +65,7 @@ interface StandardLecture {
   subject_topic: string | null;
   lecturecontent?: string | null;
   date: string | null;
+  lectureday?: string | null;
   starttime: string | null;
   endtime: string | null;
   assignment: string | null;
@@ -73,6 +74,7 @@ interface StandardLecture {
   class_room: string | null;
   documents: string | null;
   unit_test: string | null;
+  unit_test_date?: string | null;
   publish: string | null;
 }
 
@@ -355,6 +357,7 @@ export default function EditBatchPage() {
     subject: '',
     subject_topic: '',
     date: '',
+    lectureday: '',
     starttime: '',
     endtime: '',
     assignment: '',
@@ -389,6 +392,7 @@ export default function EditBatchPage() {
           subject_topic: (row.subject_topic ?? null),
           lecturecontent: (row.lecturecontent ?? null),
           date: formatDateForInput(row.date) || null,
+          lectureday: row.lectureday,
           starttime: row.starttime,
           endtime: row.endtime,
           assignment: row.assignment,
@@ -419,6 +423,7 @@ export default function EditBatchPage() {
           lecturecontent: row.lecturecontent ?? row.subject,
           subject_topic: row.subject_topic,
           date: formatDateForInput(row.date) || null,
+          lectureday: row.lectureday,
           starttime: row.starttime,
           endtime: row.endtime,
           assignment: row.assignment,
@@ -2106,7 +2111,8 @@ export default function EditBatchPage() {
   /* Standard Lecture Plan Tab */
   const filteredSLectures = standardLectures.filter(l =>
     (l.lecturecontent || l.subject)?.toLowerCase().includes(sLectureSearch.toLowerCase()) ||
-    l.subject_topic?.toLowerCase().includes(sLectureSearch.toLowerCase())
+    l.subject_topic?.toLowerCase().includes(sLectureSearch.toLowerCase()) ||
+    (l.lectureday || '').toLowerCase().includes(sLectureSearch.toLowerCase())
   );
 
   const handleDeleteSLecture = async (lectureId: number) => {
@@ -2122,12 +2128,13 @@ export default function EditBatchPage() {
   };
 
   const handleExportSLectures = () => {
-    const headers = ['LectureNo', 'LectureContent', 'SubjectTopics', 'Date', 'StartTime', 'EndTime', 'Assignment', 'AssignmentDate', 'TrainerName', 'ClassRoom', 'Documents', 'UnitTest', 'Publish'];
+    const headers = ['LectureNo', 'LectureContent', 'SubjectTopics', 'Date', 'LectureDay', 'StartTime', 'EndTime', 'Assignment', 'AssignmentDate', 'TrainerName', 'ClassRoom', 'Documents', 'UnitTest', 'UnitTestDate', 'Publish'];
     const rows = filteredSLectures.map(l => [
       l.lecture_no || '',
       l.lecturecontent || l.subject || '',
       l.subject_topic || '',
       l.date || '',
+      l.lectureday || '',
       l.starttime || '',
       l.endtime || '',
       l.assignment || '',
@@ -2136,6 +2143,7 @@ export default function EditBatchPage() {
       l.class_room || '',
       l.documents || '',
       l.unit_test || '',
+      l.unit_test_date || '',
       l.publish || '',
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\\n');
@@ -2193,6 +2201,7 @@ export default function EditBatchPage() {
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Subject</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Subject Topic</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Date</th>
+              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Lecture Day</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Start</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">End</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Assign</th>
@@ -2201,6 +2210,7 @@ export default function EditBatchPage() {
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Room</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Docs</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">UT</th>
+              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">UT Date</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Pub</th>
               <th className="text-center px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Act</th>
             </tr>
@@ -2208,7 +2218,7 @@ export default function EditBatchPage() {
           <tbody>
             {loadingSLectures ? (
               <tr>
-                <td colSpan={14} className="px-2 py-4 text-center text-gray-400">
+                <td colSpan={16} className="px-2 py-4 text-center text-gray-400">
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-3 h-3 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                     Loading...
@@ -2217,7 +2227,7 @@ export default function EditBatchPage() {
               </tr>
             ) : filteredSLectures.length === 0 ? (
               <tr>
-                <td colSpan={14} className="px-2 py-4 text-center text-gray-400">
+                <td colSpan={16} className="px-2 py-4 text-center text-gray-400">
                   No lecture plan found. Lectures are auto-loaded from previous batch of same course.
                 </td>
               </tr>
@@ -2263,6 +2273,16 @@ export default function EditBatchPage() {
                       disabled={stdPlanLocked}
                       onChange={(e) => updateStandardLectureInline(l.id, { date: e.target.value })}
                       className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <input
+                      type="text"
+                      value={(l.lectureday ?? '').toString()}
+                      disabled={stdPlanLocked}
+                      onChange={(e) => updateStandardLectureInline(l.id, { lectureday: e.target.value })}
+                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                      placeholder="Lecture Day"
                     />
                   </td>
                   <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
@@ -2340,6 +2360,14 @@ export default function EditBatchPage() {
                       onChange={(e) => updateStandardLectureInline(l.id, { unit_test: e.target.value })}
                       className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
                       placeholder="UT"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
+                    <input
+                      type="date"
+                      value={formatDateForInput(l.unit_test_date || null)}
+                      disabled
+                      className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-gray-100"
                     />
                   </td>
                   <td className="px-2 py-1.5 text-gray-700">
@@ -2620,7 +2648,8 @@ export default function EditBatchPage() {
     const q = lectureSearch.toLowerCase();
     const subject = (l.subject || l.lecturecontent || '').toLowerCase();
     const topics = (l.subject_topic || '').toLowerCase();
-    return subject.includes(q) || topics.includes(q);
+    const lectureday = (l.lectureday || '').toLowerCase();
+    return subject.includes(q) || topics.includes(q) || lectureday.includes(q);
   });
 
   const handleDeleteLecture = async (lectureId: number) => {
@@ -2636,12 +2665,13 @@ export default function EditBatchPage() {
   };
 
   const handleExportLectures = () => {
-    const headers = ['LectureNo', 'Subject', 'SubjectTopics', 'Date', 'StartTime', 'EndTime', 'Assignment', 'AssignmentDate', 'TrainerName', 'ClassRoom', 'Documents', 'UnitTest', 'Publish'];
+    const headers = ['LectureNo', 'Subject', 'SubjectTopics', 'Date', 'LectureDay', 'StartTime', 'EndTime', 'Assignment', 'AssignmentDate', 'TrainerName', 'ClassRoom', 'Documents', 'UnitTest', 'Publish'];
     const rows = filteredLectures.map(l => [
       l.lecture_no || '',
       l.subject || l.lecturecontent || '',
       l.subject_topic || '',
       l.date || '',
+      l.lectureday || '',
       l.starttime || '',
       l.endtime || '',
       l.assignment || '',
@@ -2677,6 +2707,7 @@ export default function EditBatchPage() {
           subject: '',
           subject_topic: '',
           date: '',
+          lectureday: '',
           starttime: '',
           endtime: '',
           assignment: '',
@@ -2749,6 +2780,16 @@ export default function EditBatchPage() {
                   value={newLecture.starttime}
                   onChange={(e) => setNewLecture({ ...newLecture, starttime: e.target.value })}
                   className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Lecture Day</label>
+                <input
+                  type="text"
+                  value={newLecture.lectureday}
+                  onChange={(e) => setNewLecture({ ...newLecture, lectureday: e.target.value })}
+                  className={inputCls}
+                  placeholder="Lecture Day"
                 />
               </div>
               <div>
@@ -2897,6 +2938,7 @@ export default function EditBatchPage() {
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Subject</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Topics</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Date</th>
+              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Lecture Day</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Start</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">End</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Assign</th>
@@ -2912,7 +2954,7 @@ export default function EditBatchPage() {
           <tbody>
             {loadingLectures ? (
               <tr>
-                <td colSpan={14} className="px-2 py-4 text-center text-gray-400">
+                <td colSpan={15} className="px-2 py-4 text-center text-gray-400">
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-3 h-3 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                     Loading...
@@ -2921,7 +2963,7 @@ export default function EditBatchPage() {
               </tr>
             ) : filteredLectures.length === 0 ? (
               <tr>
-                <td colSpan={14} className="px-2 py-4 text-center text-gray-400">
+                <td colSpan={15} className="px-2 py-4 text-center text-gray-400">
                   No records found. Click &quot;Add&quot; to create.
                 </td>
               </tr>
@@ -2963,6 +3005,15 @@ export default function EditBatchPage() {
                       value={formatDateForInput(l.date)}
                       onChange={(e) => updateLectureInline(l.id, { date: e.target.value })}
                       className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700">
+                    <input
+                      type="text"
+                      value={(l.lectureday ?? '').toString()}
+                      onChange={(e) => updateLectureInline(l.id, { lectureday: e.target.value })}
+                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                      placeholder="Lecture Day"
                     />
                   </td>
                   <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
