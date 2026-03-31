@@ -567,8 +567,8 @@ export default function ConvertInquiryPage() {
 
         {activeTab === 'meeting' && (
           <div className="p-5 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-              <div className="md:col-span-3">
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex-[1_1_130px]">
                 <label className={labelCls}>Meeting Date</label>
                 <input
                   type="date"
@@ -578,7 +578,7 @@ export default function ConvertInquiryPage() {
                 />
               </div>
 
-              <div className="md:col-span-7">
+              <div className="flex-[3_1_300px]">
                 <label className={labelCls}>Meeting Agenda</label>
                 <textarea
                   rows={1}
@@ -589,7 +589,7 @@ export default function ConvertInquiryPage() {
                 />
               </div>
 
-              <div className="md:col-span-2 flex flex-col justify-end gap-2">
+              <div className="flex-none flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -606,7 +606,7 @@ export default function ConvertInquiryPage() {
                     setMeetingDraft({ meetingDate: '', attendeeClient: '', attendeeSIT: '', meetingAgenda: '' });
                     setEditingMeetingIndex(null);
                   }}
-                  className="w-full h-[38px] px-4 rounded-lg bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white text-sm font-semibold shadow hover:shadow-md transition-all disabled:opacity-60"
+                  className="h-[30px] px-3 rounded-lg bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white text-xs font-semibold shadow hover:shadow-md transition-all disabled:opacity-60 whitespace-nowrap"
                   disabled={saving}
                 >
                   {editingMeetingIndex === null ? 'Add' : 'Update'}
@@ -619,7 +619,7 @@ export default function ConvertInquiryPage() {
                       setMeetingDraft({ meetingDate: '', attendeeClient: '', attendeeSIT: '', meetingAgenda: '' });
                       setEditingMeetingIndex(null);
                     }}
-                    className="w-full h-[38px] px-4 rounded-lg border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50 disabled:opacity-60"
+                    className="h-[30px] px-3 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50 disabled:opacity-60 whitespace-nowrap"
                     disabled={saving}
                   >
                     Cancel
@@ -627,7 +627,7 @@ export default function ConvertInquiryPage() {
                 )}
               </div>
 
-              <div className="md:col-span-12">
+              <div className="w-full mt-2">
                 <div className={labelCls}>Attendee</div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
@@ -785,8 +785,8 @@ export default function ConvertInquiryPage() {
 
         {activeTab === 'followups' && (
           <div className="p-5 space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-              <div className="md:col-span-3">
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex-[1_1_130px]">
                 <label className={labelCls}>Follow Up Date</label>
                 <input
                   type="date"
@@ -795,7 +795,7 @@ export default function ConvertInquiryPage() {
                   onChange={(e) => setFollowUpDraft((d) => ({ ...d, date: e.target.value }))}
                 />
               </div>
-              <div className="md:col-span-3">
+              <div className="flex-[1_1_130px]">
                 <label className={labelCls}>Next Follow Up Date</label>
                 <input
                   type="date"
@@ -804,7 +804,7 @@ export default function ConvertInquiryPage() {
                   onChange={(e) => setFollowUpDraft((d) => ({ ...d, nextDate: e.target.value }))}
                 />
               </div>
-              <div className="md:col-span-4">
+              <div className="flex-[3_1_300px]">
                 <label className={labelCls}>Follow Up Remarks</label>
                 <input
                   className={inputCls}
@@ -813,7 +813,7 @@ export default function ConvertInquiryPage() {
                   placeholder="Remark"
                 />
               </div>
-              <div className="md:col-span-2 flex items-center justify-end gap-2">
+              <div className="flex-none flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -826,7 +826,7 @@ export default function ConvertInquiryPage() {
                     setFollowUpDraft({ date: '', nextDate: '', remark: '' });
                     setEditingFollowUpIndex(null);
                   }}
-                  className="w-full px-4 py-2 rounded-lg bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white text-sm font-semibold shadow hover:shadow-md transition-all disabled:opacity-60"
+                  className="h-[30px] px-4 rounded-lg bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white text-xs font-semibold shadow hover:shadow-md transition-all disabled:opacity-60 whitespace-nowrap"
                   disabled={saving}
                 >
                   {editingFollowUpIndex === null ? 'Add' : 'Update'}
@@ -839,7 +839,7 @@ export default function ConvertInquiryPage() {
                       setFollowUpDraft({ date: '', nextDate: '', remark: '' });
                       setEditingFollowUpIndex(null);
                     }}
-                    className="w-full px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50"
+                    className="h-[30px] px-4 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50 whitespace-nowrap"
                     disabled={saving}
                   >
                     Cancel
