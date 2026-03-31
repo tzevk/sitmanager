@@ -49,12 +49,23 @@ type MeetingItem = {
   remark: string;
 };
 
+type ContactDetailItem = {
+  fullName: string;
+  email: string;
+  phoneNumber: string;
+  alternateNumber: string;
+  jobTitle: string;
+  industry: string;
+  location: string;
+};
+
 type FollowUpData = {
   meetingDate: string;
   attendeeClient: string;
   attendeeSIT: string;
   meetingAgenda: string;
   meetings: MeetingItem[];
+  contacts?: ContactDetailItem[];
 };
 
 type MeetingDetailsItem = {
@@ -139,12 +150,16 @@ function parseFollowUpJson(raw: string | null | undefined): FollowUpData {
       meetings = [{ date: initialDate, remark: '' }, ...meetings];
     }
 
+    const contacts: ContactDetailItem[] =
+      parsedObj && Array.isArray(parsedObj.contacts) ? parsedObj.contacts : [];
+
     return {
       meetingDate: toDateInput(meetingDate),
       attendeeClient,
       attendeeSIT,
       meetingAgenda,
       meetings,
+      contacts,
     };
   } catch {
     return {
@@ -153,6 +168,7 @@ function parseFollowUpJson(raw: string | null | undefined): FollowUpData {
       attendeeSIT: '',
       meetingAgenda: '',
       meetings: [],
+      contacts: [],
     };
   }
 }
@@ -180,7 +196,7 @@ export default function ConvertInquiryPage() {
     DiscussionOutcome: '' as '' | 'Awarded' | 'Regretted' | 'On Hold',
   });
 
-  const [activeTab, setActiveTab] = useState<'inquiry' | 'meeting' | 'discussion' | 'followups'>('inquiry');
+  const [activeTab, setActiveTab] = useState<'inquiry' | 'meeting' | 'discussion' | 'followups' | 'contacts'>('inquiry');
   const [minutesOfMeeting, setMinutesOfMeeting] = useState('');
 
   const [meetingDetails, setMeetingDetails] = useState<MeetingDetailsItem[]>([]);
@@ -190,10 +206,23 @@ export default function ConvertInquiryPage() {
     attendeeSIT: '',
     meetingAgenda: '',
   });
+  const [editingMeetingIndex, setEditingMeetingIndex] = useState<number | null>(null);
 
   const [followUps, setFollowUps] = useState<MeetingItem[]>([]);
   const [followUpDraft, setFollowUpDraft] = useState<MeetingItem>({ date: '', nextDate: '', remark: '' });
   const [editingFollowUpIndex, setEditingFollowUpIndex] = useState<number | null>(null);
+
+  const [contacts, setContacts] = useState<ContactDetailItem[]>([]);
+  const [contactDraft, setContactDraft] = useState<ContactDetailItem>({
+    fullName: '',
+    email: '',
+    phoneNumber: '',
+    alternateNumber: '',
+    jobTitle: '',
+    industry: '',
+    location: '',
+  });
+  const [editingContactIndex, setEditingContactIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!inquiryId) return;
@@ -209,6 +238,9 @@ export default function ConvertInquiryPage() {
 
         const parsedFollowUp = parseFollowUpJson(r.FollowUp);
         setFollowUps(parsedFollowUp.meetings);
+        if (parsedFollowUp.contacts) {
+          setContacts(parsedFollowUp.contacts);
+        }
 
         // Meeting details: support both the new list format and legacy single-row keys.
         let loadedMeetingDetails: MeetingDetailsItem[] = [];
@@ -259,9 +291,15 @@ export default function ConvertInquiryPage() {
           attendeeSIT: '',
           meetingAgenda: '',
         });
+        setEditingMeetingIndex(null);
         setMinutesOfMeeting(typeof r.Discussion === 'string' ? r.Discussion : '');
         setFollowUpDraft({ date: '', nextDate: '', remark: '' });
         setEditingFollowUpIndex(null);
+        setContactDraft({
+          fullName: '', email: '', phoneNumber: '', alternateNumber: '',
+          jobTitle: '', industry: '', location: ''
+        });
+        setEditingContactIndex(null);
 
         setForm({
           TrainingNumber: r.TrainingNumber || '',
@@ -292,6 +330,7 @@ export default function ConvertInquiryPage() {
       meetings: followUps,
       // Optional alias to make the intent obvious for future code.
       followUps: followUps,
+      contacts,
     });
 
   const handleSave = async () => {
@@ -428,6 +467,7 @@ export default function ConvertInquiryPage() {
               { key: 'meeting', label: 'Meeting Details' },
               { key: 'discussion', label: 'Discussion' },
               { key: 'followups', label: 'Follow Ups' },
+              { key: 'contacts', label: 'Contact Details' },
             ] as const).map((t) => {
               const active = activeTab === t.key;
               return (
@@ -549,7 +589,7 @@ export default function ConvertInquiryPage() {
                 />
               </div>
 
-              <div className="md:col-span-2">
+              <div className="md:col-span-2 flex flex-col justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -559,14 +599,32 @@ export default function ConvertInquiryPage() {
                       Boolean(meetingDraft.attendeeClient?.trim()) ||
                       Boolean(meetingDraft.attendeeSIT?.trim());
                     if (!hasAny) return;
-                    setMeetingDetails((prev) => [...prev, meetingDraft]);
+                    setMeetingDetails((prev) => {
+                      if (editingMeetingIndex === null) return [...prev, meetingDraft];
+                      return prev.map((it, idx) => (idx === editingMeetingIndex ? meetingDraft : it));
+                    });
                     setMeetingDraft({ meetingDate: '', attendeeClient: '', attendeeSIT: '', meetingAgenda: '' });
+                    setEditingMeetingIndex(null);
                   }}
                   className="w-full h-[38px] px-4 rounded-lg bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white text-sm font-semibold shadow hover:shadow-md transition-all disabled:opacity-60"
                   disabled={saving}
                 >
-                  Add
+                  {editingMeetingIndex === null ? 'Add' : 'Update'}
                 </button>
+
+                {editingMeetingIndex !== null && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMeetingDraft({ meetingDate: '', attendeeClient: '', attendeeSIT: '', meetingAgenda: '' });
+                      setEditingMeetingIndex(null);
+                    }}
+                    className="w-full h-[38px] px-4 rounded-lg border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50 disabled:opacity-60"
+                    disabled={saving}
+                  >
+                    Cancel
+                  </button>
+                )}
               </div>
 
               <div className="md:col-span-12">
@@ -647,13 +705,31 @@ export default function ConvertInquiryPage() {
                         </td>
                         <td className="px-3 py-2 text-gray-900 whitespace-pre-wrap">{(m.meetingAgenda || '').trim() || '—'}</td>
                         <td className="px-3 py-2 text-right">
-                          <button
-                            type="button"
-                            onClick={() => setMeetingDetails((prev) => prev.filter((_, i) => i !== idx))}
-                            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50"
-                          >
-                            Remove
-                          </button>
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingMeetingIndex(idx);
+                                setMeetingDraft({ ...m });
+                              }}
+                              className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMeetingDetails((prev) => prev.filter((_, i) => i !== idx));
+                                if (editingMeetingIndex === idx) {
+                                  setMeetingDraft({ meetingDate: '', attendeeClient: '', attendeeSIT: '', meetingAgenda: '' });
+                                  setEditingMeetingIndex(null);
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-xs font-semibold hover:bg-red-50"
+                            >
+                              Remove
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -818,6 +894,182 @@ export default function ConvertInquiryPage() {
                                 if (editingFollowUpIndex === idx) {
                                   setFollowUpDraft({ date: '', nextDate: '', remark: '' });
                                   setEditingFollowUpIndex(null);
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-xs font-semibold hover:bg-red-50"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'contacts' && (
+          <div className="p-5 space-y-3">
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex-[1_1_130px]">
+                <label className={labelCls}>Full Name</label>
+                <input
+                  className={inputCls}
+                  value={contactDraft.fullName}
+                  onChange={(e) => setContactDraft((d) => ({ ...d, fullName: e.target.value }))}
+                />
+              </div>
+              <div className="flex-[1_1_130px]">
+                <label className={labelCls}>Email Address</label>
+                <input
+                  type="email"
+                  className={inputCls}
+                  value={contactDraft.email}
+                  onChange={(e) => setContactDraft((d) => ({ ...d, email: e.target.value }))}
+                />
+              </div>
+              <div className="flex-[1_1_110px]">
+                <label className={labelCls}>Phone Number</label>
+                <input
+                  className={inputCls}
+                  value={contactDraft.phoneNumber}
+                  onChange={(e) => setContactDraft((d) => ({ ...d, phoneNumber: e.target.value }))}
+                />
+              </div>
+              <div className="flex-[1_1_110px]">
+                <label className={labelCls}>Alternate Number</label>
+                <input
+                  className={inputCls}
+                  value={contactDraft.alternateNumber}
+                  onChange={(e) => setContactDraft((d) => ({ ...d, alternateNumber: e.target.value }))}
+                />
+              </div>
+              <div className="flex-[1_1_130px]">
+                <label className={labelCls}>Job Title</label>
+                <input
+                  className={inputCls}
+                  value={contactDraft.jobTitle}
+                  onChange={(e) => setContactDraft((d) => ({ ...d, jobTitle: e.target.value }))}
+                />
+              </div>
+              <div className="flex-[1_1_100px]">
+                <label className={labelCls}>Industry</label>
+                <input
+                  className={inputCls}
+                  value={contactDraft.industry}
+                  placeholder="e.g. Tech"
+                  onChange={(e) => setContactDraft((d) => ({ ...d, industry: e.target.value }))}
+                />
+              </div>
+              <div className="flex-[1_1_100px]">
+                <label className={labelCls}>Location</label>
+                <input
+                  className={inputCls}
+                  value={contactDraft.location}
+                  placeholder="City, State"
+                  onChange={(e) => setContactDraft((d) => ({ ...d, location: e.target.value }))}
+                />
+              </div>
+              
+              <div className="flex-none flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const hasAny = Boolean(contactDraft.fullName?.trim()) || Boolean(contactDraft.email?.trim());
+                    if (!hasAny) return;
+                    setContacts((prev) => {
+                      if (editingContactIndex === null) return [...prev, contactDraft];
+                      return prev.map((it, idx) => (idx === editingContactIndex ? contactDraft : it));
+                    });
+                    setContactDraft({
+                      fullName: '', email: '', phoneNumber: '', alternateNumber: '',
+                      jobTitle: '', industry: '', location: ''
+                    });
+                    setEditingContactIndex(null);
+                  }}
+                  className="h-[30px] px-3 rounded-lg bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white text-xs font-semibold shadow hover:shadow-md transition-all disabled:opacity-60 whitespace-nowrap"
+                  disabled={saving}
+                >
+                  {editingContactIndex === null ? 'Add' : 'Update'}
+                </button>
+
+                {editingContactIndex !== null && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setContactDraft({
+                        fullName: '', email: '', phoneNumber: '', alternateNumber: '',
+                        jobTitle: '', industry: '', location: ''
+                      });
+                      setEditingContactIndex(null);
+                    }}
+                    className="h-[30px] px-3 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50 whitespace-nowrap"
+                    disabled={saving}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="min-w-full text-xs">
+                <thead className="bg-gray-50 text-gray-700">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold">Name</th>
+                    <th className="px-3 py-2 text-left font-semibold">Job Title</th>
+                    <th className="px-3 py-2 text-left font-semibold">Contact Info</th>
+                    <th className="px-3 py-2 text-left font-semibold">Details</th>
+                    <th className="px-3 py-2 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {contacts.length === 0 ? (
+                    <tr>
+                      <td className="px-3 py-3 text-gray-500 text-center" colSpan={5}>
+                        No contacts added yet
+                      </td>
+                    </tr>
+                  ) : (
+                    contacts.map((c, idx) => (
+                      <tr key={idx} className="bg-white">
+                        <td className="px-3 py-2 text-gray-900">
+                          <div className="font-semibold">{c.fullName || '—'}</div>
+                        </td>
+                        <td className="px-3 py-2 text-gray-900">{c.jobTitle || '—'}</td>
+                        <td className="px-3 py-2 text-gray-900">
+                          <div>E: {c.email || '—'}</div>
+                          <div>P: {c.phoneNumber || '—'}</div>
+                        </td>
+                        <td className="px-3 py-2 text-gray-900">
+                          <div>Industry: {c.industry || '—'}</div>
+                          <div>Location: {c.location || '—'}</div>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingContactIndex(idx);
+                                setContactDraft({ ...c });
+                              }}
+                              className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setContacts((prev) => prev.filter((_, i) => i !== idx));
+                                if (editingContactIndex === idx) {
+                                  setContactDraft({
+                                    fullName: '', email: '', phoneNumber: '', alternateNumber: '',
+                                    jobTitle: '', industry: '', location: ''
+                                  });
+                                  setEditingContactIndex(null);
                                 }
                               }}
                               className="px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-xs font-semibold hover:bg-red-50"

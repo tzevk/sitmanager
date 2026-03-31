@@ -12,13 +12,13 @@ export async function GET(
     if (auth instanceof NextResponse) return auth;
     
     const pool = getPool();
-    const { id: admissionId } = await params;
+    const { id: studentId } = await params;
 
     // Fetch admission and student details
     const [rows] = await pool.query<any[]>(
       `SELECT 
         a.Admission_Id,
-        a.Student_Id,
+        s.Student_Id,
         a.Batch_Id,
         a.Course_Id,
         a.Admission_Date,
@@ -28,21 +28,33 @@ export async function GET(
         s.Present_Mobile2,
         s.Present_Address,
         s.Present_City,
-        s.Present_PIN,
+        s.Present_Pin,
+        s.Present_State,
+        s.Permanent_Address,
+        s.Permanent_City,
+        s.Permanent_Pin,
+        s.Permanent_State,
+        s.Permanent_Country,
         s.Nationality,
         s.DOB,
         s.Sex,
         s.Status_id,
-        b.Batch_code
-      FROM admission_master a
-      LEFT JOIN student_master s ON a.Student_Id = s.Student_Id
+        s.Occupation,
+        s.Company,
+        s.Designation,
+        s.Total_Exp,
+        s.Father_Mobile,
+        s.Batch_Code as Student_Batch_Code,
+        b.Batch_code as Admission_Batch_code
+      FROM student_master s
+      LEFT JOIN admission_master a ON s.Student_Id = a.Student_Id AND a.IsDelete = 0
       LEFT JOIN batch_mst b ON a.Batch_Id = b.Batch_Id
-      WHERE a.Admission_Id = ? AND a.IsDelete = 0`,
-      [admissionId]
+      WHERE s.Student_Id = ? AND (s.IsDelete = 0 OR s.IsDelete IS NULL)`,
+      [studentId]
     );
 
     if (!rows || rows.length === 0) {
-      return NextResponse.json({ error: 'Admission not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     }
 
     const admission = rows[0];
@@ -67,13 +79,13 @@ export async function GET(
       email: admission.Email || '',
       mobile: admission.Present_Mobile || '',
       telephone: admission.Present_Mobile2 || '',
-      familyContact: '',
+      familyContact: admission.Father_Mobile || '',
       presentAddress: admission.Present_Address || '',
       presentCity: admission.Present_City || '',
-      presentPin: admission.Present_PIN || '',
-      permanentAddress: '',
-      permanentState: '',
-      permanentCountry: 'India',
+      presentPin: admission.Present_Pin || '',
+      permanentAddress: admission.Permanent_Address || '',
+      permanentState: admission.Permanent_State || '',
+      permanentCountry: admission.Permanent_Country || 'India',
       // Educational fields (to be populated from additional tables if needed)
       ssc_board: '',
       ssc_schoolName: '',
@@ -110,16 +122,16 @@ export async function GET(
       postgrad_ktCount: '0',
       postgrad_ktDetails: [],
       educationRemark: '',
-      occupationalStatus: '',
-      jobOrganisation: '',
+      occupationalStatus: admission.Occupation || '',
+      jobOrganisation: admission.Company || '',
       jobDescription: '',
-      jobDesignation: '',
+      jobDesignation: admission.Designation || '',
       workingFromYears: '',
       workingFromMonths: '',
-      totalOccupationYears: '',
+      totalOccupationYears: String(admission.Total_Exp || ''),
       selfEmploymentDetails: '',
       trainingCategory: '',
-      batchCode: admission.Batch_code || '',
+      batchCode: admission.Admission_Batch_code || admission.Student_Batch_Code || '',
       idProofType: '',
     };
 
@@ -140,20 +152,18 @@ export async function PUT(
     if (auth instanceof NextResponse) return auth;
     
     const pool = getPool();
-    const { id: admissionId } = await params;
+    const { id: studentId } = await params;
     const body = await req.json();
 
-    // Fetch the student_id for this admission
-    const [admissionRows] = await pool.query<any[]>(
-      'SELECT Student_Id, Batch_Id FROM admission_master WHERE Admission_Id = ? AND IsDelete = 0',
-      [admissionId]
+    // Check if student exists
+    const [studentRows] = await pool.query<any[]>(
+      'SELECT Student_Id FROM student_master WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)',
+      [studentId]
     );
 
-    if (!admissionRows || admissionRows.length === 0) {
-      return NextResponse.json({ error: 'Admission not found' }, { status: 404 });
+    if (!studentRows || studentRows.length === 0) {
+      return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     }
-
-    const studentId = admissionRows[0].Student_Id;
 
     // Construct full name
     const fullName = [body.firstName, body.middleName, body.lastName].filter(Boolean).join(' ');
@@ -167,10 +177,21 @@ export async function PUT(
         Present_Mobile2 = ?,
         Present_Address = ?,
         Present_City = ?,
-        Present_PIN = ?,
+        Present_Pin = ?,
+        Present_State = ?,
+        Permanent_Address = ?,
+        Permanent_City = ?,
+        Permanent_Pin = ?,
+        Permanent_State = ?,
+        Permanent_Country = ?,
         Nationality = ?,
         DOB = ?,
         Sex = ?,
+        Occupation = ?,
+        Company = ?,
+        Designation = ?,
+        Total_Exp = ?,
+        Father_Mobile = ?,
         Modified_Date = NOW()
       WHERE Student_Id = ?`,
       [
@@ -181,19 +202,30 @@ export async function PUT(
         body.presentAddress || null,
         body.presentCity || null,
         body.presentPin || null,
+        body.presentState || null,
+        body.permanentAddress || null,
+        body.permanentCity || null,
+        body.permanentPin || null,
+        body.permanentState || null,
+        body.permanentCountry || 'India',
         body.nationality || 'Indian',
         body.dob || null,
         body.gender || null,
+        body.occupationalStatus || null,
+        body.jobOrganisation || null,
+        body.jobDesignation || null,
+        body.totalOccupationYears ? Number(body.totalOccupationYears) : 0,
+        body.familyContact || null,
         studentId,
       ]
     );
 
-    // Update admission_master if needed
+    // Update admission_master if it exists for this student
     await pool.query(
       `UPDATE admission_master SET
         Modified_Date = NOW()
-      WHERE Admission_Id = ?`,
-      [admissionId]
+      WHERE Student_Id = ? AND IsDelete = 0`,
+      [studentId]
     );
 
     return NextResponse.json({
@@ -216,12 +248,18 @@ export async function DELETE(
     if (auth instanceof NextResponse) return auth;
     
     const pool = getPool();
-    const { id: admissionId } = await params;
+    const { id: studentId } = await params;
 
-    // Soft delete
+    // Soft delete student_master
     await pool.query(
-      'UPDATE admission_master SET IsDelete = 1, Modified_Date = NOW() WHERE Admission_Id = ?',
-      [admissionId]
+      'UPDATE student_master SET IsDelete = 1, Modified_Date = NOW() WHERE Student_Id = ?',
+      [studentId]
+    );
+
+    // Soft delete associated admission if there is any
+    await pool.query(
+      'UPDATE admission_master SET IsDelete = 1, Modified_Date = NOW() WHERE Student_Id = ?',
+      [studentId]
     );
 
     return NextResponse.json({
