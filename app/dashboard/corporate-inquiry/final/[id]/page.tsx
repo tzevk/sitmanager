@@ -89,10 +89,32 @@ export default function CorporateInquiryFinalPage() {
     TotalStudents: '',
     TrainingCoordinator: '',
     ConfirmDate: '',
+    DocumentType: 'P/O',
+    DocumentNumber: '',
+    SitCorporateProgramCode: '',
   });
   const [performanceRows, setPerformanceRows] = useState<PerformanceRow[]>(defaultPerformanceRows());
   const [trainingFeedback, setTrainingFeedback] = useState('');
   const [sitCertification, setSitCertification] = useState<'Yes' | 'No' | ''>('');
+  const [studentEntry, setStudentEntry] = useState({
+    studentId: '',
+    studentName: '',
+    studentNumber: '',
+    rollNumber: '',
+  });
+  const [nextRollNumber, setNextRollNumber] = useState(179);
+
+  const formatRollNumber = (seq: number) => {
+    const year = new Date().getFullYear().toString().slice(-2);
+    const code = scheduleForm.SitCorporateProgramCode || '000';
+    return `${year}${code}CT${seq}`;
+  };
+
+  const handleAllotRollNumber = () => {
+    const roll = formatRollNumber(nextRollNumber);
+    setStudentEntry((s) => ({ ...s, rollNumber: roll }));
+    setNextRollNumber((n) => n + 1);
+  };
 
   useEffect(() => {
     if (!inquiryId) return;
@@ -114,6 +136,9 @@ export default function CorporateInquiryFinalPage() {
           TotalStudents: r.TotalStudents === null || r.TotalStudents === undefined ? '' : String(r.TotalStudents),
           TrainingCoordinator: r.TrainingCoordinator || '',
           ConfirmDate: toDateInput(r.ConfirmDate),
+          DocumentType: 'P/O',
+          DocumentNumber: '',
+          SitCorporateProgramCode: '',
         });
 
         const parsed = safeJsonParse<Partial<PerformanceRow>[]>(r.PerformanceEvaluation, []);
@@ -194,7 +219,7 @@ export default function CorporateInquiryFinalPage() {
               Corporate Inquiry #{inquiryId}{inquiry?.CompanyName ? ` • ${inquiry.CompanyName}` : ''}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             <button
               onClick={() => router.push(`/dashboard/corporate-inquiry/edit/${inquiryId}`)}
               className="px-4 py-2 rounded-lg bg-white text-[#2E3093] text-sm font-semibold hover:bg-white/90 transition-colors"
@@ -208,6 +233,13 @@ export default function CorporateInquiryFinalPage() {
               title="Under discussion"
             >
               Under Discussion
+            </button>
+            <button
+              onClick={() => router.push(`/dashboard/corporate-inquiry/final/edit/${inquiryId}`)}
+              className="px-4 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-sm font-semibold transition-colors"
+              title="Edit execution"
+            >
+              Edit Execution
             </button>
           </div>
         </div>
@@ -245,30 +277,42 @@ export default function CorporateInquiryFinalPage() {
 
         <div className="p-5">
           {activeTab === 'inquiry' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
-              <div>
-                <label className={labelCls}>Company</label>
-                <input className={inputCls} value={inquiry?.CompanyName || ''} disabled />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-bold text-gray-800">Inquiry Details</div>
+                <button
+                  onClick={() => router.push(`/dashboard/corporate-inquiry/final/edit/${inquiryId}`)}
+                  className="px-3 py-1.5 rounded-lg bg-[#2E3093] text-white text-xs font-semibold hover:bg-[#252779] transition-colors"
+                >
+                  Edit
+                </button>
               </div>
-              <div>
-                <label className={labelCls}>Inquirer</label>
-                <input className={inputCls} value={inquiry?.FullName || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Course</label>
-                <input className={inputCls} value={inquiry?.Course_Id || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Email</label>
-                <input className={inputCls} value={inquiry?.Email || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Phone</label>
-                <input className={inputCls} value={inquiry?.Mobile || inquiry?.Phone || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Status</label>
-                <input className={inputCls} value={inquiry?.InquiryStatus || ''} disabled />
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
+                <div>
+                  <label className={labelCls}>Company</label>
+                  <input className={inputCls} value={inquiry?.CompanyName || ''} disabled />
+                </div>
+                <div>
+                  <label className={labelCls}>Inquirer</label>
+                  <input className={inputCls} value={inquiry?.FullName || ''} disabled />
+                </div>
+                <div>
+                  <label className={labelCls}>Course</label>
+                  <input className={inputCls} value={inquiry?.Course_Id || ''} disabled />
+                </div>
+                <div>
+                  <label className={labelCls}>Email</label>
+                  <input className={inputCls} value={inquiry?.Email || ''} disabled />
+                </div>
+                <div>
+                  <label className={labelCls}>Phone</label>
+                  <input className={inputCls} value={inquiry?.Mobile || inquiry?.Phone || ''} disabled />
+                </div>
+                <div>
+                  <label className={labelCls}>Status</label>
+                  <input className={inputCls} value={inquiry?.InquiryStatus || ''} disabled />
+                </div>
               </div>
             </div>
           )}
@@ -303,27 +347,145 @@ export default function CorporateInquiryFinalPage() {
           )}
 
           {activeTab === 'schedule' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
-                <div>
-                  <label className={labelCls}>Trainer Name</label>
-                  <input className={inputCls} value={scheduleForm.TrainerName} onChange={(e) => setScheduleForm((f) => ({ ...f, TrainerName: e.target.value }))} />
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-gray-800">Schedule</h3>
+                  <span className="text-[11px] text-gray-500">Company: {inquiry?.CompanyName || '-'}</span>
                 </div>
-                <div>
-                  <label className={labelCls}>Number Of Days</label>
-                  <input type="number" min={0} className={inputCls} value={scheduleForm.NumberOfDays} onChange={(e) => setScheduleForm((f) => ({ ...f, NumberOfDays: e.target.value }))} />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
+                  <div>
+                    <label className={labelCls}>P/O • S/O • W/O</label>
+                    <select
+                      className={selectCls}
+                      value={scheduleForm.DocumentType}
+                      onChange={(e) => setScheduleForm((f) => ({ ...f, DocumentType: e.target.value }))}
+                    >
+                      <option value="P/O">P/O</option>
+                      <option value="S/O">S/O</option>
+                      <option value="W/O">W/O</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Number</label>
+                    <input
+                      className={inputCls}
+                      value={scheduleForm.DocumentNumber}
+                      onChange={(e) => setScheduleForm((f) => ({ ...f, DocumentNumber: e.target.value }))}
+                      placeholder="Enter number"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Training Programme Code</label>
+                    <input
+                      className={inputCls}
+                      value={scheduleForm.TrainingNumber}
+                      onChange={(e) => setScheduleForm((f) => ({ ...f, TrainingNumber: e.target.value }))}
+                      placeholder="Programme code"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>SIT Corporate Training Programme Code</label>
+                    <input
+                      className={inputCls}
+                      value={scheduleForm.SitCorporateProgramCode}
+                      onChange={(e) => setScheduleForm((f) => ({ ...f, SitCorporateProgramCode: e.target.value }))}
+                      placeholder="SIT code"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Training Duration (days)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      className={inputCls}
+                      value={scheduleForm.NumberOfDays}
+                      onChange={(e) => setScheduleForm((f) => ({ ...f, NumberOfDays: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Total Students</label>
+                    <input
+                      type="number"
+                      min={0}
+                      className={inputCls}
+                      value={scheduleForm.TotalStudents}
+                      onChange={(e) => setScheduleForm((f) => ({ ...f, TotalStudents: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Trainer Name</label>
+                    <input
+                      className={inputCls}
+                      value={scheduleForm.TrainerName}
+                      onChange={(e) => setScheduleForm((f) => ({ ...f, TrainerName: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Training Co-ordinator</label>
+                    <input
+                      className={inputCls}
+                      value={scheduleForm.TrainingCoordinator}
+                      onChange={(e) => setScheduleForm((f) => ({ ...f, TrainingCoordinator: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Confirm Date</label>
+                    <input
+                      type="date"
+                      className={inputCls}
+                      value={scheduleForm.ConfirmDate}
+                      onChange={(e) => setScheduleForm((f) => ({ ...f, ConfirmDate: e.target.value }))}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className={labelCls}>Total Students</label>
-                  <input type="number" min={0} className={inputCls} value={scheduleForm.TotalStudents} onChange={(e) => setScheduleForm((f) => ({ ...f, TotalStudents: e.target.value }))} />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-gray-800">Performance</h3>
+                  <span className="text-[11px] text-gray-500">Roll format: YY + SIT code + CT + seq (starting at 179)</span>
                 </div>
-                <div>
-                  <label className={labelCls}>Training Co-ordinator</label>
-                  <input className={inputCls} value={scheduleForm.TrainingCoordinator} onChange={(e) => setScheduleForm((f) => ({ ...f, TrainingCoordinator: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={labelCls}>Confirm Date</label>
-                  <input type="date" className={inputCls} value={scheduleForm.ConfirmDate} onChange={(e) => setScheduleForm((f) => ({ ...f, ConfirmDate: e.target.value }))} />
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-x-4 gap-y-2">
+                  <div>
+                    <label className={labelCls}>Student ID</label>
+                    <input
+                      className={inputCls}
+                      value={studentEntry.studentId}
+                      onChange={(e) => setStudentEntry((s) => ({ ...s, studentId: e.target.value }))}
+                      placeholder="Enter student ID"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Student Name</label>
+                    <input
+                      className={inputCls}
+                      value={studentEntry.studentName}
+                      onChange={(e) => setStudentEntry((s) => ({ ...s, studentName: e.target.value }))}
+                      placeholder="Enter student name"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Student Number</label>
+                    <input
+                      className={inputCls}
+                      value={studentEntry.studentNumber}
+                      onChange={(e) => setStudentEntry((s) => ({ ...s, studentNumber: e.target.value }))}
+                      placeholder="Enter student number"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Roll Number</label>
+                    <input className={inputCls} value={studentEntry.rollNumber} disabled placeholder="Auto when allotted" />
+                  </div>
+                  <div className="md:col-span-4 flex items-center justify-end">
+                    <button
+                      onClick={handleAllotRollNumber}
+                      className="px-4 py-2 rounded-lg bg-[#2E3093] text-white text-xs font-semibold hover:bg-[#252779]"
+                    >
+                      Allot Roll Number
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -400,6 +562,12 @@ export default function CorporateInquiryFinalPage() {
           )}
 
           <div className="flex justify-end mt-5 gap-2">
+            <button
+              onClick={() => router.push(`/dashboard/corporate-inquiry/final/edit/${inquiryId}`)}
+              className="px-4 py-2 rounded-lg border border-[#2E3093]/40 text-[#2E3093] text-sm font-semibold hover:bg-[#2E3093]/5"
+            >
+              Edit Execution
+            </button>
             <button
               onClick={() => router.push('/dashboard/corporate-inquiry/convert')}
               className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50"

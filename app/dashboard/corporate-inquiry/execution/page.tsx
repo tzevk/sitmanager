@@ -157,21 +157,23 @@ export default function TrainingExecutionIndexPage() {
                     <td className="p-3 text-gray-700">{r.TotalStudents ?? '-'}</td>
                     <td className="p-3">
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => router.push(`/dashboard/corporate-inquiry/execution/${r.Id}`)}
-                          className="px-3 py-1.5 rounded-lg bg-[#2E3093] hover:bg-[#262a7d] text-white text-xs font-semibold"
-                          title="Open training execution"
-                        >
-                          Open
-                        </button>
                         {canUpdate && (
-                          <button
-                            onClick={() => router.push(`/dashboard/corporate-inquiry/edit/${r.Id}`)}
-                            className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50"
-                            title="Inquiry details"
-                          >
-                            Inquiry
-                          </button>
+                          <>
+                            <button
+                              onClick={() => router.push(`/dashboard/corporate-inquiry/final/edit/${r.Id}`)}
+                              className="px-3 py-1.5 rounded-lg border border-[#2E3093]/50 text-[#2E3093] text-xs font-semibold hover:bg-[#2E3093]/5"
+                              title="Edit execution"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => router.push(`/dashboard/corporate-inquiry/edit/${r.Id}`)}
+                              className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50"
+                              title="Inquiry details"
+                            >
+                              Inquiry
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
