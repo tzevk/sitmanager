@@ -192,7 +192,7 @@ export default function CorporateInquiryEditPage() {
 
   const { canUpdate, loading: permLoading } = useResourcePermissions('corporate_inquiry');
 
-  const [activeTab, setActiveTab] = useState<'inquiry' | 'discussion' | 'schedule' | 'feedback'>('inquiry');
+  const [activeTab, setActiveTab] = useState<'inquiry' | 'discussion' | 'schedule' | 'timetable' | 'feedback'>('inquiry');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -440,6 +440,7 @@ export default function CorporateInquiryEditPage() {
             ['inquiry', 'Inquiry Details'],
             ['discussion', 'Discussion & Follow-ups'],
             ['schedule', 'Schedule & Performance'],
+            ['timetable', 'Time Table'],
             ['feedback', 'Feedback & Certification'],
           ] as const).map(([key, label]) => (
             <button
@@ -1339,6 +1340,15 @@ export default function CorporateInquiryEditPage() {
                     <option value="No">No</option>
                   </select>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'timetable' && (
+            <div className="space-y-4">
+              <div className="p-4 border border-dashed border-gray-300 rounded-lg bg-white">
+                <h3 className="text-sm font-bold text-gray-800 mb-2">Time Table</h3>
+                <p className="text-sm text-gray-600">Add your session-wise schedule here.</p>
               </div>
             </div>
           )}
