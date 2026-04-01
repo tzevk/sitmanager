@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState, use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { FaSave, FaTimes } from 'react-icons/fa';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -21,6 +21,39 @@ interface Consultancy {
 }
 
 type Tab = 'details' | 'discussion';
+type DiscussionSubTab = 'meeting' | 'discussion' | 'contacts';
+
+type MeetingItem = {
+  date: string;
+  nextDate?: string;
+  remark: string;
+};
+
+type ContactDetailItem = {
+  fullName: string;
+  email: string;
+  phoneNumber: string;
+  alternateNumber: string;
+  jobTitle: string;
+  industry: string;
+  discussion: string;
+};
+
+type FollowUpData = {
+  meetingDate: string;
+  attendeeClient: string;
+  attendeeSIT: string;
+  meetingAgenda: string;
+  meetings: MeetingItem[];
+  contacts?: ContactDetailItem[];
+};
+
+type MeetingDetailsItem = {
+  meetingDate: string;
+  attendeeClient: string;
+  attendeeSIT: string;
+  meetingAgenda: string;
+};
 
 function toDateInputValue(value: unknown): string {
   if (!value) return '';
@@ -30,16 +63,158 @@ function toDateInputValue(value: unknown): string {
   return parts[0] || '';
 }
 
+const splitList = (raw: string | null | undefined) => {
+  const s = String(raw ?? '');
+  return s
+    .split(/\r?\n|,/g)
+    .map((x) => x.trim())
+    .filter(Boolean);
+};
+
+function parseFollowUpJson(raw: string | null | undefined): FollowUpData {
+  if (!raw)
+    return {
+      meetingDate: '',
+      attendeeClient: '',
+      attendeeSIT: '',
+      meetingAgenda: '',
+      meetings: [],
+    };
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    const parsedObj = typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : null;
+
+    const rawMeetings =
+      parsedObj && Array.isArray(parsedObj.meetings)
+        ? parsedObj.meetings
+        : parsedObj && Array.isArray(parsedObj.followUps)
+          ? parsedObj.followUps
+          : [];
+
+    let meetings: MeetingItem[] = rawMeetings
+      .map((it: unknown) => {
+        const obj = typeof it === 'object' && it !== null ? (it as Record<string, unknown>) : {};
+        return {
+          date: typeof obj.date === 'string' ? obj.date : '',
+          nextDate:
+            typeof obj.nextDate === 'string'
+              ? obj.nextDate
+              : typeof obj.nextFollowUpDate === 'string'
+                ? obj.nextFollowUpDate
+                : typeof obj.next_follow_up_date === 'string'
+                  ? obj.next_follow_up_date
+                  : '',
+          remark: typeof obj.remark === 'string' ? obj.remark : '',
+        };
+      })
+      .filter((it) => Boolean(it.date || it.nextDate || it.remark));
+
+    const initialDate = parsedObj && typeof parsedObj.initialDate === 'string' ? parsedObj.initialDate : '';
+    const meetingDate = parsedObj && typeof parsedObj.meetingDate === 'string' ? parsedObj.meetingDate : initialDate;
+    const attendeeClient = parsedObj && typeof parsedObj.attendeeClient === 'string' ? parsedObj.attendeeClient : '';
+    const attendeeSIT =
+      parsedObj && (typeof parsedObj.attendeeSIT === 'string' || typeof parsedObj.attendeeSit === 'string')
+        ? String((parsedObj.attendeeSIT ?? parsedObj.attendeeSit) as string)
+        : '';
+    const meetingAgenda =
+      parsedObj && (typeof parsedObj.meetingAgenda === 'string' || typeof parsedObj.agenda === 'string')
+        ? String((parsedObj.meetingAgenda ?? parsedObj.agenda) as string)
+        : '';
+
+    if (initialDate && !meetings.some((m) => toDateInputValue(m.date) === toDateInputValue(initialDate))) {
+      meetings = [{ date: initialDate, remark: '' }, ...meetings];
+    }
+
+    const contacts: ContactDetailItem[] =
+      parsedObj && Array.isArray(parsedObj.contacts)
+        ? parsedObj.contacts
+            .map((it: unknown) => {
+              const obj = typeof it === 'object' && it !== null ? (it as Record<string, unknown>) : {};
+              return {
+                fullName: typeof obj.fullName === 'string' ? obj.fullName : '',
+                email: typeof obj.email === 'string' ? obj.email : '',
+                phoneNumber: typeof obj.phoneNumber === 'string' ? obj.phoneNumber : '',
+                alternateNumber: typeof obj.alternateNumber === 'string' ? obj.alternateNumber : '',
+                jobTitle: typeof obj.jobTitle === 'string' ? obj.jobTitle : '',
+                industry: typeof obj.industry === 'string' ? obj.industry : '',
+                // Backward compatibility for older payloads that used `location`.
+                discussion:
+                  typeof obj.discussion === 'string'
+                    ? obj.discussion
+                    : typeof obj.location === 'string'
+                      ? obj.location
+                      : '',
+              };
+            })
+            .filter((it) =>
+              Boolean(
+                it.fullName ||
+                  it.email ||
+                  it.phoneNumber ||
+                  it.alternateNumber ||
+                  it.jobTitle ||
+                  it.industry ||
+                  it.discussion,
+              ),
+            )
+        : [];
+
+    return {
+      meetingDate: toDateInputValue(meetingDate),
+      attendeeClient,
+      attendeeSIT,
+      meetingAgenda,
+      meetings,
+      contacts,
+    };
+  } catch {
+    return {
+      meetingDate: '',
+      attendeeClient: '',
+      attendeeSIT: '',
+      meetingAgenda: '',
+      meetings: [],
+      contacts: [],
+    };
+  }
+}
+
 export default function EditCorporateInquiryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { canUpdate, loading: permLoading } = useResourcePermissions('corporate_inquiry');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
   const [consultancies, setConsultancies] = useState<Consultancy[]>([]);
-  const [activeTab, setActiveTab] = useState<Tab>('details');
+  const [activeTab, setActiveTab] = useState<Tab>(() => (searchParams.get('tab') === 'discussion' ? 'discussion' : 'details'));
+  const [discussionSubTab, setDiscussionSubTab] = useState<DiscussionSubTab>(() => {
+    const dtab = searchParams.get('dtab');
+    return dtab === 'meeting' || dtab === 'discussion' || dtab === 'contacts' ? dtab : 'meeting';
+  });
   const [companyMode, setCompanyMode] = useState<'master' | 'manual'>('master');
+  const [discussionOutcome, setDiscussionOutcome] = useState<'' | 'Awarded' | 'Regretted' | 'On Hold'>('');
+  const [meetingDetails, setMeetingDetails] = useState<MeetingDetailsItem[]>([]);
+  const [meetingDraft, setMeetingDraft] = useState<MeetingDetailsItem>({
+    meetingDate: '',
+    attendeeClient: '',
+    attendeeSIT: '',
+    meetingAgenda: '',
+  });
+  const [editingMeetingIndex, setEditingMeetingIndex] = useState<number | null>(null);
+  const [followUps, setFollowUps] = useState<MeetingItem[]>([]);
+  const [contacts, setContacts] = useState<ContactDetailItem[]>([]);
+  const [contactDraft, setContactDraft] = useState<ContactDetailItem>({
+    fullName: '',
+    email: '',
+    phoneNumber: '',
+    alternateNumber: '',
+    jobTitle: '',
+    industry: '',
+    discussion: '',
+  });
+  const [editingContactIndex, setEditingContactIndex] = useState<number | null>(null);
   const [form, setForm] = useState({
     Id: 0,
     Idate: '',
@@ -140,6 +315,66 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
             return next;
           });
 
+          const parsedFollowUp = parseFollowUpJson(String(inq?.FollowUp ?? ''));
+          setFollowUps(parsedFollowUp.meetings);
+          if (parsedFollowUp.contacts) setContacts(parsedFollowUp.contacts);
+
+          let loadedMeetingDetails: MeetingDetailsItem[] = [];
+          try {
+            const parsed: unknown = inq?.FollowUp ? JSON.parse(String(inq.FollowUp)) : null;
+            const obj = typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : null;
+            const rawMeetingDetails = obj && Array.isArray(obj.meetingDetails) ? obj.meetingDetails : [];
+            loadedMeetingDetails = rawMeetingDetails
+              .map((it: unknown) => {
+                const rec = typeof it === 'object' && it !== null ? (it as Record<string, unknown>) : {};
+                return {
+                  meetingDate: typeof rec.meetingDate === 'string' ? toDateInputValue(rec.meetingDate) : '',
+                  attendeeClient: typeof rec.attendeeClient === 'string' ? rec.attendeeClient : '',
+                  attendeeSIT:
+                    typeof rec.attendeeSIT === 'string'
+                      ? rec.attendeeSIT
+                      : typeof rec.attendeeSit === 'string'
+                        ? (rec.attendeeSit as string)
+                        : '',
+                  meetingAgenda:
+                    typeof rec.meetingAgenda === 'string'
+                      ? rec.meetingAgenda
+                      : typeof rec.agenda === 'string'
+                        ? (rec.agenda as string)
+                        : '',
+                };
+              })
+              .filter((x) => Boolean(x.meetingDate || x.attendeeClient || x.attendeeSIT || x.meetingAgenda));
+          } catch {
+            // ignore malformed old follow-up payload
+          }
+
+          if (loadedMeetingDetails.length === 0 && (parsedFollowUp.meetingDate || parsedFollowUp.attendeeClient || parsedFollowUp.attendeeSIT || parsedFollowUp.meetingAgenda)) {
+            loadedMeetingDetails = [
+              {
+                meetingDate: parsedFollowUp.meetingDate,
+                attendeeClient: parsedFollowUp.attendeeClient,
+                attendeeSIT: parsedFollowUp.attendeeSIT,
+                meetingAgenda: parsedFollowUp.meetingAgenda,
+              },
+            ];
+          }
+          setMeetingDetails(loadedMeetingDetails);
+          setMeetingDraft({ meetingDate: '', attendeeClient: '', attendeeSIT: '', meetingAgenda: '' });
+          setEditingMeetingIndex(null);
+          setContactDraft({
+            fullName: '',
+            email: '',
+            phoneNumber: '',
+            alternateNumber: '',
+            jobTitle: '',
+            industry: '',
+            discussion: '',
+          });
+          setEditingContactIndex(null);
+          const outcome = String(inq?.DiscussionOutcome ?? '').trim();
+          setDiscussionOutcome(outcome === 'Awarded' || outcome === 'Regretted' || outcome === 'On Hold' ? outcome : '');
+
           setCompanyMode(consultancyId ? 'master' : 'manual');
 
           // If we don't have a consultancy id but we have a company name, try to map it.
@@ -192,6 +427,19 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
     setForm((prev) => ({ ...prev, Consultancy_Id: '' }));
   }, [companyMode, companyOptions, form.Consultancy_Id]);
 
+  const buildFollowUpJson = () =>
+    JSON.stringify({
+      initialDate: (meetingDetails[meetingDetails.length - 1]?.meetingDate || '') as string,
+      meetingDate: (meetingDetails[meetingDetails.length - 1]?.meetingDate || '') as string,
+      attendeeClient: (meetingDetails[meetingDetails.length - 1]?.attendeeClient || '') as string,
+      attendeeSIT: (meetingDetails[meetingDetails.length - 1]?.attendeeSIT || '') as string,
+      meetingAgenda: (meetingDetails[meetingDetails.length - 1]?.meetingAgenda || '') as string,
+      meetingDetails,
+      meetings: followUps,
+      followUps,
+      contacts,
+    });
+
   function handleCompanyChange(constId: string) {
     const idNum = Number(constId);
     const selected = companyOptions.find((c) => Number(c.Const_Id) === idNum);
@@ -212,7 +460,13 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
     e.preventDefault();
     setSaving(true);
     try {
-      const payload = { ...form };
+      const payload = {
+        ...form,
+        FollowUp: buildFollowUpJson(),
+        InitialFollowUpDate: followUps[0]?.date || null,
+        NextFollowUpDate: followUps[followUps.length - 1]?.nextDate || null,
+        DiscussionOutcome: discussionOutcome || null,
+      };
       const res = await fetch('/api/admission-activity/corporate-inquiry', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -518,41 +772,214 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
 
             {activeTab === 'discussion' && (
               <>
-                <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Discussion</h2>
-
-                <label className={labelClass}>Disciplines</label>
-                <textarea
-                  name="business"
-                  value={form.business}
-                  onChange={handleChange}
-                  className={textareaClass}
-                  rows={3}
-                  placeholder="Disciplines / departments"
-                />
-
-                <div className="mt-4">
-                  <label className={labelClass}>Discussion Notes</label>
-                  <textarea
-                    name="Discussion"
-                    value={form.Discussion}
-                    onChange={handleChange}
-                    className={textareaClass}
-                    rows={8}
-                    placeholder="Enter discussion details"
-                  />
+                <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                  <h2 className="text-sm font-bold text-[#2A6BB5] uppercase">Training Discussion</h2>
+                  <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm">
+                    {([
+                      { key: 'meeting', label: 'Meeting Details' },
+                      { key: 'discussion', label: 'Discussion' },
+                      { key: 'contacts', label: 'Contact Details' },
+                    ] as const).map((t) => (
+                      <button
+                        key={t.key}
+                        type="button"
+                        onClick={() => setDiscussionSubTab(t.key)}
+                        className={`px-3 py-2 text-xs font-semibold transition-colors border-r border-gray-200 last:border-r-0 ${
+                          discussionSubTab === t.key ? 'bg-[#2A6BB5] text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="mt-4">
-                  <label className={labelClass}>Remarks</label>
-                  <textarea
-                    name="Remark"
-                    value={form.Remark}
-                    onChange={handleChange}
-                    className={textareaClass}
-                    rows={3}
-                    placeholder="Any additional remarks"
-                  />
-                </div>
+                {discussionSubTab === 'meeting' && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelClass}>Meeting Date</label>
+                        <input
+                          type="date"
+                          className={inputClass}
+                          value={meetingDraft.meetingDate}
+                          onChange={(e) => setMeetingDraft((d) => ({ ...d, meetingDate: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Meeting Agenda</label>
+                        <input
+                          className={inputClass}
+                          value={meetingDraft.meetingAgenda}
+                          onChange={(e) => setMeetingDraft((d) => ({ ...d, meetingAgenda: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelClass}>Attendee (Client)</label>
+                        <textarea
+                          className={textareaClass}
+                          rows={3}
+                          value={meetingDraft.attendeeClient}
+                          onChange={(e) => setMeetingDraft((d) => ({ ...d, attendeeClient: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Attendee (SIT)</label>
+                        <textarea
+                          className={textareaClass}
+                          rows={3}
+                          value={meetingDraft.attendeeSIT}
+                          onChange={(e) => setMeetingDraft((d) => ({ ...d, attendeeSIT: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        type="button"
+                        className="px-4 py-2 rounded-lg bg-[#2A6BB5] text-white text-sm font-semibold"
+                        onClick={() => {
+                          const hasAny = Boolean(meetingDraft.meetingDate || meetingDraft.meetingAgenda || meetingDraft.attendeeClient || meetingDraft.attendeeSIT);
+                          if (!hasAny) return;
+                          setMeetingDetails((prev) => (editingMeetingIndex === null ? [...prev, meetingDraft] : prev.map((m, i) => (i === editingMeetingIndex ? meetingDraft : m))));
+                          setMeetingDraft({ meetingDate: '', attendeeClient: '', attendeeSIT: '', meetingAgenda: '' });
+                          setEditingMeetingIndex(null);
+                        }}
+                      >
+                        {editingMeetingIndex === null ? 'Add Meeting' : 'Update Meeting'}
+                      </button>
+                      {editingMeetingIndex !== null && (
+                        <button
+                          type="button"
+                          className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-semibold"
+                          onClick={() => {
+                            setMeetingDraft({ meetingDate: '', attendeeClient: '', attendeeSIT: '', meetingAgenda: '' });
+                            setEditingMeetingIndex(null);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="overflow-x-auto rounded-lg border border-gray-200">
+                      <table className="min-w-full text-xs">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Date</th>
+                            <th className="px-3 py-2 text-left">Client</th>
+                            <th className="px-3 py-2 text-left">SIT</th>
+                            <th className="px-3 py-2 text-left">Agenda</th>
+                            <th className="px-3 py-2 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {meetingDetails.length === 0 ? (
+                            <tr><td colSpan={5} className="px-3 py-3 text-gray-500">No meeting details yet</td></tr>
+                          ) : (
+                            meetingDetails.map((m, idx) => (
+                              <tr key={`${m.meetingDate}-${idx}`} className="border-t border-gray-100">
+                                <td className="px-3 py-2">{toDateInputValue(m.meetingDate) || '—'}</td>
+                                <td className="px-3 py-2">{splitList(m.attendeeClient).join(', ') || '—'}</td>
+                                <td className="px-3 py-2">{splitList(m.attendeeSIT).join(', ') || '—'}</td>
+                                <td className="px-3 py-2">{m.meetingAgenda || '—'}</td>
+                                <td className="px-3 py-2 text-right">
+                                  <button type="button" className="text-[#2A6BB5] mr-2" onClick={() => { setEditingMeetingIndex(idx); setMeetingDraft({ ...m }); }}>Edit</button>
+                                  <button type="button" className="text-red-600" onClick={() => setMeetingDetails((prev) => prev.filter((_, i) => i !== idx))}>Delete</button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {discussionSubTab === 'discussion' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className={labelClass}>Minutes of Meeting</label>
+                      <textarea
+                        name="Discussion"
+                        value={form.Discussion}
+                        onChange={handleChange}
+                        className={textareaClass}
+                        rows={8}
+                        placeholder="Enter discussion details"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Discussion Outcome</label>
+                      <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm">
+                        {(['Awarded', 'Regretted', 'On Hold'] as const).map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => setDiscussionOutcome(opt)}
+                            className={`px-4 py-2 text-sm font-semibold ${discussionOutcome === opt ? 'bg-[#2A6BB5] text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {discussionSubTab === 'contacts' && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div><label className={labelClass}>Full Name</label><input className={inputClass} value={contactDraft.fullName} onChange={(e) => setContactDraft((d) => ({ ...d, fullName: e.target.value }))} /></div>
+                      <div><label className={labelClass}>Email</label><input className={inputClass} value={contactDraft.email} onChange={(e) => setContactDraft((d) => ({ ...d, email: e.target.value }))} /></div>
+                      <div><label className={labelClass}>Phone</label><input className={inputClass} value={contactDraft.phoneNumber} onChange={(e) => setContactDraft((d) => ({ ...d, phoneNumber: e.target.value }))} /></div>
+                      <div><label className={labelClass}>Alternate Number</label><input className={inputClass} value={contactDraft.alternateNumber} onChange={(e) => setContactDraft((d) => ({ ...d, alternateNumber: e.target.value }))} /></div>
+                      <div><label className={labelClass}>Job Title</label><input className={inputClass} value={contactDraft.jobTitle} onChange={(e) => setContactDraft((d) => ({ ...d, jobTitle: e.target.value }))} /></div>
+                      <div><label className={labelClass}>Industry</label><input className={inputClass} value={contactDraft.industry} onChange={(e) => setContactDraft((d) => ({ ...d, industry: e.target.value }))} /></div>
+                      <div><label className={labelClass}>Discussion</label><input className={inputClass} value={contactDraft.discussion} onChange={(e) => setContactDraft((d) => ({ ...d, discussion: e.target.value }))} /></div>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        type="button"
+                        className="px-4 py-2 rounded-lg bg-[#2A6BB5] text-white text-sm font-semibold"
+                        onClick={() => {
+                          const hasAny = Boolean(contactDraft.fullName?.trim() || contactDraft.email?.trim());
+                          if (!hasAny) return;
+                          setContacts((prev) => (editingContactIndex === null ? [...prev, contactDraft] : prev.map((m, i) => (i === editingContactIndex ? contactDraft : m))));
+                          setContactDraft({ fullName: '', email: '', phoneNumber: '', alternateNumber: '', jobTitle: '', industry: '', discussion: '' });
+                          setEditingContactIndex(null);
+                        }}
+                      >
+                        {editingContactIndex === null ? 'Add Contact' : 'Update Contact'}
+                      </button>
+                      {editingContactIndex !== null && (
+                        <button type="button" className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-semibold" onClick={() => { setContactDraft({ fullName: '', email: '', phoneNumber: '', alternateNumber: '', jobTitle: '', industry: '', discussion: '' }); setEditingContactIndex(null); }}>Cancel</button>
+                      )}
+                    </div>
+                    <div className="overflow-x-auto rounded-lg border border-gray-200">
+                      <table className="min-w-full text-xs">
+                        <thead className="bg-gray-50"><tr><th className="px-3 py-2 text-left">Name</th><th className="px-3 py-2 text-left">Job</th><th className="px-3 py-2 text-left">Contact</th><th className="px-3 py-2 text-left">Discussion</th><th className="px-3 py-2 text-right">Action</th></tr></thead>
+                        <tbody>
+                          {contacts.length === 0 ? (
+                            <tr><td colSpan={5} className="px-3 py-3 text-gray-500">No contacts added yet</td></tr>
+                          ) : contacts.map((c, idx) => (
+                            <tr key={idx} className="border-t border-gray-100">
+                              <td className="px-3 py-2">{c.fullName || '—'}</td>
+                              <td className="px-3 py-2">{c.jobTitle || '—'}</td>
+                              <td className="px-3 py-2">{c.email || '—'} / {c.phoneNumber || '—'}</td>
+                              <td className="px-3 py-2">{c.industry || '—'} / {c.discussion || '—'}</td>
+                              <td className="px-3 py-2 text-right">
+                                <button type="button" className="text-[#2A6BB5] mr-2" onClick={() => { setEditingContactIndex(idx); setContactDraft({ ...c }); }}>Edit</button>
+                                <button type="button" className="text-red-600" onClick={() => setContacts((prev) => prev.filter((_, i) => i !== idx))}>Delete</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 

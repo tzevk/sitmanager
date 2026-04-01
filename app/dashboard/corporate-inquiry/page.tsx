@@ -141,7 +141,7 @@ export default function CorporateInquiryPage() {
       if (!res.ok) throw new Error(data.error || 'Update failed');
 
       if (status === 'UnderDiscussion') {
-        router.push(`/dashboard/corporate-inquiry/convert/${id}`);
+        router.push(`/dashboard/corporate-inquiry/execution/${id}`);
         return;
       }
 
@@ -373,7 +373,7 @@ export default function CorporateInquiryPage() {
                           onClick={() => updateStatus(inq.Id, 'UnderDiscussion')}
                           disabled={updating === inq.Id}
                           className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600 transition-colors disabled:opacity-50"
-                          title="Under Discussion"
+                          title="Convert to Execution"
                         >
                           <FaCheckCircle className="w-4 h-4" />
                         </button>

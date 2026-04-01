@@ -320,7 +320,7 @@ export default function TrainingExecutionPage() {
               Inquiry Details
             </button>
             <button
-              onClick={() => router.push(`/dashboard/corporate-inquiry/convert/${inquiryId}`)}
+              onClick={() => router.push(`/dashboard/corporate-inquiry/edit/${inquiryId}?tab=discussion`)}
               className="px-4 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-sm font-semibold transition-colors"
               title="Under discussion"
             >

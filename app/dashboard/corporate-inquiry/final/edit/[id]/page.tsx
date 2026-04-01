@@ -66,7 +66,7 @@ type ContactDetailItem = {
   alternateNumber: string;
   jobTitle: string;
   industry: string;
-  location: string;
+  discussion: string;
 };
 
 type MeetingDetailsItem = {
@@ -215,10 +215,8 @@ export default function CorporateInquiryEditPage() {
   const [meetingDraft, setMeetingDraft] = useState<MeetingDetailsItem>({ meetingDate: '', attendeeClient: '', attendeeSIT: '', meetingAgenda: '' });
   const [editingMeetingIndex, setEditingMeetingIndex] = useState<number | null>(null);
   const [followUps, setFollowUps] = useState<MeetingItem[]>([]);
-  const [followUpDraft, setFollowUpDraft] = useState<MeetingItem>({ date: '', nextDate: '', remark: '' });
-  const [editingFollowUpIndex, setEditingFollowUpIndex] = useState<number | null>(null);
   const [contacts, setContacts] = useState<ContactDetailItem[]>([]);
-  const [contactDraft, setContactDraft] = useState<ContactDetailItem>({ fullName: '', email: '', phoneNumber: '', alternateNumber: '', jobTitle: '', industry: '', location: '' });
+  const [contactDraft, setContactDraft] = useState<ContactDetailItem>({ fullName: '', email: '', phoneNumber: '', alternateNumber: '', jobTitle: '', industry: '', discussion: '' });
   const [editingContactIndex, setEditingContactIndex] = useState<number | null>(null);
 
   // --- State from 'final' page ---
@@ -438,7 +436,7 @@ export default function CorporateInquiryEditPage() {
         <div className="flex border-b border-gray-200 px-5 bg-gray-50/80">
           {([
             ['inquiry', 'Inquiry Details'],
-            ['discussion', 'Discussion & Follow-ups'],
+            ['discussion', 'Discussion'],
             ['schedule', 'Schedule & Performance'],
             ['timetable', 'Time Table'],
             ['feedback', 'Feedback & Certification'],
@@ -748,136 +746,6 @@ export default function CorporateInquiryEditPage() {
                 </div>
               </div>
 
-              {/* Follow Ups */}
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <h3 className="text-sm font-bold text-gray-800 mb-3">Follow Ups</h3>
-                <div className="space-y-3">
-                  <div className="flex flex-wrap gap-3 items-end">
-                    <div className="flex-[1_1_130px]">
-                      <label className={labelCls}>Follow Up Date</label>
-                      <input
-                        type="date"
-                        className={inputCls}
-                        value={followUpDraft.date}
-                        onChange={(e) => setFollowUpDraft((d) => ({ ...d, date: e.target.value }))}
-                      />
-                    </div>
-                    <div className="flex-[1_1_130px]">
-                      <label className={labelCls}>Next Follow Up Date</label>
-                      <input
-                        type="date"
-                        className={inputCls}
-                        value={followUpDraft.nextDate || ''}
-                        onChange={(e) => setFollowUpDraft((d) => ({ ...d, nextDate: e.target.value }))}
-                      />
-                    </div>
-                    <div className="flex-[3_1_300px]">
-                      <label className={labelCls}>Follow Up Remarks</label>
-                      <input
-                        className={inputCls}
-                        value={followUpDraft.remark}
-                        onChange={(e) => setFollowUpDraft((d) => ({ ...d, remark: e.target.value }))}
-                        placeholder="Remark"
-                      />
-                    </div>
-                    <div className="flex-none flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const hasAny = Boolean(followUpDraft.date) || Boolean(followUpDraft.nextDate) || Boolean(followUpDraft.remark?.trim());
-                          if (!hasAny) return;
-                          setFollowUps((prev) => {
-                            if (editingFollowUpIndex === null) return [...prev, followUpDraft];
-                            return prev.map((it, idx) => (idx === editingFollowUpIndex ? followUpDraft : it));
-                          });
-                          setFollowUpDraft({ date: '', nextDate: '', remark: '' });
-                          setEditingFollowUpIndex(null);
-                        }}
-                        className="h-[30px] px-4 rounded-lg bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white text-xs font-semibold shadow hover:shadow-md transition-all disabled:opacity-60 whitespace-nowrap"
-                        disabled={saving}
-                      >
-                        {editingFollowUpIndex === null ? 'Add' : 'Update'}
-                      </button>
-
-                      {editingFollowUpIndex !== null && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFollowUpDraft({ date: '', nextDate: '', remark: '' });
-                            setEditingFollowUpIndex(null);
-                          }}
-                          className="h-[30px] px-4 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50 whitespace-nowrap"
-                          disabled={saving}
-                        >
-                          Cancel
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="overflow-x-auto rounded-lg border border-gray-200">
-                    <table className="min-w-full text-xs">
-                      <thead className="bg-gray-50 text-gray-700">
-                        <tr>
-                          <th className="px-3 py-2 text-left font-semibold">Date</th>
-                          <th className="px-3 py-2 text-left font-semibold">Next Follow Up Date</th>
-                          <th className="px-3 py-2 text-left font-semibold">Remark</th>
-                          <th className="px-3 py-2 text-right font-semibold">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {followUps.length === 0 ? (
-                          <tr>
-                            <td className="px-3 py-3 text-gray-500" colSpan={4}>
-                              No follow ups yet
-                            </td>
-                          </tr>
-                        ) : (
-                          followUps.map((m, idx) => (
-                            <tr key={`${m.date}-${m.nextDate || ''}-${idx}`} className="bg-white">
-                              <td className="px-3 py-2 text-gray-900">{toDateInput(m.date) || '—'}</td>
-                              <td className="px-3 py-2 text-gray-900">{toDateInput(m.nextDate) || '—'}</td>
-                              <td className="px-3 py-2 text-gray-900">{(m.remark || '').trim() || '—'}</td>
-                              <td className="px-3 py-2 text-right">
-                                <div className="inline-flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingFollowUpIndex(idx);
-                                      setFollowUpDraft({
-                                        date: m.date || '',
-                                        nextDate: m.nextDate || '',
-                                        remark: m.remark || '',
-                                      });
-                                    }}
-                                    className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setFollowUps((prev) => prev.filter((_, i) => i !== idx));
-                                      if (editingFollowUpIndex === idx) {
-                                        setFollowUpDraft({ date: '', nextDate: '', remark: '' });
-                                        setEditingFollowUpIndex(null);
-                                      }
-                                    }}
-                                    className="px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-xs font-semibold hover:bg-red-50"
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-
               {/* Contact Details */}
               <div className="p-4 border border-gray-200 rounded-lg">
                 <h3 className="text-sm font-bold text-gray-800 mb-3">Contact Details</h3>
@@ -934,12 +802,12 @@ export default function CorporateInquiryEditPage() {
                       />
                     </div>
                     <div className="flex-[1_1_100px]">
-                      <label className={labelCls}>Location</label>
+                      <label className={labelCls}>Discussion</label>
                       <input
                         className={inputCls}
-                        value={contactDraft.location}
-                        placeholder="City, State"
-                        onChange={(e) => setContactDraft((d) => ({ ...d, location: e.target.value }))}
+                        value={contactDraft.discussion}
+                        placeholder="Discussion"
+                        onChange={(e) => setContactDraft((d) => ({ ...d, discussion: e.target.value }))}
                       />
                     </div>
                     
@@ -955,7 +823,7 @@ export default function CorporateInquiryEditPage() {
                           });
                           setContactDraft({
                             fullName: '', email: '', phoneNumber: '', alternateNumber: '',
-                            jobTitle: '', industry: '', location: ''
+                            jobTitle: '', industry: '', discussion: ''
                           });
                           setEditingContactIndex(null);
                         }}
@@ -971,7 +839,7 @@ export default function CorporateInquiryEditPage() {
                           onClick={() => {
                             setContactDraft({
                               fullName: '', email: '', phoneNumber: '', alternateNumber: '',
-                              jobTitle: '', industry: '', location: ''
+                              jobTitle: '', industry: '', discussion: ''
                             });
                             setEditingContactIndex(null);
                           }}
@@ -993,7 +861,7 @@ export default function CorporateInquiryEditPage() {
                           <th className="px-3 py-2 text-left font-semibold">Phone</th>
                           <th className="px-3 py-2 text-left font-semibold">Job Title</th>
                           <th className="px-3 py-2 text-left font-semibold">Industry</th>
-                          <th className="px-3 py-2 text-left font-semibold">Location</th>
+                          <th className="px-3 py-2 text-left font-semibold">Discussion</th>
                           <th className="px-3 py-2 text-right font-semibold">Action</th>
                         </tr>
                       </thead>
@@ -1012,7 +880,7 @@ export default function CorporateInquiryEditPage() {
                               <td className="px-3 py-2 text-gray-900">{c.phoneNumber}{c.alternateNumber ? `, ${c.alternateNumber}`: ''}</td>
                               <td className="px-3 py-2 text-gray-900">{c.jobTitle}</td>
                               <td className="px-3 py-2 text-gray-900">{c.industry}</td>
-                              <td className="px-3 py-2 text-gray-900">{c.location}</td>
+                              <td className="px-3 py-2 text-gray-900">{c.discussion}</td>
                               <td className="px-3 py-2 text-right">
                                 <div className="inline-flex items-center gap-2">
                                   <button
@@ -1032,7 +900,7 @@ export default function CorporateInquiryEditPage() {
                                       if (editingContactIndex === idx) {
                                         setContactDraft({
                                           fullName: '', email: '', phoneNumber: '', alternateNumber: '',
-                                          jobTitle: '', industry: '', location: ''
+                                          jobTitle: '', industry: '', discussion: ''
                                         });
                                         setEditingContactIndex(null);
                                       }

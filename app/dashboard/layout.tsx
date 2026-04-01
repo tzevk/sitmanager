@@ -39,7 +39,6 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Admission Activity > Online Admission': '/dashboard/online-admission',
   'Admission Activity > Student': '/dashboard/student',
   'Corporate Training > Corporate Inquiry': '/dashboard/corporate-inquiry',
-  'Corporate Training > Training Discussion': '/dashboard/corporate-inquiry/convert',
   'Corporate Training > Training Execution': '/dashboard/corporate-inquiry/execution',
   'Reports > Inquiry': '/dashboard/reports/inquiry',
   'Reports > Inquiry Report': '/dashboard/reports/inquiry',
@@ -63,6 +62,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Placement > Consultancy Report': '/dashboard/reports/consultancy',
   'Placement > Job Postings': '/dashboard/placement',
   'Placement > Email Company': '/dashboard/placement/email-company',
+  'Utility > Festival Photo Upload': '/dashboard/utility/festival-photo-upload',
 };
 
 const SUB_MENUS: Record<string, string[]> = {
@@ -166,7 +166,6 @@ const SUB_MENUS: Record<string, string[]> = {
   ],
   'Corporate Training': [
     'Corporate Inquiry',
-    'Training Discussion',
     'Training Execution',
   ],
   'Utility': [
@@ -246,6 +245,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     if (path.startsWith('/dashboard/role-right')) return 'Role Right';
     if (path.startsWith('/dashboard/portal-accounts')) return 'Role Right';
     if (path.startsWith('/dashboard/corporate-inquiry')) return 'Corporate Training';
+    if (path.startsWith('/dashboard/utility')) return 'Utility';
     if (path.startsWith('/dashboard/inquiry') || path.startsWith('/dashboard/online-admission') || path.startsWith('/dashboard/student')) return 'Admission Activity';
     if (path.startsWith('/dashboard/placement') || path.startsWith('/dashboard/cv-shortlisted')) return 'Placement';
     return 'Dashboard';

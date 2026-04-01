@@ -617,6 +617,7 @@ export async function PUT(req: NextRequest) {
     const NumberOfDays = toNullableInt(body?.NumberOfDays);
     const TotalStudents = toNullableInt(body?.TotalStudents);
     const TrainingCoordinator = body?.TrainingCoordinator;
+    const DiscussionOutcome = body?.DiscussionOutcome;
 
     const Place = body?.Place ?? TrainingLocation;
     const Remark = body?.Remark ?? Discussion;
@@ -634,7 +635,7 @@ export async function PUT(req: NextRequest) {
         Consultancy_Id = ?, CompanyType = ?, CompanyAuthority = ?, TrainingMode = ?, Participants_Fresher = ?, Participants_Experienced = ?,
         TrainingLocation = ?, TrainingDates = ?, Discussion = ?, FollowUp = ?
         , InitialFollowUpDate = ?, NextFollowUpDate = ?
-        , InquiryStatus = ?, TrainingNumber = ?, TrainingDate = ?, TrainerName = ?, NumberOfDays = ?, TotalStudents = ?, TrainingCoordinator = ?
+        , InquiryStatus = ?, TrainingNumber = ?, TrainingDate = ?, TrainerName = ?, NumberOfDays = ?, TotalStudents = ?, TrainingCoordinator = ?, DiscussionOutcome = ?
       WHERE Id = ?`,
       [
         (Fname ?? FullName) || null,
@@ -675,6 +676,7 @@ export async function PUT(req: NextRequest) {
         NumberOfDays,
         TotalStudents,
         TrainingCoordinator || null,
+        DiscussionOutcome || null,
         Id
       ]
     );
