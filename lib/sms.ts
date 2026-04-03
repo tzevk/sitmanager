@@ -17,15 +17,42 @@ export async function sendSms(toMobile10Digits: string, message: string): Promis
     throw new Error('SMS provider not configured (missing SMS_WEBHOOK_URL)');
   }
 
+  if (webhookUrl.includes('/api/sms/realtime-delivery')) {
+    throw new Error('SMS_WEBHOOK_URL is misconfigured. Use provider send API, not /api/sms/realtime-delivery');
+  }
+
   const authHeader = process.env.SMS_WEBHOOK_AUTH;
+  const contentType = (process.env.SMS_WEBHOOK_CONTENT_TYPE || 'json').toLowerCase();
+  const toKey = process.env.SMS_WEBHOOK_TO_KEY || 'to';
+  const messageKey = process.env.SMS_WEBHOOK_MESSAGE_KEY || 'message';
+  const senderId = process.env.SMS_WEBHOOK_SENDER_ID;
+
+  const payload: Record<string, string> = {
+    [toKey]: toMobile10Digits,
+    [messageKey]: message,
+  };
+
+  if (senderId) {
+    payload.sender = senderId;
+  }
+
+  const headers: Record<string, string> = {
+    ...(authHeader ? { Authorization: authHeader } : {}),
+  };
+
+  let body: string;
+  if (contentType === 'form') {
+    headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    body = new URLSearchParams(payload).toString();
+  } else {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(payload);
+  }
 
   const res = await fetch(webhookUrl, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(authHeader ? { Authorization: authHeader } : {}),
-    },
-    body: JSON.stringify({ to: toMobile10Digits, message }),
+    headers,
+    body,
     cache: 'no-store',
   });
 

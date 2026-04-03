@@ -87,11 +87,11 @@ async function parsePayload(req: NextRequest): Promise<{ data: Record<string, un
 
 function normalizeDeliveryPayload(payload: Record<string, unknown>) {
   return {
-    messageId: pickFirst(payload, ['messageId', 'message_id', 'msgid', 'messageid', 'id']),
-    mobile: pickFirst(payload, ['mobile', 'phone', 'msisdn', 'to', 'recipient']),
+    messageId: pickFirst(payload, ['messageId', 'message_id', 'msgid', 'messageid', 'id', 'externalId', 'externalID']),
+    mobile: pickFirst(payload, ['mobile', 'phone', 'phoneNo', 'msisdn', 'to', 'recipient']),
     deliveryStatus: pickFirst(payload, ['deliveryStatus', 'delivery_status', 'dlr_status', 'status']),
-    deliveredAt: pickFirst(payload, ['deliveredAt', 'delivered_at', 'done_date', 'timestamp', 'time']),
-    errorCode: pickFirst(payload, ['errorCode', 'error_code', 'err_code', 'reason_code', 'error']),
+    deliveredAt: pickFirst(payload, ['deliveredAt', 'delivered_at', 'done_date', 'timestamp', 'time', 'deliveredTS']),
+    errorCode: pickFirst(payload, ['errorCode', 'error_code', 'errCode', 'err_code', 'reason_code', 'cause', 'error']),
   };
 }
 
@@ -104,8 +104,57 @@ function isAuthorized(req: NextRequest): boolean {
   return actual === expected;
 }
 
-export async function GET() {
-  return NextResponse.json({ ok: true, service: 'sms-realtime-delivery-webhook' });
+async function storeDeliveryReport(req: NextRequest, data: Record<string, unknown>, raw: string) {
+  const normalized = normalizeDeliveryPayload(data);
+
+  await ensureTable();
+  const pool = getPool();
+  await pool.query(
+    `
+      INSERT INTO ${REPORTS_TABLE} (
+        message_id,
+        mobile,
+        delivery_status,
+        delivered_at,
+        error_code,
+        auth_header,
+        source_ip,
+        payload_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      normalized.messageId,
+      normalized.mobile,
+      normalized.deliveryStatus,
+      normalized.deliveredAt,
+      normalized.errorCode,
+      getHeader(req, (process.env.SMS_DELIVERY_WEBHOOK_HEADER || 'authorization').toLowerCase()).slice(0, 255),
+      (req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '').slice(0, 100),
+      JSON.stringify({ normalized, parsed: data, raw }),
+    ]
+  );
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    // Health check path: GET with no query params.
+    if (req.nextUrl.searchParams.size === 0) {
+      return NextResponse.json({ ok: true, service: 'sms-realtime-delivery-webhook' });
+    }
+
+    if (!isAuthorized(req)) {
+      return NextResponse.json({ error: 'Unauthorized webhook request' }, { status: 401 });
+    }
+
+    const data = Object.fromEntries(req.nextUrl.searchParams.entries());
+    await storeDeliveryReport(req, data, req.nextUrl.searchParams.toString());
+
+    return NextResponse.json({ ok: true, received: true, method: 'GET' });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to process delivery report';
+    console.error('SMS realtime delivery webhook GET error:', error);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -115,34 +164,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { data, raw } = await parsePayload(req);
-    const normalized = normalizeDeliveryPayload(data);
-
-    await ensureTable();
-    const pool = getPool();
-    await pool.query(
-      `
-        INSERT INTO ${REPORTS_TABLE} (
-          message_id,
-          mobile,
-          delivery_status,
-          delivered_at,
-          error_code,
-          auth_header,
-          source_ip,
-          payload_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        normalized.messageId,
-        normalized.mobile,
-        normalized.deliveryStatus,
-        normalized.deliveredAt,
-        normalized.errorCode,
-        getHeader(req, (process.env.SMS_DELIVERY_WEBHOOK_HEADER || 'authorization').toLowerCase()).slice(0, 255),
-        (req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '').slice(0, 100),
-        JSON.stringify({ normalized, parsed: data, raw }),
-      ]
-    );
+    await storeDeliveryReport(req, data, raw);
 
     return NextResponse.json({ ok: true, received: true });
   } catch (error: unknown) {
