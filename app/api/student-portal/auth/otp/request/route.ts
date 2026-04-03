@@ -60,13 +60,7 @@ export async function POST(req: NextRequest) {
       [mobile, mobile]
     );
 
-    // Always return a generic success to reduce account enumeration.
-    // Only set an OTP cookie if a matching, active student exists.
-    if (!rows.length) {
-      return NextResponse.json({ success: true, message: 'If the mobile number is registered, an OTP has been sent.' });
-    }
-
-    const student = rows[0];
+    const student = rows.length ? rows[0] : null;
 
     const otp = generateOtp();
     const otpHash = hashOtp(mobile, otp);
@@ -84,7 +78,7 @@ export async function POST(req: NextRequest) {
 
     const otpToken = await new SignJWT({
       type: 'student_otp',
-      studentId: student.Student_Id,
+      studentId: student?.Student_Id ?? null,
       mobile,
       otpHash,
     })

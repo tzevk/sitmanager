@@ -54,6 +54,7 @@ const PUBLIC_PREFIXES = [
   '/student-portal',
   '/company',
   '/api/public',
+  '/api/sms/realtime-delivery',
   '/api/cron',
   '/api/student-portal',
   '/trainer-portal',
@@ -75,7 +76,7 @@ export async function proxy(request: NextRequest) {
 
   // Allow public paths
   if (isPublicRoute(pathname)) {
-    return addSecurityHeaders(NextResponse.next());
+    return addSecurityHeaders(NextResponse.next(), pathname);
   }
 
   // Only protect /api/* and /dashboard/* routes
@@ -83,7 +84,7 @@ export async function proxy(request: NextRequest) {
   const isDashboardRoute = pathname.startsWith('/dashboard');
 
   if (!isApiRoute && !isDashboardRoute) {
-    return addSecurityHeaders(NextResponse.next());
+    return addSecurityHeaders(NextResponse.next(), pathname);
   }
 
   // Check for session cookie
@@ -106,7 +107,7 @@ export async function proxy(request: NextRequest) {
   // Verify JWT token
   try {
     await jwtVerify(token, SECRET_KEY());
-    return addSecurityHeaders(NextResponse.next());
+    return addSecurityHeaders(NextResponse.next(), pathname);
   } catch {
     // Invalid/expired token — clear cookie and respond
     const response = isApiRoute
@@ -131,8 +132,9 @@ export async function proxy(request: NextRequest) {
 /**
  * Append security headers to any response.
  */
-function addSecurityHeaders(response: NextResponse): NextResponse {
-  response.headers.set('X-Frame-Options', 'DENY');
+function addSecurityHeaders(response: NextResponse, pathname?: string): NextResponse {
+  const isAdmissionPreviewPage = Boolean(pathname && pathname.startsWith('/admission/'));
+  response.headers.set('X-Frame-Options', isAdmissionPreviewPage ? 'SAMEORIGIN' : 'DENY');
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set(

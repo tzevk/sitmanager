@@ -95,6 +95,7 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
 
   /* ui state */
   const [saving, setSaving] = useState(false);
+  const [sendingAdmissionForm, setSendingAdmissionForm] = useState(false);
   const [error, setError] = useState('');
 
   /* ---- load options on mount ---- */
@@ -210,6 +211,71 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
     setDiscussionLoading(false);
   };
 
+  const handleSendAdmissionForm = async () => {
+    if (!editId) {
+      alert('Please save the inquiry first before sending admission form');
+      return;
+    }
+
+    const recipient = email.trim();
+    if (!recipient) {
+      alert('No email address found for this inquiry. Please add email and save first.');
+      return;
+    }
+
+    setSendingAdmissionForm(true);
+    try {
+      const previewRes = await fetch('/api/inquiry/send-admission-form', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId: editId,
+          toEmail: recipient,
+          studentName: name,
+          previewOnly: true,
+        }),
+      });
+
+      const previewData = await previewRes.json();
+      if (!previewRes.ok) throw new Error(previewData?.error || 'Failed to load mail preview');
+
+      const previewMessage = [
+        'Please verify before sending:',
+        '',
+        `To: ${previewData.toEmail}`,
+        `Subject: ${previewData.preview?.subject || 'Your SIT Admission Form Link'}`,
+        `Admission Form Link: ${previewData.admissionFormUrl}`,
+        '',
+        'Mail Body:',
+        String(previewData.preview?.text || ''),
+        '',
+        'Click OK to send this email now.',
+      ].join('\n');
+
+      const approved = window.confirm(previewMessage);
+      if (!approved) return;
+
+      window.open(String(previewData.admissionFormUrl), '_blank', 'noopener,noreferrer');
+
+      const sendRes = await fetch('/api/inquiry/send-admission-form', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId: editId,
+          toEmail: recipient,
+          studentName: name,
+        }),
+      });
+      const sendData = await sendRes.json();
+      if (!sendRes.ok) throw new Error(sendData?.error || 'Failed to send admission form email');
+      alert('Admission form email sent successfully');
+    } catch (err: any) {
+      alert(err?.message || 'Failed to send admission form email');
+    } finally {
+      setSendingAdmissionForm(false);
+    }
+  };
+
   if (!open) return null;
 
   /* ---- shared label/input classes ---- */
@@ -280,19 +346,14 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
               {/* Section: Personal Details */}
               <section>
                 <h3 className="text-sm font-bold text-[#2E3093] mb-3 flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  Personal Details
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {/* Name */}
+                    onClick={handleSendAdmissionForm}
+                    disabled={sendingAdmissionForm}
                   <div>
                     <label className={labelCls}>
                       Name <span className="text-red-400">*</span>
                     </label>
                     <input
-                      type="text"
+                    {sendingAdmissionForm ? 'Sending...' : 'Send Admission Form'}
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Full name"

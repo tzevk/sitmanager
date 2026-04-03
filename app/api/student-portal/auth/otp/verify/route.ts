@@ -42,7 +42,7 @@ function safeEqualHex(a: string, b: string): boolean {
 
 type OtpTokenPayload = {
   type: 'student_otp';
-  studentId: number;
+  studentId: number | null;
   mobile: string;
   otpHash: string;
 };

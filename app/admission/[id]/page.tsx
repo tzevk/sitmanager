@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 
 const STEPS = [
   { id: 1, title: 'Personal Info', icon: 'fa-user', description: 'Basic personal details' },
@@ -33,7 +33,10 @@ const COURSE_ELIGIBILITY: { [key: string]: string[] } = {
 
 export default function PublicAdmissionFormPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const studentId = params.id as string;
+  const isPreviewTermsMode = searchParams.get('previewTerms') === '1';
+  const forcedStep = Number(searchParams.get('step') || '0');
 
   const [submitted, setSubmitted] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
@@ -55,6 +58,13 @@ export default function PublicAdmissionFormPage() {
   const checkedCount = sectionChecks.filter(Boolean).length;
   const allSectionsChecked = checkedCount === 15;
   const [academicTab, setAcademicTab] = useState<'ssc' | 'hsc' | 'diploma' | 'graduation' | 'postgrad'>('ssc');
+
+  useEffect(() => {
+    if (!isPreviewTermsMode) return;
+    if (forcedStep >= 1 && forcedStep <= 5) {
+      setCurrentStep(forcedStep);
+    }
+  }, [isPreviewTermsMode, forcedStep]);
 
   // Training programme cascade
   const [courses, setCourses] = useState<{ Course_Id: number; Course_Name: string }[]>([]);
@@ -409,7 +419,7 @@ export default function PublicAdmissionFormPage() {
 
   const jumpToStep = (step: number) => {
     // Step 5 is locked until steps 1–4 are all completed
-    if (step === 5 && ![1, 2, 3, 4].every((s) => completedSteps.includes(s))) return;
+    if (!isPreviewTermsMode && step === 5 && ![1, 2, 3, 4].every((s) => completedSteps.includes(s))) return;
     setCurrentStep(step);
   };
 
@@ -633,7 +643,7 @@ export default function PublicAdmissionFormPage() {
           </div>
           <div className="flex gap-1.5">
             {STEPS.map((step) => {
-              const isLocked = step.id === 6 && ![1, 2, 3, 4, 5].every((s) => completedSteps.includes(s));
+              const isLocked = !isPreviewTermsMode && step.id === 5 && ![1, 2, 3, 4].every((s) => completedSteps.includes(s));
               return (
                 <button
                   key={step.id}
@@ -675,7 +685,7 @@ export default function PublicAdmissionFormPage() {
                 {STEPS.map((step) => {
                   const isActive = currentStep === step.id;
                   const isCompleted = completedSteps.includes(step.id);
-                  const isLocked = step.id === 5 && ![1, 2, 3, 4].every((s) => completedSteps.includes(s));
+                  const isLocked = !isPreviewTermsMode && step.id === 5 && ![1, 2, 3, 4].every((s) => completedSteps.includes(s));
                   return (
                     <button
                       key={step.id}
