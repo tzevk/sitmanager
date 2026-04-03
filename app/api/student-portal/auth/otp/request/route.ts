@@ -82,10 +82,11 @@ export async function POST(req: NextRequest) {
         console.error(`Student OTP SMS send error [${traceId}]:`, providerError);
 
         const isProd = process.env.NODE_ENV === 'production';
+        const allowDebugDetails = process.env.OTP_SMS_DEBUG_RESPONSE === '1';
         return NextResponse.json(
           {
             success: false,
-            message: isProd
+            message: isProd && !allowDebugDetails
               ? `OTP delivery service is temporarily unavailable. Ref: ${traceId}`
               : `OTP delivery service failed: ${providerError}`,
           },

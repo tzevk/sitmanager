@@ -22,6 +22,7 @@ export async function sendSms(toMobile10Digits: string, message: string): Promis
   }
 
   const authHeader = process.env.SMS_WEBHOOK_AUTH;
+  const authHeaderName = (process.env.SMS_WEBHOOK_AUTH_HEADER || 'Authorization').trim();
   const contentType = (process.env.SMS_WEBHOOK_CONTENT_TYPE || 'json').toLowerCase();
   const toKey = process.env.SMS_WEBHOOK_TO_KEY || 'to';
   const messageKey = process.env.SMS_WEBHOOK_MESSAGE_KEY || 'message';
@@ -36,9 +37,10 @@ export async function sendSms(toMobile10Digits: string, message: string): Promis
     payload.sender = senderId;
   }
 
-  const headers: Record<string, string> = {
-    ...(authHeader ? { Authorization: authHeader } : {}),
-  };
+  const headers: Record<string, string> = {};
+  if (authHeader) {
+    headers[authHeaderName] = authHeader;
+  }
 
   let body: string;
   if (contentType === 'form') {
