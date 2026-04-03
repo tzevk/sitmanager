@@ -9,7 +9,6 @@ export default function StudentSigninPage() {
   const [mobile, setMobile] = useState('');
   const [otp, setOtp] = useState('');
   const [otpRequested, setOtpRequested] = useState(false);
-  const [devOtpHint, setDevOtpHint] = useState<string>('');
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -18,7 +17,6 @@ export default function StudentSigninPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    setDevOtpHint('');
     try {
       const res = await fetch('/api/student-portal/auth/otp/request', {
         method: 'POST',
@@ -27,9 +25,6 @@ export default function StudentSigninPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to send OTP');
-      if (typeof data.devOtp === 'string') {
-        setDevOtpHint(data.devOtp);
-      }
       setOtpRequested(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to send OTP');
@@ -142,18 +137,12 @@ export default function StudentSigninPage() {
                   required
                   className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-[#2E3093] focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 transition-all text-gray-900 placeholder-gray-400 text-sm"
                 />
-                {devOtpHint && (
-                  <p className="mt-2 text-xs text-gray-400">
-                    Dev OTP: <span className="font-semibold text-gray-600">{devOtpHint}</span>
-                  </p>
-                )}
                 <button
                   type="button"
                   onClick={() => {
                     setOtpRequested(false);
                     setOtp('');
                     setError('');
-                    setDevOtpHint('');
                   }}
                   className="mt-3 text-xs font-semibold text-[#2E3093] hover:underline"
                 >

@@ -70,9 +70,19 @@ export async function POST(req: NextRequest) {
     const smsMessage = `Your SIT Student Portal OTP is ${otp}. It is valid for 5 minutes.`;
     try {
       await sendSms(mobile, smsMessage);
-    } catch (e) {
+    } catch (e: unknown) {
       // If explicitly allowed, keep OTP flow usable without a provider.
-      if (!shouldReturnOtp) throw e;
+      if (!shouldReturnOtp) {
+        const message = e instanceof Error ? e.message : 'SMS sending failed';
+        console.error('Student OTP SMS send error:', message);
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'OTP delivery service is temporarily unavailable. Please try again later.',
+          },
+          { status: 503 }
+        );
+      }
       console.warn('[WARN] OTP SMS sending failed, continuing due to OTP_RETURN_IN_RESPONSE mode:', e);
     }
 
@@ -108,6 +118,10 @@ export async function POST(req: NextRequest) {
     return response;
   } catch (err: unknown) {
     console.error('Student OTP request error:', err);
-    return NextResponse.json({ success: false, message: 'Server error' }, { status: 500 });
+    const message =
+      process.env.NODE_ENV !== 'production' && err instanceof Error
+        ? err.message
+        : 'Server error';
+    return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }
