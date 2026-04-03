@@ -2,7 +2,6 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -49,8 +48,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
 export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryFormProps) {
-  const router = useRouter();
-  
+
   /* tab state */
   const [activeTab, setActiveTab] = useState<'personal' | 'discussion'>('personal');
 
@@ -346,14 +344,17 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
               {/* Section: Personal Details */}
               <section>
                 <h3 className="text-sm font-bold text-[#2E3093] mb-3 flex items-center gap-2">
-                    onClick={handleSendAdmissionForm}
-                    disabled={sendingAdmissionForm}
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zM19.938 15.5A9 9 0 103 15.5" />
+                  </svg>
+                  Personal Details
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-2 gap-y-1.5">
                   <div>
                     <label className={labelCls}>
                       Name <span className="text-red-400">*</span>
                     </label>
                     <input
-                    {sendingAdmissionForm ? 'Sending...' : 'Send Admission Form'}
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Full name"
@@ -512,19 +513,18 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        if (editId) {
-                          window.open(`/admission/${editId}`, '_blank');
-                        } else {
-                          alert('Please save the inquiry first before sending admission form');
-                        }
-                      }}
-                      className="flex-1 flex items-center justify-center gap-2 bg-[#2A6BB5] hover:bg-[#2360A0] text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                      onClick={handleSendAdmissionForm}
+                      disabled={sendingAdmissionForm}
+                      className="flex-1 flex items-center justify-center gap-2 bg-[#2A6BB5] hover:bg-[#2360A0] text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
-                      Send Admission Form
+                      {sendingAdmissionForm ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                      )}
+                      {sendingAdmissionForm ? 'Sending...' : 'Send Admission Form'}
                     </button>
                   </div>
                 </div>
