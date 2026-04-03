@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { RowDataPacket } from 'mysql2/promise';
 import { requirePermission } from '@/lib/api-auth';
 import { getPool } from '@/lib/db';
 
 const REPORTS_TABLE = process.env.SMS_DELIVERY_REPORTS_TABLE || 'sms_delivery_reports';
 let tableReady = false;
 
-type ReportRow = {
+type ReportRow = RowDataPacket & {
   id: number;
   message_id: string | null;
   mobile: string | null;
