@@ -32,6 +32,10 @@ function hashOtp(mobile: string, otp: string): string {
   return crypto.createHash('sha256').update(`${mobile}:${otp}:${secret}`).digest('hex');
 }
 
+function makeTraceId(): string {
+  return crypto.randomBytes(6).toString('hex');
+}
+
 export async function POST(req: NextRequest) {
   const blocked = loginRateLimiter(req);
   if (blocked) return blocked;
@@ -73,12 +77,17 @@ export async function POST(req: NextRequest) {
     } catch (e: unknown) {
       // If explicitly allowed, keep OTP flow usable without a provider.
       if (!shouldReturnOtp) {
-        const message = e instanceof Error ? e.message : 'SMS sending failed';
-        console.error('Student OTP SMS send error:', message);
+        const providerError = e instanceof Error ? e.message : 'SMS sending failed';
+        const traceId = makeTraceId();
+        console.error(`Student OTP SMS send error [${traceId}]:`, providerError);
+
+        const isProd = process.env.NODE_ENV === 'production';
         return NextResponse.json(
           {
             success: false,
-            message: 'OTP delivery service is temporarily unavailable. Please try again later.',
+            message: isProd
+              ? `OTP delivery service is temporarily unavailable. Ref: ${traceId}`
+              : `OTP delivery service failed: ${providerError}`,
           },
           { status: 503 }
         );
