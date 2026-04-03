@@ -1,4 +1,69 @@
+function toE164(mobile10: string): string {
+  const cc = (process.env.TWILIO_DEFAULT_COUNTRY_CODE || '+91').trim();
+  if (mobile10.startsWith('+')) return mobile10;
+  return `${cc}${mobile10}`;
+}
+
+async function sendViaTwilio(toMobile10Digits: string, message: string): Promise<void> {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const fromNumber = process.env.TWILIO_FROM_NUMBER;
+  const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
+
+  if (!accountSid || !authToken || (!fromNumber && !messagingServiceSid)) {
+    throw new Error(
+      'Twilio is selected but credentials are incomplete. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER or TWILIO_MESSAGING_SERVICE_SID'
+    );
+  }
+
+  const endpoint = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+  const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+
+  const params = new URLSearchParams({
+    To: toE164(toMobile10Digits),
+    Body: message,
+  });
+
+  if (messagingServiceSid) {
+    params.set('MessagingServiceSid', messagingServiceSid);
+  } else if (fromNumber) {
+    params.set('From', fromNumber);
+  }
+
+  const body = params.toString();
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${auth}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body,
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Twilio send failed: ${res.status} ${text}`);
+  }
+}
+
 export async function sendSms(toMobile10Digits: string, message: string): Promise<void> {
+  const provider = (process.env.SMS_PROVIDER || '').toLowerCase();
+
+  // Prefer Twilio when explicitly selected, or when Twilio credentials are present.
+  if (
+    provider === 'twilio' ||
+    (
+      !!process.env.TWILIO_ACCOUNT_SID &&
+      !!process.env.TWILIO_AUTH_TOKEN &&
+      (!!process.env.TWILIO_FROM_NUMBER || !!process.env.TWILIO_MESSAGING_SERVICE_SID)
+    )
+  ) {
+    await sendViaTwilio(toMobile10Digits, message);
+    return;
+  }
+
   const webhookUrl = process.env.SMS_WEBHOOK_URL;
   if (!webhookUrl) {
     // Optional (insecure) fallback for environments without an SMS provider.
