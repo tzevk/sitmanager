@@ -989,7 +989,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                       <div><label className={labelClass}>Email</label><input className={inputClass} value={contactDraft.email} onChange={(e) => setContactDraft((d) => ({ ...d, email: e.target.value }))} /></div>
                       <div><label className={labelClass}>Phone</label><input className={inputClass} value={contactDraft.phoneNumber} onChange={(e) => setContactDraft((d) => ({ ...d, phoneNumber: e.target.value }))} /></div>
                       <div><label className={labelClass}>Alternate Number</label><input className={inputClass} value={contactDraft.alternateNumber} onChange={(e) => setContactDraft((d) => ({ ...d, alternateNumber: e.target.value }))} /></div>
-                      <div><label className={labelClass}>Job Title</label><input className={inputClass} value={contactDraft.jobTitle} onChange={(e) => setContactDraft((d) => ({ ...d, jobTitle: e.target.value }))} /></div>
+                      <div><label className={labelClass}>Designation</label><input className={inputClass} value={contactDraft.jobTitle} onChange={(e) => setContactDraft((d) => ({ ...d, jobTitle: e.target.value }))} /></div>
                       <div><label className={labelClass}>Industry</label><input className={inputClass} value={contactDraft.industry} onChange={(e) => setContactDraft((d) => ({ ...d, industry: e.target.value }))} /></div>
                       <div><label className={labelClass}>Follow Up Notes</label><input className={inputClass} value={contactDraft.discussion} onChange={(e) => setContactDraft((d) => ({ ...d, discussion: e.target.value }))} /></div>
                     </div>

@@ -861,7 +861,7 @@ export default function CorporateInquiryFinalPage() {
                       />
                     </div>
                     <div className="flex-[1_1_130px]">
-                      <label className={labelCls}>Job Title</label>
+                      <label className={labelCls}>Designation</label>
                       <input
                         className={inputCls}
                         value={contactDraft.jobTitle}
@@ -933,7 +933,7 @@ export default function CorporateInquiryFinalPage() {
                       <thead className="bg-gray-50 text-gray-700">
                         <tr>
                           <th className="px-3 py-2 text-left font-semibold">Name</th>
-                          <th className="px-3 py-2 text-left font-semibold">Job Title</th>
+                          <th className="px-3 py-2 text-left font-semibold">Designation</th>
                           <th className="px-3 py-2 text-left font-semibold">Contact Info</th>
                           <th className="px-3 py-2 text-left font-semibold">Discussion</th>
                           <th className="px-3 py-2 text-right font-semibold">Action</th>
@@ -952,7 +952,9 @@ export default function CorporateInquiryFinalPage() {
                               <td className="px-3 py-2 text-gray-900">
                                 <div className="font-semibold">{c.fullName || '—'}</div>
                               </td>
-                              <td className="px-3 py-2 text-gray-900">{c.jobTitle || '—'}</td>
+                              <td className="px-3 py-2 text-gray-900">
+                                {(c as { Designation?: string; jobTitle?: string }).Designation || c.jobTitle || '—'}
+                              </td>
                               <td className="px-3 py-2 text-gray-900">
                                 <div>E: {c.email || '—'}</div>
                                 <div>P: {c.phoneNumber || '—'}</div>

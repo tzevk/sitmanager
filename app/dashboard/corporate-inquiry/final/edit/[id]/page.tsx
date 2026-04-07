@@ -785,7 +785,7 @@ export default function CorporateInquiryEditPage() {
                       />
                     </div>
                     <div className="flex-[1_1_130px]">
-                      <label className={labelCls}>Job Title</label>
+                      <label className={labelCls}>Designation</label>
                       <input
                         className={inputCls}
                         value={contactDraft.jobTitle}
@@ -859,7 +859,7 @@ export default function CorporateInquiryEditPage() {
                           <th className="px-3 py-2 text-left font-semibold">Full Name</th>
                           <th className="px-3 py-2 text-left font-semibold">Email</th>
                           <th className="px-3 py-2 text-left font-semibold">Phone</th>
-                          <th className="px-3 py-2 text-left font-semibold">Job Title</th>
+                          <th className="px-3 py-2 text-left font-semibold">Designation</th>
                           <th className="px-3 py-2 text-left font-semibold">Industry</th>
                           <th className="px-3 py-2 text-left font-semibold">Discussion</th>
                           <th className="px-3 py-2 text-right font-semibold">Action</th>
@@ -878,7 +878,9 @@ export default function CorporateInquiryEditPage() {
                               <td className="px-3 py-2 text-gray-900">{c.fullName}</td>
                               <td className="px-3 py-2 text-gray-900">{c.email}</td>
                               <td className="px-3 py-2 text-gray-900">{c.phoneNumber}{c.alternateNumber ? `, ${c.alternateNumber}`: ''}</td>
-                              <td className="px-3 py-2 text-gray-900">{c.jobTitle}</td>
+                              <td className="px-3 py-2 text-gray-900">
+                                {(c as { Designation?: string; jobTitle?: string }).Designation || c.jobTitle || '—'}
+                              </td>
                               <td className="px-3 py-2 text-gray-900">{c.industry}</td>
                               <td className="px-3 py-2 text-gray-900">{c.discussion}</td>
                               <td className="px-3 py-2 text-right">
