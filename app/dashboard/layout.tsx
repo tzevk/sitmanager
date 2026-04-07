@@ -227,6 +227,18 @@ function getInitials(firstName?: string, lastName?: string, email?: string) {
   return 'U';
 }
 
+function NavbarUserSkeleton() {
+  return (
+    <div className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-white/15 bg-white/10 min-w-[180px] animate-pulse">
+      <div className="w-7 h-7 rounded-full bg-white/30" />
+      <div className="min-w-0 leading-tight flex-1 space-y-1">
+        <div className="h-2.5 w-24 bg-white/30 rounded" />
+        <div className="h-2 w-16 bg-white/20 rounded" />
+      </div>
+    </div>
+  );
+}
+
 function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -293,9 +305,13 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         <div className="grid grid-cols-[auto_1fr_auto] items-center h-12 px-3 gap-3 relative">
           <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-white/20" />
           {/* Brand */}
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[15px] font-extrabold tracking-tight text-[#FAE452]">SIT</span>
-            <span className="text-[15px] font-bold tracking-tight text-white">Manager</span>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span
+              className="text-[15px] font-black tracking-[0.14em] text-white leading-none whitespace-nowrap"
+              style={{ fontFamily: 'Georgia, Times New Roman, serif' }}
+            >
+              SIT MANAGER
+            </span>
           </div>
 
           {/* Menu (centered) */}
@@ -349,32 +365,32 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 min-w-0">
             {/* User chip */}
-            <div
-              className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-white/15 bg-white/10 text-white min-w-0"
-              title={session?.email || ''}
-            >
-              <div className="w-7 h-7 rounded-full bg-[#FAE452] text-[#2E3093] flex items-center justify-center text-[12px] font-extrabold">
-                {loading ? '…' : getInitials(session?.firstName, session?.lastName, session?.email)}
-              </div>
-              <div className="min-w-0 leading-tight">
-                <div className="text-[12px] font-semibold truncate max-w-[180px]">
-                  {loading
-                    ? 'Loading…'
-                    : session
+            {loading ? (
+              <NavbarUserSkeleton />
+            ) : (
+              <div
+                className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-white/15 bg-white/10 text-white min-w-0"
+                title={session?.email || ''}
+              >
+                <div className="w-7 h-7 rounded-full bg-[#FAE452] text-[#2E3093] flex items-center justify-center text-[12px] font-extrabold">
+                  {getInitials(session?.firstName, session?.lastName, session?.email)}
+                </div>
+                <div className="min-w-0 leading-tight">
+                  <div className="text-[12px] font-semibold truncate max-w-[180px]">
+                    {session
                       ? `${session.firstName} ${session.lastName}`.trim() || session.email
                       : 'Guest'}
-                </div>
-                <div className="text-[10px] text-white/75 truncate max-w-[180px]">
-                  {loading
-                    ? ''
-                    : session
+                  </div>
+                  <div className="text-[10px] text-white/75 truncate max-w-[180px]">
+                    {session
                       ? isSuperAdmin
                         ? 'Super Admin'
                         : session.department || `Role ${session.role}`
                       : ''}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             <button
               onClick={() => {

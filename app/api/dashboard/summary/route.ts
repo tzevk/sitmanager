@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool, cached } from '@/lib/db';
 import { requireAuth } from '@/lib/api-auth';
+import { dashboardRateLimiter } from '@/lib/rate-limit';
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 min
 
@@ -15,13 +16,24 @@ async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallb
 
 export async function GET(request: NextRequest) {
   try {
+    const rateLimited = dashboardRateLimiter(request);
+    if (rateLimited) return rateLimited;
+
     const auth = await requireAuth(request);
     if (auth instanceof NextResponse) return auth;
-    const result = await cached('dashboard:summary', CACHE_TTL, async () => {
+    const roleKey = String(auth.session.role ?? 'na');
+    const deptKey = String(auth.session.department || 'unknown')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_');
+    const cacheKey = `dashboard:summary:role:${roleKey}:dept:${deptKey}`;
+
+    const result = await cached(cacheKey, CACHE_TTL, async () => {
       const pool = getPool();
 
       const [
         enquirySummaryRows,
+        recentEnquiries,
         corporateTotalRows,
         recentCorporate,
         upcomingBatches,
@@ -36,6 +48,13 @@ export async function GET(request: NextRequest) {
             SUM(CASE WHEN inquiry_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) as last_7_days
           FROM student_inquiry WHERE (IsDelete = 0 OR IsDelete IS NULL)
         `, [{ total_enquiries: 0, last_30_days: 0, last_7_days: 0 }]),
+
+        // Recent student enquiries
+        safeQuery(pool, `
+          SELECT id, student_name, email, phone, course_id, inquiry_date, status
+          FROM student_inquiry WHERE (IsDelete = 0 OR IsDelete IS NULL)
+          ORDER BY id DESC LIMIT 10
+        `, []),
 
         // Corporate total
         safeQuery(pool, `
@@ -98,6 +117,7 @@ export async function GET(request: NextRequest) {
             last_30_days: esRow.last_30_days || 0,
             last_7_days: esRow.last_7_days || 0,
           },
+          recentEnquiries,
           corporateTotal: (corporateTotalRows as Record<string, number>[])[0]?.total || 0,
           recentCorporate,
         },

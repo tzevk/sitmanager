@@ -25,6 +25,11 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "SIT Manager",
   description: "Suvidya Institute of Technology Management System",
+  icons: {
+    icon: '/sit.png',
+    shortcut: '/sit.png',
+    apple: '/sit.png',
+  },
   robots: "noindex, nofollow", // Private app - don't index
 };
 

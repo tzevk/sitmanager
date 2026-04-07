@@ -9,11 +9,25 @@ import {
   UpcomingBatchesSkeleton,
   EnquirySkeleton,
 } from './components/Skeletons';
+import { usePermissions } from '@/lib/permissions-context';
+import { DashboardDepartment, getDashboardWidgetConfig, resolveDashboardDepartment } from './widget-config';
+import CbdDashboard from './components/CbdDashboard';
+import TrainingDevelopmentDashboard from './components/TrainingDevelopmentDashboard';
+import AdministrationDashboard from './components/AdministrationDashboard';
 
 interface TodoItem {
   id: string;
   text: string;
   done: boolean;
+  createdAt: string;
+}
+
+interface AdminTodoItem {
+  id: string;
+  taskName: string;
+  priority: 'High' | 'Medium' | 'Low';
+  dueDate: string;
+  status: 'Pending' | 'In Progress' | 'Done';
   createdAt: string;
 }
 
@@ -80,10 +94,32 @@ function WidgetHeader({ title, icon, badge, accent = 'from-[#2E3093] to-[#2A6BB5
 }
 
 export default function DashboardPage() {
+  const { session, isSuperAdmin } = usePermissions();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [adminTodos, setAdminTodos] = useState<AdminTodoItem[]>([]);
   const [newTodo, setNewTodo] = useState('');
+  const resolvedDepartment = resolveDashboardDepartment(session?.department, session?.role);
+  const canSwitchDepartmentDashboard = isSuperAdmin || resolvedDepartment === 'administration';
+  const [adminSelectedDepartment, setAdminSelectedDepartment] = useState<DashboardDepartment>('administration');
+  const activeDepartment: DashboardDepartment = canSwitchDepartmentDashboard ? adminSelectedDepartment : resolvedDepartment;
+  const widgetConfig = getDashboardWidgetConfig(session?.department, session?.role);
+
+  useEffect(() => {
+    if (!canSwitchDepartmentDashboard) return;
+    const saved = localStorage.getItem('sit-admin-dashboard-department') as DashboardDepartment | null;
+    if (saved) {
+      setAdminSelectedDepartment(saved);
+      return;
+    }
+    setAdminSelectedDepartment(isSuperAdmin ? 'cbd' : 'administration');
+  }, [canSwitchDepartmentDashboard, isSuperAdmin]);
+
+  const handleAdminDepartmentChange = (value: DashboardDepartment) => {
+    setAdminSelectedDepartment(value);
+    localStorage.setItem('sit-admin-dashboard-department', value);
+  };
 
   // Fetch dashboard data
   useEffect(() => {
@@ -102,6 +138,11 @@ export default function DashboardPage() {
     if (saved) setTodos(JSON.parse(saved));
   }, []);
 
+  useEffect(() => {
+    const saved = localStorage.getItem('sit-admin-dashboard-todos');
+    if (saved) setAdminTodos(JSON.parse(saved));
+  }, []);
+
   const saveTodos = useCallback((items: TodoItem[]) => {
     setTodos(items);
     localStorage.setItem('sit-dashboard-todos', JSON.stringify(items));
@@ -116,16 +157,124 @@ export default function DashboardPage() {
   const toggleTodo = (id: string) => saveTodos(todos.map(t => t.id === id ? { ...t, done: !t.done } : t));
   const removeTodo = (id: string) => saveTodos(todos.filter(t => t.id !== id));
 
+  const saveAdminTodos = useCallback((items: AdminTodoItem[]) => {
+    setAdminTodos(items);
+    localStorage.setItem('sit-admin-dashboard-todos', JSON.stringify(items));
+  }, []);
+
+  const addAdminTodo = useCallback((taskName: string, priority: AdminTodoItem['priority'], dueDate: string) => {
+    if (!taskName.trim()) return;
+    saveAdminTodos([
+      {
+        id: Date.now().toString(),
+        taskName: taskName.trim(),
+        priority,
+        dueDate,
+        status: 'Pending',
+        createdAt: new Date().toISOString(),
+      },
+      ...adminTodos,
+    ]);
+  }, [adminTodos, saveAdminTodos]);
+
+  const updateAdminTodo = useCallback((id: string, patch: Partial<AdminTodoItem>) => {
+    saveAdminTodos(adminTodos.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  }, [adminTodos, saveAdminTodos]);
+
+  const removeAdminTodo = useCallback((id: string) => {
+    saveAdminTodos(adminTodos.filter((t) => t.id !== id));
+  }, [adminTodos, saveAdminTodos]);
+
   const qs = data?.quickStats ?? { totalStudents: 0, activeCourses: 0, activeBatches: 0, totalFaculty: 0 };
+
+  if (activeDepartment === 'cbd') {
+    return (
+      <div className="space-y-4">
+        {canSwitchDepartmentDashboard && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+            <span className="text-sm font-semibold text-gray-700">Department Dashboard</span>
+            <select
+              value={adminSelectedDepartment}
+              onChange={(e) => handleAdminDepartmentChange(e.target.value as DashboardDepartment)}
+              className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25"
+            >
+              <option value="administration">Administration</option>
+              <option value="cbd">CBD Department</option>
+              <option value="corporate_training">Corporate Training</option>
+              <option value="placement">Placement Department</option>
+              <option value="training_and_development">Training and Development</option>
+            </select>
+          </div>
+        )}
+        <CbdDashboard data={data} loading={loading} />
+      </div>
+    );
+  }
+
+  if (activeDepartment === 'training_and_development') {
+    return (
+      <div className="space-y-4">
+        {canSwitchDepartmentDashboard && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+            <span className="text-sm font-semibold text-gray-700">Department Dashboard</span>
+            <select
+              value={adminSelectedDepartment}
+              onChange={(e) => handleAdminDepartmentChange(e.target.value as DashboardDepartment)}
+              className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25"
+            >
+              <option value="administration">Administration</option>
+              <option value="cbd">CBD Department</option>
+              <option value="corporate_training">Corporate Training</option>
+              <option value="placement">Placement Department</option>
+              <option value="training_and_development">Training and Development</option>
+            </select>
+          </div>
+        )}
+        <TrainingDevelopmentDashboard data={data} loading={loading} />
+      </div>
+    );
+  }
+
+  if (activeDepartment === 'administration') {
+    return (
+      <AdministrationDashboard
+        data={data}
+        loading={loading}
+        activeDepartment={adminSelectedDepartment}
+        onDepartmentChange={handleAdminDepartmentChange}
+        showDepartmentToggle={canSwitchDepartmentDashboard}
+        todos={adminTodos}
+        onAddTodo={addAdminTodo}
+        onUpdateTodo={updateAdminTodo}
+        onRemoveTodo={removeAdminTodo}
+      />
+    );
+  }
 
   return (
     <div className="relative space-y-6 pb-8">
+      {canSwitchDepartmentDashboard && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+          <span className="text-sm font-semibold text-gray-700">Department Dashboard</span>
+          <select
+            value={adminSelectedDepartment}
+            onChange={(e) => handleAdminDepartmentChange(e.target.value as DashboardDepartment)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25"
+          >
+            <option value="administration">Administration</option>
+            <option value="cbd">CBD Department</option>
+            <option value="corporate_training">Corporate Training</option>
+            <option value="placement">Placement Department</option>
+            <option value="training_and_development">Training and Development</option>
+          </select>
+        </div>
+      )}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_rgba(46,48,147,0.08),_transparent_55%),radial-gradient(ellipse_at_top_right,_rgba(42,107,181,0.08),_transparent_55%),radial-gradient(ellipse_at_bottom_left,_rgba(250,228,82,0.10),_transparent_50%)]"
       />
       {/* ── Quick Stats Row ── */}
-      {loading ? (
+      {widgetConfig.quickStats && (loading ? (
         <QuickStatsSkeleton />
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
@@ -150,13 +299,13 @@ export default function DashboardPage() {
           color="bg-gradient-to-br from-white to-white text-[#2A6BB5] border border-[#2A6BB5]/15" glow="bg-[#2A6BB5]"
         />
       </div>
-      )}
+      ))}
 
       {/* ── Main Grid ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* ── Annual Targets (full width) ── */}
-        {loading ? (
+        {widgetConfig.annualTargets && (loading ? (
           <TableSkeleton rows={6} cols={10} className="lg:col-span-3" />
         ) : (
         <Widget className="lg:col-span-3">
@@ -255,12 +404,12 @@ export default function DashboardPage() {
             )}
           </div>
         </Widget>
-        )}
+        ))}
 
         {/* ── ROW 2: Upcoming Batches & Todo List ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:col-span-3 w-full">
           {/* ── Upcoming Batches (2 col)  ── */}
-          {loading ? (
+          {widgetConfig.upcomingBatches && (loading ? (
             <UpcomingBatchesSkeleton />
           ) : (
           <Widget className="lg:col-span-2">
@@ -308,9 +457,10 @@ export default function DashboardPage() {
               )}
             </div>
           </Widget>
-          )}
+          ))}
 
           {/* ── Todo List (client-only, col 3) ── */}
+          {widgetConfig.todoList && (
           <Widget className="lg:col-span-1">
             <WidgetHeader
               title="To-Do List"
@@ -366,12 +516,13 @@ export default function DashboardPage() {
               </div>
             </div>
           </Widget>
+          )}
         </div>
 
         {/* ── ROW 3: Secondary Info Widgets ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:col-span-3 w-full">
           {/* ── Notice Board  ── */}
-          {loading ? (
+          {widgetConfig.noticeBoard && (loading ? (
             <WidgetSkeleton lines={3} />
           ) : (
           <Widget>
@@ -403,10 +554,10 @@ export default function DashboardPage() {
             )}
           </div>
         </Widget>
-        )}
+        ))}
 
           {/* ── Enquiry Report  ── */}
-          {loading ? (
+          {widgetConfig.enquiryReport && (loading ? (
             <EnquirySkeleton />
           ) : (
           <Widget>
@@ -459,10 +610,10 @@ export default function DashboardPage() {
             </div>
             </div>
           </Widget>
-          )}
+          ))}
 
           {/* ── Company Requirements  ── */}
-          {loading ? (
+          {widgetConfig.companyRequirements && (loading ? (
             <WidgetSkeleton lines={3} />
           ) : (
           <Widget>
@@ -496,11 +647,11 @@ export default function DashboardPage() {
               )}
             </div>
           </Widget>
-          )}
+          ))}
         </div>
 
         {/* ── ROW 4: Placement Report ── */}
-        {loading ? (
+        {widgetConfig.placementReport && (loading ? (
           <TableSkeleton rows={5} cols={11} className="lg:col-span-3" />
         ) : (
         <Widget className="lg:col-span-3">
@@ -598,7 +749,7 @@ export default function DashboardPage() {
             )}
           </div>
         </Widget>
-        )}
+        ))}
       </div>
     </div>
   );

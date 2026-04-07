@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { getPool } from '@/lib/db';
+import { cached, getPool } from '@/lib/db';
 import { ALL_PERMISSIONS, PERMISSION_GROUPS } from '@/lib/rbac';
 import { getSession } from '@/lib/session';
 import { isSuperAdminRole } from '@/lib/super-admin';
+import { apiRateLimiter } from '@/lib/rate-limit';
 
 // Ensure role_permissions table exists
 async function ensureTable(pool: any) {
@@ -20,16 +21,26 @@ async function ensureTable(pool: any) {
   `);
 }
 
+async function ensureRolePermissionsTableOnce(pool: any) {
+  await cached('schema:role_permissions', 60 * 60 * 1000, async () => {
+    await ensureTable(pool);
+    return true;
+  });
+}
+
 // GET: List all roles with their permissions
 export async function GET(request: NextRequest) {
   try {
+    const rateLimited = apiRateLimiter(request);
+    if (rateLimited) return rateLimited;
+
     const session = await getSession(request);
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const pool = getPool();
-    await ensureTable(pool);
+    await ensureRolePermissionsTableOnce(pool);
 
     const { searchParams } = new URL(request.url);
     const includeDeleted = searchParams.get('includeDeleted') === 'true';
@@ -94,13 +105,16 @@ export async function GET(request: NextRequest) {
 // POST: Create a new role
 export async function POST(request: NextRequest) {
   try {
+    const rateLimited = apiRateLimiter(request);
+    if (rateLimited) return rateLimited;
+
     const session = await getSession(request);
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const pool = getPool();
-    await ensureTable(pool);
+    await ensureRolePermissionsTableOnce(pool);
 
     const body = await request.json();
     const { title, description, permissions } = body;

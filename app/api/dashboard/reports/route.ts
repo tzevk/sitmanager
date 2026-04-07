@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool, cached } from '@/lib/db';
 import { requireAuth } from '@/lib/api-auth';
+import { dashboardRateLimiter } from '@/lib/rate-limit';
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 min
 
@@ -16,9 +17,19 @@ async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallb
 
 export async function GET(request: NextRequest) {
   try {
+    const rateLimited = dashboardRateLimiter(request);
+    if (rateLimited) return rateLimited;
+
     const auth = await requireAuth(request);
     if (auth instanceof NextResponse) return auth;
-    const result = await cached('dashboard:reports', CACHE_TTL, async () => {
+    const roleKey = String(auth.session.role ?? 'na');
+    const deptKey = String(auth.session.department || 'unknown')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_');
+    const cacheKey = `dashboard:reports:role:${roleKey}:dept:${deptKey}`;
+
+    const result = await cached(cacheKey, CACHE_TTL, async () => {
       const pool = getPool();
 
       const [

@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -14,19 +13,12 @@ const quotes = [
     author: "Mr. Vasant Dinkar Mestry"
   }
 ];
-const departments = [
-  'Career Building Department',
-  'Corporate Training',
-  'Training and Development',
-  'Accounts',
-];
 export default function SignIn() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [department, setDepartment] = useState('');
   const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -48,7 +40,7 @@ export default function SignIn() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, department }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
@@ -113,7 +105,7 @@ export default function SignIn() {
           <div className="bg-gray-10 rounded-3xl shadow-lg border border-gray-100 p-6 pt-2 sm:p-8 sm:pt-2">
             {/* Logo inside container */}
             <div className="flex flex-col items-center">
-              <div className="w-52 h-52 relative flex items-center justify-center">
+              <div className="w-64 h-64 sm:w-72 sm:h-72 relative flex items-center justify-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="/sit.png"
@@ -208,40 +200,6 @@ export default function SignIn() {
                 </div>
               </div>
 
-              {/* Department Field */}
-              <div className="group">
-                <label 
-                  htmlFor="department" 
-                  className="block text-sm font-semibold text-gray-700 mb-0"
-                >
-                  Department
-                </label>
-                <div className="relative mt-1">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <svg className="w-5 h-5 text-gray-400 group-focus-within:text-[#2A6BB5] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                  </div>
-                  <select
-                    id="department"
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                    required
-                    style={{backgroundColor: '#ffffff'}}
-                    className="w-full pl-12 pr-10 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-[#2A6BB5] focus:outline-none focus:ring-4 focus:ring-[#2A6BB5]/10 transition-all text-gray-800 appearance-none cursor-pointer"
-                  >
-                    <option value="" disabled>Select your department</option>
-                    {departments.map((dept) => (
-                      <option key={dept} value={dept}>{dept}</option>
-                    ))}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
 
               {/* Remember & Forgot */}
               <div className="flex items-center justify-between">

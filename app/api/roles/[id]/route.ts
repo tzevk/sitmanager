@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { getPool } from '@/lib/db';
+import { cached, getPool } from '@/lib/db';
 import { ALL_PERMISSIONS } from '@/lib/rbac';
 import { getSession } from '@/lib/session';
 import { isSuperAdminRole } from '@/lib/super-admin';
+import { apiRateLimiter } from '@/lib/rate-limit';
 
 // Ensure role_permissions table exists (shared schema with /api/roles)
 async function ensureRolePermissionsTable(pool: any) {
@@ -20,6 +21,13 @@ async function ensureRolePermissionsTable(pool: any) {
   `);
 }
 
+async function ensureRolePermissionsTableOnce(pool: any) {
+  await cached('schema:role_permissions', 60 * 60 * 1000, async () => {
+    await ensureRolePermissionsTable(pool);
+    return true;
+  });
+}
+
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
@@ -27,6 +35,9 @@ interface RouteParams {
 // GET: Get single role with permissions
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
+    const rateLimited = apiRateLimiter(request);
+    if (rateLimited) return rateLimited;
+
     const session = await getSession(request);
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -43,7 +54,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const pool = getPool();
-    await ensureRolePermissionsTable(pool);
+    await ensureRolePermissionsTableOnce(pool);
 
     const [roles] = await pool.execute(
       `SELECT id, title, description, created_by, created_date, 
@@ -90,6 +101,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // PUT: Update role
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
+    const rateLimited = apiRateLimiter(request);
+    if (rateLimited) return rateLimited;
+
     const session = await getSession(request);
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -114,7 +128,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const pool = getPool();
-    await ensureRolePermissionsTable(pool);
+    await ensureRolePermissionsTableOnce(pool);
     const body = await request.json();
     const { title, description, permissions } = body;
 

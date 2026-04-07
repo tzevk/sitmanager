@@ -17,6 +17,49 @@ const DEPARTMENT_ROLE_MAP: Record<string, number[]> = {
 // Role 1 = Administration (superadmin) — can access any department
 const SUPERADMIN_ROLE = 1;
 
+function normalizeRoleTitle(title: unknown): string {
+  return String(title ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+function inferDepartmentFromRole(roleId: number, roleTitle: unknown): string {
+  const normalizedTitle = normalizeRoleTitle(roleTitle);
+
+  if (
+    normalizedTitle === 'super admin' ||
+    normalizedTitle === 'superadmin' ||
+    normalizedTitle === 'admin' ||
+    normalizedTitle === 'administration'
+  ) {
+    return 'Administration';
+  }
+
+  if (normalizedTitle.includes('account')) {
+    return 'Accounts';
+  }
+
+  if (
+    normalizedTitle.includes('placement') ||
+    normalizedTitle.includes('admission') ||
+    normalizedTitle.includes('business development')
+  ) {
+    return 'Career Building Department';
+  }
+
+  if (normalizedTitle.includes('training') || normalizedTitle.includes('faculty')) {
+    return 'Training and Development';
+  }
+
+  if (normalizedTitle.includes('corporate training')) {
+    return 'Corporate Training';
+  }
+
+  const inferred = Object.entries(DEPARTMENT_ROLE_MAP).find(([, roles]) => roles.includes(roleId));
+  return inferred?.[0] || 'unknown';
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Rate limit: 5 login attempts per 60 seconds per IP
@@ -31,9 +74,9 @@ export async function POST(request: NextRequest) {
     const department = sanitizeString(body.department);
 
     // Validate required fields
-    if (!isNonEmpty(email) || !password || !isNonEmpty(department)) {
+    if (!isNonEmpty(email) || !password) {
       return NextResponse.json(
-        { success: false, message: 'Email, password, and department are required.' },
+        { success: false, message: 'Email and password are required.' },
         { status: 400 }
       );
     }
@@ -46,14 +89,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate department
-    if (!DEPARTMENT_ROLE_MAP[department]) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid department selected.' },
-        { status: 400 }
-      );
-    }
-
     const pool = getPool();
 
     // TODO: SECURITY — MD5 is cryptographically broken for password hashing.
@@ -62,7 +97,10 @@ export async function POST(request: NextRequest) {
 
     // Look up user by username/email and password
     const [rows] = await pool.execute(
-      'SELECT id, firstname, lastname, email, username, role FROM awt_adminuser WHERE (username = ? OR email = ?) AND password = ? AND deleted = 0',
+      `SELECT u.id, u.firstname, u.lastname, u.email, u.username, u.role, r.title AS role_title
+       FROM awt_adminuser u
+       LEFT JOIN role r ON r.id = u.role
+       WHERE (u.username = ? OR u.email = ?) AND u.password = ? AND u.deleted = 0`,
       [email, email, hashedPassword]
     );
 
@@ -77,23 +115,36 @@ export async function POST(request: NextRequest) {
 
     const user = users[0];
 
-    // Superadmin (role 1) can access any department
-    const allowedRoles = DEPARTMENT_ROLE_MAP[department];
-    if (user.role !== SUPERADMIN_ROLE && !allowedRoles.includes(user.role)) {
-      // Get the role title for a better error message
-      const [roleRows] = await pool.execute(
-        'SELECT title FROM role WHERE id = ?',
-        [user.role]
-      );
-      const roleTitle = (roleRows as any[])[0]?.title || 'Unknown';
+    let finalDepartment = department;
+    if (isNonEmpty(department)) {
+      if (!DEPARTMENT_ROLE_MAP[department]) {
+        return NextResponse.json(
+          { success: false, message: 'Invalid department selected.' },
+          { status: 400 }
+        );
+      }
 
-      return NextResponse.json(
-        {
-          success: false,
-          message: `You are not assigned to the "${department}" department. Your current role is "${roleTitle}".`,
-        },
-        { status: 403 }
-      );
+      // Superadmin (role 1) can access any department.
+      const allowedRoles = DEPARTMENT_ROLE_MAP[department];
+      if (user.role !== SUPERADMIN_ROLE && !allowedRoles.includes(user.role)) {
+        const [roleRows] = await pool.execute(
+          'SELECT title FROM role WHERE id = ?',
+          [user.role]
+        );
+        const roleTitle = (roleRows as any[])[0]?.title || 'Unknown';
+
+        return NextResponse.json(
+          {
+            success: false,
+            message: `You are not assigned to the "${department}" department. Your current role is "${roleTitle}".`,
+          },
+          { status: 403 }
+        );
+      }
+    } else {
+      // When the form omits a department, infer it from the role title first.
+      // Fall back to the legacy role-id mapping, but do not auto-promote unknown roles to Administration.
+      finalDepartment = inferDepartmentFromRole(user.role, user.role_title);
     }
 
     // Create session token
@@ -102,7 +153,7 @@ export async function POST(request: NextRequest) {
       email: user.email,
       firstName: user.firstname,
       lastName: user.lastname,
-      department,
+      department: finalDepartment,
       role: user.role,
     });
 
@@ -115,7 +166,7 @@ export async function POST(request: NextRequest) {
         firstName: user.firstname,
         lastName: user.lastname,
         email: user.email,
-        department,
+        department: finalDepartment,
         role: user.role,
       },
     });

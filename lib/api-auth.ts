@@ -22,15 +22,27 @@ interface PermissionCacheEntry {
 const permissionCache = new Map<number, PermissionCacheEntry>();
 const PERMISSION_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+interface SuperAdminCacheEntry {
+  isSuperAdmin: boolean;
+  expiry: number;
+}
+
+const superAdminCache = new Map<number, SuperAdminCacheEntry>();
+
+async function getIsSuperAdminCached(roleId: number, pool: ReturnType<typeof getPool>): Promise<boolean> {
+  const now = Date.now();
+  const hit = superAdminCache.get(roleId);
+  if (hit && hit.expiry > now) return hit.isSuperAdmin;
+
+  const isSa = await isSuperAdminRole(roleId, pool);
+  superAdminCache.set(roleId, { isSuperAdmin: isSa, expiry: now + PERMISSION_CACHE_TTL });
+  return isSa;
+}
+
 /**
  * Get permissions for a role, with in-memory caching
  */
-async function getRolePermissions(roleId: number): Promise<string[]> {
-  // Super admin gets all permissions (do not assume a fixed role id)
-  if (await isSuperAdminRole(roleId)) {
-    return ALL_PERMISSIONS.map(p => p.id);
-  }
-
+export async function getRolePermissions(roleId: number): Promise<string[]> {
   const now = Date.now();
   const cached = permissionCache.get(roleId);
   if (cached && cached.expiry > now) {
@@ -38,6 +50,14 @@ async function getRolePermissions(roleId: number): Promise<string[]> {
   }
 
   const pool = getPool();
+
+  // Super admin gets all permissions (do not assume a fixed role id)
+  if (await getIsSuperAdminCached(roleId, pool)) {
+    const all = ALL_PERMISSIONS.map(p => p.id);
+    permissionCache.set(roleId, { permissions: all, expiry: now + PERMISSION_CACHE_TTL });
+    return all;
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [rows] = await pool.execute<any[]>(
     'SELECT permission_id FROM role_permissions WHERE role_id = ?',
@@ -53,8 +73,10 @@ async function getRolePermissions(roleId: number): Promise<string[]> {
 export function invalidatePermissionCache(roleId?: number) {
   if (roleId !== undefined) {
     permissionCache.delete(roleId);
+    superAdminCache.delete(roleId);
   } else {
     permissionCache.clear();
+    superAdminCache.clear();
   }
 }
 

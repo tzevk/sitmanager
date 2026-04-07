@@ -138,6 +138,12 @@ export const apiRateLimiter = createRateLimiter({
   windowSeconds: 60,
 });
 
+/** Dashboard limiter: 60 requests per 60 seconds */
+export const dashboardRateLimiter = createRateLimiter({
+  maxRequests: 60,
+  windowSeconds: 60,
+});
+
 /** Health check limiter: 10 requests per 60 seconds */
 export const healthRateLimiter = createRateLimiter({
   maxRequests: 10,

@@ -50,14 +50,26 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
       };
 
       // Fetch session
-      const sessionRes = await fetch('/api/auth/session');
+      const sessionRes = await fetch('/api/auth/session', { cache: 'no-store' });
       const sessionData = await readJson(sessionRes);
       
       if (sessionData.success && sessionData.session) {
         setSession(sessionData.session);
 
+        const sessionPerms = Array.isArray(sessionData?.session?.permissions)
+          ? sessionData.session.permissions
+          : [];
+
+        if (sessionPerms.length > 0) {
+          setPermissions(sessionPerms);
+          const dept = normalizeTitle(sessionData.session.department);
+          const sessionIsSuperAdmin = sessionData.session.role === 1 || dept === 'administration' || dept === 'super admin';
+          setIsSuperAdmin(sessionIsSuperAdmin);
+          return;
+        }
+
         // Fetch role info (title + permissions)
-        const roleRes = await fetch(`/api/roles/${sessionData.session.role}`);
+        const roleRes = await fetch(`/api/roles/${sessionData.session.role}`, { cache: 'no-store' });
         const roleData = await readJson(roleRes);
 
         const roleTitle = normalizeTitle(roleData?.data?.title);
@@ -65,15 +77,19 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
         setIsSuperAdmin(superAdminByTitle || sessionData.session.role === 1);
 
         if (roleData?.success) {
-          setPermissions(roleData.data.permissions || []);
+          const rolePerms = roleData.data.permissions || [];
+          setPermissions(rolePerms);
           return;
         }
         
         // Fallback (should rarely happen): fetch flat permissions list for super admin.
         if (superAdminByTitle || sessionData.session.role === 1) {
-          const permRes = await fetch('/api/roles/permissions?flat=true');
+          const permRes = await fetch('/api/roles/permissions?flat=true', { cache: 'no-store' });
           const permData = await readJson(permRes);
-          if (permData.success) setPermissions(permData.data.map((p: { id: string }) => p.id));
+          if (permData.success) {
+            const rolePerms = permData.data.map((p: { id: string }) => p.id);
+            setPermissions(rolePerms);
+          }
         }
       }
     } catch (error) {

@@ -1,8 +1,13 @@
 import mysql from 'mysql2/promise';
 import { getDbEnv } from '@/lib/env';
 
-// Global pool reference for connection reuse across serverless invocations
-let pool: mysql.Pool | null = null;
+declare global {
+  // eslint-disable-next-line no-var
+  var __sitDbPool: mysql.Pool | undefined;
+}
+
+// Global pool reference reused across hot reloads/process modules
+let pool: mysql.Pool | null = global.__sitDbPool ?? null;
 
 // Detect if running on Vercel (serverless)
 const isServerless = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
@@ -17,14 +22,15 @@ export function getPool(): mysql.Pool {
       user: env.DB_USER,
       password: env.DB_PASSWORD,
       waitForConnections: true,
-      // Serverless: fewer connections, shorter timeouts
-      connectionLimit: isServerless ? 5 : 20,
-      maxIdle: isServerless ? 2 : 10,
+      // Balanced defaults: avoid connection exhaustion while supporting parallel dashboard queries.
+      connectionLimit: isServerless ? 4 : 12,
+      maxIdle: isServerless ? 2 : 6,
       idleTimeout: isServerless ? 10000 : 60000, // 10s for serverless
+      // Do not reject queued requests under load; allow waiting for free connection.
       queueLimit: 0,
       enableKeepAlive: !isServerless, // Disable keep-alive in serverless
       keepAliveInitialDelay: 30000,
-      connectTimeout: isServerless ? 10000 : 30000, // More generous timeout for remote DB
+      connectTimeout: isServerless ? 20000 : 60000,
       namedPlaceholders: true,
       dateStrings: true,
       // SECURITY: Enable SSL/TLS when DB_SSL=true (set in env for SSL-capable servers)
@@ -45,6 +51,8 @@ export function getPool(): mysql.Pool {
         }
       });
     });
+
+    global.__sitDbPool = pool;
   }
   return pool;
 }
@@ -57,6 +65,7 @@ export async function destroyPool(): Promise<void> {
   if (pool) {
     await pool.end();
     pool = null;
+    global.__sitDbPool = undefined;
   }
 }
 
@@ -74,6 +83,14 @@ export async function query<T>(
     const [rows] = await p.query<mysql.RowDataPacket[]>(sql, params);
     return rows as T[];
   } catch (err: unknown) {
+    // Retry once for transient network/connection timeouts.
+    const code = (err as { code?: string } | null)?.code;
+    if (code && ['ETIMEDOUT', 'ECONNRESET', 'PROTOCOL_CONNECTION_LOST', 'PROTOCOL_SEQUENCE_TIMEOUT'].includes(code)) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const [rows] = await p.query<mysql.RowDataPacket[]>(sql, params);
+      return rows as T[];
+    }
+
     // Log DB errors server-side, but don't expose details to callers
     const message = err instanceof Error ? err.message : 'Unknown DB error';
     console.error('DB query error:', message);
@@ -99,6 +116,7 @@ interface CacheEntry<T> {
 }
 
 const cache = new Map<string, CacheEntry<unknown>>();
+const inFlight = new Map<string, Promise<unknown>>();
 
 /**
  * Get-or-set cache. Returns cached value if still valid, otherwise
@@ -118,20 +136,42 @@ export async function cached<T>(
   if (hit && hit.expiry > now) {
     return hit.data;
   }
-  const data = await fetcher();
-  cache.set(key, { data, expiry: now + ttl });
-  return data;
+
+  // Coalesce concurrent misses for the same key into one fetch.
+  const running = inFlight.get(key) as Promise<T> | undefined;
+  if (running) {
+    return running;
+  }
+
+  const p = (async () => {
+    const data = await fetcher();
+    cache.set(key, { data, expiry: Date.now() + ttl });
+    return data;
+  })();
+
+  inFlight.set(key, p);
+  try {
+    return await p;
+  } finally {
+    inFlight.delete(key);
+  }
 }
 
 /** Invalidate one key or all keys matching a prefix */
 export function invalidateCache(keyOrPrefix?: string) {
   if (!keyOrPrefix) {
     cache.clear();
+    inFlight.clear();
     return;
   }
   for (const k of cache.keys()) {
     if (k === keyOrPrefix || k.startsWith(keyOrPrefix + ':')) {
       cache.delete(k);
+    }
+  }
+  for (const k of inFlight.keys()) {
+    if (k === keyOrPrefix || k.startsWith(keyOrPrefix + ':')) {
+      inFlight.delete(k);
     }
   }
 }

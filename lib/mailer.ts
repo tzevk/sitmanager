@@ -1,5 +1,7 @@
 import nodemailer from 'nodemailer';
+import { SendMailClient } from 'zeptomail';
 
+const MAIL_PROVIDER = (process.env.ADMISSION_MAIL_PROVIDER || 'smtp').trim().toLowerCase();
 const SMTP_HOST = process.env.ADMISSION_SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.ADMISSION_SMTP_PORT || '587', 10);
 const SMTP_SECURE = process.env.ADMISSION_SMTP_SECURE === '1';
@@ -7,6 +9,15 @@ const SMTP_USER = process.env.ADMISSION_SMTP_USER;
 const SMTP_PASS = process.env.ADMISSION_SMTP_PASS;
 const SMTP_FROM = process.env.ADMISSION_SMTP_FROM;
 const SMTP_REPLY_TO = process.env.ADMISSION_SMTP_REPLY_TO;
+
+const ZEPTOMAIL_URL_RAW = process.env.ADMISSION_ZEPTOMAIL_URL || 'https://api.zeptomail.in/v1.1/email';
+const ZEPTOMAIL_URL =
+  ZEPTOMAIL_URL_RAW.startsWith('http://') || ZEPTOMAIL_URL_RAW.startsWith('https://')
+    ? ZEPTOMAIL_URL_RAW
+    : `https://${ZEPTOMAIL_URL_RAW}`;
+const ZEPTOMAIL_TOKEN = process.env.ADMISSION_ZEPTOMAIL_TOKEN;
+const ZEPTOMAIL_FROM_ADDRESS = process.env.ADMISSION_ZEPTOMAIL_FROM_ADDRESS;
+const ZEPTOMAIL_FROM_NAME = process.env.ADMISSION_ZEPTOMAIL_FROM_NAME || 'noreply';
 
 export function buildAdmissionFormMailContent(params: {
   studentName?: string;
@@ -39,6 +50,15 @@ export function buildAdmissionFormMailContent(params: {
 }
 
 function assertMailerConfig() {
+  if (MAIL_PROVIDER === 'zeptomail') {
+    if (!ZEPTOMAIL_TOKEN || !ZEPTOMAIL_FROM_ADDRESS) {
+      throw new Error(
+        'ZeptoMail configuration is missing. Set ADMISSION_ZEPTOMAIL_TOKEN and ADMISSION_ZEPTOMAIL_FROM_ADDRESS.'
+      );
+    }
+    return;
+  }
+
   if (!SMTP_USER || !SMTP_PASS) {
     throw new Error(
       'SMTP credentials are missing. Set ADMISSION_SMTP_USER and ADMISSION_SMTP_PASS in environment variables.'
@@ -56,16 +76,6 @@ export async function sendAdmissionFormEmail(params: {
 }) {
   assertMailerConfig();
 
-  const transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_SECURE,
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS,
-    },
-  });
-
   const built = buildAdmissionFormMailContent({
     studentName: params.studentName,
     admissionFormUrl: params.admissionFormUrl,
@@ -78,8 +88,43 @@ export async function sendAdmissionFormEmail(params: {
       .split('\n')
       .map((line) => `<p>${line || '&nbsp;'}</p>`)
       .join('');
-  const fromEmail = SMTP_FROM || SMTP_USER!;
 
+  if (MAIL_PROVIDER === 'zeptomail') {
+    const client = new SendMailClient({
+      url: ZEPTOMAIL_URL,
+      token: ZEPTOMAIL_TOKEN!,
+    });
+
+    await client.sendMail({
+      from: {
+        address: ZEPTOMAIL_FROM_ADDRESS!,
+        name: ZEPTOMAIL_FROM_NAME,
+      },
+      to: [
+        {
+          email_address: {
+            address: params.toEmail,
+            name: (params.studentName || '').trim() || 'Student',
+          },
+        },
+      ],
+      subject,
+      htmlbody: html,
+    });
+    return;
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_SECURE,
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASS,
+    },
+  });
+
+  const fromEmail = SMTP_FROM || SMTP_USER!;
   await transporter.sendMail({
     from: fromEmail,
     to: params.toEmail,

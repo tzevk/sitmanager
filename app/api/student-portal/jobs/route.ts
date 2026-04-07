@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     const appliedMap: Record<number, string> = {};
     existingApps.forEach((a: any) => { appliedMap[a.Job_Id] = a.Status; });
 
-    // Compute eligibility for each job
+    // Compute eligibility for each placement job
     const enriched = jobs.map((job: any) => {
       const eligibility: { eligible: boolean; reasons: string[] } = { eligible: true, reasons: [] };
 
@@ -85,7 +85,36 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return NextResponse.json({ jobs: enriched, student });
+    // Alumni jobs are external opportunities synced by cron. Keep this optional
+    // so this endpoint still works even before the snapshot table is created.
+    let alumniJobs: any[] = [];
+    try {
+      const [alumniRows] = await pool.query<any[]>(
+        `SELECT
+            External_Id,
+            Designation,
+            Company_Name,
+            Salary_Text,
+            Salary_Min,
+            Salary_Max,
+            Experience_Min,
+            Experience_Max,
+            Deadline_Unix,
+            External_Link,
+            Locations_JSON,
+            Description_HTML,
+            Company_Desc_HTML,
+            Updated_At
+         FROM alumni_jobs_snapshot
+         WHERE Is_Active = 1
+         ORDER BY Updated_At DESC`
+      );
+      alumniJobs = alumniRows;
+    } catch (alumniErr) {
+      console.warn('Alumni jobs snapshot not available yet:', alumniErr);
+    }
+
+    return NextResponse.json({ jobs: enriched, alumni_jobs: alumniJobs, student });
   } catch (err: unknown) {
     console.error('Student jobs GET error:', err);
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });
