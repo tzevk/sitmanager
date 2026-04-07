@@ -124,8 +124,8 @@ export default function CorporateInquiryPage() {
     }
   };
 
-  const updateStatus = async (id: number, status: 'Rejected' | 'UnderDiscussion') => {
-    const verb = status === 'Rejected' ? 'cancel' : 'move to training execution';
+  const updateStatus = async (id: number, status: 'Rejected' | 'Final') => {
+    const verb = status === 'Rejected' ? 'cancel' : 'convert to training execution';
     if (!confirm(`Are you sure you want to ${verb} this inquiry?`)) return;
     const prevStatus = inquiries.find((r) => r.Id === id)?.InquiryStatus ?? null;
     setUpdating(id);
@@ -140,8 +140,8 @@ export default function CorporateInquiryPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Update failed');
 
-      if (status === 'UnderDiscussion') {
-        router.push('/dashboard/corporate-inquiry/execution');
+      if (status === 'Final') {
+        router.push(`/dashboard/corporate-inquiry/execution/${id}?tab=execution`);
         return;
       }
 
@@ -370,7 +370,7 @@ export default function CorporateInquiryPage() {
 
                         {canUpdate && (
                         <button
-                          onClick={() => updateStatus(inq.Id, 'UnderDiscussion')}
+                          onClick={() => updateStatus(inq.Id, 'Final')}
                           disabled={updating === inq.Id}
                           className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600 transition-colors disabled:opacity-50"
                           title="Convert to Execution"

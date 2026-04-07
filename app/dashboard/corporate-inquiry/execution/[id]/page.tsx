@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -179,12 +179,36 @@ function parseFollowUpJson(raw: string | null | undefined): { meetingDetails: Me
 
 export default function TrainingExecutionPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { id } = useParams<{ id: string }>();
   const inquiryId = useMemo(() => Number(id), [id]);
 
   const { canUpdate, loading: permLoading } = useResourcePermissions('corporate_inquiry');
 
   const [activeTab, setActiveTab] = useState<'inquiry' | 'discussion' | 'execution' | 'feedback' | 'certificate'>('inquiry');
+    useEffect(() => {
+      const tab = (searchParams.get('tab') || '').toLowerCase();
+      if (tab === 'execution') {
+        setActiveTab('execution');
+        return;
+      }
+      if (tab === 'discussion') {
+        setActiveTab('discussion');
+        return;
+      }
+      if (tab === 'feedback') {
+        setActiveTab('feedback');
+        return;
+      }
+      if (tab === 'certificate') {
+        setActiveTab('certificate');
+        return;
+      }
+      if (tab === 'inquiry') {
+        setActiveTab('inquiry');
+      }
+    }, [searchParams]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
