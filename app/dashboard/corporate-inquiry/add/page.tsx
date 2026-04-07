@@ -52,10 +52,13 @@ export default function AddCorporateInquiryPage() {
     Phone: '',
     Mobile: '',
     Email: '',
-    TrainingMode: 'offline' as 'online' | 'offline',
+    TrainingMode: 'offline' as 'online' | 'offline' | 'both online and offline',
     Participants_Fresher: '',
     Participants_Experienced: '',
     TrainingLocation: '',
+    TrainingDates: '',
+    business: '',
+    Remark: '',
     Discussion: '',
   });
 
@@ -173,7 +176,7 @@ export default function AddCorporateInquiryPage() {
                 Inquiry Details
               </button>
               <button type="button" className={tabBtn(activeTab === 'discussion')} onClick={() => setActiveTab('discussion')}>
-                Discussion
+                Requirements
               </button>
             </div>
           </div>
@@ -348,6 +351,16 @@ export default function AddCorporateInquiryPage() {
                     />
                     Offline
                   </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="radio"
+                      name="TrainingMode"
+                      value="both online and offline"
+                      checked={form.TrainingMode === 'both online and offline'}
+                      onChange={handleChange}
+                    />
+                    Both Online and Offline
+                  </label>
                 </div>
               </div>
 
@@ -390,16 +403,54 @@ export default function AddCorporateInquiryPage() {
 
             {activeTab === 'discussion' && (
               <>
-                <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Discussion</h2>
-                <label className={labelClass}>Discussion Notes</label>
+                <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Requirements</h2>
+                <label className={labelClass}>Requirement Notes</label>
                 <textarea
                   name="Discussion"
                   value={form.Discussion}
                   onChange={handleChange}
                   className={textareaClass}
                   rows={8}
-                  placeholder="Enter discussion details"
+                  placeholder="Enter requirement details"
                 />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <label className={labelClass}>Requirement Disciplines</label>
+                    <input
+                      type="text"
+                      name="business"
+                      value={form.business}
+                      onChange={handleChange}
+                      className={inputClass}
+                      placeholder="e.g. Piping, Mechanical, Process"
+                    />
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Preferred Training Dates</label>
+                    <input
+                      type="text"
+                      name="TrainingDates"
+                      value={form.TrainingDates}
+                      onChange={handleChange}
+                      className={inputClass}
+                      placeholder="e.g. 15-20 May / Next month"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <label className={labelClass}>Requirement Details Shared by Company</label>
+                  <textarea
+                    name="Remark"
+                    value={form.Remark}
+                    onChange={handleChange}
+                    className={textareaClass}
+                    rows={5}
+                    placeholder="Enter requirement details shared by company"
+                  />
+                </div>
               </>
             )}
           </div>

@@ -17,10 +17,10 @@
     "cron:sync-batch": "node scripts/cron/run-sync-batch.mjs",
     "cron:sync-all": "node scripts/cron/run-sync-all.mjs",
     "cron:sync-inquiry": "node scripts/cron/run-sync-inquiry.mjs",
-    "cron:sync-alumni-jobs": "node scripts/cron/run-sync-alumni-jobs.mjs",
-    "test:zeptomail": "node scripts/test-zeptomail.mjs"
+    "cron:sync-alumni-jobs": "node scripts/cron/run-sync-alumni-jobs.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-ses": "^3.1025.0",
     "@tiptap/extension-color": "^3.19.0",
     "@tiptap/extension-text-style": "^3.19.0",
     "@tiptap/react": "^3.19.0",
@@ -39,9 +39,8 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-icons": "^5.5.0",
-    "vercel": "^50.38.1",
-    "xlsx": "^0.18.5",
-    "zeptomail": "^7.0.2"
+    "vercel": "^50.40.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

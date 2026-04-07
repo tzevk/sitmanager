@@ -19,6 +19,7 @@ export default function SignIn() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -40,7 +41,7 @@ export default function SignIn() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, rememberMe }),
       });
 
       const data = await res.json();
@@ -206,6 +207,8 @@ export default function SignIn() {
                 <label className="flex items-center cursor-pointer group">
                   <input 
                     type="checkbox" 
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
                     className="w-5 h-5 text-[#2A6BB5] bg-gray-50 border-2 border-gray-100 rounded-md focus:ring-[#2A6BB5] focus:ring-offset-0 cursor-pointer transition-colors"
                   />
                   <span className="ml-3 text-sm text-gray-600 group-hover:text-gray-800 transition-colors">Remember me</span>

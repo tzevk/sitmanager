@@ -36,6 +36,8 @@ interface CorporateInquiry {
   Participants_Fresher?: number | null;
   Participants_Experienced?: number | null;
   TrainingLocation?: string | null;
+  TrainingDates?: string | null;
+  Discussion?: string | null;
 }
 
 interface Pagination {
@@ -285,6 +287,7 @@ export default function CorporateInquiryPage() {
                 <th className="text-left py-3 px-4 font-semibold">Enquiry Date</th>
                 <th className="text-left py-3 px-4 font-semibold">Training Programme</th>
                 <th className="text-left py-3 px-4 font-semibold">Company</th>
+                <th className="text-left py-3 px-4 font-semibold">Company Details</th>
                 <th className="text-left py-3 px-4 font-semibold">Company Location</th>
                 <th className="text-left py-3 px-4 font-semibold">Company Type</th>
                 <th className="text-left py-3 px-4 font-semibold">Authority</th>
@@ -293,6 +296,7 @@ export default function CorporateInquiryPage() {
                 <th className="text-left py-3 px-4 font-semibold">Email</th>
                 <th className="text-left py-3 px-4 font-semibold">Mode</th>
                 <th className="text-left py-3 px-4 font-semibold">Training Location</th>
+                <th className="text-left py-3 px-4 font-semibold">Requirement Details</th>
                 <th className="text-left py-3 px-4 font-semibold">Status</th>
                 <th className="text-center py-3 px-4 font-semibold">Action</th>
               </tr>
@@ -300,7 +304,7 @@ export default function CorporateInquiryPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={14} className="py-16 text-center">
+                  <td colSpan={16} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-8 h-8 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                       <span className="text-sm text-gray-400">Loading inquiries...</span>
@@ -309,7 +313,7 @@ export default function CorporateInquiryPage() {
                 </tr>
               ) : inquiries.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="py-16 text-center">
+                  <td colSpan={16} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2 text-gray-300">
                       <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -336,6 +340,14 @@ export default function CorporateInquiryPage() {
                     <td className="py-3 px-4 text-gray-600">{inq.Idate ? String(inq.Idate).slice(0, 10) : '-'}</td>
                     <td className="py-3 px-4 text-gray-600">{inq.Course_Id || '-'}</td>
                     <td className="py-3 px-4 text-gray-600">{inq.CompanyName || '-'}</td>
+                    <td className="py-3 px-4 text-gray-600">
+                      <div className="space-y-1 min-w-[220px]">
+                        <div><span className="font-medium text-gray-700">Contact:</span> {inq.CompanyAuthority || '-'}</div>
+                        <div><span className="font-medium text-gray-700">Designation:</span> {inq.Designation || '-'}</div>
+                        <div><span className="font-medium text-gray-700">Phone:</span> {inq.Mobile || inq.Phone || '-'}</div>
+                        <div><span className="font-medium text-gray-700">Email:</span> {inq.Email || '-'}</div>
+                      </div>
+                    </td>
                     <td className="py-3 px-4 text-gray-600">{inq.Place || '-'}</td>
                     <td className="py-3 px-4 text-gray-600">{inq.CompanyType || '-'}</td>
                     <td className="py-3 px-4 text-gray-600">{inq.CompanyAuthority || '-'}</td>
@@ -344,6 +356,23 @@ export default function CorporateInquiryPage() {
                     <td className="py-3 px-4 text-gray-600">{inq.Email || '-'}</td>
                     <td className="py-3 px-4 text-gray-600">{inq.TrainingMode || '-'}</td>
                     <td className="py-3 px-4 text-gray-600">{inq.TrainingLocation || '-'}</td>
+                    <td className="py-3 px-4 text-gray-600">
+                      <div className="space-y-1 min-w-[260px]">
+                        <div>
+                          <span className="font-medium text-gray-700">Disciplines:</span> {inq.business || '-'}
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-700">Participants:</span>{' '}
+                          F {inq.Participants_Fresher ?? 0} / E {inq.Participants_Experienced ?? 0}
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-700">Requirement:</span> {inq.Discussion || inq.Remark || '-'}
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-700">Preferred Dates:</span> {inq.TrainingDates || '-'}
+                        </div>
+                      </div>
+                    </td>
                     <td className="py-3 px-4 text-gray-600">{inq.InquiryStatus === 'Rejected' ? 'Cancelled' : (inq.InquiryStatus || '-')}</td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1">

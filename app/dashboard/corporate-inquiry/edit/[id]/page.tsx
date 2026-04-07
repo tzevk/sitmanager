@@ -229,10 +229,11 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
     Phone: '',
     Mobile: '',
     Email: '',
-    TrainingMode: 'offline' as 'online' | 'offline',
+    TrainingMode: 'offline' as 'online' | 'offline' | 'both online and offline',
     Participants_Fresher: '',
     Participants_Experienced: '',
     TrainingLocation: '',
+    TrainingDates: '',
     business: '',
     Remark: '',
 
@@ -293,12 +294,16 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
               Phone: String(inq?.Phone ?? '').trim(),
               Mobile: String(inq?.Mobile ?? '').trim(),
               Email: String(inq?.Email ?? '').trim(),
-              TrainingMode: (String(inq?.TrainingMode ?? 'offline').toLowerCase() === 'online' ? 'online' : 'offline') as
-                | 'online'
-                | 'offline',
+              TrainingMode: (() => {
+                const mode = String(inq?.TrainingMode ?? 'offline').trim().toLowerCase();
+                if (mode === 'online') return 'online' as const;
+                if (mode === 'both online and offline' || mode === 'both') return 'both online and offline' as const;
+                return 'offline' as const;
+              })(),
               Participants_Fresher: String(inq?.Participants_Fresher ?? ''),
               Participants_Experienced: String(inq?.Participants_Experienced ?? ''),
               TrainingLocation: String(inq?.TrainingLocation ?? '').trim(),
+              TrainingDates: String(inq?.TrainingDates ?? '').trim(),
               business: String(inq?.business ?? '').trim(),
               Remark: remark,
 
@@ -553,7 +558,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                 Inquiry Details
               </button>
               <button type="button" className={tabBtn(activeTab === 'discussion')} onClick={() => setActiveTab('discussion')}>
-                Discussion
+                Requirements
               </button>
             </div>
           </div>
@@ -724,6 +729,16 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                         />
                         Offline
                       </label>
+                      <label className="flex items-center gap-1 text-xs text-gray-700">
+                        <input
+                          type="radio"
+                          name="TrainingMode"
+                          value="both online and offline"
+                          checked={form.TrainingMode === 'both online and offline'}
+                          onChange={handleChange}
+                        />
+                        Both Online and Offline
+                      </label>
                     </div>
                   </div>
 
@@ -773,12 +788,12 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
             {activeTab === 'discussion' && (
               <>
                 <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-                  <h2 className="text-sm font-bold text-[#2A6BB5] uppercase">Training Discussion</h2>
+                  <h2 className="text-sm font-bold text-[#2A6BB5] uppercase">Training Requirements</h2>
                   <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm">
                     {([
                       { key: 'meeting', label: 'Meeting Details' },
-                      { key: 'discussion', label: 'Discussion' },
-                      { key: 'contacts', label: 'Contact Details' },
+                      { key: 'discussion', label: 'Requirements' },
+                      { key: 'contacts', label: 'Follow Up' },
                     ] as const).map((t) => (
                       <button
                         key={t.key}
@@ -900,16 +915,55 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                 {discussionSubTab === 'discussion' && (
                   <div className="space-y-4">
                     <div>
-                      <label className={labelClass}>Minutes of Meeting</label>
+                      <label className={labelClass}>Requirement Notes</label>
                       <textarea
                         name="Discussion"
                         value={form.Discussion}
                         onChange={handleChange}
                         className={textareaClass}
                         rows={8}
-                        placeholder="Enter discussion details"
+                        placeholder="Enter requirement details"
                       />
                     </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelClass}>Requirement Disciplines</label>
+                        <input
+                          type="text"
+                          name="business"
+                          value={form.business}
+                          onChange={handleChange}
+                          className={inputClass}
+                          placeholder="e.g. Piping, Mechanical, Process"
+                        />
+                      </div>
+
+                      <div>
+                        <label className={labelClass}>Preferred Training Dates</label>
+                        <input
+                          type="text"
+                          name="TrainingDates"
+                          value={form.TrainingDates}
+                          onChange={handleChange}
+                          className={inputClass}
+                          placeholder="e.g. 15-20 May / Next month"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className={labelClass}>Requirement Details Shared by Company</label>
+                      <textarea
+                        name="Remark"
+                        value={form.Remark}
+                        onChange={handleChange}
+                        className={textareaClass}
+                        rows={5}
+                        placeholder="Enter requirement details shared by company"
+                      />
+                    </div>
+
                     <div>
                       <label className={labelClass}>Discussion Outcome</label>
                       <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm">
@@ -937,7 +991,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                       <div><label className={labelClass}>Alternate Number</label><input className={inputClass} value={contactDraft.alternateNumber} onChange={(e) => setContactDraft((d) => ({ ...d, alternateNumber: e.target.value }))} /></div>
                       <div><label className={labelClass}>Job Title</label><input className={inputClass} value={contactDraft.jobTitle} onChange={(e) => setContactDraft((d) => ({ ...d, jobTitle: e.target.value }))} /></div>
                       <div><label className={labelClass}>Industry</label><input className={inputClass} value={contactDraft.industry} onChange={(e) => setContactDraft((d) => ({ ...d, industry: e.target.value }))} /></div>
-                      <div><label className={labelClass}>Discussion</label><input className={inputClass} value={contactDraft.discussion} onChange={(e) => setContactDraft((d) => ({ ...d, discussion: e.target.value }))} /></div>
+                      <div><label className={labelClass}>Follow Up Notes</label><input className={inputClass} value={contactDraft.discussion} onChange={(e) => setContactDraft((d) => ({ ...d, discussion: e.target.value }))} /></div>
                     </div>
                     <div className="flex gap-2 justify-end">
                       <button
@@ -951,7 +1005,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                           setEditingContactIndex(null);
                         }}
                       >
-                        {editingContactIndex === null ? 'Add Contact' : 'Update Contact'}
+                        {editingContactIndex === null ? 'Add Follow Up' : 'Update Follow Up'}
                       </button>
                       {editingContactIndex !== null && (
                         <button type="button" className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-semibold" onClick={() => { setContactDraft({ fullName: '', email: '', phoneNumber: '', alternateNumber: '', jobTitle: '', industry: '', discussion: '' }); setEditingContactIndex(null); }}>Cancel</button>

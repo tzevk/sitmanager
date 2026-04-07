@@ -1,7 +1,9 @@
 import nodemailer from 'nodemailer';
-import { SendMailClient } from 'zeptomail';
+import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 
 const MAIL_PROVIDER = (process.env.ADMISSION_MAIL_PROVIDER || 'smtp').trim().toLowerCase();
+
+// SMTP Configuration
 const SMTP_HOST = process.env.ADMISSION_SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.ADMISSION_SMTP_PORT || '587', 10);
 const SMTP_SECURE = process.env.ADMISSION_SMTP_SECURE === '1';
@@ -10,14 +12,12 @@ const SMTP_PASS = process.env.ADMISSION_SMTP_PASS;
 const SMTP_FROM = process.env.ADMISSION_SMTP_FROM;
 const SMTP_REPLY_TO = process.env.ADMISSION_SMTP_REPLY_TO;
 
-const ZEPTOMAIL_URL_RAW = process.env.ADMISSION_ZEPTOMAIL_URL || 'https://api.zeptomail.in/v1.1/email';
-const ZEPTOMAIL_URL =
-  ZEPTOMAIL_URL_RAW.startsWith('http://') || ZEPTOMAIL_URL_RAW.startsWith('https://')
-    ? ZEPTOMAIL_URL_RAW
-    : `https://${ZEPTOMAIL_URL_RAW}`;
-const ZEPTOMAIL_TOKEN = process.env.ADMISSION_ZEPTOMAIL_TOKEN;
-const ZEPTOMAIL_FROM_ADDRESS = process.env.ADMISSION_ZEPTOMAIL_FROM_ADDRESS;
-const ZEPTOMAIL_FROM_NAME = process.env.ADMISSION_ZEPTOMAIL_FROM_NAME || 'noreply';
+// AWS SES Configuration
+const AWS_SES_REGION = process.env.ADMISSION_AWS_SES_REGION || 'us-east-1';
+const AWS_SES_ACCESS_KEY = process.env.ADMISSION_AWS_SES_ACCESS_KEY;
+const AWS_SES_SECRET_KEY = process.env.ADMISSION_AWS_SES_SECRET_KEY;
+const AWS_SES_FROM_EMAIL = process.env.ADMISSION_AWS_SES_FROM_EMAIL;
+const AWS_SES_REPLY_TO = process.env.ADMISSION_AWS_SES_REPLY_TO;
 
 export function buildAdmissionFormMailContent(params: {
   studentName?: string;
@@ -50,10 +50,10 @@ export function buildAdmissionFormMailContent(params: {
 }
 
 function assertMailerConfig() {
-  if (MAIL_PROVIDER === 'zeptomail') {
-    if (!ZEPTOMAIL_TOKEN || !ZEPTOMAIL_FROM_ADDRESS) {
+  if (MAIL_PROVIDER === 'ses') {
+    if (!AWS_SES_ACCESS_KEY || !AWS_SES_SECRET_KEY || !AWS_SES_FROM_EMAIL) {
       throw new Error(
-        'ZeptoMail configuration is missing. Set ADMISSION_ZEPTOMAIL_TOKEN and ADMISSION_ZEPTOMAIL_FROM_ADDRESS.'
+        'AWS SES configuration is missing. Set ADMISSION_AWS_SES_ACCESS_KEY, ADMISSION_AWS_SES_SECRET_KEY, and ADMISSION_AWS_SES_FROM_EMAIL.'
       );
     }
     return;
@@ -89,28 +89,42 @@ export async function sendAdmissionFormEmail(params: {
       .map((line) => `<p>${line || '&nbsp;'}</p>`)
       .join('');
 
-  if (MAIL_PROVIDER === 'zeptomail') {
-    const client = new SendMailClient({
-      url: ZEPTOMAIL_URL,
-      token: ZEPTOMAIL_TOKEN!,
+  if (MAIL_PROVIDER === 'ses') {
+    const sesClient = new SESClient({
+      region: AWS_SES_REGION,
+      credentials: {
+        accessKeyId: AWS_SES_ACCESS_KEY!,
+        secretAccessKey: AWS_SES_SECRET_KEY!,
+      },
     });
 
-    await client.sendMail({
-      from: {
-        address: ZEPTOMAIL_FROM_ADDRESS!,
-        name: ZEPTOMAIL_FROM_NAME,
+    const replyToAddresses = AWS_SES_REPLY_TO ? [AWS_SES_REPLY_TO] : undefined;
+
+    const command = new SendEmailCommand({
+      Source: AWS_SES_FROM_EMAIL,
+      Destination: {
+        ToAddresses: [params.toEmail],
       },
-      to: [
-        {
-          email_address: {
-            address: params.toEmail,
-            name: (params.studentName || '').trim() || 'Student',
+      Message: {
+        Subject: {
+          Data: subject,
+          Charset: 'UTF-8',
+        },
+        Body: {
+          Text: {
+            Data: text,
+            Charset: 'UTF-8',
+          },
+          Html: {
+            Data: html,
+            Charset: 'UTF-8',
           },
         },
-      ],
-      subject,
-      htmlbody: html,
+      },
+      ReplyToAddresses: replyToAddresses,
     });
+
+    await sesClient.send(command);
     return;
   }
 

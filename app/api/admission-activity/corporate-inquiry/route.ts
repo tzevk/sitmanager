@@ -195,6 +195,17 @@ function parseDiscussionOutcome(value: unknown): 'Awarded' | 'Regretted' | 'On H
   throw new Error('Invalid DiscussionOutcome. Allowed: Awarded, Regretted, On Hold');
 }
 
+function parseTrainingMode(value: unknown): 'online' | 'offline' | 'both online and offline' | null {
+  if (value === null || value === undefined || value === '') return null;
+  const raw = String(value).trim().toLowerCase();
+  if (raw === 'online') return 'online';
+  if (raw === 'offline') return 'offline';
+  if (raw === 'both online and offline' || raw === 'both' || raw === 'online and offline') {
+    return 'both online and offline';
+  }
+  throw new Error('Invalid TrainingMode. Allowed: online, offline, both online and offline');
+}
+
 function toNullableInt(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null;
   const n = Number(value);
@@ -400,6 +411,7 @@ export async function PATCH(req: NextRequest) {
       FollowUp: body?.FollowUp,
       InitialFollowUpDate: body?.InitialFollowUpDate,
       NextFollowUpDate: body?.NextFollowUpDate,
+      TrainingMode: parseTrainingMode(body?.TrainingMode),
 
       DiscussionOutcome,
 
@@ -471,7 +483,7 @@ export async function POST(req: NextRequest) {
     let Consultancy_Id = toNullableInt(body?.Consultancy_Id);
     const CompanyType = body?.CompanyType;
     const CompanyAuthority = body?.CompanyAuthority;
-    const TrainingMode = body?.TrainingMode;
+    const TrainingMode = parseTrainingMode(body?.TrainingMode);
     const Participants_Fresher = toNullableInt(body?.Participants_Fresher);
     const Participants_Experienced = toNullableInt(body?.Participants_Experienced);
     const TrainingLocation = body?.TrainingLocation;
@@ -600,7 +612,7 @@ export async function PUT(req: NextRequest) {
     const Consultancy_Id = toNullableInt(body?.Consultancy_Id);
     const CompanyType = body?.CompanyType;
     const CompanyAuthority = body?.CompanyAuthority;
-    const TrainingMode = body?.TrainingMode;
+    const TrainingMode = parseTrainingMode(body?.TrainingMode);
     const Participants_Fresher = toNullableInt(body?.Participants_Fresher);
     const Participants_Experienced = toNullableInt(body?.Participants_Experienced);
     const TrainingLocation = body?.TrainingLocation;

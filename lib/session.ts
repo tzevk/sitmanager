@@ -28,6 +28,11 @@ function SECRET_KEY(): Uint8Array {
 
 const SESSION_COOKIE_NAME = 'sit_session';
 const SESSION_DURATION = 60 * 60 * 8; // 8 hours in seconds (reduced from 24h)
+const REMEMBER_ME_DURATION = 60 * 60 * 24 * 30; // 30 days in seconds
+
+interface SessionOptions {
+  maxAgeSeconds?: number;
+}
 
 export interface SessionData {
   userId: number;
@@ -41,11 +46,14 @@ export interface SessionData {
 /**
  * Create a session token
  */
-export async function createSession(data: SessionData): Promise<string> {
+export async function createSession(data: SessionData, options?: SessionOptions): Promise<string> {
+  const maxAgeSeconds = options?.maxAgeSeconds && options.maxAgeSeconds > 0
+    ? options.maxAgeSeconds
+    : SESSION_DURATION;
   const token = await new SignJWT({ ...data })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_DURATION}s`)
+    .setExpirationTime(`${maxAgeSeconds}s`)
     .sign(SECRET_KEY());
   
   return token;
@@ -66,15 +74,20 @@ export async function verifySession(token: string): Promise<SessionData | null> 
 /**
  * Set session cookie in response
  */
-export function setSessionCookie(response: NextResponse, token: string): void {
+export function setSessionCookie(response: NextResponse, token: string, options?: SessionOptions): void {
+  const maxAgeSeconds = options?.maxAgeSeconds && options.maxAgeSeconds > 0
+    ? options.maxAgeSeconds
+    : SESSION_DURATION;
   response.cookies.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: SESSION_DURATION,
+    maxAge: maxAgeSeconds,
   });
 }
+
+export { SESSION_DURATION, REMEMBER_ME_DURATION };
 
 /**
  * Get session from request

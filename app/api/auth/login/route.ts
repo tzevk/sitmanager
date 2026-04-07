@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
-import { createSession, setSessionCookie } from '@/lib/session';
+import { createSession, REMEMBER_ME_DURATION, setSessionCookie } from '@/lib/session';
 import { loginRateLimiter } from '@/lib/rate-limit';
 import { sanitizeString, isNonEmpty } from '@/lib/validation';
 import crypto from 'crypto';
@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
     const email = sanitizeString(body.email);
     const password = typeof body.password === 'string' ? body.password : '';
     const department = sanitizeString(body.department);
+    const rememberMe = body?.rememberMe === true;
 
     // Validate required fields
     if (!isNonEmpty(email) || !password) {
@@ -148,6 +149,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create session token
+    const sessionMaxAge = rememberMe ? REMEMBER_ME_DURATION : undefined;
     const sessionToken = await createSession({
       userId: user.id,
       email: user.email,
@@ -155,7 +157,7 @@ export async function POST(request: NextRequest) {
       lastName: user.lastname,
       department: finalDepartment,
       role: user.role,
-    });
+    }, { maxAgeSeconds: sessionMaxAge });
 
     // Success response with session cookie
     const response = NextResponse.json({
@@ -172,7 +174,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Set httpOnly session cookie
-    setSessionCookie(response, sessionToken);
+    setSessionCookie(response, sessionToken, { maxAgeSeconds: sessionMaxAge });
 
     return response;
   } catch (error: any) {
