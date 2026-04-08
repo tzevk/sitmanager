@@ -113,8 +113,8 @@ export default function DashboardPage() {
       setAdminSelectedDepartment(saved);
       return;
     }
-    setAdminSelectedDepartment(isSuperAdmin ? 'cbd' : 'administration');
-  }, [canSwitchDepartmentDashboard, isSuperAdmin]);
+    setAdminSelectedDepartment('administration');
+  }, [canSwitchDepartmentDashboard]);
 
   const handleAdminDepartmentChange = (value: DashboardDepartment) => {
     setAdminSelectedDepartment(value);
@@ -124,12 +124,20 @@ export default function DashboardPage() {
   // Fetch dashboard data
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/dashboard')
-      .then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); })
-      .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
-      .catch(() => { if (!cancelled) setLoading(false); });
+    const fetchDashboard = async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/dashboard?dept=${activeDepartment}`);
+        if (!r.ok) throw new Error('Failed');
+        const d = await r.json();
+        if (!cancelled) { setData(d); setLoading(false); }
+      } catch {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    fetchDashboard();
     return () => { cancelled = true; };
-  }, []);
+  }, [activeDepartment]);
 
   // Load todos from localStorage
   useEffect(() => {
@@ -140,7 +148,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const saved = localStorage.getItem('sit-admin-dashboard-todos');
-    if (saved) setAdminTodos(JSON.parse(saved));
+    if (saved) {
+      Promise.resolve().then(() => setAdminTodos(JSON.parse(saved)));
+    }
   }, []);
 
   const saveTodos = useCallback((items: TodoItem[]) => {
