@@ -48,6 +48,8 @@ export default function SignIn() {
 
       if (data.success) {
         setSuccess(`Welcome, ${data.user.firstName} ${data.user.lastName}!`);
+        // Ensure super admins default to Administration on first load after login
+        localStorage.removeItem('sit-admin-dashboard-department');
         setTimeout(() => router.push('/dashboard'), 1000);
       } else {
         setError(data.message);

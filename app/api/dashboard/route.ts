@@ -22,7 +22,9 @@ export async function GET(request: NextRequest) {
     // SECURITY: Dashboard data requires authentication
     const auth = await requireAuth(request);
     if (auth instanceof NextResponse) return auth;
-    const result = await cached('dashboard', CACHE_TTL, fetchDashboardData);
+    const { searchParams } = new URL(request.url);
+    const dept = searchParams.get('dept') || 'unknown';
+    const result = await cached(`dashboard:${dept}`, CACHE_TTL, () => fetchDashboardData(dept));
 
     return NextResponse.json(result, {
       headers: {
@@ -38,8 +40,35 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function fetchDashboardData() {
+async function fetchDashboardData(dept?: string) {
   const pool = getPool();
+
+  const isCbd = dept === 'cbd';
+  const isTd = dept === 'training_and_development';
+  const isAdmin = dept === 'administration';
+  const isGeneral = !isCbd && !isTd && !isAdmin;
+
+  const needsAnnualTargets = isGeneral || isCbd;
+  const needsUpcomingBatches = isGeneral || isCbd;
+  const needsEnquiries = isGeneral || isCbd || isAdmin;
+  const needsPlacement = isGeneral || isAdmin;
+  const needsNotices = isGeneral;
+  const needsLeadFunnel = isCbd || isAdmin;
+  const needsSeminars = isCbd;
+  const needsExhibitions = isCbd;
+  const needsFollowups = isCbd || isAdmin;
+  const needsDailyActivity = isCbd;
+  const needsPendingFees = isCbd;
+  const needsAlumni = isCbd;
+  
+  const needsTdDashboard = isTd;
+  const needsTdConvocations = isTd || isAdmin;
+  const needsTdExams = isTd || isAdmin;
+  const needsTdSiteVisits = isTd || isAdmin;
+  const needsTdLectures = isTd || isAdmin;
+  
+  const needsAdminWidgets = isAdmin;
+  const needsQuickStats = isGeneral || isAdmin;
 
   // ── Run ALL independent queries in parallel ──────────────────────
   const [
@@ -87,15 +116,15 @@ async function fetchDashboardData() {
   ] = await Promise.all([
 
     // 1a. awt_annual
-    safeQuery(pool, `
+    needsAnnualTargets ? safeQuery(pool, `
       SELECT id, selectcourse, batchcode, category, coursename,
         planned, admission, duration, coordinator, actualdate, timings, created_date
       FROM awt_annual WHERE deleted = 0 OR deleted IS NULL
       ORDER BY created_date DESC LIMIT 10
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 1b. Comprehensive batch targets per course
-    safeQuery(pool, `
+    needsAnnualTargets ? safeQuery(pool, `
       SELECT
         c.Course_Id,
         c.Course_Name AS CourseName,
@@ -123,10 +152,10 @@ async function fetchDashboardData() {
       GROUP BY c.Course_Id, c.Course_Name
       ORDER BY COUNT(DISTINCT b.Batch_Id) DESC, c.Course_Name ASC
       LIMIT 15
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 1c. Sparkline data
-    safeQuery(pool, `
+    needsAnnualTargets ? safeQuery(pool, `
       SELECT c.Course_Id, DATE_FORMAT(b.SDate, '%Y-%m') AS month,
         COUNT(*) AS batch_count, COALESCE(SUM(b.NoStudent), 0) AS students
       FROM batch_mst b
@@ -136,10 +165,10 @@ async function fetchDashboardData() {
         AND b.SDate >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
       GROUP BY c.Course_Id, DATE_FORMAT(b.SDate, '%Y-%m')
       ORDER BY c.Course_Id, month
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 2. Upcoming batches
-    safeQuery(pool, `
+    needsUpcomingBatches ? safeQuery(pool, `
       SELECT b.Batch_Id, b.Batch_code, b.SDate, b.EDate,
         b.Category, b.Duration, b.Timings,
         b.Training_Coordinator, b.INR_Basic,
@@ -186,37 +215,37 @@ async function fetchDashboardData() {
         AND (b.IsDelete IS NULL OR b.IsDelete = 0)
         AND (b.Cancel IS NULL OR b.Cancel = 0)
       ORDER BY b.SDate ASC LIMIT 20
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 3a. Enquiry summary
-    safeQuery(pool, `
+    needsEnquiries ? safeQuery(pool, `
       SELECT COUNT(*) as total_enquiries,
         SUM(CASE WHEN inquiry_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) as last_30_days,
         SUM(CASE WHEN inquiry_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) as last_7_days
       FROM student_inquiry WHERE (IsDelete = 0 OR IsDelete IS NULL)
-    `, [{ total_enquiries: 0, last_30_days: 0, last_7_days: 0 }]),
+    `, [{ total_enquiries: 0, last_30_days: 0, last_7_days: 0 }]) : Promise.resolve([{ total_enquiries: 0, last_30_days: 0, last_7_days: 0 }]),
 
     // 3b. Recent student enquiries
-    safeQuery(pool, `
+    needsEnquiries ? safeQuery(pool, `
       SELECT id, student_name, email, phone, course_id, inquiry_date, status
       FROM student_inquiry WHERE (IsDelete = 0 OR IsDelete IS NULL)
       ORDER BY id DESC LIMIT 10
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 3c. Corporate total
-    safeQuery(pool, `
+    needsEnquiries ? safeQuery(pool, `
       SELECT COUNT(*) as total FROM corporate_inquiry WHERE (IsDelete = 0 OR IsDelete IS NULL)
-    `, [{ total: 0 }]),
+    `, [{ total: 0 }]) : Promise.resolve([{total: 0}]),
 
     // 3d. Recent corporate
-    safeQuery(pool, `
+    needsEnquiries ? safeQuery(pool, `
       SELECT Id, FullName, CompanyName, Designation, Mobile, Email, Course_Id, Idate
       FROM corporate_inquiry WHERE (IsDelete = 0 OR IsDelete IS NULL)
       ORDER BY Id DESC LIMIT 10
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 4a. Placement batch data (per-batch rows for placement table)
-    safeQuery(pool, `
+    needsPlacement ? safeQuery(pool, `
       SELECT
         b.Batch_Id,
         b.Batch_code,
@@ -232,10 +261,10 @@ async function fetchDashboardData() {
         AND b.StudentPassed1 > 0
       ORDER BY b.ConvocationDate DESC
       LIMIT 50
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 4b. Student aggregates per batch (CV, self-placement)
-    safeQuery(pool, `
+    needsPlacement ? safeQuery(pool, `
       SELECT
         Batch_Code,
         COUNT(*) AS total_students,
@@ -247,41 +276,41 @@ async function fetchDashboardData() {
       FROM student_master
       WHERE (IsDelete IS NULL OR IsDelete = 0)
       GROUP BY Batch_Code
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 4c. Interview count per batch (from cv_shortlisted)
-    safeQuery(pool, `
+    needsPlacement ? safeQuery(pool, `
       SELECT Batch_Id, COUNT(*) AS interview_count
       FROM cv_shortlisted
       WHERE (IsDelete IS NULL OR IsDelete = 0)
       GROUP BY Batch_Id
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 4d. Active requirements count
-    safeQuery(pool, `
+    needsPlacement ? safeQuery(pool, `
       SELECT COUNT(*) as active_requirements
       FROM company_requirements_apk
       WHERE (IsDelete IS NULL OR IsDelete = 0) AND IsActive = 1
-    `, [{ active_requirements: 0 }]),
+    `, [{ active_requirements: 0 }]) : Promise.resolve([{ active_requirements: 0 }]),
 
     // 4e. Company requirements list
-    safeQuery(pool, `
+    needsPlacement ? safeQuery(pool, `
       SELECT CompReqId, Profile, Location, Eligibility, PostedDate, CompanyName
       FROM company_requirements_apk
       WHERE (IsDelete IS NULL OR IsDelete = 0) AND IsActive = 1
       ORDER BY CompReqId DESC LIMIT 5
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 6. Notices
-    safeQuery(pool, `
+    needsNotices ? safeQuery(pool, `
       SELECT id, startdate, enddate, specification, created_date
       FROM awt_noticeboard
       WHERE (deleted = 0 OR deleted IS NULL) AND specification IS NOT NULL AND specification != ''
       ORDER BY id DESC LIMIT 5
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 7. Source wise performance (from student enquiry source funnel)
-    safeQuery(pool, `
+    needsLeadFunnel ? safeQuery(pool, `
       SELECT
         COALESCE(NULLIF(TRIM(Inquiry_From), ''), 'Unknown') AS source,
         COUNT(*) AS leads,
@@ -294,10 +323,10 @@ async function fetchDashboardData() {
       GROUP BY COALESCE(NULLIF(TRIM(Inquiry_From), ''), 'Unknown')
       ORDER BY leads DESC
       LIMIT 12
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 8. Lead funnel summary
-    safeQuery(pool, `
+    needsLeadFunnel ? safeQuery(pool, `
       SELECT
         COUNT(*) AS total,
         SUM(CASE WHEN TRIM(IFNULL(Discussion, '')) <> '' THEN 1 ELSE 0 END) AS contacted,
@@ -312,10 +341,10 @@ async function fetchDashboardData() {
           THEN 1 ELSE 0 END) AS converted
       FROM student_inquiry
       WHERE (IsDelete = 0 OR IsDelete IS NULL)
-    `, [{ total: 0, contacted: 0, interested: 0, converted: 0 }]),
+    `, [{ total: 0, contacted: 0, interested: 0, converted: 0 }]) : Promise.resolve([{ total: 0, contacted: 0, interested: 0, converted: 0 }]),
 
     // 2. Seminar targets (scrollable) from annual planner items containing seminar signals
-    safeQuery(pool, `
+    needsSeminars ? safeQuery(pool, `
       SELECT
         DATE_FORMAT(IFNULL(actualdate, created_date), '%b %Y') AS month,
         COALESCE(NULLIF(TRIM(description), ''), NULLIF(TRIM(training), ''), NULLIF(TRIM(coursename), ''), 'Seminar') AS college_name,
@@ -330,10 +359,10 @@ async function fetchDashboardData() {
         )
       ORDER BY IFNULL(actualdate, created_date) DESC
       LIMIT 30
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // Seminar fallback (fast path from followups when annual planner has no seminar rows)
-    safeQuery(pool, `
+    needsSeminars ? safeQuery(pool, `
       SELECT
         '' AS month,
         COALESCE(NULLIF(TRIM(CName), ''), 'Seminar') AS college_name,
@@ -344,10 +373,10 @@ async function fetchDashboardData() {
         AND LOWER(IFNULL(Purpose, '')) LIKE '%semin%'
       ORDER BY Follow_id DESC
       LIMIT 30
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 3. Exhibition targets summary from annual planner items containing exhibition signals
-    safeQuery(pool, `
+    needsExhibitions ? safeQuery(pool, `
       SELECT
         COALESCE(SUM(IFNULL(planned, 0)), 0) AS planned,
         COALESCE(SUM(IFNULL(admission, 0)), 0) AS completed,
@@ -361,10 +390,10 @@ async function fetchDashboardData() {
           OR LOWER(IFNULL(description, '')) LIKE '%exhib%'
           OR LOWER(IFNULL(training, '')) LIKE '%exhib%'
         )
-    `, [{ planned: 0, completed: 0, achievement_pct: 0 }]),
+    `, [{ planned: 0, completed: 0, achievement_pct: 0 }]) : Promise.resolve([{ planned: 0, completed: 0, achievement_pct: 0 }]),
 
     // 5. Pending followups (college follow records with next date due)
-    safeQuery(pool, `
+    needsFollowups ? safeQuery(pool, `
       SELECT
         Follow_id AS id,
         CName AS name,
@@ -379,10 +408,10 @@ async function fetchDashboardData() {
         )
       ORDER BY Follow_id DESC
       LIMIT 30
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 6. Daily activity tracker (last 7 days)
-    safeQuery(pool, `
+    needsDailyActivity ? safeQuery(pool, `
       SELECT label, value FROM (
         SELECT 'New Enquiries (7d)' AS label, COUNT(*) AS value
         FROM student_inquiry
@@ -403,10 +432,10 @@ async function fetchDashboardData() {
         WHERE (IsDelete = 0 OR IsDelete IS NULL)
           AND DATE(IFNULL(Tdate, CURDATE())) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
       ) x
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 9. Pending fees
-    safeQuery(pool, `
+    needsPendingFees ? safeQuery(pool, `
       SELECT
         am.Admission_Id AS id,
         sm.Student_Name AS student_name,
@@ -423,10 +452,10 @@ async function fetchDashboardData() {
         AND IFNULL(am.Fees, 0) > IFNULL(paid.total_paid, 0)
       ORDER BY amount DESC
       LIMIT 30
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 10. Alumni registration progress approximated by contact completeness per batch
-    safeQuery(pool, `
+    needsAlumni ? safeQuery(pool, `
       SELECT
         b.Batch_code AS batch_no,
         COALESCE(c.Course_Name, b.CourseName, 'N/A') AS training_program,
@@ -446,10 +475,10 @@ async function fetchDashboardData() {
       HAVING COUNT(sm.Student_Id) > 0
       ORDER BY registered_pct ASC, b.Batch_code DESC
       LIMIT 25
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // T&D-1 Ongoing batches metrics
-    safeQuery(pool, `
+    needsTdDashboard ? safeQuery(pool, `
       SELECT
         b.Batch_Id,
         b.Batch_code AS batch_no,
@@ -484,10 +513,10 @@ async function fetchDashboardData() {
       GROUP BY b.Batch_Id, b.Batch_code, COALESCE(c.Course_Name, b.CourseName, 'N/A'), b.SDate, b.EDate, b.NoStudent
       ORDER BY b.SDate ASC
       LIMIT 30
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // T&D-2 Low attendance students
-    safeQuery(pool, `
+    needsTdDashboard ? safeQuery(pool, `
       SELECT
         sm.Student_Name AS name,
         b.Batch_code AS batch_no,
@@ -502,10 +531,10 @@ async function fetchDashboardData() {
         AND CAST(am.Stud_Attend AS DECIMAL(10,2)) < 75
       ORDER BY CAST(am.Stud_Attend AS DECIMAL(10,2)) ASC
       LIMIT 50
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // T&D-3 Low performing students
-    safeQuery(pool, `
+    needsTdDashboard ? safeQuery(pool, `
       SELECT
         sm.Student_Name AS name,
         sm.Batch_Code AS batch_no,
@@ -519,10 +548,10 @@ async function fetchDashboardData() {
         AND CAST(sm.Percentage AS DECIMAL(10,2)) < 40
       ORDER BY CAST(sm.Percentage AS DECIMAL(10,2)) ASC
       LIMIT 50
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // T&D-4 Upcoming exams
-    safeQuery(pool, `
+    needsTdExams ? safeQuery(pool, `
       SELECT
         b.Batch_code AS batch_no,
         COALESCE(c.Course_Name, b.CourseName, 'N/A') AS training_program,
@@ -542,10 +571,10 @@ async function fetchDashboardData() {
         AND DATE(e.Exam_Date) >= CURDATE()
       ORDER BY DATE(e.Exam_Date) ASC
       LIMIT 40
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // T&D-4b Fallback exam schedule when no future exams exist
-    safeQuery(pool, `
+    needsTdExams ? safeQuery(pool, `
       SELECT
         b.Batch_code AS batch_no,
         COALESCE(c.Course_Name, b.CourseName, 'N/A') AS training_program,
@@ -564,10 +593,10 @@ async function fetchDashboardData() {
       WHERE (e.IsDelete = 0 OR e.IsDelete IS NULL)
       ORDER BY DATE(e.Exam_Date) DESC
       LIMIT 40
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // T&D-5 Finished exams
-    safeQuery(pool, `
+    needsTdDashboard ? safeQuery(pool, `
       SELECT
         b.Batch_code AS batch_no,
         COALESCE(c.Course_Name, b.CourseName, 'N/A') AS training_program,
@@ -593,10 +622,10 @@ async function fetchDashboardData() {
       GROUP BY b.Batch_code, COALESCE(c.Course_Name, b.CourseName, 'N/A'), e.Exam_Date, e.Exam_Id
       ORDER BY DATE(e.Exam_Date) DESC
       LIMIT 40
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // T&D-6 Today's lectures
-    safeQuery(pool, `
+    needsTdLectures ? safeQuery(pool, `
       SELECT
         b.Batch_code AS batch_no,
         COALESCE(c.Course_Name, b.CourseName, 'N/A') AS training_program,
@@ -611,19 +640,19 @@ async function fetchDashboardData() {
         AND DATE(ltm.Take_Dt) = CURDATE()
       ORDER BY ltm.Lecture_Start ASC, ltm.Take_Id DESC
       LIMIT 50
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // T&D-7 Google reviews pending (proxy using missing SIT performance feedback)
-    safeQuery(pool, `
+    needsTdDashboard ? safeQuery(pool, `
       SELECT COUNT(*) AS pending_count
       FROM student_master sm
       WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
         AND (LOWER(IFNULL(sm.Admission, '')) IN ('yes', 'y', '1', 'true') OR IFNULL(sm.admission_done, 0) = 1)
         AND TRIM(IFNULL(sm.SitPerformance, '')) = ''
-    `, [{ pending_count: 0 }]),
+    `, [{ pending_count: 0 }]) : Promise.resolve([{ pending_count: 0 }]),
 
     // T&D-8 Upcoming convocations
-    safeQuery(pool, `
+    needsTdConvocations ? safeQuery(pool, `
       SELECT
         Id AS id,
         Batch_List AS batch_list,
@@ -633,10 +662,10 @@ async function fetchDashboardData() {
         AND DATE(Convocation_Date) >= CURDATE()
       ORDER BY DATE(Convocation_Date) ASC
       LIMIT 30
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // T&D-9 Site visits
-    safeQuery(pool, `
+    needsTdSiteVisits ? safeQuery(pool, `
       SELECT
         Visit_Id AS id,
         Batch_Code AS batch_no,
@@ -650,10 +679,10 @@ async function fetchDashboardData() {
       WHERE (IsDelete = 0 OR IsDelete IS NULL)
       ORDER BY DATE(IFNULL(Visit_Date, ConfirmDAte)) DESC
       LIMIT 40
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // T&D-10 Admission cancelled
-    safeQuery(pool, `
+    needsTdDashboard ? safeQuery(pool, `
       SELECT
         bc.Cancel_Id AS id,
         sm.Student_Name AS student_name,
@@ -668,10 +697,10 @@ async function fetchDashboardData() {
       WHERE (bc.IsDelete = 0 OR bc.IsDelete IS NULL)
       ORDER BY DATE(bc.Date_Added) DESC
       LIMIT 50
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // Admin - meetings (today and recent) from followups marked as meetings
-    safeQuery(pool, `
+    needsAdminWidgets ? safeQuery(pool, `
       SELECT
         Follow_id AS id,
         COALESCE(NULLIF(TRIM(CName), ''), 'Meeting') AS title,
@@ -682,10 +711,10 @@ async function fetchDashboardData() {
         AND LOWER(IFNULL(Purpose, '')) LIKE '%meeting%'
       ORDER BY Follow_id DESC
       LIMIT 20
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // Admin - weekly report summary
-    safeQuery(pool, `
+    needsAdminWidgets ? safeQuery(pool, `
       SELECT metric, value FROM (
         SELECT 'New Enquiries (7d)' AS metric, COUNT(*) AS value
         FROM student_inquiry
@@ -720,21 +749,21 @@ async function fetchDashboardData() {
         WHERE (IsDelete = 0 OR IsDelete IS NULL)
           AND DATE(Take_Dt) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
       ) x
-    `, []),
+    `, []) : Promise.resolve([]),
 
     // 5. Quick stats (4 count queries)
-    cached('qs:students', CACHE_TTL_STATS, () =>
+    needsQuickStats ? cached('qs:students', CACHE_TTL_STATS, () =>
       safeQuery(pool, "SELECT COUNT(*) as cnt FROM student_master WHERE (IsDelete IS NULL OR IsDelete = 0)", [{ cnt: 0 }])
-    ),
-    cached('qs:courses', CACHE_TTL_STATS, () =>
+    ) : Promise.resolve([{cnt: 0}]),
+    needsQuickStats ? cached('qs:courses', CACHE_TTL_STATS, () =>
       safeQuery(pool, "SELECT COUNT(*) as cnt FROM course_mst WHERE IsActive = 1 AND (IsDelete IS NULL OR IsDelete = 0)", [{ cnt: 0 }])
-    ),
-    cached('qs:batches', CACHE_TTL_STATS, () =>
+    ) : Promise.resolve([{cnt: 0}]),
+    needsQuickStats ? cached('qs:batches', CACHE_TTL_STATS, () =>
       safeQuery(pool, "SELECT COUNT(*) as cnt FROM batch_mst WHERE (IsDelete IS NULL OR IsDelete = 0) AND (Cancel IS NULL OR Cancel = 0) AND SDate <= CURDATE() AND EDate >= CURDATE()", [{ cnt: 0 }])
-    ),
-    cached('qs:faculty', CACHE_TTL_STATS, () =>
+    ) : Promise.resolve([{cnt: 0}]),
+    needsQuickStats ? cached('qs:faculty', CACHE_TTL_STATS, () =>
       safeQuery(pool, "SELECT COUNT(*) as cnt FROM faculty_master WHERE (IsDelete IS NULL OR IsDelete = 0)", [{ cnt: 0 }])
-    ),
+    ) : Promise.resolve([{cnt: 0}]),
   ]);
 
   // ── Shape the response ──────────────────────────────────────────
