@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { FaPlus, FaFilter, FaFileExport, FaEdit, FaSearch, FaChevronLeft, FaChevronRight, FaTimesCircle, FaCheckCircle } from 'react-icons/fa';
+import { FaPlus, FaFilter, FaFileExport, FaEdit, FaSearch, FaChevronLeft, FaChevronRight, FaTimesCircle, FaCheckCircle, FaFileSignature } from 'react-icons/fa';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -405,6 +405,16 @@ export default function CorporateInquiryPage() {
                           title="Convert to Execution"
                         >
                           <FaCheckCircle className="w-4 h-4" />
+                        </button>
+                        )}
+
+                        {canUpdate && (
+                        <button
+                          onClick={() => router.push(`/dashboard/corporate-inquiry/proposal/${inq.Id}`)}
+                          className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors"
+                          title="Make Proposal"
+                        >
+                          <FaFileSignature className="w-4 h-4" />
                         </button>
                         )}
                       </div>
