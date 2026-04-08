@@ -24,11 +24,16 @@ export async function GET(request: NextRequest) {
     if (auth instanceof NextResponse) return auth;
     const { searchParams } = new URL(request.url);
     const dept = searchParams.get('dept') || 'unknown';
-    const result = await cached(`dashboard:${dept}`, CACHE_TTL, () => fetchDashboardData(dept));
+    const isPlacement = dept === 'placement';
+    const result = isPlacement
+      ? await fetchDashboardData(dept)
+      : await cached(`dashboard:${dept}`, CACHE_TTL, () => fetchDashboardData(dept));
 
     return NextResponse.json(result, {
       headers: {
-        'Cache-Control': 'private, max-age=60, stale-while-revalidate=120',
+        'Cache-Control': isPlacement
+          ? 'private, no-store, max-age=0, must-revalidate'
+          : 'private, max-age=60, stale-while-revalidate=120',
       },
     });
   } catch (error: unknown) {
@@ -46,12 +51,14 @@ async function fetchDashboardData(dept?: string) {
   const isCbd = dept === 'cbd';
   const isTd = dept === 'training_and_development';
   const isAdmin = dept === 'administration';
-  const isGeneral = !isCbd && !isTd && !isAdmin;
+  const isPlacement = dept === 'placement';
+  const isGeneral = !isCbd && !isTd && !isAdmin && !isPlacement;
 
   const needsAnnualTargets = isGeneral || isCbd;
   const needsUpcomingBatches = isGeneral || isCbd;
   const needsEnquiries = isGeneral || isCbd || isAdmin;
-  const needsPlacement = isGeneral || isAdmin;
+  const needsPlacement = isGeneral || isAdmin || isPlacement;
+  const needsPlacementDepartment = isPlacement;
   const needsNotices = isGeneral;
   const needsLeadFunnel = isCbd || isAdmin;
   const needsSeminars = isCbd;
@@ -85,6 +92,14 @@ async function fetchDashboardData(dept?: string) {
     placementInterviewCount,
     activeReqRows,
     companyRequirementsList,
+    placementSummaryRows,
+    upcomingInterviewsRows,
+    completedInterviewsRows,
+    jobOpeningTrackerRows,
+    companyVisitsPlannedRows,
+    campusInterviewsPlannedRows,
+    upcomingMockInterviewsRows,
+    completedMockInterviewsRows,
     notices,
     sourcePerformanceRows,
     leadFunnelRows,
@@ -299,6 +314,202 @@ async function fetchDashboardData(dept?: string) {
       FROM company_requirements_apk
       WHERE (IsDelete IS NULL OR IsDelete = 0) AND IsActive = 1
       ORDER BY CompReqId DESC LIMIT 5
+    `, []) : Promise.resolve([]),
+
+    // Placement department widgets
+    needsPlacementDepartment ? safeQuery(pool, `
+      SELECT metric, value FROM (
+        SELECT 'Total Passed Students' AS metric, COALESCE(SUM(IFNULL(StudentPassed1, 0)), 0) AS value
+        FROM batch_mst
+        WHERE (IsDelete IS NULL OR IsDelete = 0) AND (Cancel IS NULL OR Cancel = 0)
+
+        UNION ALL
+
+        SELECT 'Total Placed Students' AS metric, COALESCE(SUM(IFNULL(Placement, 0)), 0) AS value
+        FROM batch_mst
+        WHERE (IsDelete IS NULL OR IsDelete = 0) AND (Cancel IS NULL OR Cancel = 0)
+
+        UNION ALL
+
+        SELECT 'Open Job Openings' AS metric, COUNT(*) AS value
+        FROM placement_jobs
+        WHERE (IsDelete = 0 OR IsDelete IS NULL) AND LOWER(IFNULL(Status, 'open')) = 'open'
+
+        UNION ALL
+
+        SELECT 'Upcoming Interviews' AS metric, COUNT(*) AS value
+        FROM cv_shortlisted
+        WHERE (IsDelete = 0 OR IsDelete IS NULL)
+          AND DATE(TDate) >= CURDATE()
+          AND LOWER(IFNULL(CompanyName, '')) NOT LIKE '%mock%'
+
+        UNION ALL
+
+        SELECT 'Completed Interviews' AS metric, COUNT(*) AS value
+        FROM cv_shortlisted
+        WHERE (IsDelete = 0 OR IsDelete IS NULL)
+          AND DATE(TDate) < CURDATE()
+          AND LOWER(IFNULL(CompanyName, '')) NOT LIKE '%mock%'
+
+        UNION ALL
+
+        SELECT 'Company Visits Planned' AS metric, COUNT(*) AS value
+        FROM site_visit_master
+        WHERE (IsDelete = 0 OR IsDelete IS NULL)
+          AND DATE(IFNULL(Visit_Date, ConfirmDAte)) >= CURDATE()
+
+        UNION ALL
+
+        SELECT 'Campus Interviews Planned' AS metric, COUNT(*) AS value
+        FROM company_req_batch_details_apk cbd
+        INNER JOIN company_requirements_apk cr ON cr.CompReqId = cbd.CompanyReqId
+        WHERE (cbd.IsDelete = 0 OR cbd.IsDelete IS NULL)
+          AND (cr.IsDelete = 0 OR cr.IsDelete IS NULL)
+          AND IFNULL(cr.IsActive, 1) = 1
+
+        UNION ALL
+
+        SELECT 'Upcoming Mock Interviews' AS metric, COUNT(*) AS value
+        FROM cv_shortlisted
+        WHERE (IsDelete = 0 OR IsDelete IS NULL)
+          AND DATE(TDate) >= CURDATE()
+          AND LOWER(IFNULL(CompanyName, '')) LIKE '%mock%'
+
+        UNION ALL
+
+        SELECT 'Completed Mock Interviews' AS metric, COUNT(*) AS value
+        FROM cv_shortlisted
+        WHERE (IsDelete = 0 OR IsDelete IS NULL)
+          AND DATE(TDate) < CURDATE()
+          AND LOWER(IFNULL(CompanyName, '')) LIKE '%mock%'
+      ) m
+    `, []) : Promise.resolve([]),
+
+    needsPlacementDepartment ? safeQuery(pool, `
+      SELECT
+        cv.id,
+        DATE_FORMAT(cv.TDate, '%d-%m-%Y') AS interview_date,
+        COALESCE(NULLIF(TRIM(cv.CompanyName), ''), cm.Comp_Name, 'Company') AS company_name,
+        COALESCE(NULLIF(TRIM(c.Course_Name), ''), 'N/A') AS training_name,
+        COALESCE(NULLIF(TRIM(b.Batch_code), ''), '-') AS batch_code
+      FROM cv_shortlisted cv
+      LEFT JOIN consultant_mst cm ON cm.Const_Id = cv.Company_Id
+      LEFT JOIN course_mst c ON c.Course_Id = cv.Course_id
+      LEFT JOIN batch_mst b ON b.Batch_Id = cv.Batch_Id
+      WHERE (cv.IsDelete = 0 OR cv.IsDelete IS NULL)
+        AND DATE(cv.TDate) >= CURDATE()
+        AND LOWER(IFNULL(cv.CompanyName, '')) NOT LIKE '%mock%'
+      ORDER BY DATE(cv.TDate) ASC, cv.id DESC
+      LIMIT 20
+    `, []) : Promise.resolve([]),
+
+    needsPlacementDepartment ? safeQuery(pool, `
+      SELECT
+        cv.id,
+        DATE_FORMAT(cv.TDate, '%d-%m-%Y') AS interview_date,
+        COALESCE(NULLIF(TRIM(cv.CompanyName), ''), cm.Comp_Name, 'Company') AS company_name,
+        COALESCE(NULLIF(TRIM(c.Course_Name), ''), 'N/A') AS training_name,
+        COALESCE(NULLIF(TRIM(b.Batch_code), ''), '-') AS batch_code
+      FROM cv_shortlisted cv
+      LEFT JOIN consultant_mst cm ON cm.Const_Id = cv.Company_Id
+      LEFT JOIN course_mst c ON c.Course_Id = cv.Course_id
+      LEFT JOIN batch_mst b ON b.Batch_Id = cv.Batch_Id
+      WHERE (cv.IsDelete = 0 OR cv.IsDelete IS NULL)
+        AND DATE(cv.TDate) < CURDATE()
+        AND LOWER(IFNULL(cv.CompanyName, '')) NOT LIKE '%mock%'
+      ORDER BY DATE(cv.TDate) DESC, cv.id DESC
+      LIMIT 20
+    `, []) : Promise.resolve([]),
+
+    needsPlacementDepartment ? safeQuery(pool, `
+      SELECT
+        j.Job_Id,
+        COALESCE(NULLIF(TRIM(j.Company_Name), ''), 'Company') AS company_name,
+        COALESCE(NULLIF(TRIM(j.Job_Title), ''), 'Position') AS designation,
+        COALESCE(NULLIF(TRIM(j.Location), ''), '-') AS location,
+        DATE_FORMAT(j.Application_Deadline, '%d-%m-%Y') AS application_deadline,
+        COALESCE(NULLIF(TRIM(j.Status), ''), 'Open') AS status,
+        (
+          SELECT COUNT(*)
+          FROM placement_applications a
+          WHERE a.Job_Id = j.Job_Id AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
+        ) AS total_applications
+      FROM placement_jobs j
+      WHERE (j.IsDelete = 0 OR j.IsDelete IS NULL)
+      ORDER BY j.Created_Date DESC
+      LIMIT 20
+    `, []) : Promise.resolve([]),
+
+    needsPlacementDepartment ? safeQuery(pool, `
+      SELECT
+        sv.Visit_Id,
+        DATE_FORMAT(IFNULL(sv.Visit_Date, sv.ConfirmDAte), '%d-%m-%Y') AS visit_date,
+        COALESCE(NULLIF(TRIM(sv.Region), ''), '-') AS region,
+        COALESCE(NULLIF(TRIM(sv.Location), ''), '-') AS location,
+        COALESCE(NULLIF(TRIM(sv.Course_Name), ''), 'N/A') AS training_name,
+        COALESCE(NULLIF(TRIM(b.Batch_code), ''), '-') AS batch_code
+      FROM site_visit_master sv
+      LEFT JOIN batch_mst b ON b.Batch_Id = sv.Batch_ID
+      WHERE (sv.IsDelete = 0 OR sv.IsDelete IS NULL)
+        AND DATE(IFNULL(sv.Visit_Date, sv.ConfirmDAte)) >= CURDATE()
+      ORDER BY DATE(IFNULL(sv.Visit_Date, sv.ConfirmDAte)) ASC, sv.Visit_Id DESC
+      LIMIT 20
+    `, []) : Promise.resolve([]),
+
+    needsPlacementDepartment ? safeQuery(pool, `
+      SELECT
+        cbd.CompReqBatchId,
+        COALESCE(NULLIF(TRIM(cm.Comp_Name), ''), 'Company') AS company_name,
+        COALESCE(NULLIF(TRIM(cr.Profile), ''), 'Campus Drive') AS profile,
+        COALESCE(NULLIF(TRIM(c.Course_Name), ''), 'N/A') AS training_name,
+        COALESCE(NULLIF(TRIM(b.Batch_code), ''), '-') AS batch_code,
+        DATE_FORMAT(cr.PostedDate, '%d-%m-%Y') AS posted_date
+      FROM company_req_batch_details_apk cbd
+      INNER JOIN company_requirements_apk cr ON cr.CompReqId = cbd.CompanyReqId
+      LEFT JOIN consultant_mst cm ON cm.Const_Id = cr.CompanyId
+      LEFT JOIN course_mst c ON c.Course_Id = cr.CourseId
+      LEFT JOIN batch_mst b ON b.Batch_Id = cbd.BatchId
+      WHERE (cbd.IsDelete = 0 OR cbd.IsDelete IS NULL)
+        AND (cr.IsDelete = 0 OR cr.IsDelete IS NULL)
+        AND IFNULL(cr.IsActive, 1) = 1
+      ORDER BY cr.CompReqId DESC, cbd.CompReqBatchId DESC
+      LIMIT 20
+    `, []) : Promise.resolve([]),
+
+    needsPlacementDepartment ? safeQuery(pool, `
+      SELECT
+        cv.id,
+        DATE_FORMAT(cv.TDate, '%d-%m-%Y') AS interview_date,
+        COALESCE(NULLIF(TRIM(cv.CompanyName), ''), cm.Comp_Name, 'Mock Interview') AS company_name,
+        COALESCE(NULLIF(TRIM(c.Course_Name), ''), 'N/A') AS training_name,
+        COALESCE(NULLIF(TRIM(b.Batch_code), ''), '-') AS batch_code
+      FROM cv_shortlisted cv
+      LEFT JOIN consultant_mst cm ON cm.Const_Id = cv.Company_Id
+      LEFT JOIN course_mst c ON c.Course_Id = cv.Course_id
+      LEFT JOIN batch_mst b ON b.Batch_Id = cv.Batch_Id
+      WHERE (cv.IsDelete = 0 OR cv.IsDelete IS NULL)
+        AND DATE(cv.TDate) >= CURDATE()
+        AND LOWER(IFNULL(cv.CompanyName, '')) LIKE '%mock%'
+      ORDER BY DATE(cv.TDate) ASC, cv.id DESC
+      LIMIT 20
+    `, []) : Promise.resolve([]),
+
+    needsPlacementDepartment ? safeQuery(pool, `
+      SELECT
+        cv.id,
+        DATE_FORMAT(cv.TDate, '%d-%m-%Y') AS interview_date,
+        COALESCE(NULLIF(TRIM(cv.CompanyName), ''), cm.Comp_Name, 'Mock Interview') AS company_name,
+        COALESCE(NULLIF(TRIM(c.Course_Name), ''), 'N/A') AS training_name,
+        COALESCE(NULLIF(TRIM(b.Batch_code), ''), '-') AS batch_code
+      FROM cv_shortlisted cv
+      LEFT JOIN consultant_mst cm ON cm.Const_Id = cv.Company_Id
+      LEFT JOIN course_mst c ON c.Course_Id = cv.Course_id
+      LEFT JOIN batch_mst b ON b.Batch_Id = cv.Batch_Id
+      WHERE (cv.IsDelete = 0 OR cv.IsDelete IS NULL)
+        AND DATE(cv.TDate) < CURDATE()
+        AND LOWER(IFNULL(cv.CompanyName, '')) LIKE '%mock%'
+      ORDER BY DATE(cv.TDate) DESC, cv.id DESC
+      LIMIT 20
     `, []) : Promise.resolve([]),
 
     // 6. Notices
@@ -877,6 +1088,16 @@ async function fetchDashboardData(dept?: string) {
       rows: placementRows,
       activeRequirements: (activeReqRows as Record<string, number>[])[0]?.active_requirements || 0,
       companyRequirements: companyRequirementsList,
+    },
+    placementDepartment: {
+      placementSummary: placementSummaryRows,
+      upcomingInterviews: upcomingInterviewsRows,
+      completedInterviews: completedInterviewsRows,
+      jobOpeningTracker: jobOpeningTrackerRows,
+      companyVisitsPlanned: companyVisitsPlannedRows,
+      campusInterviewsPlanned: campusInterviewsPlannedRows,
+      upcomingMockInterviews: upcomingMockInterviewsRows,
+      completedMockInterviews: completedMockInterviewsRows,
     },
     quickStats: {
       totalStudents: (totalStudentsRows as Record<string, number>[])[0]?.cnt || 0,

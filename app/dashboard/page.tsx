@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { Manrope, Playfair_Display } from 'next/font/google';
 import {
   QuickStatsSkeleton,
   TableSkeleton,
@@ -14,6 +15,10 @@ import { DashboardDepartment, getDashboardWidgetConfig, resolveDashboardDepartme
 import CbdDashboard from './components/CbdDashboard';
 import TrainingDevelopmentDashboard from './components/TrainingDevelopmentDashboard';
 import AdministrationDashboard from './components/AdministrationDashboard';
+import PlacementDepartmentDashboard from './components/PlacementDepartmentDashboard';
+
+const headingFont = Playfair_Display({ subsets: ['latin'], weight: ['700', '800'] });
+const bodyFont = Manrope({ subsets: ['latin'], weight: ['500', '600', '700'] });
 
 interface TodoItem {
   id: string;
@@ -93,6 +98,143 @@ function WidgetHeader({ title, icon, badge, accent = 'from-[#2E3093] to-[#2A6BB5
   );
 }
 
+function DashboardWelcomeModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  if (!open) return null;
+
+  const confetti = Array.from({ length: 260 }).map((_, i) => ({
+    burstClass: ['sit-burst-r', 'sit-burst-l', 'sit-burst-ur', 'sit-burst-ul', 'sit-burst-dr', 'sit-burst-dl'][i % 6],
+    delay: -((i % 20) * 0.38),
+    duration: 1.6 + ((i * 5) % 9) * 0.18,
+    size: 7 + (i % 8),
+    color: ['#FAE452', '#FFFFFF', '#2A6BB5', '#2E3093', '#FF4D4F', '#00E5FF'][i % 6],
+  }));
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-[#FFFFFF]/35 backdrop-blur-xl" onClick={onClose} />
+
+      <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
+        {confetti.map((piece, idx) => (
+          <span
+            key={idx}
+            className={`sit-dash-confetti ${piece.burstClass}`}
+            style={{
+              left: '50%',
+              top: '50%',
+              width: `${piece.size}px`,
+              height: `${piece.size * 0.68}px`,
+              backgroundColor: piece.color,
+              animationDelay: `${piece.delay}s`,
+              animationDuration: `${piece.duration}s`,
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="relative z-20 h-full w-full flex items-center justify-center px-4">
+        <div className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-[#FFFFFF]/30 shadow-[0_30px_90px_rgba(46,48,147,0.45)] bg-gradient-to-r from-[#2E3093] via-[#2A6BB5] to-[#2E3093] p-8 sm:p-10">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(250,228,82,0.28),transparent_45%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.16),transparent_42%)]" />
+        <div className="absolute inset-x-0 top-0 h-[2px] bg-[#FAE452]/75" />
+
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-20 inline-flex items-center justify-center w-9 h-9 rounded-full border border-[#FFFFFF]/40 bg-[#FFFFFF]/10 text-[#FFFFFF] hover:bg-[#FFFFFF]/20 transition-colors"
+          aria-label="Close welcome modal"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+
+        <div className={`relative z-10 text-center ${bodyFont.className}`}>
+          <div className="relative mx-auto w-36 h-36 sm:w-40 sm:h-40 mb-5">
+            <div className="absolute inset-0 rounded-full bg-[#FFFFFF]/35 blur-2xl sit-logo-halo" />
+            <div className="absolute -inset-2 rounded-full border-2 border-[#FFFFFF]/75" />
+            <div className="relative h-full w-full rounded-full bg-[#FFFFFF] border-2 border-[#FFFFFF] flex items-center justify-center shadow-[0_0_44px_rgba(255,255,255,0.45)]">
+              <img src="/sit.png" alt="SIT Logo" className="w-24 h-24 sm:w-28 sm:h-28 object-contain rounded-md" />
+            </div>
+          </div>
+          <p className="text-[11px] uppercase tracking-[0.26em] text-[#FFFFFF] font-bold">SITConnect</p>
+          <h2 className={`text-3xl sm:text-5xl font-black text-[#FFFFFF] mt-2 leading-tight ${headingFont.className}`}>
+            Welcome to SITConnect
+          </h2>
+          <p className="text-[#FFFFFF] text-sm sm:text-base mt-3">Everything you need for today is ready. Let&apos;s get started.</p>
+
+          <button
+            onClick={onClose}
+            className="mt-7 inline-flex items-center justify-center rounded-full border border-[#FFFFFF]/55 bg-[#FFFFFF]/12 text-[#FFFFFF] px-5 py-2.5 text-xs tracking-[0.2em] uppercase font-bold hover:bg-[#FFFFFF]/20 transition-colors"
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+      </div>
+
+      <style jsx global>{`
+        .sit-dash-confetti {
+          position: absolute;
+          border-radius: 2px;
+          opacity: 1;
+          animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+          animation-iteration-count: infinite;
+          box-shadow: 0 0 0 1px rgba(255,255,255,0.28), 0 0 10px rgba(255,255,255,0.25);
+          will-change: transform, opacity;
+        }
+
+        .sit-logo-halo {
+          animation: sit-logo-halo 2.8s ease-in-out infinite;
+        }
+
+        .sit-burst-r { animation-name: sit-burst-r; }
+        .sit-burst-l { animation-name: sit-burst-l; }
+        .sit-burst-ur { animation-name: sit-burst-ur; }
+        .sit-burst-ul { animation-name: sit-burst-ul; }
+        .sit-burst-dr { animation-name: sit-burst-dr; }
+        .sit-burst-dl { animation-name: sit-burst-dl; }
+
+        @keyframes sit-logo-halo {
+          0%, 100% { transform: scale(0.96); opacity: 0.48; }
+          50% { transform: scale(1.08); opacity: 0.85; }
+        }
+
+        @keyframes sit-burst-r {
+          0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(0deg) scale(0.8); }
+          8% { opacity: 1; }
+          100% { opacity: 0.96; transform: translate3d(100vw, 0, 0) rotate(780deg) scale(1.06); }
+        }
+
+        @keyframes sit-burst-l {
+          0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(0deg) scale(0.8); }
+          8% { opacity: 1; }
+          100% { opacity: 0.96; transform: translate3d(-100vw, 0, 0) rotate(780deg) scale(1.06); }
+        }
+
+        @keyframes sit-burst-ur {
+          0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(0deg) scale(0.8); }
+          8% { opacity: 1; }
+          100% { opacity: 0.96; transform: translate3d(88vw, -52vh, 0) rotate(780deg) scale(1.06); }
+        }
+
+        @keyframes sit-burst-ul {
+          0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(0deg) scale(0.8); }
+          8% { opacity: 1; }
+          100% { opacity: 0.96; transform: translate3d(-88vw, -52vh, 0) rotate(780deg) scale(1.06); }
+        }
+
+        @keyframes sit-burst-dr {
+          0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(0deg) scale(0.8); }
+          8% { opacity: 1; }
+          100% { opacity: 0.96; transform: translate3d(88vw, 52vh, 0) rotate(780deg) scale(1.06); }
+        }
+
+        @keyframes sit-burst-dl {
+          0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(0deg) scale(0.8); }
+          8% { opacity: 1; }
+          100% { opacity: 0.96; transform: translate3d(-88vw, 52vh, 0) rotate(780deg) scale(1.06); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { session, isSuperAdmin } = usePermissions();
   const [data, setData] = useState<any>(null);
@@ -100,6 +242,7 @@ export default function DashboardPage() {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [adminTodos, setAdminTodos] = useState<AdminTodoItem[]>([]);
   const [newTodo, setNewTodo] = useState('');
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const resolvedDepartment = resolveDashboardDepartment(session?.department, session?.role);
   const canSwitchDepartmentDashboard = isSuperAdmin || resolvedDepartment === 'administration';
   const [adminSelectedDepartment, setAdminSelectedDepartment] = useState<DashboardDepartment>('administration');
@@ -153,6 +296,18 @@ export default function DashboardPage() {
     }
   }, []);
 
+  useEffect(() => {
+    try {
+      const seen = sessionStorage.getItem('sitconnect-welcome-modal-seen');
+      if (!seen) {
+        setShowWelcomeModal(true);
+        sessionStorage.setItem('sitconnect-welcome-modal-seen', '1');
+      }
+    } catch {
+      setShowWelcomeModal(true);
+    }
+  }, []);
+
   const saveTodos = useCallback((items: TodoItem[]) => {
     setTodos(items);
     localStorage.setItem('sit-dashboard-todos', JSON.stringify(items));
@@ -200,6 +355,7 @@ export default function DashboardPage() {
   if (activeDepartment === 'cbd') {
     return (
       <div className="space-y-4">
+        <DashboardWelcomeModal open={showWelcomeModal} onClose={() => setShowWelcomeModal(false)} />
         {canSwitchDepartmentDashboard && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
             <span className="text-sm font-semibold text-gray-700">Department Dashboard</span>
@@ -224,6 +380,7 @@ export default function DashboardPage() {
   if (activeDepartment === 'training_and_development') {
     return (
       <div className="space-y-4">
+        <DashboardWelcomeModal open={showWelcomeModal} onClose={() => setShowWelcomeModal(false)} />
         {canSwitchDepartmentDashboard && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
             <span className="text-sm font-semibold text-gray-700">Department Dashboard</span>
@@ -247,22 +404,51 @@ export default function DashboardPage() {
 
   if (activeDepartment === 'administration') {
     return (
-      <AdministrationDashboard
-        data={data}
-        loading={loading}
-        activeDepartment={adminSelectedDepartment}
-        onDepartmentChange={handleAdminDepartmentChange}
-        showDepartmentToggle={canSwitchDepartmentDashboard}
-        todos={adminTodos}
-        onAddTodo={addAdminTodo}
-        onUpdateTodo={updateAdminTodo}
-        onRemoveTodo={removeAdminTodo}
-      />
+      <div className="space-y-4">
+        <DashboardWelcomeModal open={showWelcomeModal} onClose={() => setShowWelcomeModal(false)} />
+        <AdministrationDashboard
+          data={data}
+          loading={loading}
+          activeDepartment={adminSelectedDepartment}
+          onDepartmentChange={handleAdminDepartmentChange}
+          showDepartmentToggle={canSwitchDepartmentDashboard}
+          todos={adminTodos}
+          onAddTodo={addAdminTodo}
+          onUpdateTodo={updateAdminTodo}
+          onRemoveTodo={removeAdminTodo}
+        />
+      </div>
+    );
+  }
+
+  if (activeDepartment === 'placement') {
+    return (
+      <div className="space-y-4">
+        <DashboardWelcomeModal open={showWelcomeModal} onClose={() => setShowWelcomeModal(false)} />
+        {canSwitchDepartmentDashboard && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+            <span className="text-sm font-semibold text-gray-700">Department Dashboard</span>
+            <select
+              value={adminSelectedDepartment}
+              onChange={(e) => handleAdminDepartmentChange(e.target.value as DashboardDepartment)}
+              className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25"
+            >
+              <option value="administration">Administration</option>
+              <option value="cbd">CBD Department</option>
+              <option value="corporate_training">Corporate Training</option>
+              <option value="placement">Placement Department</option>
+              <option value="training_and_development">Training and Development</option>
+            </select>
+          </div>
+        )}
+        <PlacementDepartmentDashboard data={data} loading={loading} />
+      </div>
     );
   }
 
   return (
     <div className="relative space-y-6 pb-8">
+      <DashboardWelcomeModal open={showWelcomeModal} onClose={() => setShowWelcomeModal(false)} />
       {canSwitchDepartmentDashboard && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
           <span className="text-sm font-semibold text-gray-700">Department Dashboard</span>
