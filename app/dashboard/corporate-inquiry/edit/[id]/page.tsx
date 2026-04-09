@@ -498,18 +498,21 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
           );
 
           combinedFollowUps.push(
-            ...parsedFollowUp.meetings.map((m) => ({
+            ...parsedFollowUp.meetings.map((m, idx) => {
+              const contact = legacyContacts[idx] || legacyContacts[0];
+              return {
               date: m.date || '',
               nextDate: m.nextDate || '',
-              contactPerson: '',
-              designation: '',
-              mobile: '',
-              email: '',
+              contactPerson: contact?.fullName || parsedFollowUp.attendeeClient || '',
+              designation: contact?.jobTitle || '',
+              mobile: contact?.phoneNumber || '',
+              email: contact?.email || '',
               purpose: 'Meeting',
               course: '',
-              directLine: '',
-              remark: m.remark || '',
-            })),
+              directLine: contact?.alternateNumber || '',
+              remark: m.remark || contact?.discussion || parsedFollowUp.meetingAgenda || '',
+            };
+            }),
           );
 
           const dedupedFollowUps = Array.from(
