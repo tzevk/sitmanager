@@ -906,39 +906,29 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
 
                   <div>
                     <label className={labelClass}>Company Name</label>
-                    <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
-                      <div className="mb-2 flex items-center justify-between">
-                        <span className="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Consultancy List</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCompanyMode('manual');
-                            setForm((prev) => ({ ...prev, Consultancy_Id: '', CompanyName: '' }));
-                          }}
-                          className="text-[11px] font-semibold text-[#2A6BB5] hover:underline"
-                        >
-                          Other / Not in list
-                        </button>
-                      </div>
-                      <select
-                        name="Consultancy_Id"
-                        value={form.Consultancy_Id}
-                        size={8}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          if (!v) return;
-                          setCompanyMode('master');
-                          handleCompanyChange(v);
-                        }}
-                        className="w-full rounded-md border border-gray-200 bg-white p-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
-                      >
-                        {companyOptions.map((c) => (
-                          <option key={c.Const_Id} value={String(c.Const_Id)}>
-                            {c.Comp_Name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <select
+                      name="Consultancy_Id"
+                      value={form.Consultancy_Id}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === '__manual__') {
+                          setCompanyMode('manual');
+                          setForm((prev) => ({ ...prev, Consultancy_Id: '', CompanyName: '' }));
+                          return;
+                        }
+                        setCompanyMode('master');
+                        handleCompanyChange(v);
+                      }}
+                      className={inputClass}
+                    >
+                      <option value="">Select Company</option>
+                      <option value="__manual__">Other / Not in list</option>
+                      {companyOptions.map((c) => (
+                        <option key={c.Const_Id} value={String(c.Const_Id)}>
+                          {c.Comp_Name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   {companyMode === 'manual' && (
