@@ -49,6 +49,36 @@ export function buildAdmissionFormMailContent(params: {
   return { safeName, subject, text, html };
 }
 
+export function buildOnlineAdmissionSubmissionMailContent(params: {
+  studentName?: string;
+  applicationId: string | number;
+}) {
+  const safeName = (params.studentName || '').trim() || 'Student';
+  const appId = String(params.applicationId || '').trim();
+  const subject = 'SIT Online Admission Submission Received';
+  const text = [
+    `Dear ${safeName},`,
+    '',
+    'Thank you for submitting your online admission form to Suvidya Institute of Technology.',
+    appId ? `Application ID: ${appId}` : '',
+    'Our admissions team will review your application and contact you with the next steps.',
+    '',
+    'If you have any questions, please reply to this email.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const html = `
+    <p>Dear ${safeName},</p>
+    <p>Thank you for submitting your online admission form to Suvidya Institute of Technology.</p>
+    ${appId ? `<p><strong>Application ID:</strong> ${appId}</p>` : ''}
+    <p>Our admissions team will review your application and contact you with the next steps.</p>
+    <p>If you have any questions, please reply to this email.</p>
+  `;
+
+  return { safeName, subject, text, html };
+}
+
 function assertMailerConfig() {
   if (MAIL_PROVIDER === 'ses') {
     if (!AWS_SES_ACCESS_KEY || !AWS_SES_SECRET_KEY || !AWS_SES_FROM_EMAIL) {
@@ -146,5 +176,25 @@ export async function sendAdmissionFormEmail(params: {
     subject,
     text,
     html,
+  });
+}
+
+export async function sendOnlineAdmissionSubmissionEmail(params: {
+  toEmail: string;
+  studentName?: string;
+  applicationId: string | number;
+}) {
+  const built = buildOnlineAdmissionSubmissionMailContent({
+    studentName: params.studentName,
+    applicationId: params.applicationId,
+  });
+
+  await sendAdmissionFormEmail({
+    toEmail: params.toEmail,
+    studentName: params.studentName,
+    admissionFormUrl: '#',
+    subject: built.subject,
+    text: built.text,
+    html: built.html,
   });
 }

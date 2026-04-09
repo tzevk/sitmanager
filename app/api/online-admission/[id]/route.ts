@@ -3,6 +3,231 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
+const ONLINE_ADMISSION_PAYLOAD_TABLE = 'online_admission_payload';
+
+const toIntOrNull = (value: unknown): number | null => {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+};
+
+const toStr = (value: unknown): string => (value == null ? '' : String(value));
+
+async function ensureOnlineAdmissionPayloadTable(pool: any) {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS ${ONLINE_ADMISSION_PAYLOAD_TABLE} (
+      Student_Id INT NOT NULL PRIMARY KEY,
+      Payload LONGTEXT NULL,
+      Created_At DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      Updated_At DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+  );
+}
+
+async function getOnlineAdmissionPayload(pool: any, studentId: number) {
+  try {
+    await ensureOnlineAdmissionPayloadTable(pool);
+    const [rows] = await pool.query<any[]>(
+      `SELECT Payload FROM ${ONLINE_ADMISSION_PAYLOAD_TABLE} WHERE Student_Id = ? LIMIT 1`,
+      [studentId]
+    );
+    const payloadText = rows?.[0]?.Payload;
+    if (!payloadText) return {};
+    return JSON.parse(String(payloadText));
+  } catch {
+    return {};
+  }
+}
+
+function mapAcademicRowsToForm(rows: any[]) {
+  const byQualification = new Map<string, any>();
+  for (const row of rows) {
+    const key = String(row.Aca_Qualification || '').toLowerCase();
+    if (!key) continue;
+    if (!byQualification.has(key)) {
+      byQualification.set(key, row);
+    }
+  }
+
+  const parseRemark = (value: any) => {
+    if (!value) return {};
+    try {
+      return JSON.parse(String(value));
+    } catch {
+      return {};
+    }
+  };
+
+  const ssc = byQualification.get('ssc') || {};
+  const hsc = byQualification.get('hsc') || {};
+  const diploma = byQualification.get('diploma') || {};
+  const grad = byQualification.get('graduation') || {};
+  const postgrad = byQualification.get('post graduation') || byQualification.get('postgraduation') || {};
+
+  const sscRemark = parseRemark(ssc.Status_Remark);
+  const hscRemark = parseRemark(hsc.Status_Remark);
+  const diplomaRemark = parseRemark(diploma.Status_Remark);
+  const gradRemark = parseRemark(grad.Status_Remark);
+  const postgradRemark = parseRemark(postgrad.Status_Remark);
+
+  return {
+    ssc_board: toStr(sscRemark.board || ssc.Discipline),
+    ssc_schoolName: toStr(ssc.Institute),
+    ssc_yearOfPassing: toStr(ssc.Year),
+    ssc_percentage: toStr(ssc.Marks),
+    ssc_ktCount: toStr(ssc.Total_KT ?? '0'),
+    ssc_ktDetails: Array.isArray(sscRemark.ktDetails) ? sscRemark.ktDetails : [],
+
+    hsc_board: toStr(hscRemark.board),
+    hsc_collegeName: toStr(hsc.Institute),
+    hsc_stream: toStr(hscRemark.stream || hsc.Discipline),
+    hsc_yearOfPassing: toStr(hsc.Year),
+    hsc_percentage: toStr(hsc.Marks),
+    hsc_ktCount: toStr(hsc.Total_KT ?? '0'),
+    hsc_ktDetails: Array.isArray(hscRemark.ktDetails) ? hscRemark.ktDetails : [],
+
+    diploma_degree: toStr(diplomaRemark.degree),
+    diploma_specialization: toStr(diploma.Discipline),
+    diploma_institute: toStr(diploma.Institute),
+    diploma_yearOfPassing: toStr(diploma.Year),
+    diploma_percentage: toStr(diploma.Marks),
+    diploma_ktCount: toStr(diploma.Total_KT ?? '0'),
+    diploma_ktDetails: Array.isArray(diplomaRemark.ktDetails) ? diplomaRemark.ktDetails : [],
+
+    grad_degree: toStr(gradRemark.degree),
+    grad_specialization: toStr(grad.Discipline),
+    grad_university: toStr(grad.Institute),
+    grad_yearOfPassing: toStr(grad.Year),
+    grad_percentage: toStr(grad.Marks),
+    grad_ktCount: toStr(grad.Total_KT ?? '0'),
+    grad_ktDetails: Array.isArray(gradRemark.ktDetails) ? gradRemark.ktDetails : [],
+
+    postgrad_degree: toStr(postgradRemark.degree),
+    postgrad_specialization: toStr(postgrad.Discipline),
+    postgrad_university: toStr(postgrad.Institute),
+    postgrad_yearOfPassing: toStr(postgrad.Year),
+    postgrad_percentage: toStr(postgrad.Marks),
+    postgrad_ktCount: toStr(postgrad.Total_KT ?? '0'),
+    postgrad_ktDetails: Array.isArray(postgradRemark.ktDetails) ? postgradRemark.ktDetails : [],
+  };
+}
+
+function buildAcademicRows(body: any, studentId: number) {
+  const rows = [
+    {
+      qualification: 'SSC',
+      discipline: toStr(body.ssc_board),
+      institute: toStr(body.ssc_schoolName),
+      year: toStr(body.ssc_yearOfPassing),
+      marks: toStr(body.ssc_percentage),
+      totalKt: toIntOrNull(body.ssc_ktCount) ?? 0,
+      statusRemark: JSON.stringify({
+        level: 'ssc',
+        board: toStr(body.ssc_board),
+        ktDetails: Array.isArray(body.ssc_ktDetails) ? body.ssc_ktDetails : [],
+      }),
+    },
+    {
+      qualification: 'HSC',
+      discipline: toStr(body.hsc_stream || body.hsc_board),
+      institute: toStr(body.hsc_collegeName),
+      year: toStr(body.hsc_yearOfPassing),
+      marks: toStr(body.hsc_percentage),
+      totalKt: toIntOrNull(body.hsc_ktCount) ?? 0,
+      statusRemark: JSON.stringify({
+        level: 'hsc',
+        board: toStr(body.hsc_board),
+        stream: toStr(body.hsc_stream),
+        ktDetails: Array.isArray(body.hsc_ktDetails) ? body.hsc_ktDetails : [],
+      }),
+    },
+    {
+      qualification: 'Diploma',
+      discipline: toStr(body.diploma_specialization || body.diploma_degree),
+      institute: toStr(body.diploma_institute),
+      year: toStr(body.diploma_yearOfPassing),
+      marks: toStr(body.diploma_percentage),
+      totalKt: toIntOrNull(body.diploma_ktCount) ?? 0,
+      statusRemark: JSON.stringify({
+        level: 'diploma',
+        degree: toStr(body.diploma_degree),
+        ktDetails: Array.isArray(body.diploma_ktDetails) ? body.diploma_ktDetails : [],
+      }),
+    },
+    {
+      qualification: 'Graduation',
+      discipline: toStr(body.grad_specialization || body.grad_degree),
+      institute: toStr(body.grad_university),
+      year: toStr(body.grad_yearOfPassing),
+      marks: toStr(body.grad_percentage),
+      totalKt: toIntOrNull(body.grad_ktCount) ?? 0,
+      statusRemark: JSON.stringify({
+        level: 'graduation',
+        degree: toStr(body.grad_degree),
+        ktDetails: Array.isArray(body.grad_ktDetails) ? body.grad_ktDetails : [],
+      }),
+    },
+    {
+      qualification: 'Post Graduation',
+      discipline: toStr(body.postgrad_specialization || body.postgrad_degree),
+      institute: toStr(body.postgrad_university),
+      year: toStr(body.postgrad_yearOfPassing),
+      marks: toStr(body.postgrad_percentage),
+      totalKt: toIntOrNull(body.postgrad_ktCount) ?? 0,
+      statusRemark: JSON.stringify({
+        level: 'postgrad',
+        degree: toStr(body.postgrad_degree),
+        ktDetails: Array.isArray(body.postgrad_ktDetails) ? body.postgrad_ktDetails : [],
+      }),
+    },
+  ];
+
+  return rows
+    .filter((r) => r.institute || r.year || r.marks || r.discipline)
+    .map((r) => ({ ...r, studentId }));
+}
+
+async function upsertAcademicRecords(pool: any, studentId: number, body: any) {
+  const academicRows = buildAcademicRows(body, studentId);
+  await pool.query('DELETE FROM student_master_aca_rec WHERE Student_Id = ?', [studentId]);
+
+  for (const row of academicRows) {
+    await pool.query(
+      `INSERT INTO student_master_aca_rec (
+        Student_Id,
+        Aca_Qualification,
+        Discipline,
+        Institute,
+        Year,
+        Marks,
+        IsActive,
+        IsDelete,
+        Status_Remark,
+        Total_KT
+      ) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
+      [
+        row.studentId,
+        row.qualification,
+        row.discipline || null,
+        row.institute || null,
+        row.year || null,
+        row.marks || null,
+        row.statusRemark,
+        row.totalKt,
+      ]
+    );
+  }
+}
+
+async function upsertOnlineAdmissionPayload(pool: any, studentId: number, body: any) {
+  await ensureOnlineAdmissionPayloadTable(pool);
+  await pool.query(
+    `INSERT INTO ${ONLINE_ADMISSION_PAYLOAD_TABLE} (Student_Id, Payload)
+     VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE Payload = VALUES(Payload)`,
+    [studentId, JSON.stringify(body)]
+  );
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -58,6 +283,15 @@ export async function GET(
     }
 
     const admission = rows[0];
+    const payload = await getOnlineAdmissionPayload(pool, Number(studentId));
+
+    const [academicRows] = await pool.query<any[]>(
+      `SELECT Aca_Qualification, Discipline, Institute, Year, Marks, Status_Remark, Total_KT
+       FROM student_master_aca_rec
+       WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+      [studentId]
+    );
+    const academicData = mapAcademicRowsToForm(academicRows || []);
     
     // Parse name parts
     const nameParts = (admission.Student_Name || '').split(' ');
@@ -69,70 +303,43 @@ export async function GET(
     const response = {
       admissionId: admission.Admission_Id,
       studentId: admission.Student_Id,
-      firstName,
-      middleName,
-      lastName,
-      shortName: '',
+      firstName: payload.firstName || firstName,
+      middleName: payload.middleName || middleName,
+      lastName: payload.lastName || lastName,
+      shortName: payload.shortName || admission.Nickname || '',
       dob: admission.DOB ? new Date(admission.DOB).toISOString().split('T')[0] : '',
       gender: admission.Sex || '',
       nationality: admission.Nationality || 'Indian',
       email: admission.Email || '',
       mobile: admission.Present_Mobile || '',
       telephone: admission.Present_Mobile2 || '',
-      familyContact: admission.Father_Mobile || '',
+      familyContact: payload.familyContact || admission.Father_Mobile || '',
       presentAddress: admission.Present_Address || '',
       presentCity: admission.Present_City || '',
       presentPin: admission.Present_Pin || '',
       permanentAddress: admission.Permanent_Address || '',
+      permanentCity: admission.Permanent_City || '',
+      permanentPin: admission.Permanent_Pin || '',
       permanentState: admission.Permanent_State || '',
       permanentCountry: admission.Permanent_Country || 'India',
-      // Educational fields (to be populated from additional tables if needed)
-      ssc_board: '',
-      ssc_schoolName: '',
-      ssc_yearOfPassing: '',
-      ssc_percentage: '',
-      ssc_ktCount: '0',
-      ssc_ktDetails: [],
-      hsc_board: '',
-      hsc_collegeName: '',
-      hsc_stream: '',
-      hsc_yearOfPassing: '',
-      hsc_percentage: '',
-      hsc_ktCount: '0',
-      hsc_ktDetails: [],
-      diploma_degree: '',
-      diploma_specialization: '',
-      diploma_institute: '',
-      diploma_yearOfPassing: '',
-      diploma_percentage: '',
-      diploma_ktCount: '0',
-      diploma_ktDetails: [],
-      grad_degree: '',
-      grad_specialization: '',
-      grad_university: '',
-      grad_yearOfPassing: '',
-      grad_percentage: '',
-      grad_ktCount: '0',
-      grad_ktDetails: [],
-      postgrad_degree: '',
-      postgrad_specialization: '',
-      postgrad_university: '',
-      postgrad_yearOfPassing: '',
-      postgrad_percentage: '',
-      postgrad_ktCount: '0',
-      postgrad_ktDetails: [],
-      educationRemark: '',
-      occupationalStatus: admission.Occupation || '',
-      jobOrganisation: admission.Company || '',
-      jobDescription: '',
-      jobDesignation: admission.Designation || '',
-      workingFromYears: '',
-      workingFromMonths: '',
-      totalOccupationYears: String(admission.Total_Exp || ''),
-      selfEmploymentDetails: '',
-      trainingCategory: '',
+      ...academicData,
+      educationRemark: payload.educationRemark || admission.Remark || '',
+      occupationalStatus: payload.occupationalStatus || admission.Occupation || '',
+      jobOrganisation: payload.jobOrganisation || admission.Company || '',
+      jobDescription: payload.jobDescription || '',
+      jobDesignation: payload.jobDesignation || admission.Designation || '',
+      workingFromYears: payload.workingFromYears || '',
+      workingFromMonths: payload.workingFromMonths || '',
+      totalOccupationYears: payload.totalOccupationYears || String(admission.Total_Exp || ''),
+      selfEmploymentDetails: payload.selfEmploymentDetails || '',
+      trainingProgrammeId: payload.trainingProgrammeId || '',
+      trainingProgrammeName: payload.trainingProgrammeName || '',
+      trainingCategory: payload.trainingCategory || '',
       batchCode: admission.Admission_Batch_code || admission.Student_Batch_Code || '',
-      idProofType: '',
+      idProofType: payload.idProofType || '',
+      consentAcknowledged: Boolean(payload.consentAcknowledged),
+      experiencedConsentAcknowledged: Boolean(payload.experiencedConsentAcknowledged),
+      termsAgreed: Boolean(payload.termsAgreed),
     };
 
     return NextResponse.json(response);
@@ -171,6 +378,10 @@ export async function PUT(
     // Update student_master
     await pool.query(
       `UPDATE student_master SET
+        FName = ?,
+        MName = ?,
+        LName = ?,
+        Nickname = ?,
         Student_Name = ?,
         Email = ?,
         Present_Mobile = ?,
@@ -192,9 +403,15 @@ export async function PUT(
         Designation = ?,
         Total_Exp = ?,
         Father_Mobile = ?,
-        Modified_Date = NOW()
+        Remark = ?,
+        Batch_Code = ?,
+        updated_date = NOW()
       WHERE Student_Id = ?`,
       [
+        body.firstName || null,
+        body.middleName || null,
+        body.lastName || null,
+        body.shortName || null,
         fullName,
         body.email,
         body.mobile,
@@ -216,14 +433,19 @@ export async function PUT(
         body.jobDesignation || null,
         body.totalOccupationYears ? Number(body.totalOccupationYears) : 0,
         body.familyContact || null,
+        body.educationRemark || null,
+        body.batchCode || null,
         studentId,
       ]
     );
 
+    await upsertAcademicRecords(pool, Number(studentId), body);
+    await upsertOnlineAdmissionPayload(pool, Number(studentId), body);
+
     // Update admission_master if it exists for this student
     await pool.query(
       `UPDATE admission_master SET
-        Modified_Date = NOW()
+        Admission_Date = COALESCE(Admission_Date, NOW())
       WHERE Student_Id = ? AND IsDelete = 0`,
       [studentId]
     );
@@ -252,13 +474,13 @@ export async function DELETE(
 
     // Soft delete student_master
     await pool.query(
-      'UPDATE student_master SET IsDelete = 1, Modified_Date = NOW() WHERE Student_Id = ?',
+      'UPDATE student_master SET IsDelete = 1, updated_date = NOW() WHERE Student_Id = ?',
       [studentId]
     );
 
     // Soft delete associated admission if there is any
     await pool.query(
-      'UPDATE admission_master SET IsDelete = 1, Modified_Date = NOW() WHERE Student_Id = ?',
+      'UPDATE admission_master SET IsDelete = 1 WHERE Student_Id = ?',
       [studentId]
     );
 

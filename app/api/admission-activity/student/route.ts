@@ -18,8 +18,16 @@ export async function GET(req: NextRequest) {
     const courseId = searchParams.get('courseId')?.trim() || '';
     const sex = searchParams.get('sex')?.trim() || '';
 
+    const acceptedAdmissionExists = `EXISTS (
+      SELECT 1
+      FROM admission_master a
+      WHERE a.Student_Id = s.Student_Id
+        AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
+        AND (a.Cancel IS NULL OR LOWER(TRIM(CAST(a.Cancel AS CHAR))) IN ('no', '0', 'false'))
+    )`;
+
     // Build WHERE clause
-    const conditions: string[] = ['(s.IsDelete = 0 OR s.IsDelete IS NULL)'];
+    const conditions: string[] = ['(s.IsDelete = 0 OR s.IsDelete IS NULL)', acceptedAdmissionExists];
     const params: (string | number)[] = [];
 
     if (search) {

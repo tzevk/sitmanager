@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { sendOnlineAdmissionSubmissionEmail } from '@/lib/mailer';
 
 /* fallback labels for older DBs */
 const fallbackStatusMap: Record<number, string> = {
@@ -33,6 +34,143 @@ const fallbackStatusMap: Record<number, string> = {
   40: 'Counselling Done',
 };
 
+const ONLINE_ADMISSION_PAYLOAD_TABLE = 'online_admission_payload';
+
+const toIntOrNull = (value: unknown): number | null => {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+};
+
+const toStr = (value: unknown): string => (value == null ? '' : String(value));
+
+async function ensureOnlineAdmissionPayloadTable(pool: any) {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS ${ONLINE_ADMISSION_PAYLOAD_TABLE} (
+      Student_Id INT NOT NULL PRIMARY KEY,
+      Payload LONGTEXT NULL,
+      Created_At DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      Updated_At DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+  );
+}
+
+async function upsertOnlineAdmissionPayload(pool: any, studentId: number, body: any) {
+  await ensureOnlineAdmissionPayloadTable(pool);
+  await pool.query(
+    `INSERT INTO ${ONLINE_ADMISSION_PAYLOAD_TABLE} (Student_Id, Payload)
+     VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE Payload = VALUES(Payload)`,
+    [studentId, JSON.stringify(body)]
+  );
+}
+
+function buildAcademicRows(body: any, studentId: number) {
+  const rows = [
+    {
+      qualification: 'SSC',
+      discipline: toStr(body.ssc_board),
+      institute: toStr(body.ssc_schoolName),
+      year: toStr(body.ssc_yearOfPassing),
+      marks: toStr(body.ssc_percentage),
+      totalKt: toIntOrNull(body.ssc_ktCount) ?? 0,
+      statusRemark: JSON.stringify({
+        level: 'ssc',
+        board: toStr(body.ssc_board),
+        ktDetails: Array.isArray(body.ssc_ktDetails) ? body.ssc_ktDetails : [],
+      }),
+    },
+    {
+      qualification: 'HSC',
+      discipline: toStr(body.hsc_stream || body.hsc_board),
+      institute: toStr(body.hsc_collegeName),
+      year: toStr(body.hsc_yearOfPassing),
+      marks: toStr(body.hsc_percentage),
+      totalKt: toIntOrNull(body.hsc_ktCount) ?? 0,
+      statusRemark: JSON.stringify({
+        level: 'hsc',
+        board: toStr(body.hsc_board),
+        stream: toStr(body.hsc_stream),
+        ktDetails: Array.isArray(body.hsc_ktDetails) ? body.hsc_ktDetails : [],
+      }),
+    },
+    {
+      qualification: 'Diploma',
+      discipline: toStr(body.diploma_specialization || body.diploma_degree),
+      institute: toStr(body.diploma_institute),
+      year: toStr(body.diploma_yearOfPassing),
+      marks: toStr(body.diploma_percentage),
+      totalKt: toIntOrNull(body.diploma_ktCount) ?? 0,
+      statusRemark: JSON.stringify({
+        level: 'diploma',
+        degree: toStr(body.diploma_degree),
+        ktDetails: Array.isArray(body.diploma_ktDetails) ? body.diploma_ktDetails : [],
+      }),
+    },
+    {
+      qualification: 'Graduation',
+      discipline: toStr(body.grad_specialization || body.grad_degree),
+      institute: toStr(body.grad_university),
+      year: toStr(body.grad_yearOfPassing),
+      marks: toStr(body.grad_percentage),
+      totalKt: toIntOrNull(body.grad_ktCount) ?? 0,
+      statusRemark: JSON.stringify({
+        level: 'graduation',
+        degree: toStr(body.grad_degree),
+        ktDetails: Array.isArray(body.grad_ktDetails) ? body.grad_ktDetails : [],
+      }),
+    },
+    {
+      qualification: 'Post Graduation',
+      discipline: toStr(body.postgrad_specialization || body.postgrad_degree),
+      institute: toStr(body.postgrad_university),
+      year: toStr(body.postgrad_yearOfPassing),
+      marks: toStr(body.postgrad_percentage),
+      totalKt: toIntOrNull(body.postgrad_ktCount) ?? 0,
+      statusRemark: JSON.stringify({
+        level: 'postgrad',
+        degree: toStr(body.postgrad_degree),
+        ktDetails: Array.isArray(body.postgrad_ktDetails) ? body.postgrad_ktDetails : [],
+      }),
+    },
+  ];
+
+  return rows
+    .filter((r) => r.institute || r.year || r.marks || r.discipline)
+    .map((r) => ({ ...r, studentId }));
+}
+
+async function upsertAcademicRecords(pool: any, studentId: number, body: any) {
+  const academicRows = buildAcademicRows(body, studentId);
+  await pool.query('DELETE FROM student_master_aca_rec WHERE Student_Id = ?', [studentId]);
+
+  for (const row of academicRows) {
+    await pool.query(
+      `INSERT INTO student_master_aca_rec (
+        Student_Id,
+        Aca_Qualification,
+        Discipline,
+        Institute,
+        Year,
+        Marks,
+        IsActive,
+        IsDelete,
+        Status_Remark,
+        Total_KT
+      ) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
+      [
+        row.studentId,
+        row.qualification,
+        row.discipline || null,
+        row.institute || null,
+        row.year || null,
+        row.marks || null,
+        row.statusRemark,
+        row.totalKt,
+      ]
+    );
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await requirePermission(req, 'online_admission.view');
@@ -57,10 +195,7 @@ export async function GET(req: NextRequest) {
     /* ---- Build WHERE ---- */
     const conditions: string[] = [
       '(s.IsDelete = 0 OR s.IsDelete IS NULL)',
-      "s.Admission != 1",
-      "s.IsAdmOpen = 'open'",
-      "s.Status_id != 8",
-      "s.Admission_Dt IS NOT NULL"
+      '(s.Admission = 1 OR s.Status_id = 8 OR s.Admission_Dt IS NOT NULL)',
     ];
     const params: (string | number)[] = [];
 
@@ -174,7 +309,7 @@ export async function GET(req: NextRequest) {
       `SELECT DISTINCT ${statusIdExpr} as id
        FROM student_master s
        WHERE (s.IsDelete = 0 OR s.IsDelete IS NULL)
-         AND s.Admission != 1
+         AND (s.Admission = 1 OR s.Status_id = 8 OR s.Admission_Dt IS NOT NULL)
          AND ${statusIdExpr} IS NOT NULL`
     );
 
@@ -270,7 +405,7 @@ export async function POST(req: NextRequest) {
 
     // Get the student_id from inquiry
     const [inquiryRows] = await pool.query<any[]>(
-      'SELECT Student_Id, Batch_Id, Course_Id FROM student_master WHERE Student_Id = ?',
+      'SELECT Student_Id, Batch_Code, Course_Id FROM student_master WHERE Student_Id = ?',
       [body.inquiryId]
     );
 
@@ -279,26 +414,57 @@ export async function POST(req: NextRequest) {
     }
 
     const studentId = inquiryRows[0].Student_Id;
-    const batchId = inquiryRows[0].Batch_Id;
+    const batchCode = body.batchCode || inquiryRows[0].Batch_Code || null;
     const courseId = inquiryRows[0].Course_Id;
+    let batchId: number | null = null;
+
+    if (batchCode) {
+      const [batchRows] = await pool.query<any[]>(
+        'SELECT Batch_Id FROM batch_mst WHERE Batch_code = ? LIMIT 1',
+        [batchCode]
+      );
+      batchId = batchRows?.[0]?.Batch_Id ? Number(batchRows[0].Batch_Id) : null;
+    }
 
     // Update student_master with form data
     await pool.query(
       `UPDATE student_master SET
+        FName = ?,
+        MName = ?,
+        LName = ?,
+        Nickname = ?,
         Student_Name = ?,
         Email = ?,
         Present_Mobile = ?,
         Present_Mobile2 = ?,
         Present_Address = ?,
         Present_City = ?,
-        Present_PIN = ?,
+        Present_Pin = ?,
+        Permanent_Address = ?,
+        Permanent_City = ?,
+        Permanent_Pin = ?,
+        Permanent_State = ?,
+        Permanent_Country = ?,
         Nationality = ?,
         DOB = ?,
         Sex = ?,
+        Father_Mobile = ?,
+        Occupation = ?,
+        Company = ?,
+        Designation = ?,
+        Total_Exp = ?,
+        Remark = ?,
+        Batch_Code = ?,
         Status_id = 8,
-        Admission = 1
+        Admission = 1,
+        Admission_Dt = NOW(),
+        updated_date = NOW()
       WHERE Student_Id = ?`,
       [
+        body.firstName || null,
+        body.middleName || null,
+        body.lastName || null,
+        body.shortName || null,
         fullName,
         body.email,
         body.mobile,
@@ -306,34 +472,69 @@ export async function POST(req: NextRequest) {
         body.presentAddress || null,
         body.presentCity || null,
         body.presentPin || null,
+        body.permanentAddress || null,
+        body.permanentCity || null,
+        body.permanentPin || null,
+        body.permanentState || null,
+        body.permanentCountry || 'India',
         body.nationality || 'Indian',
         body.dob || null,
         body.gender || null,
+        body.familyContact || null,
+        body.occupationalStatus || null,
+        body.jobOrganisation || null,
+        body.jobDesignation || null,
+        toIntOrNull(body.totalOccupationYears) || 0,
+        body.educationRemark || null,
+        body.batchCode || null,
         studentId,
       ]
     );
 
-    // Insert into admission_master
-    const [admissionResult] = await pool.query<any>(
-      `INSERT INTO admission_master (
-        Student_Id,
-        Batch_Id,
-        Course_Id,
-        Admission_Date,
-        IsActive,
-        Cancel,
-        IsDelete
-      ) VALUES (?, ?, ?, NOW(), 1, 0, 0)`,
-      [studentId, batchId || null, courseId || null]
-    );
-
-    const admissionId = admissionResult.insertId;
-
-    // Store form submission timestamp
-    await pool.query(
-      `UPDATE student_master SET Modified_Date = NOW() WHERE Student_Id = ?`,
+    const [existingAdmission] = await pool.query<any[]>(
+      `SELECT Admission_Id FROM admission_master WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
       [studentId]
     );
+
+    let admissionId = existingAdmission?.[0]?.Admission_Id ?? null;
+    if (admissionId) {
+      await pool.query(
+        `UPDATE admission_master
+         SET Batch_Id = ?, Course_Id = ?, Admission_Date = NOW(), IsActive = 1, Cancel = 0, IsDelete = 0
+         WHERE Admission_Id = ?`,
+        [batchId || null, courseId || null, admissionId]
+      );
+    } else {
+      const [admissionResult] = await pool.query<any>(
+        `INSERT INTO admission_master (
+          Student_Id,
+          Batch_Id,
+          Course_Id,
+          Admission_Date,
+          IsActive,
+          Cancel,
+          IsDelete
+        ) VALUES (?, ?, ?, NOW(), 1, 0, 0)`,
+        [studentId, batchId || null, courseId || null]
+      );
+      admissionId = admissionResult.insertId;
+    }
+
+    await upsertAcademicRecords(pool, studentId, body);
+    await upsertOnlineAdmissionPayload(pool, studentId, body);
+
+    const recipientEmail = String(body?.email || '').trim();
+    if (recipientEmail) {
+      try {
+        await sendOnlineAdmissionSubmissionEmail({
+          toEmail: recipientEmail,
+          studentName: fullName,
+          applicationId: studentId,
+        });
+      } catch (mailErr) {
+        console.error('Online Admission confirmation email error:', mailErr);
+      }
+    }
 
     return NextResponse.json({
       success: true,

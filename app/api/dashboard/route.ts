@@ -964,7 +964,20 @@ async function fetchDashboardData(dept?: string) {
 
     // 5. Quick stats (4 count queries)
     needsQuickStats ? cached('qs:students', CACHE_TTL_STATS, () =>
-      safeQuery(pool, "SELECT COUNT(*) as cnt FROM student_master WHERE (IsDelete IS NULL OR IsDelete = 0)", [{ cnt: 0 }])
+      safeQuery(
+        pool,
+        `SELECT COUNT(DISTINCT s.Student_Id) as cnt
+         FROM student_master s
+         WHERE (s.IsDelete IS NULL OR s.IsDelete = 0)
+           AND EXISTS (
+             SELECT 1
+             FROM admission_master a
+             WHERE a.Student_Id = s.Student_Id
+               AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
+               AND (a.Cancel IS NULL OR LOWER(TRIM(CAST(a.Cancel AS CHAR))) IN ('no', '0', 'false'))
+           )`,
+        [{ cnt: 0 }]
+      )
     ) : Promise.resolve([{cnt: 0}]),
     needsQuickStats ? cached('qs:courses', CACHE_TTL_STATS, () =>
       safeQuery(pool, "SELECT COUNT(*) as cnt FROM course_mst WHERE IsActive = 1 AND (IsDelete IS NULL OR IsDelete = 0)", [{ cnt: 0 }])

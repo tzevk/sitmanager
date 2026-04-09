@@ -182,11 +182,26 @@ async function ensureConsultancyFollowupTable(pool: ReturnType<typeof getPool>) 
       Direct_Line VARCHAR(100),
       Remarks TEXT,
       Added_By INT,
+      Source_Inquiry_Id INT NULL,
       IsDelete TINYINT DEFAULT 0,
       Date_Added DATETIME DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_const_id (Const_Id)
+      INDEX idx_const_id (Const_Id),
+      INDEX idx_source_inquiry (Source_Inquiry_Id)
     )
   `);
+
+  const [rows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS cnt
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'consultant_followup'
+       AND COLUMN_NAME = 'Source_Inquiry_Id'`
+  );
+  const cnt = rows?.[0]?.cnt ?? 0;
+  if (cnt === 0) {
+    await pool.query(`ALTER TABLE consultant_followup ADD COLUMN Source_Inquiry_Id INT NULL`);
+    await pool.query(`ALTER TABLE consultant_followup ADD INDEX idx_source_inquiry (Source_Inquiry_Id)`);
+  }
 }
 
 type CorporateFollowupCandidate = {
@@ -277,6 +292,7 @@ function extractCorporateFollowupCandidates(opts: {
 async function syncConsultancyFollowupsFromCorporate(opts: {
   pool: ReturnType<typeof getPool>;
   consultancyId: number | null;
+  corporateInquiryId?: number | null;
   companyAuthority?: string | null;
   fullName?: string | null;
   designation?: string | null;
@@ -297,7 +313,20 @@ async function syncConsultancyFollowupsFromCorporate(opts: {
     nextFollowUpDate: opts.nextFollowUpDate,
     inquiryDate: opts.inquiryDate,
   });
-  if (candidates.length === 0) return;
+
+  const fallbackDate =
+    normalizeDateOnly(opts.nextFollowUpDate)
+    || normalizeDateOnly(opts.initialFollowUpDate)
+    || normalizeDateOnly(opts.inquiryDate)
+    || null;
+
+  if (candidates.length === 0) {
+    candidates.push({
+      followupDate: fallbackDate,
+      purpose: 'Corporate Inquiry Entry',
+      remarks: String(opts.discussion || '').trim() || null,
+    });
+  }
 
   await ensureConsultancyFollowupTable(opts.pool);
 
@@ -305,25 +334,46 @@ async function syncConsultancyFollowupsFromCorporate(opts: {
     || String((opts.fullName && String(opts.fullName).trim()) || '').trim()
     || null;
 
+  const corporateInquiryId = Number(opts.corporateInquiryId);
+  const hasCorporateInquiryId = Number.isFinite(corporateInquiryId) && corporateInquiryId > 0;
+
   for (const c of candidates) {
-    const [exists] = await opts.pool.query<any[]>(
-      `SELECT Followup_Id
-       FROM consultant_followup
-       WHERE Const_Id = ?
-         AND COALESCE(Followup_Date, '1900-01-01') = COALESCE(?, '1900-01-01')
-         AND LOWER(TRIM(COALESCE(Purpose, ''))) = LOWER(TRIM(COALESCE(?, '')))
-         AND LOWER(TRIM(COALESCE(Remarks, ''))) = LOWER(TRIM(COALESCE(?, '')))
-         AND (IsDelete = 0 OR IsDelete IS NULL)
-       LIMIT 1`,
-      [opts.consultancyId, c.followupDate, c.purpose, c.remarks]
-    );
+    let exists: any[] = [];
+    if (hasCorporateInquiryId) {
+      const [bySource] = await opts.pool.query<any[]>(
+        `SELECT Followup_Id
+         FROM consultant_followup
+         WHERE Const_Id = ?
+           AND Source_Inquiry_Id = ?
+           AND COALESCE(Followup_Date, '1900-01-01') = COALESCE(?, '1900-01-01')
+           AND LOWER(TRIM(COALESCE(Purpose, ''))) = LOWER(TRIM(COALESCE(?, '')))
+           AND LOWER(TRIM(COALESCE(Remarks, ''))) = LOWER(TRIM(COALESCE(?, '')))
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+         LIMIT 1`,
+        [opts.consultancyId, corporateInquiryId, c.followupDate, c.purpose, c.remarks]
+      );
+      exists = bySource;
+    } else {
+      const [legacyExists] = await opts.pool.query<any[]>(
+        `SELECT Followup_Id
+         FROM consultant_followup
+         WHERE Const_Id = ?
+           AND COALESCE(Followup_Date, '1900-01-01') = COALESCE(?, '1900-01-01')
+           AND LOWER(TRIM(COALESCE(Purpose, ''))) = LOWER(TRIM(COALESCE(?, '')))
+           AND LOWER(TRIM(COALESCE(Remarks, ''))) = LOWER(TRIM(COALESCE(?, '')))
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+         LIMIT 1`,
+        [opts.consultancyId, c.followupDate, c.purpose, c.remarks]
+      );
+      exists = legacyExists;
+    }
 
     if (Array.isArray(exists) && exists.length > 0) continue;
 
     await opts.pool.query(
       `INSERT INTO consultant_followup
-        (Const_Id, Followup_Date, Contact_Person, Designation, Mobile, email, Purpose, Remarks, Added_By)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+        (Const_Id, Followup_Date, Contact_Person, Designation, Mobile, email, Purpose, Remarks, Added_By, Source_Inquiry_Id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
       [
         opts.consultancyId,
         c.followupDate,
@@ -333,6 +383,7 @@ async function syncConsultancyFollowupsFromCorporate(opts: {
         (opts.email && String(opts.email).trim()) || null,
         c.purpose,
         c.remarks,
+        hasCorporateInquiryId ? corporateInquiryId : null,
       ]
     );
   }
@@ -757,21 +808,6 @@ export async function POST(req: NextRequest) {
       dateAdded: (Idate && String(Idate).trim()) || null,
     });
 
-    await syncConsultancyFollowupsFromCorporate({
-      pool,
-      consultancyId: Consultancy_Id,
-      companyAuthority: (CompanyAuthority && String(CompanyAuthority).trim()) || null,
-      fullName: (FullName && String(FullName).trim()) || null,
-      designation: (Designation && String(Designation).trim()) || null,
-      mobile: (Mobile && String(Mobile).trim()) || null,
-      email: (Email && String(Email).trim()) || null,
-      followUpRaw: FollowUp,
-      discussion: Discussion,
-      initialFollowUpDate: InitialFollowUpDate,
-      nextFollowUpDate: NextFollowUpDate,
-      inquiryDate: Idate,
-    });
-
     const [result] = await pool.query(
       `INSERT INTO corporate_inquiry (
         Fname, Lname, MName, FullName, CompanyName, Designation, Address, City, State,
@@ -822,6 +858,23 @@ export async function POST(req: NextRequest) {
         NextFollowUpDate || null,
       ]
     );
+
+    const insertedId = Number((result as any).insertId || 0);
+    await syncConsultancyFollowupsFromCorporate({
+      pool,
+      consultancyId: Consultancy_Id,
+      corporateInquiryId: insertedId,
+      companyAuthority: (CompanyAuthority && String(CompanyAuthority).trim()) || null,
+      fullName: (FullName && String(FullName).trim()) || null,
+      designation: (Designation && String(Designation).trim()) || null,
+      mobile: (Mobile && String(Mobile).trim()) || null,
+      email: (Email && String(Email).trim()) || null,
+      followUpRaw: FollowUp,
+      discussion: Discussion,
+      initialFollowUpDate: InitialFollowUpDate,
+      nextFollowUpDate: NextFollowUpDate,
+      inquiryDate: Idate,
+    });
 
     // Invalidate cache on data modification
     cache.deleteByPrefix(cacheKeys.corporateInquiry.prefix);
@@ -910,6 +963,7 @@ export async function PUT(req: NextRequest) {
     await syncConsultancyFollowupsFromCorporate({
       pool,
       consultancyId: Consultancy_Id,
+      corporateInquiryId: Number(Id),
       companyAuthority: (CompanyAuthority && String(CompanyAuthority).trim()) || null,
       fullName: (FullName && String(FullName).trim()) || null,
       designation: (Designation && String(Designation).trim()) || null,

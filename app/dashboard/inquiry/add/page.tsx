@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -146,14 +146,6 @@ export default function AddInquiryPage() {
   const [saving, setSaving] = useState(false);
   const [sendingAdmissionForm, setSendingAdmissionForm] = useState(false);
   const [error, setError] = useState('');
-  const [showSendPreviewModal, setShowSendPreviewModal] = useState(false);
-  const [previewToEmail, setPreviewToEmail] = useState('');
-  const [previewSubject, setPreviewSubject] = useState('');
-  const [previewBody, setPreviewBody] = useState('');
-  const [previewFormUrl, setPreviewFormUrl] = useState('');
-  const [previewFrameUrl, setPreviewFrameUrl] = useState('');
-  const [previewTab, setPreviewTab] = useState<'mail' | 'form'>('mail');
-  const admissionPreviewFrameRef = useRef<HTMLIFrameElement | null>(null);
 
   /* ---- load options on mount ---- */
   useEffect(() => {
@@ -308,69 +300,22 @@ export default function AddInquiryPage() {
 
     setSendingAdmissionForm(true);
     try {
-      const previewRes = await fetch('/api/inquiry/send-admission-form', {
+      const sendRes = await fetch('/api/inquiry/send-admission-form', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           inquiryId: editId,
           toEmail: recipient,
           studentName: name,
-          previewOnly: true,
         }),
       });
 
-      const previewData = await previewRes.json();
-      if (!previewRes.ok) throw new Error(previewData?.error || 'Failed to load mail preview');
-
-      setPreviewToEmail(String(previewData.toEmail || recipient));
-      setPreviewSubject(String(previewData.preview?.subject || 'Your SIT Admission Form Link'));
-      setPreviewBody(String(previewData.preview?.text || ''));
-      setPreviewFormUrl(String(previewData.admissionFormUrl || ''));
-      {
-        const baseUrl = String(previewData.admissionFormUrl || '');
-        if (baseUrl) {
-          const initialPreviewUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}previewTerms=1`;
-          setPreviewFrameUrl(initialPreviewUrl);
-        } else {
-          setPreviewFrameUrl('');
-        }
-      }
-      setPreviewTab('mail');
-      setShowSendPreviewModal(true);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Failed to send admission form email');
-    } finally {
-      setSendingAdmissionForm(false);
-    }
-  };
-
-  const handleConfirmSendAdmissionForm = async () => {
-    if (!editId) return;
-    if (!previewToEmail.trim()) {
-      alert('Recipient email is required.');
-      return;
-    }
-
-    setSendingAdmissionForm(true);
-    try {
-      const sendRes = await fetch('/api/inquiry/send-admission-form', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inquiryId: editId,
-          toEmail: previewToEmail.trim(),
-          studentName: name,
-          subject: previewSubject,
-          body: previewBody,
-        }),
-      });
       const sendData = await sendRes.json();
       if (!sendRes.ok) throw new Error(sendData?.error || 'Failed to send admission form email');
 
-      if (previewFormUrl) {
-        window.open(previewFormUrl, '_blank', 'noopener,noreferrer');
+      if (sendData?.admissionFormUrl) {
+        window.open(String(sendData.admissionFormUrl), '_blank', 'noopener,noreferrer');
       }
-      setShowSendPreviewModal(false);
       alert('Admission form email sent successfully');
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed to send admission form email');
@@ -378,16 +323,6 @@ export default function AddInquiryPage() {
       setSendingAdmissionForm(false);
     }
   };
-
-  const openTermsInPreviewFrame = useCallback(() => {
-    if (!previewFormUrl) return;
-    const termsUrl = `${previewFormUrl}${previewFormUrl.includes('?') ? '&' : '?'}previewTerms=1&step=5&_t=${Date.now()}`;
-    setPreviewFrameUrl(termsUrl);
-    const frame = admissionPreviewFrameRef.current;
-    if (frame) {
-      frame.src = termsUrl;
-    }
-  }, [previewFormUrl]);
 
   if (permLoading) return <PermissionLoading />;
   if (editId && !canUpdate) return <AccessDenied message="You do not have permission to edit inquiries." />;
@@ -895,137 +830,6 @@ export default function AddInquiryPage() {
         </div>
 
       </div>
-
-      {showSendPreviewModal && (
-        <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-[1px] overflow-y-auto">
-          <div className="min-h-full flex items-start justify-center p-4">
-          <div className="w-full max-w-6xl my-4 rounded-xl bg-white border border-gray-200 shadow-2xl">
-            <div className="px-5 py-3 border-b border-gray-200 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white flex items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-bold">Admission Form Send Preview</h3>
-                <p className="text-xs text-white/80">Review and edit mail details, and preview all form information before sending.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowSendPreviewModal(false)}
-                className="px-2 py-1 rounded bg-white/15 hover:bg-white/25 text-xs font-semibold"
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="px-5 pt-3">
-              <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden bg-white">
-                <button
-                  type="button"
-                  onClick={() => setPreviewTab('mail')}
-                  className={`px-3 py-1.5 text-xs font-semibold ${previewTab === 'mail' ? 'bg-[#2E3093] text-white' : 'text-gray-700 hover:bg-gray-50'}`}
-                >
-                  Mail Preview
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewTab('form')}
-                  className={`px-3 py-1.5 text-xs font-semibold border-l border-gray-300 ${previewTab === 'form' ? 'bg-[#2E3093] text-white' : 'text-gray-700 hover:bg-gray-50'}`}
-                >
-                  Full Form Preview
-                </button>
-              </div>
-            </div>
-
-            <div className="p-5 overflow-y-auto max-h-[68vh] space-y-4">
-              {previewTab === 'mail' ? (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="md:col-span-2">
-                      <label className={labelCls}>Admission Form Link</label>
-                      <div className="flex gap-2">
-                        <input className={inputCls} value={previewFormUrl} readOnly />
-                        <button
-                          type="button"
-                          onClick={() => previewFormUrl && window.open(previewFormUrl, '_blank', 'noopener,noreferrer')}
-                          className="px-3 py-1.5 rounded-md border border-[#2E3093]/40 text-[#2E3093] text-xs font-semibold hover:bg-[#2E3093]/5"
-                        >
-                          Open Form
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className={labelCls}>To Email</label>
-                      <input className={inputCls} value={previewToEmail} onChange={(e) => setPreviewToEmail(e.target.value)} />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Subject</label>
-                      <input className={inputCls} value={previewSubject} onChange={(e) => setPreviewSubject(e.target.value)} />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className={labelCls}>Mail Body</label>
-                      <textarea
-                        className={textareaCls + ' min-h-[220px]'}
-                        value={previewBody}
-                        onChange={(e) => setPreviewBody(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs font-semibold text-gray-600">Live Admission Form Preview (all tabs available in form page)</div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={openTermsInPreviewFrame}
-                        className="px-3 py-1.5 rounded-md border border-amber-300 text-amber-700 text-xs font-semibold hover:bg-amber-50"
-                      >
-                        Terms & Conditions Tab
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => previewFormUrl && window.open(previewFormUrl, '_blank', 'noopener,noreferrer')}
-                        className="px-3 py-1.5 rounded-md border border-[#2E3093]/40 text-[#2E3093] text-xs font-semibold hover:bg-[#2E3093]/5"
-                      >
-                        Open in New Tab
-                      </button>
-                    </div>
-                  </div>
-                  <div className="rounded-lg border border-gray-200 overflow-hidden bg-gray-50">
-                    {previewFormUrl ? (
-                      <iframe
-                        ref={admissionPreviewFrameRef}
-                        title="Admission Form Preview"
-                        src={previewFrameUrl || `${previewFormUrl}${previewFormUrl.includes('?') ? '&' : '?'}previewTerms=1`}
-                        className="w-full h-[72vh] bg-white"
-                      />
-                    ) : (
-                      <div className="p-4 text-sm text-gray-500">Form preview link is not available.</div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-end gap-2 bg-gray-50">
-              <button
-                type="button"
-                onClick={() => setShowSendPreviewModal(false)}
-                className="px-4 py-2 rounded-md border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-white"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmSendAdmissionForm}
-                disabled={sendingAdmissionForm}
-                className="px-5 py-2 rounded-md bg-[#2E3093] text-white text-sm font-semibold hover:bg-[#252780] disabled:opacity-60"
-              >
-                {sendingAdmissionForm ? 'Sending...' : 'Send Now'}
-              </button>
-            </div>
-          </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

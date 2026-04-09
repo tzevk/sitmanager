@@ -49,7 +49,6 @@ interface FollowUp {
   Course: string;
   Direct_Line: string;
   Remarks: string;
-  added_by_name?: string;
 }
 
 const FOLLOWUP_PURPOSES = ['Meeting', 'Placements', 'Placements Received', 'Training', 'Project', 'Others'] as const;
@@ -220,8 +219,8 @@ export default function AddConsultancyPage() {
   };
 
   const handleExportFollowups = () => {
-    const headers = ['Date', 'Contact Person', 'Designation', 'Mobile', 'Email', 'Purpose', 'Course', 'Direct Line', 'Remarks', 'Added By'];
-    const csvRows = followups.map(f => [f.Followup_Date||'', f.Contact_Person||'', f.Designation||'', f.Mobile||'', f.email||'', f.Purpose||'', f.Course||'', f.Direct_Line||'', f.Remarks||'', f.added_by_name||'']);
+    const headers = ['Date', 'Contact Person', 'Designation', 'Mobile', 'Email', 'Purpose', 'Course', 'Direct Line', 'Remarks'];
+    const csvRows = followups.map(f => [f.Followup_Date||'', f.Contact_Person||'', f.Designation||'', f.Mobile||'', f.email||'', f.Purpose||'', f.Course||'', f.Direct_Line||'', f.Remarks||'']);
     const csv = [headers.join(','), ...csvRows.map(r => r.map((v: string) => `"${v.replace(/"/g,'""')}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -660,13 +659,12 @@ export default function AddConsultancyPage() {
                           <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Course</th>
                           <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Direct Line</th>
                           <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Remarks</th>
-                          <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Added By</th>
                           <th className="text-center px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Action</th>
                         </tr>
                       </thead>
                       <tbody>
                         {followups.length === 0 ? (
-                          <tr><td colSpan={11} className="px-4 py-6 text-center text-gray-400 text-xs">No follow-ups yet</td></tr>
+                          <tr><td colSpan={10} className="px-4 py-6 text-center text-gray-400 text-xs">No follow-ups yet</td></tr>
                         ) : followups.map((f, idx) => (
                           <tr key={f.Followup_Id ?? idx} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{f.Followup_Date ? new Date(f.Followup_Date).toLocaleDateString('en-GB') : '-'}</td>
@@ -678,7 +676,6 @@ export default function AddConsultancyPage() {
                             <td className="px-3 py-2 text-gray-700">{f.Course || '-'}</td>
                             <td className="px-3 py-2 text-gray-700">{f.Direct_Line || '-'}</td>
                             <td className="px-3 py-2 text-gray-700 truncate max-w-[120px]">{f.Remarks || '-'}</td>
-                            <td className="px-3 py-2 text-gray-700">{f.added_by_name || '-'}</td>
                             <td className="px-3 py-2 text-center">
                               <div className="flex items-center justify-center gap-1">
                                 <button onClick={() => setViewFollowup(f)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="View">
@@ -710,7 +707,6 @@ export default function AddConsultancyPage() {
             </div>
             <div className="grid grid-cols-1 gap-3 p-4 text-xs md:grid-cols-2">
               <div><span className="font-semibold text-gray-600">Date:</span> {viewFollowup.Followup_Date ? new Date(viewFollowup.Followup_Date).toLocaleDateString('en-GB') : '-'}</div>
-              <div><span className="font-semibold text-gray-600">Added By:</span> {viewFollowup.added_by_name || '-'}</div>
               <div><span className="font-semibold text-gray-600">Contact Person:</span> {viewFollowup.Contact_Person || '-'}</div>
               <div><span className="font-semibold text-gray-600">Designation:</span> {viewFollowup.Designation || '-'}</div>
               <div><span className="font-semibold text-gray-600">Mobile:</span> {viewFollowup.Mobile || '-'}</div>

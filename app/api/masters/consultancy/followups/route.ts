@@ -122,18 +122,8 @@ export async function GET(req: NextRequest) {
 
     const [rows] = await pool.query<any[]>(
       `SELECT f.Followup_Id, f.Const_Id, f.Followup_Date, f.Contact_Person, f.Designation,
-              f.Mobile, f.email, f.Purpose, f.Course, f.Direct_Line, f.Remarks, f.Added_By,
-              COALESCE(
-                NULLIF(TRIM(CONCAT_WS(' ', COALESCE(u.firstname, ''), COALESCE(u.lastname, ''))), ''),
-                NULLIF(TRIM(u.firstname), ''),
-                NULLIF(TRIM(u.lastname), ''),
-                NULLIF(TRIM(u.username), ''),
-                NULLIF(TRIM(u.email), ''),
-                NULLIF(TRIM(f.Contact_Person), ''),
-                'System'
-              ) as added_by_name
+              f.Mobile, f.email, f.Purpose, f.Course, f.Direct_Line, f.Remarks
        FROM consultant_followup f
-       LEFT JOIN awt_adminuser u ON f.Added_By = u.id
        WHERE ${where}
        ORDER BY f.Followup_Id DESC`,
       params
