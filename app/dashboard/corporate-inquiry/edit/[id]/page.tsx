@@ -515,7 +515,21 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
             }),
           );
 
-          const dedupedFollowUps = Array.from(
+          const toFollowUpKey = (f: CorporateFollowUpItem) =>
+            [
+              toDateInputValue(f.date),
+              toDateInputValue(f.nextDate || ''),
+              f.contactPerson.trim().toLowerCase(),
+              f.designation.trim().toLowerCase(),
+              splitList(f.mobile).join('|').toLowerCase(),
+              splitList(f.email).join('|').toLowerCase(),
+              f.purpose.trim().toLowerCase(),
+              f.course.trim().toLowerCase(),
+              splitList(f.directLine).join('|').toLowerCase(),
+              f.remark.trim().toLowerCase(),
+            ].join('::');
+
+          let baseFollowUps = Array.from(
             new Map(
               combinedFollowUps
                 .filter((f) =>
@@ -532,27 +546,11 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                       f.remark,
                   ),
                 )
-                .map((f) => {
-                  const key = [
-                    toDateInputValue(f.date),
-                    toDateInputValue(f.nextDate || ''),
-                    f.contactPerson.trim().toLowerCase(),
-                    f.designation.trim().toLowerCase(),
-                    splitList(f.mobile).join('|').toLowerCase(),
-                    splitList(f.email).join('|').toLowerCase(),
-                    f.purpose.trim().toLowerCase(),
-                    f.course.trim().toLowerCase(),
-                    splitList(f.directLine).join('|').toLowerCase(),
-                    f.remark.trim().toLowerCase(),
-                  ].join('::');
-                  return [key, f] as const;
-                }),
+                .map((f) => [toFollowUpKey(f), f] as const),
             ).values(),
           );
 
-          if (dedupedFollowUps.length > 0) {
-            setFollowUps(dedupedFollowUps);
-          } else {
+          if (baseFollowUps.length === 0) {
             const fallbackFollowUp: CorporateFollowUpItem = {
               date: toDateInputValue(inq?.InitialFollowUpDate) || toDateInputValue(inq?.Idate),
               nextDate: toDateInputValue(inq?.NextFollowUpDate),
@@ -574,8 +572,40 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
               fallbackFollowUp.email ||
               fallbackFollowUp.remark,
             );
-            setFollowUps(hasFallback ? [fallbackFollowUp] : []);
+            baseFollowUps = hasFallback ? [fallbackFollowUp] : [];
           }
+
+          if (consultancyId) {
+            try {
+              const params = new URLSearchParams({ constId: consultancyId });
+              const consultancyFollowupRes = await fetch(`/api/masters/consultancy/followups?${params.toString()}`, { method: 'GET' });
+              const consultancyFollowupData = await consultancyFollowupRes.json().catch(() => ({}));
+              const masterRows = Array.isArray(consultancyFollowupData?.rows) ? consultancyFollowupData.rows : [];
+              const mappedMasterFollowUps: CorporateFollowUpItem[] = masterRows.map((r: unknown) => {
+                const rec = typeof r === 'object' && r !== null ? (r as Record<string, unknown>) : {};
+                return {
+                date: toDateInputValue(rec.Followup_Date),
+                nextDate: '',
+                contactPerson: String(rec.Contact_Person ?? '').trim(),
+                designation: String(rec.Designation ?? '').trim(),
+                mobile: normalizeMultiValue(rec.Mobile ?? null),
+                email: normalizeMultiValue(rec.email ?? null),
+                purpose: String(rec.Purpose ?? '').trim(),
+                course: String(rec.Course ?? '').trim(),
+                directLine: normalizeMultiValue(rec.Direct_Line ?? null),
+                remark: String(rec.Remarks ?? '').trim(),
+              };
+              });
+
+              baseFollowUps = Array.from(
+                new Map([...baseFollowUps, ...mappedMasterFollowUps].map((f) => [toFollowUpKey(f), f] as const)).values(),
+              );
+            } catch {
+              // Non-blocking: keep local follow-up payload data even if master fetch fails.
+            }
+          }
+
+          setFollowUps(baseFollowUps);
 
           let loadedMeetingDetails: MeetingDetailsItem[] = [];
           try {
@@ -876,29 +906,39 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
 
                   <div>
                     <label className={labelClass}>Company Name</label>
-                    <select
-                      name="Consultancy_Id"
-                      value={form.Consultancy_Id}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === '__manual__') {
-                          setCompanyMode('manual');
-                          setForm((prev) => ({ ...prev, Consultancy_Id: '', CompanyName: '' }));
-                          return;
-                        }
-                        setCompanyMode('master');
-                        handleCompanyChange(v);
-                      }}
-                      className={inputClass}
-                    >
-                      <option value="">Select Company</option>
-                      <option value="__manual__">Other / Not in list</option>
-                      {companyOptions.map((c) => (
-                        <option key={c.Const_Id} value={String(c.Const_Id)}>
-                          {c.Comp_Name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Consultancy List</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCompanyMode('manual');
+                            setForm((prev) => ({ ...prev, Consultancy_Id: '', CompanyName: '' }));
+                          }}
+                          className="text-[11px] font-semibold text-[#2A6BB5] hover:underline"
+                        >
+                          Other / Not in list
+                        </button>
+                      </div>
+                      <select
+                        name="Consultancy_Id"
+                        value={form.Consultancy_Id}
+                        size={8}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (!v) return;
+                          setCompanyMode('master');
+                          handleCompanyChange(v);
+                        }}
+                        className="w-full rounded-md border border-gray-200 bg-white p-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+                      >
+                        {companyOptions.map((c) => (
+                          <option key={c.Const_Id} value={String(c.Const_Id)}>
+                            {c.Comp_Name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
                   {companyMode === 'manual' && (
