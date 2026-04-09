@@ -26,10 +26,10 @@ async function ensureOnlineAdmissionPayloadTable(pool: any) {
 async function getOnlineAdmissionPayload(pool: any, studentId: number) {
   try {
     await ensureOnlineAdmissionPayloadTable(pool);
-    const [rows] = await pool.query<any[]>(
+    const [rows] = (await pool.query(
       `SELECT Payload FROM ${ONLINE_ADMISSION_PAYLOAD_TABLE} WHERE Student_Id = ? LIMIT 1`,
       [studentId]
-    );
+    )) as [any[], any];
     const payloadText = rows?.[0]?.Payload;
     if (!payloadText) return {};
     return JSON.parse(String(payloadText));
@@ -240,7 +240,7 @@ export async function GET(
     const { id: studentId } = await params;
 
     // Fetch admission and student details
-    const [rows] = await pool.query<any[]>(
+    const [rows] = (await pool.query(
       `SELECT 
         a.Admission_Id,
         s.Student_Id,
@@ -276,7 +276,7 @@ export async function GET(
       LEFT JOIN batch_mst b ON a.Batch_Id = b.Batch_Id
       WHERE s.Student_Id = ? AND (s.IsDelete = 0 OR s.IsDelete IS NULL)`,
       [studentId]
-    );
+    )) as [any[], any];
 
     if (!rows || rows.length === 0) {
       return NextResponse.json({ error: 'Student not found' }, { status: 404 });
@@ -285,12 +285,12 @@ export async function GET(
     const admission = rows[0];
     const payload = await getOnlineAdmissionPayload(pool, Number(studentId));
 
-    const [academicRows] = await pool.query<any[]>(
+    const [academicRows] = (await pool.query(
       `SELECT Aca_Qualification, Discipline, Institute, Year, Marks, Status_Remark, Total_KT
        FROM student_master_aca_rec
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
       [studentId]
-    );
+    )) as [any[], any];
     const academicData = mapAcademicRowsToForm(academicRows || []);
     
     // Parse name parts
@@ -363,10 +363,10 @@ export async function PUT(
     const body = await req.json();
 
     // Check if student exists
-    const [studentRows] = await pool.query<any[]>(
+    const [studentRows] = (await pool.query(
       'SELECT Student_Id FROM student_master WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)',
       [studentId]
-    );
+    )) as [any[], any];
 
     if (!studentRows || studentRows.length === 0) {
       return NextResponse.json({ error: 'Student not found' }, { status: 404 });
