@@ -167,6 +167,16 @@ function normalizeDateOnly(value: unknown): string | null {
   return dt.toISOString().slice(0, 10);
 }
 
+function normalizeMultiText(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    const joined = value.map((v) => String(v ?? '').trim()).filter(Boolean).join(', ');
+    return joined || null;
+  }
+  if (value === null || value === undefined) return null;
+  const str = String(value).trim();
+  return str || null;
+}
+
 async function ensureConsultancyFollowupTable(pool: ReturnType<typeof getPool>) {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS consultant_followup (
@@ -206,7 +216,14 @@ async function ensureConsultancyFollowupTable(pool: ReturnType<typeof getPool>) 
 
 type CorporateFollowupCandidate = {
   followupDate: string | null;
+  nextFollowupDate?: string | null;
+  contactPerson?: string | null;
+  designation?: string | null;
+  mobile?: string | null;
+  email?: string | null;
   purpose: string | null;
+  course?: string | null;
+  directLine?: string | null;
   remarks: string | null;
 };
 
@@ -222,11 +239,25 @@ function extractCorporateFollowupCandidates(opts: {
   const pushCandidate = (entry: CorporateFollowupCandidate) => {
     const remarks = String(entry.remarks || '').trim();
     const purpose = String(entry.purpose || '').trim();
-    const followupDate = normalizeDateOnly(entry.followupDate);
-    if (!remarks && !purpose && !followupDate) return;
+    const followupDate = normalizeDateOnly(entry.followupDate) || normalizeDateOnly(entry.nextFollowupDate) || null;
+    const contactPerson = String(entry.contactPerson || '').trim();
+    const designation = String(entry.designation || '').trim();
+    const mobile = String(entry.mobile || '').trim();
+    const email = String(entry.email || '').trim();
+    const course = String(entry.course || '').trim();
+    const directLine = String(entry.directLine || '').trim();
+
+    if (!remarks && !purpose && !followupDate && !contactPerson && !designation && !mobile && !email && !course && !directLine) return;
     out.push({
       followupDate,
+      nextFollowupDate: normalizeDateOnly(entry.nextFollowupDate),
+      contactPerson: contactPerson || null,
+      designation: designation || null,
+      mobile: mobile || null,
+      email: email || null,
       purpose: purpose || null,
+      course: course || null,
+      directLine: directLine || null,
       remarks: remarks || null,
     });
   };
@@ -250,18 +281,40 @@ function extractCorporateFollowupCandidates(opts: {
   if (followUpRaw) {
     try {
       const parsed = JSON.parse(followUpRaw) as any;
-      const meetings = Array.isArray(parsed?.meetings)
-        ? parsed.meetings
-        : Array.isArray(parsed?.followUps)
-          ? parsed.followUps
+      const meetings = Array.isArray(parsed?.followUps)
+        ? parsed.followUps
+        : Array.isArray(parsed?.meetings)
+          ? parsed.meetings
           : [];
 
       for (const m of meetings) {
         if (!m || typeof m !== 'object') continue;
         pushCandidate({
-          followupDate: m.nextDate || m.nextFollowUpDate || m.next_follow_up_date || m.date || fallbackDate,
+          followupDate: m.date || m.followupDate || m.follow_up_date || m.meetingDate || fallbackDate,
+          nextFollowupDate: m.nextDate || m.nextFollowUpDate || m.next_follow_up_date || null,
+          contactPerson: m.contactPerson || m.fullName || m.attendeeClient || null,
+          designation: m.designation || m.jobTitle || null,
+          mobile: normalizeMultiText(m.mobile ?? m.phoneNumber ?? m.phoneNumbers),
+          email: normalizeMultiText(m.email ?? m.emails),
+          purpose: m.purpose || 'Corporate Inquiry Follow-up',
+          course: m.course || m.trainingProgramme || null,
+          directLine: normalizeMultiText(m.directLine ?? m.alternateNumber ?? m.alternateNumbers),
+          remarks: m.remark || m.remarks || m.meetingAgenda || parsed?.meetingAgenda || null,
+        });
+      }
+
+      const contacts = Array.isArray(parsed?.contacts) ? parsed.contacts : [];
+      for (const c of contacts) {
+        if (!c || typeof c !== 'object') continue;
+        pushCandidate({
+          followupDate: fallbackDate,
+          contactPerson: c.fullName || null,
+          designation: c.jobTitle || null,
+          mobile: normalizeMultiText(c.phoneNumber ?? c.phoneNumbers),
+          email: normalizeMultiText(c.email ?? c.emails),
+          directLine: normalizeMultiText(c.alternateNumber ?? c.alternateNumbers),
           purpose: 'Corporate Inquiry Follow-up',
-          remarks: m.remark || parsed?.meetingAgenda || null,
+          remarks: c.discussion || null,
         });
       }
 
@@ -283,7 +336,7 @@ function extractCorporateFollowupCandidates(opts: {
 
   const dedup = new Map<string, CorporateFollowupCandidate>();
   for (const item of out) {
-    const k = `${item.followupDate || ''}|${String(item.purpose || '').toLowerCase()}|${String(item.remarks || '').toLowerCase()}`;
+    const k = `${item.followupDate || ''}|${String(item.contactPerson || '').toLowerCase()}|${String(item.mobile || '').toLowerCase()}|${String(item.email || '').toLowerCase()}|${String(item.purpose || '').toLowerCase()}|${String(item.course || '').toLowerCase()}|${String(item.directLine || '').toLowerCase()}|${String(item.remarks || '').toLowerCase()}`;
     if (!dedup.has(k)) dedup.set(k, item);
   }
   return Array.from(dedup.values());
@@ -346,11 +399,29 @@ async function syncConsultancyFollowupsFromCorporate(opts: {
          WHERE Const_Id = ?
            AND Source_Inquiry_Id = ?
            AND COALESCE(Followup_Date, '1900-01-01') = COALESCE(?, '1900-01-01')
+          AND LOWER(TRIM(COALESCE(Contact_Person, ''))) = LOWER(TRIM(COALESCE(?, '')))
+          AND LOWER(TRIM(COALESCE(Designation, ''))) = LOWER(TRIM(COALESCE(?, '')))
+          AND LOWER(TRIM(COALESCE(Mobile, ''))) = LOWER(TRIM(COALESCE(?, '')))
+          AND LOWER(TRIM(COALESCE(email, ''))) = LOWER(TRIM(COALESCE(?, '')))
            AND LOWER(TRIM(COALESCE(Purpose, ''))) = LOWER(TRIM(COALESCE(?, '')))
+          AND LOWER(TRIM(COALESCE(Course, ''))) = LOWER(TRIM(COALESCE(?, '')))
+          AND LOWER(TRIM(COALESCE(Direct_Line, ''))) = LOWER(TRIM(COALESCE(?, '')))
            AND LOWER(TRIM(COALESCE(Remarks, ''))) = LOWER(TRIM(COALESCE(?, '')))
            AND (IsDelete = 0 OR IsDelete IS NULL)
          LIMIT 1`,
-        [opts.consultancyId, corporateInquiryId, c.followupDate, c.purpose, c.remarks]
+        [
+          opts.consultancyId,
+          corporateInquiryId,
+          c.followupDate,
+          c.contactPerson,
+          c.designation,
+          c.mobile,
+          c.email,
+          c.purpose,
+          c.course,
+          c.directLine,
+          c.remarks,
+        ]
       );
       exists = bySource;
     } else {
@@ -359,11 +430,28 @@ async function syncConsultancyFollowupsFromCorporate(opts: {
          FROM consultant_followup
          WHERE Const_Id = ?
            AND COALESCE(Followup_Date, '1900-01-01') = COALESCE(?, '1900-01-01')
+           AND LOWER(TRIM(COALESCE(Contact_Person, ''))) = LOWER(TRIM(COALESCE(?, '')))
+           AND LOWER(TRIM(COALESCE(Designation, ''))) = LOWER(TRIM(COALESCE(?, '')))
+           AND LOWER(TRIM(COALESCE(Mobile, ''))) = LOWER(TRIM(COALESCE(?, '')))
+           AND LOWER(TRIM(COALESCE(email, ''))) = LOWER(TRIM(COALESCE(?, '')))
            AND LOWER(TRIM(COALESCE(Purpose, ''))) = LOWER(TRIM(COALESCE(?, '')))
+           AND LOWER(TRIM(COALESCE(Course, ''))) = LOWER(TRIM(COALESCE(?, '')))
+           AND LOWER(TRIM(COALESCE(Direct_Line, ''))) = LOWER(TRIM(COALESCE(?, '')))
            AND LOWER(TRIM(COALESCE(Remarks, ''))) = LOWER(TRIM(COALESCE(?, '')))
            AND (IsDelete = 0 OR IsDelete IS NULL)
          LIMIT 1`,
-        [opts.consultancyId, c.followupDate, c.purpose, c.remarks]
+        [
+          opts.consultancyId,
+          c.followupDate,
+          c.contactPerson,
+          c.designation,
+          c.mobile,
+          c.email,
+          c.purpose,
+          c.course,
+          c.directLine,
+          c.remarks,
+        ]
       );
       exists = legacyExists;
     }
@@ -372,16 +460,18 @@ async function syncConsultancyFollowupsFromCorporate(opts: {
 
     await opts.pool.query(
       `INSERT INTO consultant_followup
-        (Const_Id, Followup_Date, Contact_Person, Designation, Mobile, email, Purpose, Remarks, Added_By, Source_Inquiry_Id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+        (Const_Id, Followup_Date, Contact_Person, Designation, Mobile, email, Purpose, Course, Direct_Line, Remarks, Added_By, Source_Inquiry_Id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
       [
         opts.consultancyId,
         c.followupDate,
-        contactPerson,
-        (opts.designation && String(opts.designation).trim()) || null,
-        (opts.mobile && String(opts.mobile).trim()) || null,
-        (opts.email && String(opts.email).trim()) || null,
+        c.contactPerson || contactPerson,
+        c.designation || (opts.designation && String(opts.designation).trim()) || null,
+        c.mobile || (opts.mobile && String(opts.mobile).trim()) || null,
+        c.email || (opts.email && String(opts.email).trim()) || null,
         c.purpose,
+        c.course || null,
+        c.directLine || null,
         c.remarks,
         hasCorporateInquiryId ? corporateInquiryId : null,
       ]

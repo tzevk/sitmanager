@@ -41,6 +41,7 @@ interface Branch {
 
 interface FollowUp {
   Followup_Id?: number;
+  Source_Inquiry_Id?: number | null;
   Followup_Date: string;
   Contact_Person: string;
   Designation: string;
@@ -65,7 +66,7 @@ interface StudentRow {
   status: string;
 }
 
-const FOLLOWUP_PURPOSES = ['Meeting', 'Placements', 'Placements Received', 'Training', 'Project', 'Others'] as const;
+const FOLLOWUP_PURPOSES = ['Meeting', 'Seminar', 'Internship', 'Trainer', 'Placements', 'Placements Received', 'Training', 'Project', 'Others'] as const;
 
 const toDateInput = (v: string | null | undefined) => {
   if (!v) return '';
@@ -106,6 +107,7 @@ export default function EditConsultancyPage() {
   /* ---- follow ups ---- */
   const [followups, setFollowups] = useState<FollowUp[]>([]);
   const [followupSearch, setFollowupSearch] = useState('');
+  const [followupSource, setFollowupSource] = useState<'all' | 'corporate' | 'manual'>('all');
   const [followupsLoading, setFollowupsLoading] = useState(false);
   const [followupsError, setFollowupsError] = useState('');
   const [viewFollowup, setViewFollowup] = useState<FollowUp | null>(null);
@@ -236,6 +238,7 @@ export default function EditConsultancyPage() {
     try {
       const params = new URLSearchParams({ constId: String(consultancyId) });
       if (followupSearch) params.set('search', followupSearch);
+      if (followupSource !== 'all') params.set('source', followupSource);
       const res = await fetch(`/api/masters/consultancy/followups?${params}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load follow-ups');
@@ -246,7 +249,7 @@ export default function EditConsultancyPage() {
     } finally {
       setFollowupsLoading(false);
     }
-  }, [consultancyId, followupSearch]);
+  }, [consultancyId, followupSearch, followupSource]);
 
   useEffect(() => { fetchFollowups(); }, [fetchFollowups]);
 
@@ -310,8 +313,19 @@ export default function EditConsultancyPage() {
   };
 
   const handleExportFollowups = () => {
-    const headers = ['Date', 'Contact Person', 'Designation', 'Mobile', 'Email', 'Purpose', 'Course', 'Direct Line', 'Remarks'];
-    const csvRows = followups.map(f => [f.Followup_Date||'', f.Contact_Person||'', f.Designation||'', f.Mobile||'', f.email||'', f.Purpose||'', f.Course||'', f.Direct_Line||'', f.Remarks||'']);
+    const headers = ['Date', 'Contact Person', 'Designation', 'Mobile', 'Email', 'Purpose', 'Course', 'Direct Line', 'Remarks', 'Source'];
+    const csvRows = followups.map(f => [
+      f.Followup_Date||'',
+      f.Contact_Person||'',
+      f.Designation||'',
+      f.Mobile||'',
+      f.email||'',
+      f.Purpose||'',
+      f.Course||'',
+      f.Direct_Line||'',
+      f.Remarks||'',
+      f.Source_Inquiry_Id ? 'Corporate Inquiry' : 'Manual',
+    ]);
     const csv = [headers.join(','), ...csvRows.map(r => r.map((v: string) => `"${v.replace(/"/g,'""')}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -742,6 +756,15 @@ export default function EditConsultancyPage() {
                       className="w-40 pl-7 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]" />
                     <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>
                   </div>
+                  <select
+                    value={followupSource}
+                    onChange={(e) => setFollowupSource(e.target.value as 'all' | 'corporate' | 'manual')}
+                    className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+                  >
+                    <option value="all">All Sources</option>
+                    <option value="corporate">Corporate Inquiry</option>
+                    <option value="manual">Manual</option>
+                  </select>
                 </div>
                 <div className="overflow-auto max-h-72">
                   <table className="dashboard-table w-full text-sm">
@@ -756,14 +779,15 @@ export default function EditConsultancyPage() {
                         <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Course</th>
                         <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Direct Line</th>
                         <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Remarks</th>
+                        <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Source</th>
                         <th className="text-center px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {followupsLoading ? (
-                        <tr><td colSpan={10} className="px-4 py-6 text-center text-gray-400 text-xs">Loading…</td></tr>
+                        <tr><td colSpan={11} className="px-4 py-6 text-center text-gray-400 text-xs">Loading…</td></tr>
                       ) : followups.length === 0 ? (
-                        <tr><td colSpan={10} className="px-4 py-6 text-center text-gray-400 text-xs">No follow-ups yet</td></tr>
+                        <tr><td colSpan={11} className="px-4 py-6 text-center text-gray-400 text-xs">No follow-ups yet</td></tr>
                       ) : followups.map(f => (
                         <tr key={f.Followup_Id} className="border-b border-gray-100 hover:bg-gray-50">
                           <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{f.Followup_Date ? new Date(f.Followup_Date).toLocaleDateString('en-GB') : '-'}</td>
@@ -775,6 +799,22 @@ export default function EditConsultancyPage() {
                           <td className="px-3 py-2 text-gray-700">{f.Course || '-'}</td>
                           <td className="px-3 py-2 text-gray-700">{f.Direct_Line || '-'}</td>
                           <td className="px-3 py-2 text-gray-700 truncate max-w-[120px]">{f.Remarks || '-'}</td>
+                          <td className="px-3 py-2 text-gray-700">
+                            {f.Source_Inquiry_Id ? (
+                              <button
+                                type="button"
+                                onClick={() => router.push(`/dashboard/corporate-inquiry/edit/${f.Source_Inquiry_Id}`)}
+                                className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200 hover:bg-blue-100"
+                                title="Open Corporate Inquiry"
+                              >
+                                Corporate Inquiry
+                              </button>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full bg-gray-50 px-2 py-0.5 text-[11px] font-semibold text-gray-700 border border-gray-200">
+                                Manual
+                              </span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-center">
                             <div className="flex items-center justify-center gap-1">
                               <button onClick={() => setViewFollowup(f)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="View">
@@ -811,6 +851,21 @@ export default function EditConsultancyPage() {
               <div><span className="font-semibold text-gray-600">Email:</span> {viewFollowup.email || '-'}</div>
               <div><span className="font-semibold text-gray-600">Purpose:</span> {viewFollowup.Purpose || '-'}</div>
               <div><span className="font-semibold text-gray-600">Course:</span> {viewFollowup.Course || '-'}</div>
+              <div>
+                <span className="font-semibold text-gray-600">Source:</span>{' '}
+                {viewFollowup.Source_Inquiry_Id ? (
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/dashboard/corporate-inquiry/edit/${viewFollowup.Source_Inquiry_Id}`)}
+                    className="text-blue-700 hover:underline font-semibold"
+                    title="Open Corporate Inquiry"
+                  >
+                    Corporate Inquiry #{viewFollowup.Source_Inquiry_Id}
+                  </button>
+                ) : (
+                  'Manual'
+                )}
+              </div>
               <div className="md:col-span-2"><span className="font-semibold text-gray-600">Direct Line:</span> {viewFollowup.Direct_Line || '-'}</div>
               <div className="md:col-span-2"><span className="font-semibold text-gray-600">Remarks:</span> {viewFollowup.Remarks || '-'}</div>
             </div>

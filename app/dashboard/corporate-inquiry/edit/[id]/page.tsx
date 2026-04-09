@@ -29,6 +29,19 @@ type MeetingItem = {
   remark: string;
 };
 
+type CorporateFollowUpItem = {
+  date: string;
+  nextDate?: string;
+  contactPerson: string;
+  designation: string;
+  mobile: string;
+  email: string;
+  purpose: string;
+  course: string;
+  directLine: string;
+  remark: string;
+};
+
 type ContactDetailItem = {
   fullName: string;
   email: string;
@@ -45,6 +58,7 @@ type FollowUpData = {
   attendeeSIT: string;
   meetingAgenda: string;
   meetings: MeetingItem[];
+  followUps: CorporateFollowUpItem[];
   contacts?: ContactDetailItem[];
 };
 
@@ -71,6 +85,17 @@ const splitList = (raw: string | null | undefined) => {
     .filter(Boolean);
 };
 
+const normalizeMultiValue = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => String(v ?? '').trim())
+      .filter(Boolean)
+      .join('\n');
+  }
+  if (value === null || value === undefined) return '';
+  return String(value);
+};
+
 function parseFollowUpJson(raw: string | null | undefined): FollowUpData {
   if (!raw)
     return {
@@ -79,6 +104,7 @@ function parseFollowUpJson(raw: string | null | undefined): FollowUpData {
       attendeeSIT: '',
       meetingAgenda: '',
       meetings: [],
+      followUps: [],
     };
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -89,7 +115,9 @@ function parseFollowUpJson(raw: string | null | undefined): FollowUpData {
         ? parsedObj.meetings
         : parsedObj && Array.isArray(parsedObj.followUps)
           ? parsedObj.followUps
-          : [];
+          : parsedObj && Array.isArray(parsedObj.followup)
+            ? parsedObj.followup
+            : [];
 
     let meetings: MeetingItem[] = rawMeetings
       .map((it: unknown) => {
@@ -121,6 +149,115 @@ function parseFollowUpJson(raw: string | null | undefined): FollowUpData {
         ? String((parsedObj.meetingAgenda ?? parsedObj.agenda) as string)
         : '';
 
+    const rawFollowUps =
+      parsedObj && Array.isArray(parsedObj.followUps)
+        ? parsedObj.followUps
+        : parsedObj && Array.isArray(parsedObj.followup)
+          ? parsedObj.followup
+          : parsedObj && Array.isArray(parsedObj.meetings)
+            ? parsedObj.meetings
+            : [];
+
+    const followUps: CorporateFollowUpItem[] = rawFollowUps
+      .map((it: unknown) => {
+        const obj = typeof it === 'object' && it !== null ? (it as Record<string, unknown>) : {};
+        return {
+          date:
+            typeof obj.date === 'string'
+              ? toDateInputValue(obj.date)
+              : typeof obj.Date === 'string'
+                ? toDateInputValue(obj.Date)
+              : typeof obj.followupDate === 'string'
+                ? toDateInputValue(obj.followupDate)
+                : typeof obj.FollowUpDate === 'string'
+                  ? toDateInputValue(obj.FollowUpDate)
+                : '',
+          nextDate:
+            typeof obj.nextDate === 'string'
+              ? toDateInputValue(obj.nextDate)
+              : typeof obj.NextDate === 'string'
+                ? toDateInputValue(obj.NextDate)
+              : typeof obj.nextFollowUpDate === 'string'
+                ? toDateInputValue(obj.nextFollowUpDate)
+                : typeof obj.NextFollowUpDate === 'string'
+                  ? toDateInputValue(obj.NextFollowUpDate)
+                : '',
+          contactPerson:
+            typeof obj.contactPerson === 'string'
+              ? obj.contactPerson
+              : typeof obj.Contact_Person === 'string'
+                ? obj.Contact_Person
+                : typeof obj.ContactPerson === 'string'
+                  ? obj.ContactPerson
+              : typeof obj.fullName === 'string'
+                ? obj.fullName
+                : typeof obj.FullName === 'string'
+                  ? obj.FullName
+                : typeof obj.attendeeClient === 'string'
+                  ? obj.attendeeClient
+                  : typeof obj.CompanyAuthority === 'string'
+                    ? obj.CompanyAuthority
+                  : '',
+          designation:
+            typeof obj.designation === 'string'
+              ? obj.designation
+              : typeof obj.Designation === 'string'
+                ? obj.Designation
+              : typeof obj.jobTitle === 'string'
+                ? obj.jobTitle
+                : typeof obj.JobTitle === 'string'
+                  ? obj.JobTitle
+                : '',
+          mobile:
+            normalizeMultiValue(
+              obj.mobile ?? obj.Mobile ?? obj.phoneNumber ?? obj.PhoneNumber ?? obj.phoneNumbers ?? obj.Phone ?? null,
+            ),
+          email: normalizeMultiValue(obj.email ?? obj.Email ?? obj.EMail ?? obj.emails ?? null),
+          purpose:
+            typeof obj.purpose === 'string'
+              ? obj.purpose
+              : typeof obj.Purpose === 'string'
+                ? obj.Purpose
+                : '',
+          course:
+            typeof obj.course === 'string'
+              ? obj.course
+              : typeof obj.Course === 'string'
+                ? obj.Course
+              : typeof obj.trainingProgramme === 'string'
+                ? obj.trainingProgramme
+                : '',
+          directLine:
+            normalizeMultiValue(
+              obj.directLine ?? obj.Direct_Line ?? obj.DirectLine ?? obj.alternateNumber ?? obj.AlternateNumber ?? obj.alternateNumbers ?? null,
+            ),
+          remark:
+            typeof obj.remark === 'string'
+              ? obj.remark
+              : typeof obj.Remark === 'string'
+                ? obj.Remark
+              : typeof obj.remarks === 'string'
+                ? obj.remarks
+                : typeof obj.meetingAgenda === 'string'
+                  ? obj.meetingAgenda
+                  : '',
+        };
+      })
+      .filter((it) =>
+        Boolean(
+          it.date ||
+          it.nextDate ||
+          it.contactPerson ||
+          it.designation ||
+          it.mobile ||
+          it.email ||
+          it.purpose ||
+          it.course ||
+          it.directLine ||
+          it.remark,
+        ),
+      );
+
     if (initialDate && !meetings.some((m) => toDateInputValue(m.date) === toDateInputValue(initialDate))) {
       meetings = [{ date: initialDate, remark: '' }, ...meetings];
     }
@@ -132,9 +269,9 @@ function parseFollowUpJson(raw: string | null | undefined): FollowUpData {
               const obj = typeof it === 'object' && it !== null ? (it as Record<string, unknown>) : {};
               return {
                 fullName: typeof obj.fullName === 'string' ? obj.fullName : '',
-                email: typeof obj.email === 'string' ? obj.email : '',
-                phoneNumber: typeof obj.phoneNumber === 'string' ? obj.phoneNumber : '',
-                alternateNumber: typeof obj.alternateNumber === 'string' ? obj.alternateNumber : '',
+                email: normalizeMultiValue(obj.email ?? obj.emails ?? null),
+                phoneNumber: normalizeMultiValue(obj.phoneNumber ?? obj.phoneNumbers ?? null),
+                alternateNumber: normalizeMultiValue(obj.alternateNumber ?? obj.alternateNumbers ?? null),
                 jobTitle: typeof obj.jobTitle === 'string' ? obj.jobTitle : '',
                 industry: typeof obj.industry === 'string' ? obj.industry : '',
                 // Backward compatibility for older payloads that used `location`.
@@ -165,6 +302,7 @@ function parseFollowUpJson(raw: string | null | undefined): FollowUpData {
       attendeeSIT,
       meetingAgenda,
       meetings,
+      followUps,
       contacts,
     };
   } catch {
@@ -174,10 +312,13 @@ function parseFollowUpJson(raw: string | null | undefined): FollowUpData {
       attendeeSIT: '',
       meetingAgenda: '',
       meetings: [],
+      followUps: [],
       contacts: [],
     };
   }
 }
+
+const FOLLOWUP_PURPOSES = ['Meeting', 'Seminar', 'Internship', 'Trainer', 'Placements', 'Placements Received', 'Training', 'Project', 'Others'] as const;
 
 export default function EditCorporateInquiryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -203,18 +344,20 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
     meetingAgenda: '',
   });
   const [editingMeetingIndex, setEditingMeetingIndex] = useState<number | null>(null);
-  const [followUps, setFollowUps] = useState<MeetingItem[]>([]);
-  const [contacts, setContacts] = useState<ContactDetailItem[]>([]);
-  const [contactDraft, setContactDraft] = useState<ContactDetailItem>({
-    fullName: '',
+  const [followUps, setFollowUps] = useState<CorporateFollowUpItem[]>([]);
+  const [followUpDraft, setFollowUpDraft] = useState<CorporateFollowUpItem>({
+    date: '',
+    nextDate: '',
+    contactPerson: '',
+    designation: '',
+    mobile: '',
     email: '',
-    phoneNumber: '',
-    alternateNumber: '',
-    jobTitle: '',
-    industry: '',
-    discussion: '',
+    purpose: '',
+    course: '',
+    directLine: '',
+    remark: '',
   });
-  const [editingContactIndex, setEditingContactIndex] = useState<number | null>(null);
+  const [editingFollowUpIndex, setEditingFollowUpIndex] = useState<number | null>(null);
   const [form, setForm] = useState({
     Id: 0,
     Idate: '',
@@ -321,8 +464,115 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
           });
 
           const parsedFollowUp = parseFollowUpJson(String(inq?.FollowUp ?? ''));
-          setFollowUps(parsedFollowUp.meetings);
-          if (parsedFollowUp.contacts) setContacts(parsedFollowUp.contacts);
+          const legacyContacts = parsedFollowUp.contacts || [];
+          const combinedFollowUps: CorporateFollowUpItem[] = [];
+
+          combinedFollowUps.push(
+            ...parsedFollowUp.followUps.map((f, idx) => {
+              const contact = legacyContacts[idx] || legacyContacts[0];
+              return {
+                ...f,
+                contactPerson: f.contactPerson || contact?.fullName || parsedFollowUp.attendeeClient || '',
+                designation: f.designation || contact?.jobTitle || '',
+                mobile: f.mobile || contact?.phoneNumber || '',
+                email: f.email || contact?.email || '',
+                directLine: f.directLine || contact?.alternateNumber || '',
+                remark: f.remark || contact?.discussion || parsedFollowUp.meetingAgenda || '',
+              };
+            }),
+          );
+
+          combinedFollowUps.push(
+            ...legacyContacts.map((c) => ({
+              date: '',
+              nextDate: '',
+              contactPerson: c.fullName || '',
+              designation: c.jobTitle || '',
+              mobile: c.phoneNumber || '',
+              email: c.email || '',
+              purpose: '',
+              course: '',
+              directLine: c.alternateNumber || '',
+              remark: c.discussion || '',
+            })),
+          );
+
+          combinedFollowUps.push(
+            ...parsedFollowUp.meetings.map((m) => ({
+              date: m.date || '',
+              nextDate: m.nextDate || '',
+              contactPerson: '',
+              designation: '',
+              mobile: '',
+              email: '',
+              purpose: 'Meeting',
+              course: '',
+              directLine: '',
+              remark: m.remark || '',
+            })),
+          );
+
+          const dedupedFollowUps = Array.from(
+            new Map(
+              combinedFollowUps
+                .filter((f) =>
+                  Boolean(
+                    f.date ||
+                      f.nextDate ||
+                      f.contactPerson ||
+                      f.designation ||
+                      f.mobile ||
+                      f.email ||
+                      f.purpose ||
+                      f.course ||
+                      f.directLine ||
+                      f.remark,
+                  ),
+                )
+                .map((f) => {
+                  const key = [
+                    toDateInputValue(f.date),
+                    toDateInputValue(f.nextDate || ''),
+                    f.contactPerson.trim().toLowerCase(),
+                    f.designation.trim().toLowerCase(),
+                    splitList(f.mobile).join('|').toLowerCase(),
+                    splitList(f.email).join('|').toLowerCase(),
+                    f.purpose.trim().toLowerCase(),
+                    f.course.trim().toLowerCase(),
+                    splitList(f.directLine).join('|').toLowerCase(),
+                    f.remark.trim().toLowerCase(),
+                  ].join('::');
+                  return [key, f] as const;
+                }),
+            ).values(),
+          );
+
+          if (dedupedFollowUps.length > 0) {
+            setFollowUps(dedupedFollowUps);
+          } else {
+            const fallbackFollowUp: CorporateFollowUpItem = {
+              date: toDateInputValue(inq?.InitialFollowUpDate) || toDateInputValue(inq?.Idate),
+              nextDate: toDateInputValue(inq?.NextFollowUpDate),
+              contactPerson: String(inq?.CompanyAuthority ?? inq?.FullName ?? inq?.Fname ?? '').trim(),
+              designation: String(inq?.Designation ?? '').trim(),
+              mobile: normalizeMultiValue(inq?.Mobile ?? inq?.Phone ?? null),
+              email: normalizeMultiValue(inq?.Email ?? null),
+              purpose: '',
+              course: '',
+              directLine: '',
+              remark: String(inq?.Discussion ?? inq?.Remark ?? '').trim(),
+            };
+            const hasFallback = Boolean(
+              fallbackFollowUp.date ||
+              fallbackFollowUp.nextDate ||
+              fallbackFollowUp.contactPerson ||
+              fallbackFollowUp.designation ||
+              fallbackFollowUp.mobile ||
+              fallbackFollowUp.email ||
+              fallbackFollowUp.remark,
+            );
+            setFollowUps(hasFallback ? [fallbackFollowUp] : []);
+          }
 
           let loadedMeetingDetails: MeetingDetailsItem[] = [];
           try {
@@ -367,16 +617,19 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
           setMeetingDetails(loadedMeetingDetails);
           setMeetingDraft({ meetingDate: '', attendeeClient: '', attendeeSIT: '', meetingAgenda: '' });
           setEditingMeetingIndex(null);
-          setContactDraft({
-            fullName: '',
+          setFollowUpDraft({
+            date: '',
+            nextDate: '',
+            contactPerson: '',
+            designation: '',
+            mobile: '',
             email: '',
-            phoneNumber: '',
-            alternateNumber: '',
-            jobTitle: '',
-            industry: '',
-            discussion: '',
+            purpose: '',
+            course: '',
+            directLine: '',
+            remark: '',
           });
-          setEditingContactIndex(null);
+          setEditingFollowUpIndex(null);
           const outcome = String(inq?.DiscussionOutcome ?? '').trim();
           setDiscussionOutcome(outcome === 'Awarded' || outcome === 'Regretted' || outcome === 'On Hold' ? outcome : '');
 
@@ -440,9 +693,32 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
       attendeeSIT: (meetingDetails[meetingDetails.length - 1]?.attendeeSIT || '') as string,
       meetingAgenda: (meetingDetails[meetingDetails.length - 1]?.meetingAgenda || '') as string,
       meetingDetails,
-      meetings: followUps,
-      followUps,
-      contacts,
+      meetings: followUps.map((f) => ({
+        date: f.date,
+        nextDate: f.nextDate,
+        remark: f.remark,
+      })),
+      followUps: followUps.map((f) => ({
+        ...f,
+        email: splitList(f.email).join(', '),
+        emails: splitList(f.email),
+        mobile: splitList(f.mobile).join(', '),
+        phoneNumbers: splitList(f.mobile),
+        directLine: splitList(f.directLine).join(', '),
+        alternateNumbers: splitList(f.directLine),
+      })),
+      contacts: followUps.map((f) => ({
+        fullName: f.contactPerson,
+        email: splitList(f.email).join(', '),
+        emails: splitList(f.email),
+        phoneNumber: splitList(f.mobile).join(', '),
+        phoneNumbers: splitList(f.mobile),
+        alternateNumber: splitList(f.directLine).join(', '),
+        alternateNumbers: splitList(f.directLine),
+        jobTitle: f.designation,
+        industry: '',
+        discussion: f.remark,
+      })),
     });
 
   function handleCompanyChange(constId: string) {
@@ -985,47 +1261,87 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                 {discussionSubTab === 'contacts' && (
                   <div className="space-y-3">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div><label className={labelClass}>Full Name</label><input className={inputClass} value={contactDraft.fullName} onChange={(e) => setContactDraft((d) => ({ ...d, fullName: e.target.value }))} /></div>
-                      <div><label className={labelClass}>Email</label><input className={inputClass} value={contactDraft.email} onChange={(e) => setContactDraft((d) => ({ ...d, email: e.target.value }))} /></div>
-                      <div><label className={labelClass}>Phone</label><input className={inputClass} value={contactDraft.phoneNumber} onChange={(e) => setContactDraft((d) => ({ ...d, phoneNumber: e.target.value }))} /></div>
-                      <div><label className={labelClass}>Alternate Number</label><input className={inputClass} value={contactDraft.alternateNumber} onChange={(e) => setContactDraft((d) => ({ ...d, alternateNumber: e.target.value }))} /></div>
-                      <div><label className={labelClass}>Designation</label><input className={inputClass} value={contactDraft.jobTitle} onChange={(e) => setContactDraft((d) => ({ ...d, jobTitle: e.target.value }))} /></div>
-                      <div><label className={labelClass}>Industry</label><input className={inputClass} value={contactDraft.industry} onChange={(e) => setContactDraft((d) => ({ ...d, industry: e.target.value }))} /></div>
-                      <div><label className={labelClass}>Follow Up Notes</label><input className={inputClass} value={contactDraft.discussion} onChange={(e) => setContactDraft((d) => ({ ...d, discussion: e.target.value }))} /></div>
+                      <div><label className={labelClass}>Date</label><input type="date" className={inputClass} value={followUpDraft.date} onChange={(e) => setFollowUpDraft((d) => ({ ...d, date: e.target.value }))} /></div>
+                      <div><label className={labelClass}>Next Date</label><input type="date" className={inputClass} value={followUpDraft.nextDate || ''} onChange={(e) => setFollowUpDraft((d) => ({ ...d, nextDate: e.target.value }))} /></div>
+                      <div><label className={labelClass}>Contact Person</label><input className={inputClass} value={followUpDraft.contactPerson} onChange={(e) => setFollowUpDraft((d) => ({ ...d, contactPerson: e.target.value }))} /></div>
+                      <div><label className={labelClass}>Designation</label><input className={inputClass} value={followUpDraft.designation} onChange={(e) => setFollowUpDraft((d) => ({ ...d, designation: e.target.value }))} /></div>
+                      <div>
+                        <label className={labelClass}>Mobile</label>
+                        <textarea
+                          className={textareaClass}
+                          rows={2}
+                          value={followUpDraft.mobile}
+                          onChange={(e) => setFollowUpDraft((d) => ({ ...d, mobile: e.target.value }))}
+                          placeholder="Multiple numbers: comma or new line"
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Email</label>
+                        <textarea
+                          className={textareaClass}
+                          rows={2}
+                          value={followUpDraft.email}
+                          onChange={(e) => setFollowUpDraft((d) => ({ ...d, email: e.target.value }))}
+                          placeholder="Multiple emails: comma or new line"
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Purpose</label>
+                        <select className={inputClass} value={followUpDraft.purpose} onChange={(e) => setFollowUpDraft((d) => ({ ...d, purpose: e.target.value }))}>
+                          <option value="">--Select Purpose--</option>
+                          {FOLLOWUP_PURPOSES.map((p) => (
+                            <option key={p} value={p}>{p}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelClass}>Course</label>
+                        <select className={inputClass} value={followUpDraft.course} onChange={(e) => setFollowUpDraft((d) => ({ ...d, course: e.target.value }))}>
+                          <option value="">--Select Course--</option>
+                          {courses.map((c) => (
+                            <option key={c.Course_Id} value={c.Course_Name}>{c.Course_Name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div><label className={labelClass}>Direct Line</label><input className={inputClass} value={followUpDraft.directLine} onChange={(e) => setFollowUpDraft((d) => ({ ...d, directLine: e.target.value }))} /></div>
+                      <div className="md:col-span-3"><label className={labelClass}>Remarks</label><input className={inputClass} value={followUpDraft.remark} onChange={(e) => setFollowUpDraft((d) => ({ ...d, remark: e.target.value }))} /></div>
                     </div>
                     <div className="flex gap-2 justify-end">
                       <button
                         type="button"
                         className="px-4 py-2 rounded-lg bg-[#2A6BB5] text-white text-sm font-semibold"
                         onClick={() => {
-                          const hasAny = Boolean(contactDraft.fullName?.trim() || contactDraft.email?.trim());
+                          const hasAny = Boolean(followUpDraft.date || followUpDraft.contactPerson?.trim() || followUpDraft.email?.trim() || followUpDraft.remark?.trim());
                           if (!hasAny) return;
-                          setContacts((prev) => (editingContactIndex === null ? [...prev, contactDraft] : prev.map((m, i) => (i === editingContactIndex ? contactDraft : m))));
-                          setContactDraft({ fullName: '', email: '', phoneNumber: '', alternateNumber: '', jobTitle: '', industry: '', discussion: '' });
-                          setEditingContactIndex(null);
+                          setFollowUps((prev) => (editingFollowUpIndex === null ? [...prev, followUpDraft] : prev.map((m, i) => (i === editingFollowUpIndex ? followUpDraft : m))));
+                          setFollowUpDraft({ date: '', nextDate: '', contactPerson: '', designation: '', mobile: '', email: '', purpose: '', course: '', directLine: '', remark: '' });
+                          setEditingFollowUpIndex(null);
                         }}
                       >
-                        {editingContactIndex === null ? 'Add Follow Up' : 'Update Follow Up'}
+                        {editingFollowUpIndex === null ? 'Add Follow Up' : 'Update Follow Up'}
                       </button>
-                      {editingContactIndex !== null && (
-                        <button type="button" className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-semibold" onClick={() => { setContactDraft({ fullName: '', email: '', phoneNumber: '', alternateNumber: '', jobTitle: '', industry: '', discussion: '' }); setEditingContactIndex(null); }}>Cancel</button>
+                      {editingFollowUpIndex !== null && (
+                        <button type="button" className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-semibold" onClick={() => { setFollowUpDraft({ date: '', nextDate: '', contactPerson: '', designation: '', mobile: '', email: '', purpose: '', course: '', directLine: '', remark: '' }); setEditingFollowUpIndex(null); }}>Cancel</button>
                       )}
                     </div>
                     <div className="overflow-x-auto rounded-lg border border-gray-200">
                       <table className="min-w-full text-xs">
-                        <thead className="bg-gray-50"><tr><th className="px-3 py-2 text-left">Name</th><th className="px-3 py-2 text-left">Job</th><th className="px-3 py-2 text-left">Contact</th><th className="px-3 py-2 text-left">Discussion</th><th className="px-3 py-2 text-right">Action</th></tr></thead>
+                        <thead className="bg-gray-50"><tr><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">Contact</th><th className="px-3 py-2 text-left">Designation</th><th className="px-3 py-2 text-left">Mobile / Email</th><th className="px-3 py-2 text-left">Purpose / Course</th><th className="px-3 py-2 text-left">Direct Line</th><th className="px-3 py-2 text-left">Remarks</th><th className="px-3 py-2 text-right">Action</th></tr></thead>
                         <tbody>
-                          {contacts.length === 0 ? (
-                            <tr><td colSpan={5} className="px-3 py-3 text-gray-500">No contacts added yet</td></tr>
-                          ) : contacts.map((c, idx) => (
+                          {followUps.length === 0 ? (
+                            <tr><td colSpan={8} className="px-3 py-3 text-gray-500">No follow-ups added yet</td></tr>
+                          ) : followUps.map((c, idx) => (
                             <tr key={idx} className="border-t border-gray-100">
-                              <td className="px-3 py-2">{c.fullName || '—'}</td>
-                              <td className="px-3 py-2">{c.jobTitle || '—'}</td>
-                              <td className="px-3 py-2">{c.email || '—'} / {c.phoneNumber || '—'}</td>
-                              <td className="px-3 py-2">{c.industry || '—'} / {c.discussion || '—'}</td>
+                              <td className="px-3 py-2">{toDateInputValue(c.date) || '—'}</td>
+                              <td className="px-3 py-2">{c.contactPerson || '—'}</td>
+                              <td className="px-3 py-2">{c.designation || '—'}</td>
+                              <td className="px-3 py-2">{splitList(c.mobile).join(', ') || '—'} / {splitList(c.email).join(', ') || '—'}</td>
+                              <td className="px-3 py-2">{c.purpose || '—'} / {c.course || '—'}</td>
+                              <td className="px-3 py-2">{c.directLine || '—'}</td>
+                              <td className="px-3 py-2">{c.remark || '—'}</td>
                               <td className="px-3 py-2 text-right">
-                                <button type="button" className="text-[#2A6BB5] mr-2" onClick={() => { setEditingContactIndex(idx); setContactDraft({ ...c }); }}>Edit</button>
-                                <button type="button" className="text-red-600" onClick={() => setContacts((prev) => prev.filter((_, i) => i !== idx))}>Delete</button>
+                                <button type="button" className="text-[#2A6BB5] mr-2" onClick={() => { setEditingFollowUpIndex(idx); setFollowUpDraft({ ...c }); }}>Edit</button>
+                                <button type="button" className="text-red-600" onClick={() => setFollowUps((prev) => prev.filter((_, i) => i !== idx))}>Delete</button>
                               </td>
                             </tr>
                           ))}

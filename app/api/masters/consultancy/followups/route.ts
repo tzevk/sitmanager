@@ -71,6 +71,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const constId = searchParams.get('constId') || searchParams.get('Const_Id') || searchParams.get('id');
     const search = searchParams.get('search')?.trim() || '';
+    const source = (searchParams.get('source') || 'all').trim().toLowerCase();
 
     if (!constId) return NextResponse.json({ error: 'constId is required' }, { status: 400 });
 
@@ -89,9 +90,11 @@ export async function GET(req: NextRequest) {
         Direct_Line VARCHAR(100),
         Remarks TEXT,
         Added_By INT,
+        Source_Inquiry_Id INT,
         IsDelete TINYINT DEFAULT 0,
         Date_Added DATETIME DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_const_id (Const_Id)
+        INDEX idx_const_id (Const_Id),
+        INDEX idx_source_inquiry (Source_Inquiry_Id)
       )
     `);
 
@@ -107,6 +110,7 @@ export async function GET(req: NextRequest) {
     await ensureFollowupColumn(pool, 'Direct_Line', 'VARCHAR(100) NULL');
     await ensureFollowupColumn(pool, 'Remarks', 'TEXT NULL');
     await ensureFollowupColumn(pool, 'Added_By', 'INT NULL');
+    await ensureFollowupColumn(pool, 'Source_Inquiry_Id', 'INT NULL');
     await ensureFollowupColumn(pool, 'IsDelete', 'TINYINT DEFAULT 0');
     await ensureFollowupColumn(pool, 'Date_Added', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
@@ -120,9 +124,15 @@ export async function GET(req: NextRequest) {
       params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
+    if (source === 'corporate') {
+      where += ` AND (f.Source_Inquiry_Id IS NOT NULL AND f.Source_Inquiry_Id > 0)`;
+    } else if (source === 'manual') {
+      where += ` AND (f.Source_Inquiry_Id IS NULL OR f.Source_Inquiry_Id = 0)`;
+    }
+
     const [rows] = await pool.query<any[]>(
       `SELECT f.Followup_Id, f.Const_Id, f.Followup_Date, f.Contact_Person, f.Designation,
-              f.Mobile, f.email, f.Purpose, f.Course, f.Direct_Line, f.Remarks
+              f.Mobile, f.email, f.Purpose, f.Course, f.Direct_Line, f.Remarks, f.Source_Inquiry_Id
        FROM consultant_followup f
        WHERE ${where}
        ORDER BY f.Followup_Id DESC`,
@@ -165,9 +175,11 @@ export async function POST(req: NextRequest) {
         Direct_Line VARCHAR(100),
         Remarks TEXT,
         Added_By INT,
+        Source_Inquiry_Id INT,
         IsDelete TINYINT DEFAULT 0,
         Date_Added DATETIME DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_const_id (Const_Id)
+        INDEX idx_const_id (Const_Id),
+        INDEX idx_source_inquiry (Source_Inquiry_Id)
       )
     `);
 
@@ -183,12 +195,13 @@ export async function POST(req: NextRequest) {
     await ensureFollowupColumn(pool, 'Direct_Line', 'VARCHAR(100) NULL');
     await ensureFollowupColumn(pool, 'Remarks', 'TEXT NULL');
     await ensureFollowupColumn(pool, 'Added_By', 'INT NULL');
+    await ensureFollowupColumn(pool, 'Source_Inquiry_Id', 'INT NULL');
     await ensureFollowupColumn(pool, 'IsDelete', 'TINYINT DEFAULT 0');
     await ensureFollowupColumn(pool, 'Date_Added', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
     await pool.query(
-      `INSERT INTO consultant_followup (Const_Id, Followup_Date, Contact_Person, Designation, Mobile, email, Purpose, Course, Direct_Line, Remarks, Added_By)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO consultant_followup (Const_Id, Followup_Date, Contact_Person, Designation, Mobile, email, Purpose, Course, Direct_Line, Remarks, Added_By, Source_Inquiry_Id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
       [constId, Followup_Date || null, Contact_Person || null, Designation || null,
        Mobile || null, email || null, Purpose || null, Course || null, Direct_Line || null,
        Remarks || null, session?.userId || null]
