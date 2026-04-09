@@ -3,6 +3,48 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
+async function getRelatedConsultancyIds(pool: ReturnType<typeof getPool>, constId: number): Promise<number[]> {
+  const ids = new Set<number>([constId]);
+
+  const [currentRows] = await pool.query<any[]>(
+    `SELECT Comp_Name
+     FROM consultant_mst
+     WHERE Const_Id = ?
+     LIMIT 1`,
+    [constId]
+  );
+
+  const companyName = String(currentRows?.[0]?.Comp_Name || '').trim();
+  if (!companyName) return Array.from(ids);
+
+  const tokens = companyName
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 4)
+    .slice(0, 3);
+
+  if (tokens.length === 0) return Array.from(ids);
+
+  const tokenWhere = tokens.map(() => 'LOWER(Comp_Name) LIKE ?').join(' OR ');
+  const [rows] = await pool.query<any[]>(
+    `SELECT Const_Id
+     FROM consultant_mst
+     WHERE (IsDelete = 0 OR IsDelete IS NULL)
+       AND (${tokenWhere})
+     LIMIT 100`,
+    tokens.map((t) => `%${t}%`)
+  );
+
+  for (const r of rows ?? []) {
+    const id = Number(r?.Const_Id);
+    if (Number.isFinite(id) && id > 0) ids.add(id);
+  }
+
+  return Array.from(ids);
+}
+
 export async function GET(req: NextRequest) {
   try {
     // Keep permissions aligned with other consultancy sub-resources (branches/followups)
@@ -24,6 +66,8 @@ export async function GET(req: NextRequest) {
     if (!constIdRaw || Number.isNaN(constId) || constId <= 0) {
       return NextResponse.json({ error: 'constId is required' }, { status: 400 });
     }
+
+    const relatedConstIds = await getRelatedConsultancyIds(pool, constId);
 
     // `cv_shortlisted.Company_Id` links to `consultant_mst.Const_Id`.
     // `cvchild` stores students (shortlisted/placement status) for that CV.
@@ -54,10 +98,10 @@ export async function GET(req: NextRequest) {
          ON cc.Batch_id = b.Batch_Id
        LEFT JOIN MST_Deciplin md
          ON md.Id = CAST(NULLIF(TRIM(s.Discipline), '') AS UNSIGNED)
-       WHERE cv.Company_Id = ?
+       WHERE cv.Company_Id IN (${relatedConstIds.map(() => '?').join(',')})
          AND (cv.IsDelete = 0 OR cv.IsDelete IS NULL)
        ORDER BY cv.id DESC, cc.Id DESC`,
-      [constId]
+      relatedConstIds
     );
 
     const mapped = (rows ?? []).map((r: any) => ({
