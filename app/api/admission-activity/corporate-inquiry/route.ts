@@ -99,6 +99,245 @@ async function getOrCreateConsultancyFromInquiry(opts: {
   return Number(result.insertId);
 }
 
+async function consultancyExists(pool: ReturnType<typeof getPool>, consultancyId: number): Promise<boolean> {
+  if (!Number.isFinite(consultancyId) || consultancyId <= 0) return false;
+  const [rows] = await pool.query<any[]>(
+    `SELECT 1
+     FROM consultant_mst
+     WHERE Const_Id = ?
+       AND (IsDelete = 0 OR IsDelete IS NULL)
+     LIMIT 1`,
+    [consultancyId]
+  );
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+async function resolveConsultancyIdForInquiry(opts: {
+  pool: ReturnType<typeof getPool>;
+  consultancyId?: number | null;
+  companyName?: string | null;
+  contactPerson?: string | null;
+  designation?: string | null;
+  phone?: string | null;
+  mobile?: string | null;
+  email?: string | null;
+  city?: string | null;
+  companyType?: string | null;
+  dateAdded?: string | null;
+}): Promise<number | null> {
+  const id = Number(opts.consultancyId);
+  if (Number.isFinite(id) && id > 0) {
+    const exists = await consultancyExists(opts.pool, id);
+    if (exists) return id;
+  }
+
+  const name = String(opts.companyName || '').trim();
+  if (!name) return null;
+
+  return getOrCreateConsultancyFromInquiry({
+    pool: opts.pool,
+    companyName: name,
+    contactPerson: opts.contactPerson || null,
+    designation: opts.designation || null,
+    phone: opts.phone || null,
+    mobile: opts.mobile || null,
+    email: opts.email || null,
+    city: opts.city || null,
+    companyType: opts.companyType || null,
+    dateAdded: opts.dateAdded || null,
+  });
+}
+
+function normalizeDateOnly(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const isoDate = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoDate) return `${isoDate[1]}-${isoDate[2]}-${isoDate[3]}`;
+
+  const dmy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+
+  const mdy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (mdy) return `${mdy[3]}-${mdy[1]}-${mdy[2]}`;
+
+  const dt = new Date(raw);
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt.toISOString().slice(0, 10);
+}
+
+async function ensureConsultancyFollowupTable(pool: ReturnType<typeof getPool>) {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS consultant_followup (
+      Followup_Id INT AUTO_INCREMENT PRIMARY KEY,
+      Const_Id INT NOT NULL,
+      Followup_Date DATE,
+      Contact_Person VARCHAR(255),
+      Designation VARCHAR(255),
+      Mobile VARCHAR(50),
+      email VARCHAR(255),
+      Purpose VARCHAR(255),
+      Course VARCHAR(255),
+      Direct_Line VARCHAR(100),
+      Remarks TEXT,
+      Added_By INT,
+      IsDelete TINYINT DEFAULT 0,
+      Date_Added DATETIME DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_const_id (Const_Id)
+    )
+  `);
+}
+
+type CorporateFollowupCandidate = {
+  followupDate: string | null;
+  purpose: string | null;
+  remarks: string | null;
+};
+
+function extractCorporateFollowupCandidates(opts: {
+  followUpRaw?: unknown;
+  discussion?: unknown;
+  initialFollowUpDate?: unknown;
+  nextFollowUpDate?: unknown;
+  inquiryDate?: unknown;
+}): CorporateFollowupCandidate[] {
+  const out: CorporateFollowupCandidate[] = [];
+
+  const pushCandidate = (entry: CorporateFollowupCandidate) => {
+    const remarks = String(entry.remarks || '').trim();
+    const purpose = String(entry.purpose || '').trim();
+    const followupDate = normalizeDateOnly(entry.followupDate);
+    if (!remarks && !purpose && !followupDate) return;
+    out.push({
+      followupDate,
+      purpose: purpose || null,
+      remarks: remarks || null,
+    });
+  };
+
+  const fallbackDate =
+    normalizeDateOnly(opts.nextFollowUpDate)
+    || normalizeDateOnly(opts.initialFollowUpDate)
+    || normalizeDateOnly(opts.inquiryDate)
+    || null;
+
+  const discussion = String(opts.discussion || '').trim();
+  if (discussion) {
+    pushCandidate({
+      followupDate: fallbackDate,
+      purpose: 'Corporate Inquiry Discussion',
+      remarks: discussion,
+    });
+  }
+
+  const followUpRaw = String(opts.followUpRaw || '').trim();
+  if (followUpRaw) {
+    try {
+      const parsed = JSON.parse(followUpRaw) as any;
+      const meetings = Array.isArray(parsed?.meetings)
+        ? parsed.meetings
+        : Array.isArray(parsed?.followUps)
+          ? parsed.followUps
+          : [];
+
+      for (const m of meetings) {
+        if (!m || typeof m !== 'object') continue;
+        pushCandidate({
+          followupDate: m.nextDate || m.nextFollowUpDate || m.next_follow_up_date || m.date || fallbackDate,
+          purpose: 'Corporate Inquiry Follow-up',
+          remarks: m.remark || parsed?.meetingAgenda || null,
+        });
+      }
+
+      if (meetings.length === 0 && parsed?.meetingAgenda) {
+        pushCandidate({
+          followupDate: parsed?.meetingDate || parsed?.initialDate || fallbackDate,
+          purpose: 'Corporate Inquiry Follow-up',
+          remarks: parsed?.meetingAgenda,
+        });
+      }
+    } catch {
+      pushCandidate({
+        followupDate: fallbackDate,
+        purpose: 'Corporate Inquiry Follow-up',
+        remarks: followUpRaw,
+      });
+    }
+  }
+
+  const dedup = new Map<string, CorporateFollowupCandidate>();
+  for (const item of out) {
+    const k = `${item.followupDate || ''}|${String(item.purpose || '').toLowerCase()}|${String(item.remarks || '').toLowerCase()}`;
+    if (!dedup.has(k)) dedup.set(k, item);
+  }
+  return Array.from(dedup.values());
+}
+
+async function syncConsultancyFollowupsFromCorporate(opts: {
+  pool: ReturnType<typeof getPool>;
+  consultancyId: number | null;
+  companyAuthority?: string | null;
+  fullName?: string | null;
+  designation?: string | null;
+  mobile?: string | null;
+  email?: string | null;
+  followUpRaw?: unknown;
+  discussion?: unknown;
+  initialFollowUpDate?: unknown;
+  nextFollowUpDate?: unknown;
+  inquiryDate?: unknown;
+}) {
+  if (!opts.consultancyId) return;
+
+  const candidates = extractCorporateFollowupCandidates({
+    followUpRaw: opts.followUpRaw,
+    discussion: opts.discussion,
+    initialFollowUpDate: opts.initialFollowUpDate,
+    nextFollowUpDate: opts.nextFollowUpDate,
+    inquiryDate: opts.inquiryDate,
+  });
+  if (candidates.length === 0) return;
+
+  await ensureConsultancyFollowupTable(opts.pool);
+
+  const contactPerson = String((opts.companyAuthority && String(opts.companyAuthority).trim()) || '').trim()
+    || String((opts.fullName && String(opts.fullName).trim()) || '').trim()
+    || null;
+
+  for (const c of candidates) {
+    const [exists] = await opts.pool.query<any[]>(
+      `SELECT Followup_Id
+       FROM consultant_followup
+       WHERE Const_Id = ?
+         AND COALESCE(Followup_Date, '1900-01-01') = COALESCE(?, '1900-01-01')
+         AND LOWER(TRIM(COALESCE(Purpose, ''))) = LOWER(TRIM(COALESCE(?, '')))
+         AND LOWER(TRIM(COALESCE(Remarks, ''))) = LOWER(TRIM(COALESCE(?, '')))
+         AND (IsDelete = 0 OR IsDelete IS NULL)
+       LIMIT 1`,
+      [opts.consultancyId, c.followupDate, c.purpose, c.remarks]
+    );
+
+    if (Array.isArray(exists) && exists.length > 0) continue;
+
+    await opts.pool.query(
+      `INSERT INTO consultant_followup
+        (Const_Id, Followup_Date, Contact_Person, Designation, Mobile, email, Purpose, Remarks, Added_By)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+      [
+        opts.consultancyId,
+        c.followupDate,
+        contactPerson,
+        (opts.designation && String(opts.designation).trim()) || null,
+        (opts.mobile && String(opts.mobile).trim()) || null,
+        (opts.email && String(opts.email).trim()) || null,
+        c.purpose,
+        c.remarks,
+      ]
+    );
+  }
+}
+
 async function ensureCorporateInquiryColumns(pool: ReturnType<typeof getPool>) {
   const wanted = [
     'Consultancy_Id',
@@ -500,27 +739,38 @@ export async function POST(req: NextRequest) {
 
     const Idate = body?.Idate;
 
-    // If the user selected "Other / Not in list", they will send CompanyName without Consultancy_Id.
-    // Auto-save it into Consultancy Master and link this inquiry to the created/reused master record.
-    const companyNameTrimmed = String(CompanyName || '').trim();
-    if (!Consultancy_Id && companyNameTrimmed) {
-      const contactPerson = String((CompanyAuthority && String(CompanyAuthority).trim()) || '').trim()
-        || String((FullName && String(FullName).trim()) || '').trim()
-        || '';
+    const contactPerson = String((CompanyAuthority && String(CompanyAuthority).trim()) || '').trim()
+      || String((FullName && String(FullName).trim()) || '').trim()
+      || '';
 
-      Consultancy_Id = await getOrCreateConsultancyFromInquiry({
-        pool,
-        companyName: companyNameTrimmed,
-        contactPerson: contactPerson || null,
-        designation: (Designation && String(Designation).trim()) || null,
-        phone: (Phone && String(Phone).trim()) || null,
-        mobile: (Mobile && String(Mobile).trim()) || null,
-        email: (Email && String(Email).trim()) || null,
-        city: (Place && String(Place).trim()) || null,
-        companyType: (CompanyType && String(CompanyType).trim()) || null,
-        dateAdded: (Idate && String(Idate).trim()) || null,
-      });
-    }
+    Consultancy_Id = await resolveConsultancyIdForInquiry({
+      pool,
+      consultancyId: Consultancy_Id,
+      companyName: (CompanyName && String(CompanyName).trim()) || null,
+      contactPerson: contactPerson || null,
+      designation: (Designation && String(Designation).trim()) || null,
+      phone: (Phone && String(Phone).trim()) || null,
+      mobile: (Mobile && String(Mobile).trim()) || null,
+      email: (Email && String(Email).trim()) || null,
+      city: (Place && String(Place).trim()) || null,
+      companyType: (CompanyType && String(CompanyType).trim()) || null,
+      dateAdded: (Idate && String(Idate).trim()) || null,
+    });
+
+    await syncConsultancyFollowupsFromCorporate({
+      pool,
+      consultancyId: Consultancy_Id,
+      companyAuthority: (CompanyAuthority && String(CompanyAuthority).trim()) || null,
+      fullName: (FullName && String(FullName).trim()) || null,
+      designation: (Designation && String(Designation).trim()) || null,
+      mobile: (Mobile && String(Mobile).trim()) || null,
+      email: (Email && String(Email).trim()) || null,
+      followUpRaw: FollowUp,
+      discussion: Discussion,
+      initialFollowUpDate: InitialFollowUpDate,
+      nextFollowUpDate: NextFollowUpDate,
+      inquiryDate: Idate,
+    });
 
     const [result] = await pool.query(
       `INSERT INTO corporate_inquiry (
@@ -609,7 +859,7 @@ export async function PUT(req: NextRequest) {
     const Email = body?.Email;
     const Course_Id = body?.Course_Id;
 
-    const Consultancy_Id = toNullableInt(body?.Consultancy_Id);
+    let Consultancy_Id = toNullableInt(body?.Consultancy_Id);
     const CompanyType = body?.CompanyType;
     const CompanyAuthority = body?.CompanyAuthority;
     const TrainingMode = parseTrainingMode(body?.TrainingMode);
@@ -638,6 +888,39 @@ export async function PUT(req: NextRequest) {
     if (!Id) {
       return NextResponse.json({ error: 'ID is required' }, { status: 400 });
     }
+
+    const contactPerson = String((CompanyAuthority && String(CompanyAuthority).trim()) || '').trim()
+      || String((FullName && String(FullName).trim()) || '').trim()
+      || '';
+
+    Consultancy_Id = await resolveConsultancyIdForInquiry({
+      pool,
+      consultancyId: Consultancy_Id,
+      companyName: (CompanyName && String(CompanyName).trim()) || null,
+      contactPerson: contactPerson || null,
+      designation: (Designation && String(Designation).trim()) || null,
+      phone: (Phone && String(Phone).trim()) || null,
+      mobile: (Mobile && String(Mobile).trim()) || null,
+      email: (Email && String(Email).trim()) || null,
+      city: (Place && String(Place).trim()) || null,
+      companyType: (CompanyType && String(CompanyType).trim()) || null,
+      dateAdded: (Idate && String(Idate).trim()) || null,
+    });
+
+    await syncConsultancyFollowupsFromCorporate({
+      pool,
+      consultancyId: Consultancy_Id,
+      companyAuthority: (CompanyAuthority && String(CompanyAuthority).trim()) || null,
+      fullName: (FullName && String(FullName).trim()) || null,
+      designation: (Designation && String(Designation).trim()) || null,
+      mobile: (Mobile && String(Mobile).trim()) || null,
+      email: (Email && String(Email).trim()) || null,
+      followUpRaw: FollowUp,
+      discussion: Discussion,
+      initialFollowUpDate: InitialFollowUpDate,
+      nextFollowUpDate: NextFollowUpDate,
+      inquiryDate: Idate,
+    });
 
     await pool.query(
       `UPDATE corporate_inquiry SET 
