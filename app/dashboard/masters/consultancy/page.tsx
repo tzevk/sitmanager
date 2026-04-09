@@ -52,7 +52,7 @@ export default function ConsultancyPage() {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, fetchTrigger]);
+  }, [page, search, fetchTrigger]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -65,7 +65,7 @@ export default function ConsultancyPage() {
   };
 
   const handleExport = () => {
-    const headers = ['Consultancy Name', 'Company Type', 'Contact Person', 'Designation', 'Address', 'City', 'Telephone', 'Email'];
+    const headers = ['Consultancy Name', 'Company Type', 'CName', 'Designation', 'Address', 'City', 'Telephone', 'Email'];
     const csvRows = rows.map(r => [r.Comp_Name || '', r.Company_Type || '', r.Contact_Person || '', r.Designation || '', r.Address || '', r.City || '', r.Tel || '', r.EMail || '']);
     const csv = [headers.join(','), ...csvRows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -153,7 +153,7 @@ export default function ConsultancyPage() {
                   <tr className="bg-gradient-to-r from-[#2E3093]/10 to-[#2A6BB5]/10">
                     <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Consultancy Name</th>
                     <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Company Type</th>
-                    <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Contact Person</th>
+                    <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">CName</th>
                     <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Designation</th>
                     <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Address</th>
                     <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">City</th>

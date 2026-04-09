@@ -109,6 +109,7 @@ export default function EditConsultancyPage() {
   const [followupSearch, setFollowupSearch] = useState('');
   const [followupsLoading, setFollowupsLoading] = useState(false);
   const [followupsError, setFollowupsError] = useState('');
+  const [viewFollowup, setViewFollowup] = useState<FollowUp | null>(null);
   const [followupForm, setFollowupForm] = useState<FollowUp>({
     Followup_Date: today(), Contact_Person: '', Designation: '', Mobile: '', email: '',
     Purpose: '', Course: '', Direct_Line: '', Remarks: '',
@@ -484,7 +485,7 @@ export default function EditConsultancyPage() {
                     <label className={labelCls}>Course {n}</label>
                     <select className={selectCls} value={form[`Course_Id${n}` as keyof typeof form]} onChange={e => handleChange(`Course_Id${n}`, e.target.value)}>
                       <option value="">--Select Course {n}--</option>
-                      {courses.map(c => <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>)}
+                      {courses.map((c, idx) => <option key={c.Course_Id ?? idx} value={c.Course_Id}>{c.Course_Name}</option>)}
                     </select>
                   </div>
                 ))}
@@ -778,9 +779,14 @@ export default function EditConsultancyPage() {
                           <td className="px-3 py-2 text-gray-700 truncate max-w-[120px]">{f.Remarks || '-'}</td>
                           <td className="px-3 py-2 text-gray-700">{f.added_by_name || '-'}</td>
                           <td className="px-3 py-2 text-center">
-                            <button onClick={() => handleDeleteFollowup(f.Followup_Id!)} className="p-1 text-red-500 hover:bg-red-50 rounded" title="Delete">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              <button onClick={() => setViewFollowup(f)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="View">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12s3.75-7.5 9.75-7.5 9.75 7.5 9.75 7.5-3.75 7.5-9.75 7.5S2.25 12 2.25 12z" /><circle cx="12" cy="12" r="3" /></svg>
+                              </button>
+                              <button onClick={() => handleDeleteFollowup(f.Followup_Id!)} className="p-1 text-red-500 hover:bg-red-50 rounded" title="Delete">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -792,6 +798,29 @@ export default function EditConsultancyPage() {
           )}
         </div>
       </div>
+
+      {viewFollowup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-gray-200 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+              <h3 className="text-sm font-bold text-[#2E3093]">Follow-up Details</h3>
+              <button onClick={() => setViewFollowup(null)} className="rounded p-1 text-gray-500 hover:bg-gray-100">✕</button>
+            </div>
+            <div className="grid grid-cols-1 gap-3 p-4 text-xs md:grid-cols-2">
+              <div><span className="font-semibold text-gray-600">Date:</span> {viewFollowup.Followup_Date ? new Date(viewFollowup.Followup_Date).toLocaleDateString('en-GB') : '-'}</div>
+              <div><span className="font-semibold text-gray-600">Added By:</span> {viewFollowup.added_by_name || '-'}</div>
+              <div><span className="font-semibold text-gray-600">Contact Person:</span> {viewFollowup.Contact_Person || '-'}</div>
+              <div><span className="font-semibold text-gray-600">Designation:</span> {viewFollowup.Designation || '-'}</div>
+              <div><span className="font-semibold text-gray-600">Mobile:</span> {viewFollowup.Mobile || '-'}</div>
+              <div><span className="font-semibold text-gray-600">Email:</span> {viewFollowup.email || '-'}</div>
+              <div><span className="font-semibold text-gray-600">Purpose:</span> {viewFollowup.Purpose || '-'}</div>
+              <div><span className="font-semibold text-gray-600">Course:</span> {viewFollowup.Course || '-'}</div>
+              <div className="md:col-span-2"><span className="font-semibold text-gray-600">Direct Line:</span> {viewFollowup.Direct_Line || '-'}</div>
+              <div className="md:col-span-2"><span className="font-semibold text-gray-600">Remarks:</span> {viewFollowup.Remarks || '-'}</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

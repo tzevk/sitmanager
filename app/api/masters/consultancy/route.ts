@@ -53,27 +53,49 @@ export async function GET(req: NextRequest) {
     const offset = (page - 1) * limit;
     const search = searchParams.get('search')?.trim() || '';
 
-    const conditions: string[] = ['(IsDelete = 0 OR IsDelete IS NULL)'];
+    const companyTypeExpr = `COALESCE(
+      ${hasCompanyType ? "NULLIF(TRIM(cm.Company_Type), '')" : 'NULL'},
+      (
+        SELECT NULLIF(TRIM(ci.CompanyType), '')
+        FROM corporate_inquiry ci
+        WHERE (ci.IsDelete = 0 OR ci.IsDelete IS NULL)
+          AND (
+            ci.Consultancy_Id = cm.Const_Id
+            OR LOWER(TRIM(COALESCE(ci.CompanyName, ''))) = LOWER(TRIM(cm.Comp_Name))
+          )
+          AND ci.CompanyType IS NOT NULL
+          AND TRIM(ci.CompanyType) <> ''
+        ORDER BY ci.Id DESC
+        LIMIT 1
+      ),
+      CASE
+        WHEN LOWER(TRIM(COALESCE(cm.Country, ''))) IN ('india', 'in', 'bharat') THEN 'Local'
+        WHEN TRIM(COALESCE(cm.Country, '')) <> '' THEN 'International'
+        ELSE NULL
+      END
+    )`;
+
+    const conditions: string[] = ['(cm.IsDelete = 0 OR cm.IsDelete IS NULL)'];
     const params: (string | number)[] = [];
 
     if (search) {
-      conditions.push(`(Comp_Name LIKE ? OR Contact_Person LIKE ? OR Designation LIKE ? OR City LIKE ? OR EMail LIKE ?)`);
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      conditions.push(`(cm.Comp_Name LIKE ? OR cm.Contact_Person LIKE ? OR cm.Designation LIKE ? OR cm.City LIKE ? OR cm.EMail LIKE ? OR cm.Address LIKE ? OR cm.Tel LIKE ? OR cm.Mobile LIKE ? OR cm.Purpose LIKE ? OR ${companyTypeExpr} LIKE ?)`);
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     const where = conditions.join(' AND ');
 
-    const [countRows] = await pool.query<any[]>(`SELECT COUNT(*) AS total FROM consultant_mst WHERE ${where}`, params);
+    const [countRows] = await pool.query<any[]>(`SELECT COUNT(*) AS total FROM consultant_mst cm WHERE ${where}`, params);
     const total = countRows[0]?.total ?? 0;
 
     const [rows] = await pool.query<any[]>(
-      `SELECT Const_Id, Comp_Name, Contact_Person, Designation, Address, City, State, Pin, Tel, Fax,
-              Mobile, EMail, Date_Added, Industry, Remark, Country, Purpose, Website, Company_Status,
-              ${hasCompanyType ? 'Company_Type' : 'NULL AS Company_Type'},
-              Course_Id1, Course_Id2, Course_Id3, Course_Id4, Course_Id5, Course_Id6, IsActive
-       FROM consultant_mst
+      `SELECT cm.Const_Id, cm.Comp_Name, cm.Contact_Person, cm.Designation, cm.Address, cm.City, cm.State, cm.Pin, cm.Tel, cm.Fax,
+              cm.Mobile, cm.EMail, cm.Date_Added, cm.Industry, cm.Remark, cm.Country, cm.Purpose, cm.Website, cm.Company_Status,
+              ${companyTypeExpr} AS Company_Type,
+              cm.Course_Id1, cm.Course_Id2, cm.Course_Id3, cm.Course_Id4, cm.Course_Id5, cm.Course_Id6, cm.IsActive
+       FROM consultant_mst cm
        WHERE ${where}
-       ORDER BY Comp_Name ASC
+       ORDER BY cm.Comp_Name ASC
        LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
