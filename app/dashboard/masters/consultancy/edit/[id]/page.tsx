@@ -688,6 +688,37 @@ export default function EditConsultancyPage() {
 
               {/* Add Follow Up Form */}
               <SectionCard title="View Consultancy Info" icon={<svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}>
+                {/* Branch selection */}
+                <div className="mb-3">
+                  <label className={labelCls}>Branch</label>
+                  <select
+                    className={selectCls}
+                    onChange={e => {
+                      const bid = Number(e.target.value);
+                      const branch = savedBranches.find(b => b.Branch_Id === bid);
+                      if (!branch) return;
+                      setFollowupForm(f => ({
+                        ...f,
+                        Contact_Person: branch.Contact_Person || f.Contact_Person,
+                        Designation: branch.Designation || f.Designation,
+                        Mobile: branch.Mobile || f.Mobile,
+                        email: branch.email || f.email,
+                        Direct_Line: branch.Telephone || f.Direct_Line,
+                      }));
+                    }}
+                    defaultValue=""
+                  >
+                    <option value="" disabled>--Select Branch to auto-fill--</option>
+                    {savedBranches.length === 0
+                      ? <option disabled>No branches added yet</option>
+                      : savedBranches.map(b => (
+                        <option key={b.Branch_Id} value={b.Branch_Id}>
+                          {[b.Contact_Person, b.City, b.Branch_Address].filter(Boolean).join(' — ') || `Branch #${b.Branch_Id}`}
+                        </option>
+                      ))
+                    }
+                  </select>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2 mt-1">
                   <div>
                     <label className={labelCls}>Date</label>
