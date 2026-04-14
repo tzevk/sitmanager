@@ -97,11 +97,39 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    fetchSession();
+    let hasCache = false;
+    try {
+      const cached = sessionStorage.getItem('sit-session-cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setSession(parsed.session ?? null);
+        setPermissions(parsed.permissions ?? []);
+        setIsSuperAdmin(Boolean(parsed.isSuperAdmin));
+        setLoading(false);
+        hasCache = true;
+      }
+    } catch { /* ignore */ }
+
+    if (!hasCache) {
+      fetchSession();
+      return;
+    }
+
+    // Refresh in background while keeping cached UI responsive.
+    void fetchSession();
   }, [fetchSession]);
+
+  // Cache session data so navigations within dashboard are instant
+  useEffect(() => {
+    if (!session) return;
+    try {
+      sessionStorage.setItem('sit-session-cache', JSON.stringify({ session, permissions, isSuperAdmin }));
+    } catch { /* quota */ }
+  }, [session, permissions, isSuperAdmin]);
 
   const value = useMemo<PermissionContextType>(() => ({
     session,

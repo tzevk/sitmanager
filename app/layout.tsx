@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Libre_Franklin } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,6 +14,13 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
   display: "swap",
   preload: true,
+});
+
+const libreFranklin = Libre_Franklin({
+  variable: "--font-libre-franklin",
+  subsets: ["latin"],
+  weight: ["700"],
+  display: "swap",
 });
 
 export const viewport: Viewport = {
@@ -50,7 +57,7 @@ export default function RootLayout({
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased h-full`}
+        className={`${geistSans.variable} ${geistMono.variable} ${libreFranklin.variable} antialiased h-full`}
         suppressHydrationWarning
       >
         {children}

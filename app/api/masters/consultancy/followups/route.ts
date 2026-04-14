@@ -19,49 +19,6 @@ async function ensureFollowupColumn(pool: ReturnType<typeof getPool>, columnName
   }
 }
 
-async function getRelatedConsultancyIds(pool: ReturnType<typeof getPool>, constId: string): Promise<string[]> {
-  const ids = new Set<string>([String(constId)]);
-
-  const [currentRows] = await pool.query<any[]>(
-    `SELECT Comp_Name
-     FROM consultant_mst
-     WHERE Const_Id = ?
-     LIMIT 1`,
-    [constId]
-  );
-
-  const companyName = String(currentRows?.[0]?.Comp_Name || '').trim();
-  if (!companyName) return Array.from(ids);
-
-  const tokens = companyName
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .map((t) => t.trim())
-    .filter((t) => t.length >= 4)
-    .slice(0, 3);
-
-  if (tokens.length === 0) return Array.from(ids);
-
-  const tokenWhere = tokens.map(() => 'LOWER(Comp_Name) LIKE ?').join(' OR ');
-  const [rows] = await pool.query<any[]>(
-    `SELECT Const_Id
-     FROM consultant_mst
-     WHERE (IsDelete = 0 OR IsDelete IS NULL)
-       AND (${tokenWhere})
-     LIMIT 100`,
-    tokens.map((t) => `%${t}%`)
-  );
-
-  for (const r of rows ?? []) {
-    if (r?.Const_Id !== null && r?.Const_Id !== undefined) {
-      ids.add(String(r.Const_Id));
-    }
-  }
-
-  return Array.from(ids);
-}
-
 // GET - list follow-ups for a consultancy
 export async function GET(req: NextRequest) {
   try {
@@ -114,10 +71,8 @@ export async function GET(req: NextRequest) {
     await ensureFollowupColumn(pool, 'IsDelete', 'TINYINT DEFAULT 0');
     await ensureFollowupColumn(pool, 'Date_Added', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
-    const relatedConstIds = await getRelatedConsultancyIds(pool, String(constId));
-
-    let where = `f.Const_Id IN (${relatedConstIds.map(() => '?').join(',')}) AND (f.IsDelete = 0 OR f.IsDelete IS NULL OR f.IsDelete = '' OR f.IsDelete = '0' OR f.IsDelete = 'N' OR f.IsDelete = 'No')`;
-    const params: any[] = [...relatedConstIds];
+    let where = `f.Const_Id = ? AND (f.IsDelete = 0 OR f.IsDelete IS NULL OR f.IsDelete = '' OR f.IsDelete = '0' OR f.IsDelete = 'N' OR f.IsDelete = 'No')`;
+    const params: any[] = [constId];
 
     if (search) {
       where += ` AND (f.Contact_Person LIKE ? OR f.Purpose LIKE ? OR f.Remarks LIKE ? OR f.Course LIKE ?)`;
@@ -139,7 +94,55 @@ export async function GET(req: NextRequest) {
       params
     );
 
-    return NextResponse.json({ rows });
+    // Also pull inline follow-ups from corporate_inquiry FollowUp JSON for this company
+    // so older un-synced inquiries are included
+    const trackedSourceIds = new Set(
+      (rows || [])
+        .filter((r: any) => r.Source_Inquiry_Id)
+        .map((r: any) => Number(r.Source_Inquiry_Id))
+    );
+
+    const inlineRows: any[] = [];
+    try {
+      const [corpRows] = await pool.query<any[]>(
+        `SELECT Id, FollowUp, CompanyAuthority, FullName, Designation, Mobile, Email
+         FROM corporate_inquiry
+         WHERE Consultancy_Id = ?
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+           AND FollowUp IS NOT NULL AND FollowUp != ''`,
+        [constId]
+      );
+
+      for (const corp of corpRows || []) {
+        if (trackedSourceIds.has(Number(corp.Id))) continue;
+        try {
+          const parsed = JSON.parse(String(corp.FollowUp));
+          const obj = typeof parsed === 'object' && parsed !== null ? parsed as Record<string, unknown> : null;
+          const fuArr = obj && Array.isArray(obj.followUps) ? obj.followUps
+            : obj && Array.isArray(obj.followup) ? obj.followup
+            : [];
+          for (const fu of fuArr) {
+            const f = typeof fu === 'object' && fu !== null ? fu as Record<string, unknown> : {};
+            inlineRows.push({
+              Followup_Id: null,
+              Const_Id: Number(constId),
+              Followup_Date: f.date || null,
+              Contact_Person: f.contactPerson || corp.CompanyAuthority || corp.FullName || '',
+              Designation: f.designation || corp.Designation || '',
+              Mobile: f.mobile || corp.Mobile || '',
+              email: f.email || corp.Email || '',
+              Purpose: f.purpose || '',
+              Course: f.course || '',
+              Direct_Line: f.directLine || '',
+              Remarks: f.remark || '',
+              Source_Inquiry_Id: corp.Id,
+            });
+          }
+        } catch { /* malformed JSON, skip */ }
+      }
+    } catch { /* corporate_inquiry table might not have these columns yet */ }
+
+    return NextResponse.json({ rows: [...rows, ...inlineRows] });
   } catch (err: unknown) {
     console.error('Consultancy followups GET error:', err);
     const message = err instanceof Error ? err.message : 'Unknown error';

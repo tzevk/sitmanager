@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 
@@ -12,6 +12,8 @@ export default function StudentSigninPage() {
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [splash, setSplash] = useState<{ name: string } | null>(null);
+  const splashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,13 +47,84 @@ export default function StudentSigninPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'OTP verification failed');
-      router.push('/student-portal/dashboard');
+      const name = data.user?.name ?? '';
+      sessionStorage.setItem('sit_student_name', name);
+      setSplash({ name });
+      splashTimer.current = setTimeout(() => router.push('/student-portal/dashboard'), 2500);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'OTP verification failed');
     } finally {
       setLoading(false);
     }
   };
+
+  if (splash) {
+    const initials = splash.name
+      .split(' ')
+      .map(w => w[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center"
+        style={{ background: 'linear-gradient(135deg, #1a1d5e 0%, #2E3093 40%, #2A6BB5 100%)' }}
+      >
+        {/* Decorative blobs */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-[#FAE452]/8 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative flex flex-col items-center gap-6 animate-[fadeInUp_0.5s_ease_both]">
+          {/* Avatar ring */}
+          <div className="relative">
+            <div className="absolute inset-0 rounded-full bg-[#FAE452] blur-2xl opacity-30 scale-110" />
+            <div className="relative w-32 h-32 rounded-full border-4 border-[#FAE452] bg-[#FAE452] flex items-center justify-center shadow-[0_24px_60px_rgba(250,228,82,0.3)]">
+              <span className="text-4xl font-black text-[#2E3093] leading-none">{initials}</span>
+            </div>
+          </div>
+
+          {/* Name */}
+          <div className="flex flex-col items-center gap-1.5 text-center">
+            <p className="text-white/50 text-xs font-semibold uppercase tracking-[0.3em]">Welcome back</p>
+            <h1 className="text-3xl font-bold text-white">{splash.name}</h1>
+          </div>
+
+          {/* Go to Dashboard button */}
+          <button
+            onClick={() => {
+              if (splashTimer.current) clearTimeout(splashTimer.current);
+              router.push('/student-portal/dashboard');
+            }}
+            className="mt-2 px-6 py-2.5 rounded-2xl bg-[#FAE452] text-[#2E3093] text-sm font-bold shadow-[0_12px_32px_rgba(250,228,82,0.3)] hover:bg-white transition-colors"
+          >
+            Go to Dashboard →
+          </button>
+
+          {/* Loading dots */}
+          <div className="flex items-center gap-1.5">
+            {[0, 1, 2].map(i => (
+              <div
+                key={i}
+                className="w-1.5 h-1.5 rounded-full bg-white/30"
+                style={{ animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }}
+              />
+            ))}
+          </div>
+        </div>
+
+        <style>{`
+          @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+            40% { transform: scale(1); opacity: 1; }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 flex overflow-hidden">

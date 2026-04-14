@@ -17,7 +17,8 @@
     "cron:sync-batch": "node scripts/cron/run-sync-batch.mjs",
     "cron:sync-all": "node scripts/cron/run-sync-all.mjs",
     "cron:sync-inquiry": "node scripts/cron/run-sync-inquiry.mjs",
-    "cron:sync-alumni-jobs": "node scripts/cron/run-sync-alumni-jobs.mjs"
+    "cron:sync-alumni-jobs": "node scripts/cron/run-sync-alumni-jobs.mjs",
+    "cron:sync-consultancy": "node scripts/cron/run-sync-consultancy.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-ses": "^3.1025.0",

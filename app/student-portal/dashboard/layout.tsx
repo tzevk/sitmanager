@@ -64,7 +64,9 @@ const navItems = [
 export default function StudentDashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [studentName, setStudentName] = useState('');
+  const [studentName, setStudentName] = useState(() =>
+    typeof window !== 'undefined' ? (sessionStorage.getItem('sit_student_name') ?? '') : ''
+  );
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -74,7 +76,11 @@ export default function StudentDashboardLayout({ children }: { children: React.R
         const res = await fetch('/api/student-portal/auth/session');
         if (res.status === 401) { router.push('/student-portal/signin'); return; }
         const data = await res.json();
-        if (active) setStudentName(data.user?.name ?? '');
+        if (active) {
+          const name = data.user?.name ?? '';
+          sessionStorage.setItem('sit_student_name', name);
+          setStudentName(name);
+        }
       } catch { /* silent */ }
     })();
     return () => { active = false; };

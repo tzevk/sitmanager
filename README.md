@@ -30,6 +30,7 @@ Cron auth (recommended in production):
 
 - `GET /api/cron/sync-all` — Incrementally upserts **all** base tables (requires primary keys) from old → new.
 - `GET /api/cron/sync-courses` — Incrementally upserts `course_mst` from old → new.
+- `GET /api/cron/sync-consultancy` — Incrementally upserts consultancy master (`consultant_mst`) from old → new.
 
 ### Manual run (local)
 

@@ -20,6 +20,10 @@
       "schedule": "5 */2 * * *"
     },
     {
+      "path": "/api/cron/sync-consultancy",
+      "schedule": "8 */2 * * *"
+    },
+    {
       "path": "/api/cron/sync-all",
       "schedule": "10 */2 * * *"
     },
