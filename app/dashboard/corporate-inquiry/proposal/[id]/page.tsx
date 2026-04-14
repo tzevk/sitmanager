@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState, use, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { FaArrowLeft, FaDownload, FaPlus, FaTrash } from 'react-icons/fa';
+import { FaArrowLeft, FaPlus, FaTrash, FaSave } from 'react-icons/fa';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -11,6 +11,22 @@ type QuotationRow = {
   duration: string;
   fee: string;
 };
+
+type Attachment = {
+  name: string;
+  mime: string;
+  dataUrl: string;
+};
+
+async function readFileAsAttachment(file: File): Promise<Attachment> {
+  const dataUrl: string = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+  return { name: file.name, mime: file.type || 'application/octet-stream', dataUrl };
+}
 
 const DEFAULT_ABOUT_ORGANISATION = `1. Introduction
 "Suvidya Institute of Technology Pvt. Ltd." is a Training organization formed to "Make Everyone Eligible for Working in Global Industry" by enhancing skills as per the industrial project activities. SIT training is supported by an EPC company "Ms. Accent Techno Solutions Pvt. Ltd." by providing working professionals as a Trainer and Providing project case studies for making training Rehearsal of actual working.
@@ -69,17 +85,36 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
   const [quotationRows, setQuotationRows] = useState<QuotationRow[]>([
     { particulars: '', duration: '', fee: '' },
   ]);
+  const [trainingAttachments, setTrainingAttachments] = useState<Attachment[]>([]);
+  const [quotationAttachments, setQuotationAttachments] = useState<Attachment[]>([]);
+  const trainingFileInputRef = useRef<HTMLInputElement | null>(null);
+  const quotationFileInputRef = useRef<HTMLInputElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
+
+  const handleAttachmentUpload = async (
+    files: FileList | null,
+    setter: React.Dispatch<React.SetStateAction<Attachment[]>>
+  ) => {
+    if (!files || files.length === 0) return;
+    const incoming = await Promise.all(Array.from(files).map(readFileAsAttachment));
+    setter((prev) => [...prev, ...incoming]);
+  };
+
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    async function loadInquiry() {
+    async function loadAll() {
       try {
-        const res = await fetch(`/api/admission-activity/corporate-inquiry/${id}`, { method: 'GET' });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !alive) return;
+        const [inqRes, propRes] = await Promise.all([
+          fetch(`/api/admission-activity/corporate-inquiry/${id}`, { method: 'GET' }),
+          fetch(`/api/admission-activity/corporate-inquiry/proposal/${id}`, { method: 'GET' }),
+        ]);
+        const inqData = await inqRes.json().catch(() => ({}));
+        const propData = await propRes.json().catch(() => ({}));
+        if (!alive) return;
 
-        const inq = data?.inquiry || {};
+        const inq = inqData?.inquiry || {};
         const inqCompany = String(inq.CompanyName || '').trim();
         const inqVenue = String(inq.Place || '').trim();
         const inqCourse = String(inq.Course_Id || '').trim();
@@ -90,6 +125,22 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
         setClientName(inqCompany);
         setProposalTitle(inqCourse || 'Corporate Training Program');
         setTrainingContents(inqReq);
+
+        const saved = propData?.proposal;
+        if (saved) {
+          if (saved.ProposalRefNo) setProposalRefNo(String(saved.ProposalRefNo));
+          if (saved.ProposalDate) setProposalDate(String(saved.ProposalDate));
+          if (saved.ProposalTitle) setProposalTitle(String(saved.ProposalTitle));
+          if (saved.ClientName) setClientName(String(saved.ClientName));
+          if (saved.Venue) setVenue(String(saved.Venue));
+          if (saved.AboutOrganisation) setAboutOrganisation(String(saved.AboutOrganisation));
+          if (typeof saved.TrainingContents === 'string') setTrainingContents(saved.TrainingContents);
+          if (Array.isArray(saved.QuotationRows) && saved.QuotationRows.length > 0) {
+            setQuotationRows(saved.QuotationRows);
+          }
+          if (Array.isArray(saved.TrainingAttachments)) setTrainingAttachments(saved.TrainingAttachments);
+          if (Array.isArray(saved.QuotationAttachments)) setQuotationAttachments(saved.QuotationAttachments);
+        }
       } catch {
         // Ignore and allow manual form filling.
       } finally {
@@ -97,7 +148,7 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
       }
     }
 
-    loadInquiry();
+    loadAll();
     return () => {
       alive = false;
     };
@@ -132,6 +183,30 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
       .map((line) => `<li>${esc(line)}</li>`)
       .join('');
 
+    const renderAttachments = (items: Attachment[]) => {
+      if (items.length === 0) return '';
+      const images = items.filter((a) => a.mime.startsWith('image/'));
+      const files = items.filter((a) => !a.mime.startsWith('image/'));
+      const imageHtml = images
+        .map(
+          (att) =>
+            `<div style="margin:8px 0;"><img src="${att.dataUrl}" alt="${esc(att.name)}" style="max-width:100%;height:auto;border:1px solid #eee;"/><div style="font-size:12px;color:#555;margin-top:2px;">${esc(att.name)}</div></div>`
+        )
+        .join('');
+      const filesHtml = files.length
+        ? `<ul style="margin:4px 0 0;padding-left:18px;">${files
+            .map(
+              (att) =>
+                `<li><a href="${att.dataUrl}" download="${esc(att.name)}">${esc(att.name)}</a></li>`
+            )
+            .join('')}</ul>`
+        : '';
+      return `<div style="margin-top:10px;"><div style="font-weight:bold;margin-bottom:4px;">Attachments:</div>${imageHtml}${filesHtml}</div>`;
+    };
+
+    const trainingAttachmentsHtml = renderAttachments(trainingAttachments);
+    const quotationAttachmentsHtml = renderAttachments(quotationAttachments);
+
     return `
       <html>
         <head>
@@ -160,6 +235,7 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
 
           <h3 style="margin-top:22px;">TRAINING CONTENTS:</h3>
           <ul>${trainingLines || '<li>-</li>'}</ul>
+          ${trainingAttachmentsHtml}
 
           <h3 style="margin-top:22px;">QUOTATION:</h3>
           <table style="width:100%; border-collapse:collapse; font-size:14px;">
@@ -173,19 +249,18 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
             </thead>
             <tbody>${quotationRowsHtml}</tbody>
           </table>
+          ${quotationAttachmentsHtml}
         </body>
       </html>
     `;
-  }, [proposalRefNo, proposalDate, proposalTitle, clientName, companyName, venue, aboutOrganisation, trainingContents, quotationRows]);
+  }, [proposalRefNo, proposalDate, proposalTitle, clientName, companyName, venue, aboutOrganisation, trainingContents, quotationRows, trainingAttachments, quotationAttachments]);
 
-  const generatePreview = () => {
-    previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
-  const downloadPreviewDocx = async () => {
+  const saveProposal = async () => {
+    if (saving) return;
+    setSaving(true);
     try {
-      const res = await fetch('/api/admission-activity/corporate-inquiry/proposal', {
-        method: 'POST',
+      const res = await fetch(`/api/admission-activity/corporate-inquiry/proposal/${id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           proposalRefNo,
@@ -193,25 +268,23 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
           proposalTitle,
           clientName,
           venue,
+          aboutOrganisation,
           trainingContents,
           quotationRows,
-          aboutOrganisation,
+          trainingAttachments,
+          quotationAttachments,
         }),
       });
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error || 'Failed to generate DOCX preview');
+        throw new Error(data?.error || 'Failed to save proposal');
       }
-
-      const blob = await res.blob();
-      const safeClient = (clientName || companyName || 'client').replace(/[^a-zA-Z0-9]+/g, '-');
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `corporate-training-preview-${safeClient}.docx`;
-      link.click();
+      previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Failed to download DOCX preview');
+      alert(err instanceof Error ? err.message : 'Failed to save proposal');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -234,16 +307,11 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
               <FaArrowLeft className="w-4 h-4" /> Back
             </button>
             <button
-              onClick={generatePreview}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2A6BB5] hover:bg-[#2360A0] text-white font-semibold text-sm"
+              onClick={saveProposal}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1f8f4e] hover:bg-[#18703d] disabled:opacity-60 text-white font-semibold text-sm"
             >
-              Generate Preview
-            </button>
-            <button
-              onClick={downloadPreviewDocx}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1f8f4e] hover:bg-[#18703d] text-white font-semibold text-sm"
-            >
-              <FaDownload className="w-4 h-4" /> Download Preview DOCX
+              <FaSave className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
             </button>
           </div>
         </div>
@@ -286,20 +354,75 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
           </div>
 
           <div>
-            <label className={labelClass}>Training Contents (one item per line)</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className={labelClass}>Training Contents (one item per line)</label>
+              <button
+                type="button"
+                onClick={() => trainingFileInputRef.current?.click()}
+                className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
+              >
+                <FaPlus className="w-3 h-3" /> Attach
+              </button>
+              <input
+                ref={trainingFileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={async (e) => {
+                  await handleAttachmentUpload(e.target.files, setTrainingAttachments);
+                  if (e.target) e.target.value = '';
+                }}
+              />
+            </div>
             <textarea className={textareaClass} rows={6} value={trainingContents} onChange={(e) => setTrainingContents(e.target.value)} />
+            {trainingAttachments.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {trainingAttachments.map((att, idx) => (
+                  <li key={idx} className="flex items-center justify-between text-xs border border-gray-200 rounded px-2 py-1">
+                    <span className="truncate">{att.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => setTrainingAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                      className="p-1 rounded hover:bg-red-50 text-red-500"
+                      title="Remove attachment"
+                    >
+                      <FaTrash className="w-3 h-3" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className={labelClass}>Quotation</label>
-              <button
-                type="button"
-                onClick={() => setQuotationRows((prev) => [...prev, { particulars: '', duration: '', fee: '' }])}
-                className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
-              >
-                <FaPlus className="w-3 h-3" /> Add Row
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => quotationFileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
+                >
+                  <FaPlus className="w-3 h-3" /> Attach
+                </button>
+                <input
+                  ref={quotationFileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={async (e) => {
+                    await handleAttachmentUpload(e.target.files, setQuotationAttachments);
+                    if (e.target) e.target.value = '';
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setQuotationRows((prev) => [...prev, { particulars: '', duration: '', fee: '' }])}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
+                >
+                  <FaPlus className="w-3 h-3" /> Add Row
+                </button>
+              </div>
             </div>
             <div className="space-y-2">
               {quotationRows.map((row, idx) => (
@@ -347,6 +470,23 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
                 </div>
               ))}
             </div>
+            {quotationAttachments.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {quotationAttachments.map((att, idx) => (
+                  <li key={idx} className="flex items-center justify-between text-xs border border-gray-200 rounded px-2 py-1">
+                    <span className="truncate">{att.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => setQuotationAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                      className="p-1 rounded hover:bg-red-50 text-red-500"
+                      title="Remove attachment"
+                    >
+                      <FaTrash className="w-3 h-3" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
 

@@ -9,140 +9,136 @@ async function ensureFollowupColumn(pool: ReturnType<typeof getPool>, columnName
     `SELECT COUNT(*) AS cnt
      FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = 'consultant_followup'
+       AND TABLE_NAME = 'consultant_follows'
        AND COLUMN_NAME = ?`,
     [columnName]
   );
   const cnt = rows?.[0]?.cnt ?? 0;
   if (cnt === 0) {
-    await pool.query(`ALTER TABLE consultant_followup ADD COLUMN ${columnName} ${columnType}`);
+    await pool.query(`ALTER TABLE consultant_follows ADD COLUMN ${columnName} ${columnType}`);
   }
 }
 
 // GET - list follow-ups for a consultancy
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requirePermission(req, ['consultancy.view', 'consultancy.update', 'consultancy.create']);
+    const auth = await requirePermission(req, [
+      'consultancy.view',
+      'consultancy.update',
+      'consultancy.create',
+      'corporate_inquiry.view',
+      'corporate_inquiry.update',
+      'corporate_inquiry.create',
+    ]);
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
     const { searchParams } = new URL(req.url);
     const constId = searchParams.get('constId') || searchParams.get('Const_Id') || searchParams.get('id');
+    const inquiryId = searchParams.get('inquiryId') || searchParams.get('Inquiry_Id');
+    const companyName = searchParams.get('companyName')?.trim() || searchParams.get('CompanyName')?.trim() || '';
     const search = searchParams.get('search')?.trim() || '';
     const source = (searchParams.get('source') || 'all').trim().toLowerCase();
 
-    if (!constId) return NextResponse.json({ error: 'constId is required' }, { status: 400 });
+    if (!constId && !inquiryId && !companyName) {
+      return NextResponse.json({ error: 'constId or inquiryId or companyName is required' }, { status: 400 });
+    }
 
     // Ensure table
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS consultant_followup (
-        Followup_Id INT AUTO_INCREMENT PRIMARY KEY,
-        Const_Id INT NOT NULL,
-        Followup_Date DATE,
-        Contact_Person VARCHAR(255),
+      CREATE TABLE IF NOT EXISTS consultant_follows (
+        ID INT AUTO_INCREMENT PRIMARY KEY,
+        Consultant_Id VARCHAR(50),
+        CName VARCHAR(255),
+        Phone VARCHAR(100),
+        Email VARCHAR(255),
         Designation VARCHAR(255),
-        Mobile VARCHAR(50),
-        email VARCHAR(255),
         Purpose VARCHAR(255),
+        Remark MEDIUMTEXT,
+        Tdate VARCHAR(50),
+        DirectLine MEDIUMTEXT,
         Course VARCHAR(255),
-        Direct_Line VARCHAR(100),
-        Remarks TEXT,
-        Added_By INT,
-        Source_Inquiry_Id INT,
-        IsDelete TINYINT DEFAULT 0,
-        Date_Added DATETIME DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_const_id (Const_Id),
-        INDEX idx_source_inquiry (Source_Inquiry_Id)
+        nextdate VARCHAR(50),
+        IsActive VARCHAR(10) DEFAULT '1',
+        IsDelete INT DEFAULT 0,
+        Course_id VARCHAR(100),
+        CreatedBy VARCHAR(100)
       )
     `);
 
     // Backfill columns for older installs where table existed with partial schema.
-    await ensureFollowupColumn(pool, 'Const_Id', 'INT NOT NULL DEFAULT 0');
-    await ensureFollowupColumn(pool, 'Followup_Date', 'DATE NULL');
-    await ensureFollowupColumn(pool, 'Contact_Person', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Consultant_Id', 'VARCHAR(50) NULL');
+    await ensureFollowupColumn(pool, 'CName', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Phone', 'VARCHAR(100) NULL');
+    await ensureFollowupColumn(pool, 'Email', 'VARCHAR(255) NULL');
     await ensureFollowupColumn(pool, 'Designation', 'VARCHAR(255) NULL');
-    await ensureFollowupColumn(pool, 'Mobile', 'VARCHAR(50) NULL');
-    await ensureFollowupColumn(pool, 'email', 'VARCHAR(255) NULL');
     await ensureFollowupColumn(pool, 'Purpose', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Remark', 'MEDIUMTEXT NULL');
+    await ensureFollowupColumn(pool, 'Tdate', 'VARCHAR(50) NULL');
+    await ensureFollowupColumn(pool, 'DirectLine', 'MEDIUMTEXT NULL');
     await ensureFollowupColumn(pool, 'Course', 'VARCHAR(255) NULL');
-    await ensureFollowupColumn(pool, 'Direct_Line', 'VARCHAR(100) NULL');
-    await ensureFollowupColumn(pool, 'Remarks', 'TEXT NULL');
-    await ensureFollowupColumn(pool, 'Added_By', 'INT NULL');
-    await ensureFollowupColumn(pool, 'Source_Inquiry_Id', 'INT NULL');
-    await ensureFollowupColumn(pool, 'IsDelete', 'TINYINT DEFAULT 0');
-    await ensureFollowupColumn(pool, 'Date_Added', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
+    await ensureFollowupColumn(pool, 'nextdate', 'VARCHAR(50) NULL');
+    await ensureFollowupColumn(pool, 'IsActive', 'VARCHAR(10) DEFAULT \'1\'');
+    await ensureFollowupColumn(pool, 'IsDelete', 'INT DEFAULT 0');
+    await ensureFollowupColumn(pool, 'CreatedBy', 'VARCHAR(100) NULL');
 
-    let where = `f.Const_Id = ? AND (f.IsDelete = 0 OR f.IsDelete IS NULL OR f.IsDelete = '' OR f.IsDelete = '0' OR f.IsDelete = 'N' OR f.IsDelete = 'No')`;
-    const params: any[] = [constId];
+    let resolvedConstId = constId ? Number(constId) : 0;
+    if (resolvedConstId <= 0 && inquiryId) {
+      const [inquiryRows] = await pool.query<any[]>(
+        `SELECT Consultancy_Id
+         FROM corporate_inquiry
+         WHERE Id = ?
+         LIMIT 1`,
+        [inquiryId]
+      );
+      resolvedConstId = Number(inquiryRows?.[0]?.Consultancy_Id || 0);
+    }
+    if (resolvedConstId <= 0 && companyName) {
+      const [consultancyRows] = await pool.query<any[]>(
+        `SELECT Const_Id
+         FROM consultant_mst
+         WHERE LOWER(TRIM(COALESCE(Comp_Name, ''))) = LOWER(TRIM(?))
+         LIMIT 1`,
+        [companyName]
+      );
+      resolvedConstId = Number(consultancyRows?.[0]?.Const_Id || 0);
+    }
+    if (resolvedConstId <= 0) return NextResponse.json({ rows: [] });
+
+    let where = `(f.IsDelete = 0 OR f.IsDelete IS NULL OR f.IsDelete = '' OR f.IsDelete = '0' OR f.IsDelete = 'N' OR f.IsDelete = 'No')`;
+    const params: any[] = [resolvedConstId];
+    where += ` AND CAST(NULLIF(TRIM(f.Consultant_Id), '') AS UNSIGNED) = ?`;
 
     if (search) {
-      where += ` AND (f.Contact_Person LIKE ? OR f.Purpose LIKE ? OR f.Remarks LIKE ? OR f.Course LIKE ?)`;
+      where += ` AND (f.CName LIKE ? OR f.Purpose LIKE ? OR f.Remark LIKE ? OR f.Course LIKE ? OR f.Email LIKE ? OR f.Designation LIKE ?)`;
       params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      params.push(`%${search}%`, `%${search}%`);
     }
 
+    // consultant_follows is legacy/manual source; no corporate source linkage.
     if (source === 'corporate') {
-      where += ` AND (f.Source_Inquiry_Id IS NOT NULL AND f.Source_Inquiry_Id > 0)`;
-    } else if (source === 'manual') {
-      where += ` AND (f.Source_Inquiry_Id IS NULL OR f.Source_Inquiry_Id = 0)`;
+      return NextResponse.json({ rows: [] });
     }
 
     const [rows] = await pool.query<any[]>(
-      `SELECT f.Followup_Id, f.Const_Id, f.Followup_Date, f.Contact_Person, f.Designation,
-              f.Mobile, f.email, f.Purpose, f.Course, f.Direct_Line, f.Remarks, f.Source_Inquiry_Id
-       FROM consultant_followup f
+      `SELECT
+         f.ID AS Followup_Id,
+         CAST(NULLIF(TRIM(f.Consultant_Id), '') AS UNSIGNED) AS Const_Id,
+         COALESCE(NULLIF(TRIM(f.Tdate), ''), NULLIF(TRIM(f.nextdate), '')) AS Followup_Date,
+         COALESCE(f.CName, '') AS Contact_Person,
+         COALESCE(f.Designation, '') AS Designation,
+         COALESCE(f.Phone, '') AS Mobile,
+         COALESCE(f.Email, '') AS email,
+         COALESCE(f.Purpose, '') AS Purpose,
+         COALESCE(f.Course, '') AS Course,
+         COALESCE(f.DirectLine, '') AS Direct_Line,
+         COALESCE(f.Remark, '') AS Remarks,
+         NULL AS Source_Inquiry_Id
+       FROM consultant_follows f
        WHERE ${where}
-       ORDER BY f.Followup_Id DESC`,
+       ORDER BY f.ID DESC`,
       params
     );
-
-    // Also pull inline follow-ups from corporate_inquiry FollowUp JSON for this company
-    // so older un-synced inquiries are included
-    const trackedSourceIds = new Set(
-      (rows || [])
-        .filter((r: any) => r.Source_Inquiry_Id)
-        .map((r: any) => Number(r.Source_Inquiry_Id))
-    );
-
-    const inlineRows: any[] = [];
-    try {
-      const [corpRows] = await pool.query<any[]>(
-        `SELECT Id, FollowUp, CompanyAuthority, FullName, Designation, Mobile, Email
-         FROM corporate_inquiry
-         WHERE Consultancy_Id = ?
-           AND (IsDelete = 0 OR IsDelete IS NULL)
-           AND FollowUp IS NOT NULL AND FollowUp != ''`,
-        [constId]
-      );
-
-      for (const corp of corpRows || []) {
-        if (trackedSourceIds.has(Number(corp.Id))) continue;
-        try {
-          const parsed = JSON.parse(String(corp.FollowUp));
-          const obj = typeof parsed === 'object' && parsed !== null ? parsed as Record<string, unknown> : null;
-          const fuArr = obj && Array.isArray(obj.followUps) ? obj.followUps
-            : obj && Array.isArray(obj.followup) ? obj.followup
-            : [];
-          for (const fu of fuArr) {
-            const f = typeof fu === 'object' && fu !== null ? fu as Record<string, unknown> : {};
-            inlineRows.push({
-              Followup_Id: null,
-              Const_Id: Number(constId),
-              Followup_Date: f.date || null,
-              Contact_Person: f.contactPerson || corp.CompanyAuthority || corp.FullName || '',
-              Designation: f.designation || corp.Designation || '',
-              Mobile: f.mobile || corp.Mobile || '',
-              email: f.email || corp.Email || '',
-              Purpose: f.purpose || '',
-              Course: f.course || '',
-              Direct_Line: f.directLine || '',
-              Remarks: f.remark || '',
-              Source_Inquiry_Id: corp.Id,
-            });
-          }
-        } catch { /* malformed JSON, skip */ }
-      }
-    } catch { /* corporate_inquiry table might not have these columns yet */ }
-
-    return NextResponse.json({ rows: [...rows, ...inlineRows] });
+    return NextResponse.json({ rows });
   } catch (err: unknown) {
     console.error('Consultancy followups GET error:', err);
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -165,49 +161,59 @@ export async function POST(req: NextRequest) {
 
     // Ensure table
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS consultant_followup (
-        Followup_Id INT AUTO_INCREMENT PRIMARY KEY,
-        Const_Id INT NOT NULL,
-        Followup_Date DATE,
-        Contact_Person VARCHAR(255),
+      CREATE TABLE IF NOT EXISTS consultant_follows (
+        ID INT AUTO_INCREMENT PRIMARY KEY,
+        Consultant_Id VARCHAR(50),
+        CName VARCHAR(255),
+        Phone VARCHAR(100),
+        Email VARCHAR(255),
         Designation VARCHAR(255),
-        Mobile VARCHAR(50),
-        email VARCHAR(255),
         Purpose VARCHAR(255),
+        Remark MEDIUMTEXT,
+        Tdate VARCHAR(50),
+        DirectLine MEDIUMTEXT,
         Course VARCHAR(255),
-        Direct_Line VARCHAR(100),
-        Remarks TEXT,
-        Added_By INT,
-        Source_Inquiry_Id INT,
-        IsDelete TINYINT DEFAULT 0,
-        Date_Added DATETIME DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_const_id (Const_Id),
-        INDEX idx_source_inquiry (Source_Inquiry_Id)
+        nextdate VARCHAR(50),
+        IsActive VARCHAR(10) DEFAULT '1',
+        IsDelete INT DEFAULT 0,
+        Course_id VARCHAR(100),
+        CreatedBy VARCHAR(100)
       )
     `);
 
     // Backfill columns for older installs where table existed with partial schema.
-    await ensureFollowupColumn(pool, 'Const_Id', 'INT NOT NULL DEFAULT 0');
-    await ensureFollowupColumn(pool, 'Followup_Date', 'DATE NULL');
-    await ensureFollowupColumn(pool, 'Contact_Person', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Consultant_Id', 'VARCHAR(50) NULL');
+    await ensureFollowupColumn(pool, 'CName', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Phone', 'VARCHAR(100) NULL');
+    await ensureFollowupColumn(pool, 'Email', 'VARCHAR(255) NULL');
     await ensureFollowupColumn(pool, 'Designation', 'VARCHAR(255) NULL');
-    await ensureFollowupColumn(pool, 'Mobile', 'VARCHAR(50) NULL');
-    await ensureFollowupColumn(pool, 'email', 'VARCHAR(255) NULL');
     await ensureFollowupColumn(pool, 'Purpose', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Remark', 'MEDIUMTEXT NULL');
+    await ensureFollowupColumn(pool, 'Tdate', 'VARCHAR(50) NULL');
+    await ensureFollowupColumn(pool, 'DirectLine', 'MEDIUMTEXT NULL');
     await ensureFollowupColumn(pool, 'Course', 'VARCHAR(255) NULL');
-    await ensureFollowupColumn(pool, 'Direct_Line', 'VARCHAR(100) NULL');
-    await ensureFollowupColumn(pool, 'Remarks', 'TEXT NULL');
-    await ensureFollowupColumn(pool, 'Added_By', 'INT NULL');
-    await ensureFollowupColumn(pool, 'Source_Inquiry_Id', 'INT NULL');
-    await ensureFollowupColumn(pool, 'IsDelete', 'TINYINT DEFAULT 0');
-    await ensureFollowupColumn(pool, 'Date_Added', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
+    await ensureFollowupColumn(pool, 'nextdate', 'VARCHAR(50) NULL');
+    await ensureFollowupColumn(pool, 'IsActive', 'VARCHAR(10) DEFAULT \'1\'');
+    await ensureFollowupColumn(pool, 'IsDelete', 'INT DEFAULT 0');
+    await ensureFollowupColumn(pool, 'CreatedBy', 'VARCHAR(100) NULL');
 
     await pool.query(
-      `INSERT INTO consultant_followup (Const_Id, Followup_Date, Contact_Person, Designation, Mobile, email, Purpose, Course, Direct_Line, Remarks, Added_By, Source_Inquiry_Id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
-      [constId, Followup_Date || null, Contact_Person || null, Designation || null,
-       Mobile || null, email || null, Purpose || null, Course || null, Direct_Line || null,
-       Remarks || null, session?.userId || null]
+      `INSERT INTO consultant_follows
+       (Consultant_Id, CName, Phone, Email, Designation, Purpose, Remark, Tdate, DirectLine, Course, nextdate, IsActive, IsDelete, CreatedBy)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '1', 0, ?)`,
+      [
+        String(constId),
+        Contact_Person || null,
+        Mobile || null,
+        email || null,
+        Designation || null,
+        Purpose || null,
+        Remarks || null,
+        Followup_Date || null,
+        Direct_Line || null,
+        Course || null,
+        session?.userId != null ? String(session.userId) : null,
+      ]
     );
 
     return NextResponse.json({ success: true });
@@ -228,7 +234,7 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
-    await pool.query(`UPDATE consultant_followup SET IsDelete = 1 WHERE Followup_Id = ?`, [id]);
+    await pool.query(`UPDATE consultant_follows SET IsDelete = 1 WHERE ID = ?`, [id]);
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     console.error('Consultancy followups DELETE error:', err);

@@ -15,6 +15,7 @@ const textareaCls =
 
 type Inquiry = {
   Id: number;
+  Consultancy_Id?: number | string | null;
   FullName?: string | null;
   CompanyName?: string | null;
   Email?: string | null;
@@ -71,6 +72,11 @@ type FollowUpItem = {
   remarks: string;
 };
 
+type ConsultancyFollowupRow = {
+  Followup_Date?: string | null;
+  Remarks?: string | null;
+};
+
 type EvalKey = 'pre_test' | 'assessment' | 'final_test' | 'training_material' | 'attendance';
 
 type EvalItem = {
@@ -86,6 +92,9 @@ const toDateInput = (v: string | null | undefined) => {
     return '';
   }
 };
+
+const followupKey = (f: FollowUpItem) =>
+  `${toDateInput(f.date) || ''}|${toDateInput(f.nextDate) || ''}|${String(f.remarks || '').trim().toLowerCase()}`;
 
 function parseEvalItem(value: string | null | undefined): EvalItem {
   if (!value) return { completed: false, remarks: '' };
@@ -162,15 +171,34 @@ function parseFollowUpJson(raw: string | null | undefined): { meetingDetails: Me
   const followUpsRaw =
     obj && Array.isArray(obj.followUps)
       ? obj.followUps
+      : obj && Array.isArray(obj.followup)
+        ? obj.followup
       : obj && Array.isArray(obj.meetings)
         ? obj.meetings
         : [];
 
   const followUps: FollowUpItem[] = followUpsRaw
     .map((rec: any) => ({
-      date: typeof rec?.date === 'string' ? rec.date : '',
-      nextDate: typeof rec?.nextDate === 'string' ? rec.nextDate : undefined,
-      remarks: typeof rec?.remarks === 'string' ? rec.remarks : '',
+      date:
+        typeof rec?.date === 'string'
+          ? rec.date
+          : typeof rec?.followupDate === 'string'
+            ? rec.followupDate
+            : '',
+      nextDate:
+        typeof rec?.nextDate === 'string'
+          ? rec.nextDate
+          : typeof rec?.nextFollowUpDate === 'string'
+            ? rec.nextFollowUpDate
+            : typeof rec?.next_follow_up_date === 'string'
+              ? rec.next_follow_up_date
+              : undefined,
+      remarks:
+        typeof rec?.remarks === 'string'
+          ? rec.remarks
+          : typeof rec?.remark === 'string'
+            ? rec.remark
+            : '',
     }))
     .filter((x: FollowUpItem) => Boolean(x.date || x.nextDate || x.remarks));
 
@@ -244,7 +272,50 @@ export default function TrainingExecutionPage() {
 
         const parsedFU = parseFollowUpJson(r.FollowUp);
         setMeetingDetails(parsedFU.meetingDetails);
-        setFollowUps(parsedFU.followUps);
+
+        let mergedFollowUps = parsedFU.followUps;
+        const consultancyId = Number(r.Consultancy_Id);
+        if (Number.isFinite(consultancyId) && consultancyId > 0) {
+          try {
+            const params = new URLSearchParams({ constId: String(consultancyId) });
+            const fuRes = await fetch(`/api/masters/consultancy/followups?${params.toString()}`);
+            const fuData = await fuRes.json().catch(() => ({}));
+            const rows = Array.isArray(fuData?.rows) ? (fuData.rows as ConsultancyFollowupRow[]) : [];
+            const mapped: FollowUpItem[] = rows
+              .map((row) => ({
+                date: toDateInput(row.Followup_Date),
+                nextDate: '',
+                remarks: String(row.Remarks || '').trim(),
+              }))
+              .filter((x) => Boolean(x.date || x.nextDate || x.remarks));
+            mergedFollowUps = Array.from(
+              new Map([...parsedFU.followUps, ...mapped].map((f) => [followupKey(f), f] as const)).values(),
+            );
+          } catch {
+            // non-blocking: keep inquiry followups only
+          }
+        } else {
+          try {
+            const params = new URLSearchParams({ inquiryId: String(inquiryId) });
+            if (r.CompanyName) params.set('companyName', String(r.CompanyName));
+            const fuRes = await fetch(`/api/masters/consultancy/followups?${params.toString()}`);
+            const fuData = await fuRes.json().catch(() => ({}));
+            const rows = Array.isArray(fuData?.rows) ? (fuData.rows as ConsultancyFollowupRow[]) : [];
+            const mapped: FollowUpItem[] = rows
+              .map((row) => ({
+                date: toDateInput(row.Followup_Date),
+                nextDate: '',
+                remarks: String(row.Remarks || '').trim(),
+              }))
+              .filter((x) => Boolean(x.date || x.nextDate || x.remarks));
+            mergedFollowUps = Array.from(
+              new Map([...parsedFU.followUps, ...mapped].map((f) => [followupKey(f), f] as const)).values(),
+            );
+          } catch {
+            // non-blocking: keep inquiry followups only
+          }
+        }
+        setFollowUps(mergedFollowUps);
 
         setExecutionForm({
           TrainingNumber: r.TrainingNumber || '',

@@ -16,6 +16,7 @@ const textareaCls =
 
 type Inquiry = {
   Id: number;
+  Consultancy_Id?: number | string | null;
   Idate?: string | null;
   Course_Id?: string | null;
   FullName?: string | null;
@@ -59,6 +60,11 @@ type MeetingItem = {
   remark: string;
 };
 
+type ConsultancyFollowupRow = {
+  Followup_Date?: string | null;
+  Remarks?: string | null;
+};
+
 type ContactDetailItem = {
   fullName: string;
   email: string;
@@ -91,6 +97,9 @@ const toDateInput = (v: string | null | undefined) => {
     return '';
   }
 };
+
+const followupKey = (f: MeetingItem) =>
+  `${toDateInput(f.date) || ''}|${toDateInput(f.nextDate) || ''}|${String(f.remark || '').trim().toLowerCase()}`;
 
 const splitList = (raw: string | null | undefined) => {
   const s = String(raw ?? '');
@@ -168,7 +177,7 @@ function parseFollowUpJson(raw: string | null | undefined) {
       .map((it: any) => ({
         date: it.date || '',
         nextDate: it.nextDate || it.nextFollowUpDate || it.next_follow_up_date || '',
-        remark: it.remark || '',
+        remark: it.remark || it.remarks || '',
       }))
       .filter((it: any) => it.date || it.nextDate || it.remark);
 
@@ -312,7 +321,49 @@ export default function CorporateInquiryEditPage() {
         // Load data for 'convert' part
         const parsedFollowUp = parseFollowUpJson(r.FollowUp);
         setMeetingDetails(parsedFollowUp.meetingDetails);
-        setFollowUps(parsedFollowUp.meetings);
+        let mergedFollowUps = parsedFollowUp.meetings;
+        const consultancyId = Number(r.Consultancy_Id);
+        if (Number.isFinite(consultancyId) && consultancyId > 0) {
+          try {
+            const params = new URLSearchParams({ constId: String(consultancyId) });
+            const fuRes = await fetch(`/api/masters/consultancy/followups?${params.toString()}`);
+            const fuData = await fuRes.json().catch(() => ({}));
+            const rows = Array.isArray(fuData?.rows) ? (fuData.rows as ConsultancyFollowupRow[]) : [];
+            const mapped: MeetingItem[] = rows
+              .map((row) => ({
+                date: toDateInput(row.Followup_Date),
+                nextDate: '',
+                remark: String(row.Remarks || '').trim(),
+              }))
+              .filter((x) => Boolean(x.date || x.nextDate || x.remark));
+            mergedFollowUps = Array.from(
+              new Map([...parsedFollowUp.meetings, ...mapped].map((f) => [followupKey(f), f] as const)).values(),
+            );
+          } catch {
+            // non-blocking: keep inquiry followups only
+          }
+        } else {
+          try {
+            const params = new URLSearchParams({ inquiryId: String(inquiryId) });
+            if (r.CompanyName) params.set('companyName', String(r.CompanyName));
+            const fuRes = await fetch(`/api/masters/consultancy/followups?${params.toString()}`);
+            const fuData = await fuRes.json().catch(() => ({}));
+            const rows = Array.isArray(fuData?.rows) ? (fuData.rows as ConsultancyFollowupRow[]) : [];
+            const mapped: MeetingItem[] = rows
+              .map((row) => ({
+                date: toDateInput(row.Followup_Date),
+                nextDate: '',
+                remark: String(row.Remarks || '').trim(),
+              }))
+              .filter((x) => Boolean(x.date || x.nextDate || x.remark));
+            mergedFollowUps = Array.from(
+              new Map([...parsedFollowUp.meetings, ...mapped].map((f) => [followupKey(f), f] as const)).values(),
+            );
+          } catch {
+            // non-blocking: keep inquiry followups only
+          }
+        }
+        setFollowUps(mergedFollowUps);
         setContacts(parsedFollowUp.contacts || []);
         setMinutesOfMeeting(r.Discussion || '');
 

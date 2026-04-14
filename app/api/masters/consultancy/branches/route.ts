@@ -18,6 +18,18 @@ async function ensureBranchColumn(pool: ReturnType<typeof getPool>, columnName: 
   }
 }
 
+async function hasBranchColumn(pool: ReturnType<typeof getPool>, columnName: string): Promise<boolean> {
+  const [rows] = await pool.query<any[]>(
+    `SELECT COUNT(*) AS cnt
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'consultant_branch'
+       AND COLUMN_NAME = ?`,
+    [columnName]
+  );
+  return (rows?.[0]?.cnt ?? 0) > 0;
+}
+
 // GET - list branches for a consultancy
 export async function GET(req: NextRequest) {
   try {
@@ -30,12 +42,21 @@ export async function GET(req: NextRequest) {
 
     if (!constId) return NextResponse.json({ error: 'constId is required' }, { status: 400 });
 
+    const hasBranchCity = await hasBranchColumn(pool, 'Branch_City');
+    const hasBranchTel = await hasBranchColumn(pool, 'Branch_Tel');
+    const hasLegacyEmail = await hasBranchColumn(pool, 'Email');
+
+    const cityExpr = hasBranchCity ? 'COALESCE(NULLIF(TRIM(City), \'\'), NULLIF(TRIM(Branch_City), \'\'))' : 'City';
+    const telExpr = hasBranchTel ? 'COALESCE(NULLIF(TRIM(Telephone), \'\'), NULLIF(TRIM(Branch_Tel), \'\'))' : 'Telephone';
+    const emailExpr = hasLegacyEmail ? 'COALESCE(NULLIF(TRIM(email), \'\'), NULLIF(TRIM(Email), \'\'))' : 'email';
+
     let where = 'Const_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)';
     const params: any[] = [constId];
 
     if (search) {
-      where += ` AND (Contact_Person LIKE ? OR Branch_Address LIKE ? OR City LIKE ? OR email LIKE ?)`;
+      where += ` AND (Contact_Person LIKE ? OR Branch_Address LIKE ? OR ${cityExpr} LIKE ? OR ${emailExpr} LIKE ? OR ${telExpr} LIKE ?)`;
       params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      params.push(`%${search}%`);
     }
 
     // Try to create table if not exists
@@ -66,7 +87,11 @@ export async function GET(req: NextRequest) {
     await ensureBranchColumn(pool, 'email', 'VARCHAR(255) NULL');
 
     const [rows] = await pool.query<any[]>(
-      `SELECT Branch_Id, Const_Id, Contact_Person, Designation, Branch_Address, City, Telephone, Mobile, email
+      `SELECT Branch_Id, Const_Id, Contact_Person, Designation, Branch_Address,
+              ${cityExpr} AS City,
+              ${telExpr} AS Telephone,
+              Mobile,
+              ${emailExpr} AS email
        FROM consultant_branch WHERE ${where} ORDER BY Branch_Id DESC`,
       params
     );
