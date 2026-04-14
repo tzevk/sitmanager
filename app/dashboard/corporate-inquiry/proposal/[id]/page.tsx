@@ -87,8 +87,10 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
   ]);
   const [trainingAttachments, setTrainingAttachments] = useState<Attachment[]>([]);
   const [quotationAttachments, setQuotationAttachments] = useState<Attachment[]>([]);
+  const [trainerCvAttachments, setTrainerCvAttachments] = useState<Attachment[]>([]);
   const trainingFileInputRef = useRef<HTMLInputElement | null>(null);
   const quotationFileInputRef = useRef<HTMLInputElement | null>(null);
+  const trainerCvFileInputRef = useRef<HTMLInputElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
 
   const handleAttachmentUpload = async (
@@ -140,6 +142,7 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
           }
           if (Array.isArray(saved.TrainingAttachments)) setTrainingAttachments(saved.TrainingAttachments);
           if (Array.isArray(saved.QuotationAttachments)) setQuotationAttachments(saved.QuotationAttachments);
+          if (Array.isArray(saved.TrainerCvAttachments)) setTrainerCvAttachments(saved.TrainerCvAttachments);
         }
       } catch {
         // Ignore and allow manual form filling.
@@ -206,6 +209,7 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
 
     const trainingAttachmentsHtml = renderAttachments(trainingAttachments);
     const quotationAttachmentsHtml = renderAttachments(quotationAttachments);
+    const trainerCvAttachmentsHtml = renderAttachments(trainerCvAttachments);
 
     return `
       <html>
@@ -250,10 +254,12 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
             <tbody>${quotationRowsHtml}</tbody>
           </table>
           ${quotationAttachmentsHtml}
+
+          ${trainerCvAttachments.length > 0 ? `<h3 style="margin-top:22px;">TRAINER'S CV:</h3>${trainerCvAttachmentsHtml}` : ''}
         </body>
       </html>
     `;
-  }, [proposalRefNo, proposalDate, proposalTitle, clientName, companyName, venue, aboutOrganisation, trainingContents, quotationRows, trainingAttachments, quotationAttachments]);
+  }, [proposalRefNo, proposalDate, proposalTitle, clientName, companyName, venue, aboutOrganisation, trainingContents, quotationRows, trainingAttachments, quotationAttachments, trainerCvAttachments]);
 
   const saveProposal = async () => {
     if (saving) return;
@@ -273,6 +279,7 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
           quotationRows,
           trainingAttachments,
           quotationAttachments,
+          trainerCvAttachments,
         }),
       });
 
@@ -478,6 +485,48 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
                     <button
                       type="button"
                       onClick={() => setQuotationAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                      className="p-1 rounded hover:bg-red-50 text-red-500"
+                      title="Remove attachment"
+                    >
+                      <FaTrash className="w-3 h-3" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className={labelClass}>Trainer&apos;s CV</label>
+              <button
+                type="button"
+                onClick={() => trainerCvFileInputRef.current?.click()}
+                className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
+              >
+                <FaPlus className="w-3 h-3" /> Attach
+              </button>
+              <input
+                ref={trainerCvFileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={async (e) => {
+                  await handleAttachmentUpload(e.target.files, setTrainerCvAttachments);
+                  if (e.target) e.target.value = '';
+                }}
+              />
+            </div>
+            {trainerCvAttachments.length === 0 ? (
+              <div className="text-xs text-gray-400">No CV attached yet.</div>
+            ) : (
+              <ul className="space-y-1">
+                {trainerCvAttachments.map((att, idx) => (
+                  <li key={idx} className="flex items-center justify-between text-xs border border-gray-200 rounded px-2 py-1">
+                    <span className="truncate">{att.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => setTrainerCvAttachments((prev) => prev.filter((_, i) => i !== idx))}
                       className="p-1 rounded hover:bg-red-50 text-red-500"
                       title="Remove attachment"
                     >

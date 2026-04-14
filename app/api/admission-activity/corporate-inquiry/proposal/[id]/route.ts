@@ -18,11 +18,21 @@ async function ensureCorporateProposalTable(pool: ReturnType<typeof getPool>) {
       QuotationRows LONGTEXT NULL,
       TrainingAttachments LONGTEXT NULL,
       QuotationAttachments LONGTEXT NULL,
+      TrainerCvAttachments LONGTEXT NULL,
       CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
       UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uq_corporate_proposal_inquiry (Inquiry_Id)
     )
   `);
+
+  const [cols] = await pool.query<any[]>(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'corporate_proposal'
+       AND COLUMN_NAME = 'TrainerCvAttachments'`
+  );
+  if (!cols || cols.length === 0) {
+    await pool.query(`ALTER TABLE corporate_proposal ADD COLUMN TrainerCvAttachments LONGTEXT NULL`);
+  }
 }
 
 export async function GET(
@@ -63,6 +73,7 @@ export async function GET(
         QuotationRows: parse(row.QuotationRows) || [],
         TrainingAttachments: parse(row.TrainingAttachments) || [],
         QuotationAttachments: parse(row.QuotationAttachments) || [],
+        TrainerCvAttachments: parse(row.TrainerCvAttachments) || [],
       },
     });
   } catch (err: unknown) {
@@ -100,6 +111,9 @@ export async function PUT(
     const quotationAttachments = JSON.stringify(
       Array.isArray(body?.quotationAttachments) ? body.quotationAttachments : []
     );
+    const trainerCvAttachments = JSON.stringify(
+      Array.isArray(body?.trainerCvAttachments) ? body.trainerCvAttachments : []
+    );
 
     const pool = getPool();
     await ensureCorporateProposalTable(pool);
@@ -107,8 +121,8 @@ export async function PUT(
     await pool.query(
       `INSERT INTO corporate_proposal
          (Inquiry_Id, ProposalRefNo, ProposalDate, ProposalTitle, ClientName, Venue,
-          AboutOrganisation, TrainingContents, QuotationRows, TrainingAttachments, QuotationAttachments)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          AboutOrganisation, TrainingContents, QuotationRows, TrainingAttachments, QuotationAttachments, TrainerCvAttachments)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          ProposalRefNo = VALUES(ProposalRefNo),
          ProposalDate = VALUES(ProposalDate),
@@ -119,7 +133,8 @@ export async function PUT(
          TrainingContents = VALUES(TrainingContents),
          QuotationRows = VALUES(QuotationRows),
          TrainingAttachments = VALUES(TrainingAttachments),
-         QuotationAttachments = VALUES(QuotationAttachments)`,
+         QuotationAttachments = VALUES(QuotationAttachments),
+         TrainerCvAttachments = VALUES(TrainerCvAttachments)`,
       [
         inquiryId,
         proposalRefNo,
@@ -132,6 +147,7 @@ export async function PUT(
         quotationRows,
         trainingAttachments,
         quotationAttachments,
+        trainerCvAttachments,
       ]
     );
 
