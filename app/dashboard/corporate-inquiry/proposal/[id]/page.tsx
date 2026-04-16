@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState, use, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { FaArrowLeft, FaPlus, FaTrash, FaSave } from 'react-icons/fa';
+import { FaArrowLeft, FaPlus, FaTrash, FaSave, FaFileWord } from 'react-icons/fa';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -219,6 +219,7 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
 
   const [activeTab, setActiveTab] = useState<'about' | 'training' | 'quotation'>('about');
   const [saving, setSaving] = useState(false);
+  const [downloadingWord, setDownloadingWord] = useState(false);
 
   const handleAttachmentUpload = async (
     files: FileList | null,
@@ -626,6 +627,80 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
     }
   };
 
+  const downloadWordProposal = async () => {
+    if (downloadingWord) return;
+    setDownloadingWord(true);
+    try {
+      const styleMatch = previewHtml.match(/<style>([\s\S]*?)<\/style>/i);
+      const baseStyles = styleMatch?.[1] || '';
+
+      const sectionMatches = Array.from(previewHtml.matchAll(/<section class="page">[\s\S]*?<\/section>/g));
+      const sections = sectionMatches
+        .map((m) => m[0].replace('class="page"', 'class="word-page"'))
+        .map((s) => s.replace(/<a\s+href="[^"]*"\s+download="([^"]+)"[^>]*>(.*?)<\/a>/g, '$1'));
+
+      if (sections.length === 0) {
+        throw new Error('Unable to prepare proposal pages for Word export.');
+      }
+
+      const cleanedStyles = baseStyles
+        .replace(/body::before\s*\{[\s\S]*?\}/g, '')
+        .replace(/\.page\s*\{[\s\S]*?\}/g, '')
+        .replace(/\.page\s*\+\s*\.page\s*\{[\s\S]*?\}/g, '');
+
+      const wordHtml = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <!--[if gte mso 9]>
+  <xml>
+    <w:WordDocument>
+      <w:View>Print</w:View>
+      <w:Zoom>100</w:Zoom>
+      <w:DoNotOptimizeForBrowser/>
+    </w:WordDocument>
+  </xml>
+  <![endif]-->
+  <style>
+    @page { size: A4; margin: 18mm 14mm; }
+    body { margin: 0; padding: 0; font-family: Calibri, "Segoe UI", Arial, sans-serif; color: #1a1a1a; }
+    .word-page { width: 100%; min-height: auto; padding: 0; }
+    .word-page-break { page-break-before: always; break-before: page; }
+    ${cleanedStyles}
+  </style>
+</head>
+<body>
+${sections
+  .map((section, idx) =>
+    idx < sections.length - 1 ? `${section}<div class="word-page-break"></div>` : section
+  )
+  .join('')}
+</body>
+</html>`;
+
+      const blob = new Blob(['\ufeff', wordHtml], {
+        type: 'application/msword;charset=utf-8',
+      });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeRef = (proposalRefNo || `proposal-${id}`)
+        .replace(/\s+/g, '-')
+        .replace(/[^a-zA-Z0-9-_]/g, '');
+      a.href = url;
+      a.download = `${safeRef || `proposal-${id}`}.doc`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to download Word file');
+    } finally {
+      setDownloadingWord(false);
+    }
+  };
+
   if (permLoading) return <PermissionLoading />;
   if (!canUpdate) return <AccessDenied message="You do not have permission to make corporate training proposals." />;
 
@@ -657,6 +732,13 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold text-sm"
             >
               <FaArrowLeft className="w-4 h-4" /> Back
+            </button>
+            <button
+              onClick={downloadWordProposal}
+              disabled={downloadingWord}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2E3093] hover:bg-[#252778] disabled:opacity-60 text-white font-semibold text-sm"
+            >
+              <FaFileWord className="w-4 h-4" /> {downloadingWord ? 'Preparing...' : 'Download Word'}
             </button>
             <button
               onClick={saveProposal}

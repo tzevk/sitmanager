@@ -93,6 +93,7 @@ async function fetchDashboardData(dept?: string) {
     activeReqRows,
     companyRequirementsList,
     placementSummaryRows,
+    placementSummaryDetailsRows,
     upcomingInterviewsRows,
     completedInterviewsRows,
     jobOpeningTrackerRows,
@@ -383,6 +384,37 @@ async function fetchDashboardData(dept?: string) {
           AND DATE(TDate) < CURDATE()
           AND LOWER(IFNULL(CompanyName, '')) LIKE '%mock%'
       ) m
+    `, []) : Promise.resolve([]),
+
+    needsPlacementDepartment ? safeQuery(pool, `
+      SELECT
+        b.Batch_Id AS batch_id,
+        COALESCE(NULLIF(TRIM(c.Course_Name), ''), 'N/A') AS course_name,
+        COALESCE(NULLIF(TRIM(b.Batch_code), ''), '-') AS batch_code,
+        DATE_FORMAT(b.ConvocationDate, '%d-%m-%Y') AS convocation_date,
+        COALESCE(IFNULL(b.StudentPassed1, 0), 0) AS passed_students,
+        COALESCE(IFNULL(b.Placement, 0), 0) AS placed_students,
+        ROUND(
+          CASE
+            WHEN COALESCE(IFNULL(b.StudentPassed1, 0), 0) > 0
+              THEN (COALESCE(IFNULL(b.Placement, 0), 0) / COALESCE(IFNULL(b.StudentPassed1, 0), 0)) * 100
+            ELSE 0
+          END,
+          1
+        ) AS placement_pct,
+        (
+          SELECT COUNT(*)
+          FROM cv_shortlisted cv
+          WHERE (cv.IsDelete = 0 OR cv.IsDelete IS NULL)
+            AND cv.Batch_Id = b.Batch_Id
+        ) AS interviews_count
+      FROM batch_mst b
+      LEFT JOIN course_mst c ON c.Course_Id = b.Course_Id
+      WHERE (b.IsDelete IS NULL OR b.IsDelete = 0)
+        AND (b.Cancel IS NULL OR b.Cancel = 0)
+        AND COALESCE(IFNULL(b.StudentPassed1, 0), 0) > 0
+      ORDER BY b.ConvocationDate DESC, b.Batch_Id DESC
+      LIMIT 12
     `, []) : Promise.resolve([]),
 
     needsPlacementDepartment ? safeQuery(pool, `
@@ -1104,6 +1136,7 @@ async function fetchDashboardData(dept?: string) {
     },
     placementDepartment: {
       placementSummary: placementSummaryRows,
+      placementSummaryDetails: placementSummaryDetailsRows,
       upcomingInterviews: upcomingInterviewsRows,
       completedInterviews: completedInterviewsRows,
       jobOpeningTracker: jobOpeningTrackerRows,

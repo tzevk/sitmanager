@@ -14,6 +14,16 @@ interface PlacementTodoItem {
 type PlacementData = {
   placementDepartment?: {
     placementSummary?: Array<{ metric?: string; value?: number }>;
+    placementSummaryDetails?: Array<{
+      batch_id?: number;
+      course_name?: string;
+      batch_code?: string;
+      convocation_date?: string;
+      passed_students?: number;
+      placed_students?: number;
+      placement_pct?: number;
+      interviews_count?: number;
+    }>;
     upcomingInterviews?: Array<{ interview_date?: string; company_name?: string; training_name?: string; batch_code?: string }>;
     completedInterviews?: Array<{ interview_date?: string; company_name?: string; training_name?: string; batch_code?: string }>;
     jobOpeningTracker?: Array<{ company_name?: string; designation?: string; location?: string; application_deadline?: string; status?: string; total_applications?: number }>;
@@ -168,6 +178,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
   }
 
   const summaryRows = placementData.placementSummary ?? [];
+  const summaryDetailRows = placementData.placementSummaryDetails ?? [];
   const upcomingInterviews = placementData.upcomingInterviews ?? [];
   const completedInterviews = placementData.completedInterviews ?? [];
   const jobOpeningTracker = placementData.jobOpeningTracker ?? [];
@@ -176,6 +187,32 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
   const upcomingMockInterviews = placementData.upcomingMockInterviews ?? [];
   const completedMockInterviews = placementData.completedMockInterviews ?? [];
   const pendingTodos = todos.filter((todo) => todo.status !== 'Done').length;
+  const summaryMap = Object.fromEntries(
+    summaryRows.map((row) => [String(row.metric || '').trim(), Number(row.value || 0)])
+  );
+
+  const summaryCards = [
+    {
+      label: 'Total Passed Students',
+      value: summaryMap['Total Passed Students'] || 0,
+      tone: 'bg-[#2E3093]/10 text-[#2E3093] border-[#2E3093]/20',
+    },
+    {
+      label: 'Total Placed Students',
+      value: summaryMap['Total Placed Students'] || 0,
+      tone: 'bg-[#2A6BB5]/10 text-[#2A6BB5] border-[#2A6BB5]/20',
+    },
+    {
+      label: 'Open Job Openings',
+      value: summaryMap['Open Job Openings'] || 0,
+      tone: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    },
+    {
+      label: 'Upcoming Interviews',
+      value: summaryMap['Upcoming Interviews'] || 0,
+      tone: 'bg-amber-50 text-amber-700 border-amber-200',
+    },
+  ];
 
   return (
     <div className="space-y-6 pb-8">
@@ -374,21 +411,62 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
             </div>
           </div>
         </WidgetCard>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 auto-rows-fr">
-          <WidgetCard title="Placement Summary" count={summaryRows.length} className="lg:col-span-2" contentClassName="max-h-none h-full">
-            {summaryRows.length === 0 ? (
-              <EmptyState />
-            ) : (
-              <Table
-                columns={['Metric', 'Value']}
-                rows={summaryRows.map((r, idx) => (
-                  <tr key={`${r.metric}-${idx}`} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-800">{r.metric || '-'}</td>
-                    <td className="px-4 py-3 text-[#2E3093] font-semibold">{Number(r.value || 0).toLocaleString()}</td>
-                  </tr>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+          <WidgetCard title="Placement Summary" count={summaryCards.length} className="lg:col-span-2" contentClassName="max-h-[400px]">
+            <div className="p-3 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                {summaryCards.map((card) => (
+                  <div key={card.label} className={`rounded-2xl border p-3 ${card.tone}`}>
+                    <p className="text-[11px] uppercase tracking-wider font-bold opacity-85">{card.label}</p>
+                    <p className="mt-2 text-2xl font-black leading-none">{card.value.toLocaleString()}</p>
+                  </div>
                 ))}
-              />
-            )}
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
+                <div className="px-4 py-3 border-b border-slate-200 bg-slate-50/80 flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">Recent Batch Outcomes</h4>
+                  <span className="text-[11px] font-semibold text-slate-500">Live from database</span>
+                </div>
+                {summaryDetailRows.length === 0 ? (
+                  <EmptyState text="No batch outcome details found" />
+                ) : (
+                  <div className="overflow-auto max-h-[220px]">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 z-10 bg-white border-b border-slate-200">
+                        <tr>
+                          <th className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Training</th>
+                          <th className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Batch</th>
+                          <th className="text-center px-3 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Passed</th>
+                          <th className="text-center px-3 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Placed</th>
+                          <th className="text-center px-3 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Interviews</th>
+                          <th className="text-center px-4 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Placed %</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {summaryDetailRows.map((row, idx) => {
+                          const pct = Number(row.placement_pct || 0);
+                          return (
+                            <tr key={`${row.batch_id || idx}`} className="hover:bg-slate-50/70">
+                              <td className="px-4 py-2.5 font-semibold text-slate-800 max-w-[220px] truncate">{row.course_name || 'N/A'}</td>
+                              <td className="px-4 py-2.5 text-slate-600 font-mono text-xs">{row.batch_code || '-'}</td>
+                              <td className="px-3 py-2.5 text-center font-bold text-slate-800">{Number(row.passed_students || 0).toLocaleString()}</td>
+                              <td className="px-3 py-2.5 text-center font-bold text-[#2A6BB5]">{Number(row.placed_students || 0).toLocaleString()}</td>
+                              <td className="px-3 py-2.5 text-center font-semibold text-slate-700">{Number(row.interviews_count || 0).toLocaleString()}</td>
+                              <td className="px-4 py-2.5 text-center">
+                                <span className={`inline-flex min-w-[58px] items-center justify-center rounded-full px-2.5 py-1 text-[11px] font-bold border ${pct >= 70 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : pct >= 40 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                                  {pct.toFixed(1)}%
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
           </WidgetCard>
 
           <WidgetCard title="Upcoming Interviews" count={upcomingInterviews.length} contentClassName="max-h-none h-full">

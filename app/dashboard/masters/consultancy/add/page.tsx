@@ -53,7 +53,7 @@ interface FollowUp {
   Remarks: string;
 }
 
-const FOLLOWUP_PURPOSES = ['Meeting', 'Seminar', 'Internship', 'Trainer', 'Placements', 'Placements Received', 'Training', 'Project', 'Others'] as const;
+const FOLLOWUP_PURPOSES = ['Meeting', 'Seminar', 'Internship', 'Trainer', 'Placements', 'Placements Received', 'Training', 'Project', 'Proposal', 'Others'] as const;
 
 const today = () => new Date().toISOString().slice(0, 10);
 

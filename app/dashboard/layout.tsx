@@ -61,6 +61,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Placement > CV Shortlisted': '/dashboard/cv-shortlisted',
   'Placement > Consultancy Report': '/dashboard/reports/consultancy',
   'Placement > Job Postings': '/dashboard/placement',
+  'Placement > Mock Interviews': '/dashboard/placement/mock-interviews',
   'Placement > Email Company': '/dashboard/placement/email-company',
   'Utility > Festival Photo Upload': '/dashboard/utility/festival-photo-upload',
 };
@@ -184,6 +185,7 @@ const SUB_MENUS: Record<string, string[]> = {
   ],
   'Placement': [
     'Job Postings',
+    'Mock Interviews',
     'Email Company',
     'Consultancy Master',
     'CV Shortlisted',

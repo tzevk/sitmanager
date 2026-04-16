@@ -69,6 +69,13 @@ export default function PlacementJobsPage() {
             <p className="text-xs text-white/70">Manage company requirements and job openings</p>
           </div>
           <div className="flex gap-2">
+            <button onClick={() => router.push('/dashboard/placement/mock-interviews')}
+              className="px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10m-11 9h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v11a2 2 0 002 2z" />
+              </svg>
+              Mock Interviews
+            </button>
             <button onClick={() => router.push('/dashboard/placement/email-company')}
               className="px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

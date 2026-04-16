@@ -301,6 +301,165 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// PUT - update follow-up
+export async function PUT(req: NextRequest) {
+  try {
+    const auth = await requirePermission(req, 'consultancy.update');
+    if (auth instanceof NextResponse) return auth;
+    const pool = getPool();
+    const body = await req.json();
+
+    const id = body.id || body.Followup_Id;
+    if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+
+    const constId = body.constId || body.Const_Id || body.Consultant_Id;
+    const { Followup_Date, Contact_Person, Designation, Mobile, email, Purpose, Course, Direct_Line, Remarks } = body;
+
+    // Ensure table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS consultant_follows (
+        ID INT AUTO_INCREMENT PRIMARY KEY,
+        Consultant_Id VARCHAR(50),
+        CName VARCHAR(255),
+        Phone VARCHAR(100),
+        Email VARCHAR(255),
+        Designation VARCHAR(255),
+        Purpose VARCHAR(255),
+        Remark MEDIUMTEXT,
+        Tdate VARCHAR(50),
+        DirectLine MEDIUMTEXT,
+        Course VARCHAR(255),
+        nextdate VARCHAR(50),
+        IsActive VARCHAR(10) DEFAULT '1',
+        IsDelete INT DEFAULT 0,
+        Course_id VARCHAR(100),
+        CreatedBy VARCHAR(100)
+      )
+    `);
+
+    // Backfill columns for older installs where table existed with partial schema.
+    await ensureFollowupColumn(pool, 'Consultant_Id', 'VARCHAR(50) NULL');
+    await ensureFollowupColumn(pool, 'CName', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Phone', 'VARCHAR(100) NULL');
+    await ensureFollowupColumn(pool, 'Email', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Designation', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Purpose', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'Remark', 'MEDIUMTEXT NULL');
+    await ensureFollowupColumn(pool, 'Tdate', 'VARCHAR(50) NULL');
+    await ensureFollowupColumn(pool, 'DirectLine', 'MEDIUMTEXT NULL');
+    await ensureFollowupColumn(pool, 'Course', 'VARCHAR(255) NULL');
+    await ensureFollowupColumn(pool, 'nextdate', 'VARCHAR(50) NULL');
+    await ensureFollowupColumn(pool, 'IsActive', 'VARCHAR(10) DEFAULT \'1\'');
+    await ensureFollowupColumn(pool, 'IsDelete', 'INT DEFAULT 0');
+    await ensureFollowupColumn(pool, 'CreatedBy', 'VARCHAR(100) NULL');
+
+    const [updateResult] = await pool.query<ResultSetHeader>(
+      `UPDATE consultant_follows
+       SET Consultant_Id = COALESCE(?, Consultant_Id),
+           CName = ?,
+           Phone = ?,
+           Email = ?,
+           Designation = ?,
+           Purpose = ?,
+           Remark = ?,
+           Tdate = ?,
+           DirectLine = ?,
+           Course = ?
+       WHERE ID = ?
+         AND (IsDelete = 0 OR IsDelete IS NULL OR IsDelete = '' OR IsDelete = '0' OR IsDelete = 'N' OR IsDelete = 'No')`,
+      [
+        constId != null ? String(constId) : null,
+        Contact_Person || null,
+        Mobile || null,
+        email || null,
+        Designation || null,
+        Purpose || null,
+        Remarks || null,
+        Followup_Date || null,
+        Direct_Line || null,
+        Course || null,
+        id,
+      ]
+    );
+
+    if (!updateResult.affectedRows) {
+      return NextResponse.json({ error: 'Follow-up not found' }, { status: 404 });
+    }
+
+    await logTableActivity(req, {
+      tableName: 'consultant_follows',
+      action: 'UPDATE',
+      recordId: id,
+      details: {
+        constId: constId != null ? String(constId) : null,
+        followupDate: Followup_Date || null,
+        contactPerson: Contact_Person || null,
+      },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (err: unknown) {
+    console.error('Consultancy followups PUT error:', err);
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+// PATCH - append discussion to follow-up remark only
+export async function PATCH(req: NextRequest) {
+  try {
+    const auth = await requirePermission(req, 'consultancy.update');
+    if (auth instanceof NextResponse) return auth;
+    const pool = getPool();
+    const body = await req.json();
+
+    const id = body.id || body.Followup_Id;
+    const discussionRaw = body.discussion;
+    const discussion = typeof discussionRaw === 'string' ? discussionRaw.trim() : '';
+
+    if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    if (!discussion) return NextResponse.json({ error: 'discussion is required' }, { status: 400 });
+
+    const [existingRows] = await pool.query<any[]>(
+      `SELECT Remark
+       FROM consultant_follows
+       WHERE ID = ?
+         AND (IsDelete = 0 OR IsDelete IS NULL OR IsDelete = '' OR IsDelete = '0' OR IsDelete = 'N' OR IsDelete = 'No')
+       LIMIT 1`,
+      [id]
+    );
+
+    if (!existingRows?.length) {
+      return NextResponse.json({ error: 'Follow-up not found' }, { status: 404 });
+    }
+
+    const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
+    const existingRemark = String(existingRows[0]?.Remark || '').trim();
+    const appendedLine = `[${timestamp}] ${discussion}`;
+    const nextRemark = existingRemark ? `${existingRemark}\n${appendedLine}` : appendedLine;
+
+    await pool.query(
+      `UPDATE consultant_follows
+       SET Remark = ?
+       WHERE ID = ?`,
+      [nextRemark, id]
+    );
+
+    await logTableActivity(req, {
+      tableName: 'consultant_follows',
+      action: 'UPDATE',
+      recordId: id,
+      details: { updatedField: 'Remark', mode: 'append_discussion' },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (err: unknown) {
+    console.error('Consultancy followups PATCH error:', err);
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 // DELETE - soft delete follow-up
 export async function DELETE(req: NextRequest) {
   try {
