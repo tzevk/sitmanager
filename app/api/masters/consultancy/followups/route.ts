@@ -81,6 +81,7 @@ export async function GET(req: NextRequest) {
     await ensureFollowupColumn(pool, 'IsActive', 'VARCHAR(10) DEFAULT \'1\'');
     await ensureFollowupColumn(pool, 'IsDelete', 'INT DEFAULT 0');
     await ensureFollowupColumn(pool, 'CreatedBy', 'VARCHAR(100) NULL');
+    await ensureFollowupColumn(pool, 'Entry_Type', 'VARCHAR(20) NULL');
 
     if (recent) {
       const [rows] = await pool.query<any[]>(
@@ -104,7 +105,8 @@ export async function GET(req: NextRequest) {
              NULLIF(TRIM(oe.Employee_Name), ''),
              NULLIF(TRIM(f.CreatedBy), ''),
              'System'
-           ) AS Created_By
+           ) AS Created_By,
+           f.Entry_Type AS Entry_Type
          FROM consultant_follows f
          LEFT JOIN consultant_mst cm
            ON CAST(NULLIF(TRIM(f.Consultant_Id), '') AS UNSIGNED) = cm.Const_Id
@@ -188,7 +190,8 @@ export async function GET(req: NextRequest) {
            NULLIF(TRIM(f.CreatedBy), ''),
            'System'
          ) AS Created_By,
-         NULL AS Source_Inquiry_Id
+         NULL AS Source_Inquiry_Id,
+         f.Entry_Type AS Entry_Type
        FROM consultant_follows f
        LEFT JOIN awt_adminuser au
          ON au.id = CAST(NULLIF(TRIM(f.CreatedBy), '') AS UNSIGNED)
@@ -262,6 +265,7 @@ export async function POST(req: NextRequest) {
     await ensureFollowupColumn(pool, 'IsActive', 'VARCHAR(10) DEFAULT \'1\'');
     await ensureFollowupColumn(pool, 'IsDelete', 'INT DEFAULT 0');
     await ensureFollowupColumn(pool, 'CreatedBy', 'VARCHAR(100) NULL');
+    await ensureFollowupColumn(pool, 'Entry_Type', 'VARCHAR(20) NULL');
 
     const [insertResult] = await pool.query<ResultSetHeader>(
       `INSERT INTO consultant_follows
@@ -352,6 +356,7 @@ export async function PUT(req: NextRequest) {
     await ensureFollowupColumn(pool, 'IsActive', 'VARCHAR(10) DEFAULT \'1\'');
     await ensureFollowupColumn(pool, 'IsDelete', 'INT DEFAULT 0');
     await ensureFollowupColumn(pool, 'CreatedBy', 'VARCHAR(100) NULL');
+    await ensureFollowupColumn(pool, 'Entry_Type', 'VARCHAR(20) NULL');
 
     const [updateResult] = await pool.query<ResultSetHeader>(
       `UPDATE consultant_follows

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
+import DeputationSection from './DeputationSection';
 
 /* ---- shared classes ---- */
 const labelCls = 'block text-[11px] font-semibold text-gray-600 mb-0.5';
@@ -114,12 +115,14 @@ export default function EditConsultancyPage() {
   const [branchSearch, setBranchSearch] = useState('');
 
   /* ---- follow ups ---- */
+  const [atsMode, setAtsMode] = useState(false);
   const [followups, setFollowups] = useState<FollowUp[]>([]);
   const [followupSearch, setFollowupSearch] = useState('');
   const [followupSource, setFollowupSource] = useState<'all' | 'corporate' | 'manual'>('all');
   const [followupsLoading, setFollowupsLoading] = useState(false);
   const [followupsError, setFollowupsError] = useState('');
   const [viewFollowup, setViewFollowup] = useState<FollowUp | null>(null);
+  const [editingFollowupId, setEditingFollowupId] = useState<number | null>(null);
   const [discussionSourceFollowupId, setDiscussionSourceFollowupId] = useState<number | null>(null);
   const [followupForm, setFollowupForm] = useState<FollowUp>({
     Followup_Date: today(), Contact_Person: '', Designation: '', Mobile: '', email: '',
@@ -290,6 +293,7 @@ export default function EditConsultancyPage() {
   }, [activeTab, fetchStudents]);
 
   const resetFollowupForm = () => {
+    setEditingFollowupId(null);
     setDiscussionSourceFollowupId(null);
     setFollowupForm({
       Followup_Date: today(),
@@ -307,10 +311,11 @@ export default function EditConsultancyPage() {
   const handleAddFollowup = async () => {
     setError(''); setSaving(true);
     try {
+      const isEditing = editingFollowupId != null;
       const res = await fetch('/api/masters/consultancy/followups', {
-        method: 'POST',
+        method: isEditing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ constId: consultancyId, ...followupForm }),
+        body: JSON.stringify({ constId: consultancyId, id: editingFollowupId, ...followupForm }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
@@ -327,6 +332,7 @@ export default function EditConsultancyPage() {
       ? `${discussionStamp()}\n${existingRemarks}`
       : discussionStamp();
 
+    setEditingFollowupId(null);
     setDiscussionSourceFollowupId(f.Followup_Id ?? null);
     setFollowupForm({
       Followup_Date: toDateInput(f.Followup_Date),
@@ -338,6 +344,25 @@ export default function EditConsultancyPage() {
       Course: f.Course || '',
       Direct_Line: f.Direct_Line || '',
       Remarks: prefixedRemarks,
+    });
+    setError('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleEditFollowup = (f: FollowUp) => {
+    if (f.Followup_Id == null) return;
+    setDiscussionSourceFollowupId(null);
+    setEditingFollowupId(f.Followup_Id);
+    setFollowupForm({
+      Followup_Date: toDateInput(f.Followup_Date),
+      Contact_Person: f.Contact_Person || '',
+      Designation: f.Designation || '',
+      Mobile: f.Mobile || '',
+      email: f.email || '',
+      Purpose: f.Purpose || '',
+      Course: f.Course || '',
+      Direct_Line: f.Direct_Line || '',
+      Remarks: f.Remarks || '',
     });
     setError('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -735,8 +760,48 @@ export default function EditConsultancyPage() {
                 </div>
               )}
 
+              {/* ATS / Deputation Mode Toggle */}
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center rounded-md text-[10px] font-bold px-2 py-0.5 ${atsMode ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500'}`}>ATS</span>
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">
+                      {atsMode ? 'Deputation Mode' : 'Standard Follow-up Mode'}
+                    </div>
+                    <div className="text-[11px] text-gray-500">
+                      {atsMode
+                        ? 'Track agreements, JD status, positions and closing outcomes.'
+                        : 'Log standard follow-up touch-points against this consultancy.'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={atsMode}
+                  onClick={() => setAtsMode(v => !v)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${atsMode ? 'bg-indigo-600' : 'bg-gray-300'}`}
+                >
+                  <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${atsMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+
+              {atsMode && <DeputationSection constId={consultancyId} />}
+
               {/* Add Follow Up Form */}
               <SectionCard title="View Consultancy Info" icon={<svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}>
+                {editingFollowupId != null && (
+                  <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 flex items-center justify-between gap-2">
+                    <span>Editing follow-up #{editingFollowupId}. This will update the same follow-up record.</span>
+                    <button
+                      type="button"
+                      onClick={resetFollowupForm}
+                      className="px-2 py-1 text-[11px] font-semibold rounded border border-blue-300 hover:bg-blue-100"
+                    >
+                      Cancel Edit
+                    </button>
+                  </div>
+                )}
                 {discussionSourceFollowupId != null && (
                   <div className="mb-3 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900 flex items-center justify-between gap-2">
                     <span>Creating new discussion copy from follow-up #{discussionSourceFollowupId}. All details are editable.</span>
@@ -827,7 +892,7 @@ export default function EditConsultancyPage() {
                   </div>
                 </div>
                 <div className="flex justify-end mt-3 gap-2">
-                  {discussionSourceFollowupId != null && (
+                  {(discussionSourceFollowupId != null || editingFollowupId != null) && (
                     <button
                       type="button"
                       onClick={resetFollowupForm}
@@ -839,7 +904,7 @@ export default function EditConsultancyPage() {
                   <button onClick={handleAddFollowup} disabled={saving}
                     className="flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white text-xs font-semibold rounded-lg shadow hover:shadow-md transition-all disabled:opacity-60">
                     {saving ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>}
-                    {discussionSourceFollowupId != null ? 'Create Discussion Copy' : 'Add +'}
+                    {editingFollowupId != null ? 'Update Follow-up' : discussionSourceFollowupId != null ? 'Create Discussion Copy' : 'Add +'}
                   </button>
                 </div>
               </SectionCard>
@@ -928,6 +993,11 @@ export default function EditConsultancyPage() {
                               <button onClick={() => setViewFollowup(f)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="View">
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12s3.75-7.5 9.75-7.5 9.75 7.5 9.75 7.5-3.75 7.5-9.75 7.5S2.25 12 2.25 12z" /><circle cx="12" cy="12" r="3" /></svg>
                               </button>
+                              {f.Followup_Id != null && (
+                                <button onClick={() => handleEditFollowup(f)} className="p-1 text-indigo-700 hover:bg-indigo-50 rounded" title="Edit">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" /></svg>
+                                </button>
+                              )}
                               {f.Followup_Id != null && (
                                 <button onClick={() => handleStartDiscussionCopy(f)} className="p-1 text-indigo-600 hover:bg-indigo-50 rounded" title="Add Discussion Copy">
                                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3h5.25m-8.319 8.682A11.955 11.955 0 0112 21c4.97 0 9-3.694 9-8.25S16.97 4.5 12 4.5s-9 3.694-9 8.25c0 1.929.724 3.705 1.931 5.122.22.257.316.598.25.927a16.965 16.965 0 01-.69 2.833.75.75 0 00.949.949 16.965 16.965 0 002.833-.69.75.75 0 00.398-.216z" /></svg>

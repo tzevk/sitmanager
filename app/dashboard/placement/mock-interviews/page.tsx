@@ -158,21 +158,38 @@ export default function MockInterviewsPage() {
   }, [plans]);
 
   const rangeStats = useMemo(() => {
-    const m = new Map<string, { active: number; start: number; end: number }>();
+    const m = new Map<string, { start: number; end: number }>();
     days.forEach((d) => {
       if (!d.inMonth) return;
-      let activeCount = 0;
       let startCount = 0;
       let endCount = 0;
       batches.forEach((b) => {
         const s = toDateKey(b.SDate);
         const e = toDateKey(b.EDate);
         if (!s || !e) return;
-        if (d.key >= s && d.key <= e) activeCount += 1;
         if (d.key === s) startCount += 1;
         if (d.key === e) endCount += 1;
       });
-      m.set(d.key, { active: activeCount, start: startCount, end: endCount });
+      m.set(d.key, { start: startCount, end: endCount });
+    });
+    return m;
+  }, [days, batches]);
+
+  const dayBatches = useMemo(() => {
+    const m = new Map<string, Array<{ batch: BatchRow; isStart: boolean; isEnd: boolean }>>();
+    days.forEach((d) => {
+      if (!d.inMonth) return;
+      const list: Array<{ batch: BatchRow; isStart: boolean; isEnd: boolean }> = [];
+      batches.forEach((b) => {
+        const s = toDateKey(b.SDate);
+        const e = toDateKey(b.EDate);
+        if (!s || !e) return;
+        const isStart = d.key === s;
+        const isEnd = d.key === e;
+        if (isStart || isEnd) list.push({ batch: b, isStart, isEnd });
+      });
+      list.sort((a, b) => String(a.batch.Course_Name || '').localeCompare(String(b.batch.Course_Name || '')));
+      m.set(d.key, list);
     });
     return m;
   }, [days, batches]);
@@ -264,9 +281,10 @@ export default function MockInterviewsPage() {
           ) : (
             <div className="grid grid-cols-7">
               {days.map((d) => {
-                if (!d.inMonth) return <div key={d.key} className="h-24 border-r border-b border-gray-100 bg-gray-50/40" />;
-                const stats = rangeStats.get(d.key) || { active: 0, start: 0, end: 0 };
+                if (!d.inMonth) return <div key={d.key} className="h-44 border-r border-b border-gray-100 bg-gray-50/40" />;
+                const stats = rangeStats.get(d.key) || { start: 0, end: 0 };
                 const dayPlans = plansByDate.get(d.key) || [];
+                const dayBatchRows = dayBatches.get(d.key) || [];
                 const selected = selectedDate === d.key;
 
                 return (
@@ -274,8 +292,8 @@ export default function MockInterviewsPage() {
                     type="button"
                     key={d.key}
                     onClick={() => setSelectedDate(d.key)}
-                    className={`h-24 border-r border-b border-gray-100 p-1.5 text-left transition-colors ${
-                      selected ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-300' : stats.active > 0 ? 'bg-amber-50/40 hover:bg-amber-50' : 'hover:bg-gray-50'
+                    className={`h-44 border-r border-b border-gray-100 p-1.5 text-left transition-colors ${
+                      selected ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-300' : (stats.start > 0 || stats.end > 0) ? 'bg-amber-50/40 hover:bg-amber-50' : 'hover:bg-gray-50'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -287,7 +305,18 @@ export default function MockInterviewsPage() {
                     <div className="mt-1 space-y-1">
                       {stats.start > 0 && <div className="text-[10px] text-green-700 font-semibold">Start: {stats.start}</div>}
                       {stats.end > 0 && <div className="text-[10px] text-blue-700 font-semibold">End: {stats.end}</div>}
-                      {stats.active > 0 && <div className="text-[10px] text-amber-700 font-semibold">Window: {stats.active}</div>}
+                      {dayBatchRows.length > 0 && (
+                        <div className="max-h-20 overflow-y-auto space-y-1 pr-0.5">
+                          {dayBatchRows.map((entry) => (
+                            <div key={`${d.key}-${entry.batch.Batch_Id}`} className="rounded border border-gray-200 bg-white/80 px-1 py-1">
+                              <div className="text-[10px] font-semibold text-gray-800 truncate">{entry.batch.Course_Name || 'Training'}</div>
+                              <div className="text-[9px] text-gray-600 truncate">Batch: {entry.batch.Batch_code || `Batch ${entry.batch.Batch_Id}`}</div>
+                              {entry.isStart && <div className="text-[9px] text-green-700">Start: {formatDate(toDateKey(entry.batch.SDate))}</div>}
+                              {entry.isEnd && <div className="text-[9px] text-blue-700">End: {formatDate(toDateKey(entry.batch.EDate))}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </button>
                 );
