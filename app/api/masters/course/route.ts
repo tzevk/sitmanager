@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { logTableActivity } from '@/lib/activity-log';
 
 export async function GET(req: NextRequest) {
   try {
@@ -102,6 +103,13 @@ export async function POST(req: NextRequest) {
       course_Preparation?.trim() || null,
     ]);
 
+    await logTableActivity(req, {
+      tableName: 'course_mst',
+      action: 'CREATE',
+      recordId: result.insertId,
+      details: { courseName: Course_Name.trim(), courseCode: Course_Code?.trim() || null },
+    });
+
     return NextResponse.json({ 
       success: true, 
       Course_Id: result.insertId,
@@ -147,6 +155,13 @@ export async function PUT(req: NextRequest) {
       Course_Id,
     ]);
 
+    await logTableActivity(req, {
+      tableName: 'course_mst',
+      action: 'UPDATE',
+      recordId: Course_Id,
+      details: { courseName: Course_Name.trim(), courseCode: Course_Code?.trim() || null },
+    });
+
     return NextResponse.json({ 
       success: true, 
       message: 'Course updated successfully' 
@@ -176,6 +191,12 @@ export async function DELETE(req: NextRequest) {
       WHERE Course_Id = ?
     `;
     await pool.query(sql, [Number(id)]);
+
+    await logTableActivity(req, {
+      tableName: 'course_mst',
+      action: 'DELETE',
+      recordId: id,
+    });
 
     return NextResponse.json({ 
       success: true, 

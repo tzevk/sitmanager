@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { logTableActivity } from '@/lib/activity-log';
 
 async function ensureCompanyTypeColumn(pool: ReturnType<typeof getPool>) {
   try {
@@ -161,6 +162,13 @@ export async function POST(req: NextRequest) {
       insertValues
     );
 
+    await logTableActivity(req, {
+      tableName: 'consultant_mst',
+      action: 'CREATE',
+      recordId: (result as any).insertId,
+      details: { companyName: Comp_Name.trim() },
+    });
+
     return NextResponse.json({ success: true, insertId: (result as any).insertId });
   } catch (err: unknown) {
     console.error('Consultancy POST error:', err);
@@ -209,6 +217,13 @@ export async function PUT(req: NextRequest) {
       values
     );
 
+    await logTableActivity(req, {
+      tableName: 'consultant_mst',
+      action: 'UPDATE',
+      recordId: Const_Id,
+      details: { companyName: fields.Comp_Name.trim() },
+    });
+
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     console.error('Consultancy PUT error:', err);
@@ -228,6 +243,11 @@ export async function DELETE(req: NextRequest) {
     if (!id) return NextResponse.json({ error: 'ID is required' }, { status: 400 });
 
     await pool.query(`UPDATE consultant_mst SET IsDelete = 1 WHERE Const_Id = ?`, [id]);
+    await logTableActivity(req, {
+      tableName: 'consultant_mst',
+      action: 'DELETE',
+      recordId: id,
+    });
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     console.error('Consultancy DELETE error:', err);

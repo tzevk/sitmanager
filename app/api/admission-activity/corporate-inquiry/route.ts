@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { cache, cacheKeys, cacheTTL } from '@/lib/cache';
 import { requirePermission } from '@/lib/api-auth';
+import { logTableActivity } from '@/lib/activity-log';
 
 async function ensureConsultancyCompanyTypeColumn(pool: ReturnType<typeof getPool>) {
   const [rows] = await pool.query<any[]>(
@@ -969,6 +970,13 @@ export async function POST(req: NextRequest) {
     // Invalidate cache on data modification
     cache.deleteByPrefix(cacheKeys.corporateInquiry.prefix);
 
+    await logTableActivity(req, {
+      tableName: 'corporate_inquiry',
+      action: 'CREATE',
+      recordId: insertedId,
+      details: { companyName: CompanyName || null, consultancyId: Consultancy_Id || null },
+    });
+
     return NextResponse.json({ success: true, insertId: (result as any).insertId });
   } catch (err: unknown) {
     console.error('Corporate Inquiry POST error:', err);
@@ -1123,6 +1131,13 @@ export async function PUT(req: NextRequest) {
     // Invalidate cache on data modification
     cache.deleteByPrefix(cacheKeys.corporateInquiry.prefix);
 
+    await logTableActivity(req, {
+      tableName: 'corporate_inquiry',
+      action: 'UPDATE',
+      recordId: Id,
+      details: { companyName: CompanyName || null, consultancyId: Consultancy_Id || null },
+    });
+
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     console.error('Corporate Inquiry PUT error:', err);
@@ -1147,6 +1162,12 @@ export async function DELETE(req: NextRequest) {
 
     // Invalidate cache on data modification
     cache.deleteByPrefix(cacheKeys.corporateInquiry.prefix);
+
+    await logTableActivity(req, {
+      tableName: 'corporate_inquiry',
+      action: 'DELETE',
+      recordId: id,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {

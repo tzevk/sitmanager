@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { logTableActivity } from '@/lib/activity-log';
 
 // GET — single job with applicants summary
 export async function GET(
@@ -85,6 +86,13 @@ export async function PUT(
       ]
     );
 
+    await logTableActivity(req, {
+      tableName: 'placement_jobs',
+      action: 'UPDATE',
+      recordId: id,
+      details: { status: body.Status || 'Open', jobTitle: body.Job_Title || null },
+    });
+
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     console.error('Placement job PUT error:', err);
@@ -105,6 +113,11 @@ export async function DELETE(
     const { id } = await params;
 
     await pool.query(`UPDATE placement_jobs SET IsDelete = 1 WHERE Job_Id = ?`, [id]);
+    await logTableActivity(req, {
+      tableName: 'placement_jobs',
+      action: 'DELETE',
+      recordId: id,
+    });
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     console.error('Placement job DELETE error:', err);

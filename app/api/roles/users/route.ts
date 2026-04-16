@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { getSession } from '@/lib/session';
+import { logTableActivity } from '@/lib/activity-log';
 
 // GET: List all users with their roles
 export async function GET(request: NextRequest) {
@@ -109,6 +110,13 @@ export async function PUT(request: NextRequest) {
       `UPDATE awt_adminuser SET role = ?, updated_by = ?, updated_date = NOW() WHERE id = ?`,
       [roleId, session.userId, userId]
     );
+
+    await logTableActivity(request, {
+      tableName: 'awt_adminuser',
+      action: 'UPDATE',
+      recordId: userId,
+      details: { roleId },
+    });
 
     return NextResponse.json({
       success: true,

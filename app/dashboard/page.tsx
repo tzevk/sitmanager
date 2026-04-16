@@ -2,7 +2,6 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Manrope, Playfair_Display } from 'next/font/google';
 import {
   QuickStatsSkeleton,
   TableSkeleton,
@@ -16,9 +15,6 @@ import CbdDashboard from './components/CbdDashboard';
 import TrainingDevelopmentDashboard from './components/TrainingDevelopmentDashboard';
 import AdministrationDashboard from './components/AdministrationDashboard';
 import PlacementDepartmentDashboard from './components/PlacementDepartmentDashboard';
-
-const headingFont = Playfair_Display({ subsets: ['latin'], weight: ['700', '800'] });
-const bodyFont = Manrope({ subsets: ['latin'], weight: ['500', '600', '700'] });
 
 interface TodoItem {
   id: string;
@@ -34,6 +30,16 @@ interface AdminTodoItem {
   dueDate: string;
   status: 'Pending' | 'In Progress' | 'Done';
   createdAt: string;
+}
+
+interface RecentConsultancyFollowup {
+  Followup_Id: number;
+  Const_Id: number | null;
+  Company_Name: string;
+  Contact_Person: string;
+  Purpose: string;
+  Followup_Date: string;
+  Remarks: string;
 }
 
 // --- Mini Sparkline (SVG) ---
@@ -118,11 +124,69 @@ export default function DashboardPage() {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [adminTodos, setAdminTodos] = useState<AdminTodoItem[]>([]);
   const [newTodo, setNewTodo] = useState('');
+  const [now, setNow] = useState<Date | null>(null);
+  const [showFollowupPopup, setShowFollowupPopup] = useState(false);
+  const [recentFollowups, setRecentFollowups] = useState<RecentConsultancyFollowup[]>([]);
+  const [recentFollowupsLoading, setRecentFollowupsLoading] = useState(false);
+  const [showFollowupReminder, setShowFollowupReminder] = useState(false);
+  const [newFollowupCount, setNewFollowupCount] = useState(0);
   const resolvedDepartment = resolveDashboardDepartment(session?.department, session?.role);
-  const canSwitchDepartmentDashboard = isSuperAdmin || resolvedDepartment === 'administration';
+  const canSwitchDepartmentDashboard = isSuperAdmin;
   const [adminSelectedDepartment, setAdminSelectedDepartment] = useState<DashboardDepartment>('administration');
   const activeDepartment: DashboardDepartment = canSwitchDepartmentDashboard ? adminSelectedDepartment : resolvedDepartment;
   const widgetConfig = getDashboardWidgetConfig(session?.department, session?.role);
+
+  useEffect(() => {
+    if (activeDepartment !== 'placement') return;
+
+    const STORAGE_KEY = 'sit-placement-followups-last-seen-id';
+    let active = true;
+
+    const fetchRecentFollowups = async (checkReminder: boolean) => {
+      if (!active) return;
+      if (!checkReminder) setRecentFollowupsLoading(true);
+
+      try {
+        const res = await fetch('/api/masters/consultancy/followups?recent=1&limit=10');
+        const payload = await res.json().catch(() => ({}));
+        if (!active) return;
+
+        const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+        setRecentFollowups(rows);
+
+        const latestId = Number(rows?.[0]?.Followup_Id || 0);
+        const storedSeen = Number(localStorage.getItem(STORAGE_KEY) || 0);
+
+        if (!storedSeen && latestId > 0) {
+          localStorage.setItem(STORAGE_KEY, String(latestId));
+          setShowFollowupReminder(false);
+          setNewFollowupCount(0);
+          return;
+        }
+
+        if (checkReminder && latestId > storedSeen) {
+          const unseenCount = rows.filter((r: RecentConsultancyFollowup) => Number(r.Followup_Id) > storedSeen).length;
+          setNewFollowupCount(unseenCount);
+          setShowFollowupReminder(unseenCount > 0);
+        }
+      } catch {
+        if (!active) return;
+        if (!checkReminder) setRecentFollowups([]);
+      } finally {
+        if (active && !checkReminder) setRecentFollowupsLoading(false);
+      }
+    };
+
+    fetchRecentFollowups(false);
+    const intervalId = setInterval(() => {
+      fetchRecentFollowups(true);
+    }, 2 * 60 * 60 * 1000);
+
+    return () => {
+      active = false;
+      clearInterval(intervalId);
+    };
+  }, [activeDepartment]);
 
   useEffect(() => {
     if (!canSwitchDepartmentDashboard) return;
@@ -138,6 +202,94 @@ export default function DashboardPage() {
     setAdminSelectedDepartment(value);
     localStorage.setItem('sit-admin-dashboard-department', value);
   };
+
+  const markFollowupsAsSeen = () => {
+    const STORAGE_KEY = 'sit-placement-followups-last-seen-id';
+    const latestId = Number(recentFollowups?.[0]?.Followup_Id || 0);
+    if (latestId > 0) localStorage.setItem(STORAGE_KEY, String(latestId));
+    setShowFollowupReminder(false);
+    setNewFollowupCount(0);
+  };
+
+  const openFollowupPopup = () => {
+    markFollowupsAsSeen();
+    setShowFollowupPopup(true);
+  };
+
+  const goToFollowupDetails = (item: RecentConsultancyFollowup) => {
+    if (!item.Const_Id) return;
+    markFollowupsAsSeen();
+    setShowFollowupPopup(false);
+    window.location.href = `/dashboard/masters/consultancy/edit/${item.Const_Id}`;
+  };
+
+  useEffect(() => {
+    setNow(new Date());
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const greeting = now
+    ? now.getHours() < 12
+      ? 'Good Morning'
+      : now.getHours() < 17
+        ? 'Good Afternoon'
+        : 'Good Evening'
+    : 'Good Morning';
+  const profileName = session?.firstName?.trim() || session?.email?.split('@')[0] || 'User';
+  const clockText = now ? now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+
+  const profileHeader = (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex items-center gap-3 min-w-0 flex-wrap">
+        <span className="text-sm font-semibold text-gray-800 truncate">{greeting}, {profileName}</span>
+        <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#2A6BB5]/20 bg-[#2A6BB5]/5 px-2.5 py-1 text-xs font-semibold text-[#2E3093] whitespace-nowrap">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M22 12A10 10 0 1112 2a10 10 0 0110 10z" />
+          </svg>
+          {clockText}
+        </span>
+      </div>
+      <div className="flex items-center gap-3 flex-wrap justify-end">
+        {canSwitchDepartmentDashboard && (
+          <>
+            <select
+              value={adminSelectedDepartment}
+              onChange={(e) => handleAdminDepartmentChange(e.target.value as DashboardDepartment)}
+              className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25"
+              aria-label="Switch dashboard department"
+            >
+              <option value="administration">Administration</option>
+              <option value="cbd">CBD Department</option>
+              <option value="corporate_training">Corporate Training</option>
+              <option value="placement">Placement Department</option>
+              <option value="training_and_development">Training and Development</option>
+            </select>
+            {activeDepartment === 'placement' && (
+              <button
+                type="button"
+                onClick={openFollowupPopup}
+                className="group inline-flex items-center gap-2 rounded-2xl border border-[#2A6BB5]/25 bg-gradient-to-r from-white to-[#2A6BB5]/5 px-4 py-2.5 text-sm font-semibold text-[#2E3093] shadow-[0_8px_22px_rgba(42,107,181,0.12)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(42,107,181,0.2)]"
+              >
+                <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] text-white shadow-sm">
+                  <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.083 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                  </svg>
+                  <span className={`absolute -right-1.5 -top-1.5 min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-black border border-white ${showFollowupReminder ? 'bg-rose-500 text-white animate-pulse' : 'bg-[#FAE452] text-[#2E3093]'}`}>
+                    {showFollowupReminder ? newFollowupCount : recentFollowups.length}
+                  </span>
+                </span>
+                {showFollowupReminder ? `Reminder: ${newFollowupCount} new` : 'Follow-up Popups'}
+                <svg className="w-3.5 h-3.5 text-[#2A6BB5] transition group-hover:translate-x-0.5" fill="none" stroke="currentColor" strokeWidth={2.3} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
 
   // Fetch dashboard data (stale-while-revalidate)
   useEffect(() => {
@@ -179,7 +331,6 @@ export default function DashboardPage() {
   // Load todos from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('sit-dashboard-todos');
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (saved) setTodos(JSON.parse(saved));
   }, []);
 
@@ -238,22 +389,7 @@ export default function DashboardPage() {
   if (activeDepartment === 'cbd') {
     return (
       <div className="space-y-4">
-        {canSwitchDepartmentDashboard && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
-            <span className="text-sm font-semibold text-gray-700">Department Dashboard</span>
-            <select
-              value={adminSelectedDepartment}
-              onChange={(e) => handleAdminDepartmentChange(e.target.value as DashboardDepartment)}
-              className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25"
-            >
-              <option value="administration">Administration</option>
-              <option value="cbd">CBD Department</option>
-              <option value="corporate_training">Corporate Training</option>
-              <option value="placement">Placement Department</option>
-              <option value="training_and_development">Training and Development</option>
-            </select>
-          </div>
-        )}
+        {profileHeader}
         <CbdDashboard data={data} loading={loading} />
       </div>
     );
@@ -262,22 +398,7 @@ export default function DashboardPage() {
   if (activeDepartment === 'training_and_development') {
     return (
       <div className="space-y-4">
-        {canSwitchDepartmentDashboard && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
-            <span className="text-sm font-semibold text-gray-700">Department Dashboard</span>
-            <select
-              value={adminSelectedDepartment}
-              onChange={(e) => handleAdminDepartmentChange(e.target.value as DashboardDepartment)}
-              className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25"
-            >
-              <option value="administration">Administration</option>
-              <option value="cbd">CBD Department</option>
-              <option value="corporate_training">Corporate Training</option>
-              <option value="placement">Placement Department</option>
-              <option value="training_and_development">Training and Development</option>
-            </select>
-          </div>
-        )}
+        {profileHeader}
         <TrainingDevelopmentDashboard data={data} loading={loading} />
       </div>
     );
@@ -286,6 +407,7 @@ export default function DashboardPage() {
   if (activeDepartment === 'administration') {
     return (
       <div className="space-y-4">
+        {profileHeader}
         <AdministrationDashboard
           data={data}
           loading={loading}
@@ -304,49 +426,68 @@ export default function DashboardPage() {
   if (activeDepartment === 'placement') {
     return (
       <div className="space-y-4">
-        {canSwitchDepartmentDashboard && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
-            <span className="text-sm font-semibold text-gray-700">Department Dashboard</span>
-            <select
-              value={adminSelectedDepartment}
-              onChange={(e) => handleAdminDepartmentChange(e.target.value as DashboardDepartment)}
-              className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25"
-            >
-              <option value="administration">Administration</option>
-              <option value="cbd">CBD Department</option>
-              <option value="corporate_training">Corporate Training</option>
-              <option value="placement">Placement Department</option>
-              <option value="training_and_development">Training and Development</option>
-            </select>
+        {profileHeader}
+        <PlacementDepartmentDashboard data={data} loading={loading} />
+        {showFollowupPopup && (
+          <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-2xl rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.3)] overflow-hidden">
+              <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] via-[#2E3093] to-[#2A6BB5] text-white flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold tracking-wide">Recent Consultancy Follow-ups</h3>
+                  <p className="text-[11px] text-white/80 mt-1">Directly from Consultancy Master</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowFollowupPopup(false)}
+                  className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-white/30 bg-white/10 hover:bg-white/20"
+                  aria-label="Close follow-up popup"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="max-h-[70vh] overflow-auto p-5 bg-gradient-to-b from-slate-50/60 to-white">
+                {recentFollowupsLoading ? (
+                  <div className="py-10 text-center text-sm text-slate-500">Loading recent follow-ups...</div>
+                ) : recentFollowups.length === 0 ? (
+                  <div className="py-10 text-center text-sm text-slate-500">No recent consultancy follow-ups available.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {recentFollowups.map((item) => (
+                      <button
+                        key={item.Followup_Id}
+                        type="button"
+                        onClick={() => goToFollowupDetails(item)}
+                        className={`w-full text-left rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_26px_rgba(15,23,42,0.1)] ${item.Const_Id ? 'cursor-pointer' : 'cursor-default'}`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-800 truncate">{item.Company_Name || 'Company'}</p>
+                            <p className="text-xs text-slate-500 mt-1 truncate">{item.Contact_Person || 'Contact'} · {item.Purpose || 'Follow-up'}</p>
+                          </div>
+                          <span className="text-[11px] font-semibold text-[#2E3093] whitespace-nowrap">{item.Followup_Date || ''}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
-        <PlacementDepartmentDashboard data={data} loading={loading} />
       </div>
     );
   }
 
   return (
     <div className="relative space-y-6 pb-8">
-      {canSwitchDepartmentDashboard && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
-          <span className="text-sm font-semibold text-gray-700">Department Dashboard</span>
-          <select
-            value={adminSelectedDepartment}
-            onChange={(e) => handleAdminDepartmentChange(e.target.value as DashboardDepartment)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25"
-          >
-            <option value="administration">Administration</option>
-            <option value="cbd">CBD Department</option>
-            <option value="corporate_training">Corporate Training</option>
-            <option value="placement">Placement Department</option>
-            <option value="training_and_development">Training and Development</option>
-          </select>
-        </div>
-      )}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_rgba(46,48,147,0.08),_transparent_55%),radial-gradient(ellipse_at_top_right,_rgba(42,107,181,0.08),_transparent_55%),radial-gradient(ellipse_at_bottom_left,_rgba(250,228,82,0.10),_transparent_50%)]"
       />
+      {profileHeader}
       {/* ── Quick Stats Row ── */}
       {widgetConfig.quickStats && (loading ? (
         <QuickStatsSkeleton />

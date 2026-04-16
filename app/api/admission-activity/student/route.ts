@@ -31,8 +31,23 @@ export async function GET(req: NextRequest) {
     const params: (string | number)[] = [];
 
     if (search) {
-      conditions.push(`(s.Student_Name LIKE ? OR s.Email LIKE ? OR s.Present_Mobile LIKE ? OR s.Present_City LIKE ?)`);
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      const like = `%${search}%`;
+      conditions.push(`(
+        s.Student_Name LIKE ?
+        OR CONCAT_WS(' ', s.FName, s.MName, s.LName) LIKE ?
+        OR s.Email LIKE ?
+        OR s.Present_Mobile LIKE ?
+        OR s.Present_City LIKE ?
+        OR s.Batch_Code LIKE ?
+        OR CAST(s.Student_Id AS CHAR) LIKE ?
+        OR EXISTS (
+          SELECT 1
+          FROM course_mst c2
+          WHERE c2.Course_Id = s.Course_Id
+            AND c2.Course_Name LIKE ?
+        )
+      )`);
+      params.push(like, like, like, like, like, like, like, like);
     }
 
     if (courseId) {
@@ -56,7 +71,7 @@ export async function GET(req: NextRequest) {
     const dataSql = `
       SELECT 
         s.Student_Id, s.Student_Name, s.FName, s.LName, s.MName,
-        s.Qualification, s.Course_Id, s.DOB, s.Sex, s.Nationality,
+        s.Qualification, s.Course_Id, s.Batch_Code, s.DOB, s.Sex, s.Nationality,
         s.Present_Address, s.Present_City, s.Present_State, s.Present_Country, s.Present_Pin, s.Present_Mobile,
         s.Email, s.IsActive,
         c.Course_Name

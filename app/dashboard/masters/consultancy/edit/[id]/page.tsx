@@ -42,6 +42,7 @@ interface Branch {
 interface FollowUp {
   Followup_Id?: number;
   Source_Inquiry_Id?: number | null;
+  Created_By?: string;
   Followup_Date: string;
   Contact_Person: string;
   Designation: string;
@@ -313,7 +314,7 @@ export default function EditConsultancyPage() {
   };
 
   const handleExportFollowups = () => {
-    const headers = ['Date', 'Contact Person', 'Designation', 'Mobile', 'Email', 'Purpose', 'Course', 'Direct Line', 'Remarks', 'Source'];
+    const headers = ['Date', 'Contact Person', 'Designation', 'Mobile', 'Email', 'Purpose', 'Course', 'Direct Line', 'Remarks', 'Created By', 'Source'];
     const csvRows = followups.map(f => [
       f.Followup_Date||'',
       f.Contact_Person||'',
@@ -324,6 +325,7 @@ export default function EditConsultancyPage() {
       f.Course||'',
       f.Direct_Line||'',
       f.Remarks||'',
+      f.Created_By||'System',
       f.Source_Inquiry_Id ? 'Corporate Inquiry' : 'Manual',
     ]);
     const csv = [headers.join(','), ...csvRows.map(r => r.map((v: string) => `"${v.replace(/"/g,'""')}"`).join(','))].join('\n');
@@ -471,6 +473,7 @@ export default function EditConsultancyPage() {
                     <option value="Training">Training</option>
                     <option value="Internship">Internship</option>
                     <option value="Recruitment">Recruitment</option>
+                    <option value="Proposal">Proposal</option>
                     <option value="Other">Other</option>
                   </select>
                 </div>
@@ -810,15 +813,16 @@ export default function EditConsultancyPage() {
                         <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Course</th>
                         <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Direct Line</th>
                         <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Remarks</th>
+                        <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Created By</th>
                         <th className="text-left px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Source</th>
                         <th className="text-center px-3 py-2 font-semibold text-[#2E3093] border-b whitespace-nowrap">Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {followupsLoading ? (
-                        <tr><td colSpan={11} className="px-4 py-6 text-center text-gray-400 text-xs">Loading…</td></tr>
+                        <tr><td colSpan={12} className="px-4 py-6 text-center text-gray-400 text-xs">Loading…</td></tr>
                       ) : followups.length === 0 ? (
-                        <tr><td colSpan={11} className="px-4 py-6 text-center text-gray-400 text-xs">No follow-ups yet</td></tr>
+                        <tr><td colSpan={12} className="px-4 py-6 text-center text-gray-400 text-xs">No follow-ups yet</td></tr>
                       ) : followups.map((f, idx) => (
                         <tr
                           key={f.Followup_Id != null
@@ -835,6 +839,7 @@ export default function EditConsultancyPage() {
                           <td className="px-3 py-2 text-gray-700">{f.Course || '-'}</td>
                           <td className="px-3 py-2 text-gray-700">{f.Direct_Line || '-'}</td>
                           <td className="px-3 py-2 text-gray-700 truncate max-w-[120px]">{f.Remarks || '-'}</td>
+                          <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{f.Created_By || 'System'}</td>
                           <td className="px-3 py-2 text-gray-700">
                             {f.Source_Inquiry_Id ? (
                               <button
@@ -889,6 +894,7 @@ export default function EditConsultancyPage() {
               <div><span className="font-semibold text-gray-600">Email:</span> {viewFollowup.email || '-'}</div>
               <div><span className="font-semibold text-gray-600">Purpose:</span> {viewFollowup.Purpose || '-'}</div>
               <div><span className="font-semibold text-gray-600">Course:</span> {viewFollowup.Course || '-'}</div>
+              <div><span className="font-semibold text-gray-600">Created By:</span> {viewFollowup.Created_By || 'System'}</div>
               <div>
                 <span className="font-semibold text-gray-600">Source:</span>{' '}
                 {viewFollowup.Source_Inquiry_Id ? (

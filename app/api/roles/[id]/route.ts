@@ -5,6 +5,7 @@ import { ALL_PERMISSIONS } from '@/lib/rbac';
 import { getSession } from '@/lib/session';
 import { isSuperAdminRole } from '@/lib/super-admin';
 import { apiRateLimiter } from '@/lib/rate-limit';
+import { logTableActivity } from '@/lib/activity-log';
 
 // Ensure role_permissions table exists (shared schema with /api/roles)
 async function ensureRolePermissionsTable(pool: any) {
@@ -212,6 +213,22 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
       await connection.commit();
 
+      await logTableActivity(request, {
+        tableName: 'role',
+        action: 'UPDATE',
+        recordId: roleId,
+        details: { title: title || null, permissionsUpdated: Array.isArray(permissions) },
+      });
+
+      if (permissions) {
+        await logTableActivity(request, {
+          tableName: 'role_permissions',
+          action: 'UPDATE',
+          recordId: roleId,
+          details: { roleId, permissionsCount: permissions.length },
+        });
+      }
+
       return NextResponse.json({
         success: true,
         message: 'Role updated successfully',
@@ -281,6 +298,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       `UPDATE role SET \`delete\` = 1, updated_by = ?, updated_date = NOW() WHERE id = ?`,
       [session.userId, roleId]
     );
+
+    await logTableActivity(request, {
+      tableName: 'role',
+      action: 'DELETE',
+      recordId: roleId,
+    });
 
     return NextResponse.json({
       success: true,

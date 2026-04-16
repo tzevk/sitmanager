@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { logTableActivity } from '@/lib/activity-log';
 
 // GET - fetch all employees with pagination, search, and filters
 export async function GET(req: NextRequest) {
@@ -122,6 +123,13 @@ export async function POST(req: NextRequest) {
       ]
     );
 
+    await logTableActivity(req, {
+      tableName: 'office_employee_mst',
+      action: 'CREATE',
+      recordId: (result as any).insertId,
+      details: { employeeName: Employee_Name.trim(), email: EMail?.trim() || null },
+    });
+
     return NextResponse.json({ 
       success: true, 
       insertId: (result as any).insertId 
@@ -181,6 +189,13 @@ export async function PUT(req: NextRequest) {
       ]
     );
 
+    await logTableActivity(req, {
+      tableName: 'office_employee_mst',
+      action: 'UPDATE',
+      recordId: Emp_Id,
+      details: { employeeName: Employee_Name.trim(), email: EMail?.trim() || null },
+    });
+
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     console.error('Employee PUT error:', err);
@@ -202,6 +217,12 @@ export async function DELETE(req: NextRequest) {
     }
 
     await pool.query(`UPDATE office_employee_mst SET IsDelete = 1 WHERE Emp_Id = ?`, [id]);
+
+    await logTableActivity(req, {
+      tableName: 'office_employee_mst',
+      action: 'DELETE',
+      recordId: id,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {

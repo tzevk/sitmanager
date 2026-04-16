@@ -24,6 +24,11 @@ interface Pagination {
   totalPages: number;
 }
 
+interface CourseOption {
+  Course_Id: number;
+  Course_Name: string;
+}
+
 export default function ConsultancyPage() {
   const router = useRouter();
   const { canView, canCreate, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('consultancy');
@@ -36,6 +41,14 @@ export default function ConsultancyPage() {
   const [showFilters, setShowFilters] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const [fetchTrigger, setFetchTrigger] = useState(0);
+
+  const [showCourseExport, setShowCourseExport] = useState(false);
+  const [courseOptions, setCourseOptions] = useState<CourseOption[]>([]);
+  const [exportCourseId, setExportCourseId] = useState('');
+  const [exportDateFrom, setExportDateFrom] = useState('');
+  const [exportDateTo, setExportDateTo] = useState('');
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -55,6 +68,71 @@ export default function ConsultancyPage() {
   }, [page, search, fetchTrigger]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    if (!showCourseExport || courseOptions.length > 0) return;
+    let isCancelled = false;
+
+    (async () => {
+      try {
+        const allCourses: CourseOption[] = [];
+        let nextPage = 1;
+        let totalPages = 1;
+
+        while (nextPage <= totalPages) {
+          const res = await fetch(`/api/masters/course?page=${nextPage}&limit=100`);
+          const data = await res.json();
+          const rows = Array.isArray(data?.rows) ? data.rows : [];
+          allCourses.push(...rows);
+          totalPages = Number(data?.pagination?.totalPages) || 1;
+          nextPage += 1;
+        }
+
+        if (!isCancelled) {
+          const unique = new Map<number, CourseOption>();
+          allCourses.forEach((c) => {
+            if (c?.Course_Id != null && !unique.has(c.Course_Id)) unique.set(c.Course_Id, c);
+          });
+          setCourseOptions(Array.from(unique.values()));
+        }
+      } catch {
+        if (!isCancelled) setCourseOptions([]);
+      }
+    })();
+
+    return () => { isCancelled = true; };
+  }, [showCourseExport, courseOptions.length]);
+
+  const handleCourseExport = async () => {
+    setExportError('');
+    if (!exportCourseId) { setExportError('Please select a training course.'); return; }
+    if (!exportDateFrom || !exportDateTo) { setExportError('Please select both From and To dates.'); return; }
+    if (exportDateFrom > exportDateTo) { setExportError('From date cannot be after To date.'); return; }
+    setExportBusy(true);
+    try {
+      const qs = new URLSearchParams({ courseId: exportCourseId, dateFrom: exportDateFrom, dateTo: exportDateTo });
+      const res = await fetch(`/api/masters/consultancy/export-by-course?${qs.toString()}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || 'Failed to generate report');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const course = exportCourseId === 'all'
+        ? 'All_Training_Programmes'
+        : (courseOptions.find(c => String(c.Course_Id) === exportCourseId)?.Course_Name || 'course');
+      a.download = `Consultancy_${course.replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40)}_${exportDateFrom}_to_${exportDateTo}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setShowCourseExport(false);
+    } catch (e: unknown) {
+      setExportError(e instanceof Error ? e.message : 'Failed to generate report');
+    } finally {
+      setExportBusy(false);
+    }
+  };
 
   const handleDelete = async (id: number) => {
     if (!confirm('Are you sure you want to delete this consultancy?')) return;
@@ -126,6 +204,13 @@ export default function ConsultancyPage() {
             <button onClick={handleExport} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
               Export
+            </button>
+            <button
+              onClick={() => { setShowCourseExport(true); setExportError(''); }}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#2E3093] text-[#2E3093] hover:bg-[#2E3093]/5"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" /></svg>
+              Export by Course
             </button>
             <div className="flex-1" />
             <div className="relative">
@@ -201,6 +286,82 @@ export default function ConsultancyPage() {
               </table>
             </div>
           </div>
+
+          {/* Export by Training Programme Modal */}
+          {showCourseExport && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+                <div className="flex items-center justify-between px-5 py-3 border-b bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-t-xl">
+                  <h3 className="text-sm font-bold text-white">Export Consultancies by Training Programme</h3>
+                  <button
+                    onClick={() => setShowCourseExport(false)}
+                    className="text-white/80 hover:text-white"
+                    aria-label="Close"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                <div className="p-5 space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Training Course</label>
+                    <select
+                      value={exportCourseId}
+                      onChange={(e) => setExportCourseId(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+                    >
+                      <option value="">-- Select Training Programme --</option>
+                      <option value="all">All Training Programmes</option>
+                      {courseOptions.map(c => (
+                        <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Date From</label>
+                      <input
+                        type="date"
+                        value={exportDateFrom}
+                        onChange={(e) => setExportDateFrom(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Date To</label>
+                      <input
+                        type="date"
+                        value={exportDateTo}
+                        onChange={(e) => setExportDateTo(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+                      />
+                    </div>
+                  </div>
+                  {exportError && (
+                    <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{exportError}</div>
+                  )}
+                  <div className="text-xs text-gray-500">
+                    Excel columns: Created Date, Company Name, Contact Person, Designation, Company Address, Contact Number, Email Id.
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 px-5 py-3 border-t bg-gray-50 rounded-b-xl">
+                  <button
+                    onClick={() => setShowCourseExport(false)}
+                    className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100"
+                    disabled={exportBusy}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCourseExport}
+                    disabled={exportBusy}
+                    className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white shadow hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {exportBusy ? 'Generating…' : 'Download Excel'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Pagination */}
           {pagination.totalPages > 1 && (

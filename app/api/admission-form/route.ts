@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { apiRateLimiter } from '@/lib/rate-limit';
+import { logTableActivity } from '@/lib/activity-log';
 
 export async function POST(req: NextRequest) {
   try {
@@ -146,6 +147,20 @@ export async function POST(req: NextRequest) {
       );
       admissionId = (admissionResult as any).insertId;
     }
+
+    await logTableActivity(req, {
+      tableName: 'student_master',
+      action: 'UPDATE',
+      recordId: Student_Id,
+      details: { fullName: fullName?.trim() || null, batchCode: batchCode || null },
+    });
+
+    await logTableActivity(req, {
+      tableName: 'admission_master',
+      action: existingAdmission.length > 0 ? 'UPDATE' : 'CREATE',
+      recordId: admissionId,
+      details: { studentId: Student_Id, batchId },
+    });
 
     // Store additional form data in a dedicated table (if exists)
     // For now, we'll store additional details as JSON in a comment or separate table

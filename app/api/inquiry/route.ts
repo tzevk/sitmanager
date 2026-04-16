@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { logTableActivity } from '@/lib/activity-log';
 
 /* ---------- POST — Create new inquiry ---------- */
 export async function POST(req: NextRequest) {
@@ -38,13 +39,13 @@ export async function POST(req: NextRequest) {
     }
 
     const sql = `
-      INSERT INTO student_master (
+      INSERT INTO Student_Inquiry (
         Student_Name, Sex, DOB, Present_Mobile, Present_Mobile2,
         Email, Nationality, Present_Country, Discussion,
-        Status_id, Inquiry_Dt, Inquiry_From, Inquiry_Type,
+        OnlineState, Inquiry_Dt, Inquiry_From, Inquiry_Type,
         Course_Id, Batch_Category_id, Batch_Code,
         Qualification, Discipline, Percentage,
-        IsDelete, Inquiry, created_date
+        IsDelete, Inquiry, Date_Added
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'Inquiry', NOW())
     `;
 
@@ -82,6 +83,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    await logTableActivity(req, {
+      tableName: 'Student_Inquiry',
+      action: 'CREATE',
+      recordId: insertId,
+      details: { studentName: Student_Name?.trim() || null, courseId: Course_Id || null },
+    });
+
     return NextResponse.json({ success: true, Student_Id: insertId });
   } catch (error: any) {
     console.error('Create inquiry error:', error);
@@ -105,16 +113,17 @@ export async function GET(req: NextRequest) {
     if (singleId) {
       const sql = `
         SELECT
-          sm.Student_Id, sm.Student_Name, sm.Sex, sm.DOB,
-          sm.Present_Mobile, sm.Present_Mobile2, sm.Email,
-          sm.Nationality, sm.Present_Country, sm.Discussion,
-          sm.Status_id, sm.Inquiry_Dt, sm.Inquiry_From, sm.Inquiry_Type,
-          sm.Course_Id, sm.Batch_Category_id, sm.Batch_Code,
-          sm.Qualification, sm.Discipline, sm.Percentage,
+          si.Inquiry_Id as Student_Id, si.Student_Name, si.Sex, si.DOB,
+          si.Present_Mobile, si.Present_Mobile2, si.Email,
+          si.Nationality, si.Present_Country, si.Discussion,
+          CAST(NULLIF(si.OnlineState, '') AS UNSIGNED) as Status_id,
+          si.Inquiry_Dt, si.Inquiry_From, si.Inquiry_Type,
+          si.Course_Id, si.Batch_Category_id, si.Batch_Code,
+          si.Qualification, si.Discipline, si.Percentage,
           c.Course_Name as CourseName
-        FROM student_master sm
-        LEFT JOIN course_mst c ON sm.Course_Id = c.Course_Id
-        WHERE sm.Student_Id = ? AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+        FROM Student_Inquiry si
+        LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
+        WHERE si.Inquiry_Id = ? AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
       `;
       const [rows] = await pool.query(sql, [parseInt(singleId)]);
       const row = (rows as any[])[0];
@@ -189,12 +198,14 @@ export async function GET(req: NextRequest) {
     ];
     const params: any[] = [];
 
+    const resolvedBatchCodeExpr = `NULLIF(TRIM(CAST(si.Batch_Code AS CHAR)), '')`;
+
     if (search) {
       conditions.push(
-        '(si.Student_Name LIKE ? OR si.Email LIKE ? OR si.Present_Mobile LIKE ? OR c.Course_Name LIKE ?)'
+        `(si.Student_Name LIKE ? OR si.Email LIKE ? OR si.Present_Mobile LIKE ? OR c.Course_Name LIKE ? OR ${resolvedBatchCodeExpr} LIKE ?)`
       );
       const s = `%${search}%`;
-      params.push(s, s, s, s);
+      params.push(s, s, s, s, s);
     }
 
     if (discipline) {
@@ -281,6 +292,7 @@ export async function GET(req: NextRequest) {
           si.Student_Id as SourceStudentId,
           si.Student_Name,
           c.Course_Name as CourseName,
+          ${resolvedBatchCodeExpr} as Batch_Code,
           si.Inquiry_Dt,
           si.Present_Mobile,
           si.Email,
@@ -357,11 +369,15 @@ export async function GET(req: NextRequest) {
       const disciplineValue =
         (r.DisciplineName && String(r.DisciplineName).trim() ? String(r.DisciplineName).trim() : null)
         || (r.Discipline && String(r.Discipline).trim() ? String(r.Discipline).trim() : null);
+      const batchCodeValue = r.Batch_Code && String(r.Batch_Code).trim()
+        ? String(r.Batch_Code).trim()
+        : null;
 
       return {
         Student_Id: r.Student_Id,
         Student_Name: r.Student_Name,
         CourseName: r.CourseName,
+        Batch_Code: batchCodeValue,
         Inquiry_Dt: r.Inquiry_Dt,
         Present_Mobile: r.Present_Mobile,
         Email: r.Email,
@@ -485,15 +501,15 @@ export async function PUT(req: NextRequest) {
     }
 
     const sql = `
-      UPDATE student_master SET
+      UPDATE Student_Inquiry SET
         Student_Name = ?, Sex = ?, DOB = ?,
         Present_Mobile = ?, Present_Mobile2 = ?,
         Email = ?, Nationality = ?, Present_Country = ?,
-        Discussion = ?, Status_id = ?, Inquiry_Dt = ?,
+        Discussion = ?, OnlineState = ?, Inquiry_Dt = ?,
         Inquiry_From = ?, Inquiry_Type = ?,
         Course_Id = ?, Batch_Category_id = ?, Batch_Code = ?,
         Qualification = ?, Discipline = ?, Percentage = ?
-      WHERE Student_Id = ?
+      WHERE Inquiry_Id = ?
     `;
 
     const params = [
@@ -529,6 +545,13 @@ export async function PUT(req: NextRequest) {
         [Student_Id, body.Discussion.trim()]
       );
     }
+
+    await logTableActivity(req, {
+      tableName: 'Student_Inquiry',
+      action: 'UPDATE',
+      recordId: Student_Id,
+      details: { studentName: body.Student_Name?.trim() || null, statusId: body.Status_id ?? null },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {

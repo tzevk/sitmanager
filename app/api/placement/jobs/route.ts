@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { logTableActivity } from '@/lib/activity-log';
 import crypto from 'crypto';
 
 // GET — list placement jobs
@@ -91,6 +92,13 @@ export async function POST(req: NextRequest) {
     );
 
     const jobId = (result as any).insertId;
+
+    await logTableActivity(req, {
+      tableName: 'placement_jobs',
+      action: 'CREATE',
+      recordId: jobId,
+      details: { companyName: body.Company_Name || null, jobTitle: body.Job_Title || null },
+    });
 
     return NextResponse.json({ success: true, Job_Id: jobId, token });
   } catch (err: unknown) {

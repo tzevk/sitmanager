@@ -5,6 +5,7 @@ import { ALL_PERMISSIONS, PERMISSION_GROUPS } from '@/lib/rbac';
 import { getSession } from '@/lib/session';
 import { isSuperAdminRole } from '@/lib/super-admin';
 import { apiRateLimiter } from '@/lib/rate-limit';
+import { logTableActivity } from '@/lib/activity-log';
 
 // Ensure role_permissions table exists
 async function ensureTable(pool: any) {
@@ -167,6 +168,20 @@ export async function POST(request: NextRequest) {
       }
 
       await connection.commit();
+
+      await logTableActivity(request, {
+        tableName: 'role',
+        action: 'CREATE',
+        recordId: roleId,
+        details: { title: title.trim(), permissionsCount: permissions.length },
+      });
+
+      await logTableActivity(request, {
+        tableName: 'role_permissions',
+        action: 'CREATE',
+        recordId: roleId,
+        details: { roleId, permissions },
+      });
 
       return NextResponse.json({
         success: true,

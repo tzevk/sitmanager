@@ -49,6 +49,7 @@ interface InquiryRow {
   Student_Id: number;
   Student_Name: string;
   CourseName: string | null;
+  Batch_Code: string | null;
   Inquiry_Dt: string | null;
   Discussion: string | null;
   DiscussionDate: string | null;
@@ -381,6 +382,7 @@ export default function InquiryPage() {
                 <th className="text-left py-3 px-4 font-bold">#</th>
                 <th className="text-left py-3 px-4 font-bold">Student Name</th>
                 <th className="text-left py-3 px-4 font-bold">Training Name</th>
+                <th className="text-left py-3 px-4 font-bold">Batch Code</th>
                 <th className="text-left py-3 px-4 font-bold">Mobile</th>
                 <th className="text-left py-3 px-4 font-bold">Email</th>
                 <th className="text-left py-3 px-4 font-bold">Location</th>
@@ -394,7 +396,7 @@ export default function InquiryPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="py-16 text-center">
+                  <td colSpan={12} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-8 h-8 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                       <span className="text-sm text-gray-400">Loading inquiries...</span>
@@ -403,7 +405,7 @@ export default function InquiryPage() {
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-16 text-center">
+                  <td colSpan={12} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2 text-gray-300">
                       <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -438,6 +440,9 @@ export default function InquiryPage() {
                     </td>
                     <td className="py-2.5 px-4 max-w-[160px]">
                       <span className="truncate block">{r.CourseName || '—'}</span>
+                    </td>
+                    <td className="py-2.5 px-4 whitespace-nowrap font-mono text-xs">
+                      {r.Batch_Code || '—'}
                     </td>
                     <td className="py-2.5 px-4 whitespace-nowrap font-mono text-xs">
                       {r.Present_Mobile || '—'}

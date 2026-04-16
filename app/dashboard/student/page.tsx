@@ -7,6 +7,7 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 
 interface StudentRow {
   Student_Id: number;
+  Batch_Code: string | null;
   Student_Name: string | null;
   FName: string | null;
   LName: string | null;
@@ -107,12 +108,12 @@ export default function StudentPage() {
   };
 
   const handleExport = () => {
-    const headers = ['Id', 'Student Name', 'Email', 'Mobile', 'Course', 'City', 'Qualification'];
+    const headers = ['Batch Code', 'Student Name', 'Email', 'Mobile', 'Course', 'City', 'Qualification'];
     const csvRows = [
       headers.join(','),
       ...rows.map((r) =>
         [
-          r.Student_Id,
+          `"${(r.Batch_Code || '').replace(/"/g, '""')}"`,
           `"${(r.Student_Name || '').replace(/"/g, '""')}"`,
           `"${(r.Email || '').replace(/"/g, '""')}"`,
           r.Present_Mobile || '',
@@ -163,7 +164,7 @@ export default function StudentPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Search name, email, mobile, city..."
+                placeholder="Search batch code, name, email, mobile, city..."
                 className="w-full bg-white/95 border border-white/30 rounded-xl pl-10 pr-3 py-2.5 text-sm font-semibold text-slate-800 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-4 focus:ring-[#FAE452]/20 focus:border-[#FAE452]"
               />
               <svg className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -261,7 +262,7 @@ export default function StudentPage() {
           <table className="dashboard-table w-full text-sm">
             <thead>
               <tr className="text-[11px] uppercase tracking-wider text-slate-500 bg-slate-50 border-b border-slate-200">
-                <th className="text-left py-3 px-4 font-bold">Id</th>
+                <th className="text-left py-3 px-4 font-bold">Batch Code</th>
                 <th className="text-left py-3 px-4 font-bold">Student Name</th>
                 <th className="text-left py-3 px-4 font-bold">Email</th>
                 <th className="text-left py-3 px-4 font-bold">Mobile</th>
@@ -299,7 +300,7 @@ export default function StudentPage() {
                     className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors"
                   >
                     <td className="py-2.5 px-4 text-slate-500 font-mono text-xs">
-                      {r.Student_Id}
+                      {r.Batch_Code || '—'}
                     </td>
                     <td className="py-2.5 px-4 font-semibold text-slate-900 max-w-[200px]">
                       <span className="truncate block">{r.Student_Name || '—'}</span>

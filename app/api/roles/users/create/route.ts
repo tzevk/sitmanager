@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { getSession } from '@/lib/session';
+import { logTableActivity } from '@/lib/activity-log';
 import crypto from 'crypto';
 
 // GET: List employees with their user account status
@@ -166,6 +167,13 @@ export async function POST(request: NextRequest) {
     );
 
     const userId = (result as any).insertId;
+
+    await logTableActivity(request, {
+      tableName: 'awt_adminuser',
+      action: 'CREATE',
+      recordId: userId,
+      details: { username: username.trim(), email: email.trim(), roleId },
+    });
 
     return NextResponse.json({
       success: true,
