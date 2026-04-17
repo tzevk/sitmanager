@@ -220,6 +220,7 @@ export default function EditRolePage({ params }: PageProps) {
           title: title.trim(),
           description: description.trim(),
           permissions: Array.from(selectedPermissions),
+          dashboard_department: dashboardDepartment || null,
         }),
       });
 

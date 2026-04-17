@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
 
     // Look up user by username/email and password
     const [rows] = await pool.execute(
-      `SELECT u.id, u.firstname, u.lastname, u.email, u.username, u.role, r.title AS role_title
+      `SELECT u.id, u.firstname, u.lastname, u.email, u.username, u.role, r.title AS role_title, r.dashboard_department
        FROM awt_adminuser u
        LEFT JOIN role r ON r.id = u.role
        WHERE (u.username = ? OR u.email = ?) AND u.password = ? AND u.deleted = 0`,
