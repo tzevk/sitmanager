@@ -567,7 +567,7 @@ export default function PublicAdmissionFormPage() {
         {/* Header */}
         <header className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] shadow-lg">
           <div className="max-w-[1400px] mx-auto px-4 py-3 flex items-center gap-3">
-            <Image src="/sit.png" alt="SIT Logo" width={44} height={44} className="rounded-lg bg-white/10 p-0.5" />
+            <Image src="/sit.png" alt="SIT Logo" width={44} height={44} className="rounded-lg bg-white/10 p-0.5" style={{ width: 'auto', height: 'auto' }} />
             <div>
               <div className="text-white font-bold text-base">Suvidya Institute of Technology</div>
               <div className="text-white/70 text-xs">Online Admission Form</div>
@@ -616,8 +616,8 @@ export default function PublicAdmissionFormPage() {
         <div className="max-w-full mx-auto px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-4">
             <div className="bg-white rounded-lg sm:rounded-xl p-1 sm:p-1.5 shadow-md flex-shrink-0 -my-2 sm:-my-3">
-              <Image src="/sit.png" alt="SIT Logo" width={48} height={48} className="block sm:hidden rounded-md" />
-              <Image src="/sit.png" alt="SIT Logo" width={72} height={72} className="hidden sm:block rounded-lg" />
+              <Image src="/sit.png" alt="SIT Logo" width={48} height={48} className="block sm:hidden rounded-md" style={{ width: 'auto', height: 'auto' }} />
+              <Image src="/sit.png" alt="SIT Logo" width={72} height={72} className="hidden sm:block rounded-lg" style={{ width: 'auto', height: 'auto' }} />
             </div>
             <div>
               <div className="text-white font-extrabold text-sm sm:text-lg leading-tight tracking-tight">Suvidya Institute of Technology</div>
@@ -2103,7 +2103,7 @@ export default function PublicAdmissionFormPage() {
 
             {/* Watermark */}
             <div className="pointer-events-none select-none fixed inset-0 flex items-center justify-center z-0" style={{zIndex:0}}>
-              <Image src="/sit.png" alt="" width={600} height={600} className="opacity-[0.025] object-contain" style={{maxWidth:'80vw',maxHeight:'80vh'}} />
+              <Image src="/sit.png" alt="" width={600} height={600} className="opacity-[0.025] object-contain" style={{ maxWidth: '80vw', maxHeight: '80vh', width: 'auto', height: 'auto' }} />
             </div>
 
             <div className="relative z-10 max-w-4xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-3 text-sm">

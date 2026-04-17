@@ -166,7 +166,7 @@ export default function TrainerDashboardLayout({ children }: { children: React.R
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <Image src="/sit.png" alt="SIT" width={28} height={28} className="object-contain" />
+          <Image src="/sit.png" alt="SIT" width={28} height={28} className="object-contain" style={{ width: 'auto', height: 'auto' }} />
           <span className="font-semibold text-sm" style={{ color: '#2E3093' }}>Trainer Portal</span>
         </header>
 

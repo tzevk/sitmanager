@@ -80,7 +80,7 @@ export default function PublicStudentIntakeTokenPage() {
       <header className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] px-6 py-4 shadow">
         <div className="max-w-3xl mx-auto flex items-center gap-5">
           <div className="flex-shrink-0 w-16 h-16 bg-white rounded-2xl grid place-items-center">
-            <Image src="/sit.png" alt="SIT" width={72} height={72} className="object-contain" />
+            <Image src="/sit.png" alt="SIT" width={72} height={72} className="object-contain" style={{ width: 'auto', height: 'auto' }} />
           </div>
           <div>
             <h1 className="text-lg font-bold text-white">Student Intake</h1>
