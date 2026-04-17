@@ -40,9 +40,9 @@ function dedupeStudents(list: Student[]): Student[] {
   const unique: Student[] = [];
 
   for (const s of list) {
-    const idPart = Number.isFinite(Number(s.Student_Id)) ? String(s.Student_Id) : '';
     const namePart = (s.Student_Name || '').trim().toLowerCase();
-    const key = idPart ? `id:${idPart}` : `name:${namePart}`;
+    const idPart = Number.isFinite(Number(s.Student_Id)) ? String(s.Student_Id) : '';
+    const key = namePart ? `name:${namePart}` : `id:${idPart}`;
     if (seen.has(key)) continue;
     seen.add(key);
     unique.push(s);

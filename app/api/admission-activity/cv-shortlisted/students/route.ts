@@ -33,19 +33,16 @@ export async function GET(req: NextRequest) {
     if (batchCode) {
       const [students] = await pool.query<any[]>(
         `SELECT
-           MAX(Student_Id) AS Student_Id,
-           MAX(Student_Name) AS Student_Name,
+           Student_Id,
+           TRIM(Student_Name) AS Student_Name,
            Batch_Code
          FROM student_master
          WHERE Batch_Code = ?
            AND (IsDelete = 0 OR IsDelete IS NULL)
            AND Student_Name IS NOT NULL
            AND TRIM(Student_Name) <> ''
-         GROUP BY
-           Batch_Code,
-           COALESCE(NULLIF(Student_Id, 0), -1),
-           LOWER(TRIM(Student_Name))
-         ORDER BY MAX(Student_Name)`,
+         GROUP BY Student_Id, Batch_Code
+         ORDER BY TRIM(Student_Name)`,
         [batchCode]
       );
       return NextResponse.json({ students });
