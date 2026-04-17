@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
           department: session.department,
           role: session.role,
           permissions,
+          dashboardDepartment: session.dashboardDepartment || null,
         },
         user: {
           id: session.userId,

@@ -130,11 +130,11 @@ export default function DashboardPage() {
   const [recentFollowupsLoading, setRecentFollowupsLoading] = useState(false);
   const [showFollowupReminder, setShowFollowupReminder] = useState(false);
   const [newFollowupCount, setNewFollowupCount] = useState(0);
-  const resolvedDepartment = resolveDashboardDepartment(session?.department, session?.role);
+  const resolvedDepartment = resolveDashboardDepartment(session?.department, session?.role, session?.dashboardDepartment);
   const canSwitchDepartmentDashboard = isSuperAdmin;
   const [adminSelectedDepartment, setAdminSelectedDepartment] = useState<DashboardDepartment>('administration');
   const activeDepartment: DashboardDepartment = canSwitchDepartmentDashboard ? adminSelectedDepartment : resolvedDepartment;
-  const widgetConfig = getDashboardWidgetConfig(session?.department, session?.role);
+  const widgetConfig = getDashboardWidgetConfig(session?.department, session?.role, session?.dashboardDepartment);
 
   useEffect(() => {
     if (activeDepartment !== 'placement') return;

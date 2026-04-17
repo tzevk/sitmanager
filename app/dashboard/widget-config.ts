@@ -96,8 +96,9 @@ export function resolveDashboardDepartment(
 
 export function getDashboardWidgetConfig(
   department: string | null | undefined,
-  role: number | null | undefined
+  role: number | null | undefined,
+  dashboardDepartment?: string | null
 ): DashboardWidgetConfig {
-  const key = resolveDashboardDepartment(department, role);
+  const key = resolveDashboardDepartment(department, role, dashboardDepartment);
   return DEPARTMENT_WIDGET_CONFIG[key] || ALL_WIDGETS_ENABLED;
 }
