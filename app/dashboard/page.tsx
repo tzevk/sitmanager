@@ -32,14 +32,13 @@ interface AdminTodoItem {
   createdAt: string;
 }
 
-interface RecentConsultancyFollowup {
-  Followup_Id: number;
-  Const_Id: number | null;
-  Company_Name: string;
-  Contact_Person: string;
-  Purpose: string;
-  Followup_Date: string;
-  Remarks: string;
+interface FollowupPopupItem {
+  popupId: number;
+  recordId: number | null;
+  primaryText: string;
+  secondaryText: string;
+  followupDate: string;
+  module: 'consultancy' | 'inquiry';
 }
 
 // --- Mini Sparkline (SVG) ---
@@ -126,7 +125,7 @@ export default function DashboardPage() {
   const [newTodo, setNewTodo] = useState('');
   const [now, setNow] = useState<Date | null>(null);
   const [showFollowupPopup, setShowFollowupPopup] = useState(false);
-  const [recentFollowups, setRecentFollowups] = useState<RecentConsultancyFollowup[]>([]);
+  const [recentFollowups, setRecentFollowups] = useState<FollowupPopupItem[]>([]);
   const [recentFollowupsLoading, setRecentFollowupsLoading] = useState(false);
   const [showFollowupReminder, setShowFollowupReminder] = useState(false);
   const [newFollowupCount, setNewFollowupCount] = useState(0);
@@ -134,38 +133,91 @@ export default function DashboardPage() {
   const canSwitchDepartmentDashboard = isSuperAdmin;
   const [adminSelectedDepartment, setAdminSelectedDepartment] = useState<DashboardDepartment>('administration');
   const activeDepartment: DashboardDepartment = canSwitchDepartmentDashboard ? adminSelectedDepartment : resolvedDepartment;
+  const showConsultancyFollowupPopup = activeDepartment === 'placement' || activeDepartment === 'cbd';
+  const followupStorageKey = `sit-${activeDepartment}-followups-last-seen-id`;
+  const followupPopupTitle = activeDepartment === 'cbd' ? 'Recent Inquiry Follow-ups' : 'Recent Consultancy Follow-ups';
+  const followupPopupSubtitle = activeDepartment === 'cbd' ? 'Directly from Inquiry' : 'Directly from Consultancy Master';
+  const followupPopupEmptyText = activeDepartment === 'cbd'
+    ? 'No recent inquiry follow-ups available.'
+    : 'No recent consultancy follow-ups available.';
+  const followupButtonText = showFollowupReminder
+    ? `Reminder: ${newFollowupCount} new`
+    : activeDepartment === 'cbd'
+      ? 'Inquiry Follow-up Popups'
+      : 'Follow-up Popups';
   const widgetConfig = getDashboardWidgetConfig(session?.department, session?.role, session?.dashboardDepartment);
 
   useEffect(() => {
-    if (activeDepartment !== 'placement') return;
+    if (!showConsultancyFollowupPopup) return;
 
-    const STORAGE_KEY = 'sit-placement-followups-last-seen-id';
     let active = true;
 
-    const fetchRecentFollowups = async (checkReminder: boolean) => {
+    const fetchRecentFollowups = async (checkReminder: boolean, showAlertModal: boolean) => {
       if (!active) return;
       if (!checkReminder) setRecentFollowupsLoading(true);
 
       try {
-        const res = await fetch('/api/masters/consultancy/followups?recent=1&limit=10');
-        const payload = await res.json().catch(() => ({}));
+        let mappedRows: FollowupPopupItem[] = [];
+
+        if (activeDepartment === 'cbd') {
+          const res = await fetch('/api/inquiry?page=1&limit=10');
+          const payload = await res.json().catch(() => ({}));
+          const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+
+          mappedRows = rows
+            .filter((r: any) => {
+              const hasDiscussion = String(r?.Discussion || '').trim().length > 0;
+              const hasNext = String(r?.NextFollowUpDate || '').trim().length > 0;
+              const label = String(r?.StatusLabel || '').toLowerCase();
+              const isFollowUpStatus = label.includes('follow up') || label.includes('pending') || label.includes('callback');
+              return hasDiscussion || hasNext || isFollowUpStatus;
+            })
+            .map((r: any) => ({
+              popupId: Number(r?.Student_Id || 0),
+              recordId: Number(r?.Student_Id || 0) || null,
+              primaryText: String(r?.Student_Name || 'Inquiry').trim() || 'Inquiry',
+              secondaryText: [
+                String(r?.CourseName || '').trim(),
+                String(r?.Present_Mobile || r?.Email || '').trim(),
+              ].filter(Boolean).join(' · ') || 'Follow-up',
+              followupDate: String(r?.NextFollowUpDate || r?.DiscussionDate || r?.Inquiry_Dt || ''),
+              module: 'inquiry',
+            }));
+        } else {
+          const res = await fetch('/api/masters/consultancy/followups?recent=1&limit=10');
+          const payload = await res.json().catch(() => ({}));
+          const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+
+          mappedRows = rows.map((r: any) => ({
+            popupId: Number(r?.Followup_Id || 0),
+            recordId: Number(r?.Const_Id || 0) || null,
+            primaryText: String(r?.Company_Name || 'Company').trim() || 'Company',
+            secondaryText: `${String(r?.Contact_Person || 'Contact').trim() || 'Contact'} · ${String(r?.Purpose || 'Follow-up').trim() || 'Follow-up'}`,
+            followupDate: String(r?.Followup_Date || ''),
+            module: 'consultancy',
+          }));
+        }
+
         if (!active) return;
 
-        const rows = Array.isArray(payload?.rows) ? payload.rows : [];
-        setRecentFollowups(rows);
+        setRecentFollowups(mappedRows);
 
-        const latestId = Number(rows?.[0]?.Followup_Id || 0);
-        const storedSeen = Number(localStorage.getItem(STORAGE_KEY) || 0);
+        if (showAlertModal && mappedRows.length > 0) {
+          setShowFollowupPopup(true);
+        }
+
+        const latestId = Number(mappedRows?.[0]?.popupId || 0);
+        const storedSeen = Number(localStorage.getItem(followupStorageKey) || 0);
 
         if (!storedSeen && latestId > 0) {
-          localStorage.setItem(STORAGE_KEY, String(latestId));
+          localStorage.setItem(followupStorageKey, String(latestId));
           setShowFollowupReminder(false);
           setNewFollowupCount(0);
           return;
         }
 
         if (checkReminder && latestId > storedSeen) {
-          const unseenCount = rows.filter((r: RecentConsultancyFollowup) => Number(r.Followup_Id) > storedSeen).length;
+          const unseenCount = mappedRows.filter((r: FollowupPopupItem) => Number(r.popupId) > storedSeen).length;
           setNewFollowupCount(unseenCount);
           setShowFollowupReminder(unseenCount > 0);
         }
@@ -177,16 +229,18 @@ export default function DashboardPage() {
       }
     };
 
-    fetchRecentFollowups(false);
+    // Show alert modal immediately when dashboard loads for eligible departments.
+    fetchRecentFollowups(false, true);
     const intervalId = setInterval(() => {
-      fetchRecentFollowups(true);
+      // Re-open alert modal every 2 hours with latest follow-ups.
+      fetchRecentFollowups(true, true);
     }, 2 * 60 * 60 * 1000);
 
     return () => {
       active = false;
       clearInterval(intervalId);
     };
-  }, [activeDepartment]);
+  }, [activeDepartment, followupStorageKey, showConsultancyFollowupPopup]);
 
   useEffect(() => {
     if (!canSwitchDepartmentDashboard) return;
@@ -204,9 +258,8 @@ export default function DashboardPage() {
   };
 
   const markFollowupsAsSeen = () => {
-    const STORAGE_KEY = 'sit-placement-followups-last-seen-id';
-    const latestId = Number(recentFollowups?.[0]?.Followup_Id || 0);
-    if (latestId > 0) localStorage.setItem(STORAGE_KEY, String(latestId));
+    const latestId = Number(recentFollowups?.[0]?.popupId || 0);
+    if (latestId > 0) localStorage.setItem(followupStorageKey, String(latestId));
     setShowFollowupReminder(false);
     setNewFollowupCount(0);
   };
@@ -216,11 +269,15 @@ export default function DashboardPage() {
     setShowFollowupPopup(true);
   };
 
-  const goToFollowupDetails = (item: RecentConsultancyFollowup) => {
-    if (!item.Const_Id) return;
+  const goToFollowupDetails = (item: FollowupPopupItem) => {
+    if (!item.recordId) return;
     markFollowupsAsSeen();
     setShowFollowupPopup(false);
-    window.location.href = `/dashboard/masters/consultancy/edit/${item.Const_Id}`;
+    if (item.module === 'inquiry') {
+      window.location.href = `/dashboard/inquiry/add?editId=${item.recordId}`;
+      return;
+    }
+    window.location.href = `/dashboard/masters/consultancy/edit/${item.recordId}`;
   };
 
   useEffect(() => {
@@ -265,7 +322,7 @@ export default function DashboardPage() {
               <option value="placement">Placement Department</option>
               <option value="training_and_development">Training and Development</option>
             </select>
-            {activeDepartment === 'placement' && (
+            {showConsultancyFollowupPopup && (
               <button
                 type="button"
                 onClick={openFollowupPopup}
@@ -279,7 +336,7 @@ export default function DashboardPage() {
                     {showFollowupReminder ? newFollowupCount : recentFollowups.length}
                   </span>
                 </span>
-                {showFollowupReminder ? `Reminder: ${newFollowupCount} new` : 'Follow-up Popups'}
+                {followupButtonText}
                 <svg className="w-3.5 h-3.5 text-[#2A6BB5] transition group-hover:translate-x-0.5" fill="none" stroke="currentColor" strokeWidth={2.3} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
@@ -391,6 +448,55 @@ export default function DashboardPage() {
       <div className="space-y-4">
         {profileHeader}
         <CbdDashboard data={data} loading={loading} />
+        {showFollowupPopup && (
+          <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-2xl rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.3)] overflow-hidden">
+              <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] via-[#2E3093] to-[#2A6BB5] text-white flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold tracking-wide">{followupPopupTitle}</h3>
+                  <p className="text-[11px] text-white/80 mt-1">{followupPopupSubtitle}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowFollowupPopup(false)}
+                  className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-white/30 bg-white/10 hover:bg-white/20"
+                  aria-label="Close follow-up popup"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="max-h-[70vh] overflow-auto p-5 bg-gradient-to-b from-slate-50/60 to-white">
+                {recentFollowupsLoading ? (
+                  <div className="py-10 text-center text-sm text-slate-500">Loading recent follow-ups...</div>
+                ) : recentFollowups.length === 0 ? (
+                  <div className="py-10 text-center text-sm text-slate-500">{followupPopupEmptyText}</div>
+                ) : (
+                  <div className="space-y-3">
+                    {recentFollowups.map((item) => (
+                      <button
+                        key={`${item.module}-${item.popupId}`}
+                        type="button"
+                        onClick={() => goToFollowupDetails(item)}
+                        className={`w-full text-left rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_26px_rgba(15,23,42,0.1)] ${item.recordId ? 'cursor-pointer' : 'cursor-default'}`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-800 truncate">{item.primaryText || 'Follow-up'}</p>
+                            <p className="text-xs text-slate-500 mt-1 truncate">{item.secondaryText || 'Follow-up'}</p>
+                          </div>
+                          <span className="text-[11px] font-semibold text-[#2E3093] whitespace-nowrap">{item.followupDate || ''}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -430,8 +536,8 @@ export default function DashboardPage() {
             <div className="w-full max-w-2xl rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.3)] overflow-hidden">
               <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] via-[#2E3093] to-[#2A6BB5] text-white flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-bold tracking-wide">Recent Consultancy Follow-ups</h3>
-                  <p className="text-[11px] text-white/80 mt-1">Directly from Consultancy Master</p>
+                  <h3 className="text-sm font-bold tracking-wide">{followupPopupTitle}</h3>
+                  <p className="text-[11px] text-white/80 mt-1">{followupPopupSubtitle}</p>
                 </div>
                 <button
                   type="button"
@@ -449,22 +555,22 @@ export default function DashboardPage() {
                 {recentFollowupsLoading ? (
                   <div className="py-10 text-center text-sm text-slate-500">Loading recent follow-ups...</div>
                 ) : recentFollowups.length === 0 ? (
-                  <div className="py-10 text-center text-sm text-slate-500">No recent consultancy follow-ups available.</div>
+                  <div className="py-10 text-center text-sm text-slate-500">{followupPopupEmptyText}</div>
                 ) : (
                   <div className="space-y-3">
                     {recentFollowups.map((item) => (
                       <button
-                        key={item.Followup_Id}
+                        key={`${item.module}-${item.popupId}`}
                         type="button"
                         onClick={() => goToFollowupDetails(item)}
-                        className={`w-full text-left rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_26px_rgba(15,23,42,0.1)] ${item.Const_Id ? 'cursor-pointer' : 'cursor-default'}`}
+                        className={`w-full text-left rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_26px_rgba(15,23,42,0.1)] ${item.recordId ? 'cursor-pointer' : 'cursor-default'}`}
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div className="min-w-0">
-                            <p className="text-sm font-bold text-slate-800 truncate">{item.Company_Name || 'Company'}</p>
-                            <p className="text-xs text-slate-500 mt-1 truncate">{item.Contact_Person || 'Contact'} · {item.Purpose || 'Follow-up'}</p>
+                            <p className="text-sm font-bold text-slate-800 truncate">{item.primaryText || 'Follow-up'}</p>
+                            <p className="text-xs text-slate-500 mt-1 truncate">{item.secondaryText || 'Follow-up'}</p>
                           </div>
-                          <span className="text-[11px] font-semibold text-[#2E3093] whitespace-nowrap">{item.Followup_Date || ''}</span>
+                          <span className="text-[11px] font-semibold text-[#2E3093] whitespace-nowrap">{item.followupDate || ''}</span>
                         </div>
                       </button>
                     ))}
