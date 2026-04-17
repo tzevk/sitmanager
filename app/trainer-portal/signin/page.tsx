@@ -49,7 +49,7 @@ export default function TrainerSignIn() {
 
         <div className="relative z-10 flex flex-col items-center text-center px-12">
           <div className="bg-white rounded-2xl p-4 shadow-2xl mb-8">
-            <Image src="/sit.png" alt="SIT Logo" width={100} height={100} className="object-contain" />
+            <Image src="/sit.png" alt="SIT Logo" width={100} height={100} className="object-contain" style={{ width: 'auto', height: 'auto' }} />
           </div>
           <h1 className="text-4xl font-bold text-white mb-4">Trainer Portal</h1>
           <p className="text-lg text-blue-100 max-w-md leading-relaxed">
@@ -76,7 +76,7 @@ export default function TrainerSignIn() {
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden flex flex-col items-center mb-8">
-            <Image src="/sit.png" alt="SIT Logo" width={72} height={72} className="object-contain mb-3" />
+            <Image src="/sit.png" alt="SIT Logo" width={72} height={72} className="object-contain mb-3" style={{ width: 'auto', height: 'auto' }} />
             <h2 className="text-2xl font-bold" style={{ color: '#2E3093' }}>Trainer Portal</h2>
           </div>
 
