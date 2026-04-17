@@ -144,8 +144,13 @@ export default function AddInquiryPage() {
 
   /* ui state */
   const [saving, setSaving] = useState(false);
-  const [sendingAdmissionForm, setSendingAdmissionForm] = useState(false);
+  const [showAdmissionMailModal, setShowAdmissionMailModal] = useState(false);
+  const [mailSubject, setMailSubject] = useState('Your SIT Admission Form Link');
+  const [mailBody, setMailBody] = useState('');
   const [error, setError] = useState('');
+  const admissionFormUrl = editId
+    ? (typeof window !== 'undefined' ? `${window.location.origin}/admission/${editId}` : `/admission/${editId}`)
+    : '';
 
   /* ---- load options on mount ---- */
   useEffect(() => {
@@ -288,7 +293,7 @@ export default function AddInquiryPage() {
 
   const handleSendAdmissionForm = async () => {
     if (!editId) {
-      alert('Please save the inquiry first before sending admission form');
+      alert('Please save the inquiry first before preparing admission form mail body');
       return;
     }
 
@@ -298,30 +303,21 @@ export default function AddInquiryPage() {
       return;
     }
 
-    setSendingAdmissionForm(true);
-    try {
-      const sendRes = await fetch('/api/inquiry/send-admission-form', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inquiryId: editId,
-          toEmail: recipient,
-          studentName: name,
-        }),
-      });
-
-      const sendData = await sendRes.json();
-      if (!sendRes.ok) throw new Error(sendData?.error || 'Failed to send admission form email');
-
-      if (sendData?.admissionFormUrl) {
-        window.open(String(sendData.admissionFormUrl), '_blank', 'noopener,noreferrer');
-      }
-      alert('Admission form email sent successfully');
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Failed to send admission form email');
-    } finally {
-      setSendingAdmissionForm(false);
-    }
+    const studentName = name.trim() || 'Student';
+    setMailSubject('Your SIT Admission Form Link');
+    setMailBody(
+      [
+        `Dear ${studentName},`,
+        '',
+        'Thank you for your interest in SIT.',
+        'Please complete your admission form using the link below:',
+        admissionFormUrl,
+        '',
+        'Regards,',
+        'SIT Admissions Team',
+      ].join('\n')
+    );
+    setShowAdmissionMailModal(true);
   };
 
   if (permLoading) return <PermissionLoading />;
@@ -704,13 +700,12 @@ export default function AddInquiryPage() {
                   <button
                     type="button"
                     onClick={handleSendAdmissionForm}
-                    disabled={sendingAdmissionForm}
                     className="flex items-center justify-center gap-2 bg-[#2A6BB5] hover:bg-[#2360A0] text-white px-4 py-1.5 rounded text-xs font-semibold transition-all shadow-md hover:shadow-lg"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
-                    {sendingAdmissionForm ? 'Sending...' : 'Send Admission Form'}
+                    Admission Form Mail Body
                   </button>
                   <button
                     onClick={() => router.push('/dashboard/inquiry')}
@@ -830,6 +825,93 @@ export default function AddInquiryPage() {
         </div>
 
       </div>
+
+      {showAdmissionMailModal && editId && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl rounded-xl bg-white border border-gray-200 shadow-2xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-200 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white">Admission Form Mail Body</h3>
+                  <p className="text-[11px] text-white/75">Manual copy/share mode. No auto email is sent.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAdmissionMailModal(false)}
+                  className="text-white/80 hover:text-white"
+                  aria-label="Close"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>To</label>
+                  <input value={email.trim()} readOnly className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Admission Form Link</label>
+                  <input value={admissionFormUrl} readOnly className={inputCls} />
+                </div>
+              </div>
+
+              <div>
+                <label className={labelCls}>Subject</label>
+                <input
+                  value={mailSubject}
+                  onChange={(e) => setMailSubject(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+
+              <div>
+                <label className={labelCls}>Mail Body</label>
+                <textarea
+                  value={mailBody}
+                  onChange={(e) => setMailBody(e.target.value)}
+                  rows={10}
+                  className={textareaCls}
+                />
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(admissionFormUrl);
+                  alert('Admission form link copied');
+                }}
+                className="px-3 py-1.5 text-xs font-semibold border border-gray-300 rounded text-gray-700 hover:bg-white"
+              >
+                Copy Link
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(mailBody);
+                  alert('Mail body copied');
+                }}
+                className="px-3 py-1.5 text-xs font-semibold border border-gray-300 rounded text-gray-700 hover:bg-white"
+              >
+                Copy Body
+              </button>
+              <button
+                type="button"
+                onClick={() => window.open(`/admission/${editId}`, '_blank', 'noopener,noreferrer')}
+                className="px-3 py-1.5 text-xs font-semibold bg-[#2A6BB5] hover:bg-[#2360A0] text-white rounded"
+              >
+                Open Admission Form
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

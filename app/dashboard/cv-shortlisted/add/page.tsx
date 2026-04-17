@@ -35,6 +35,22 @@ interface Company { Const_Id: number; Comp_Name: string; }
 interface Batch { Batch_Id: number; Batch_Code: string; }
 interface Student { Student_Id: number; Student_Name: string; Batch_Code: string; }
 
+function dedupeStudents(list: Student[]): Student[] {
+  const seen = new Set<string>();
+  const unique: Student[] = [];
+
+  for (const s of list) {
+    const idPart = Number.isFinite(Number(s.Student_Id)) ? String(s.Student_Id) : '';
+    const namePart = (s.Student_Name || '').trim().toLowerCase();
+    const key = idPart ? `id:${idPart}` : `name:${namePart}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(s);
+  }
+
+  return unique;
+}
+
 interface StudentRow {
   _key: string;
   Batch_Id: number | null;
@@ -136,7 +152,7 @@ export default function AddCVShortlistedPage() {
     if (!batchCode) return [];
     const res = await fetch(`/api/admission-activity/cv-shortlisted/students?batchCode=${encodeURIComponent(batchCode)}`);
     const data = await res.json();
-    return data.students || [];
+    return dedupeStudents(data.students || []);
   }, []);
 
   const ensureModalStudentsLoaded = useCallback(

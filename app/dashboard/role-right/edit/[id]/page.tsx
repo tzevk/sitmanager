@@ -64,6 +64,7 @@ interface Role {
   description: string;
   permissions: string[];
   isSystemRole?: boolean;
+  dashboard_department?: string | null;
 }
 
 interface PageProps {
@@ -79,6 +80,7 @@ export default function EditRolePage({ params }: PageProps) {
   const [role, setRole] = useState<Role | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [dashboardDepartment, setDashboardDepartment] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState<Set<string>>(new Set());
   const [permissionGroups, setPermissionGroups] = useState<PermissionGroup[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -104,6 +106,7 @@ export default function EditRolePage({ params }: PageProps) {
           setRole(r);
           setTitle(r.title || '');
           setDescription(r.description || '');
+          setDashboardDepartment(r.dashboard_department || '');
           setSelectedPermissions(new Set(r.permissions || []));
           // Expand groups that have selected permissions
           const groupsWithSelection = new Set<string>();
@@ -360,6 +363,26 @@ export default function EditRolePage({ params }: PageProps) {
                   disabled={role.isSystemRole}
                   className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] resize-none disabled:bg-gray-50 disabled:cursor-not-allowed"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">
+                  Dashboard Department
+                </label>
+                <select
+                  value={dashboardDepartment}
+                  onChange={(e) => setDashboardDepartment(e.target.value)}
+                  disabled={role.isSystemRole}
+                  className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                >
+                  <option value="">-- Select Dashboard --</option>
+                  <option value="cbd">Career Building Department</option>
+                  <option value="corporate_training">Corporate Training</option>
+                  <option value="placement">Placement</option>
+                  <option value="training_and_development">Training &amp; Development</option>
+                  <option value="accounts">Accounts</option>
+                  <option value="administration">Administration</option>
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">Determines which dashboard users with this role will see.</p>
               </div>
             </div>
           </div>

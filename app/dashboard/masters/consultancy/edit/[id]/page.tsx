@@ -43,6 +43,7 @@ interface Branch {
 interface FollowUp {
   Followup_Id?: number;
   Source_Inquiry_Id?: number | null;
+  Entry_Type?: string | null;
   Created_By?: string;
   Followup_Date: string;
   Contact_Person: string;
@@ -397,7 +398,7 @@ export default function EditConsultancyPage() {
       f.Direct_Line||'',
       f.Remarks||'',
       f.Created_By||'System',
-      f.Source_Inquiry_Id ? 'Corporate Inquiry' : 'Manual',
+      f.Entry_Type === 'deputation' ? 'Deputation' : f.Source_Inquiry_Id ? 'Corporate Inquiry' : 'Manual',
     ]);
     const csv = [headers.join(','), ...csvRows.map(r => r.map((v: string) => `"${v.replace(/"/g,'""')}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -788,8 +789,8 @@ export default function EditConsultancyPage() {
 
               {atsMode && <DeputationSection constId={consultancyId} />}
 
-              {/* Add Follow Up Form */}
-              <SectionCard title="View Consultancy Info" icon={<svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}>
+              {/* Standard follow-up form & table — hidden in ATS mode */}
+              {!atsMode && <SectionCard title="View Consultancy Info" icon={<svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}>
                 {editingFollowupId != null && (
                   <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 flex items-center justify-between gap-2">
                     <span>Editing follow-up #{editingFollowupId}. This will update the same follow-up record.</span>
@@ -907,10 +908,10 @@ export default function EditConsultancyPage() {
                     {editingFollowupId != null ? 'Update Follow-up' : discussionSourceFollowupId != null ? 'Create Discussion Copy' : 'Add +'}
                   </button>
                 </div>
-              </SectionCard>
+              </SectionCard>}
 
-              {/* Follow Ups Table */}
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
+              {/* Follow Ups Table — hidden in ATS mode */}
+              {!atsMode && <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="p-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
                   <button onClick={handleExportFollowups} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
@@ -960,7 +961,7 @@ export default function EditConsultancyPage() {
                           key={f.Followup_Id != null
                             ? `followup-${f.Followup_Id}`
                             : `followup-legacy-${f.Source_Inquiry_Id ?? 'manual'}-${f.Followup_Date || ''}-${f.email || ''}-${idx}`}
-                          className="border-b border-gray-100 hover:bg-gray-50"
+                          className={`border-b border-gray-100 ${f.Entry_Type === 'deputation' ? 'bg-purple-50/60 hover:bg-purple-50' : 'hover:bg-gray-50'}`}
                         >
                           <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{f.Followup_Date ? new Date(f.Followup_Date).toLocaleDateString('en-GB') : '-'}</td>
                           <td className="px-3 py-2 text-gray-700">{f.Contact_Person || '-'}</td>
@@ -973,7 +974,11 @@ export default function EditConsultancyPage() {
                           <td className="px-3 py-2 text-gray-700 truncate max-w-[120px]">{f.Remarks || '-'}</td>
                           <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{f.Created_By || 'System'}</td>
                           <td className="px-3 py-2 text-gray-700">
-                            {f.Source_Inquiry_Id ? (
+                            {f.Entry_Type === 'deputation' ? (
+                              <span className="inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700 border border-purple-200">
+                                Deputation
+                              </span>
+                            ) : f.Source_Inquiry_Id ? (
                               <button
                                 type="button"
                                 onClick={() => router.push(`/dashboard/corporate-inquiry/edit/${f.Source_Inquiry_Id}`)}
@@ -1015,7 +1020,7 @@ export default function EditConsultancyPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </div>}
             </div>
           )}
         </div>
@@ -1039,7 +1044,11 @@ export default function EditConsultancyPage() {
               <div><span className="font-semibold text-gray-600">Created By:</span> {viewFollowup.Created_By || 'System'}</div>
               <div>
                 <span className="font-semibold text-gray-600">Source:</span>{' '}
-                {viewFollowup.Source_Inquiry_Id ? (
+                {viewFollowup.Entry_Type === 'deputation' ? (
+                  <span className="inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700 border border-purple-200">
+                    Deputation
+                  </span>
+                ) : viewFollowup.Source_Inquiry_Id ? (
                   <button
                     type="button"
                     onClick={() => router.push(`/dashboard/corporate-inquiry/edit/${viewFollowup.Source_Inquiry_Id}`)}

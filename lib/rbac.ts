@@ -122,6 +122,13 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     icon: 'graduation',
     permissions: [
       ...createPermissions('inquiry', 'Inquiry'),
+      {
+        id: 'inquiry.edit',
+        name: 'Edit Inquiry (Legacy)',
+        description: 'Legacy alias for update inquiry permission',
+        resource: 'inquiry',
+        action: 'update',
+      },
       ...createPermissions('online_admission', 'Online Admission'),
       ...createPermissions('student', 'Student'),
       ...createPermissions('corporate_inquiry', 'Corporate Inquiry'),
@@ -298,6 +305,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     description: 'Student placement and recruitment',
     icon: 'briefcase',
     permissions: [
+      ...createPermissions('placement', 'Placement Job Postings'),
+      ...createPermissions('mock_interview', 'Mock Interviews'),
       ...createPermissions('consultancy', 'Consultancy'),
       ...createPermissions('cv_shortlisted', 'CV Shortlisted'),
       ...createPermissions('cv_latest', 'Latest CV'),

@@ -411,9 +411,6 @@ export default function DashboardPage() {
         <AdministrationDashboard
           data={data}
           loading={loading}
-          activeDepartment={adminSelectedDepartment}
-          onDepartmentChange={handleAdminDepartmentChange}
-          showDepartmentToggle={canSwitchDepartmentDashboard}
           todos={adminTodos}
           onAddTodo={addAdminTodo}
           onUpdateTodo={updateAdminTodo}

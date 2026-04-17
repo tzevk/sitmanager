@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 interface BatchRow {
   Batch_Id: number;
@@ -45,6 +47,7 @@ const formatDate = (v: string) => {
 
 export default function MockInterviewsPage() {
   const router = useRouter();
+  const { canView, loading: permLoading } = useResourcePermissions('mock_interview');
 
   const [monthCursor, setMonthCursor] = useState(() => monthStart(new Date()));
   const [batches, setBatches] = useState<BatchRow[]>([]);
@@ -228,6 +231,9 @@ export default function MockInterviewsPage() {
     if (!confirm('Delete this mock interview plan?')) return;
     setPlans((prev) => prev.filter((p) => p.id !== id));
   };
+
+  if (permLoading) return <PermissionLoading />;
+  if (!canView) return <AccessDenied message="You do not have permission to view mock interviews." />;
 
   return (
     <div className="space-y-4">

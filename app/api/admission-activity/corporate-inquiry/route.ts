@@ -635,43 +635,60 @@ export async function GET(req: NextRequest) {
 
     const where = conditions.join(' AND ');
 
-    // Count
-    const countSql = `SELECT COUNT(*) AS total FROM corporate_inquiry WHERE ${where}`;
+    // Deduplicate by core inquiry signature and keep latest row per signature.
+    // This fixes accidental duplicate submissions while preserving the latest edit.
+    const dedupGroupSql = `
+      SELECT
+        MAX(Id) AS latest_id
+      FROM corporate_inquiry
+      WHERE ${where}
+      GROUP BY
+        LOWER(TRIM(COALESCE(CompanyName, ''))),
+        LOWER(TRIM(COALESCE(Email, ''))),
+        LOWER(TRIM(COALESCE(Mobile, ''))),
+        LOWER(TRIM(COALESCE(Course_Id, ''))),
+        COALESCE(DATE(Idate), '1900-01-01')
+    `;
+
+    // Count deduplicated rows
+    const countSql = `SELECT COUNT(*) AS total FROM (${dedupGroupSql}) dedup`;
     const [countRows] = await pool.query<any[]>(countSql, params);
     const total = countRows[0]?.total ?? 0;
 
-    // Data
+    // Data (latest representative row per dedup group)
     const dataSql = `
       SELECT
-        Id, Fname, Lname, MName, FullName, CompanyName, Designation,
-        Address, City, State, Country, Pin,
-        Phone, Mobile, Email,
-        Course_Id,
-        Place, business,
-        Remark, Idate, IsActive,
+        c.Id, c.Fname, c.Lname, c.MName, c.FullName, c.CompanyName, c.Designation,
+        c.Address, c.City, c.State, c.Country, c.Pin,
+        c.Phone, c.Mobile, c.Email,
+        c.Course_Id,
+        c.Place, c.business,
+        c.Remark, c.Idate, c.IsActive,
 
-        Consultancy_Id,
-        CompanyType,
-        CompanyAuthority,
-        TrainingMode, Participants_Fresher, Participants_Experienced,
-        TrainingLocation,
-        TrainingDates,
-        Discussion,
-        FollowUp, InitialFollowUpDate, NextFollowUpDate,
+        c.Consultancy_Id,
+        c.CompanyType,
+        c.CompanyAuthority,
+        c.TrainingMode, c.Participants_Fresher, c.Participants_Experienced,
+        c.TrainingLocation,
+        c.TrainingDates,
+        c.Discussion,
+        c.FollowUp, c.InitialFollowUpDate, c.NextFollowUpDate,
 
-        InquiryStatus,
-        DiscussionOutcome,
-        TrainingNumber, TrainingDate, TrainerName, NumberOfDays, TotalStudents, TrainingCoordinator,
+        c.InquiryStatus,
+        c.DiscussionOutcome,
+        c.TrainingNumber, c.TrainingDate, c.TrainerName, c.NumberOfDays, c.TotalStudents, c.TrainingCoordinator,
 
-        ConfirmDate,
-        PerformanceEvaluation_PreTest, PerformanceEvaluation_Assessment, PerformanceEvaluation_Assignment,
-        PerformanceEvaluation_FinalExam, PerformanceEvaluation_TrainingMaterial, PerformanceEvaluation_Attendance,
-        TrainingFeedbackObtained,
-        SitCertIssuedOnPerformanceOnAttendance,
-        CtTrainingEnquiryId
-      FROM corporate_inquiry
-      WHERE ${where}
-      ORDER BY Id DESC
+        c.ConfirmDate,
+        c.PerformanceEvaluation_PreTest, c.PerformanceEvaluation_Assessment, c.PerformanceEvaluation_Assignment,
+        c.PerformanceEvaluation_FinalExam, c.PerformanceEvaluation_TrainingMaterial, c.PerformanceEvaluation_Attendance,
+        c.TrainingFeedbackObtained,
+        c.SitCertIssuedOnPerformanceOnAttendance,
+        c.CtTrainingEnquiryId
+      FROM corporate_inquiry c
+      INNER JOIN (
+        ${dedupGroupSql}
+      ) dedup ON dedup.latest_id = c.Id
+      ORDER BY c.Id DESC
       LIMIT ? OFFSET ?
     `;
     const [rows] = await pool.query<any[]>(dataSql, [...params, limit, offset]);
@@ -898,6 +915,24 @@ export async function POST(req: NextRequest) {
       companyType: (CompanyType && String(CompanyType).trim()) || null,
       dateAdded: (Idate && String(Idate).trim()) || null,
     });
+
+    // Prevent accidental duplicates from rapid double-submit or repeated same payload.
+    const [existingDup] = await pool.query<any[]>(
+      `SELECT Id
+       FROM corporate_inquiry
+       WHERE (IsDelete = 0 OR IsDelete IS NULL)
+         AND LOWER(TRIM(COALESCE(CompanyName, ''))) = LOWER(TRIM(COALESCE(?, '')))
+         AND LOWER(TRIM(COALESCE(Email, ''))) = LOWER(TRIM(COALESCE(?, '')))
+         AND LOWER(TRIM(COALESCE(Mobile, ''))) = LOWER(TRIM(COALESCE(?, '')))
+         AND LOWER(TRIM(COALESCE(Course_Id, ''))) = LOWER(TRIM(COALESCE(?, '')))
+         AND COALESCE(DATE(Idate), '1900-01-01') = COALESCE(DATE(?), '1900-01-01')
+       ORDER BY Id DESC
+       LIMIT 1`,
+      [CompanyName || null, Email || null, Mobile || null, Course_Id || null, Idate || null]
+    );
+    if (Array.isArray(existingDup) && existingDup.length > 0) {
+      return NextResponse.json({ success: true, insertId: Number(existingDup[0].Id), duplicate: true });
+    }
 
     const [result] = await pool.query(
       `INSERT INTO corporate_inquiry (

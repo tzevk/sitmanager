@@ -58,8 +58,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     await ensureRolePermissionsTableOnce(pool);
 
     const [roles] = await pool.execute(
-      `SELECT id, title, description, created_by, created_date, 
-              updated_by, updated_date, \`delete\` as deleted
+      `SELECT id, title, description, created_by, created_date,
+              updated_by, updated_date, \`delete\` as deleted,
+              dashboard_department
        FROM role WHERE id = ?`,
       [roleId]
     );
@@ -131,7 +132,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const pool = getPool();
     await ensureRolePermissionsTableOnce(pool);
     const body = await request.json();
-    const { title, description, permissions } = body;
+    const { title, description, permissions, dashboard_department } = body;
 
     // Validate role exists
     const [existing] = await pool.execute(
@@ -182,6 +183,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         if (description !== undefined) {
           updates.push('description = ?');
           values.push(description);
+        }
+        if (dashboard_department !== undefined) {
+          updates.push('dashboard_department = ?');
+          values.push(dashboard_department || null);
         }
 
         updates.push('updated_by = ?', 'updated_date = NOW()');

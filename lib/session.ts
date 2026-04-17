@@ -41,6 +41,7 @@ export interface SessionData {
   lastName: string;
   department: string;
   role: number;
+  dashboardDepartment?: string | null;
 }
 
 /**

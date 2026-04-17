@@ -610,7 +610,7 @@ export default function PublicAdmissionFormPage() {
 
   // ── Main form ─────────────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 bg-white flex flex-col">
+    <div className="min-h-[100dvh] bg-white flex flex-col">
       {/* ── Header ── */}
       <header className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] shadow-lg flex-shrink-0 z-30">
         <div className="max-w-full mx-auto px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between">
@@ -666,7 +666,7 @@ export default function PublicAdmissionFormPage() {
       </div>
 
       {/* ── Body ── */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <div className="h-full w-full px-2 sm:px-4 py-2 sm:py-4 bg-gray-50">
         <div className="flex gap-2 sm:gap-4 h-full">
 
@@ -1010,66 +1010,66 @@ export default function PublicAdmissionFormPage() {
                     <div className="space-y-5">
                       {/* Tab Navigation */}
                       <div className="border-b border-gray-300">
-                        <div className="flex gap-2 flex-wrap">
+                        <div className="flex gap-1 sm:gap-2 overflow-x-auto pb-px -mb-px scrollbar-hide">
                           <button
                             type="button"
                             onClick={() => setAcademicTab('ssc')}
-                            className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 ${
+                            className={`px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all border-b-2 whitespace-nowrap flex-shrink-0 ${
                               academicTab === 'ssc'
                                 ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
                                 : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
                             }`}
                           >
-                            <i className="fas fa-school mr-2"></i>
-                            SSC (10th)
+                            <i className="fas fa-school mr-1 sm:mr-2"></i>
+                            <span className="hidden sm:inline">SSC (10th)</span><span className="sm:hidden">SSC</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => setAcademicTab('hsc')}
-                            className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 ${
+                            className={`px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all border-b-2 whitespace-nowrap flex-shrink-0 ${
                               academicTab === 'hsc'
                                 ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
                                 : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
                             }`}
                           >
-                            <i className="fas fa-graduation-cap mr-2"></i>
-                            HSC (12th)
+                            <i className="fas fa-graduation-cap mr-1 sm:mr-2"></i>
+                            <span className="hidden sm:inline">HSC (12th)</span><span className="sm:hidden">HSC</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => setAcademicTab('diploma')}
-                            className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 ${
+                            className={`px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all border-b-2 whitespace-nowrap flex-shrink-0 ${
                               academicTab === 'diploma'
                                 ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
                                 : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
                             }`}
                           >
-                            <i className="fas fa-certificate mr-2"></i>
+                            <i className="fas fa-certificate mr-1 sm:mr-2"></i>
                             Diploma
                           </button>
                           <button
                             type="button"
                             onClick={() => setAcademicTab('graduation')}
-                            className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 ${
+                            className={`px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all border-b-2 whitespace-nowrap flex-shrink-0 ${
                               academicTab === 'graduation'
                                 ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
                                 : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
                             }`}
                           >
-                            <i className="fas fa-user-graduate mr-2"></i>
-                            Graduation
+                            <i className="fas fa-user-graduate mr-1 sm:mr-2"></i>
+                            <span className="hidden sm:inline">Graduation</span><span className="sm:hidden">Grad</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => setAcademicTab('postgrad')}
-                            className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 ${
+                            className={`px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all border-b-2 whitespace-nowrap flex-shrink-0 ${
                               academicTab === 'postgrad'
                                 ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
                                 : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
                             }`}
                           >
-                            <i className="fas fa-award mr-2"></i>
-                            Post-Graduation
+                            <i className="fas fa-award mr-1 sm:mr-2"></i>
+                            <span className="hidden sm:inline">Post-Graduation</span><span className="sm:hidden">PG</span>
                           </button>
                         </div>
                       </div>
@@ -1846,26 +1846,28 @@ export default function PublicAdmissionFormPage() {
 
                       {/* Consent Form Banner — triggers when Student doesn't meet course eligibility */}
                       {formData.occupationalStatus === 'Student' && !checkEligibility() && (
-                        <div className={`mt-5 rounded-xl border-2 p-4 flex items-start gap-3 ${
+                        <div className={`mt-5 rounded-xl border-2 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-start gap-3 ${
                           consentAcknowledged ? 'bg-green-50 border-green-300' : 'bg-orange-50 border-orange-300'
                         }`}>
-                          <i className={`fas ${
-                            consentAcknowledged ? 'fa-check-circle text-green-500' : 'fa-exclamation-circle text-orange-500'
-                          } text-lg flex-shrink-0 mt-0.5`}></i>
-                          <div className="flex-1">
-                            <p className={`text-sm font-bold ${consentAcknowledged ? 'text-green-800' : 'text-orange-800'}`}>
-                              {consentAcknowledged ? 'Consent Form Acknowledged' : 'Educational Consent Form Required'}
-                            </p>
-                            <p className={`text-xs mt-0.5 ${consentAcknowledged ? 'text-green-700' : 'text-orange-700'}`}>
-                              {consentAcknowledged
-                                ? 'You have reviewed and accepted all consent declarations.'
-                                : 'Your educational background does not match the selected training program eligibility. Please complete the consent form.'}
-                            </p>
+                          <div className="flex items-start gap-3 flex-1">
+                            <i className={`fas ${
+                              consentAcknowledged ? 'fa-check-circle text-green-500' : 'fa-exclamation-circle text-orange-500'
+                            } text-lg flex-shrink-0 mt-0.5`}></i>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-bold ${consentAcknowledged ? 'text-green-800' : 'text-orange-800'}`}>
+                                {consentAcknowledged ? 'Consent Form Acknowledged' : 'Educational Consent Form Required'}
+                              </p>
+                              <p className={`text-xs mt-0.5 ${consentAcknowledged ? 'text-green-700' : 'text-orange-700'}`}>
+                                {consentAcknowledged
+                                  ? 'You have reviewed and accepted all consent declarations.'
+                                  : 'Your educational background does not match the selected training program eligibility. Please complete the consent form.'}
+                              </p>
+                            </div>
                           </div>
                           <button
                             type="button"
                             onClick={() => { setConsentType('student'); setShowConsentModal(true); }}
-                            className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all w-full sm:w-auto text-center ${
                               consentAcknowledged
                                 ? 'bg-green-100 text-green-700 border border-green-300 hover:bg-green-200'
                                 : 'bg-orange-500 text-white hover:bg-orange-600'
@@ -1878,26 +1880,28 @@ export default function PublicAdmissionFormPage() {
 
                       {/* Consent Form Banner — triggers when Employee has 10+ years experience */}
                       {formData.occupationalStatus === 'Employee' && parseInt(formData.totalOccupationYears) >= 10 && (
-                        <div className={`mt-5 rounded-xl border-2 p-4 flex items-start gap-3 ${
+                        <div className={`mt-5 rounded-xl border-2 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-start gap-3 ${
                           experiencedConsentAcknowledged ? 'bg-green-50 border-green-300' : 'bg-blue-50 border-blue-300'
                         }`}>
-                          <i className={`fas ${
-                            experiencedConsentAcknowledged ? 'fa-check-circle text-green-500' : 'fa-briefcase text-blue-500'
-                          } text-lg flex-shrink-0 mt-0.5`}></i>
-                          <div className="flex-1">
-                            <p className={`text-sm font-bold ${experiencedConsentAcknowledged ? 'text-green-800' : 'text-blue-800'}`}>
-                              {experiencedConsentAcknowledged ? 'Experienced Candidate Consent Acknowledged' : 'Experienced Candidate Consent Form Required'}
-                            </p>
-                            <p className={`text-xs mt-0.5 ${experiencedConsentAcknowledged ? 'text-green-700' : 'text-blue-700'}`}>
-                              {experiencedConsentAcknowledged
-                                ? 'You have reviewed and accepted all consent declarations for experienced candidates.'
-                                : 'You have 10+ years of work experience. Please complete the consent form for experienced candidates.'}
-                            </p>
+                          <div className="flex items-start gap-3 flex-1">
+                            <i className={`fas ${
+                              experiencedConsentAcknowledged ? 'fa-check-circle text-green-500' : 'fa-briefcase text-blue-500'
+                            } text-lg flex-shrink-0 mt-0.5`}></i>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-bold ${experiencedConsentAcknowledged ? 'text-green-800' : 'text-blue-800'}`}>
+                                {experiencedConsentAcknowledged ? 'Experienced Candidate Consent Acknowledged' : 'Experienced Candidate Consent Form Required'}
+                              </p>
+                              <p className={`text-xs mt-0.5 ${experiencedConsentAcknowledged ? 'text-green-700' : 'text-blue-700'}`}>
+                                {experiencedConsentAcknowledged
+                                  ? 'You have reviewed and accepted all consent declarations for experienced candidates.'
+                                  : 'You have 10+ years of work experience. Please complete the consent form for experienced candidates.'}
+                              </p>
+                            </div>
                           </div>
                           <button
                             type="button"
                             onClick={() => { setConsentType('experienced'); setShowConsentModal(true); }}
-                            className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all w-full sm:w-auto text-center ${
                               experiencedConsentAcknowledged
                                 ? 'bg-green-100 text-green-700 border border-green-300 hover:bg-green-200'
                                 : 'bg-blue-500 text-white hover:bg-blue-600'
@@ -2048,10 +2052,8 @@ export default function PublicAdmissionFormPage() {
 
       {/* ── Footer ── */}
       <footer className="flex-shrink-0 bg-[#2E3093] border-t border-[#2A6BB5]/30">
-        <div className="max-w-full mx-auto px-6 py-2.5 flex items-center text-center justify-center">
-          <div className="flex items-center gap-2.5">
-            <span className="text-white/70 text-xs">© {new Date().getFullYear()} Suvidya Institute of Technology. All rights reserved.</span>
-          </div>
+        <div className="max-w-full mx-auto px-3 sm:px-6 py-2 sm:py-2.5 flex flex-col sm:flex-row items-center text-center justify-center gap-1 sm:gap-4">
+          <span className="text-white/70 text-[10px] sm:text-xs">© {new Date().getFullYear()} Suvidya Institute of Technology. All rights reserved.</span>
           <span className="hidden sm:block text-white/40 text-xs">Secure Online Admission Portal</span>
         </div>
       </footer>
@@ -2104,7 +2106,7 @@ export default function PublicAdmissionFormPage() {
               <Image src="/sit.png" alt="" width={600} height={600} className="opacity-[0.025] object-contain" style={{maxWidth:'80vw',maxHeight:'80vh'}} />
             </div>
 
-            <div className="relative z-10 max-w-4xl mx-auto px-6 py-6 space-y-3 text-sm">
+            <div className="relative z-10 max-w-4xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-3 text-sm">
 
               {/* Section helper */}
               {([
@@ -2138,9 +2140,9 @@ export default function PublicAdmissionFormPage() {
                       <li>Demand Draft/NEFT of any bank in favor of &apos;Suvidya Institute of Technology Pvt. Ltd.&apos; payable at Mumbai.</li>
                       <li>Penalty of Rs 500/- will be charged towards bank charges in case of Cheque returned.</li>
                       <li>Payment may be made thru NEFT transfer, accounts details are as under:
-                        <div className="mt-2 bg-white border border-gray-200 rounded-lg p-3 text-xs space-y-1.5">
+                        <div className="mt-2 bg-white border border-gray-200 rounded-lg p-2 sm:p-3 text-xs space-y-1.5">
                           {[['Bank account name','Suvidya Institute of Technology Pvt. Ltd.'],['Bank Name','Axis Bank Ltd.'],['Branch Address','Vakola, Mumbai (MH), City Survey No. 841 to 846, Florence Lorenace Chs. Ltd. Mumbai 400055.'],['IFSC code for NEFT','UTIB0001244'],['MICR Code','400211082'],['Bank Account No.','911020002988600']].map(([k,v])=>(
-                            <div key={k} className="flex gap-2"><span className="font-semibold text-gray-700 w-36 flex-shrink-0">{k}</span><span className="text-gray-600">: {v}</span></div>
+                            <div key={k} className="flex flex-col sm:flex-row sm:gap-2"><span className="font-semibold text-gray-700 sm:w-36 sm:flex-shrink-0">{k}</span><span className="text-gray-600"><span className="hidden sm:inline">: </span>{v}</span></div>
                           ))}
                         </div>
                       </li>
@@ -2202,7 +2204,7 @@ export default function PublicAdmissionFormPage() {
                       <li>Grade is based on average score. <span className="font-semibold text-gray-700">Weightage: Unit Test – 35%, Assignment – 15%, Final Exam – 50%</span></li>
                       <li>1% marks will be deducted for each un-disciplined behavior.</li>
                       <li>Criteria of Grade:
-                        <div className="mt-1.5 grid grid-cols-3 gap-1 text-xs bg-white border border-gray-200 rounded-lg p-2">
+                        <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-3 gap-1 text-xs bg-white border border-gray-200 rounded-lg p-2">
                           {[['A+','90–100%'],['A','80–89.99%'],['B+','70–79.99%'],['B','60–69.99%'],['C','50–59.99%'],['No Cert.','≤49.99%']].map(([g,r])=>(
                             <div key={g} className="flex items-center gap-1"><span className="font-bold text-[#2E3093]">{g}</span><span className="text-gray-500">{r}</span></div>
                           ))}

@@ -58,6 +58,17 @@ async function ensureDeputationTables(pool: ReturnType<typeof getPool>) {
   await ensureColumn(pool, 'deputation_entries', 'Deputation_Percentage', 'VARCHAR(50) NULL');
   await ensureColumn(pool, 'deputation_entries', 'Negotiation_Decision', 'VARCHAR(30) NULL');
   await ensureColumn(pool, 'deputation_entries', 'Tenure_Details', 'MEDIUMTEXT NULL');
+  await ensureColumn(pool, 'deputation_entries', 'Service_Type', `VARCHAR(30) DEFAULT 'deputation'`);
+  await ensureColumn(pool, 'deputation_entries', 'Agreement_Client_Name', 'VARCHAR(500) NULL');
+  await ensureColumn(pool, 'deputation_entries', 'Agreement_Client_Address', 'MEDIUMTEXT NULL');
+  await ensureColumn(pool, 'deputation_entries', 'Agreement_Date', 'VARCHAR(50) NULL');
+  await ensureColumn(pool, 'deputation_entries', 'Agreement_Scope', 'MEDIUMTEXT NULL');
+  await ensureColumn(pool, 'deputation_entries', 'Fee_Annual_CTC', 'VARCHAR(100) NULL');
+  await ensureColumn(pool, 'deputation_entries', 'Fee_Internship', 'VARCHAR(100) NULL');
+  await ensureColumn(pool, 'deputation_entries', 'Fee_Deputation_Monthly', 'VARCHAR(100) NULL');
+  await ensureColumn(pool, 'deputation_entries', 'Fee_Replacement_Period', 'VARCHAR(100) NULL');
+  await ensureColumn(pool, 'deputation_entries', 'Fee_Payment_Credit', 'VARCHAR(100) NULL');
+  await ensureColumn(pool, 'deputation_entries', 'Fee_Agreement_Tenure', 'VARCHAR(100) NULL');
   await ensureColumn(pool, 'deputation_entries', 'Followup_Id', 'INT NULL');
   // Allow Company_Name nullable for legacy rows
   try {
@@ -167,6 +178,17 @@ export async function GET(req: NextRequest) {
               e.Deputation_Percentage,
               e.Negotiation_Decision,
               e.Tenure_Details,
+              e.Service_Type,
+              e.Agreement_Client_Name,
+              e.Agreement_Client_Address,
+              e.Agreement_Date,
+              e.Agreement_Scope,
+              e.Fee_Annual_CTC,
+              e.Fee_Internship,
+              e.Fee_Deputation_Monthly,
+              e.Fee_Replacement_Period,
+              e.Fee_Payment_Credit,
+              e.Fee_Agreement_Tenure,
               e.Agreement_Status,
               e.JD_Shared,
               e.JD_Shared_Date,
@@ -292,6 +314,8 @@ export async function POST(req: NextRequest) {
     const contactMobile2 = body.Contact_Mobile2 ? String(body.Contact_Mobile2).trim() : null;
     const contactEmail = body.Contact_Email ? String(body.Contact_Email).trim() : null;
     const initialDiscussion = body.Initial_Discussion ? String(body.Initial_Discussion).trim() : null;
+    const rawServiceType = body.Service_Type ? String(body.Service_Type).trim().toLowerCase() : 'deputation';
+    const serviceType = ['deputation', 'permanent', 'contract'].includes(rawServiceType) ? rawServiceType : 'deputation';
 
     if (!contactName) return NextResponse.json({ error: 'Contact name is required' }, { status: 400 });
 
@@ -301,8 +325,8 @@ export async function POST(req: NextRequest) {
     const [result] = await pool.query<ResultSetHeader>(
       `INSERT INTO deputation_entries
        (Const_Id, Company_Name, Contact_Name, Contact_Designation, Contact_Mobile, Contact_Mobile2,
-        Contact_Email, Initial_Discussion, Current_Phase, IsDelete, CreatedBy)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'proposal', 0, ?)`,
+        Contact_Email, Initial_Discussion, Service_Type, Current_Phase, IsDelete, CreatedBy)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposal', 0, ?)`,
       [
         constId,
         companyName || null,
@@ -312,6 +336,7 @@ export async function POST(req: NextRequest) {
         contactMobile2,
         contactEmail,
         initialDiscussion,
+        serviceType,
         createdBy,
       ]
     );
@@ -381,12 +406,23 @@ export async function PUT(req: NextRequest) {
       Contact_Mobile2: body.Contact_Mobile2,
       Contact_Email: body.Contact_Email,
       Initial_Discussion: body.Initial_Discussion,
+      Service_Type: body.Service_Type,
       Current_Phase: body.Current_Phase,
       Proposal_Status: body.Proposal_Status,
       Agreement_Title: body.Agreement_Title,
       Agreement_Attachment: body.Agreement_Attachment,
       Deputation_Percentage: body.Deputation_Percentage,
       Agreement_Status: body.Agreement_Status,
+      Agreement_Client_Name: body.Agreement_Client_Name,
+      Agreement_Client_Address: body.Agreement_Client_Address,
+      Agreement_Date: body.Agreement_Date,
+      Agreement_Scope: body.Agreement_Scope,
+      Fee_Annual_CTC: body.Fee_Annual_CTC,
+      Fee_Internship: body.Fee_Internship,
+      Fee_Deputation_Monthly: body.Fee_Deputation_Monthly,
+      Fee_Replacement_Period: body.Fee_Replacement_Period,
+      Fee_Payment_Credit: body.Fee_Payment_Credit,
+      Fee_Agreement_Tenure: body.Fee_Agreement_Tenure,
       Negotiation_Decision: body.Negotiation_Decision,
       JD_Shared: body.JD_Shared === true ? 1 : body.JD_Shared === false ? 0 : undefined,
       JD_Shared_Date: body.JD_Shared_Date,

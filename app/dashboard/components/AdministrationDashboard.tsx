@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { TableSkeleton, WidgetSkeleton } from './Skeletons';
-import type { DashboardDepartment } from '../widget-config';
+
 
 interface AdminTodoItem {
   id: string;
@@ -50,9 +50,6 @@ function nextSundays(count = 4) {
 export default function AdministrationDashboard({
   data,
   loading,
-  activeDepartment,
-  onDepartmentChange,
-  showDepartmentToggle,
   todos,
   onAddTodo,
   onUpdateTodo,
@@ -60,9 +57,6 @@ export default function AdministrationDashboard({
 }: {
   data: any;
   loading: boolean;
-  activeDepartment: DashboardDepartment;
-  onDepartmentChange: (v: DashboardDepartment) => void;
-  showDepartmentToggle: boolean;
   todos: AdminTodoItem[];
   onAddTodo: (taskName: string, priority: AdminTodoItem['priority'], dueDate: string) => void;
   onUpdateTodo: (id: string, patch: Partial<AdminTodoItem>) => void;
@@ -134,22 +128,7 @@ export default function AdministrationDashboard({
 
   return (
     <div className="space-y-6 pb-8">
-      {showDepartmentToggle && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
-          <span className="text-sm font-semibold text-gray-700">Department Dashboard</span>
-          <select
-            value={activeDepartment}
-            onChange={(e) => onDepartmentChange(e.target.value as DashboardDepartment)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25"
-          >
-            <option value="administration">Administration</option>
-            <option value="cbd">CBD Department</option>
-            <option value="corporate_training">Corporate Training</option>
-            <option value="placement">Placement Department</option>
-            <option value="training_and_development">Training and Development</option>
-          </select>
-        </div>
-      )}
+      {/* Department switching is handled in the main dashboard profile header */}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {loading ? <TableSkeleton rows={5} cols={4} /> : (

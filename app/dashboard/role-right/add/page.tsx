@@ -64,6 +64,7 @@ export default function AddRolePage() {
   const { canCreate, loading: permLoading } = useResourcePermissions('role');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [dashboardDepartment, setDashboardDepartment] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState<Set<string>>(new Set());
   const [permissionGroups, setPermissionGroups] = useState<PermissionGroup[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -181,6 +182,7 @@ export default function AddRolePage() {
           title: title.trim(),
           description: description.trim(),
           permissions: Array.from(selectedPermissions),
+          dashboard_department: dashboardDepartment || null,
         }),
       });
 
@@ -273,6 +275,25 @@ export default function AddRolePage() {
                   rows={3}
                   className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] resize-none"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">
+                  Dashboard Department
+                </label>
+                <select
+                  value={dashboardDepartment}
+                  onChange={(e) => setDashboardDepartment(e.target.value)}
+                  className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+                >
+                  <option value="">-- Select Dashboard --</option>
+                  <option value="cbd">Career Building Department</option>
+                  <option value="corporate_training">Corporate Training</option>
+                  <option value="placement">Placement</option>
+                  <option value="training_and_development">Training &amp; Development</option>
+                  <option value="accounts">Accounts</option>
+                  <option value="administration">Administration</option>
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">Determines which dashboard users with this role will see.</p>
               </div>
             </div>
           </div>

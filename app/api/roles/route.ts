@@ -22,6 +22,18 @@ async function ensureTable(pool: any) {
   `);
 }
 
+async function ensureDashboardDepartmentColumn(pool: any) {
+  await cached('schema:role_dashboard_dept', 60 * 60 * 1000, async () => {
+    const [cols] = await pool.execute(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'role' AND COLUMN_NAME = 'dashboard_department'`
+    );
+    if ((cols as any[]).length === 0) {
+      await pool.execute(`ALTER TABLE role ADD COLUMN dashboard_department VARCHAR(50) DEFAULT NULL`);
+    }
+    return true;
+  });
+}
+
 async function ensureRolePermissionsTableOnce(pool: any) {
   await cached('schema:role_permissions', 60 * 60 * 1000, async () => {
     await ensureTable(pool);
@@ -42,14 +54,16 @@ export async function GET(request: NextRequest) {
 
     const pool = getPool();
     await ensureRolePermissionsTableOnce(pool);
+    await ensureDashboardDepartmentColumn(pool);
 
     const { searchParams } = new URL(request.url);
     const includeDeleted = searchParams.get('includeDeleted') === 'true';
     const withPermissions = searchParams.get('withPermissions') !== 'false';
 
     let query = `
-      SELECT r.id, r.title, r.description, r.created_by, r.created_date, 
-             r.updated_by, r.updated_date, r.\`delete\` as deleted
+      SELECT r.id, r.title, r.description, r.created_by, r.created_date,
+             r.updated_by, r.updated_date, r.\`delete\` as deleted,
+             r.dashboard_department
       FROM role r
     `;
     
@@ -116,9 +130,10 @@ export async function POST(request: NextRequest) {
 
     const pool = getPool();
     await ensureRolePermissionsTableOnce(pool);
+    await ensureDashboardDepartmentColumn(pool);
 
     const body = await request.json();
-    const { title, description, permissions } = body;
+    const { title, description, permissions, dashboard_department } = body;
 
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
       return NextResponse.json(
@@ -151,9 +166,9 @@ export async function POST(request: NextRequest) {
 
       // Insert role
       const [result] = await connection.execute(
-        `INSERT INTO role (title, description, created_by, created_date, \`delete\`)
-         VALUES (?, ?, ?, NOW(), 0)`,
-        [title.trim(), description || '', session.userId]
+        `INSERT INTO role (title, description, created_by, created_date, \`delete\`, dashboard_department)
+         VALUES (?, ?, ?, NOW(), 0, ?)`,
+        [title.trim(), description || '', session.userId, dashboard_department || null]
       );
 
       const roleId = (result as any).insertId;
@@ -190,6 +205,7 @@ export async function POST(request: NextRequest) {
           title: title.trim(),
           description: description || '',
           permissions,
+          dashboard_department: dashboard_department || null,
         },
         message: 'Role created successfully',
       });
