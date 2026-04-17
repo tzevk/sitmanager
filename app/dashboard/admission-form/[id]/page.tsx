@@ -13,6 +13,16 @@ const STEPS = [
   { id: 5, title: 'Documents', icon: 'fa-cloud-upload-alt', description: 'Upload required documents' },
 ];
 
+const ACADEMIC_TABS = [
+  { id: 'ssc', title: 'SSC (10th)', icon: 'fa-school' },
+  { id: 'hsc', title: 'HSC (12th)', icon: 'fa-graduation-cap' },
+  { id: 'diploma', title: 'Diploma', icon: 'fa-certificate' },
+  { id: 'graduation', title: 'Graduation', icon: 'fa-user-graduate' },
+  { id: 'postgrad', title: 'Post-Graduation', icon: 'fa-award' },
+] as const;
+
+type AcademicTab = (typeof ACADEMIC_TABS)[number]['id'];
+
 // Training Program Eligibility Map (based on educational background)
 const COURSE_ELIGIBILITY: { [key: string]: string[] } = {
   'Piping Engineering': ['Mechanical', 'Production', 'Chemical', 'Petrochemical'],
@@ -46,7 +56,8 @@ export default function AdmissionFormPage() {
   const [searchingPostgradUniversities, setSearchingPostgradUniversities] = useState(false);
   const [showAddUniversityModal, setShowAddUniversityModal] = useState(false);
   const [newUniversityData, setNewUniversityData] = useState({ name: '', country: '', city: '', fieldType: 'grad' });
-  const [academicTab, setAcademicTab] = useState<'ssc' | 'hsc' | 'diploma' | 'graduation' | 'postgrad'>('ssc');
+  const [academicTab, setAcademicTab] = useState<AcademicTab>('ssc');
+  const [isAcademicMenuOpen, setIsAcademicMenuOpen] = useState(false);
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [consentAcknowledged, setConsentAcknowledged] = useState(false);
   const [consentChecks, setConsentChecks] = useState<boolean[]>(Array(5).fill(false));
@@ -1027,67 +1038,61 @@ export default function AdmissionFormPage() {
             <div className="space-y-5">
               {/* Tab Navigation */}
               <div className="border-b border-gray-300">
-                <div className="flex gap-2 flex-wrap">
+                <div className="relative md:hidden pb-2">
                   <button
                     type="button"
-                    onClick={() => setAcademicTab('ssc')}
-                    className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 ${
-                      academicTab === 'ssc'
-                        ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
-                        : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
-                    }`}
+                    onClick={() => setIsAcademicMenuOpen((prev) => !prev)}
+                    className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-semibold text-[#2A6BB5] bg-blue-50 border border-blue-100 rounded-lg"
+                    aria-label="Toggle academic tabs menu"
+                    aria-expanded={isAcademicMenuOpen}
                   >
-                    <i className="fas fa-school mr-2"></i>
-                    SSC (10th)
+                    <span className="flex items-center gap-2">
+                      <i className="fas fa-bars"></i>
+                      {ACADEMIC_TABS.find((tab) => tab.id === academicTab)?.title}
+                    </span>
+                    <i className={`fas ${isAcademicMenuOpen ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setAcademicTab('hsc')}
-                    className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 ${
-                      academicTab === 'hsc'
-                        ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
-                        : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
-                    }`}
-                  >
-                    <i className="fas fa-graduation-cap mr-2"></i>
-                    HSC (12th)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAcademicTab('diploma')}
-                    className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 ${
-                      academicTab === 'diploma'
-                        ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
-                        : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
-                    }`}
-                  >
-                    <i className="fas fa-certificate mr-2"></i>
-                    Diploma
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAcademicTab('graduation')}
-                    className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 ${
-                      academicTab === 'graduation'
-                        ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
-                        : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
-                    }`}
-                  >
-                    <i className="fas fa-user-graduate mr-2"></i>
-                    Graduation
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAcademicTab('postgrad')}
-                    className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 ${
-                      academicTab === 'postgrad'
-                        ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
-                        : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
-                    }`}
-                  >
-                    <i className="fas fa-award mr-2"></i>
-                    Post-Graduation
-                  </button>
+
+                  {isAcademicMenuOpen && (
+                    <div className="absolute z-20 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+                      {ACADEMIC_TABS.map((tab) => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => {
+                            setAcademicTab(tab.id);
+                            setIsAcademicMenuOpen(false);
+                          }}
+                          className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${
+                            academicTab === tab.id
+                              ? 'bg-blue-50 text-[#2A6BB5] font-semibold'
+                              : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <i className={`fas ${tab.icon}`}></i>
+                          {tab.title}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="hidden md:flex gap-2 flex-wrap">
+                  {ACADEMIC_TABS.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setAcademicTab(tab.id)}
+                      className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 ${
+                        academicTab === tab.id
+                          ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
+                          : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
+                      }`}
+                    >
+                      <i className={`fas ${tab.icon} mr-2`}></i>
+                      {tab.title}
+                    </button>
+                  ))}
                 </div>
               </div>
 
