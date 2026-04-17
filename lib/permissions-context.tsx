@@ -11,6 +11,7 @@ interface UserSession {
   department: string;
   role: number;
   permissions: string[];
+  dashboardDepartment?: string | null;
 }
 
 interface PermissionContextType {

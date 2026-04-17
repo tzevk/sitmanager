@@ -113,7 +113,7 @@ export default function DashboardPage() {
       const cached = sessionStorage.getItem('sit-dashboard-cache');
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed.dept === resolveDashboardDepartment(session?.department, session?.role) && Date.now() - parsed.ts < 5 * 60 * 1000) {
+        if (parsed.dept === resolveDashboardDepartment(session?.department, session?.role, session?.dashboardDepartment) && Date.now() - parsed.ts < 5 * 60 * 1000) {
           return parsed.data;
         }
       }
