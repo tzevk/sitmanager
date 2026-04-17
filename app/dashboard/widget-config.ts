@@ -49,9 +49,18 @@ function normalizeDepartmentLabel(value: string | null | undefined): string {
 
 export function resolveDashboardDepartment(
   department: string | null | undefined,
-  role: number | null | undefined
+  role: number | null | undefined,
+  dashboardDepartment?: string | null
 ): DashboardDepartment {
   if (role === 1) return 'administration';
+
+  // Use the dashboard_department assigned to the role if available
+  if (dashboardDepartment) {
+    const valid: DashboardDepartment[] = ['cbd', 'corporate_training', 'placement', 'training_and_development', 'accounts', 'administration'];
+    if (valid.includes(dashboardDepartment as DashboardDepartment)) {
+      return dashboardDepartment as DashboardDepartment;
+    }
+  }
 
   const normalized = normalizeDepartmentLabel(department);
   if (!normalized) {

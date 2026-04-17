@@ -157,6 +157,7 @@ export async function POST(request: NextRequest) {
       lastName: user.lastname,
       department: finalDepartment,
       role: user.role,
+      dashboardDepartment: user.dashboard_department || null,
     }, { maxAgeSeconds: sessionMaxAge });
 
     // Success response with session cookie
