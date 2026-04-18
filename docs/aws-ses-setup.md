@@ -62,6 +62,30 @@ For the IAM user created above:
 
 ## Step 5: Configure Your Application
 
+Choose one mode:
+
+### Option A: SES SMTP mode (recommended when you already have SMTP credentials)
+
+Use your SES SMTP endpoint in the same region as your verified identities:
+
+```bash
+ADMISSION_MAIL_PROVIDER=smtp
+ADMISSION_SMTP_HOST=email-smtp.us-east-1.amazonaws.com
+ADMISSION_SMTP_PORT=587
+ADMISSION_SMTP_SECURE=0
+ADMISSION_SMTP_USER=YOUR_SES_SMTP_USERNAME
+ADMISSION_SMTP_PASS=YOUR_SES_SMTP_PASSWORD
+ADMISSION_SMTP_FROM=noreply@yourdomain.com
+ADMISSION_SMTP_REPLY_TO=support@yourdomain.com
+```
+
+Notes:
+- `ADMISSION_SMTP_PORT=587` + `ADMISSION_SMTP_SECURE=0` uses STARTTLS.
+- TLS wrapper ports (`465`, `2465`) require `ADMISSION_SMTP_SECURE=1`.
+- Ensure sender identity is verified in SES for `us-east-1`.
+
+### Option B: SES SDK mode
+
 Update your `.env.local` or `.env` file:
 
 ```bash

@@ -131,6 +131,18 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       },
       ...createPermissions('online_admission', 'Online Admission'),
       ...createPermissions('student', 'Student'),
+    ],
+  },
+
+  // -------------------------------------------------------------------------
+  // CORPORATE TRAINING
+  // -------------------------------------------------------------------------
+  {
+    id: 'corporate_training',
+    name: 'Corporate Training',
+    description: 'Corporate inquiry and training execution management',
+    icon: 'users',
+    permissions: [
       ...createPermissions('corporate_inquiry', 'Corporate Inquiry'),
     ],
   },

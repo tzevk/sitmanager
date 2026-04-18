@@ -253,8 +253,6 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
       const approved = window.confirm(previewMessage);
       if (!approved) return;
 
-      window.open(String(previewData.admissionFormUrl), '_blank', 'noopener,noreferrer');
-
       const sendRes = await fetch('/api/inquiry/send-admission-form', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -1,9 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
 import { buildAdmissionFormMailContent, sendAdmissionFormEmail } from '@/lib/mailer';
+import { getPool } from '@/lib/db';
 
 function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+async function resolveRecipientEmail(inquiryId: number, requestedToEmail: string): Promise<string> {
+  const direct = String(requestedToEmail || '').trim();
+  if (direct && isValidEmail(direct)) return direct;
+
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT Email FROM Student_Inquiry WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+    [inquiryId],
+  );
+
+  const savedEmail = String((rows as Array<{ Email?: string | null }>)[0]?.Email || '').trim();
+  if (savedEmail && isValidEmail(savedEmail)) return savedEmail;
+
+  throw new Error('No valid recipient email found for this inquiry. Please update Email in Edit Inquiry.');
 }
 
 export async function POST(req: NextRequest) {
@@ -13,7 +30,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const inquiryId = Number(body?.inquiryId);
-    const toEmail = String(body?.toEmail || '').trim();
+    const requestedToEmail = String(body?.toEmail || '').trim();
     const studentName = String(body?.studentName || '').trim();
     const customSubject = String(body?.subject || '').trim();
     const customText = String(body?.body || '').trim();
@@ -23,13 +40,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Valid inquiryId is required' }, { status: 400 });
     }
 
-    if (!toEmail) {
-      return NextResponse.json({ error: 'Recipient email is required' }, { status: 400 });
-    }
-
-    if (!isValidEmail(toEmail)) {
-      return NextResponse.json({ error: 'Invalid recipient email address' }, { status: 400 });
-    }
+    const toEmail = await resolveRecipientEmail(inquiryId, requestedToEmail);
 
     const admissionFormUrl = `${req.nextUrl.origin}/admission/${inquiryId}`;
     const preview = buildAdmissionFormMailContent({

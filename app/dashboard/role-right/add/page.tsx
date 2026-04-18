@@ -73,6 +73,7 @@ export default function AddRolePage() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [filterAction, setFilterAction] = useState<string>('');
+  const [activeAccessTab, setActiveAccessTab] = useState<'permissions' | 'dashboard'>('permissions');
 
   useEffect(() => {
     fetch('/api/roles/permissions')
@@ -276,25 +277,6 @@ export default function AddRolePage() {
                   className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] resize-none"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">
-                  Dashboard Department
-                </label>
-                <select
-                  value={dashboardDepartment}
-                  onChange={(e) => setDashboardDepartment(e.target.value)}
-                  className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
-                >
-                  <option value="">-- Select Dashboard --</option>
-                  <option value="cbd">Career Building Department</option>
-                  <option value="corporate_training">Corporate Training</option>
-                  <option value="placement">Placement</option>
-                  <option value="training_and_development">Training &amp; Development</option>
-                  <option value="accounts">Accounts</option>
-                  <option value="administration">Administration</option>
-                </select>
-                <p className="text-[10px] text-gray-400 mt-1">Determines which dashboard users with this role will see.</p>
-              </div>
             </div>
           </div>
 
@@ -371,154 +353,208 @@ export default function AddRolePage() {
         {/* Right: Permissions Tree */}
         <div className="lg:col-span-2">
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            {/* Permissions Header */}
             <div className="p-4 border-b border-gray-100">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-700">Permissions</h3>
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <FaSearch className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Search permissions..."
-                      className="w-48 border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
-                    />
-                  </div>
-                  <select
-                    value={filterAction}
-                    onChange={(e) => setFilterAction(e.target.value)}
-                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
-                  >
-                    <option value="">All Actions</option>
-                    <option value="view">View</option>
-                    <option value="create">Create</option>
-                    <option value="update">Update</option>
-                    <option value="delete">Delete</option>
-                    <option value="export">Export</option>
-                    <option value="manage">Manage</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Info Box */}
-              <div className="flex items-start gap-2 p-2.5 bg-blue-50 rounded-lg text-xs text-blue-700">
-                <FaInfoCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                <p>
-                  Permissions are grouped by department/module. Click on a group header to expand it, 
-                  or use the checkbox to select all permissions in that group. Individual permissions 
-                  can be toggled within each group.
-                </p>
+              <div className="inline-flex rounded-lg border border-gray-200 p-1 bg-gray-50">
+                <button
+                  type="button"
+                  onClick={() => setActiveAccessTab('permissions')}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                    activeAccessTab === 'permissions'
+                      ? 'bg-[#2E3093] text-white'
+                      : 'text-gray-600 hover:bg-white'
+                  }`}
+                >
+                  Permissions
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveAccessTab('dashboard')}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                    activeAccessTab === 'dashboard'
+                      ? 'bg-[#2E3093] text-white'
+                      : 'text-gray-600 hover:bg-white'
+                  }`}
+                >
+                  Dashboard
+                </button>
               </div>
             </div>
 
-            {/* Permissions List */}
-            <div className="max-h-[600px] overflow-y-auto">
-              {loading ? (
-                <div className="p-8 text-center text-gray-400">
-                  <div className="w-6 h-6 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                  Loading permissions...
-                </div>
-              ) : filteredGroups.length === 0 ? (
-                <div className="p-8 text-center text-gray-400">
-                  No permissions match your search
-                </div>
-              ) : (
-                filteredGroups.map(group => (
-                  <div key={group.id} className="border-b border-gray-100 last:border-0">
-                    {/* Group Header */}
-                    <div
-                      className="flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer select-none"
-                      onClick={() => toggleGroup(group.id)}
-                    >
-                      {/* Group Checkbox */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleGroupAll(group);
-                        }}
-                        className="text-lg"
+            {activeAccessTab === 'permissions' ? (
+              <>
+                {/* Permissions Header */}
+                <div className="p-4 border-b border-gray-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-gray-700">Permissions</h3>
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        <FaSearch className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                          placeholder="Search permissions..."
+                          className="w-48 border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+                        />
+                      </div>
+                      <select
+                        value={filterAction}
+                        onChange={(e) => setFilterAction(e.target.value)}
+                        className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
                       >
-                        {getGroupSelectionState(group) === 'all' ? (
-                          <FaCheckSquare className="text-[#2E3093]" />
-                        ) : getGroupSelectionState(group) === 'partial' ? (
-                          <FaMinusSquare className="text-[#2E3093]" />
-                        ) : (
-                          <FaSquare className="text-gray-300" />
-                        )}
-                      </button>
-
-                      {/* Group Icon */}
-                      <span className="text-gray-500"><GroupIcon icon={group.icon} /></span>
-
-                      {/* Group Info */}
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-800">{group.name}</div>
-                        <div className="text-xs text-gray-400">{group.description}</div>
-                      </div>
-
-                      {/* Count Badge */}
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                        {group.permissions.filter(p => selectedPermissions.has(p.id)).length}/{group.permissions.length}
-                      </span>
-
-                      {/* Expand Icon */}
-                      {expandedGroups.has(group.id) ? (
-                        <FaChevronUp className="w-4 h-4 text-gray-400" />
-                      ) : (
-                        <FaChevronDown className="w-4 h-4 text-gray-400" />
-                      )}
+                        <option value="">All Actions</option>
+                        <option value="view">View</option>
+                        <option value="create">Create</option>
+                        <option value="update">Update</option>
+                        <option value="delete">Delete</option>
+                        <option value="export">Export</option>
+                        <option value="manage">Manage</option>
+                      </select>
                     </div>
-
-                    {/* Permissions Grid */}
-                    {expandedGroups.has(group.id) && (
-                      <div className="px-4 pb-4">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pl-8">
-                          {group.permissions.map(permission => (
-                            <label
-                              key={permission.id}
-                              className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${
-                                selectedPermissions.has(permission.id)
-                                  ? 'bg-[#2E3093]/10 border border-[#2E3093]/30'
-                                  : 'bg-gray-50 border border-transparent hover:border-gray-200'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selectedPermissions.has(permission.id)}
-                                onChange={() => togglePermission(permission.id)}
-                                className="sr-only"
-                              />
-                              <span className={`w-4 h-4 flex items-center justify-center rounded text-white text-xs ${
-                                selectedPermissions.has(permission.id) ? 'bg-[#2E3093]' : 'bg-gray-300'
-                              }`}>
-                                {selectedPermissions.has(permission.id) && '✓'}
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-xs font-medium text-gray-700 truncate">
-                                  {permission.name}
-                                </div>
-                                <div className={`text-[10px] uppercase font-medium ${
-                                  permission.action === 'view' ? 'text-blue-500' :
-                                  permission.action === 'create' ? 'text-green-500' :
-                                  permission.action === 'update' ? 'text-amber-500' :
-                                  permission.action === 'delete' ? 'text-red-500' :
-                                  permission.action === 'export' ? 'text-purple-500' :
-                                  'text-gray-500'
-                                }`}>
-                                  {permission.action}
-                                </div>
-                              </div>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
-                ))
-              )}
-            </div>
+
+                  {/* Info Box */}
+                  <div className="flex items-start gap-2 p-2.5 bg-blue-50 rounded-lg text-xs text-blue-700">
+                    <FaInfoCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <p>
+                      Permissions are grouped by department/module. Click on a group header to expand it,
+                      or use the checkbox to select all permissions in that group. Individual permissions
+                      can be toggled within each group.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Permissions List */}
+                <div className="max-h-[600px] overflow-y-auto">
+                  {loading ? (
+                    <div className="p-8 text-center text-gray-400">
+                      <div className="w-6 h-6 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                      Loading permissions...
+                    </div>
+                  ) : filteredGroups.length === 0 ? (
+                    <div className="p-8 text-center text-gray-400">
+                      No permissions match your search
+                    </div>
+                  ) : (
+                    filteredGroups.map(group => (
+                      <div key={group.id} className="border-b border-gray-100 last:border-0">
+                        {/* Group Header */}
+                        <div
+                          className="flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer select-none"
+                          onClick={() => toggleGroup(group.id)}
+                        >
+                          {/* Group Checkbox */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleGroupAll(group);
+                            }}
+                            className="text-lg"
+                          >
+                            {getGroupSelectionState(group) === 'all' ? (
+                              <FaCheckSquare className="text-[#2E3093]" />
+                            ) : getGroupSelectionState(group) === 'partial' ? (
+                              <FaMinusSquare className="text-[#2E3093]" />
+                            ) : (
+                              <FaSquare className="text-gray-300" />
+                            )}
+                          </button>
+
+                          {/* Group Icon */}
+                          <span className="text-gray-500"><GroupIcon icon={group.icon} /></span>
+
+                          {/* Group Info */}
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-800">{group.name}</div>
+                            <div className="text-xs text-gray-400">{group.description}</div>
+                          </div>
+
+                          {/* Count Badge */}
+                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                            {group.permissions.filter(p => selectedPermissions.has(p.id)).length}/{group.permissions.length}
+                          </span>
+
+                          {/* Expand Icon */}
+                          {expandedGroups.has(group.id) ? (
+                            <FaChevronUp className="w-4 h-4 text-gray-400" />
+                          ) : (
+                            <FaChevronDown className="w-4 h-4 text-gray-400" />
+                          )}
+                        </div>
+
+                        {/* Permissions Grid */}
+                        {expandedGroups.has(group.id) && (
+                          <div className="px-4 pb-4">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pl-8">
+                              {group.permissions.map(permission => (
+                                <label
+                                  key={permission.id}
+                                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${
+                                    selectedPermissions.has(permission.id)
+                                      ? 'bg-[#2E3093]/10 border border-[#2E3093]/30'
+                                      : 'bg-gray-50 border border-transparent hover:border-gray-200'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedPermissions.has(permission.id)}
+                                    onChange={() => togglePermission(permission.id)}
+                                    className="sr-only"
+                                  />
+                                  <span className={`w-4 h-4 flex items-center justify-center rounded text-white text-xs ${
+                                    selectedPermissions.has(permission.id) ? 'bg-[#2E3093]' : 'bg-gray-300'
+                                  }`}>
+                                    {selectedPermissions.has(permission.id) && '✓'}
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-medium text-gray-700 truncate">
+                                      {permission.name}
+                                    </div>
+                                    <div className={`text-[10px] uppercase font-medium ${
+                                      permission.action === 'view' ? 'text-blue-500' :
+                                      permission.action === 'create' ? 'text-green-500' :
+                                      permission.action === 'update' ? 'text-amber-500' :
+                                      permission.action === 'delete' ? 'text-red-500' :
+                                      permission.action === 'export' ? 'text-purple-500' :
+                                      'text-gray-500'
+                                    }`}>
+                                      {permission.action}
+                                    </div>
+                                  </div>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Dashboard Assignment</h3>
+                <div className="max-w-md space-y-2">
+                  <label className="block text-sm font-medium text-gray-600">Dashboard Department</label>
+                  <select
+                    value={dashboardDepartment}
+                    onChange={(e) => setDashboardDepartment(e.target.value)}
+                    className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+                  >
+                    <option value="">-- Select Dashboard --</option>
+                    <option value="cbd">Career Building Department</option>
+                    <option value="corporate_training">Corporate Training</option>
+                    <option value="placement">Placement</option>
+                    <option value="training_and_development">Training &amp; Development</option>
+                    <option value="accounts">Accounts</option>
+                    <option value="administration">Administration</option>
+                  </select>
+                  <p className="text-[11px] text-gray-500">
+                    Only the assigned department dashboard will be displayed for users with this role.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

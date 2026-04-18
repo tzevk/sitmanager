@@ -4,12 +4,16 @@ import dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 dotenv.config({ path: '.env.example' });
 
-const SMTP_HOST = process.env.ADMISSION_SMTP_HOST || 'email-smtp.eu-north-1.amazonaws.com';
+const SMTP_HOST = process.env.ADMISSION_SMTP_HOST || 'email-smtp.us-east-1.amazonaws.com';
 const SMTP_PORT = parseInt(process.env.ADMISSION_SMTP_PORT || '587', 10);
 const SMTP_SECURE = process.env.ADMISSION_SMTP_SECURE === '1';
 const SMTP_USER = process.env.ADMISSION_SMTP_USER;
 const SMTP_PASS = process.env.ADMISSION_SMTP_PASS;
 const SMTP_FROM = process.env.ADMISSION_SMTP_FROM || 'noreply@sitsuvidya.in';
+const SES_REGION =
+  SMTP_HOST.startsWith('email-smtp.') && SMTP_HOST.endsWith('.amazonaws.com')
+    ? SMTP_HOST.replace('email-smtp.', '').replace('.amazonaws.com', '')
+    : 'unknown';
 
 const TO_EMAIL = process.argv[2] || 'tanviskadam80@gmail.com';
 
@@ -49,7 +53,7 @@ const mailOptions = {
     <p><strong>If you received this, the email service is working correctly!</strong></p>
     <hr>
     <p style="font-size: 12px; color: #666;">
-      Sent via AWS SES SMTP (eu-north-1 region)<br>
+      Sent via AWS SES SMTP (${SES_REGION} region)<br>
       Timestamp: ${new Date().toISOString()}
     </p>
   `,

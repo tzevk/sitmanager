@@ -19,6 +19,54 @@ const AWS_SES_SECRET_KEY = process.env.ADMISSION_AWS_SES_SECRET_KEY;
 const AWS_SES_FROM_EMAIL = process.env.ADMISSION_AWS_SES_FROM_EMAIL;
 const AWS_SES_REPLY_TO = process.env.ADMISSION_AWS_SES_REPLY_TO;
 
+function normalizeMailerError(error: unknown, provider: 'ses' | 'smtp', region: string) {
+  const message = error instanceof Error ? error.message : String(error || 'Unknown mail error');
+  const lower = message.toLowerCase();
+  const errorObj = error as {
+    code?: string;
+    responseCode?: number;
+    response?: string;
+  } | null;
+
+  const errCode = String(errorObj?.code || '').toUpperCase();
+  const responseCode = Number(errorObj?.responseCode || 0);
+  const responseText = String(errorObj?.response || '').toLowerCase();
+
+  const isIdentityRejected =
+    lower.includes('email address is not verified') ||
+    lower.includes('message rejected') ||
+    lower.includes('identity failed') ||
+    lower.includes('mail from address not verified');
+
+  if (isIdentityRejected) {
+    const providerLabel = provider === 'ses' ? 'AWS SES API mode' : 'AWS SES SMTP mode';
+    return new Error(
+      `Email rejected by ${providerLabel}. Verify sender/recipient identities in SES region ${region}. ` +
+      'If your account is in SES Sandbox, recipient addresses must also be verified. ' +
+      'Move SES out of Sandbox for sending to unverified recipients.',
+    );
+  }
+
+  const isSmtpAuthFailure =
+    provider === 'smtp' &&
+    (
+      errCode === 'EAUTH' ||
+      responseCode === 535 ||
+      lower.includes('authentication credentials invalid') ||
+      responseText.includes('authentication credentials invalid')
+    );
+
+  if (isSmtpAuthFailure) {
+    return new Error(
+      `SMTP authentication failed for SES endpoint in region ${region}. ` +
+      'Check ADMISSION_SMTP_USER and ADMISSION_SMTP_PASS. ' +
+      'For AWS SES SMTP, credentials must be SMTP credentials (not plain IAM access keys) and should match the target SES region.',
+    );
+  }
+
+  return error instanceof Error ? error : new Error(message);
+}
+
 export function buildAdmissionFormMailContent(params: {
   studentName?: string;
   admissionFormUrl: string;
@@ -81,9 +129,10 @@ export function buildOnlineAdmissionSubmissionMailContent(params: {
 
 function assertMailerConfig() {
   if (MAIL_PROVIDER === 'ses') {
-    if (!AWS_SES_ACCESS_KEY || !AWS_SES_SECRET_KEY || !AWS_SES_FROM_EMAIL) {
+    if (!AWS_SES_FROM_EMAIL) {
       throw new Error(
-        'AWS SES configuration is missing. Set ADMISSION_AWS_SES_ACCESS_KEY, ADMISSION_AWS_SES_SECRET_KEY, and ADMISSION_AWS_SES_FROM_EMAIL.'
+        'AWS SES configuration is missing. Set ADMISSION_AWS_SES_FROM_EMAIL. ' +
+        'Provide ADMISSION_AWS_SES_ACCESS_KEY and ADMISSION_AWS_SES_SECRET_KEY, or configure AWS default credentials for this runtime.'
       );
     }
     return;
@@ -120,13 +169,16 @@ export async function sendAdmissionFormEmail(params: {
       .join('');
 
   if (MAIL_PROVIDER === 'ses') {
-    const sesClient = new SESClient({
-      region: AWS_SES_REGION,
-      credentials: {
-        accessKeyId: AWS_SES_ACCESS_KEY!,
-        secretAccessKey: AWS_SES_SECRET_KEY!,
-      },
-    });
+    const hasStaticSesCreds = Boolean(AWS_SES_ACCESS_KEY && AWS_SES_SECRET_KEY);
+    const sesClient = hasStaticSesCreds
+      ? new SESClient({
+          region: AWS_SES_REGION,
+          credentials: {
+            accessKeyId: AWS_SES_ACCESS_KEY!,
+            secretAccessKey: AWS_SES_SECRET_KEY!,
+          },
+        })
+      : new SESClient({ region: AWS_SES_REGION });
 
     const replyToAddresses = AWS_SES_REPLY_TO ? [AWS_SES_REPLY_TO] : undefined;
 
@@ -154,7 +206,11 @@ export async function sendAdmissionFormEmail(params: {
       ReplyToAddresses: replyToAddresses,
     });
 
-    await sesClient.send(command);
+    try {
+      await sesClient.send(command);
+    } catch (error: unknown) {
+      throw normalizeMailerError(error, 'ses', AWS_SES_REGION);
+    }
     return;
   }
 
@@ -169,14 +225,18 @@ export async function sendAdmissionFormEmail(params: {
   });
 
   const fromEmail = SMTP_FROM || SMTP_USER!;
-  await transporter.sendMail({
-    from: fromEmail,
-    to: params.toEmail,
-    ...(SMTP_REPLY_TO ? { replyTo: SMTP_REPLY_TO } : {}),
-    subject,
-    text,
-    html,
-  });
+  try {
+    await transporter.sendMail({
+      from: fromEmail,
+      to: params.toEmail,
+      ...(SMTP_REPLY_TO ? { replyTo: SMTP_REPLY_TO } : {}),
+      subject,
+      text,
+      html,
+    });
+  } catch (error: unknown) {
+    throw normalizeMailerError(error, 'smtp', AWS_SES_REGION);
+  }
 }
 
 export async function sendOnlineAdmissionSubmissionEmail(params: {

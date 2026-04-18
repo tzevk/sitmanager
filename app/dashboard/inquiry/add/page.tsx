@@ -145,6 +145,7 @@ export default function AddInquiryPage() {
   /* ui state */
   const [saving, setSaving] = useState(false);
   const [showAdmissionMailModal, setShowAdmissionMailModal] = useState(false);
+  const [sendingAdmissionMail, setSendingAdmissionMail] = useState(false);
   const [mailSubject, setMailSubject] = useState('Your SIT Admission Form Link');
   const [mailBody, setMailBody] = useState('');
   const [error, setError] = useState('');
@@ -318,6 +319,65 @@ export default function AddInquiryPage() {
       ].join('\n')
     );
     setShowAdmissionMailModal(true);
+  };
+
+  const handleConfirmSendAdmissionMail = async () => {
+    if (!editId) return;
+    const recipient = email.trim();
+    if (!recipient) {
+      alert('No email address found for this inquiry. Please add email and save first.');
+      return;
+    }
+
+    setSendingAdmissionMail(true);
+    try {
+      const previewRes = await fetch('/api/inquiry/send-admission-form', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId: editId,
+          toEmail: recipient,
+          studentName: name,
+          previewOnly: true,
+        }),
+      });
+      const previewData = await previewRes.json();
+      if (!previewRes.ok) throw new Error(previewData?.error || 'Failed to load mail preview');
+
+      const approved = window.confirm(
+        [
+          'Please verify before sending:',
+          '',
+          `To: ${recipient}`,
+          `Subject: ${mailSubject || previewData.preview?.subject || 'Your SIT Admission Form Link'}`,
+          `Admission Form Link: ${admissionFormUrl}`,
+          '',
+          'Click OK to send this email now.',
+        ].join('\n'),
+      );
+      if (!approved) return;
+
+      const sendRes = await fetch('/api/inquiry/send-admission-form', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId: editId,
+          toEmail: recipient,
+          studentName: name,
+          subject: mailSubject,
+          body: mailBody,
+        }),
+      });
+      const sendData = await sendRes.json();
+      if (!sendRes.ok) throw new Error(sendData?.error || 'Failed to send admission form email');
+
+      alert('Admission form email sent successfully');
+      setShowAdmissionMailModal(false);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to send admission form email');
+    } finally {
+      setSendingAdmissionMail(false);
+    }
   };
 
   if (permLoading) return <PermissionLoading />;
@@ -833,7 +893,7 @@ export default function AddInquiryPage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-bold text-white">Admission Form Mail Body</h3>
-                  <p className="text-[11px] text-white/75">Manual copy/share mode. No auto email is sent.</p>
+                  <p className="text-[11px] text-white/75">Review and send via configured mail provider.</p>
                 </div>
                 <button
                   type="button"
@@ -907,6 +967,14 @@ export default function AddInquiryPage() {
                 className="px-3 py-1.5 text-xs font-semibold bg-[#2A6BB5] hover:bg-[#2360A0] text-white rounded"
               >
                 Open Admission Form
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSendAdmissionMail}
+                disabled={sendingAdmissionMail}
+                className="px-3 py-1.5 text-xs font-semibold bg-[#2E3093] hover:bg-[#252780] text-white rounded disabled:opacity-60"
+              >
+                {sendingAdmissionMail ? 'Sending...' : 'Send Email'}
               </button>
             </div>
           </div>

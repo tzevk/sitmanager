@@ -28,6 +28,7 @@ function toInt(value: string): number | null {
 export default function PortalAccountsPage() {
   const router = useRouter();
   const { canCreate, loading: permLoading } = useResourcePermissions('user');
+  const { canCreate: canCreateEmployee, loading: employeePermLoading } = useResourcePermissions('employee');
 
   const DEFAULT_IN_TIME = '08:00';
   const DEFAULT_OUT_TIME = '17:30';
@@ -334,7 +335,7 @@ export default function PortalAccountsPage() {
     };
   }, [tab, permLoading, canCreate, scheduleDate]);
 
-  if (permLoading) return <PermissionLoading />;
+  if (permLoading || employeePermLoading) return <PermissionLoading />;
   if (!canCreate) return <AccessDenied message="You do not have permission to create accounts." />;
 
   async function submitStudent() {
@@ -382,20 +383,35 @@ export default function PortalAccountsPage() {
   return (
     <div className="space-y-3">
       <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-4 shadow-md">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
-            aria-label="Back"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <div>
-            <h2 className="text-base font-bold text-white">Portal Accounts</h2>
-            <p className="text-xs text-white/70">Role Right &gt; Portal Accounts</p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
+              aria-label="Back"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div>
+              <h2 className="text-base font-bold text-white">Portal Accounts</h2>
+              <p className="text-xs text-white/70">Role Right &gt; Portal Accounts</p>
+            </div>
           </div>
+
+          {canCreateEmployee && (
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard/masters/employee/add')}
+              className="inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/25"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              Add Employee
+            </button>
+          )}
         </div>
       </div>
 

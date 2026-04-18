@@ -493,40 +493,39 @@ export default function DashboardPage() {
       </div>
       <div className="flex items-center gap-3 flex-wrap justify-end">
         {canSwitchDepartmentDashboard && (
-          <>
-            <select
-              value={adminSelectedDepartment}
-              onChange={(e) => handleAdminDepartmentChange(e.target.value as DashboardDepartment)}
-              className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25"
-              aria-label="Switch dashboard department"
-            >
-              <option value="administration">Administration</option>
-              <option value="cbd">CBD Department</option>
-              <option value="corporate_training">Corporate Training</option>
-              <option value="placement">Placement Department</option>
-              <option value="training_and_development">Training and Development</option>
-            </select>
-            {showConsultancyFollowupPopup && (
-              <button
-                type="button"
-                onClick={openFollowupPopup}
-                className="group inline-flex items-center gap-2 rounded-2xl border border-[#2A6BB5]/25 bg-gradient-to-r from-white to-[#2A6BB5]/5 px-4 py-2.5 text-sm font-semibold text-[#2E3093] shadow-[0_8px_22px_rgba(42,107,181,0.12)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(42,107,181,0.2)]"
-              >
-                <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] text-white shadow-sm">
-                  <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.083 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-                  </svg>
-                  <span className={`absolute -right-1.5 -top-1.5 min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-black border border-white ${showFollowupReminder ? 'bg-rose-500 text-white animate-pulse' : 'bg-[#FAE452] text-[#2E3093]'}`}>
-                    {showFollowupReminder ? newFollowupCount : recentFollowups.length}
-                  </span>
-                </span>
-                {followupButtonText}
-                <svg className="w-3.5 h-3.5 text-[#2A6BB5] transition group-hover:translate-x-0.5" fill="none" stroke="currentColor" strokeWidth={2.3} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            )}
-          </>
+          <select
+            value={adminSelectedDepartment}
+            onChange={(e) => handleAdminDepartmentChange(e.target.value as DashboardDepartment)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25"
+            aria-label="Switch dashboard department"
+          >
+            <option value="administration">Administration</option>
+            <option value="cbd">CBD Department</option>
+            <option value="corporate_training">Corporate Training</option>
+            <option value="placement">Placement Department</option>
+            <option value="training_and_development">Training and Development</option>
+          </select>
+        )}
+
+        {showConsultancyFollowupPopup && (
+          <button
+            type="button"
+            onClick={openFollowupPopup}
+            className="group inline-flex items-center gap-2 rounded-2xl border border-[#2A6BB5]/25 bg-gradient-to-r from-white to-[#2A6BB5]/5 px-4 py-2.5 text-sm font-semibold text-[#2E3093] shadow-[0_8px_22px_rgba(42,107,181,0.12)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(42,107,181,0.2)]"
+          >
+            <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] text-white shadow-sm">
+              <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.083 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+              </svg>
+              <span className={`absolute -right-1.5 -top-1.5 min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-black border border-white ${showFollowupReminder ? 'bg-rose-500 text-white animate-pulse' : 'bg-[#FAE452] text-[#2E3093]'}`}>
+                {showFollowupReminder ? newFollowupCount : recentFollowups.length}
+              </span>
+            </span>
+            {followupButtonText}
+            <svg className="w-3.5 h-3.5 text-[#2A6BB5] transition group-hover:translate-x-0.5" fill="none" stroke="currentColor" strokeWidth={2.3} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
         )}
       </div>
     </div>

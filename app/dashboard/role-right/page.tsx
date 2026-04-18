@@ -26,6 +26,7 @@ export default function RoleRightPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { canView, canCreate, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('role');
+  const { canCreate: canCreateEmployee, loading: employeePermLoading } = useResourcePermissions('employee');
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -91,7 +92,7 @@ export default function RoleRightPage() {
     return Math.round((getPermissionCount(role) / stats.totalPermissions) * 100);
   };
 
-  if (permLoading) return <PermissionLoading />;
+  if (permLoading || employeePermLoading) return <PermissionLoading />;
   if (!canView) return <AccessDenied message="You do not have permission to view roles." />;
 
   return (
@@ -111,14 +112,24 @@ export default function RoleRightPage() {
               </p>
             </div>
             {/* Add Button */}
-            {canCreate && (
-            <button
-              onClick={() => router.push('/dashboard/role-right/add')}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#2E3093] hover:bg-[#252780] text-white font-semibold text-sm shadow-sm transition-colors"
-            >
-              <FaPlus className="w-4 h-4" /> Add Role
-            </button>
-            )}
+            <div className="flex items-center gap-2">
+              {canCreateEmployee && (
+                <button
+                  onClick={() => router.push('/dashboard/masters/employee/add')}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-[#2E3093]/30 bg-white text-[#2E3093] hover:bg-[#2E3093]/5 font-semibold text-sm shadow-sm transition-colors"
+                >
+                  <FaUsers className="w-4 h-4" /> Add Employee
+                </button>
+              )}
+              {canCreate && (
+                <button
+                  onClick={() => router.push('/dashboard/role-right/add')}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#2E3093] hover:bg-[#252780] text-white font-semibold text-sm shadow-sm transition-colors"
+                >
+                  <FaPlus className="w-4 h-4" /> Add Role
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Stats Cards */}

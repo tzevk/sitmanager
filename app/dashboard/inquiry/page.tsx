@@ -110,6 +110,7 @@ export default function InquiryPage() {
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [fetchTrigger, setFetchTrigger] = useState(0);
+  const [sendingForStudentId, setSendingForStudentId] = useState<number | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -162,6 +163,64 @@ export default function InquiryPage() {
 
   const handleEdit = (studentId: number) => {
     router.push(`/dashboard/inquiry/add?editId=${studentId}`);
+  };
+
+  const handleSendAdmissionForm = async (row: InquiryRow) => {
+    const recipient = String(row.Email || '').trim();
+    if (!recipient) {
+      alert('No email address found for this inquiry. Please update inquiry email first.');
+      return;
+    }
+
+    setSendingForStudentId(row.Student_Id);
+    try {
+      const previewRes = await fetch('/api/inquiry/send-admission-form', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId: row.Student_Id,
+          toEmail: recipient,
+          studentName: row.Student_Name,
+          previewOnly: true,
+        }),
+      });
+      const previewData = await previewRes.json();
+      if (!previewRes.ok) throw new Error(previewData?.error || 'Failed to load mail preview');
+
+      const approved = window.confirm(
+        [
+          'Please verify before sending:',
+          '',
+          `To: ${previewData.toEmail}`,
+          `Subject: ${previewData.preview?.subject || 'Your SIT Admission Form Link'}`,
+          `Admission Form Link: ${previewData.admissionFormUrl}`,
+          '',
+          'Mail Body:',
+          String(previewData.preview?.text || ''),
+          '',
+          'Click OK to send this email now.',
+        ].join('\n'),
+      );
+      if (!approved) return;
+
+      const sendRes = await fetch('/api/inquiry/send-admission-form', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId: row.Student_Id,
+          toEmail: recipient,
+          studentName: row.Student_Name,
+        }),
+      });
+      const sendData = await sendRes.json();
+      if (!sendRes.ok) throw new Error(sendData?.error || 'Failed to send admission form email');
+
+      alert('Admission form email sent successfully');
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to send admission form email');
+    } finally {
+      setSendingForStudentId(null);
+    }
   };
 
   const statusPillColor = (statusId: number | null, label: string) => {
@@ -496,6 +555,24 @@ export default function InquiryPage() {
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
+                        </button>
+                        <button
+                          title="Send Admission Form Email"
+                          onClick={() => handleSendAdmissionForm(r)}
+                          className={
+                            canUpdate
+                              ? 'p-1.5 rounded-lg hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 transition-colors disabled:opacity-60'
+                              : 'p-1.5 rounded-lg text-slate-200 cursor-not-allowed'
+                          }
+                          disabled={!canUpdate || sendingForStudentId === r.Student_Id}
+                        >
+                          {sendingForStudentId === r.Student_Id ? (
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                          )}
                         </button>
                         <button
                           title="Delete"

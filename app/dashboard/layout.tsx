@@ -46,6 +46,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Reports > Full Attendance Report': '/dashboard/reports/attendance',
   'Role Right > Roles & Permissions': '/dashboard/role-right',
   'Role Right > Create User': '/dashboard/role-right?tab=create-user',
+  'Role Right > Add Employee': '/dashboard/masters/employee/add',
   'Role Right > Portal Accounts': '/dashboard/portal-accounts',
   'Daily Activities > Allot Roll Number': '/dashboard/daily-activities/allot-roll-number',
   'Daily Activities > Lecture Taken': '/dashboard/daily-activities/lecture-taken',
@@ -200,9 +201,80 @@ const SUB_MENUS: Record<string, string[]> = {
   'Role Right': [
     'Roles & Permissions',
     'Create User',
+    'Add Employee',
     'Portal Accounts',
   ],
 };
+
+const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
+  'Masters > Training': ['course.view'],
+  'Masters > Annual Batch': ['annual_batch.view'],
+  'Masters > Batch Category': ['batch_category.view'],
+  'Masters > Batch': ['batch.view'],
+  'Masters > Status': ['status.view'],
+  'Masters > Holiday': ['holiday.view'],
+  'Masters > Book Code': ['book_code.view'],
+  'Masters > College': ['college.view'],
+  'Masters > Employee': ['employee.view'],
+  'Masters > Library Book': ['library_book.view'],
+  'Masters > Trainer': ['faculty.view'],
+  'Admin/Accounts > Employee Profession Tax': ['profession_tax.view'],
+  'Admin/Accounts > Account Head': ['account_head.view'],
+  'Admin/Accounts > Assets': ['assets.view'],
+  'Admin/Accounts > Asset Category': ['asset_category.view'],
+  'Admission Activity > Inquiry': ['inquiry.view'],
+  'Admission Activity > Online Admission': ['online_admission.view'],
+  'Admission Activity > Student': ['student.view'],
+  'Corporate Training > Corporate Inquiry': ['corporate_inquiry.view'],
+  'Corporate Training > Training Execution': ['corporate_inquiry.view'],
+  'Reports > Inquiry': ['report_inquiry.view'],
+  'Reports > Inquiry Report': ['report_inquiry.view'],
+  'Reports > Online Students': ['report_online_students.view'],
+  'Reports > Full Attendance Report': ['report_attendance.view'],
+  'Role Right > Roles & Permissions': ['role.view'],
+  'Role Right > Create User': ['user.create'],
+  'Role Right > Add Employee': ['employee.create'],
+  'Role Right > Portal Accounts': ['user.create'],
+  'Daily Activities > Allot Roll Number': ['roll_number.view'],
+  'Daily Activities > Lecture Taken': ['lecture.view'],
+  'Daily Activities > Assignments Taken': ['assignment.view'],
+  'Daily Activities > Unit Test Taken': ['unit_test.view'],
+  'Daily Activities > Viva / MOC Taken': ['viva_moc.view'],
+  'Daily Activities > Final Exam Taken': ['final_exam.view'],
+  'Daily Activities > Site Visit': ['site_visit.view'],
+  'Daily Activities > Generate Final Result': ['final_result.view'],
+  'Daily Activities > Trainer Working Hours': ['faculty_working_hours.view'],
+  'Daily Activities > Feedback': ['feedback1.view'],
+  'Placement > Consultancy Master': ['consultancy.view'],
+  'Placement > CV Shortlisted': ['cv_shortlisted.view'],
+  'Placement > Consultancy Report': ['consultancy_report.view'],
+  'Placement > Job Postings': ['placement.view'],
+  'Placement > Mock Interviews': ['mock_interview.view'],
+  'Placement > Email Company': ['placement.view'],
+  'Utility > Festival Photo Upload': ['festival_photo.view'],
+};
+
+const WELCOME_QUOTES: Array<{ text: string; author: string }> = [
+  { text: 'The only way to do great work is to love what you do.', author: 'Steve Jobs' },
+  { text: 'It does not matter how slowly you go as long as you do not stop.', author: 'Confucius' },
+  { text: "Believe you can and you're halfway there.", author: 'Theodore Roosevelt' },
+  { text: "Hard work beats talent when talent doesn't work hard.", author: 'Tim Notke' },
+  { text: 'The secret of getting ahead is getting started.', author: 'Mark Twain' },
+  { text: "Don't watch the clock; do what it does. Keep going.", author: 'Sam Levenson' },
+  { text: 'Success usually comes to those who are too busy to be looking for it.', author: 'Henry David Thoreau' },
+  { text: "Opportunities don't happen. You create them.", author: 'Chris Grosser' },
+  { text: 'Great things never come from comfort zones.', author: '' },
+  { text: 'Dream it. Wish it. Do it.', author: '' },
+];
+
+function pickDeterministicQuote(seed: string) {
+  if (!seed) return WELCOME_QUOTES[0];
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  return WELCOME_QUOTES[hash % WELCOME_QUOTES.length];
+}
 
 export default function DashboardLayout({
   children,
@@ -244,10 +316,17 @@ function NavbarUserSkeleton() {
 function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { session, loading, isSuperAdmin } = usePermissions();
+  const { session, loading, isSuperAdmin, hasAnyPermission } = usePermissions();
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [dropdownPos, setDropdownPos] = useState<{ left: number; top: number } | null>(null);
-  const [showWelcome, setShowWelcome] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return sessionStorage.getItem('sit-admin-welcome-seen') !== '1';
+    } catch {
+      return true;
+    }
+  });
   const menuButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const menuScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -267,6 +346,25 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   };
 
   const activeMenu = getActiveFromPath(pathname);
+
+  const canAccessSubMenu = useCallback((menuKey: string, subItem: string) => {
+    if (isSuperAdmin) return true;
+
+    const routeKey = `${menuKey} > ${subItem}`;
+    const route = SUB_MENU_ROUTES[routeKey];
+    if (!route) return false;
+
+    const required = SUB_MENU_PERMISSIONS[routeKey];
+    if (!required || required.length === 0) return false;
+
+    return hasAnyPermission(required);
+  }, [hasAnyPermission, isSuperAdmin]);
+
+  const visibleMenuItems = MENU_ITEMS.filter((item) => {
+    if (item === 'Dashboard') return true;
+    const subItems = SUB_MENUS[item] ?? [];
+    return subItems.some((subItem) => canAccessSubMenu(item, subItem));
+  });
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -302,17 +400,15 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   }, [openDropdown, updateDropdownPos]);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || !showWelcome) return;
     try {
-      const seen = sessionStorage.getItem('sit-admin-welcome-seen');
-      if (!seen) {
-        setShowWelcome(true);
-        sessionStorage.setItem('sit-admin-welcome-seen', '1');
-      }
-    } catch {
-      setShowWelcome(true);
-    }
-  }, [session]);
+      sessionStorage.setItem('sit-admin-welcome-seen', '1');
+    } catch {}
+  }, [session, showWelcome]);
+
+  const welcomeQuote = pickDeterministicQuote(
+    `${session?.email ?? ''}|${session?.firstName ?? ''}|${session?.lastName ?? ''}|${session?.role ?? ''}`,
+  );
 
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-50 overflow-hidden">
@@ -344,7 +440,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
             }}
           >
             <div className="flex items-center gap-1.5 h-12 px-1 w-max mx-auto relative">
-              {MENU_ITEMS.map((item) => (
+              {visibleMenuItems.map((item) => (
                 <div key={item} className="relative">
                   <button
                     ref={(el) => {
@@ -449,7 +545,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
             className="fixed w-64 bg-white rounded-lg shadow-xl border border-[#2E3093]/15 py-1 z-50 max-h-80 overflow-y-auto"
             style={{ left: dropdownPos.left, top: dropdownPos.top }}
           >
-            {SUB_MENUS[openDropdown].map((subItem) => {
+            {SUB_MENUS[openDropdown].filter((subItem) => canAccessSubMenu(openDropdown, subItem)).map((subItem) => {
               const routeKey = `${openDropdown} > ${subItem}`;
               const route = SUB_MENU_ROUTES[routeKey];
               const routePath = route ? route.split('?')[0] : null;
@@ -490,19 +586,6 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         const initials = getInitials(session.firstName, session.lastName, session.email);
         const displayName = `${session.firstName ?? ''} ${session.lastName ?? ''}`.trim() || session.email || 'User';
         const role = isSuperAdmin ? 'Super Admin' : session.department || `Role ${session.role}`;
-        const quotes = [
-          { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
-          { text: "It does not matter how slowly you go as long as you do not stop.", author: "Confucius" },
-          { text: "Believe you can and you're halfway there.", author: "Theodore Roosevelt" },
-          { text: "Hard work beats talent when talent doesn't work hard.", author: "Tim Notke" },
-          { text: "The secret of getting ahead is getting started.", author: "Mark Twain" },
-          { text: "Don't watch the clock; do what it does. Keep going.", author: "Sam Levenson" },
-          { text: "Success usually comes to those who are too busy to be looking for it.", author: "Henry David Thoreau" },
-          { text: "Opportunities don't happen. You create them.", author: "Chris Grosser" },
-          { text: "Great things never come from comfort zones.", author: "" },
-          { text: "Dream it. Wish it. Do it.", author: "" },
-        ];
-        const quote = quotes[Math.floor(Math.random() * quotes.length)];
         return (
           <div
             className="fixed inset-0 z-50 flex overflow-hidden"
@@ -549,19 +632,19 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
                   <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
                 </svg>
                 <p className="text-xl font-light text-white/70 leading-relaxed italic">
-                  &ldquo;{quote.text}&rdquo;
+                  &ldquo;{welcomeQuote.text}&rdquo;
                 </p>
-                {quote.author && (
+                {welcomeQuote.author && (
                   <div className="flex items-center gap-3">
                     <div className="w-6 h-px bg-[#FAE452]/50" />
-                    <p className="text-[#FAE452]/80 text-xs font-semibold uppercase tracking-widest">{quote.author}</p>
+                    <p className="text-[#FAE452]/80 text-xs font-semibold uppercase tracking-widest">{welcomeQuote.author}</p>
                   </div>
                 )}
               </div>
 
               {/* Bottom — time stamp */}
               <p className="text-white/25 text-xs font-medium">
-                {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                Ready to make progress today.
               </p>
             </div>
 
@@ -609,10 +692,10 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
               <div className="flex flex-col items-center gap-4 mb-10 max-w-sm lg:hidden">
                 <div className="w-8 h-px bg-white/20" />
                 <p className="text-white/60 text-base font-light text-center italic leading-relaxed">
-                  &ldquo;{quote.text}&rdquo;
+                  &ldquo;{welcomeQuote.text}&rdquo;
                 </p>
-                {quote.author && (
-                  <p className="text-[#FAE452]/70 text-xs font-semibold">— {quote.author}</p>
+                {welcomeQuote.author && (
+                  <p className="text-[#FAE452]/70 text-xs font-semibold">— {welcomeQuote.author}</p>
                 )}
               </div>
 
