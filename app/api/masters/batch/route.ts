@@ -19,7 +19,6 @@ export async function GET(req: NextRequest) {
 
     /* ---- Build WHERE ---- */
     const conditions: string[] = [
-      'b.IsActive = 1',
       '(b.IsDelete = 0 OR b.IsDelete IS NULL)',
     ];
     const params: (string | number)[] = [];

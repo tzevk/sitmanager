@@ -318,40 +318,8 @@ export default function AddBatchPage() {
               <div className="px-3 py-2">
                 <div className="grid grid-cols-4 gap-2">
                   <div>
-                    <label className={labelCls}>Basic (INR)</label>
-                    <input type="number" value={formData.INR_Basic} onChange={(e) => handleChange('INR_Basic', e.target.value)} className={inputCls} placeholder="Amount" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Service Tax (INR)</label>
-                    <input type="number" value={formData.INR_ServiceTax} onChange={(e) => handleChange('INR_ServiceTax', e.target.value)} className={inputCls} placeholder="Amount" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Total (INR)</label>
-                    <input type="number" value={formData.INR_Total} onChange={(e) => handleChange('INR_Total', e.target.value)} className={inputCls} placeholder="Amount" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Full Payment Fees</label>
-                    <input type="number" value={formData.Fees_Full_Payment} onChange={(e) => handleChange('Fees_Full_Payment', e.target.value)} className={inputCls} placeholder="Amount" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Basic (Dollar)</label>
-                    <input type="number" value={formData.Dollar_Basic} onChange={(e) => handleChange('Dollar_Basic', e.target.value)} className={inputCls} placeholder="Amount" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Service Tax (Dollar)</label>
-                    <input type="number" value={formData.Dollar_ServiceTax} onChange={(e) => handleChange('Dollar_ServiceTax', e.target.value)} className={inputCls} placeholder="Amount" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Total (Dollar)</label>
-                    <input type="number" value={formData.Dollar_Total} onChange={(e) => handleChange('Dollar_Total', e.target.value)} className={inputCls} placeholder="Amount" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Installment Payment Fees</label>
-                    <input type="number" value={formData.Fees_Installment_Payment} onChange={(e) => handleChange('Fees_Installment_Payment', e.target.value)} className={inputCls} placeholder="Amount" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Actual Fees Payment</label>
-                    <input type="number" value={formData.Actual_Fees_Payment} onChange={(e) => handleChange('Actual_Fees_Payment', e.target.value)} className={inputCls} placeholder="Amount" />
+                    <label className={labelCls}>Total Fees (INR) <span className="text-red-500">*</span></label>
+                    <input type="number" value={formData.INR_Total} onChange={(e) => handleChange('INR_Total', e.target.value)} className={inputCls} placeholder="e.g. 12899" />
                   </div>
                 </div>
               </div>

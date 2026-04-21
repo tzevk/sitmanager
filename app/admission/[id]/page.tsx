@@ -9,7 +9,8 @@ const STEPS = [
   { id: 2, title: 'Academic', icon: 'fa-graduation-cap', description: 'Educational qualifications' },
   { id: 3, title: 'Occupational Info', icon: 'fa-briefcase', description: 'Current occupational status' },
   { id: 4, title: 'Training', icon: 'fa-chalkboard-teacher', description: 'Training programme details' },
-  { id: 5, title: 'Terms & Conditions', icon: 'fa-scroll', description: 'Read & accept terms' },
+  { id: 5, title: 'Mode of Payment', icon: 'fa-credit-card', description: 'Select your payment method' },
+  { id: 6, title: 'Terms & Conditions', icon: 'fa-scroll', description: 'Read & accept terms' },
 ];
 
 // Training Program Eligibility Map (based on educational background)
@@ -61,7 +62,7 @@ export default function PublicAdmissionFormPage() {
 
   useEffect(() => {
     if (!isPreviewTermsMode) return;
-    if (forcedStep >= 1 && forcedStep <= 5) {
+    if (forcedStep >= 1 && forcedStep <= 6) {
       setCurrentStep(forcedStep);
     }
   }, [isPreviewTermsMode, forcedStep]);
@@ -69,7 +70,8 @@ export default function PublicAdmissionFormPage() {
   // Training programme cascade
   const [courses, setCourses] = useState<{ Course_Id: number; Course_Name: string }[]>([]);
   const [batchCategories, setBatchCategories] = useState<string[]>([]);
-  const [availableBatches, setAvailableBatches] = useState<{ batchCode: string; timings: string | null }[]>([]);
+  const [availableBatches, setAvailableBatches] = useState<{ batchCode: string; timings: string | null; totalFees: number | null }[]>([]);
+  const [batchFees, setBatchFees] = useState<number | null>(null);
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [loadingBatches, setLoadingBatches] = useState(false);
@@ -191,6 +193,7 @@ export default function PublicAdmissionFormPage() {
     trainingProgrammeName: '',
     trainingCategory: '',
     batchCode: '',
+    modeOfPayment: '',
     termsAgreed: false,
   });
 
@@ -199,6 +202,24 @@ export default function PublicAdmissionFormPage() {
     fetchCourses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId]);
+
+  // Sync batchFees whenever batch selection or available batches change
+  useEffect(() => {
+    if (!formData.batchCode) { setBatchFees(null); return; }
+    // Try from already-loaded batch list first
+    if (availableBatches.length > 0) {
+      const batch = availableBatches.find(b => b.batchCode === formData.batchCode);
+      if (batch?.totalFees) { setBatchFees(parseFloat(String(batch.totalFees))); return; }
+    }
+    // Otherwise fetch directly by batch code
+    (async () => {
+      try {
+        const res = await fetch(`/api/public/batches?batchCode=${encodeURIComponent(formData.batchCode)}`);
+        const data = await res.json();
+        if (data.success && data.totalFees) setBatchFees(parseFloat(String(data.totalFees)));
+      } catch { /* non-fatal */ }
+    })();
+  }, [formData.batchCode, availableBatches]);
 
   // Auto-calculate total occupation years from working years and months
   useEffect(() => {
@@ -256,6 +277,7 @@ export default function PublicAdmissionFormPage() {
     }));
     setBatchCategories([]);
     setAvailableBatches([]);
+    setBatchFees(null);
     if (!courseId) return;
     setLoadingCategories(true);
     try {
@@ -272,6 +294,7 @@ export default function PublicAdmissionFormPage() {
   const handleCategoryChange = async (category: string) => {
     setFormData(prev => ({ ...prev, trainingCategory: category, batchCode: '' }));
     setAvailableBatches([]);
+    setBatchFees(null);
     if (!category || !formData.trainingProgrammeId) return;
     setLoadingBatches(true);
     try {
@@ -395,7 +418,13 @@ export default function PublicAdmissionFormPage() {
           return false;
         }
         break;
-      case 6:
+      case 5:
+        if (!formData.modeOfPayment) {
+          alert('Please select a Mode of Payment');
+          return false;
+        }
+        break;
+      case 7:
         if (!allSectionsChecked) {
           alert('Please read and acknowledge all sections of the Terms & Conditions');
           return false;
@@ -418,8 +447,8 @@ export default function PublicAdmissionFormPage() {
   };
 
   const jumpToStep = (step: number) => {
-    // Step 5 is locked until steps 1–4 are all completed
-    if (!isPreviewTermsMode && step === 5 && ![1, 2, 3, 4].every((s) => completedSteps.includes(s))) return;
+    // Step 6 (T&C) is locked until steps 1–5 are all completed
+    if (!isPreviewTermsMode && step === 6 && ![1, 2, 3, 4, 5].every((s) => completedSteps.includes(s))) return;
     setCurrentStep(step);
   };
 
@@ -441,9 +470,14 @@ export default function PublicAdmissionFormPage() {
       setCurrentStep(2);
       return;
     }
-    if (!allSectionsChecked || !formData.termsAgreed) {
-      alert('Please complete Step 5: Read and accept the Terms & Conditions');
+    if (!formData.modeOfPayment) {
+      alert('Please complete Step 5: Select a Mode of Payment');
       setCurrentStep(5);
+      return;
+    }
+    if (!allSectionsChecked || !formData.termsAgreed) {
+      alert('Please complete Step 6: Read and accept the Terms & Conditions');
+      setCurrentStep(6);
       return;
     }
 
@@ -515,6 +549,7 @@ export default function PublicAdmissionFormPage() {
         trainingProgrammeName: formData.trainingProgrammeName,
         trainingCategory: formData.trainingCategory,
         batchCode: formData.batchCode,
+        modeOfPayment: formData.modeOfPayment,
         consentAcknowledged: consentAcknowledged,
         experiencedConsentAcknowledged: experiencedConsentAcknowledged,
         termsAgreed: formData.termsAgreed,
@@ -635,27 +670,41 @@ export default function PublicAdmissionFormPage() {
       </header>
 
       {/* ── Mobile step indicator ── */}
-      <div className="lg:hidden bg-white border-b border-gray-200 shadow-sm flex-shrink-0">
-        <div className="max-w-full mx-auto px-4 py-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-gray-600">Step {currentStep} of {STEPS.length}</span>
-            <span className="text-xs text-gray-500">{STEPS[currentStep - 1].title}</span>
+      <div className="lg:hidden bg-gradient-to-r from-white to-gray-50 border-b border-gray-200 shadow-sm flex-shrink-0">
+        <div className="max-w-full mx-auto px-3 py-2.5">
+          {/* Current step info */}
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] rounded-lg flex items-center justify-center">
+                <i className={`fas ${STEPS[currentStep - 1].icon} text-white text-[10px]`}></i>
+              </div>
+              <div>
+                <div className="text-xs font-bold text-gray-800 leading-tight">{STEPS[currentStep - 1].title}</div>
+                <div className="text-[10px] text-gray-500 leading-tight">{STEPS[currentStep - 1].description}</div>
+              </div>
+            </div>
+            <div className="bg-[#2E3093]/10 rounded-lg px-2 py-1">
+              <span className="text-[10px] font-bold text-[#2E3093]">{currentStep}/{STEPS.length}</span>
+            </div>
           </div>
-          <div className="flex gap-1.5">
+          {/* Step dots */}
+          <div className="flex gap-1">
             {STEPS.map((step) => {
-              const isLocked = !isPreviewTermsMode && step.id === 5 && ![1, 2, 3, 4].every((s) => completedSteps.includes(s));
+              const isLocked = !isPreviewTermsMode && step.id === 6 && ![1, 2, 3, 4, 5].every((s) => completedSteps.includes(s));
+              const isCompleted = step.id < currentStep || completedSteps.includes(step.id);
+              const isCurrent = step.id === currentStep;
               return (
                 <button
                   key={step.id}
                   onClick={() => jumpToStep(step.id)}
                   disabled={isLocked}
-                  className={`h-2 flex-1 rounded-full transition-all ${
+                  className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
                     isLocked
                       ? 'bg-gray-200 cursor-not-allowed'
-                      : step.id < currentStep || completedSteps.includes(step.id)
+                      : isCompleted
                       ? 'bg-green-500'
-                      : step.id === currentStep
-                      ? 'bg-[#2E3093]'
+                      : isCurrent
+                      ? 'bg-gradient-to-r from-[#2E3093] to-[#2A6BB5]'
                       : 'bg-gray-200'
                   }`}
                 />
@@ -685,7 +734,7 @@ export default function PublicAdmissionFormPage() {
                 {STEPS.map((step) => {
                   const isActive = currentStep === step.id;
                   const isCompleted = completedSteps.includes(step.id);
-                  const isLocked = !isPreviewTermsMode && step.id === 5 && ![1, 2, 3, 4].every((s) => completedSteps.includes(s));
+                  const isLocked = !isPreviewTermsMode && step.id === 6 && ![1, 2, 3, 4, 5].every((s) => completedSteps.includes(s));
                   return (
                     <button
                       key={step.id}
@@ -717,7 +766,7 @@ export default function PublicAdmissionFormPage() {
                         <div className="flex-1 min-w-0">
                           <div className={`font-semibold text-xs ${isActive ? 'text-white' : ''}`}>{step.title}</div>
                           <div className={`text-xs mt-0 ${isActive ? 'text-white/80' : isCompleted ? 'text-green-600' : isLocked ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {isLocked ? 'Complete steps 1–5 first' : step.description}
+                            {isLocked ? 'Complete steps 1–5 to unlock' : step.description}
                           </div>
                         </div>
                       </div>
@@ -1827,7 +1876,11 @@ export default function PublicAdmissionFormPage() {
                             <div className="relative">
                               <select
                                 value={formData.batchCode}
-                                onChange={(e) => handleChange('batchCode', e.target.value)}
+                                onChange={(e) => {
+                                  handleChange('batchCode', e.target.value);
+                                  const batch = availableBatches.find(b => b.batchCode === e.target.value);
+                                  setBatchFees(batch?.totalFees ? parseFloat(String(batch.totalFees)) : null);
+                                }}
                                 disabled={!formData.trainingCategory || loadingBatches}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-50"
                               >
@@ -1915,8 +1968,225 @@ export default function PublicAdmissionFormPage() {
                     </div>
                   )}
 
-                  {/* ── STEP 5: Terms & Conditions ── */}
-                  {currentStep === 5 && (
+                  {/* ── STEP 5: Mode of Payment ── */}
+                  {currentStep === 5 && (() => {
+                    const baseFees = batchFees ?? 0;
+                    const hasFees = baseFees > 0;
+                    const discount = Math.round(baseFees * 0.05);
+                    const fullPayAmount = baseFees - discount;
+                    const installmentAmount = Math.round(baseFees / 2);
+                    const fmt = (n: number) => n.toLocaleString('en-IN');
+
+                    return (
+                    <div className="space-y-5">
+                      <div>
+                        <h3 className="text-base font-bold text-gray-800 mb-1 pb-1.5 border-b border-gray-200 flex items-center gap-2">
+                          <i className="fas fa-credit-card text-[#2A6BB5]"></i>
+                          Mode of Payment
+                        </h3>
+                        <p className="text-sm text-gray-500 mb-4">Please select your preferred mode of payment for the training programme fees.</p>
+                      </div>
+
+                      {/* Fees indicator */}
+                      {hasFees ? (
+                        <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl p-4 text-white flex items-center justify-between">
+                          <div>
+                            <p className="text-xs text-white/70 font-medium">Total Fees — {formData.batchCode}</p>
+                            <p className="text-2xl font-extrabold mt-0.5">&#8377;{fmt(baseFees)}</p>
+                          </div>
+                          <div className="w-12 h-12 bg-white/15 rounded-xl flex items-center justify-center">
+                            <i className="fas fa-rupee-sign text-xl text-[#FAE452]"></i>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
+                          <i className="fas fa-exclamation-triangle text-amber-500 flex-shrink-0"></i>
+                          <div>
+                            <p className="text-sm font-semibold text-amber-800">Fees Not Available</p>
+                            <p className="text-xs text-amber-700 mt-0.5">Please select a Training Programme and Batch Code in Step 4 to view applicable fees.</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Payment Options */}
+                      <div className="space-y-3">
+                        {/* Option 1: Full Payment with 5% discount */}
+                        {(() => {
+                          const isSelected = formData.modeOfPayment === 'Full Payment';
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleChange('modeOfPayment', 'Full Payment')}
+                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+                                isSelected
+                                  ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-200 shadow-md'
+                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                  isSelected ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'
+                                }`}>
+                                  <i className="fas fa-money-bill-wave text-lg"></i>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`text-sm font-bold ${isSelected ? 'text-emerald-800' : 'text-gray-800'}`}>Full Payment</span>
+                                    <span className="bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">5% OFF</span>
+                                  </div>
+                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-emerald-600' : 'text-gray-500'}`}>
+                                    Pay &#8377;{fmt(fullPayAmount)} in one go <span className="line-through text-gray-400">&#8377;{fmt(baseFees)}</span> — save &#8377;{fmt(discount)}
+                                  </div>
+                                </div>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                  isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-gray-300'
+                                }`}>
+                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })()}
+
+                        {/* Option 2: 50% in 2 Installments */}
+                        {(() => {
+                          const isSelected = formData.modeOfPayment === '50% Installment';
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleChange('modeOfPayment', '50% Installment')}
+                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+                                isSelected
+                                  ? 'bg-violet-50 border-violet-500 ring-2 ring-violet-200 shadow-md'
+                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                  isSelected ? 'bg-violet-100 text-violet-600' : 'bg-gray-100 text-gray-400'
+                                }`}>
+                                  <i className="fas fa-calendar-check text-lg"></i>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <span className={`text-sm font-bold ${isSelected ? 'text-violet-800' : 'text-gray-800'}`}>50% Payment in 2 Installments</span>
+                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-violet-600' : 'text-gray-500'}`}>
+                                    Pay &#8377;{fmt(installmentAmount)} now + &#8377;{fmt(baseFees - installmentAmount)} later — total &#8377;{fmt(baseFees)}
+                                  </div>
+                                </div>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                  isSelected ? 'border-violet-500 bg-violet-50' : 'border-gray-300'
+                                }`}>
+                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-violet-500" />}
+                                </div>
+                              </div>
+
+                              {/* Installment breakdown */}
+                              {isSelected && (
+                                <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>1st Installment (now)</span>
+                                    <span className="font-bold text-violet-800">&#8377;{fmt(installmentAmount)}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>2nd Installment</span>
+                                    <span className="font-bold text-violet-800">&#8377;{fmt(baseFees - installmentAmount)}</span>
+                                  </div>
+                                  <div className="border-t border-violet-200 pt-2 flex items-center justify-between text-xs">
+                                    <span className="text-violet-800 font-bold">Total</span>
+                                    <span className="font-extrabold text-violet-900">&#8377;{fmt(baseFees)}</span>
+                                  </div>
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })()}
+
+                        {/* Option 3: Loan */}
+                        {(() => {
+                          const isSelected = formData.modeOfPayment === 'Loan';
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleChange('modeOfPayment', 'Loan')}
+                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+                                isSelected
+                                  ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-200 shadow-md'
+                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                  isSelected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'
+                                }`}>
+                                  <i className="fas fa-hand-holding-usd text-lg"></i>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`text-sm font-bold ${isSelected ? 'text-blue-800' : 'text-gray-800'}`}>Loan</span>
+                                    <span className="bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">0% Interest</span>
+                                  </div>
+                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-blue-600' : 'text-gray-500'}`}>
+                                    Initial payment of &#8377;{fmt(baseFees)} at 0% interest — apply for loan via Varthana
+                                  </div>
+                                </div>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                  isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                                }`}>
+                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Varthana Loan sign-up — shown when Loan is selected */}
+                      {formData.modeOfPayment === 'Loan' && (
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl p-4 sm:p-5">
+                          <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                              <i className="fas fa-hand-holding-usd text-blue-600 text-lg"></i>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-blue-900">Education Loan via Varthana</p>
+                              <p className="text-xs text-blue-700 mt-1 leading-relaxed">
+                                We have partnered with Varthana to offer hassle-free education loans at <span className="font-bold">0% interest</span>. Sign up on their portal to check your eligibility and apply.
+                              </p>
+                              <a
+                                href="https://varthana.com/student/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 mt-3 px-4 py-2.5 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white rounded-lg text-xs font-bold hover:shadow-lg hover:-translate-y-0.5 transition-all"
+                              >
+                                <i className="fas fa-external-link-alt"></i>
+                                Sign Up on Varthana
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Selected summary */}
+                      {formData.modeOfPayment && (
+                        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+                          <i className="fas fa-check-circle text-green-500 text-lg flex-shrink-0"></i>
+                          <div>
+                            <p className="text-sm font-semibold text-green-800">Payment Method Selected</p>
+                            <p className="text-xs text-green-700 mt-0.5">
+                              You have selected <span className="font-bold">{formData.modeOfPayment}</span>
+                              {formData.modeOfPayment === 'Full Payment' && <> — you pay <span className="font-bold">&#8377;{fmt(fullPayAmount)}</span> (5% discount applied)</>}
+                              {formData.modeOfPayment === '50% Installment' && <> — &#8377;{fmt(installmentAmount)} now + &#8377;{fmt(baseFees - installmentAmount)} later</>}
+                              {formData.modeOfPayment === 'Loan' && <> — initial &#8377;{fmt(baseFees)} at 0% interest via Varthana</>}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    );
+                  })()}
+
+                  {/* ── STEP 6: Terms & Conditions ── */}
+                  {currentStep === 6 && (
                     <div className="space-y-5">
                       <div>
                         <h3 className="text-base font-bold text-gray-800 mb-1 pb-1.5 border-b border-gray-200 flex items-center gap-2">
@@ -2027,7 +2297,7 @@ export default function PublicAdmissionFormPage() {
                       </button>
                     )}
 
-                    {currentStep < 6 ? (
+                    {currentStep < 7 ? (
                       <button type="button" onClick={() => nextStep(currentStep + 1)} className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#FAE452] to-[#FDD835] text-[#2E3093] rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all">
                         <span className="hidden sm:inline">Continue</span><span className="sm:hidden">Next</span> <i className="fas fa-arrow-right ml-1 sm:ml-2"></i>
                       </button>

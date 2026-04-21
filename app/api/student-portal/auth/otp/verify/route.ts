@@ -9,6 +9,7 @@ const STUDENT_COOKIE = 'sit_student_session';
 const SESSION_DURATION = 60 * 60 * 12; // 12 hours
 
 const OTP_COOKIE = 'sit_student_otp';
+const OTP_BYPASS = process.env.STUDENT_PORTAL_OTP_BYPASS === '1';
 
 function getSecretKey(): Uint8Array {
   const secret = process.env.JWT_SECRET;
@@ -56,51 +57,82 @@ export async function POST(req: NextRequest) {
     const mobile = normalizeMobile(body?.mobile);
     const otp = String(body?.otp ?? '').trim();
 
-    if (!mobile || !otp) {
-      return NextResponse.json({ success: false, message: 'Mobile number and OTP are required' }, { status: 400 });
+    if (!mobile) {
+      return NextResponse.json({ success: false, message: 'Valid mobile number is required' }, { status: 400 });
     }
 
-    const otpToken = req.cookies.get(OTP_COOKIE)?.value;
-    if (!otpToken) {
-      return NextResponse.json({ success: false, message: 'OTP expired. Please request a new OTP.' }, { status: 401 });
-    }
-
-    let payload: OtpTokenPayload;
-    try {
-      const verified = await jwtVerify(otpToken, getSecretKey());
-      payload = verified.payload as unknown as OtpTokenPayload;
-      if (payload?.type !== 'student_otp') throw new Error('Invalid OTP token');
-    } catch {
-      return NextResponse.json({ success: false, message: 'OTP expired. Please request a new OTP.' }, { status: 401 });
-    }
-
-    if (payload.mobile !== mobile) {
-      return NextResponse.json({ success: false, message: 'OTP does not match this mobile number' }, { status: 401 });
-    }
-
-    const expectedHash = hashOtp(mobile, otp);
-    if (!safeEqualHex(payload.otpHash, expectedHash)) {
-      return NextResponse.json({ success: false, message: 'Invalid OTP' }, { status: 401 });
+    if (!OTP_BYPASS && !otp) {
+      return NextResponse.json({ success: false, message: 'OTP is required' }, { status: 400 });
     }
 
     const pool = getPool();
-    const [rows] = await pool.query<any[]>(
-      `SELECT spa.*, s.Student_Name, s.Email
-       FROM student_portal_auth spa
-       JOIN student_master s ON spa.Student_Id = s.Student_Id
-       WHERE spa.Student_Id = ? AND spa.IsActive = 1
-         AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
-       LIMIT 1`,
-      [payload.studentId]
-    );
 
-    if (!rows.length) {
-      return NextResponse.json({ success: false, message: 'Account not found or inactive' }, { status: 401 });
+    let user: any;
+    if (OTP_BYPASS) {
+      const [rows] = await pool.query<any[]>(
+        `SELECT s.Student_Id, s.Student_Name, s.Email,
+                spa.Id AS Auth_Id
+         FROM student_master s
+         LEFT JOIN student_portal_auth spa ON spa.Student_Id = s.Student_Id AND spa.IsActive = 1
+         WHERE (s.IsDelete = 0 OR s.IsDelete IS NULL)
+           AND (
+             (s.Present_Mobile IS NOT NULL AND s.Present_Mobile LIKE CONCAT('%', ?))
+             OR (s.Present_Mobile2 IS NOT NULL AND s.Present_Mobile2 LIKE CONCAT('%', ?))
+           )
+         LIMIT 1`,
+        [mobile, mobile]
+      );
+
+      if (!rows.length) {
+        return NextResponse.json({ success: false, message: 'Student not found for this mobile number' }, { status: 401 });
+      }
+
+      user = rows[0];
+    } else {
+      const otpToken = req.cookies.get(OTP_COOKIE)?.value;
+      if (!otpToken) {
+        return NextResponse.json({ success: false, message: 'OTP expired. Please request a new OTP.' }, { status: 401 });
+      }
+
+      let payload: OtpTokenPayload;
+      try {
+        const verified = await jwtVerify(otpToken, getSecretKey());
+        payload = verified.payload as unknown as OtpTokenPayload;
+        if (payload?.type !== 'student_otp') throw new Error('Invalid OTP token');
+      } catch {
+        return NextResponse.json({ success: false, message: 'OTP expired. Please request a new OTP.' }, { status: 401 });
+      }
+
+      if (payload.mobile !== mobile) {
+        return NextResponse.json({ success: false, message: 'OTP does not match this mobile number' }, { status: 401 });
+      }
+
+      const expectedHash = hashOtp(mobile, otp);
+      if (!safeEqualHex(payload.otpHash, expectedHash)) {
+        return NextResponse.json({ success: false, message: 'Invalid OTP' }, { status: 401 });
+      }
+
+      const [rows] = await pool.query<any[]>(
+        `SELECT s.Student_Id, s.Student_Name, s.Email,
+                spa.Id AS Auth_Id
+         FROM student_master s
+         LEFT JOIN student_portal_auth spa ON spa.Student_Id = s.Student_Id AND spa.IsActive = 1
+         WHERE s.Student_Id = ?
+           AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
+         LIMIT 1`,
+        [payload.studentId]
+      );
+
+      if (!rows.length) {
+        return NextResponse.json({ success: false, message: 'Student not found or inactive' }, { status: 401 });
+      }
+
+      user = rows[0];
     }
 
-    const user = rows[0];
-
-    await pool.query(`UPDATE student_portal_auth SET Last_Login = NOW() WHERE Id = ?`, [user.Id]);
+    if (user.Auth_Id) {
+      await pool.query(`UPDATE student_portal_auth SET Last_Login = NOW() WHERE Id = ?`, [user.Auth_Id]);
+    }
 
     const sessionToken = await new SignJWT({
       studentId: user.Student_Id,
@@ -130,14 +162,16 @@ export async function POST(req: NextRequest) {
       maxAge: SESSION_DURATION,
     });
 
-    // Consume OTP token
-    response.cookies.set(OTP_COOKIE, '', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 0,
-    });
+    // Consume OTP token when OTP mode is used.
+    if (!OTP_BYPASS) {
+      response.cookies.set(OTP_COOKIE, '', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 0,
+      });
+    }
 
     return response;
   } catch (err: unknown) {

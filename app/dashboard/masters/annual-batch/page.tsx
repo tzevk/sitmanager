@@ -32,8 +32,8 @@ export default function AnnualBatchPage() {
 
   /* ---- form state ---- */
   const [courseId, setCourseId] = useState('');
-  const [fromDate, setFromDate] = useState('2025-04-01');
-  const [toDate, setToDate] = useState('2026-03-31');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
   /* ---- data state ---- */
   const [courses, setCourses] = useState<Course[]>([]);
@@ -99,8 +99,8 @@ export default function AnnualBatchPage() {
 
   const handleClear = () => {
     setCourseId('');
-    setFromDate('2025-04-01');
-    setToDate('2026-03-31');
+    setFromDate('');
+    setToDate('');
     setSearch('');
     setPage(1);
     setFetchTrigger(t => t + 1);

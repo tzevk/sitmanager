@@ -48,6 +48,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Role Right > Create User': '/dashboard/role-right?tab=create-user',
   'Role Right > Add Employee': '/dashboard/masters/employee/add',
   'Role Right > Portal Accounts': '/dashboard/portal-accounts',
+  'Daily Activities > Attendance': '/dashboard/daily-activities/attendance',
   'Daily Activities > Allot Roll Number': '/dashboard/daily-activities/allot-roll-number',
   'Daily Activities > Lecture Taken': '/dashboard/daily-activities/lecture-taken',
   'Daily Activities > Assignments Taken': '/dashboard/daily-activities/assignments-taken',
@@ -107,6 +108,7 @@ const SUB_MENUS: Record<string, string[]> = {
     'Student',
   ],
   'Daily Activities': [
+    'Attendance',
     'Allot Roll Number',
     'Lecture Taken',
     'Assignments Taken',
@@ -235,6 +237,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Role Right > Create User': ['user.create'],
   'Role Right > Add Employee': ['employee.create'],
   'Role Right > Portal Accounts': ['user.create'],
+  'Daily Activities > Attendance': ['attendance.view'],
   'Daily Activities > Allot Roll Number': ['roll_number.view'],
   'Daily Activities > Lecture Taken': ['lecture.view'],
   'Daily Activities > Assignments Taken': ['assignment.view'],

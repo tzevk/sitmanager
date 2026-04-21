@@ -51,11 +51,9 @@ export async function POST(req: NextRequest) {
     const pool = getPool();
 
     const [rows] = await pool.query<any[]>(
-      `SELECT spa.Student_Id, spa.Id as Auth_Id, s.Student_Name, s.Email, s.Present_Mobile
-       FROM student_portal_auth spa
-       JOIN student_master s ON spa.Student_Id = s.Student_Id
-       WHERE spa.IsActive = 1
-         AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
+      `SELECT s.Student_Id, s.Student_Name, s.Email, s.Present_Mobile
+       FROM student_master s
+       WHERE (s.IsDelete = 0 OR s.IsDelete IS NULL)
          AND (
            (s.Present_Mobile IS NOT NULL AND s.Present_Mobile LIKE CONCAT('%', ?))
            OR (s.Present_Mobile2 IS NOT NULL AND s.Present_Mobile2 LIKE CONCAT('%', ?))

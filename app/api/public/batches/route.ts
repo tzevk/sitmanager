@@ -9,6 +9,16 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const courseId = searchParams.get('courseId');
     const category = searchParams.get('category');
+    const batchCode = searchParams.get('batchCode');
+
+    // Lookup fees for a specific batch code
+    if (batchCode) {
+      const [rows] = await pool.query<(RowDataPacket & { totalFees: number | null })[]>(
+        `SELECT INR_Total AS totalFees FROM batch_mst WHERE Batch_code = ? AND IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+        [batchCode]
+      );
+      return NextResponse.json({ success: true, totalFees: rows[0]?.totalFees ?? null });
+    }
 
     if (!courseId) {
       return NextResponse.json({ success: true, categories: [], batches: [] });
@@ -27,9 +37,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, categories: cats.map((r) => r.category), batches: [] });
     }
 
-    // Return batch codes for this course + category
-    const [batches] = await pool.query<(RowDataPacket & { batchCode: string; timings: string | null })[]>(
-      `SELECT Batch_code AS batchCode, Timings AS timings
+    // Return batch codes for this course + category (including total fees)
+    const [batches] = await pool.query<(RowDataPacket & { batchCode: string; timings: string | null; totalFees: number | null })[]>(
+      `SELECT Batch_code AS batchCode, Timings AS timings, INR_Total AS totalFees
        FROM batch_mst
        WHERE Course_Id = ? AND Category = ? AND IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL)
        ORDER BY Batch_Id DESC`,

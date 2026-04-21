@@ -156,6 +156,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     description: 'Day-to-day academic operations',
     icon: 'calendar',
     permissions: [
+      ...createPermissions('attendance', 'Attendance'),
       ...createPermissions('roll_number', 'Roll Number Allotment'),
       ...createPermissions('lecture', 'Lecture'),
       ...createPermissions('assignment', 'Assignment'),

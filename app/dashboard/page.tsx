@@ -629,7 +629,126 @@ export default function DashboardPage() {
   if (activeDepartment === 'cbd') {
     return (
       <div className="space-y-4">
-        {profileHeader}
+        {/* ── CBD Department Header ── */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-5 py-4">
+
+            {/* Left — greeting + clock */}
+            <div className="min-w-0">
+              <p className="text-base font-bold text-gray-900 truncate">{greeting}, {profileName}</p>
+              <p className="flex items-center gap-1.5 text-xs text-gray-400 mt-0.5">
+                <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M22 12A10 10 0 1112 2a10 10 0 0110 10z" />
+                </svg>
+                {clockText}
+              </p>
+              {canSwitchDepartmentDashboard && (
+                <select
+                  value={adminSelectedDepartment}
+                  onChange={(e) => handleAdminDepartmentChange(e.target.value as DashboardDepartment)}
+                  className="mt-2 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25 text-gray-700"
+                  aria-label="Switch dashboard department"
+                >
+                  <option value="administration">Administration</option>
+                  <option value="cbd">CBD Department</option>
+                  <option value="corporate_training">Corporate Training</option>
+                  <option value="placement">Placement Department</option>
+                  <option value="training_and_development">Training and Development</option>
+                </select>
+              )}
+            </div>
+
+            {/* Centre — Mochi mascot, standalone and proud */}
+            <div className="flex flex-col items-center gap-1.5 select-none" aria-hidden="true">
+              <svg
+                className="w-20 h-20 drop-shadow-[0_4px_12px_rgba(149,67,93,0.14)]"
+                viewBox="0 0 72 72"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <defs>
+                  <linearGradient id="mochiFur2" x1="16" y1="16" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#FFF7EA" />
+                    <stop offset="0.6" stopColor="#F3D2B0" />
+                    <stop offset="1" stopColor="#D4A67F" />
+                  </linearGradient>
+                  <radialGradient id="mochiGlow2" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(36 34) rotate(90) scale(27)">
+                    <stop stopColor="#FFFDF8" />
+                    <stop offset="1" stopColor="#FFFDF8" stopOpacity="0" />
+                  </radialGradient>
+                </defs>
+                <g>
+                  <animateTransform attributeName="transform" type="translate" values="0 0;0 -2;0 0" dur="4s" repeatCount="indefinite" />
+                  <ellipse cx="36" cy="35" rx="27" ry="25" fill="url(#mochiGlow2)" />
+                  <path d="M16 28L13 13L26 22.5L16 28Z" fill="#E3B38D" />
+                  <path d="M56 28L59 13L46 22.5L56 28Z" fill="#E3B38D" />
+                  <path d="M20 30C20 23.1 25.4 17.5 32.2 17.5H39.8C46.6 17.5 52 23.1 52 30V42.6C52 51 45.2 57.8 36.8 57.8H35.2C26.8 57.8 20 51 20 42.6V30Z" fill="url(#mochiFur2)" />
+                  <path d="M23.5 31.5C23.5 27.1 27.1 23.5 31.5 23.5H40.5C44.9 23.5 48.5 27.1 48.5 31.5V41.8C48.5 47.1 44.2 51.4 38.9 51.4H33.1C27.8 51.4 23.5 47.1 23.5 41.8V31.5Z" fill="#FDE9D6" fillOpacity="0.98" />
+                  <path d="M24.1 23.6C24.1 23.6 22.2 18.4 18.2 15.2C17 20.8 18.3 24.8 20.3 27.8" fill="#E3B38D" />
+                  <path d="M47.9 23.6C47.9 23.6 49.8 18.4 53.8 15.2C55 20.8 53.7 24.8 51.7 27.8" fill="#E3B38D" />
+                  <ellipse cx="28.2" cy="36.1" rx="1.8" ry="2.5" fill="#251815">
+                    <animate attributeName="ry" values="2.5;0.3;2.5" dur="4.8s" repeatCount="indefinite" />
+                  </ellipse>
+                  <ellipse cx="43.8" cy="36.1" rx="1.8" ry="2.5" fill="#251815">
+                    <animate attributeName="ry" values="2.5;0.3;2.5" dur="4.8s" repeatCount="indefinite" />
+                  </ellipse>
+                  <circle cx="27.8" cy="35.3" r="0.5" fill="#FFFFFF" />
+                  <circle cx="43.4" cy="35.3" r="0.5" fill="#FFFFFF" />
+                  <path d="M35.7 39.4L33.9 40.9H37.5L35.7 39.4Z" fill="#F09DB0" />
+                  <path d="M35.7 40.9V44.3" stroke="#8D5B61" strokeWidth="1.35" strokeLinecap="round" />
+                  <path d="M35.7 44.3C33.8 46.1 31.9 46.6 29.9 46.3" stroke="#8D5B61" strokeWidth="1.35" strokeLinecap="round" />
+                  <path d="M35.7 44.3C37.6 46.1 39.5 46.6 41.5 46.3" stroke="#8D5B61" strokeWidth="1.35" strokeLinecap="round" />
+                  <path d="M16.8 33.2H8.9" stroke="#8D5B61" strokeWidth="1.2" strokeLinecap="round">
+                    <animate attributeName="opacity" values="1;0.4;1" dur="5.5s" repeatCount="indefinite" />
+                  </path>
+                  <path d="M16.2 37.1H8.2" stroke="#8D5B61" strokeWidth="1.2" strokeLinecap="round">
+                    <animate attributeName="opacity" values="1;0.4;1" dur="5.5s" repeatCount="indefinite" />
+                  </path>
+                  <path d="M55.2 33.2H63.1" stroke="#8D5B61" strokeWidth="1.2" strokeLinecap="round">
+                    <animate attributeName="opacity" values="1;0.4;1" dur="5.5s" repeatCount="indefinite" />
+                  </path>
+                  <path d="M55.8 37.1H63.8" stroke="#8D5B61" strokeWidth="1.2" strokeLinecap="round">
+                    <animate attributeName="opacity" values="1;0.4;1" dur="5.5s" repeatCount="indefinite" />
+                  </path>
+                  <circle cx="24.2" cy="30.2" r="1.15" fill="#FFE6F0" />
+                  <circle cx="46.6" cy="30.2" r="1.15" fill="#FFE6F0" />
+                  <ellipse cx="28.3" cy="47.8" rx="2.6" ry="1.75" fill="#DDB08D" />
+                  <ellipse cx="43.1" cy="47.8" rx="2.6" ry="1.75" fill="#DDB08D" />
+                  <path d="M48 49C56 51 57 58 51.8 61" stroke="#C58F6C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <animateTransform attributeName="transform" type="rotate" values="0 48 49;8 48 49;0 48 49;-8 48 49;0 48 49" dur="3.2s" repeatCount="indefinite" />
+                  </path>
+                </g>
+              </svg>
+              <span className="text-[9px] font-black uppercase tracking-[0.22em] text-gray-300">Mochi</span>
+            </div>
+
+            {/* Right — actions */}
+            <div className="flex items-center justify-end gap-2 flex-wrap">
+              {showConsultancyFollowupPopup && (
+                <button
+                  type="button"
+                  onClick={openFollowupPopup}
+                  className="group inline-flex items-center gap-2 rounded-lg border border-[#2A6BB5]/25 bg-gradient-to-r from-white to-[#2A6BB5]/5 px-3.5 py-2 text-sm font-semibold text-[#2E3093] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] text-white shadow-sm">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.083 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                    </svg>
+                    <span className={`absolute -right-1.5 -top-1.5 min-w-[16px] h-4 px-0.5 inline-flex items-center justify-center rounded-full text-[9px] font-black border border-white ${showFollowupReminder ? 'bg-rose-500 text-white animate-pulse' : 'bg-[#FAE452] text-[#2E3093]'}`}>
+                      {showFollowupReminder ? newFollowupCount : recentFollowups.length}
+                    </span>
+                  </span>
+                  {followupButtonText}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Quote strip */}
+          <div className="border-t border-gray-100 px-5 py-2 text-[11px] text-gray-400 italic">
+            &ldquo;{CBD_CUTE_QUOTES[cuteQuoteIndex]}&rdquo;
+          </div>
+        </div>
         <CbdDashboard data={data} loading={loading} />
         {showFollowupPopup && (
           <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">

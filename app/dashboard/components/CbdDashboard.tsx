@@ -1,211 +1,344 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import {
-  QuickStatsSkeleton,
-  TableSkeleton,
-  WidgetSkeleton,
-} from './Skeletons';
+import React from 'react';
 
-function pctTone(value: number) {
-  if (value >= 80) return 'text-emerald-700 bg-emerald-50 border-emerald-200';
-  if (value >= 50) return 'text-amber-700 bg-amber-50 border-amber-200';
-  return 'text-rose-700 bg-rose-50 border-rose-200';
+/* ── Utilities ────────────────────────────────────────────────────── */
+function fmtPct(v: number) {
+  return `${Number.isFinite(v) ? v.toFixed(1) : '0.0'}%`;
 }
 
-function pct(value: number) {
-  return `${Number.isFinite(value) ? value.toFixed(1) : '0.0'}%`;
+function clamp(v: number) {
+  return Math.min(100, Math.max(0, Number.isFinite(v) ? v : 0));
 }
 
+function tone(v: number) {
+  if (v >= 80) return { text: 'text-emerald-600', bar: 'bg-emerald-500' };
+  if (v >= 50) return { text: 'text-amber-600',   bar: 'bg-amber-400'   };
+  return         { text: 'text-rose-600',   bar: 'bg-rose-500'   };
+}
+
+/* ── Shared primitives ────────────────────────────────────────────── */
+function Bar({ value, className = '' }: { value: number; className?: string }) {
+  const t = tone(value);
+  return (
+    <div className={`flex items-center gap-2 ${className}`}>
+      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${t.bar}`} style={{ width: `${clamp(value)}%` }} />
+      </div>
+      <span className={`text-[11px] font-bold tabular-nums w-10 text-right ${t.text}`}>
+        {fmtPct(value)}
+      </span>
+    </div>
+  );
+}
+
+function CardHeader({
+  title,
+  accent = '#2E3093',
+  count,
+  icon,
+}: {
+  title: string;
+  accent?: string;
+  count?: number;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div
+      className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100"
+      style={{ borderLeft: `3px solid ${accent}` }}
+    >
+      <span
+        className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+        style={{ background: `color-mix(in srgb, ${accent} 10%, transparent)` }}
+      >
+        <span style={{ color: accent }} className="[&_svg]:w-3.5 [&_svg]:h-3.5">{icon}</span>
+      </span>
+      <span className="font-bold text-gray-800 text-sm flex-1">{title}</span>
+      {count !== undefined && (
+        <span className="text-[11px] font-semibold text-gray-400 tabular-nums">{count}</span>
+      )}
+    </div>
+  );
+}
+
+function Empty({ text = 'No data available' }: { text?: string }) {
+  return <p className="px-5 py-10 text-center text-sm text-gray-400">{text}</p>;
+}
+
+function PulseRows({ cols, rows = 4 }: { cols: number; rows?: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, i) => (
+        <tr key={i}>
+          {Array.from({ length: cols }).map((_, j) => (
+            <td key={j} className="px-5 py-3">
+              <div
+                className="h-3 bg-gray-100 rounded animate-pulse"
+                style={{ width: j === 0 ? '70%' : '40%' }}
+              />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+}
+
+function Th({ children, center }: { children: React.ReactNode; center?: boolean }) {
+  return (
+    <th className={`py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap ${center ? 'text-center' : 'text-left'}`}>
+      {children}
+    </th>
+  );
+}
+
+/* ── Icon set ─────────────────────────────────────────────────────── */
+const Icons = {
+  funnel:    <svg fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>,
+  target:    <svg fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg>,
+  calendar:  <svg fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M3 9h18M8 4V2m8 2V2" /></svg>,
+  star:      <svg fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>,
+  batch:     <svg fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>,
+  bell:      <svg fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>,
+  activity:  <svg fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>,
+  pie:       <svg fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path strokeLinecap="round" strokeLinejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg>,
+  wallet:    <svg fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 6h18M7 14h.01M11 14h.01M3 6a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6z" /></svg>,
+  grad:      <svg fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 14l9-5-9-5-9 5 9 5z" /><path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" /></svg>,
+};
+
+/* ── Component ────────────────────────────────────────────────────── */
 export default function CbdDashboard({ data, loading }: { data: any; loading: boolean }) {
-  const annualTargets = data?.annualTargets?.batchTargets ?? [];
+  const annualTargets   = data?.annualTargets?.batchTargets ?? [];
+  const seminarTargets  = data?.seminarTargets ?? [];
+  const pendingFollowups = data?.pendingFollowups ?? [];
+  const dailyActivity   = data?.dailyActivity ?? [];
+  const pendingFees     = data?.pendingFees ?? [];
+  const alumniProgress  = data?.alumniRegistration ?? [];
+  const sourceRows      = data?.sourcePerformance ?? [];
+
   const upcomingBatches = (data?.upcomingBatches ?? []).filter((b: any) => {
     if (!b?.SDate) return false;
     const start = new Date(b.SDate);
     if (Number.isNaN(start.getTime())) return false;
     const now = new Date();
-    const in3Months = new Date();
-    in3Months.setMonth(in3Months.getMonth() + 3);
-    return start >= now && start <= in3Months;
+    const cap = new Date();
+    cap.setMonth(cap.getMonth() + 3);
+    return start >= now && start <= cap;
   });
 
   const leadSummary = data?.enquiryReport?.summary ?? {};
   const funnel = {
-    total: Number(leadSummary.total_enquiries || 0),
-    contacted: Number(data?.leadFunnel?.contacted || 0),
-    interested: Number(data?.leadFunnel?.interested || 0),
-    converted: Number(data?.leadFunnel?.converted || 0),
+    total:     Number(leadSummary.total_enquiries        || 0),
+    contacted: Number(data?.leadFunnel?.contacted        || 0),
+    interested:Number(data?.leadFunnel?.interested       || 0),
+    converted: Number(data?.leadFunnel?.converted        || 0),
   };
 
-  const sourceRows = data?.sourcePerformance ?? [];
-  const seminarTargets = data?.seminarTargets ?? [];
-  const pendingFollowups = data?.pendingFollowups ?? [];
-  const dailyActivity = data?.dailyActivity ?? [];
-  const pendingFees = data?.pendingFees ?? [];
-  const alumniProgress = data?.alumniRegistration ?? [];
+  const funnelSteps = [
+    { label: 'Total Enquiries', value: funnel.total,     pct: null,                                                          color: '#2E3093' },
+    { label: 'Contacted',       value: funnel.contacted, pct: funnel.total ? funnel.contacted  / funnel.total * 100 : null,  color: '#2A6BB5' },
+    { label: 'Interested',      value: funnel.interested,pct: funnel.total ? funnel.interested / funnel.total * 100 : null,  color: '#059669' },
+    { label: 'Converted',       value: funnel.converted, pct: funnel.total ? funnel.converted  / funnel.total * 100 : null,  color: '#D97706' },
+  ];
 
   return (
-    <div className="space-y-6 pb-8">
-      {/* 1) Annual Targets */}
-      {loading ? (
-        <TableSkeleton rows={6} cols={5} />
-      ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold">
-            Annual Targets
-          </div>
-          <div className="overflow-auto max-h-[340px]">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-[11px] uppercase tracking-wider text-gray-500 sticky top-0">
-                <tr>
-                  <th className="text-left px-4 py-3">Training Program Name</th>
-                  <th className="text-center px-4 py-3">Target Students</th>
-                  <th className="text-center px-4 py-3">Students Admitted</th>
-                  <th className="text-center px-4 py-3">Average Student per Batch</th>
-                  <th className="text-center px-4 py-3">Percentage Achieved</th>
-                </tr>
-              </thead>
-              <tbody>
-                {annualTargets.length === 0 ? (
-                  <tr>
-                    <td className="px-4 py-8 text-center text-gray-400" colSpan={5}>No annual targets available</td>
-                  </tr>
-                ) : (
-                  annualTargets.map((row: any, i: number) => {
-                    const minStu = parseInt(row.min_students_batch) || 15;
-                    const targetFreq = Number(row.target_frequency) || 1;
-                    const targetStudents = minStu * targetFreq;
-                    const admitted = Number(row.students_admitted) || 0;
-                    const avgPerBatch = targetFreq > 0 ? admitted / targetFreq : 0;
-                    const achieved = targetStudents > 0 ? (admitted / targetStudents) * 100 : 0;
-                    return (
-                      <tr key={`${row.Course_Id || i}`} className="border-t border-gray-100">
-                        <td className="px-4 py-3 font-semibold text-gray-800">{row.CourseName || 'N/A'}</td>
-                        <td className="px-4 py-3 text-center">{targetStudents}</td>
-                        <td className="px-4 py-3 text-center">{admitted}</td>
-                        <td className="px-4 py-3 text-center">{avgPerBatch.toFixed(1)}</td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`inline-flex px-2.5 py-1 rounded-lg border text-xs font-bold ${pctTone(achieved)}`}>
-                            {pct(achieved)}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+    <div className="space-y-5 pb-8">
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 2) Seminar Targets (Scrollable) */}
+      {/* ①  Total Lead Funnel Summary */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <CardHeader title="Total Lead Funnel Summary" accent="#2E3093" icon={Icons.funnel} />
         {loading ? (
-          <TableSkeleton rows={5} cols={4} className="lg:col-span-2" />
+          <div className="p-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-24 rounded-lg bg-gray-100 animate-pulse" />
+            ))}
+          </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden lg:col-span-2">
-            <div className="px-5 py-4 bg-gradient-to-r from-[#2A6BB5] to-[#2E3093] text-white font-bold">
-              Seminar Targets
-            </div>
-            <div className="overflow-auto max-h-[300px]">
+          <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100">
+            {funnelSteps.map((step, i) => (
+              <div key={step.label} className="flex flex-col items-center justify-center py-7 px-4 text-center relative">
+                {i > 0 && i < 4 && (
+                  <div className="hidden sm:block absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 z-10">
+                    <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                )}
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">{step.label}</p>
+                <p className="text-4xl font-black tabular-nums leading-none" style={{ color: step.color }}>
+                  {step.value.toLocaleString('en-IN')}
+                </p>
+                {step.pct !== null && (
+                  <p className="text-[11px] text-gray-400 mt-2">{fmtPct(step.pct)} of total</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ②  Annual Targets */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <CardHeader
+          title="Annual Targets"
+          accent="#2E3093"
+          icon={Icons.target}
+          count={loading ? undefined : annualTargets.length}
+        />
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                <Th>Training Program Name</Th>
+                <Th center>Target Students</Th>
+                <Th center>Students Admitted</Th>
+                <Th center>Average Student per Batch</Th>
+                <Th>Percentage Achieved</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <PulseRows cols={5} rows={5} />
+              ) : annualTargets.length === 0 ? (
+                <tr><td colSpan={5}><Empty text="No annual targets available" /></td></tr>
+              ) : (
+                annualTargets.map((row: any, i: number) => {
+                  const minStu      = parseInt(row.min_students_batch) || 15;
+                  const targetFreq  = Number(row.target_frequency) || 1;
+                  const targetStu   = minStu * targetFreq;
+                  const admitted    = Number(row.students_admitted) || 0;
+                  const avg         = targetFreq > 0 ? admitted / targetFreq : 0;
+                  const achieved    = targetStu > 0 ? (admitted / targetStu) * 100 : 0;
+                  return (
+                    <tr key={`${row.Course_Id || i}`} className="border-t border-gray-100 hover:bg-gray-50/50 transition-colors">
+                      <td className="px-5 py-3.5 font-semibold text-gray-800">{row.CourseName || '—'}</td>
+                      <td className="px-4 py-3.5 text-center tabular-nums text-gray-600">{targetStu}</td>
+                      <td className="px-4 py-3.5 text-center tabular-nums font-semibold text-gray-800">{admitted}</td>
+                      <td className="px-4 py-3.5 text-center tabular-nums text-gray-500">{avg.toFixed(1)}</td>
+                      <td className="px-4 py-3.5 w-44"><Bar value={achieved} /></td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ③  Seminar Targets + Exhibition Targets */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+        {/* Seminar Targets */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden lg:col-span-2">
+          <CardHeader
+            title="Seminar Targets"
+            accent="#2A6BB5"
+            icon={Icons.calendar}
+            count={loading ? undefined : seminarTargets.length}
+          />
+          <div className="overflow-x-auto">
+            <div className="max-h-72 overflow-y-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-[11px] uppercase tracking-wider text-gray-500 sticky top-0">
+                <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
                   <tr>
-                    <th className="text-left px-4 py-3">Month</th>
-                    <th className="text-left px-4 py-3">College Names</th>
-                    <th className="text-center px-4 py-3">Date</th>
-                    <th className="text-center px-4 py-3">Annual Percentage</th>
+                    <Th>Month</Th>
+                    <Th>College Names</Th>
+                    <Th center>Date</Th>
+                    <Th>Annual Percentage</Th>
                   </tr>
                 </thead>
                 <tbody>
-                  {seminarTargets.length === 0 ? (
-                    <tr>
-                      <td className="px-4 py-8 text-center text-gray-400" colSpan={4}>No seminar target records available</td>
-                    </tr>
+                  {loading ? (
+                    <PulseRows cols={4} />
+                  ) : seminarTargets.length === 0 ? (
+                    <tr><td colSpan={4}><Empty text="No seminar target records available" /></td></tr>
                   ) : (
-                    seminarTargets.map((row: any, i: number) => {
-                      const annualPct = Number(row.annual_percentage || 0);
-                      return (
-                        <tr key={`${row.id || i}`} className="border-t border-gray-100">
-                          <td className="px-4 py-3">{row.month || '-'}</td>
-                          <td className="px-4 py-3 font-medium">{row.college_name || '-'}</td>
-                          <td className="px-4 py-3 text-center">{row.date || '-'}</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className={`inline-flex px-2.5 py-1 rounded-lg border text-xs font-bold ${pctTone(annualPct)}`}>
-                              {pct(annualPct)}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })
+                    seminarTargets.map((row: any, i: number) => (
+                      <tr key={`${row.id || i}`} className="border-t border-gray-100 hover:bg-gray-50/50">
+                        <td className="px-5 py-3 text-gray-500">{row.month || '—'}</td>
+                        <td className="px-4 py-3 font-medium text-gray-800">{row.college_name || '—'}</td>
+                        <td className="px-4 py-3 text-center tabular-nums text-gray-500">{row.date || '—'}</td>
+                        <td className="px-4 py-3 w-40"><Bar value={Number(row.annual_percentage || 0)} /></td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* 3) Exhibition Targets */}
-        {loading ? (
-          <WidgetSkeleton lines={3} />
-        ) : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold">Exhibition Targets</div>
-            <div className="p-4 space-y-3 text-sm">
-              <div className="flex items-center justify-between"><span className="text-gray-500">Planned</span><span className="font-semibold">{data?.exhibitionTargets?.planned ?? 0}</span></div>
-              <div className="flex items-center justify-between"><span className="text-gray-500">Completed</span><span className="font-semibold">{data?.exhibitionTargets?.completed ?? 0}</span></div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500">Achievement</span>
-                <span className={`inline-flex px-2 py-1 rounded-lg border text-xs font-bold ${pctTone(Number(data?.exhibitionTargets?.achievement_pct || 0))}`}>
-                  {pct(Number(data?.exhibitionTargets?.achievement_pct || 0))}
+        {/* Exhibition Targets */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <CardHeader title="Exhibition Targets" accent="#2E3093" icon={Icons.star} />
+          {loading ? (
+            <div className="p-5 space-y-3">
+              {[...Array(3)].map((_, i) => <div key={i} className="h-16 rounded-lg bg-gray-100 animate-pulse" />)}
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              <div className="flex items-center justify-between px-5 py-5">
+                <span className="text-sm text-gray-500 font-medium">Planned</span>
+                <span className="text-3xl font-black tabular-nums text-[#2E3093]">
+                  {data?.exhibitionTargets?.planned ?? 0}
                 </span>
               </div>
+              <div className="flex items-center justify-between px-5 py-5">
+                <span className="text-sm text-gray-500 font-medium">Completed</span>
+                <span className="text-3xl font-black tabular-nums text-emerald-600">
+                  {data?.exhibitionTargets?.completed ?? 0}
+                </span>
+              </div>
+              <div className="px-5 py-5">
+                <p className="text-sm text-gray-500 font-medium mb-2.5">Achievement</p>
+                <Bar value={Number(data?.exhibitionTargets?.achievement_pct || 0)} />
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* 4) Upcoming Batches (next 3 months) */}
-      {loading ? (
-        <TableSkeleton rows={6} cols={8} />
-      ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 bg-gradient-to-r from-[#2A6BB5] to-[#2E3093] text-white font-bold">Upcoming Batches (next 3 months)</div>
-          <div className="overflow-auto max-h-[320px]">
+      {/* ④  Upcoming Batches (next 3 months) */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <CardHeader
+          title="Upcoming Batches (next 3 months)"
+          accent="#2A6BB5"
+          icon={Icons.batch}
+          count={loading ? undefined : upcomingBatches.length}
+        />
+        <div className="overflow-x-auto">
+          <div className="max-h-80 overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-[11px] uppercase tracking-wider text-gray-500 sticky top-0">
+              <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
                 <tr>
-                  <th className="text-left px-4 py-3">Batch number</th>
-                  <th className="text-left px-4 py-3">Training Program Name</th>
-                  <th className="text-center px-4 py-3">Enquiries Received</th>
-                  <th className="text-center px-4 py-3">Enquiries Contacted</th>
-                  <th className="text-center px-4 py-3">Interested Students</th>
-                  <th className="text-center px-4 py-3">Confirmed Admissions</th>
-                  <th className="text-center px-4 py-3">% Filled</th>
+                  <Th>Batch number</Th>
+                  <Th>Training Program Name</Th>
+                  <Th center>Enquiries Received</Th>
+                  <Th center>Enquiries Contacted</Th>
+                  <Th center>Interested Students</Th>
+                  <Th center>Confirmed Admissions</Th>
+                  <Th>% Filled</Th>
                 </tr>
               </thead>
               <tbody>
-                {upcomingBatches.length === 0 ? (
-                  <tr>
-                    <td className="px-4 py-8 text-center text-gray-400" colSpan={7}>No upcoming batches found for next 3 months</td>
-                  </tr>
+                {loading ? (
+                  <PulseRows cols={7} rows={5} />
+                ) : upcomingBatches.length === 0 ? (
+                  <tr><td colSpan={7}><Empty text="No upcoming batches for the next 3 months" /></td></tr>
                 ) : (
                   upcomingBatches.map((b: any, i: number) => {
                     const confirmed = Number(b.NoStudent || 0);
-                    const max = Number(b.Max_Students || 0);
-                    const fillPct = max > 0 ? (confirmed / max) * 100 : 0;
+                    const max       = Number(b.Max_Students || 0);
+                    const fillPct   = max > 0 ? (confirmed / max) * 100 : 0;
                     return (
-                      <tr key={`${b.Batch_Id || i}`} className="border-t border-gray-100">
-                        <td className="px-4 py-3 font-semibold">{b.Batch_code || '-'}</td>
-                        <td className="px-4 py-3">{b.CourseName || '-'}</td>
-                        <td className="px-4 py-3 text-center">{b.Enquiries_Received ?? 0}</td>
-                        <td className="px-4 py-3 text-center">{b.Enquiries_Contacted ?? 0}</td>
-                        <td className="px-4 py-3 text-center">{b.Interested_Students ?? 0}</td>
-                        <td className="px-4 py-3 text-center">{confirmed}</td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`inline-flex px-2.5 py-1 rounded-lg border text-xs font-bold ${pctTone(fillPct)}`}>
-                            {pct(fillPct)}
-                          </span>
-                        </td>
+                      <tr key={`${b.Batch_Id || i}`} className="border-t border-gray-100 hover:bg-gray-50/50 transition-colors">
+                        <td className="px-5 py-3.5 font-mono font-semibold text-gray-800">{b.Batch_code || '—'}</td>
+                        <td className="px-4 py-3.5 text-gray-700">{b.CourseName || '—'}</td>
+                        <td className="px-4 py-3.5 text-center tabular-nums text-gray-600">{b.Enquiries_Received ?? 0}</td>
+                        <td className="px-4 py-3.5 text-center tabular-nums text-gray-600">{b.Enquiries_Contacted ?? 0}</td>
+                        <td className="px-4 py-3.5 text-center tabular-nums text-gray-600">{b.Interested_Students ?? 0}</td>
+                        <td className="px-4 py-3.5 text-center tabular-nums font-semibold text-gray-800">{confirmed}</td>
+                        <td className="px-4 py-3.5 w-40"><Bar value={fillPct} /></td>
                       </tr>
                     );
                   })
@@ -214,156 +347,188 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
             </table>
           </div>
         </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 5) Pending Followups */}
-        {loading ? <WidgetSkeleton lines={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold">Pending Followups</div>
-            <div className="p-4 space-y-2 max-h-[260px] overflow-auto">
-              {pendingFollowups.length === 0 ? (
-                <p className="text-sm text-gray-400">No pending followups</p>
-              ) : pendingFollowups.map((f: any, i: number) => (
-                <div key={`${f.id || i}`} className="p-3 rounded-xl border border-gray-100 bg-gray-50/50 text-sm">
-                  <div className="font-semibold text-gray-800 truncate">{f.name || f.student_name || 'Followup'}</div>
-                  <div className="text-gray-500 text-xs mt-1">{f.next_followup_date || '-'}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* 6) Daily Activity Tracker (time filter) */}
-        {loading ? <WidgetSkeleton lines={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 bg-gradient-to-r from-[#2A6BB5] to-[#2E3093] text-white font-bold flex items-center justify-between">
-              <span>Daily Activity Tracker</span>
-              <span className="text-[11px] bg-white/20 px-2 py-1 rounded-md">Time Filter</span>
-            </div>
-            <div className="p-4 space-y-2 max-h-[260px] overflow-auto">
-              {dailyActivity.length === 0 ? (
-                <p className="text-sm text-gray-400">No daily activity data available</p>
-              ) : dailyActivity.map((a: any, i: number) => (
-                <div key={`${a.id || i}`} className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50/50 text-sm">
-                  <span className="font-medium text-gray-700">{a.label || a.activity || '-'}</span>
-                  <span className="font-bold text-[#2E3093]">{a.value ?? 0}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* 7) Source Wise Performance (time filter) */}
-        {loading ? <WidgetSkeleton lines={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold flex items-center justify-between">
-              <span>Source Wise Performance</span>
-              <span className="text-[11px] bg-white/20 px-2 py-1 rounded-md">Time Filter</span>
-            </div>
-            <div className="p-4 overflow-auto max-h-[260px]">
-              {sourceRows.length === 0 ? (
-                <p className="text-sm text-gray-400">No source-wise data available</p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="text-[11px] uppercase text-gray-500">
-                    <tr>
-                      <th className="text-left py-2">Source</th>
-                      <th className="text-center py-2">Leads</th>
-                      <th className="text-center py-2">Admissions</th>
-                      <th className="text-center py-2">Conversion %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sourceRows.map((r: any, i: number) => {
-                      const conv = Number(r.conversion_pct || 0);
-                      return (
-                        <tr key={`${r.source || i}`} className="border-t border-gray-100">
-                          <td className="py-2">{r.source || '-'}</td>
-                          <td className="py-2 text-center">{r.leads ?? 0}</td>
-                          <td className="py-2 text-center">{r.admissions ?? 0}</td>
-                          <td className="py-2 text-center">
-                            <span className={`inline-flex px-2 py-1 rounded-lg border text-xs font-bold ${pctTone(conv)}`}>{pct(conv)}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 8) Total Lead Funnel Summary (time filter) */}
-        {loading ? <WidgetSkeleton lines={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 bg-gradient-to-r from-[#2A6BB5] to-[#2E3093] text-white font-bold flex items-center justify-between">
-              <span>Total Lead Funnel Summary</span>
-              <span className="text-[11px] bg-white/20 px-2 py-1 rounded-md">Time Filter</span>
-            </div>
-            <div className="p-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-gray-100 p-3 text-center"><p className="text-xs text-gray-500">Total Enquiries</p><p className="text-xl font-bold text-[#2E3093]">{funnel.total}</p></div>
-              <div className="rounded-xl border border-gray-100 p-3 text-center"><p className="text-xs text-gray-500">Contacted</p><p className="text-xl font-bold text-[#2E3093]">{funnel.contacted}</p></div>
-              <div className="rounded-xl border border-gray-100 p-3 text-center"><p className="text-xs text-gray-500">Interested</p><p className="text-xl font-bold text-[#2E3093]">{funnel.interested}</p></div>
-              <div className="rounded-xl border border-gray-100 p-3 text-center"><p className="text-xs text-gray-500">Converted</p><p className="text-xl font-bold text-[#2E3093]">{funnel.converted}</p></div>
-            </div>
-          </div>
-        )}
+      {/* ⑤  Pending Followups · Daily Activity Tracker · Source Wise Performance */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-        {/* 9) Pending Fees */}
-        {loading ? <WidgetSkeleton lines={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold">Pending Fees</div>
-            <div className="p-4 space-y-2 max-h-[260px] overflow-auto">
-              {pendingFees.length === 0 ? (
-                <p className="text-sm text-gray-400">No pending fees records available</p>
-              ) : pendingFees.map((f: any, i: number) => (
-                <div key={`${f.id || i}`} className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50/50 text-sm">
-                  <span className="truncate max-w-[65%]">{f.student_name || f.name || 'Student'}</span>
-                  <span className="font-bold text-[#2E3093]">{f.amount ? `Rs ${Number(f.amount).toLocaleString('en-IN')}` : '-'}</span>
-                </div>
-              ))}
-            </div>
+        {/* Pending Followups */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <CardHeader
+            title="Pending Followups"
+            accent="#DC2626"
+            icon={Icons.bell}
+            count={loading ? undefined : pendingFollowups.length}
+          />
+          <div className="max-h-64 overflow-y-auto">
+            {loading ? (
+              <div className="p-4 space-y-2">
+                {[...Array(4)].map((_, i) => <div key={i} className="h-14 rounded-lg bg-gray-100 animate-pulse" />)}
+              </div>
+            ) : pendingFollowups.length === 0 ? (
+              <Empty text="No pending followups" />
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {pendingFollowups.map((f: any, i: number) => (
+                  <div key={`${f.id || i}`} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50/50">
+                    <div className="w-8 h-8 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center text-xs font-bold shrink-0">
+                      {(f.name || f.student_name || 'F')[0].toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-800 truncate">{f.name || f.student_name || 'Followup'}</p>
+                      <p className="text-[11px] text-gray-400">{f.next_followup_date || '—'}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
-        {/* 10) Alumni Registration Progress */}
-        {loading ? <WidgetSkeleton lines={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 bg-gradient-to-r from-[#2A6BB5] to-[#2E3093] text-white font-bold">Alumni Registration Progress</div>
-            <div className="p-4 overflow-auto max-h-[260px]">
-              {alumniProgress.length === 0 ? (
-                <p className="text-sm text-gray-400">No alumni registration progress data</p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="text-[11px] uppercase text-gray-500">
-                    <tr>
-                      <th className="text-left py-2">Batch No.</th>
-                      <th className="text-left py-2">Training Program Name</th>
-                      <th className="text-center py-2">% Registered</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {alumniProgress.map((r: any, i: number) => {
-                      const registeredPct = Number(r.registered_pct || 0);
-                      return (
-                        <tr key={`${r.batch_no || i}`} className="border-t border-gray-100">
-                          <td className="py-2">{r.batch_no || '-'}</td>
-                          <td className="py-2">{r.training_program || '-'}</td>
-                          <td className="py-2 text-center"><span className={`inline-flex px-2 py-1 rounded-lg border text-xs font-bold ${pctTone(registeredPct)}`}>{pct(registeredPct)}</span></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
+        {/* Daily Activity Tracker */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <CardHeader title="Daily Activity Tracker" accent="#2E3093" icon={Icons.activity} />
+          <div className="max-h-64 overflow-y-auto">
+            {loading ? (
+              <div className="p-4 space-y-2">
+                {[...Array(4)].map((_, i) => <div key={i} className="h-12 rounded-lg bg-gray-100 animate-pulse" />)}
+              </div>
+            ) : dailyActivity.length === 0 ? (
+              <Empty text="No daily activity data" />
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {dailyActivity.map((a: any, i: number) => (
+                  <div key={`${a.id || i}`} className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/50">
+                    <span className="text-sm text-gray-600">{a.label || a.activity || '—'}</span>
+                    <span className="text-xl font-black tabular-nums text-[#2E3093]">{a.value ?? 0}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </div>
+
+        {/* Source Wise Performance */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <CardHeader
+            title="Source Wise Performance"
+            accent="#2A6BB5"
+            icon={Icons.pie}
+            count={loading ? undefined : sourceRows.length}
+          />
+          <div className="max-h-64 overflow-auto">
+            {loading ? (
+              <div className="p-4 space-y-2">
+                {[...Array(4)].map((_, i) => <div key={i} className="h-10 rounded-lg bg-gray-100 animate-pulse" />)}
+              </div>
+            ) : sourceRows.length === 0 ? (
+              <Empty text="No source data available" />
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
+                  <tr>
+                    <Th>Source</Th>
+                    <Th center>Leads</Th>
+                    <Th center>Admissions</Th>
+                    <Th>Conversion %</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sourceRows.map((r: any, i: number) => {
+                    const conv = Number(r.conversion_pct || 0);
+                    const t = tone(conv);
+                    return (
+                      <tr key={`${r.source || i}`} className="border-t border-gray-100 hover:bg-gray-50/50">
+                        <td className="px-5 py-2.5 font-medium text-gray-700 truncate max-w-[8rem]">{r.source || '—'}</td>
+                        <td className="px-3 py-2.5 text-center tabular-nums text-gray-600">{r.leads ?? 0}</td>
+                        <td className="px-3 py-2.5 text-center tabular-nums text-gray-600">{r.admissions ?? 0}</td>
+                        <td className="px-3 py-2.5">
+                          <span className={`text-xs font-bold tabular-nums ${t.text}`}>{fmtPct(conv)}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* ⑥  Pending Fees · Alumni Registration Progress */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+        {/* Pending Fees */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <CardHeader
+            title="Pending Fees"
+            accent="#DC2626"
+            icon={Icons.wallet}
+            count={loading ? undefined : pendingFees.length}
+          />
+          <div className="max-h-64 overflow-y-auto">
+            {loading ? (
+              <div className="p-4 space-y-2">
+                {[...Array(4)].map((_, i) => <div key={i} className="h-12 rounded-lg bg-gray-100 animate-pulse" />)}
+              </div>
+            ) : pendingFees.length === 0 ? (
+              <Empty text="No pending fees" />
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {pendingFees.map((f: any, i: number) => (
+                  <div key={`${f.id || i}`} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50/50">
+                    <span className="text-sm text-gray-700 truncate max-w-[55%]">
+                      {f.student_name || f.name || 'Student'}
+                    </span>
+                    <span className="text-sm font-bold text-rose-600 tabular-nums">
+                      {f.amount ? `₹ ${Number(f.amount).toLocaleString('en-IN')}` : '—'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Alumni Registration Progress */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <CardHeader
+            title="Alumni Registration Progress"
+            accent="#2E3093"
+            icon={Icons.grad}
+            count={loading ? undefined : alumniProgress.length}
+          />
+          <div className="max-h-64 overflow-auto">
+            {loading ? (
+              <div className="p-4 space-y-2">
+                {[...Array(4)].map((_, i) => <div key={i} className="h-10 rounded-lg bg-gray-100 animate-pulse" />)}
+              </div>
+            ) : alumniProgress.length === 0 ? (
+              <Empty text="No alumni registration data" />
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
+                  <tr>
+                    <Th>Batch No.</Th>
+                    <Th>Training Program Name</Th>
+                    <Th>% Registered</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {alumniProgress.map((r: any, i: number) => (
+                    <tr key={`${r.batch_no || i}`} className="border-t border-gray-100 hover:bg-gray-50/50">
+                      <td className="px-5 py-3 font-mono text-gray-700">{r.batch_no || '—'}</td>
+                      <td className="px-4 py-3 text-gray-700">{r.training_program || '—'}</td>
+                      <td className="px-4 py-3 w-40"><Bar value={Number(r.registered_pct || 0)} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }

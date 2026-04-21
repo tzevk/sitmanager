@@ -1167,95 +1167,14 @@ export default function EditBatchPage() {
   /* Tab Content: Fees Structure */
   const FeesStructureTab = () => (
     <div className="grid grid-cols-4 gap-2">
-      {/* INR Section */}
       <div>
-        <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Basic (INR)</label>
-        <input
-          type="number"
-          value={formData.INR_Basic}
-          onChange={(e) => handleChange('INR_Basic', e.target.value)}
-          className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs"
-          placeholder="Amount"
-        />
-      </div>
-      <div>
-        <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Service Tax (INR)</label>
-        <input
-          type="number"
-          value={formData.INR_ServiceTax}
-          onChange={(e) => handleChange('INR_ServiceTax', e.target.value)}
-          className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs"
-          placeholder="Amount"
-        />
-      </div>
-      <div>
-        <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Total (INR)</label>
+        <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Total Fees (INR) <span className="text-red-500">*</span></label>
         <input
           type="number"
           value={formData.INR_Total}
           onChange={(e) => handleChange('INR_Total', e.target.value)}
           className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs"
-          placeholder="Amount"
-        />
-      </div>
-      <div>
-        <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Basic ($)</label>
-        <input
-          type="number"
-          value={formData.Dollar_Basic}
-          onChange={(e) => handleChange('Dollar_Basic', e.target.value)}
-          className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs"
-          placeholder="Amount"
-        />
-      </div>
-      <div>
-        <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Service Tax ($)</label>
-        <input
-          type="number"
-          value={formData.Dollar_ServiceTax}
-          onChange={(e) => handleChange('Dollar_ServiceTax', e.target.value)}
-          className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs"
-          placeholder="Amount"
-        />
-      </div>
-      <div>
-        <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Total ($)</label>
-        <input
-          type="number"
-          value={formData.Dollar_Total}
-          onChange={(e) => handleChange('Dollar_Total', e.target.value)}
-          className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs"
-          placeholder="Amount"
-        />
-      </div>
-      <div>
-        <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Actual Fees</label>
-        <input
-          type="number"
-          value={formData.Actual_Fees_Payment}
-          onChange={(e) => handleChange('Actual_Fees_Payment', e.target.value)}
-          className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs"
-          placeholder="Amount"
-        />
-      </div>
-      <div>
-        <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Full Payment *</label>
-        <input
-          type="number"
-          value={formData.Fees_Full_Payment}
-          onChange={(e) => handleChange('Fees_Full_Payment', e.target.value)}
-          className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs"
-          placeholder="Amount"
-        />
-      </div>
-      <div>
-        <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Installment *</label>
-        <input
-          type="number"
-          value={formData.Fees_Installment_Payment}
-          onChange={(e) => handleChange('Fees_Installment_Payment', e.target.value)}
-          className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs"
-          placeholder="Amount"
+          placeholder="e.g. 12899"
         />
       </div>
     </div>

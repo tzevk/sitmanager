@@ -7,35 +7,13 @@ import Image from 'next/image';
 export default function StudentSigninPage() {
   const router = useRouter();
   const [mobile, setMobile] = useState('');
-  const [otp, setOtp] = useState('');
-  const [otpRequested, setOtpRequested] = useState(false);
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [splash, setSplash] = useState<{ name: string } | null>(null);
   const splashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleRequestOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetch('/api/student-portal/auth/otp/request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to send OTP');
-      setOtpRequested(true);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to send OTP');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -43,16 +21,16 @@ export default function StudentSigninPage() {
       const res = await fetch('/api/student-portal/auth/otp/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile, otp }),
+        body: JSON.stringify({ mobile }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'OTP verification failed');
+      if (!res.ok) throw new Error(data.message || 'Sign in failed');
       const name = data.user?.name ?? '';
       sessionStorage.setItem('sit_student_name', name);
       setSplash({ name });
       splashTimer.current = setTimeout(() => router.push('/student-portal/dashboard'), 2500);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'OTP verification failed');
+      setError(err instanceof Error ? err.message : 'Sign in failed');
     } finally {
       setLoading(false);
     }
@@ -174,7 +152,7 @@ export default function StudentSigninPage() {
             </div>
           )}
 
-          <form onSubmit={otpRequested ? handleVerifyOtp : handleRequestOtp} className="space-y-5">
+          <form onSubmit={handleSignIn} className="space-y-5">
             {/* Mobile field */}
             <div className="group">
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">Mobile Number</label>
@@ -192,37 +170,10 @@ export default function StudentSigninPage() {
                   placeholder="Enter your registered mobile"
                   required
                   autoFocus
-                  disabled={otpRequested}
                   className="w-full pl-11 pr-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-[#2E3093] focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 transition-all text-gray-900 placeholder-gray-400 text-sm disabled:bg-gray-50 disabled:text-gray-500"
                 />
               </div>
             </div>
-
-            {otpRequested && (
-              <div className="group">
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">OTP</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={otp}
-                  onChange={e => setOtp(e.target.value)}
-                  placeholder="Enter 6-digit OTP"
-                  required
-                  className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-[#2E3093] focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 transition-all text-gray-900 placeholder-gray-400 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOtpRequested(false);
-                    setOtp('');
-                    setError('');
-                  }}
-                  className="mt-3 text-xs font-semibold text-[#2E3093] hover:underline"
-                >
-                  Change mobile
-                </button>
-              </div>
-            )}
 
             <button
               type="submit"
@@ -232,11 +183,11 @@ export default function StudentSigninPage() {
               {loading ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  {otpRequested ? 'Verifying...' : 'Sending OTP...'}
+                  Signing in...
                 </>
               ) : (
                 <>
-                  {otpRequested ? 'Verify & Sign In' : 'Send OTP'}
+                  Sign In
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
