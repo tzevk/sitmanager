@@ -75,6 +75,7 @@ export async function GET(req: NextRequest) {
         `SELECT
            a.Admission_Id,
            s.Student_Id,
+           a.Student_Code,
            s.Student_Name AS studentName,
            COALESCE(a.Roll_No, '') AS rollNo,
            s.Present_Mobile AS mobile,

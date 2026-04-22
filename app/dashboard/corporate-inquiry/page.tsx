@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { FaPlus, FaFilter, FaFileExport, FaEdit, FaSearch, FaChevronLeft, FaChevronRight, FaTimesCircle, FaCheckCircle, FaFileSignature } from 'react-icons/fa';
+import { FaPlus, FaFileExport, FaEdit, FaSearch, FaChevronLeft, FaChevronRight, FaTimesCircle, FaCheckCircle, FaFileSignature } from 'react-icons/fa';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -29,7 +29,6 @@ interface CorporateInquiry {
   Idate: string;
   IsActive: number;
   InquiryStatus?: string | null;
-
   CompanyType?: string | null;
   CompanyAuthority?: string | null;
   TrainingMode?: string | null;
@@ -47,19 +46,35 @@ interface Pagination {
   totalPages: number;
 }
 
+function StatusBadge({ status }: { status: string | null | undefined }) {
+  if (!status) return <span className="text-xs text-gray-400">—</span>;
+  const map: Record<string, { label: string; cls: string }> = {
+    Rejected:        { label: 'Cancelled',   cls: 'bg-red-100 text-red-700 border border-red-200' },
+    Final:           { label: 'Converted',   cls: 'bg-green-100 text-green-700 border border-green-200' },
+    UnderDiscussion: { label: 'In Discussion', cls: 'bg-blue-100 text-blue-700 border border-blue-200' },
+  };
+  const s = map[status] ?? { label: status, cls: 'bg-gray-100 text-gray-600 border border-gray-200' };
+  return (
+    <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${s.cls}`}>
+      {s.label}
+    </span>
+  );
+}
+
+function rowColor(status: string | null | undefined, idx: number) {
+  if (status === 'Rejected')        return 'bg-red-50 hover:bg-red-100';
+  if (status === 'Final')           return 'bg-green-50 hover:bg-green-100';
+  if (status === 'UnderDiscussion') return 'bg-blue-50 hover:bg-blue-100';
+  return idx % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-gray-50/40 hover:bg-gray-50';
+}
+
 export default function CorporateInquiryPage() {
   const router = useRouter();
   const { canView, canCreate, canUpdate, loading: permLoading } = useResourcePermissions('corporate_inquiry');
   const [inquiries, setInquiries] = useState<CorporateInquiry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [pagination, setPagination] = useState<Pagination>({
-    page: 1,
-    limit: 25,
-    total: 0,
-    totalPages: 0,
-  });
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
   const [updating, setUpdating] = useState<number | null>(null);
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -71,7 +86,7 @@ export default function CorporateInquiryPage() {
       const params = new URLSearchParams({
         page: String(pagination.page),
         limit: String(pagination.limit),
-        search: search,
+        search,
       });
       const res = await fetch(`/api/admission-activity/corporate-inquiry?${params}`);
       const data = await res.json();
@@ -90,40 +105,20 @@ export default function CorporateInquiryPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, pagination.limit, fetchTrigger]);
 
-  useEffect(() => {
-    fetchInquiries();
-  }, [fetchInquiries]);
+  useEffect(() => { fetchInquiries(); }, [fetchInquiries]);
 
-  // Debounced search: typing should actually update results.
   useEffect(() => {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     searchDebounceRef.current = setTimeout(() => {
       setPagination((prev) => ({ ...prev, page: 1 }));
       setFetchTrigger((t) => t + 1);
     }, 400);
-
-    return () => {
-      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    };
+    return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
   }, [search]);
 
-  const handleSearch = () => {
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    setPagination((prev) => ({ ...prev, page: 1 }));
-    setFetchTrigger((t) => t + 1);
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleClear = () => {
-    setSearch('');
-    setPagination((prev) => ({ ...prev, page: 1 }));
-    setFetchTrigger((t) => t + 1);
-  };
-
   const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= pagination.totalPages) {
+    if (newPage >= 1 && newPage <= pagination.totalPages)
       setPagination((prev) => ({ ...prev, page: newPage }));
-    }
   };
 
   const updateStatus = async (id: number, status: 'Rejected' | 'Final') => {
@@ -131,8 +126,8 @@ export default function CorporateInquiryPage() {
     if (!confirm(`Are you sure you want to ${verb} this inquiry?`)) return;
     const prevStatus = inquiries.find((r) => r.Id === id)?.InquiryStatus ?? null;
     setUpdating(id);
-    // Optimistic UI: immediately reflect status + row color.
-    setInquiries((prev) => prev.map((r) => (r.Id === id ? { ...r, InquiryStatus: status } : r)));
+    // Optimistic: update color immediately
+    setInquiries((prev) => prev.map((r) => r.Id === id ? { ...r, InquiryStatus: status } : r));
     try {
       const res = await fetch('/api/admission-activity/corporate-inquiry', {
         method: 'PATCH',
@@ -141,16 +136,14 @@ export default function CorporateInquiryPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Update failed');
-
       if (status === 'Final') {
         router.push(`/dashboard/corporate-inquiry/execution/${id}?tab=execution`);
         return;
       }
-
-      fetchInquiries();
+      // Keep optimistic state — color is already correct; background refresh
+      setFetchTrigger((t) => t + 1);
     } catch (e) {
-      // Revert optimistic update on failure.
-      setInquiries((prev) => prev.map((r) => (r.Id === id ? { ...r, InquiryStatus: prevStatus } : r)));
+      setInquiries((prev) => prev.map((r) => r.Id === id ? { ...r, InquiryStatus: prevStatus } : r));
       alert('Update failed');
       console.error(e);
     } finally {
@@ -159,46 +152,27 @@ export default function CorporateInquiryPage() {
   };
 
   const handleExport = () => {
-    const headers = [
-      'Id',
-      'Enquiry Date',
-      'Training Programme',
-      'Company Name',
-      'Company Location',
-      'Company Type',
-      'Company Authority',
-      'Coordinator Name',
-      'Coordinator Mobile',
-      'Coordinator Email',
-      'Training Mode',
-      'Training Location',
-      'Status',
-      'Disciplines',
-      'Remarks',
-    ];
+    const headers = ['Id','Enquiry Date','Training Programme','Company Name','Company Location','Company Type','Company Authority','Coordinator Name','Coordinator Mobile','Coordinator Email','Training Mode','Training Location','Status','Disciplines','Remarks'];
     const csvContent = [
       headers.join(','),
-      ...inquiries.map((inq) =>
-        [
-          inq.Id,
-          `"${String(inq.Idate || '').replace(/"/g, '""')}"`,
-          `"${String(inq.Course_Id || '').replace(/"/g, '""')}"`,
-          `"${String(inq.CompanyName || '').replace(/"/g, '""')}"`,
-          `"${String(inq.Place || '').replace(/"/g, '""')}"`,
-          `"${String(inq.CompanyType || '').replace(/"/g, '""')}"`,
-          `"${String(inq.CompanyAuthority || '').replace(/"/g, '""')}"`,
-          `"${String(inq.FullName || `${inq.Fname || ''} ${inq.Lname || ''}`.trim()).replace(/"/g, '""')}"`,
-          `"${String(inq.Mobile || inq.Phone || '').replace(/"/g, '""')}"`,
-          `"${String(inq.Email || '').replace(/"/g, '""')}"`,
-          `"${String(inq.TrainingMode || '').replace(/"/g, '""')}"`,
-          `"${String(inq.TrainingLocation || '').replace(/"/g, '""')}"`,
-          `"${String(inq.InquiryStatus === 'Rejected' ? 'Cancelled' : (inq.InquiryStatus || '')).replace(/"/g, '""')}"`,
-          `"${String(inq.business || '').replace(/"/g, '""')}"`,
-          `"${String(inq.Remark || '').replace(/"/g, '""')}"`,
-        ].join(',')
-      ),
+      ...inquiries.map((inq) => [
+        inq.Id,
+        `"${String(inq.Idate || '').replace(/"/g,'""')}"`,
+        `"${String(inq.Course_Id || '').replace(/"/g,'""')}"`,
+        `"${String(inq.CompanyName || '').replace(/"/g,'""')}"`,
+        `"${String(inq.Place || '').replace(/"/g,'""')}"`,
+        `"${String(inq.CompanyType || '').replace(/"/g,'""')}"`,
+        `"${String(inq.CompanyAuthority || '').replace(/"/g,'""')}"`,
+        `"${String(inq.FullName || `${inq.Fname||''} ${inq.Lname||''}`.trim()).replace(/"/g,'""')}"`,
+        `"${String(inq.Mobile || inq.Phone || '').replace(/"/g,'""')}"`,
+        `"${String(inq.Email || '').replace(/"/g,'""')}"`,
+        `"${String(inq.TrainingMode || '').replace(/"/g,'""')}"`,
+        `"${String(inq.TrainingLocation || '').replace(/"/g,'""')}"`,
+        `"${String(inq.InquiryStatus === 'Rejected' ? 'Cancelled' : (inq.InquiryStatus || '')).replace(/"/g,'""')}"`,
+        `"${String(inq.business || '').replace(/"/g,'""')}"`,
+        `"${String(inq.Remark || '').replace(/"/g,'""')}"`,
+      ].join(',')),
     ].join('\n');
-
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -206,114 +180,87 @@ export default function CorporateInquiryPage() {
     link.click();
   };
 
+  if (permLoading) return <PermissionLoading />;
+  if (!canView) return <AccessDenied message="You do not have permission to view corporate inquiries." />;
+
   return (
-    <div className="space-y-3">
-      {permLoading ? <PermissionLoading /> : !canView ? <AccessDenied message="You do not have permission to view corporate inquiries." /> : (<>
-      {/* Header Container */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <div className="flex flex-col gap-4">
-          {/* Title Row */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-gray-800">Corporate Inquiry</h2>
-              <p className="text-sm text-gray-400">
-                {pagination.total.toLocaleString()} total inquiries
-              </p>
-            </div>
-            {/* Add Button */}
-            {canCreate && (
+    <div className="space-y-6">
+
+      {/* ── Header ── */}
+      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-6 py-4 flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-white font-bold text-xl tracking-tight">Corporate Inquiry</h1>
+          <p className="text-blue-200 text-sm mt-0.5">{pagination.total.toLocaleString()} total inquiries</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition-colors border border-white/20"
+          >
+            <FaFileExport className="w-3.5 h-3.5" /> Export
+          </button>
+          {canCreate && (
             <button
               onClick={() => router.push('/dashboard/corporate-inquiry/add')}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#2A6BB5] hover:bg-[#2360A0] text-white font-semibold text-sm shadow-sm transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white text-[#2E3093] font-bold text-sm shadow hover:bg-blue-50 transition-colors"
             >
-              <FaPlus className="w-4 h-4" /> Add
+              <FaPlus className="w-3.5 h-3.5" /> Add Inquiry
             </button>
-            )}
-          </div>
-
-          {/* Controls Row */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Search */}
-            <div className="relative flex-1 min-w-[200px] max-w-md">
-              <FaSearch className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                ref={searchRef}
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
-                placeholder="Search name, email, company..."
-                className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 bg-white shadow-sm"
-              />
-            </div>
-
-            {/* Filters toggle */}
-            <button
-              onClick={() => setShowFilters((p) => !p)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm border ${
-                showFilters
-                  ? 'bg-[#2E3093] text-white border-[#2E3093]'
-                  : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              <FaFilter className="w-4 h-4" /> Filters
-            </button>
-
-            {/* Export */}
-            <button
-              onClick={handleExport}
-              className="flex items-center gap-1.5 bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm"
-            >
-              <FaFileExport className="w-4 h-4" /> Export
-            </button>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Filters Row */}
-      {showFilters && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm animate-in slide-in-from-top-2 duration-200">
-          <div className="text-sm text-gray-500">Additional filters can be added here.</div>
-        </div>
-      )}
+      {/* ── Table Card ── */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        {/* Search bar */}
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
+          <div className="relative flex-1 max-w-sm">
+            <FaSearch className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              ref={searchRef}
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, company, email..."
+              className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 bg-white"
+            />
+          </div>
+          <span className="text-xs text-gray-400 ml-auto">
+            {inquiries.length} shown
+          </span>
+        </div>
+
+        {/* Table */}
         <div className="overflow-x-auto">
-          <table className="dashboard-table w-full text-sm">
+          <table className="w-full text-sm">
             <thead>
-              <tr className="text-[11px] uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100">
-                <th className="text-left py-3 px-4 font-semibold">Id</th>
-                <th className="text-left py-3 px-4 font-semibold">Enquiry Date</th>
+              <tr className="text-[11px] uppercase tracking-wider text-gray-500 bg-gray-50 border-b border-gray-200">
+                <th className="text-left py-3 px-4 font-semibold w-12">#</th>
+                <th className="text-left py-3 px-4 font-semibold">Date</th>
                 <th className="text-left py-3 px-4 font-semibold">Training Programme</th>
                 <th className="text-left py-3 px-4 font-semibold">Company</th>
-                <th className="text-left py-3 px-4 font-semibold">Company Details</th>
-                <th className="text-left py-3 px-4 font-semibold">Company Location</th>
-                <th className="text-left py-3 px-4 font-semibold">Company Type</th>
-                <th className="text-left py-3 px-4 font-semibold">Authority</th>
-                <th className="text-left py-3 px-4 font-semibold">Coordinator</th>
-                <th className="text-left py-3 px-4 font-semibold">Mobile</th>
-                <th className="text-left py-3 px-4 font-semibold">Email</th>
-                <th className="text-left py-3 px-4 font-semibold">Mode</th>
-                <th className="text-left py-3 px-4 font-semibold">Training Location</th>
-                <th className="text-left py-3 px-4 font-semibold">Requirement Details</th>
-                <th className="text-left py-3 px-4 font-semibold">Status</th>
-                <th className="text-center py-3 px-4 font-semibold">Action</th>
+                <th className="text-left py-3 px-4 font-semibold">Contact Person</th>
+                <th className="text-left py-3 px-4 font-semibold">Training Info</th>
+                <th className="text-left py-3 px-4 font-semibold">Participants</th>
+                <th className="text-left py-3 px-4 font-semibold">Requirement</th>
+                <th className="text-center py-3 px-4 font-semibold">Status</th>
+                <th className="text-center py-3 px-4 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={16} className="py-16 text-center">
+                  <td colSpan={10} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
-                      <div className="w-8 h-8 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
-                      <span className="text-sm text-gray-400">Loading inquiries...</span>
+                      <div className="w-7 h-7 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                      <span className="text-sm text-gray-400">Loading...</span>
                     </div>
                   </td>
                 </tr>
               ) : inquiries.length === 0 ? (
                 <tr>
-                  <td colSpan={16} className="py-16 text-center">
+                  <td colSpan={10} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2 text-gray-300">
                       <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -322,139 +269,169 @@ export default function CorporateInquiryPage() {
                     </div>
                   </td>
                 </tr>
-              ) : (
-                inquiries.map((inq, idx) => {
-                  const isRejected = inq.InquiryStatus === 'Rejected';
-                  const isUnderDiscussion = inq.InquiryStatus === 'UnderDiscussion';
-                  const rowBase = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50';
-                  const rowBg = isRejected ? 'bg-red-50' : isUnderDiscussion ? 'bg-blue-50' : rowBase;
-                  const rowHover = isRejected
-                    ? 'hover:bg-red-100'
-                    : isUnderDiscussion
-                      ? 'hover:bg-blue-100'
-                      : 'hover:bg-gray-50';
+              ) : inquiries.map((inq, idx) => {
+                const name = inq.FullName || `${inq.Fname || ''} ${inq.Lname || ''}`.trim();
+                return (
+                  <tr key={inq.Id} className={`border-b border-gray-100 transition-colors ${rowColor(inq.InquiryStatus, idx)}`}>
 
-                  return (
-                    <tr key={inq.Id} className={`${rowHover} transition-colors ${rowBg}`}>
-                    <td className="py-3 px-4 text-gray-600">{inq.Id}</td>
-                    <td className="py-3 px-4 text-gray-600">{inq.Idate ? String(inq.Idate).slice(0, 10) : '-'}</td>
-                    <td className="py-3 px-4 text-gray-600">{inq.Course_Id || '-'}</td>
-                    <td className="py-3 px-4 text-gray-600">{inq.CompanyName || '-'}</td>
-                    <td className="py-3 px-4 text-gray-600">
-                      <div className="space-y-1 min-w-[220px]">
-                        <div><span className="font-medium text-gray-700">Contact:</span> {inq.CompanyAuthority || '-'}</div>
-                        <div><span className="font-medium text-gray-700">Designation:</span> {inq.Designation || '-'}</div>
-                        <div><span className="font-medium text-gray-700">Phone:</span> {inq.Mobile || inq.Phone || '-'}</div>
-                        <div><span className="font-medium text-gray-700">Email:</span> {inq.Email || '-'}</div>
+                    {/* # */}
+                    <td className="py-3 px-4 text-gray-400 text-xs">{inq.Id}</td>
+
+                    {/* Date */}
+                    <td className="py-3 px-4 text-gray-600 whitespace-nowrap text-xs">
+                      {inq.Idate ? String(inq.Idate).slice(0, 10) : '—'}
+                    </td>
+
+                    {/* Training Programme */}
+                    <td className="py-3 px-4">
+                      <p className="font-semibold text-gray-800 text-sm leading-tight">{inq.Course_Id || '—'}</p>
+                      {inq.TrainingDates && <p className="text-xs text-gray-400 mt-0.5">{inq.TrainingDates}</p>}
+                    </td>
+
+                    {/* Company */}
+                    <td className="py-3 px-4">
+                      <p className="font-semibold text-gray-800 text-sm leading-tight">{inq.CompanyName || '—'}</p>
+                      {inq.Place && <p className="text-xs text-gray-400 mt-0.5">{inq.Place}</p>}
+                      {inq.CompanyType && (
+                        <span className="inline-block mt-1 text-[10px] font-medium px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">
+                          {inq.CompanyType}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Contact Person */}
+                    <td className="py-3 px-4 min-w-[180px]">
+                      {name && <p className="font-semibold text-gray-800 text-sm leading-tight">{name}</p>}
+                      {inq.Designation && <p className="text-xs text-gray-500">{inq.Designation}</p>}
+                      {(inq.Mobile || inq.Phone) && (
+                        <p className="text-xs text-gray-500 mt-0.5">📞 {inq.Mobile || inq.Phone}</p>
+                      )}
+                      {inq.Email && <p className="text-xs text-gray-400">{inq.Email}</p>}
+                    </td>
+
+                    {/* Training Info */}
+                    <td className="py-3 px-4 min-w-[160px]">
+                      {inq.TrainingMode && (
+                        <p className="text-xs text-gray-600"><span className="font-medium text-gray-700">Mode:</span> {inq.TrainingMode}</p>
+                      )}
+                      {inq.TrainingLocation && (
+                        <p className="text-xs text-gray-600 mt-0.5"><span className="font-medium text-gray-700">Location:</span> {inq.TrainingLocation}</p>
+                      )}
+                      {inq.CompanyAuthority && (
+                        <p className="text-xs text-gray-600 mt-0.5"><span className="font-medium text-gray-700">Authority:</span> {inq.CompanyAuthority}</p>
+                      )}
+                    </td>
+
+                    {/* Participants */}
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <div className="flex flex-col gap-0.5">
+                        {(inq.Participants_Fresher != null) && (
+                          <span className="text-xs text-gray-600">
+                            <span className="font-medium text-gray-700">F:</span> {inq.Participants_Fresher}
+                          </span>
+                        )}
+                        {(inq.Participants_Experienced != null) && (
+                          <span className="text-xs text-gray-600">
+                            <span className="font-medium text-gray-700">E:</span> {inq.Participants_Experienced}
+                          </span>
+                        )}
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-gray-600">{inq.Place || '-'}</td>
-                    <td className="py-3 px-4 text-gray-600">{inq.CompanyType || '-'}</td>
-                    <td className="py-3 px-4 text-gray-600">{inq.CompanyAuthority || '-'}</td>
-                    <td className="py-3 px-4 font-medium text-gray-800">{inq.FullName || `${inq.Fname || ''} ${inq.Lname || ''}`.trim()}</td>
-                    <td className="py-3 px-4 text-gray-600">{inq.Mobile || inq.Phone || '-'}</td>
-                    <td className="py-3 px-4 text-gray-600">{inq.Email || '-'}</td>
-                    <td className="py-3 px-4 text-gray-600">{inq.TrainingMode || '-'}</td>
-                    <td className="py-3 px-4 text-gray-600">{inq.TrainingLocation || '-'}</td>
-                    <td className="py-3 px-4 text-gray-600">
-                      <div className="space-y-1 min-w-[260px]">
-                        <div>
-                          <span className="font-medium text-gray-700">Disciplines:</span> {inq.business || '-'}
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-700">Participants:</span>{' '}
-                          F {inq.Participants_Fresher ?? 0} / E {inq.Participants_Experienced ?? 0}
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-700">Requirement:</span> {inq.Discussion || inq.Remark || '-'}
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-700">Preferred Dates:</span> {inq.TrainingDates || '-'}
-                        </div>
-                      </div>
+
+                    {/* Requirement */}
+                    <td className="py-3 px-4 min-w-[200px]">
+                      {inq.business && (
+                        <p className="text-xs text-gray-600"><span className="font-medium text-gray-700">Disciplines:</span> {inq.business}</p>
+                      )}
+                      {(inq.Discussion || inq.Remark) && (
+                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{inq.Discussion || inq.Remark}</p>
+                      )}
                     </td>
-                    <td className="py-3 px-4 text-gray-600">{inq.InquiryStatus === 'Rejected' ? 'Cancelled' : (inq.InquiryStatus || '-')}</td>
+
+                    {/* Status */}
                     <td className="py-3 px-4 text-center">
+                      <StatusBadge status={inq.InquiryStatus} />
+                    </td>
+
+                    {/* Actions */}
+                    <td className="py-3 px-4">
                       <div className="flex items-center justify-center gap-1">
                         {canUpdate && (
-                        <button
-                          onClick={() => router.push(`/dashboard/corporate-inquiry/edit/${inq.Id}`)}
-                          className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-[#2A6BB5] transition-colors"
-                          title="Edit"
-                        >
-                          <FaEdit className="w-4 h-4" />
-                        </button>
+                          <button
+                            onClick={() => router.push(`/dashboard/corporate-inquiry/edit/${inq.Id}`)}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-[#2A6BB5] transition-colors"
+                            title="Edit"
+                          >
+                            <FaEdit className="w-3.5 h-3.5" />
+                          </button>
                         )}
-
                         {canUpdate && (
-                        <button
-                          onClick={() => updateStatus(inq.Id, 'Rejected')}
-                          disabled={updating === inq.Id}
-                          className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
-                          title="Cancel"
-                        >
-                          <FaTimesCircle className="w-4 h-4" />
-                        </button>
+                          <button
+                            onClick={() => updateStatus(inq.Id, 'Rejected')}
+                            disabled={updating === inq.Id || inq.InquiryStatus === 'Rejected'}
+                            className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Cancel Inquiry"
+                          >
+                            <FaTimesCircle className="w-3.5 h-3.5" />
+                          </button>
                         )}
-
                         {canUpdate && (
-                        <button
-                          onClick={() => updateStatus(inq.Id, 'Final')}
-                          disabled={updating === inq.Id}
-                          className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600 transition-colors disabled:opacity-50"
-                          title="Convert to Execution"
-                        >
-                          <FaCheckCircle className="w-4 h-4" />
-                        </button>
+                          <button
+                            onClick={() => updateStatus(inq.Id, 'Final')}
+                            disabled={updating === inq.Id || inq.InquiryStatus === 'Final'}
+                            className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Convert to Execution"
+                          >
+                            <FaCheckCircle className="w-3.5 h-3.5" />
+                          </button>
                         )}
-
                         {canUpdate && (
-                        <button
-                          onClick={() => router.push(`/dashboard/corporate-inquiry/proposal/${inq.Id}`)}
-                          className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors"
-                          title="Make Proposal"
-                        >
-                          <FaFileSignature className="w-4 h-4" />
-                        </button>
+                          <button
+                            onClick={() => router.push(`/dashboard/corporate-inquiry/proposal/${inq.Id}`)}
+                            className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors"
+                            title="Make Proposal"
+                          >
+                            <FaFileSignature className="w-3.5 h-3.5" />
+                          </button>
                         )}
                       </div>
                     </td>
+
                   </tr>
-                  );
-                })
-              )}
+                );
+              })}
             </tbody>
           </table>
         </div>
-      </div>
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between mt-4">
-        <p className="text-sm text-gray-600">
-          Showing {inquiries.length ? (pagination.page - 1) * pagination.limit + 1 : 0} -{' '}
-          {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
-        </p>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => handlePageChange(pagination.page - 1)}
-            disabled={pagination.page <= 1}
-            className="p-2 rounded-lg bg-white border border-gray-300 disabled:opacity-50 hover:bg-gray-50 transition"
-          >
-            <FaChevronLeft />
-          </button>
-          <span className="text-sm">
-            Page {pagination.page} of {pagination.totalPages || 1}
-          </span>
-          <button
-            onClick={() => handlePageChange(pagination.page + 1)}
-            disabled={pagination.page >= pagination.totalPages}
-            className="p-2 rounded-lg bg-white border border-gray-300 disabled:opacity-50 hover:bg-gray-50 transition"
-          >
-            <FaChevronRight />
-          </button>
+        {/* Pagination footer */}
+        <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between bg-gray-50/50">
+          <p className="text-xs text-gray-500">
+            Showing {inquiries.length ? (pagination.page - 1) * pagination.limit + 1 : 0}–
+            {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
+          </p>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => handlePageChange(pagination.page - 1)}
+              disabled={pagination.page <= 1}
+              className="p-1.5 rounded-lg bg-white border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition text-gray-600"
+            >
+              <FaChevronLeft className="w-3 h-3" />
+            </button>
+            <span className="text-xs text-gray-600 px-2">
+              Page {pagination.page} of {pagination.totalPages || 1}
+            </span>
+            <button
+              onClick={() => handlePageChange(pagination.page + 1)}
+              disabled={pagination.page >= pagination.totalPages}
+              className="p-1.5 rounded-lg bg-white border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition text-gray-600"
+            >
+              <FaChevronRight className="w-3 h-3" />
+            </button>
+          </div>
         </div>
+
       </div>
-      </>)}
     </div>
   );
 }

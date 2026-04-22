@@ -41,41 +41,6 @@ interface FollowupPopupItem {
   module: 'consultancy' | 'inquiry';
 }
 
-interface CbdPopupNote {
-  id: string;
-  title: string;
-  text: string;
-  tone: 'sky' | 'yellow' | 'mint';
-}
-
-const CBD_POPUP_NOTES: CbdPopupNote[] = [
-  {
-    id: 'warm-followup',
-    title: 'Tiny Nudge',
-    text: 'Warm follow-ups in the first 24 hours boost conversion chances.',
-    tone: 'sky',
-  },
-  {
-    id: 'track-remarks',
-    title: 'Cute Reminder',
-    text: 'Add one clear remark per call so tomorrow-you says thank you.',
-    tone: 'yellow',
-  },
-  {
-    id: 'priority-focus',
-    title: 'Focus Spark',
-    text: 'Tackle the top 3 pending inquiries first for a high-impact start.',
-    tone: 'mint',
-  },
-];
-
-const CBD_CUTE_QUOTES = [
-  'Mochi says: one tiny follow-up can make a huge difference.',
-  'You are doing great. Keep the warm conversations flowing.',
-  'Small pings, big wins. Your consistency is adorable and powerful.',
-  'Friendly reminder: kind words close loops faster.',
-];
-
 // --- Mini Sparkline (SVG) ---
 function Sparkline({ data, color = '#2E3093' }: { data: number[]; color?: string }) {
   if (!data || data.length === 0) return <span className="text-[10px] text-gray-300">—</span>;
@@ -152,9 +117,6 @@ export default function DashboardPage() {
   const [recentFollowupsLoading, setRecentFollowupsLoading] = useState(false);
   const [showFollowupReminder, setShowFollowupReminder] = useState(false);
   const [newFollowupCount, setNewFollowupCount] = useState(0);
-  const [showCbdCuteNotes, setShowCbdCuteNotes] = useState(false);
-  const [cbdCuteNoteIndex, setCbdCuteNoteIndex] = useState(0);
-  const [cuteQuoteIndex, setCuteQuoteIndex] = useState(0);
   const resolvedDepartment = resolveDashboardDepartment(session?.department, session?.role, session?.dashboardDepartment);
   const canSwitchDepartmentDashboard = isSuperAdmin;
   const [adminSelectedDepartment, setAdminSelectedDepartment] = useState<DashboardDepartment>('administration');
@@ -283,43 +245,6 @@ export default function DashboardPage() {
     localStorage.setItem('sit-admin-dashboard-department', value);
   };
 
-  useEffect(() => {
-    if (activeDepartment !== 'cbd') {
-      setShowCbdCuteNotes(false);
-      return;
-    }
-
-    const today = new Date().toISOString().slice(0, 10);
-    const dismissedToday = localStorage.getItem('sit-cbd-cute-notes-dismissed-date') === today;
-    if (dismissedToday) {
-      setShowCbdCuteNotes(false);
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setCbdCuteNoteIndex(0);
-      setShowCbdCuteNotes(true);
-    }, 900);
-
-    return () => window.clearTimeout(timer);
-  }, [activeDepartment]);
-
-  useEffect(() => {
-    if (activeDepartment !== 'cbd') return;
-
-    setCuteQuoteIndex(0);
-    const timer = window.setInterval(() => {
-      setCuteQuoteIndex((prev) => (prev + 1) % CBD_CUTE_QUOTES.length);
-    }, 4200);
-
-    return () => window.clearInterval(timer);
-  }, [activeDepartment]);
-
-  const dismissCbdCuteNotesForToday = useCallback(() => {
-    localStorage.setItem('sit-cbd-cute-notes-dismissed-date', new Date().toISOString().slice(0, 10));
-    setShowCbdCuteNotes(false);
-  }, []);
-
   const markFollowupsAsSeen = () => {
     const latestId = Number(recentFollowups?.[0]?.popupId || 0);
     if (latestId > 0) localStorage.setItem(followupStorageKey, String(latestId));
@@ -358,145 +283,24 @@ export default function DashboardPage() {
     : 'Good Morning';
   const profileName = session?.firstName?.trim() || session?.email?.split('@')[0] || 'User';
   const clockText = now ? now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-  const currentCbdCuteNote = CBD_POPUP_NOTES[cbdCuteNoteIndex];
-  const cbdNoteToneClasses = currentCbdCuteNote?.tone === 'yellow'
-    ? {
-        shell: 'from-[#FFF7CC] via-[#FFF2A8] to-[#FFE98A] border-[#F4D44D]/70',
-        tag: 'bg-[#FAE452]/70 text-[#4B3F00]',
-        button: 'bg-[#2E3093] text-white hover:bg-[#24267A]',
-      }
-    : currentCbdCuteNote?.tone === 'mint'
-      ? {
-          shell: 'from-[#E8FFF6] via-[#D8FBEF] to-[#C5F5E3] border-[#7ADCB4]/60',
-          tag: 'bg-[#7ADCB4]/60 text-[#0E5F45]',
-          button: 'bg-[#0E8B64] text-white hover:bg-[#0A7755]',
-        }
-      : {
-          shell: 'from-[#EEF5FF] via-[#E3F0FF] to-[#D7E9FF] border-[#8CB8F5]/55',
-          tag: 'bg-[#9DC4F8]/55 text-[#1F4F91]',
-          button: 'bg-[#2A6BB5] text-white hover:bg-[#215998]',
-        };
 
   const profileHeader = (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center justify-between gap-3 flex-wrap">
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2.5">
           <span className="text-sm font-semibold text-gray-800 truncate">{greeting}, {profileName}</span>
-          {activeDepartment === 'cbd' && showCbdCuteNotes && currentCbdCuteNote && (
-            <div className={`inline-flex items-center gap-2 rounded-2xl border bg-gradient-to-r ${cbdNoteToneClasses.shell} px-3 py-1.5 shadow-sm`}>
-              <span className="text-sm leading-none" aria-hidden="true">💡</span>
-              <span className="text-xs font-bold text-slate-700">{currentCbdCuteNote.title}</span>
-              <button
-                type="button"
-                onClick={dismissCbdCuteNotesForToday}
-                className="h-5 w-5 inline-flex items-center justify-center rounded-md border border-slate-300/70 bg-white/75 text-slate-500 hover:text-slate-700"
-                aria-label="Dismiss cute notes"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.3} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          )}
           <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#2A6BB5]/20 bg-[#2A6BB5]/5 px-2.5 py-1 text-xs font-semibold text-[#2E3093] whitespace-nowrap">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M22 12A10 10 0 1112 2a10 10 0 0110 10z" />
             </svg>
             {clockText}
           </span>
-          {activeDepartment === 'cbd' && (
-            <div className="inline-flex max-w-[20rem] items-center gap-2 rounded-2xl border border-[#F9D7E7] bg-gradient-to-r from-[#FFF2F8] via-[#FFEAF4] to-[#FFF7FB] px-2 py-1.5 shadow-[0_4px_14px_rgba(236,72,153,0.12)]">
-              <div className="relative h-10 w-10 shrink-0" aria-hidden="true">
-                <svg className="h-10 w-10 animate-bounce [animation-duration:4.2s] drop-shadow-[0_4px_10px_rgba(149,67,93,0.16)]" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <defs>
-                    <linearGradient id="mochiFur" x1="16" y1="16" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-                      <stop stopColor="#FFF7EA" />
-                      <stop offset="0.6" stopColor="#F3D2B0" />
-                      <stop offset="1" stopColor="#D4A67F" />
-                    </linearGradient>
-                    <radialGradient id="mochiGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(36 34) rotate(90) scale(27)">
-                      <stop stopColor="#FFFDF8" />
-                      <stop offset="1" stopColor="#FFFDF8" stopOpacity="0" />
-                    </radialGradient>
-                  </defs>
-                  <g>
-                    <animateTransform attributeName="transform" type="translate" values="0 0;0 -1.5;0 0" dur="3.8s" repeatCount="indefinite" />
-                    <ellipse cx="36" cy="35" rx="27" ry="25" fill="url(#mochiGlow)" />
-                    <path d="M16 28L13 13L26 22.5L16 28Z" fill="#E3B38D" />
-                    <path d="M56 28L59 13L46 22.5L56 28Z" fill="#E3B38D" />
-                    <path d="M20 30C20 23.1 25.4 17.5 32.2 17.5H39.8C46.6 17.5 52 23.1 52 30V42.6C52 51 45.2 57.8 36.8 57.8H35.2C26.8 57.8 20 51 20 42.6V30Z" fill="url(#mochiFur)" />
-                    <path d="M23.5 31.5C23.5 27.1 27.1 23.5 31.5 23.5H40.5C44.9 23.5 48.5 27.1 48.5 31.5V41.8C48.5 47.1 44.2 51.4 38.9 51.4H33.1C27.8 51.4 23.5 47.1 23.5 41.8V31.5Z" fill="#FDE9D6" fillOpacity="0.98" />
-                    <path d="M24.1 23.6C24.1 23.6 22.2 18.4 18.2 15.2C17 20.8 18.3 24.8 20.3 27.8" fill="#E3B38D" />
-                    <path d="M47.9 23.6C47.9 23.6 49.8 18.4 53.8 15.2C55 20.8 53.7 24.8 51.7 27.8" fill="#E3B38D" />
-                    <ellipse cx="28.2" cy="36.1" rx="1.8" ry="2.5" fill="#251815">
-                      <animate attributeName="ry" values="2.5;0.35;2.5" dur="4.6s" repeatCount="indefinite" />
-                    </ellipse>
-                    <ellipse cx="43.8" cy="36.1" rx="1.8" ry="2.5" fill="#251815">
-                      <animate attributeName="ry" values="2.5;0.35;2.5" dur="4.6s" repeatCount="indefinite" />
-                    </ellipse>
-                    <circle cx="27.8" cy="35.3" r="0.5" fill="#FFFFFF" />
-                    <circle cx="43.4" cy="35.3" r="0.5" fill="#FFFFFF" />
-                    <path d="M35.7 39.4L33.9 40.9H37.5L35.7 39.4Z" fill="#F09DB0" />
-                    <path d="M35.7 40.9V44.3" stroke="#8D5B61" strokeWidth="1.35" strokeLinecap="round" />
-                    <path d="M35.7 44.3C33.8 46.1 31.9 46.6 29.9 46.3" stroke="#8D5B61" strokeWidth="1.35" strokeLinecap="round" />
-                    <path d="M35.7 44.3C37.6 46.1 39.5 46.6 41.5 46.3" stroke="#8D5B61" strokeWidth="1.35" strokeLinecap="round" />
-                    <path d="M16.8 33.2H8.9" stroke="#8D5B61" strokeWidth="1.2" strokeLinecap="round">
-                      <animate attributeName="opacity" values="1;0.55;1" dur="5s" repeatCount="indefinite" />
-                    </path>
-                    <path d="M16.2 37.1H8.2" stroke="#8D5B61" strokeWidth="1.2" strokeLinecap="round">
-                      <animate attributeName="opacity" values="1;0.55;1" dur="5s" repeatCount="indefinite" />
-                    </path>
-                    <path d="M16.8 41H8.9" stroke="#8D5B61" strokeWidth="1.2" strokeLinecap="round">
-                      <animate attributeName="opacity" values="1;0.55;1" dur="5s" repeatCount="indefinite" />
-                    </path>
-                    <path d="M55.2 33.2H63.1" stroke="#8D5B61" strokeWidth="1.2" strokeLinecap="round">
-                      <animate attributeName="opacity" values="1;0.55;1" dur="5s" repeatCount="indefinite" />
-                    </path>
-                    <path d="M55.8 37.1H63.8" stroke="#8D5B61" strokeWidth="1.2" strokeLinecap="round">
-                      <animate attributeName="opacity" values="1;0.55;1" dur="5s" repeatCount="indefinite" />
-                    </path>
-                    <path d="M55.2 41H63.1" stroke="#8D5B61" strokeWidth="1.2" strokeLinecap="round">
-                      <animate attributeName="opacity" values="1;0.55;1" dur="5s" repeatCount="indefinite" />
-                    </path>
-                    <circle cx="24.2" cy="30.2" r="1.15" fill="#FFE6F0" />
-                    <circle cx="46.6" cy="30.2" r="1.15" fill="#FFE6F0" />
-                    <ellipse cx="28.3" cy="47.8" rx="2.6" ry="1.75" fill="#DDB08D" />
-                    <ellipse cx="43.1" cy="47.8" rx="2.6" ry="1.75" fill="#DDB08D" />
-                    <path d="M48 49C56 51 57 58 51.8 61" stroke="#C58F6C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <animateTransform attributeName="transform" type="rotate" values="0 48 49;10 48 49;0 48 49;-10 48 49;0 48 49" dur="2.8s" repeatCount="indefinite" />
-                    </path>
-                  </g>
-                </svg>
-                <span className="absolute -right-1 -bottom-1 rounded-full bg-[#FAE452] px-1.5 py-0.5 text-[8px] font-black text-[#2E3093] shadow-sm">meow</span>
-                <span className="absolute -right-2 -top-2 text-[10px] animate-pulse" aria-hidden="true">💗</span>
-              </div>
-              <div className="flex min-w-0 flex-col gap-1.5">
-                <div className="relative max-w-[12.5rem] rounded-2xl rounded-bl-md border border-white/80 bg-white/95 px-2.5 py-1.5 text-[10px] font-semibold text-[#8A3D67] shadow-sm animate-pulse [animation-duration:3.6s]">
-                  {CBD_CUTE_QUOTES[cuteQuoteIndex]}
-                  <span className="ml-1 inline-flex items-center gap-0.5 align-middle">
-                    <span className="h-1 w-1 rounded-full bg-[#9D3B73] animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="h-1 w-1 rounded-full bg-[#9D3B73] animate-bounce" style={{ animationDelay: '140ms' }} />
-                    <span className="h-1 w-1 rounded-full bg-[#9D3B73] animate-bounce" style={{ animationDelay: '280ms' }} />
-                  </span>
-                  <span className="absolute -left-1 bottom-1 h-2.5 w-2.5 rotate-45 border-l border-b border-white/80 bg-white/95" aria-hidden="true" />
-                </div>
-                <div className="relative max-w-[12.5rem] rounded-2xl rounded-bl-md border border-[#FFD7E3] bg-[#FFF7FA] px-2.5 py-1.5 text-[10px] font-medium text-[#9D3B73] shadow-sm animate-pulse [animation-duration:4.8s]">
-                  {activeDepartment === 'cbd' && showCbdCuteNotes && currentCbdCuteNote
-                    ? currentCbdCuteNote.title
-                    : 'Mochi is keeping your dashboard cozy.'}
-                  <span className="absolute -left-1 bottom-1 h-2.5 w-2.5 rotate-45 border-l border-b border-[#FFD7E3] bg-[#FFF7FA]" aria-hidden="true" />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
-      </div>
-      <div className="flex items-center gap-3 flex-wrap justify-end">
         {canSwitchDepartmentDashboard && (
           <select
             value={adminSelectedDepartment}
             onChange={(e) => handleAdminDepartmentChange(e.target.value as DashboardDepartment)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25"
+            className="mt-2 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25 text-gray-700"
             aria-label="Switch dashboard department"
           >
             <option value="administration">Administration</option>
@@ -506,7 +310,9 @@ export default function DashboardPage() {
             <option value="training_and_development">Training and Development</option>
           </select>
         )}
+      </div>
 
+      <div className="flex items-center gap-3 flex-wrap justify-end">
         {showConsultancyFollowupPopup && (
           <button
             type="button"
@@ -531,41 +337,31 @@ export default function DashboardPage() {
     </div>
   );
 
-  // Fetch dashboard data (stale-while-revalidate)
+  // Fetch dashboard data live from the API and refresh on an interval.
   useEffect(() => {
     let cancelled = false;
-    const cacheKey = 'sit-dashboard-cache';
-
-    // Try to show cached data instantly
-    try {
-      const cached = sessionStorage.getItem(cacheKey);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed.dept === activeDepartment && Date.now() - parsed.ts < 5 * 60 * 1000) {
-          if (!cancelled) { setData(parsed.data); setLoading(false); }
-        }
-      }
-    } catch { /* ignore */ }
-
-    // Always fetch fresh data in background
-    const fetchDashboard = async () => {
-      if (!data) setLoading(true);
+    const fetchDashboard = async (isBackgroundRefresh = false) => {
+      if (!isBackgroundRefresh) setLoading(true);
       try {
-        const r = await fetch(`/api/dashboard?dept=${activeDepartment}`);
+        const r = await fetch(`/api/dashboard?dept=${activeDepartment}`, { cache: 'no-store' });
         if (!r.ok) throw new Error('Failed');
         const d = await r.json();
         if (!cancelled) {
           setData(d);
           setLoading(false);
-          try { sessionStorage.setItem(cacheKey, JSON.stringify({ dept: activeDepartment, data: d, ts: Date.now() })); } catch { /* quota */ }
         }
       } catch {
         if (!cancelled) setLoading(false);
       }
     };
-    fetchDashboard();
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchDashboard(false);
+    const refreshId = window.setInterval(() => {
+      fetchDashboard(true);
+    }, 15000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshId);
+    };
   }, [activeDepartment]);
 
   // Load todos from localStorage
@@ -631,10 +427,10 @@ export default function DashboardPage() {
       <div className="space-y-4">
         {/* ── CBD Department Header ── */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-5 py-4">
+          <div className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
 
             {/* Left — greeting + clock */}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-base font-bold text-gray-900 truncate">{greeting}, {profileName}</p>
               <p className="flex items-center gap-1.5 text-xs text-gray-400 mt-0.5">
                 <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
@@ -642,6 +438,7 @@ export default function DashboardPage() {
                 </svg>
                 {clockText}
               </p>
+
               {canSwitchDepartmentDashboard && (
                 <select
                   value={adminSelectedDepartment}
@@ -658,72 +455,8 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Centre — Mochi mascot, standalone and proud */}
-            <div className="flex flex-col items-center gap-1.5 select-none" aria-hidden="true">
-              <svg
-                className="w-20 h-20 drop-shadow-[0_4px_12px_rgba(149,67,93,0.14)]"
-                viewBox="0 0 72 72"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <defs>
-                  <linearGradient id="mochiFur2" x1="16" y1="16" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#FFF7EA" />
-                    <stop offset="0.6" stopColor="#F3D2B0" />
-                    <stop offset="1" stopColor="#D4A67F" />
-                  </linearGradient>
-                  <radialGradient id="mochiGlow2" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(36 34) rotate(90) scale(27)">
-                    <stop stopColor="#FFFDF8" />
-                    <stop offset="1" stopColor="#FFFDF8" stopOpacity="0" />
-                  </radialGradient>
-                </defs>
-                <g>
-                  <animateTransform attributeName="transform" type="translate" values="0 0;0 -2;0 0" dur="4s" repeatCount="indefinite" />
-                  <ellipse cx="36" cy="35" rx="27" ry="25" fill="url(#mochiGlow2)" />
-                  <path d="M16 28L13 13L26 22.5L16 28Z" fill="#E3B38D" />
-                  <path d="M56 28L59 13L46 22.5L56 28Z" fill="#E3B38D" />
-                  <path d="M20 30C20 23.1 25.4 17.5 32.2 17.5H39.8C46.6 17.5 52 23.1 52 30V42.6C52 51 45.2 57.8 36.8 57.8H35.2C26.8 57.8 20 51 20 42.6V30Z" fill="url(#mochiFur2)" />
-                  <path d="M23.5 31.5C23.5 27.1 27.1 23.5 31.5 23.5H40.5C44.9 23.5 48.5 27.1 48.5 31.5V41.8C48.5 47.1 44.2 51.4 38.9 51.4H33.1C27.8 51.4 23.5 47.1 23.5 41.8V31.5Z" fill="#FDE9D6" fillOpacity="0.98" />
-                  <path d="M24.1 23.6C24.1 23.6 22.2 18.4 18.2 15.2C17 20.8 18.3 24.8 20.3 27.8" fill="#E3B38D" />
-                  <path d="M47.9 23.6C47.9 23.6 49.8 18.4 53.8 15.2C55 20.8 53.7 24.8 51.7 27.8" fill="#E3B38D" />
-                  <ellipse cx="28.2" cy="36.1" rx="1.8" ry="2.5" fill="#251815">
-                    <animate attributeName="ry" values="2.5;0.3;2.5" dur="4.8s" repeatCount="indefinite" />
-                  </ellipse>
-                  <ellipse cx="43.8" cy="36.1" rx="1.8" ry="2.5" fill="#251815">
-                    <animate attributeName="ry" values="2.5;0.3;2.5" dur="4.8s" repeatCount="indefinite" />
-                  </ellipse>
-                  <circle cx="27.8" cy="35.3" r="0.5" fill="#FFFFFF" />
-                  <circle cx="43.4" cy="35.3" r="0.5" fill="#FFFFFF" />
-                  <path d="M35.7 39.4L33.9 40.9H37.5L35.7 39.4Z" fill="#F09DB0" />
-                  <path d="M35.7 40.9V44.3" stroke="#8D5B61" strokeWidth="1.35" strokeLinecap="round" />
-                  <path d="M35.7 44.3C33.8 46.1 31.9 46.6 29.9 46.3" stroke="#8D5B61" strokeWidth="1.35" strokeLinecap="round" />
-                  <path d="M35.7 44.3C37.6 46.1 39.5 46.6 41.5 46.3" stroke="#8D5B61" strokeWidth="1.35" strokeLinecap="round" />
-                  <path d="M16.8 33.2H8.9" stroke="#8D5B61" strokeWidth="1.2" strokeLinecap="round">
-                    <animate attributeName="opacity" values="1;0.4;1" dur="5.5s" repeatCount="indefinite" />
-                  </path>
-                  <path d="M16.2 37.1H8.2" stroke="#8D5B61" strokeWidth="1.2" strokeLinecap="round">
-                    <animate attributeName="opacity" values="1;0.4;1" dur="5.5s" repeatCount="indefinite" />
-                  </path>
-                  <path d="M55.2 33.2H63.1" stroke="#8D5B61" strokeWidth="1.2" strokeLinecap="round">
-                    <animate attributeName="opacity" values="1;0.4;1" dur="5.5s" repeatCount="indefinite" />
-                  </path>
-                  <path d="M55.8 37.1H63.8" stroke="#8D5B61" strokeWidth="1.2" strokeLinecap="round">
-                    <animate attributeName="opacity" values="1;0.4;1" dur="5.5s" repeatCount="indefinite" />
-                  </path>
-                  <circle cx="24.2" cy="30.2" r="1.15" fill="#FFE6F0" />
-                  <circle cx="46.6" cy="30.2" r="1.15" fill="#FFE6F0" />
-                  <ellipse cx="28.3" cy="47.8" rx="2.6" ry="1.75" fill="#DDB08D" />
-                  <ellipse cx="43.1" cy="47.8" rx="2.6" ry="1.75" fill="#DDB08D" />
-                  <path d="M48 49C56 51 57 58 51.8 61" stroke="#C58F6C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <animateTransform attributeName="transform" type="rotate" values="0 48 49;8 48 49;0 48 49;-8 48 49;0 48 49" dur="3.2s" repeatCount="indefinite" />
-                  </path>
-                </g>
-              </svg>
-              <span className="text-[9px] font-black uppercase tracking-[0.22em] text-gray-300">Mochi</span>
-            </div>
-
             {/* Right — actions */}
-            <div className="flex items-center justify-end gap-2 flex-wrap">
+            <div className="flex items-center justify-end gap-2 flex-wrap sm:self-start">
               {showConsultancyFollowupPopup && (
                 <button
                   type="button"
@@ -742,11 +475,6 @@ export default function DashboardPage() {
                 </button>
               )}
             </div>
-          </div>
-
-          {/* Quote strip */}
-          <div className="border-t border-gray-100 px-5 py-2 text-[11px] text-gray-400 italic">
-            &ldquo;{CBD_CUTE_QUOTES[cuteQuoteIndex]}&rdquo;
           </div>
         </div>
         <CbdDashboard data={data} loading={loading} />

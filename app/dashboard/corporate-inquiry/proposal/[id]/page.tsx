@@ -631,63 +631,337 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
     if (downloadingWord) return;
     setDownloadingWord(true);
     try {
-      const styleMatch = previewHtml.match(/<style>([\s\S]*?)<\/style>/i);
-      const baseStyles = styleMatch?.[1] || '';
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const logoUrl = `${origin}/sit.png`;
 
-      const sectionMatches = Array.from(previewHtml.matchAll(/<section class="page">[\s\S]*?<\/section>/g));
-      const sections = sectionMatches
-        .map((m) => m[0].replace('class="page"', 'class="word-page"'))
-        .map((s) => s.replace(/<a\s+href="[^"]*"\s+download="([^"]+)"[^>]*>(.*?)<\/a>/g, '$1'));
+      const e = (v: unknown) =>
+        String(v ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
 
-      if (sections.length === 0) {
-        throw new Error('Unable to prepare proposal pages for Word export.');
-      }
+      /* ── Training rows ── */
+      const trainingRowsHtml = trainingData.days.map(day => {
+        const subs = day.subRows.length ? day.subRows : [{ topic: '', assessment: '', trainer: '' }];
+        const rs = subs.length;
+        return subs.map((sr, si) => `<tr>
+          ${si === 0 ? `<td rowspan="${rs}" style="border:1pt solid #999;padding:4pt 5pt;vertical-align:top;">${e(day.date || day.label || '')}</td>` : ''}
+          ${si === 0 ? `<td rowspan="${rs}" style="border:1pt solid #999;padding:4pt 5pt;vertical-align:top;">${e(day.time || '')}</td>` : ''}
+          ${si === 0 ? `<td rowspan="${rs}" style="border:1pt solid #999;padding:4pt 5pt;vertical-align:top;font-weight:bold;">${e(day.mainTopic || '')}</td>` : ''}
+          <td style="border:1pt solid #999;padding:4pt 5pt;">${e(sr.topic || '')}</td>
+          <td style="border:1pt solid #999;padding:4pt 5pt;text-align:center;font-weight:bold;color:#CC0000;">${e(sr.assessment || '')}</td>
+          <td style="border:1pt solid #999;padding:4pt 5pt;">${e(sr.trainer || '')}</td>
+        </tr>`).join('');
+      }).join('');
 
-      const cleanedStyles = baseStyles
-        .replace(/body::before\s*\{[\s\S]*?\}/g, '')
-        .replace(/\.page\s*\{[\s\S]*?\}/g, '')
-        .replace(/\.page\s*\+\s*\.page\s*\{[\s\S]*?\}/g, '');
+      /* ── Quotation rows ── */
+      const quoteBody = quotationData.sections.map(sec => {
+        const items = sec.items.map((item, iIdx) => {
+          const t = toNum(item.total) > 0 ? toNum(item.total) : toNum(item.days) * toNum(item.perDay);
+          return `<tr>
+            <td style="border:1pt solid #999;padding:4pt 5pt;text-align:center;">${iIdx + 1}</td>
+            <td style="border:1pt solid #999;padding:4pt 5pt;">${e(item.description || '')}${item.branch ? ` <b>(${e(item.branch)})</b>` : ''}</td>
+            <td style="border:1pt solid #999;padding:4pt 5pt;text-align:center;">${e(item.days || 'NA')}</td>
+            <td style="border:1pt solid #999;padding:4pt 5pt;text-align:right;">${item.perDay ? fmtINR(toNum(item.perDay)) : 'NA'}</td>
+            <td style="border:1pt solid #999;padding:4pt 5pt;text-align:right;">${t > 0 ? fmtINR(t) : 'NA'}</td>
+          </tr>`;
+        }).join('');
+        return `<tr style="background:#F2B860;">
+          <td style="border:1pt solid #999;padding:5pt;font-weight:bold;text-align:center;">${e(sec.label)}</td>
+          <td colspan="4" style="border:1pt solid #999;padding:5pt;font-weight:bold;">${e(sec.title)}</td>
+        </tr>${items}`;
+      }).join('');
 
       const wordHtml = `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns:v="urn:schemas-microsoft-com:vml"
+      xmlns:w10="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
 <head>
-  <meta charset="utf-8" />
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-  <!--[if gte mso 9]>
-  <xml>
-    <w:WordDocument>
-      <w:View>Print</w:View>
-      <w:Zoom>100</w:Zoom>
-      <w:DoNotOptimizeForBrowser/>
-    </w:WordDocument>
-  </xml>
-  <![endif]-->
-  <style>
-    @page { size: A4; margin: 18mm 14mm; }
-    body { margin: 0; padding: 0; font-family: Calibri, "Segoe UI", Arial, sans-serif; color: #1a1a1a; }
-    .word-page { width: 100%; min-height: auto; padding: 0; }
-    .word-page-break { page-break-before: always; break-before: page; }
-    ${cleanedStyles}
-  </style>
+<meta charset="utf-8"/>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<!--[if gte mso 9]><xml>
+<w:WordDocument>
+  <w:View>Print</w:View>
+  <w:Zoom>100</w:Zoom>
+  <w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml><![endif]-->
+<style>
+@page Section1 {
+  size:595.3pt 841.9pt;
+  margin:80pt 50pt 70pt 50pt;
+  mso-header:h1;
+  mso-footer:f1;
+  mso-header-margin:10pt;
+  mso-footer-margin:10pt;
+  mso-paper-source:0;
+}
+div.Section1 { page:Section1; }
+body,p,td,th,li { font-family:Calibri,sans-serif; font-size:11pt; color:#1A1A1A; }
+body { margin:0; padding:0; line-height:1.45; }
+p { margin:0 0 3pt 0; }
+table { border-collapse:collapse; }
+.pgbrk { page-break-before:always; mso-break-type:section-break; }
+</style>
 </head>
 <body>
-${sections
-  .map((section, idx) =>
-    idx < sections.length - 1 ? `${section}<div class="word-page-break"></div>` : section
-  )
-  .join('')}
+
+<!-- ═══ HEADER ═══ -->
+<div style="mso-element:header" id="h1">
+<!--[if gte vml 1]><v:shape id="WM" type="#_x0000_t75"
+  style="position:absolute;left:0;top:0;
+         width:300pt;height:180pt;z-index:-251658240;
+         mso-position-horizontal:center;mso-position-horizontal-relative:margin;
+         mso-position-vertical:center;mso-position-vertical-relative:margin;"
+  stroked="f" filled="f">
+  <v:imagedata src="${logoUrl}" o:title="" gain="19661" blacklevel="23000"/>
+  <w10:wrap type="none"/>
+  <w10:anchorlock/>
+</v:shape><![endif]-->
+<table style="width:100%;border:none;border-collapse:collapse;">
+  <tr>
+    <td style="border:none;padding:1pt 3pt;text-align:center;width:22%;">
+      <img src="${logoUrl}" alt="SIT" style="height:34pt;width:auto;"/>
+    </td>
+    <td style="border:none;padding:1pt 3pt;text-align:center;width:18%;">
+      <p style="font-size:14pt;font-weight:bold;color:#2E3093;margin:0;line-height:1;">EC</p>
+      <p style="font-size:10pt;font-weight:bold;color:#2E3093;margin:0;">ITB</p>
+    </td>
+    <td style="border:none;padding:1pt 3pt;text-align:center;width:20%;">
+      <p style="font-size:9pt;font-weight:bold;margin:0;">Skill India</p>
+      <p style="font-size:7pt;color:#555;margin:0;">&#2360;&#2381;&#2325;&#2367;&#2354; &#2311;&#2306;&#2337;&#2367;&#2351;&#2366;</p>
+    </td>
+    <td style="border:none;padding:1pt 3pt;text-align:center;width:20%;">
+      <p style="font-size:9pt;font-weight:bold;margin:0;">N&middot;S&middot;D&middot;C</p>
+      <p style="font-size:7pt;color:#555;margin:0;">National Skill Development Corporation</p>
+    </td>
+    <td style="border:none;width:20%;"></td>
+  </tr>
+</table>
+<p style="font-size:14pt;font-weight:bold;text-align:center;margin:0;padding:3pt 6pt;border-top:2.25pt solid #2E3093;border-bottom:0.75pt solid #AAAAAA;font-family:Calibri,sans-serif;">Suvidya Institute of Technology Pvt. Ltd.</p>
+<p style="font-size:8.5pt;font-weight:bold;text-align:center;margin:0;padding:2pt 6pt;border-bottom:2.25pt solid #2E3093;background:#F0F0F0;font-family:Calibri,sans-serif;">Making Everyone Eligible For Strengthening Companies To Contribute In Making Nation Technologically Self-Reliant.</p>
+</div>
+
+<!-- ═══ FOOTER ═══ -->
+<div style="mso-element:footer" id="f1">
+<table style="width:100%;border:none;border-collapse:collapse;border-top:0.75pt solid #AAAAAA;">
+  <tr>
+    <td style="border:none;border-right:0.75pt solid #AAAAAA;padding:2pt 4pt;width:52%;vertical-align:top;">
+      <p style="font-size:7.5pt;font-weight:bold;margin:0;">M/s.Suvidya Institute of Technology Pvt. Ltd.</p>
+      <p style="font-size:7pt;margin:0;color:#444;">18/140, Anand Nagar, Near Vakola Police Station, Santacruz (East), Mumbai-400055, Maharashtra, <b>INDIA</b>.</p>
+      <p style="font-size:7pt;margin:0;color:#444;">P:0091-22-26682290&nbsp;&nbsp;M:0091-9167219403&nbsp;&nbsp;Web:www.suvidya.ac.in</p>
+    </td>
+    <td style="border:none;border-right:0.75pt solid #AAAAAA;padding:2pt 5pt;width:12%;text-align:center;vertical-align:middle;">
+      <p style="font-size:9pt;font-weight:bold;margin:0;">Page&nbsp;<!--[if supportFields]><span style="mso-element:field-begin"></span>PAGE<span style="mso-element:field-separator"></span><![endif]-->1<!--[if supportFields]><span style="mso-element:field-end"></span><![endif]-->&nbsp;of&nbsp;<!--[if supportFields]><span style="mso-element:field-begin"></span>NUMPAGES<span style="mso-element:field-separator"></span><![endif]-->4<!--[if supportFields]><span style="mso-element:field-end"></span><![endif]--></p>
+    </td>
+    <td style="border:none;padding:2pt 4pt;width:36%;vertical-align:top;">
+      <p style="font-size:7pt;margin:0;color:#444;">This Training Proposal is sole property of <b>Suvidya Institute of Technology Pvt. Ltd.</b>, prepared to enhance skills of actual working. Printing and/or copying invalidate the proposal.</p>
+    </td>
+  </tr>
+</table>
+<p style="font-size:8pt;margin:1pt 0 0 0;font-family:Calibri,sans-serif;">(F/CT/03/00)</p>
+</div>
+
+<div class="Section1">
+
+<!-- ════ PAGE 1 : COVER ════ -->
+<table style="width:100%;border:none;border-collapse:collapse;margin-bottom:10pt;">
+  <tr>
+    <td style="border:none;padding:0;"><b>Ref. No.</b>&nbsp;&nbsp;${e(proposalRefNo || '')}</td>
+    <td style="border:none;padding:0;text-align:right;"><b>Date :</b>&nbsp;&nbsp;${e(proposalDate || '')}</td>
+  </tr>
+</table>
+
+<p style="text-align:center;font-size:36pt;font-weight:bold;letter-spacing:5pt;margin:28pt 0 10pt 0;font-family:Calibri,sans-serif;">PROPOSAL</p>
+<p style="text-align:center;font-size:13pt;font-weight:bold;margin:0 0 2pt 0;font-family:Calibri,sans-serif;">Corporate Training</p>
+<p style="text-align:center;font-size:11pt;color:#555;margin:0 0 2pt 0;font-family:Calibri,sans-serif;">on</p>
+<p style="text-align:center;font-size:16pt;font-weight:bold;margin:0 0 28pt 0;font-family:Calibri,sans-serif;">${e(proposalTitle || '')}</p>
+
+<p style="text-align:center;margin:30pt 0 30pt 0;">
+  <img src="${logoUrl}" alt="SIT" style="width:160pt;height:auto;opacity:0.10;filter:alpha(opacity=10);"/>
+</p>
+
+<table align="center" style="width:60%;border:none;border-collapse:collapse;margin:0 auto;">
+  <tr>
+    <td style="border:none;padding:8pt 10pt;text-align:center;border-bottom:0.75pt solid #EEEEEE;">
+      <p style="font-size:11pt;font-weight:bold;margin:0 0 3pt 0;color:#555;font-family:Calibri,sans-serif;">Client</p>
+      <p style="font-size:13pt;font-weight:bold;margin:0;font-family:Calibri,sans-serif;">${e(clientName || companyName || '')}</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="border:none;padding:8pt 10pt;text-align:center;">
+      <p style="font-size:11pt;font-weight:bold;margin:0 0 3pt 0;color:#555;font-family:Calibri,sans-serif;">Venue</p>
+      <p style="font-size:12pt;margin:0;font-family:Calibri,sans-serif;">${e(venue || '')}</p>
+    </td>
+  </tr>
+</table>
+
+<div class="pgbrk"></div>
+
+<!-- ════ PAGE 2 : ABOUT ORGANISATION ════ -->
+<p style="font-size:14pt;font-weight:bold;text-align:center;margin:0 0 10pt 0;padding-bottom:4pt;border-bottom:1pt solid #AAAAAA;font-family:Calibri,sans-serif;">About Our Organisation</p>
+<div style="white-space:pre-wrap;font-size:11pt;line-height:1.5;text-align:justify;font-family:Calibri,sans-serif;">${e(aboutOrganisation || '')}</div>
+
+<div class="pgbrk"></div>
+
+<!-- ════ PAGE 3 : TRAINING CONTENTS ════ -->
+<p style="background:#FFD700;text-align:center;padding:5pt 8pt;font-weight:bold;font-size:13pt;margin:0;border:0.75pt solid #999;font-family:Calibri,sans-serif;">${e((quotationData.recipientCompany || clientName || companyName || '') + (trainingData.venue || venue ? ' – ' + (trainingData.venue || venue) : ''))}</p>
+<p style="background:#F5F5DC;text-align:center;padding:4pt 8pt;font-weight:bold;font-size:11pt;margin:0;border:0.75pt solid #999;border-top:none;font-family:Calibri,sans-serif;">${e(trainingData.title || proposalTitle || '')}</p>
+${trainingData.participantsDesc ? `<p style="padding:4pt 8pt;font-size:11pt;margin:0;border:0.75pt solid #999;border-top:none;background:#FFFEF0;font-family:Calibri,sans-serif;"><b>Participants –</b> ${e(trainingData.participantsDesc)}</p>` : ''}
+
+<table style="width:100%;border-collapse:collapse;font-size:11pt;margin-top:0;">
+  <thead>
+    <tr style="background:#F2F2F2;">
+      <th style="border:0.75pt solid #999;padding:4pt 5pt;text-align:left;width:52pt;font-family:Calibri,sans-serif;">Date</th>
+      <th style="border:0.75pt solid #999;padding:4pt 5pt;text-align:left;width:64pt;font-family:Calibri,sans-serif;">Time</th>
+      <th style="border:0.75pt solid #999;padding:4pt 5pt;text-align:left;width:90pt;font-family:Calibri,sans-serif;">Main Topic</th>
+      <th style="border:0.75pt solid #999;padding:4pt 5pt;text-align:left;font-family:Calibri,sans-serif;">Sub Topics</th>
+      <th style="border:0.75pt solid #999;padding:4pt 5pt;text-align:center;width:56pt;font-family:Calibri,sans-serif;">Assessment Test</th>
+      <th style="border:0.75pt solid #999;padding:4pt 5pt;text-align:left;width:65pt;font-family:Calibri,sans-serif;">Trainer</th>
+    </tr>
+  </thead>
+  <tbody>${trainingRowsHtml}</tbody>
+</table>
+
+${trainingData.pleaseNote.length ? `<table style="width:100%;border:0.75pt solid #999;margin-top:6pt;border-collapse:collapse;">
+  <tr>
+    <td style="border:none;padding:5pt 8pt;font-weight:bold;vertical-align:top;width:80pt;font-family:Calibri,sans-serif;font-size:11pt;">Please Note :</td>
+    <td style="border:none;padding:5pt 8pt;font-family:Calibri,sans-serif;font-size:11pt;">
+      ${trainingData.pleaseNote.map((n, i) => `<p style="margin:1pt 0;">${i + 1}) ${e(n)}</p>`).join('')}
+    </td>
+  </tr>
+</table>` : ''}
+
+<div class="pgbrk"></div>
+
+<!-- ════ PAGE 4 : PROFORMA INVOICE ════ -->
+<table style="width:100%;border:0.75pt solid #AAAAAA;border-collapse:collapse;background:#F9F9F9;">
+  <tr>
+    <td style="border:none;padding:6pt 8pt;width:44pt;vertical-align:middle;">
+      <img src="${logoUrl}" alt="SIT" style="width:34pt;height:auto;"/>
+    </td>
+    <td style="border:none;padding:6pt 8pt;vertical-align:middle;">
+      <p style="font-size:13pt;font-weight:bold;margin:0;font-family:Calibri,sans-serif;">${e(quotationData.recipientCompany || clientName || companyName || '')}</p>
+      ${quotationData.recipientAddress ? `<p style="font-size:9pt;color:#555;margin:0;font-family:Calibri,sans-serif;">${e(quotationData.recipientAddress)}</p>` : ''}
+    </td>
+  </tr>
+</table>
+<p style="background:#FFFF99;border:0.75pt solid #AAAAAA;border-top:none;text-align:center;padding:5pt;font-weight:bold;font-size:13pt;margin:0;letter-spacing:0.5pt;font-family:Calibri,sans-serif;">Proforma Invoice</p>
+
+<table style="width:100%;border-collapse:collapse;font-size:11pt;">
+  <tr>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;width:30%;vertical-align:top;">Company Authority :<br/><span style="font-weight:normal;white-space:pre-wrap;">${e(quotationData.companyAuthority || '')}</span></td>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;width:20%;">Pro. Invoice No.</td>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;" colspan="2">${e(quotationData.proformaInvoiceNo || '')}</td>
+  </tr>
+  <tr>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;vertical-align:top;white-space:pre-wrap;"><b>Participants Details :</b> ${e(quotationData.participantsDetails || '')}</td>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;">Date</td>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;" colspan="2">${e(quotationData.invoiceDate || '')}</td>
+  </tr>
+  <tr>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;"><b>Participants :</b> ${e(quotationData.participants || '')}</td>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;">Client Ref.</td>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;">${e(quotationData.clientRef || '')}</td>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;"><b>Enquiry Date :</b> ${e(quotationData.enquiryDate || '')}</td>
+  </tr>
+  <tr>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;"><b>Training Mode :</b> ${e(quotationData.trainingMode || '')}</td>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;">Training Location</td>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;" colspan="2">${e(quotationData.trainingLocation || '')}</td>
+  </tr>
+  <tr>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;"><b>Department :</b> ${e(quotationData.department || '')}</td>
+    <td colspan="3" style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;"></td>
+  </tr>
+</table>
+
+<p style="font-weight:bold;margin:5pt 0 0 0;border:0.75pt solid #AAAAAA;border-bottom:none;padding:4pt 6pt;background:#F2B860;font-family:Calibri,sans-serif;font-size:11pt;">DISCRIPTION</p>
+<table style="width:100%;border-collapse:collapse;font-size:11pt;">
+  <thead>
+    <tr style="background:#F2B860;">
+      <th style="border:0.75pt solid #AAAAAA;padding:4pt 5pt;text-align:center;width:26pt;font-family:Calibri,sans-serif;">&nbsp;</th>
+      <th style="border:0.75pt solid #AAAAAA;padding:4pt 5pt;text-align:left;font-family:Calibri,sans-serif;">Description</th>
+      <th style="border:0.75pt solid #AAAAAA;padding:4pt 5pt;text-align:center;width:58pt;font-family:Calibri,sans-serif;">Total Days</th>
+      <th style="border:0.75pt solid #AAAAAA;padding:4pt 5pt;text-align:right;width:78pt;font-family:Calibri,sans-serif;">Per Day Cost (Rs.)</th>
+      <th style="border:0.75pt solid #AAAAAA;padding:4pt 5pt;text-align:right;width:78pt;font-family:Calibri,sans-serif;">Total Cost (Rs.)</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${quoteBody}
+    <tr>
+      <td colspan="4" style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;font-family:Calibri,sans-serif;">Training &amp; Expenses Cost Before GST</td>
+      <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;text-align:right;font-weight:bold;font-family:Calibri,sans-serif;">${fmtINR(quotationTotals.subtotal)}</td>
+    </tr>
+    <tr>
+      <td colspan="4" style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-family:Calibri,sans-serif;">Add : GST @ ${e(quotationData.gstPercent || '18')}%</td>
+      <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;text-align:right;font-family:Calibri,sans-serif;">${fmtINR(quotationTotals.gst)}</td>
+    </tr>
+    <tr style="background:#FFFF99;">
+      <td colspan="4" style="border:0.75pt solid #AAAAAA;padding:5pt 6pt;font-weight:bold;font-family:Calibri,sans-serif;">Training &amp; Expenses Cost After GST</td>
+      <td style="border:0.75pt solid #AAAAAA;padding:5pt 6pt;text-align:right;font-weight:bold;font-size:12pt;font-family:Calibri,sans-serif;">${fmtINR(quotationTotals.grand)}</td>
+    </tr>
+  </tbody>
+</table>
+
+${`${quotationData.bankDetails ? `<table style="width:100%;border-collapse:collapse;font-size:11pt;margin-top:0;">
+  <tr style="background:#F2B860;">
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;width:18pt;font-family:Calibri,sans-serif;">C</td>
+    <td colspan="4" style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;font-family:Calibri,sans-serif;">Bank details for Payment &amp; Terms :</td>
+  </tr>
+  <tr>
+    <td colspan="5" style="border:0.75pt solid #AAAAAA;padding:5pt 8pt;">
+      <div style="white-space:pre-wrap;font-family:Calibri,sans-serif;font-size:11pt;">${e(quotationData.bankDetails)}</div>
+    </td>
+  </tr>
+</table>` : ''}`}
+
+${`${quotationData.coordinator ? `<table style="width:100%;border-collapse:collapse;font-size:11pt;margin-top:0;">
+  <tr style="background:#F2B860;">
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;width:18pt;font-family:Calibri,sans-serif;">D</td>
+    <td colspan="4" style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;font-family:Calibri,sans-serif;">SIT Coordinator Team :</td>
+  </tr>
+  <tr>
+    <td colspan="5" style="border:0.75pt solid #AAAAAA;padding:5pt 8pt;">
+      <div style="white-space:pre-wrap;font-family:Calibri,sans-serif;font-size:11pt;">${e(quotationData.coordinator)}</div>
+    </td>
+  </tr>
+</table>` : ''}`}
+
+${`${quotationData.notes ? `<table style="width:100%;border-collapse:collapse;font-size:11pt;margin-top:0;">
+  <tr style="background:#F2B860;">
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;width:18pt;font-family:Calibri,sans-serif;">E</td>
+    <td colspan="4" style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;font-family:Calibri,sans-serif;">If Training at Company Premises, required following :</td>
+  </tr>
+  <tr>
+    <td colspan="5" style="border:0.75pt solid #AAAAAA;padding:5pt 8pt;">
+      <div style="white-space:pre-wrap;font-family:Calibri,sans-serif;font-size:11pt;">${e(quotationData.notes)}</div>
+    </td>
+  </tr>
+</table>` : ''}`}
+
+<table style="width:100%;border:none;border-collapse:collapse;margin-top:16pt;">
+  <tr>
+    <td style="border:none;width:50%;"></td>
+    <td style="border:none;text-align:center;width:50%;">
+      <div style="height:44pt;border-bottom:0.75pt solid #AAAAAA;width:78%;margin:0 auto;"></div>
+      <p style="font-size:11pt;font-weight:bold;text-align:center;margin:3pt 0 0 0;font-family:Calibri,sans-serif;">Authorised Signatory</p>
+      <p style="font-size:9pt;text-align:center;margin:1pt 0 0 0;font-family:Calibri,sans-serif;">For Suvidya Institute of Technology Pvt. Ltd.</p>
+    </td>
+  </tr>
+</table>
+
+</div>
 </body>
 </html>`;
 
-      const blob = new Blob(['\ufeff', wordHtml], {
-        type: 'application/msword;charset=utf-8',
-      });
-
+      const blob = new Blob(['﻿', wordHtml], { type: 'application/msword;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const safeRef = (proposalRefNo || `proposal-${id}`)
-        .replace(/\s+/g, '-')
-        .replace(/[^a-zA-Z0-9-_]/g, '');
+      const safeRef = (proposalRefNo || `proposal-${id}`).replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
       a.href = url;
       a.download = `${safeRef || `proposal-${id}`}.doc`;
       document.body.appendChild(a);
@@ -700,6 +974,7 @@ ${sections
       setDownloadingWord(false);
     }
   };
+
 
   if (permLoading) return <PermissionLoading />;
   if (!canUpdate) return <AccessDenied message="You do not have permission to make corporate training proposals." />;

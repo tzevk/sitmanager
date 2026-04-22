@@ -1,11 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { getPool, cached } from '@/lib/db';
+import { getPool } from '@/lib/db';
 import { requireAuth } from '@/lib/api-auth';
-
-// Cache TTLs (ms)
-const CACHE_TTL = 5 * 60 * 1000;           // 5 min — main dashboard
-const CACHE_TTL_STATS = 10 * 60 * 1000;    // 10 min — slow-moving counts
 
 // ── helper: safe query that never throws ──
 async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallback: T): Promise<T> {
@@ -24,16 +20,11 @@ export async function GET(request: NextRequest) {
     if (auth instanceof NextResponse) return auth;
     const { searchParams } = new URL(request.url);
     const dept = searchParams.get('dept') || 'unknown';
-    const isPlacement = dept === 'placement';
-    const result = isPlacement
-      ? await fetchDashboardData(dept)
-      : await cached(`dashboard:${dept}`, CACHE_TTL, () => fetchDashboardData(dept));
+    const result = await fetchDashboardData(dept);
 
     return NextResponse.json(result, {
       headers: {
-        'Cache-Control': isPlacement
-          ? 'private, no-store, max-age=0, must-revalidate'
-          : 'private, max-age=60, stale-while-revalidate=120',
+        'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
       },
     });
   } catch (error: unknown) {
@@ -995,31 +986,23 @@ async function fetchDashboardData(dept?: string) {
     `, []) : Promise.resolve([]),
 
     // 5. Quick stats (4 count queries)
-    needsQuickStats ? cached('qs:students', CACHE_TTL_STATS, () =>
-      safeQuery(
-        pool,
-        `SELECT COUNT(DISTINCT s.Student_Id) as cnt
-         FROM student_master s
-         WHERE (s.IsDelete IS NULL OR s.IsDelete = 0)
-           AND EXISTS (
-             SELECT 1
-             FROM admission_master a
-             WHERE a.Student_Id = s.Student_Id
-               AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
-               AND (a.Cancel IS NULL OR LOWER(TRIM(CAST(a.Cancel AS CHAR))) IN ('no', '0', 'false'))
-           )`,
-        [{ cnt: 0 }]
-      )
+    needsQuickStats ? safeQuery(
+      pool,
+      `SELECT COUNT(DISTINCT s.Student_Id) as cnt
+       FROM student_master s
+       WHERE (s.IsDelete IS NULL OR s.IsDelete = 0)
+         AND EXISTS (
+           SELECT 1
+           FROM admission_master a
+           WHERE a.Student_Id = s.Student_Id
+             AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
+             AND (a.Cancel IS NULL OR LOWER(TRIM(CAST(a.Cancel AS CHAR))) IN ('no', '0', 'false'))
+         )`,
+      [{ cnt: 0 }]
     ) : Promise.resolve([{cnt: 0}]),
-    needsQuickStats ? cached('qs:courses', CACHE_TTL_STATS, () =>
-      safeQuery(pool, "SELECT COUNT(*) as cnt FROM course_mst WHERE IsActive = 1 AND (IsDelete IS NULL OR IsDelete = 0)", [{ cnt: 0 }])
-    ) : Promise.resolve([{cnt: 0}]),
-    needsQuickStats ? cached('qs:batches', CACHE_TTL_STATS, () =>
-      safeQuery(pool, "SELECT COUNT(*) as cnt FROM batch_mst WHERE (IsDelete IS NULL OR IsDelete = 0) AND (Cancel IS NULL OR Cancel = 0) AND SDate <= CURDATE() AND EDate >= CURDATE()", [{ cnt: 0 }])
-    ) : Promise.resolve([{cnt: 0}]),
-    needsQuickStats ? cached('qs:faculty', CACHE_TTL_STATS, () =>
-      safeQuery(pool, "SELECT COUNT(*) as cnt FROM faculty_master WHERE (IsDelete IS NULL OR IsDelete = 0)", [{ cnt: 0 }])
-    ) : Promise.resolve([{cnt: 0}]),
+    needsQuickStats ? safeQuery(pool, "SELECT COUNT(*) as cnt FROM course_mst WHERE IsActive = 1 AND (IsDelete IS NULL OR IsDelete = 0)", [{ cnt: 0 }]) : Promise.resolve([{cnt: 0}]),
+    needsQuickStats ? safeQuery(pool, "SELECT COUNT(*) as cnt FROM batch_mst WHERE (IsDelete IS NULL OR IsDelete = 0) AND (Cancel IS NULL OR Cancel = 0) AND SDate <= CURDATE() AND EDate >= CURDATE()", [{ cnt: 0 }]) : Promise.resolve([{cnt: 0}]),
+    needsQuickStats ? safeQuery(pool, "SELECT COUNT(*) as cnt FROM faculty_master WHERE (IsDelete IS NULL OR IsDelete = 0)", [{ cnt: 0 }]) : Promise.resolve([{cnt: 0}]),
   ]);
 
   // ── Shape the response ──────────────────────────────────────────
