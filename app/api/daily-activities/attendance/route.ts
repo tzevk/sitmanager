@@ -25,7 +25,7 @@ async function ensureAttendanceTable(pool: any) {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
-    const [sessionCol] = await pool.query<any[]>(
+    const [sessionCol] = await pool.query(
       `SELECT COUNT(*) AS cnt
        FROM information_schema.COLUMNS
        WHERE TABLE_SCHEMA = DATABASE()
@@ -39,7 +39,7 @@ async function ensureAttendanceTable(pool: any) {
       );
     }
 
-    const [uniqIdx] = await pool.query<any[]>(
+    const [uniqIdx] = await pool.query(
       `SELECT COUNT(*) AS cnt
        FROM information_schema.STATISTICS
        WHERE TABLE_SCHEMA = DATABASE()
