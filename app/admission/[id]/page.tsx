@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -59,6 +59,9 @@ export default function PublicAdmissionFormPage() {
   const checkedCount = sectionChecks.filter(Boolean).length;
   const allSectionsChecked = checkedCount === 15;
   const [academicTab, setAcademicTab] = useState<'ssc' | 'hsc' | 'diploma' | 'graduation' | 'postgrad'>('ssc');
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftKey = `sit_admission_draft_${studentId}`;
 
   useEffect(() => {
     if (!isPreviewTermsMode) return;
@@ -88,11 +91,25 @@ export default function PublicAdmissionFormPage() {
     mobile: '',
     telephone: '',
     familyContact: '',
-    presentAddress: '',
+    presentFlat: '',
+    presentBuilding: '',
+    presentStreet: '',
+    presentArea: '',
+    presentLandmark: '',
     presentCity: '',
+    presentDistrict: '',
+    presentState: '',
     presentPin: '',
-    permanentAddress: '',
+    presentCountry: 'India',
+    permanentFlat: '',
+    permanentBuilding: '',
+    permanentStreet: '',
+    permanentArea: '',
+    permanentLandmark: '',
+    permanentCity: '',
+    permanentDistrict: '',
     permanentState: '',
+    permanentPin: '',
     permanentCountry: 'India',
     sameAsPresent: false,
     photoFile: null as File | null,
@@ -203,6 +220,52 @@ export default function PublicAdmissionFormPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId]);
 
+  // Restore draft from localStorage after server data loads
+  useEffect(() => {
+    if (loading) return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const { data } = JSON.parse(raw) as { data: typeof formData };
+      if (data) setFormData(prev => ({ ...prev, ...data }));
+    } catch { /* ignore corrupt draft */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
+  // Debounced auto-save to localStorage whenever formData changes
+  const saveDraft = useCallback(() => {
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    setAutoSaveStatus('saving');
+    autoSaveTimer.current = setTimeout(() => {
+      try {
+        // Strip File objects — they can't be serialised
+        const serialisable = {
+          ...formData,
+          photoFile: null,
+          ssc_marksheetFile: null,
+          hsc_marksheetFile: null,
+          diploma_marksheetFile: null,
+          grad_marksheetFile: null,
+          postgrad_marksheetFile: null,
+          ssc_ktDetails:      formData.ssc_ktDetails.map(d => ({ ...d, marksheetFile: null })),
+          hsc_ktDetails:      formData.hsc_ktDetails.map(d => ({ ...d, marksheetFile: null })),
+          diploma_ktDetails:  formData.diploma_ktDetails.map(d => ({ ...d, marksheetFile: null })),
+          grad_ktDetails:     formData.grad_ktDetails.map(d => ({ ...d, marksheetFile: null })),
+          postgrad_ktDetails: formData.postgrad_ktDetails.map(d => ({ ...d, marksheetFile: null })),
+        };
+        localStorage.setItem(draftKey, JSON.stringify({ data: serialisable, savedAt: Date.now() }));
+        setAutoSaveStatus('saved');
+      } catch { setAutoSaveStatus('idle'); }
+    }, 1500);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData, draftKey]);
+
+  useEffect(() => {
+    if (loading || submitted) return;
+    saveDraft();
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+  }, [formData, loading, submitted, saveDraft]);
+
   // Sync batchFees whenever batch selection or available batches change
   useEffect(() => {
     if (!formData.batchCode) { setBatchFees(null); return; }
@@ -310,15 +373,17 @@ export default function PublicAdmissionFormPage() {
 
   const fetchStudentData = async () => {
     try {
-      const res = await fetch(`/api/inquiry?id=${studentId}`);
+      const res = await fetch(`/api/public/inquiry?id=${studentId}`);
       const data = await res.json();
       if (data.inquiry) {
-        // Split name into firstName, middleName, lastName
         const nameParts = (data.inquiry.Student_Name || '').trim().split(/\s+/);
         const firstName = nameParts[0] || '';
         const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
         const middleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '';
-        
+
+        // DOB is already normalised to YYYY-MM-DD by the public API
+        const dob = data.inquiry.DOB ? String(data.inquiry.DOB).slice(0, 10) : '';
+
         setFormData(prev => ({
           ...prev,
           firstName,
@@ -327,21 +392,20 @@ export default function PublicAdmissionFormPage() {
           email: data.inquiry.Email || '',
           mobile: data.inquiry.Present_Mobile || '',
           telephone: data.inquiry.Present_Mobile2 || '',
-          dob: data.inquiry.DOB || '',
+          dob,
           gender: data.inquiry.Sex || '',
           nationality: data.inquiry.Nationality || 'Indian',
           presentCountry: data.inquiry.Present_Country || 'India',
           batchCode: data.inquiry.Batch_Code || '',
           trainingProgrammeId: data.inquiry.Course_Id ? String(data.inquiry.Course_Id) : '',
           trainingProgrammeName: data.inquiry.CourseName || '',
-          // Prefill education based on Qualification and Discipline
           grad_degree: data.inquiry.Qualification || '',
           grad_specialization: data.inquiry.Discipline || '',
-          grad_percentage: data.inquiry.Percentage || '',
+          grad_percentage: data.inquiry.Percentage ? String(data.inquiry.Percentage) : '',
         }));
       }
     } catch {
-      // Pre-fill not available; student fills in manually
+      // Pre-fill not critical — student can fill in manually
     } finally {
       setLoading(false);
     }
@@ -393,9 +457,16 @@ export default function PublicAdmissionFormPage() {
     if (checked) {
       setFormData(prev => ({
         ...prev,
-        permanentAddress: prev.presentAddress,
-        permanentState: prev.presentCity,
-        permanentCountry: 'India',
+        permanentFlat:     prev.presentFlat,
+        permanentBuilding: prev.presentBuilding,
+        permanentStreet:   prev.presentStreet,
+        permanentArea:     prev.presentArea,
+        permanentLandmark: prev.presentLandmark,
+        permanentCity:     prev.presentCity,
+        permanentDistrict: prev.presentDistrict,
+        permanentState:    prev.presentState,
+        permanentPin:      prev.presentPin,
+        permanentCountry:  prev.presentCountry,
       }));
     }
   };
@@ -497,11 +568,17 @@ export default function PublicAdmissionFormPage() {
         mobile: formData.mobile,
         telephone: formData.telephone,
         familyContact: formData.familyContact,
-        presentAddress: formData.presentAddress,
+        presentAddress: [formData.presentFlat, formData.presentBuilding, formData.presentStreet, formData.presentArea, formData.presentLandmark].filter(Boolean).join(', '),
         presentCity: formData.presentCity,
+        presentDistrict: formData.presentDistrict,
+        presentState: formData.presentState,
         presentPin: formData.presentPin,
-        permanentAddress: formData.permanentAddress,
+        presentCountry: formData.presentCountry,
+        permanentAddress: [formData.permanentFlat, formData.permanentBuilding, formData.permanentStreet, formData.permanentArea, formData.permanentLandmark].filter(Boolean).join(', '),
+        permanentCity: formData.permanentCity,
+        permanentDistrict: formData.permanentDistrict,
         permanentState: formData.permanentState,
+        permanentPin: formData.permanentPin,
         permanentCountry: formData.permanentCountry,
         ssc_board: formData.ssc_board,
         ssc_schoolName: formData.ssc_schoolName,
@@ -563,6 +640,7 @@ export default function PublicAdmissionFormPage() {
 
       const data = await res.json();
       if (res.ok && data.success) {
+        try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
         setSubmitted(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
@@ -662,9 +740,26 @@ export default function PublicAdmissionFormPage() {
               </div>
             </div>
           </div>
-          <div className="hidden sm:flex items-center gap-2 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5">
-            <i className="fas fa-hashtag text-white/60 text-xs"></i>
-            <span className="text-white text-xs font-semibold">Application #{studentId}</span>
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Auto-save indicator */}
+            {autoSaveStatus === 'saving' && (
+              <div className="flex items-center gap-1.5 bg-white/10 border border-white/20 rounded-lg px-2.5 py-1.5">
+                <div className="w-3 h-3 border-2 border-white/60 border-t-transparent rounded-full animate-spin" />
+                <span className="text-white/70 text-[11px] font-medium hidden sm:inline">Saving…</span>
+              </div>
+            )}
+            {autoSaveStatus === 'saved' && (
+              <div className="flex items-center gap-1.5 bg-white/10 border border-white/20 rounded-lg px-2.5 py-1.5">
+                <svg className="w-3 h-3 text-[#FAE452]" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="text-white/80 text-[11px] font-medium hidden sm:inline">Draft saved</span>
+              </div>
+            )}
+            <div className="hidden sm:flex items-center gap-2 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5">
+              <i className="fas fa-hashtag text-white/60 text-xs"></i>
+              <span className="text-white text-xs font-semibold">Application #{studentId}</span>
+            </div>
           </div>
         </div>
       </header>
@@ -888,7 +983,43 @@ export default function PublicAdmissionFormPage() {
                           </div>
                           <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Date of Birth <span className="text-red-500">*</span></label>
-                            <input type="date" value={formData.dob} onChange={(e) => handleChange('dob', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" required />
+                            {/* DD / MM / YYYY selects — browser-locale-independent */}
+                            <div className="flex items-center gap-1.5">
+                              {(() => {
+                                const [yyyy = '', mm = '', dd = ''] = (formData.dob || '').split('-');
+                                const selCls = 'flex-1 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all bg-white';
+                                const emit = (ndd: string, nmm: string, nyyyy: string) => {
+                                  if (ndd && nmm && nyyyy && nyyyy.length === 4)
+                                    handleChange('dob', `${nyyyy}-${nmm}-${ndd}`);
+                                  else
+                                    handleChange('dob', '');
+                                };
+                                return (
+                                  <>
+                                    <select value={dd} onChange={(e) => emit(e.target.value, mm, yyyy)} className={selCls} required>
+                                      <option value="">DD</option>
+                                      {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                                        <option key={d} value={String(d).padStart(2, '0')}>{String(d).padStart(2, '0')}</option>
+                                      ))}
+                                    </select>
+                                    <span className="text-gray-400 font-semibold">/</span>
+                                    <select value={mm} onChange={(e) => emit(dd, e.target.value, yyyy)} className={selCls} required>
+                                      <option value="">MM</option>
+                                      {['01','02','03','04','05','06','07','08','09','10','11','12'].map((m, idx) => (
+                                        <option key={m} value={m}>{['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][idx]}</option>
+                                      ))}
+                                    </select>
+                                    <span className="text-gray-400 font-semibold">/</span>
+                                    <select value={yyyy} onChange={(e) => emit(dd, mm, e.target.value)} className={selCls} required>
+                                      <option value="">YYYY</option>
+                                      {Array.from({ length: 60 }, (_, i) => new Date().getFullYear() - 15 - i).map(y => (
+                                        <option key={y} value={String(y)}>{y}</option>
+                                      ))}
+                                    </select>
+                                  </>
+                                );
+                              })()}
+                            </div>
                           </div>
                           <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Gender <span className="text-red-500">*</span></label>
@@ -938,48 +1069,126 @@ export default function PublicAdmissionFormPage() {
 
                       {/* Address Details */}
                       <div>
-                        <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
+                        <h3 className="text-base font-bold text-gray-800 mb-4 pb-2 border-b border-gray-200 flex items-center gap-2">
                           <i className="fas fa-map-marker-alt text-[#2A6BB5]"></i>
                           Address Details
                         </h3>
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-5">
-                          <h4 className="font-semibold text-gray-800 mb-3">Present Address</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="md:col-span-3">
-                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Street Address</label>
-                              <textarea value={formData.presentAddress} onChange={(e) => handleChange('presentAddress', e.target.value)} rows={2} placeholder="House No., Building, Street, Area" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all resize-none" />
+
+                        {/* Present Address */}
+                        <div className="rounded-xl border border-blue-200 bg-blue-50/60 overflow-hidden mb-4">
+                          <div className="px-4 py-2.5 bg-blue-100 border-b border-blue-200 flex items-center gap-2">
+                            <div className="w-5 h-5 rounded-md bg-[#2A6BB5] flex items-center justify-center">
+                              <i className="fas fa-home text-white text-[9px]"></i>
                             </div>
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">City</label>
-                              <input type="text" value={formData.presentCity} onChange={(e) => handleChange('presentCity', e.target.value)} placeholder="City" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Pin Code</label>
-                              <input type="text" value={formData.presentPin} onChange={(e) => handleChange('presentPin', e.target.value)} placeholder="XXXXXX" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
-                            </div>
+                            <span className="text-sm font-bold text-[#2A6BB5]">Present / Current Address</span>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-3 mb-5 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                          <input type="checkbox" id="sameAddress" checked={formData.sameAsPresent} onChange={(e) => handleSameAddress(e.target.checked)} className="w-5 h-5 text-[#2E3093] rounded" />
-                          <label htmlFor="sameAddress" className="cursor-pointer text-sm font-semibold text-gray-800 flex items-center gap-2">
-                            <i className="fas fa-copy text-yellow-600"></i>
-                            Permanent address is same as present address
-                          </label>
-                        </div>
-                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                          <h4 className="font-semibold text-gray-800 mb-3">Permanent Address</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="md:col-span-3">
-                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Street Address</label>
-                              <textarea value={formData.permanentAddress} onChange={(e) => handleChange('permanentAddress', e.target.value)} rows={2} placeholder="House No., Building, Street, Area" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all resize-none" disabled={formData.sameAsPresent} />
+                          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3">
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Flat / House No.</label>
+                              <input type="text" value={formData.presentFlat} onChange={(e) => handleChange('presentFlat', e.target.value)} placeholder="e.g. 304-B" className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Building / Society Name</label>
+                              <input type="text" value={formData.presentBuilding} onChange={(e) => handleChange('presentBuilding', e.target.value)} placeholder="e.g. Shanti Niwas" className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Street / Road</label>
+                              <input type="text" value={formData.presentStreet} onChange={(e) => handleChange('presentStreet', e.target.value)} placeholder="e.g. MG Road" className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Area / Colony / Locality</label>
+                              <input type="text" value={formData.presentArea} onChange={(e) => handleChange('presentArea', e.target.value)} placeholder="e.g. Bandra West" className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Landmark <span className="font-normal text-gray-400">(optional)</span></label>
+                              <input type="text" value={formData.presentLandmark} onChange={(e) => handleChange('presentLandmark', e.target.value)} placeholder="e.g. Near City Mall" className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">City / Town</label>
+                              <input type="text" value={formData.presentCity} onChange={(e) => handleChange('presentCity', e.target.value)} placeholder="e.g. Mumbai" className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">District</label>
+                              <input type="text" value={formData.presentDistrict} onChange={(e) => handleChange('presentDistrict', e.target.value)} placeholder="e.g. Mumbai Suburban" className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
                             </div>
                             <div>
                               <label className="block text-xs font-semibold text-gray-700 mb-1.5">State</label>
-                              <input type="text" value={formData.permanentState} onChange={(e) => handleChange('permanentState', e.target.value)} placeholder="State" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" disabled={formData.sameAsPresent} />
+                              <select value={formData.presentState} onChange={(e) => handleChange('presentState', e.target.value)} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all">
+                                <option value="">— Select State —</option>
+                                {['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Andaman & Nicobar Islands','Chandigarh','Dadra & Nagar Haveli','Daman & Diu','Delhi','Jammu & Kashmir','Ladakh','Lakshadweep','Puducherry'].map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">PIN Code</label>
+                              <input type="text" inputMode="numeric" maxLength={6} value={formData.presentPin} onChange={(e) => handleChange('presentPin', e.target.value.replace(/\D/g, ''))} placeholder="6-digit PIN" className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all font-mono tracking-widest" />
                             </div>
                             <div>
                               <label className="block text-xs font-semibold text-gray-700 mb-1.5">Country</label>
-                              <input type="text" value={formData.permanentCountry} onChange={(e) => handleChange('permanentCountry', e.target.value)} placeholder="Country" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" disabled={formData.sameAsPresent} />
+                              <input type="text" value={formData.presentCountry} onChange={(e) => handleChange('presentCountry', e.target.value)} placeholder="Country" className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Same address toggle */}
+                        <label htmlFor="sameAddress" className="flex items-center gap-3 cursor-pointer bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 select-none">
+                          <input type="checkbox" id="sameAddress" checked={formData.sameAsPresent} onChange={(e) => handleSameAddress(e.target.checked)} className="w-4 h-4 text-[#2E3093] rounded flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold text-gray-800">Permanent address is same as present address</p>
+                            <p className="text-xs text-gray-500 mt-0.5">All fields will be copied automatically</p>
+                          </div>
+                        </label>
+
+                        {/* Permanent Address */}
+                        <div className={`rounded-xl border overflow-hidden transition-opacity ${formData.sameAsPresent ? 'border-gray-200 bg-gray-50/60 opacity-60 pointer-events-none' : 'border-green-200 bg-green-50/60'}`}>
+                          <div className={`px-4 py-2.5 border-b flex items-center gap-2 ${formData.sameAsPresent ? 'bg-gray-100 border-gray-200' : 'bg-green-100 border-green-200'}`}>
+                            <div className={`w-5 h-5 rounded-md flex items-center justify-center ${formData.sameAsPresent ? 'bg-gray-400' : 'bg-green-600'}`}>
+                              <i className="fas fa-map-pin text-white text-[9px]"></i>
+                            </div>
+                            <span className={`text-sm font-bold ${formData.sameAsPresent ? 'text-gray-500' : 'text-green-700'}`}>Permanent / Native Address</span>
+                          </div>
+                          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3">
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Flat / House No.</label>
+                              <input type="text" value={formData.permanentFlat} onChange={(e) => handleChange('permanentFlat', e.target.value)} placeholder="e.g. 304-B" disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Building / Society Name</label>
+                              <input type="text" value={formData.permanentBuilding} onChange={(e) => handleChange('permanentBuilding', e.target.value)} placeholder="e.g. Shanti Niwas" disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Street / Road</label>
+                              <input type="text" value={formData.permanentStreet} onChange={(e) => handleChange('permanentStreet', e.target.value)} placeholder="e.g. MG Road" disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Area / Colony / Locality</label>
+                              <input type="text" value={formData.permanentArea} onChange={(e) => handleChange('permanentArea', e.target.value)} placeholder="e.g. Bandra West" disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Landmark <span className="font-normal text-gray-400">(optional)</span></label>
+                              <input type="text" value={formData.permanentLandmark} onChange={(e) => handleChange('permanentLandmark', e.target.value)} placeholder="e.g. Near City Mall" disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">City / Town</label>
+                              <input type="text" value={formData.permanentCity} onChange={(e) => handleChange('permanentCity', e.target.value)} placeholder="e.g. Pune" disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">District</label>
+                              <input type="text" value={formData.permanentDistrict} onChange={(e) => handleChange('permanentDistrict', e.target.value)} placeholder="e.g. Pune" disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">State</label>
+                              <select value={formData.permanentState} onChange={(e) => handleChange('permanentState', e.target.value)} disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400">
+                                <option value="">— Select State —</option>
+                                {['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Andaman & Nicobar Islands','Chandigarh','Dadra & Nagar Haveli','Daman & Diu','Delhi','Jammu & Kashmir','Ladakh','Lakshadweep','Puducherry'].map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">PIN Code</label>
+                              <input type="text" inputMode="numeric" maxLength={6} value={formData.permanentPin} onChange={(e) => handleChange('permanentPin', e.target.value.replace(/\D/g, ''))} placeholder="6-digit PIN" disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400 font-mono tracking-widest" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Country</label>
+                              <input type="text" value={formData.permanentCountry} onChange={(e) => handleChange('permanentCountry', e.target.value)} placeholder="Country" disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400" />
                             </div>
                           </div>
                         </div>

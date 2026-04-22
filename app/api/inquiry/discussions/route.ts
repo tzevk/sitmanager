@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
       `SELECT id, date, ${nextDateSelect}, discussion, created_by, created_date
        FROM awt_inquirydiscussion
        WHERE Inquiry_id IN (${idPlaceholders}) AND (deleted = 0 OR deleted IS NULL)
-       ORDER BY id DESC`,
+       ORDER BY id ASC`,
       ids
     );
 

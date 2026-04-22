@@ -400,22 +400,57 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'SSC education details are required' }, { status: 400 });
     }
 
-    // Construct full name
     const fullName = [body.firstName, body.middleName, body.lastName].filter(Boolean).join(' ');
 
-    // Get the student_id from inquiry
-    const [inquiryRows] = await pool.query<any[]>(
-      'SELECT Student_Id, Batch_Code, Course_Id FROM student_master WHERE Student_Id = ?',
+    // Look up Student_Inquiry by Inquiry_Id first (the URL param is Inquiry_Id, not student_master.Student_Id)
+    const [siRows] = await pool.query<any[]>(
+      `SELECT Inquiry_Id, Student_Id, Batch_Code, Course_Id
+       FROM Student_Inquiry
+       WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
       [body.inquiryId]
     );
 
-    if (!inquiryRows || inquiryRows.length === 0) {
+    if (!siRows || siRows.length === 0) {
       return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
     }
 
-    const studentId = inquiryRows[0].Student_Id;
-    const batchCode = body.batchCode || inquiryRows[0].Batch_Code || null;
-    const courseId = inquiryRows[0].Course_Id;
+    const inquiry = siRows[0];
+    const batchCode = body.batchCode || inquiry.Batch_Code || null;
+    const courseId = inquiry.Course_Id || null;
+
+    // Resolve or create student_master record
+    let studentId: number;
+    const linkedStudentId = inquiry.Student_Id ? Number(inquiry.Student_Id) : null;
+
+    const studentExists = async (id: number): Promise<boolean> => {
+      const [rows] = await pool.query<any[]>('SELECT Student_Id FROM student_master WHERE Student_Id = ?', [id]);
+      return !!(rows as any[]).length;
+    };
+
+    const createStudentMaster = async (): Promise<number> => {
+      const [result] = await pool.query<any>(
+        `INSERT INTO student_master
+           (Student_Name, Email, Present_Mobile, DOB, Sex, Nationality, Admission, Status_id, Date_Added, updated_date)
+         VALUES (?, ?, ?, ?, ?, ?, 0, 1, NOW(), NOW())`,
+        [fullName, body.email, body.mobile, body.dob || null, body.gender || null, body.nationality || 'Indian']
+      );
+      const newId = result.insertId as number;
+      // Link back so future submissions resolve correctly
+      await pool.query('UPDATE Student_Inquiry SET Student_Id = ? WHERE Inquiry_Id = ?', [newId, body.inquiryId]);
+      return newId;
+    };
+
+    if (linkedStudentId && await studentExists(linkedStudentId)) {
+      studentId = linkedStudentId;
+    } else {
+      // Check legacy case: student_master.Student_Id happens to equal the Inquiry_Id
+      if (await studentExists(Number(body.inquiryId))) {
+        studentId = Number(body.inquiryId);
+      } else {
+        studentId = await createStudentMaster();
+      }
+    }
+
     let batchId: number | null = null;
 
     if (batchCode) {

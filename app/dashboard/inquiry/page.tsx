@@ -70,6 +70,10 @@ function hasLatestFollowUp(row: InquiryRow): boolean {
   return Boolean(row.Discussion && row.Discussion !== 'NULL' && row.Discussion.trim());
 }
 
+function hasScheduledFollowUp(row: InquiryRow): boolean {
+  return Boolean(row.NextFollowUpDate);
+}
+
 function isPendingFollowUp(row: InquiryRow): boolean {
   if (row.Status_id != null && [4, 12, 15].includes(row.Status_id)) return true;
   const label = String(row.StatusLabel || '').toLowerCase();
@@ -91,7 +95,7 @@ interface Filters {
 
 export default function InquiryPage() {
   const router = useRouter();
-  const { canView, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('inquiry');
+  const { canView, canUpdate, canDelete, canCreate, loading: permLoading } = useResourcePermissions('inquiry');
   const [rows, setRows] = useState<InquiryRow[]>([]);
   const [pagination, setPagination] = useState<Pagination>({
     page: 1, limit: 25, total: 0, totalPages: 0,
@@ -294,6 +298,17 @@ export default function InquiryPage() {
               {pagination.total.toLocaleString()} total inquiries
             </p>
           </div>
+          {canCreate && (
+            <button
+              onClick={() => router.push('/dashboard/inquiry/add')}
+              className="flex items-center gap-2 bg-white text-[#2E3093] px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5 shrink-0"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add Inquiry
+            </button>
+          )}
         </div>
       </div>
 
@@ -682,16 +697,16 @@ export default function InquiryPage() {
         <div className="flex items-center justify-between gap-3 mb-4">
           <h3 className="text-base font-black text-slate-900 tracking-tight">Next Date Follow Up</h3>
           <span className="text-xs font-semibold text-slate-500">
-            {rows.filter((r) => hasLatestFollowUp(r)).length} inquiries
+            {rows.filter((r) => hasScheduledFollowUp(r)).length} inquiries
           </span>
         </div>
 
         {loading ? (
           <p className="text-sm text-slate-400">Loading discussion details...</p>
-        ) : rows.some((r) => hasLatestFollowUp(r)) ? (
+        ) : rows.some((r) => hasScheduledFollowUp(r)) ? (
           <div className="space-y-2.5">
             {rows
-              .filter((r) => hasLatestFollowUp(r))
+              .filter((r) => hasScheduledFollowUp(r))
               .map((r) => (
                 <div key={`followup-${r.Student_Id}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
                   <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
@@ -727,7 +742,7 @@ export default function InquiryPage() {
               ))}
           </div>
         ) : (
-          <p className="text-sm text-slate-500">No discussion notes available for current listing.</p>
+          <p className="text-sm text-slate-500">No scheduled follow-ups for this page.</p>
         )}
       </div>
       </>)}
