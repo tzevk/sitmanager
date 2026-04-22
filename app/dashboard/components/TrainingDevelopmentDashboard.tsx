@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { TableSkeleton, WidgetSkeleton } from './Skeletons';
+import { toBatchNumber } from '@/lib/batch-display';
 
 function pctTone(value: number) {
   if (value >= 80) return 'text-emerald-700 bg-emerald-50 border-emerald-200';
@@ -51,7 +52,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
                   <tr><td className="px-4 py-8 text-center text-gray-400" colSpan={7}>No ongoing batch data</td></tr>
                 ) : ongoing.map((r: any, i: number) => (
                   <tr key={`${r.Batch_Id || i}`} className="border-t border-gray-100">
-                    <td className="px-4 py-3 font-semibold">{r.batch_no || '-'}</td>
+                    <td className="px-4 py-3 font-semibold">{toBatchNumber(r.batch_no)}</td>
                     <td className="px-4 py-3">{r.training_program || '-'}</td>
                     <td className="px-4 py-3 text-center"><span className={`inline-flex px-2 py-1 rounded-lg border text-xs font-bold ${pctTone(Number(r.percentage_complete || 0))}`}>{pct(Number(r.percentage_complete || 0))}</span></td>
                     <td className="px-4 py-3 text-center">{r.total_students ?? 0}</td>
@@ -86,7 +87,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
                     lowAttendance.map((r: any, i: number) => (
                       <tr key={`${r.name || i}-${r.batch_no || ''}`} className="border-t border-gray-100">
                         <td className="px-4 py-3">{r.name || '-'}</td>
-                        <td className="px-4 py-3">{r.batch_no || '-'}</td>
+                        <td className="px-4 py-3">{toBatchNumber(r.batch_no)}</td>
                         <td className="px-4 py-3">{r.training_program || '-'}</td>
                         <td className="px-4 py-3 text-center"><span className={`inline-flex px-2 py-1 rounded-lg border text-xs font-bold ${pctTone(Number(r.attendance_pct || 0))}`}>{pct(Number(r.attendance_pct || 0))}</span></td>
                       </tr>
@@ -116,7 +117,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
                     lowPerformance.map((r: any, i: number) => (
                       <tr key={`${r.name || i}-${r.batch_no || ''}`} className="border-t border-gray-100">
                         <td className="px-4 py-3">{r.name || '-'}</td>
-                        <td className="px-4 py-3">{r.batch_no || '-'}</td>
+                        <td className="px-4 py-3">{toBatchNumber(r.batch_no)}</td>
                         <td className="px-4 py-3">{r.training_program || '-'}</td>
                         <td className="px-4 py-3 text-center"><span className={`inline-flex px-2 py-1 rounded-lg border text-xs font-bold ${pctTone(Number(r.marks_pct || 0))}`}>{pct(Number(r.marks_pct || 0))}</span></td>
                       </tr>
@@ -147,7 +148,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
                   {upcomingExams.length === 0 ? <tr><td className="px-4 py-8 text-center text-gray-400" colSpan={4}>No upcoming exams</td></tr> :
                     upcomingExams.map((r: any, i: number) => (
                       <tr key={`${r.batch_no || i}-${r.exam_date || ''}`} className="border-t border-gray-100">
-                        <td className="px-4 py-3">{r.batch_no || '-'}</td>
+                        <td className="px-4 py-3">{toBatchNumber(r.batch_no)}</td>
                         <td className="px-4 py-3">{r.training_program || '-'}</td>
                         <td className="px-4 py-3 text-center">{r.exam_date ? new Date(r.exam_date).toLocaleDateString('en-IN') : '-'}</td>
                         <td className="px-4 py-3 text-center">{r.paper_status || '-'}</td>
@@ -178,7 +179,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
                   {finishedExams.length === 0 ? <tr><td className="px-4 py-8 text-center text-gray-400" colSpan={5}>No finished exams</td></tr> :
                     finishedExams.map((r: any, i: number) => (
                       <tr key={`${r.batch_no || i}-${r.exam_date || ''}`} className="border-t border-gray-100">
-                        <td className="px-4 py-3">{r.batch_no || '-'}</td>
+                        <td className="px-4 py-3">{toBatchNumber(r.batch_no)}</td>
                         <td className="px-4 py-3">{r.training_program || '-'}</td>
                         <td className="px-4 py-3 text-center">{r.exam_date ? new Date(r.exam_date).toLocaleDateString('en-IN') : '-'}</td>
                         <td className="px-4 py-3 text-center">{r.paper_status || '-'}</td>
@@ -212,7 +213,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
                   {todaysLectures.length === 0 ? <tr><td className="px-4 py-8 text-center text-gray-400" colSpan={5}>No lectures scheduled today</td></tr> :
                     todaysLectures.map((r: any, i: number) => (
                       <tr key={`${r.batch_no || i}-${r.lecture_topic || ''}`} className="border-t border-gray-100">
-                        <td className="px-4 py-3">{r.batch_no || '-'}</td>
+                        <td className="px-4 py-3">{toBatchNumber(r.batch_no)}</td>
                         <td className="px-4 py-3">{r.training_program || '-'}</td>
                         <td className="px-4 py-3">{r.lecture_topic || '-'}</td>
                         <td className="px-4 py-3 text-center">{r.room_no || '-'}</td>
@@ -264,7 +265,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
               {siteVisits.length === 0 ? <p className="text-sm text-gray-400">No site visits records</p> :
                 siteVisits.map((r: any, i: number) => (
                   <div key={`${r.id || i}`} className="p-3 rounded-xl border border-gray-100 bg-gray-50/50 text-sm">
-                    <div className="font-semibold text-gray-800">{r.batch_no || '-'} · {r.training_program || '-'}</div>
+                    <div className="font-semibold text-gray-800">{toBatchNumber(r.batch_no)} · {r.training_program || '-'}</div>
                     <div className="text-xs text-gray-500 mt-1">{r.location || r.region || '-'} · {r.visit_date ? new Date(r.visit_date).toLocaleDateString('en-IN') : '-'}</div>
                   </div>
                 ))}
@@ -281,7 +282,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
                 admissionCancelled.map((r: any, i: number) => (
                   <div key={`${r.id || i}`} className="p-3 rounded-xl border border-gray-100 bg-gray-50/50 text-sm">
                     <div className="font-semibold text-gray-800">{r.student_name || '-'}</div>
-                    <div className="text-xs text-gray-500 mt-1">{r.batch_no || '-'} · {r.training_program || '-'}</div>
+                    <div className="text-xs text-gray-500 mt-1">{toBatchNumber(r.batch_no)} · {r.training_program || '-'}</div>
                   </div>
                 ))}
             </div>

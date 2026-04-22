@@ -243,41 +243,53 @@ export async function GET(req: NextRequest) {
     const whereClause = conditions.length > 0 ? `WHERE (${conditions.join(') AND (')})` : '';
 
     // ── Sorting: newest Inquiry_Dt first (Student_Inquiry) ──
-    // We keep a temp table to make COUNT + pagination cheap.
-    await pool.query(`DROP TEMPORARY TABLE IF EXISTS tmp_sort_keys`);
-    await pool.query(
-      `CREATE TEMPORARY TABLE tmp_sort_keys (
-         Inquiry_Id INT PRIMARY KEY,
-         sort_date DATE,
-         INDEX(sort_date),
-         INDEX(Inquiry_Id)
-       ) ENGINE=MEMORY
-       SELECT
-         si.Inquiry_Id,
-         ${inquiryDtAsDate} as sort_date
-       FROM Student_Inquiry si
-       LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
-       LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline), '') AS UNSIGNED)
-       ${whereClause}`
-    , params);
+    // Temporary tables are scoped to a single DB connection.
+    // Use one explicit connection for create/count/select/drop to avoid ER_NO_SUCH_TABLE.
+    let total = 0;
+    let pageIds: number[] = [];
+    let sortOrder = new Map<number, number>();
+    const conn = await pool.getConnection();
+    try {
+      await conn.query(`DROP TEMPORARY TABLE IF EXISTS tmp_sort_keys`);
+      await conn.query(
+        `CREATE TEMPORARY TABLE tmp_sort_keys (
+           Inquiry_Id INT PRIMARY KEY,
+           sort_date DATE,
+           INDEX(sort_date),
+           INDEX(Inquiry_Id)
+         ) ENGINE=MEMORY
+         SELECT
+           si.Inquiry_Id,
+           ${inquiryDtAsDate} as sort_date
+         FROM Student_Inquiry si
+         LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
+         LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline), '') AS UNSIGNED)
+         ${whereClause}`,
+        params
+      );
 
-    // 2. Count (fast — just count the temp table)
-    const [countResult] = await pool.query(`SELECT COUNT(*) as total FROM tmp_sort_keys`);
-    const total = (countResult as any[])[0]?.total || 0;
+      // 2. Count (fast — just count the temp table)
+      const [countResult] = await conn.query(`SELECT COUNT(*) as total FROM tmp_sort_keys`);
+      total = (countResult as any[])[0]?.total || 0;
 
-    // 3. Get sorted paginated Student_Ids (fast — indexed sort on MEMORY table)
-    const [sortedIds] = await pool.query(
-      `SELECT Inquiry_Id, sort_date
-       FROM tmp_sort_keys
-       ORDER BY sort_date DESC, Inquiry_Id DESC
-       LIMIT ? OFFSET ?`,
-      [limit, offset]
-    );
-    const pageIds = (sortedIds as any[]).map((r: any) => r.Inquiry_Id);
-    const sortOrder = new Map((sortedIds as any[]).map((r: any, i: number) => [r.Inquiry_Id, i]));
-
-    // Clean up temp table
-    await pool.query(`DROP TEMPORARY TABLE IF EXISTS tmp_sort_keys`);
+      // 3. Get sorted paginated Student_Ids (fast — indexed sort on MEMORY table)
+      const [sortedIds] = await conn.query(
+        `SELECT Inquiry_Id, sort_date
+         FROM tmp_sort_keys
+         ORDER BY sort_date DESC, Inquiry_Id DESC
+         LIMIT ? OFFSET ?`,
+        [limit, offset]
+      );
+      pageIds = (sortedIds as any[]).map((r: any) => r.Inquiry_Id);
+      sortOrder = new Map((sortedIds as any[]).map((r: any, i: number) => [r.Inquiry_Id, i]));
+    } finally {
+      try {
+        await conn.query(`DROP TEMPORARY TABLE IF EXISTS tmp_sort_keys`);
+      } catch {
+        // Ignore cleanup failure; connection is released regardless.
+      }
+      conn.release();
+    }
 
     // 4. Fetch full data + discussions for just these IDs (fast — only 25 IDs)
     let dataRows: any[] = [];

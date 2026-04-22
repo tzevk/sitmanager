@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { toBatchNumber } from '@/lib/batch-display';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -501,7 +502,7 @@ export default function InquiryPage() {
                       <span className="truncate block">{r.CourseName || '—'}</span>
                     </td>
                     <td className="py-2.5 px-4 whitespace-nowrap font-mono text-xs">
-                      {r.Batch_Code || '—'}
+                      {toBatchNumber(r.Batch_Code)}
                     </td>
                     <td className="py-2.5 px-4 whitespace-nowrap font-mono text-xs">
                       {r.Present_Mobile || '—'}

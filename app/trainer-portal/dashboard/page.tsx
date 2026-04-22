@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { toBatchNumber } from '@/lib/batch-display';
 
 interface DashboardData {
   faculty: {
@@ -343,7 +344,7 @@ export default function TrainerDashboardPage() {
               <tbody className="divide-y divide-gray-100">
                 <tr>
                   <td className="px-4 py-2 text-gray-500 font-semibold whitespace-nowrap">Batch No</td>
-                  <td className="px-4 py-2 text-gray-800 font-medium">{currentBatch?.Batch_code || '—'}</td>
+                  <td className="px-4 py-2 text-gray-800 font-medium">{toBatchNumber(currentBatch?.Batch_code)}</td>
                 </tr>
                 <tr>
                   <td className="px-4 py-2 text-gray-500 font-semibold whitespace-nowrap">Batch Name</td>
@@ -395,7 +396,7 @@ export default function TrainerDashboardPage() {
                       <td className="px-3 py-2 text-gray-800">
                         <div className="max-w-[14rem]">
                           <p className="font-medium truncate">{l._summary}</p>
-                          <p className="text-[11px] text-gray-500 truncate">{l.Batch_code}</p>
+                          <p className="text-[11px] text-gray-500 truncate">{toBatchNumber(l.Batch_code)}</p>
                         </div>
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-gray-700">{l._in}</td>
@@ -450,7 +451,7 @@ export default function TrainerDashboardPage() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-xs text-gray-500">Current Batch</p>
-            <p className="text-lg font-bold text-gray-800 leading-tight truncate">{currentBatch?.Batch_code || '—'}</p>
+            <p className="text-lg font-bold text-gray-800 leading-tight truncate">{toBatchNumber(currentBatch?.Batch_code)}</p>
             <p className="text-[11px] text-gray-500 truncate">{currentBatch?.Course_Name || '—'}</p>
           </div>
           <span
@@ -537,7 +538,7 @@ export default function TrainerDashboardPage() {
                       <td className="px-6 py-3 text-gray-800">
                         <div className="max-w-[28rem]">
                           <p className="font-semibold truncate">{l._summary}</p>
-                          <p className="text-xs text-gray-500 truncate">{l.Batch_code}</p>
+                          <p className="text-xs text-gray-500 truncate">{toBatchNumber(l.Batch_code)}</p>
                         </div>
                       </td>
                       <td className="px-6 py-3 whitespace-nowrap text-gray-700">{l._in}</td>
@@ -565,7 +566,7 @@ export default function TrainerDashboardPage() {
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-800">Planned Lectures</h2>
-              <p className="text-sm text-gray-500">This month • {currentBatch?.Batch_code || '—'}</p>
+              <p className="text-sm text-gray-500">This month • {toBatchNumber(currentBatch?.Batch_code)}</p>
             </div>
             <a href="/trainer-portal/dashboard/lecture-plan" className="text-sm font-medium" style={{ color: '#2A6BB5' }}>View</a>
           </div>

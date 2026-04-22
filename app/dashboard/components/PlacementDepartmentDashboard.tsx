@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { TableSkeleton } from './Skeletons';
+import { toBatchNumber } from '@/lib/batch-display';
 
 interface PlacementTodoItem {
   id: string;
@@ -279,7 +280,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                           <span className="absolute inset-y-0 left-0 w-1 bg-[#FAE452] opacity-0 group-hover:opacity-100 transition-opacity"></span>
                           <span className="truncate block group-hover:text-[#2A6BB5] transition-colors drop-shadow-sm pl-1">{row.courseName || 'N/A'}</span>
                         </td>
-                        <td className="py-3.5 px-4 text-center"><span className="font-mono bg-slate-50 border border-slate-200 text-slate-600 shadow-sm rounded-lg px-2.5 py-1 text-[11px] font-semibold">{row.batchCode || '-'}</span></td>
+                        <td className="py-3.5 px-4 text-center"><span className="font-mono bg-slate-50 border border-slate-200 text-slate-600 shadow-sm rounded-lg px-2.5 py-1 text-[11px] font-semibold">{toBatchNumber(row.batchCode)}</span></td>
                         <td className="py-3.5 px-4 text-center text-slate-500 whitespace-nowrap text-xs font-medium">{row.convocationDate || '—'}</td>
                         <td className="py-3.5 px-4 text-center font-black text-slate-800 border-r border-slate-100 group-hover:border-transparent drop-shadow-sm">{row.passedStudent ?? 0}</td>
                         <td className="py-3.5 px-4 text-center text-[#2A6BB5] font-extrabold">{row.totalCvReceived ?? 0}</td>
@@ -449,7 +450,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                           return (
                             <tr key={`${row.batch_id || idx}`} className="hover:bg-slate-50/70">
                               <td className="px-4 py-2.5 font-semibold text-slate-800 max-w-[220px] truncate">{row.course_name || 'N/A'}</td>
-                              <td className="px-4 py-2.5 text-slate-600 font-mono text-xs">{row.batch_code || '-'}</td>
+                              <td className="px-4 py-2.5 text-slate-600 font-mono text-xs">{toBatchNumber(row.batch_code)}</td>
                               <td className="px-3 py-2.5 text-center font-bold text-slate-800">{Number(row.passed_students || 0).toLocaleString()}</td>
                               <td className="px-3 py-2.5 text-center font-bold text-[#2A6BB5]">{Number(row.placed_students || 0).toLocaleString()}</td>
                               <td className="px-3 py-2.5 text-center font-semibold text-slate-700">{Number(row.interviews_count || 0).toLocaleString()}</td>
@@ -480,7 +481,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                     <td className="px-4 py-3 whitespace-nowrap text-gray-600">{r.interview_date || '-'}</td>
                     <td className="px-4 py-3 font-medium text-gray-800">{r.company_name || '-'}</td>
                     <td className="px-4 py-3 text-gray-700">{r.training_name || '-'}</td>
-                    <td className="px-4 py-3 text-gray-700">{r.batch_code || '-'}</td>
+                    <td className="px-4 py-3 text-gray-700">{toBatchNumber(r.batch_code)}</td>
                   </tr>
                 ))}
               />
@@ -498,7 +499,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                     <td className="px-4 py-3 whitespace-nowrap text-gray-600">{r.interview_date || '-'}</td>
                     <td className="px-4 py-3 font-medium text-gray-800">{r.company_name || '-'}</td>
                     <td className="px-4 py-3 text-gray-700">{r.training_name || '-'}</td>
-                    <td className="px-4 py-3 text-gray-700">{r.batch_code || '-'}</td>
+                    <td className="px-4 py-3 text-gray-700">{toBatchNumber(r.batch_code)}</td>
                   </tr>
                 ))}
               />
@@ -541,7 +542,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                     <td className="px-4 py-3 font-medium text-gray-800">{r.region || '-'}</td>
                     <td className="px-4 py-3 text-gray-700">{r.location || '-'}</td>
                     <td className="px-4 py-3 text-gray-700">{r.training_name || '-'}</td>
-                    <td className="px-4 py-3 text-gray-700">{r.batch_code || '-'}</td>
+                    <td className="px-4 py-3 text-gray-700">{toBatchNumber(r.batch_code)}</td>
                   </tr>
                 ))}
               />
@@ -559,7 +560,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                     <td className="px-4 py-3 font-medium text-gray-800">{r.company_name || '-'}</td>
                     <td className="px-4 py-3 text-gray-700">{r.profile || '-'}</td>
                     <td className="px-4 py-3 text-gray-700">{r.training_name || '-'}</td>
-                    <td className="px-4 py-3 text-gray-700">{r.batch_code || '-'}</td>
+                    <td className="px-4 py-3 text-gray-700">{toBatchNumber(r.batch_code)}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-gray-600">{r.posted_date || '-'}</td>
                   </tr>
                 ))}
@@ -578,7 +579,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                     <td className="px-4 py-3 whitespace-nowrap text-gray-600">{r.interview_date || '-'}</td>
                     <td className="px-4 py-3 font-medium text-gray-800">{r.company_name || '-'}</td>
                     <td className="px-4 py-3 text-gray-700">{r.training_name || '-'}</td>
-                    <td className="px-4 py-3 text-gray-700">{r.batch_code || '-'}</td>
+                    <td className="px-4 py-3 text-gray-700">{toBatchNumber(r.batch_code)}</td>
                   </tr>
                 ))}
               />
@@ -596,7 +597,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                     <td className="px-4 py-3 whitespace-nowrap text-gray-600">{r.interview_date || '-'}</td>
                     <td className="px-4 py-3 font-medium text-gray-800">{r.company_name || '-'}</td>
                     <td className="px-4 py-3 text-gray-700">{r.training_name || '-'}</td>
-                    <td className="px-4 py-3 text-gray-700">{r.batch_code || '-'}</td>
+                    <td className="px-4 py-3 text-gray-700">{toBatchNumber(r.batch_code)}</td>
                   </tr>
                 ))}
               />

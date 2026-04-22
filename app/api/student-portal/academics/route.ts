@@ -3,12 +3,39 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { getStudentSession } from '@/app/api/student-portal/auth/session/route';
 
+let attendanceTableReady = false;
+async function ensureStudentAttendanceTable(pool: any) {
+  if (attendanceTableReady) return;
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS student_attendance (
+        Attendance_Id INT AUTO_INCREMENT PRIMARY KEY,
+        Batch_Id      INT      NOT NULL,
+        Student_Id    INT      NOT NULL,
+        Admission_Id  INT      NOT NULL,
+        Attendance_Date DATE   NOT NULL,
+        Session       ENUM('first_half','second_half') NOT NULL DEFAULT 'first_half',
+        Status        CHAR(1)  NOT NULL DEFAULT 'P',
+        Remarks       VARCHAR(255) NULL,
+        Created_At    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        Updated_At    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        IsDelete      TINYINT(1) DEFAULT 0,
+        UNIQUE KEY uq_attendance (Batch_Id, Student_Id, Attendance_Date, Session)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    attendanceTableReady = true;
+  } catch {
+    attendanceTableReady = true;
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getStudentSession(req);
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const pool = getPool();
+    await ensureStudentAttendanceTable(pool);
     const studentId = session.studentId;
 
     // 1. Student info + batch + course
@@ -27,48 +54,37 @@ export async function GET(req: NextRequest) {
     const student = studentRows[0] || null;
     const batchId = student?.Batch_Id ?? null;
 
-    // 2. Attendance summary: total lectures in batch vs attended
+    // 2. Attendance summary: based on daily attendance marks (first/second half)
     let attendanceSummary = { total_lectures: 0, attended: 0, absent: 0, percentage: 0 };
     let recentLectures: any[] = [];
 
     if (batchId) {
-      // Total lectures taken for this batch
-      const [totalRows] = await pool.query<any[]>(
-        `SELECT COUNT(*) as total FROM lecture_taken_master
-         WHERE Batch_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
-        [batchId]
-      );
-      const totalLectures = totalRows[0]?.total ?? 0;
-
-      // Lectures this student attended
-      const [attendedRows] = await pool.query<any[]>(
-        `SELECT COUNT(*) as attended FROM lecture_taken_child ltc
-         INNER JOIN lecture_taken_master ltm ON ltc.Take_Id = ltm.Take_Id
-         WHERE ltm.Batch_Id = ? AND ltc.Student_Id = ?
-           AND ltc.Student_Atten = 1
-           AND (ltc.IsDelete = 0 OR ltc.IsDelete IS NULL)`,
+      const [attendanceRows] = await pool.query<any[]>(
+        `SELECT Attendance_Id, Attendance_Date, Session, Status
+         FROM student_attendance
+         WHERE Batch_Id = ? AND Student_Id = ?
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+         ORDER BY Attendance_Date DESC,
+           CASE WHEN Session = 'second_half' THEN 1 ELSE 0 END DESC,
+           Attendance_Id DESC`,
         [batchId, studentId]
       );
-      const attended = attendedRows[0]?.attended ?? 0;
-      const absent = totalLectures - attended;
-      const percentage = totalLectures > 0 ? Math.round((attended / totalLectures) * 100) : 0;
-      attendanceSummary = { total_lectures: totalLectures, attended, absent, percentage };
 
-      // Recent 10 lectures with attendance status
-      const [recentRows] = await pool.query<any[]>(
-        `SELECT ltm.Take_Id, ltm.Take_Dt, ltm.Topic, ltm.Faculty_Id,
-                f.Faculty_Name,
-                COALESCE(ltc.Student_Atten, 0) as present,
-                ltc.Student_Reaction, ltc.Late
-         FROM lecture_taken_master ltm
-         LEFT JOIN lecture_taken_child ltc ON ltm.Take_Id = ltc.Take_Id AND ltc.Student_Id = ?
-         LEFT JOIN faculty_master f ON ltm.Faculty_Id = f.Faculty_Id
-         WHERE ltm.Batch_Id = ? AND (ltm.IsDelete = 0 OR ltm.IsDelete IS NULL)
-         ORDER BY ltm.Take_Dt DESC, ltm.Take_Id DESC
-         LIMIT 10`,
-        [studentId, batchId]
-      );
-      recentLectures = recentRows;
+      const totalSessions = attendanceRows.length;
+      const attended = attendanceRows.filter((r: any) => r.Status === 'P').length;
+      const absent = attendanceRows.filter((r: any) => r.Status === 'A').length;
+      const percentage = totalSessions > 0 ? Math.round((attended / totalSessions) * 100) : 0;
+      attendanceSummary = { total_lectures: totalSessions, attended, absent, percentage };
+
+      recentLectures = attendanceRows.slice(0, 10).map((r: any) => ({
+        Take_Id: r.Attendance_Id,
+        Take_Dt: r.Attendance_Date,
+        Topic: r.Session === 'second_half' ? 'Second Half' : 'First Half',
+        Faculty_Name: '',
+        present: r.Status === 'P' ? 1 : 0,
+        Late: 0,
+        session: r.Session,
+      }));
     }
 
     // 3. Upcoming lectures from batch_lecture_master
@@ -145,22 +161,29 @@ export async function GET(req: NextRequest) {
       recentAssignments = recentAssign;
     }
 
-    // 6. All lectures list (for full attendance view) - limited to 50
+    // 6. All attendance records list (for full attendance view) - limited to 100
     let allLectures: any[] = [];
     if (batchId) {
       const [allRows] = await pool.query<any[]>(
-        `SELECT ltm.Take_Id, ltm.Take_Dt, ltm.Topic, f.Faculty_Name,
-                COALESCE(ltc.Student_Atten, 0) as present,
-                ltc.Late
-         FROM lecture_taken_master ltm
-         LEFT JOIN lecture_taken_child ltc ON ltm.Take_Id = ltc.Take_Id AND ltc.Student_Id = ?
-         LEFT JOIN faculty_master f ON ltm.Faculty_Id = f.Faculty_Id
-         WHERE ltm.Batch_Id = ? AND (ltm.IsDelete = 0 OR ltm.IsDelete IS NULL)
-         ORDER BY ltm.Take_Dt DESC, ltm.Take_Id DESC
-         LIMIT 50`,
-        [studentId, batchId]
+        `SELECT Attendance_Id, Attendance_Date, Session, Status
+         FROM student_attendance
+         WHERE Batch_Id = ? AND Student_Id = ?
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+         ORDER BY Attendance_Date DESC,
+           CASE WHEN Session = 'second_half' THEN 1 ELSE 0 END DESC,
+           Attendance_Id DESC
+         LIMIT 100`,
+        [batchId, studentId]
       );
-      allLectures = allRows;
+      allLectures = (allRows as any[]).map((r: any) => ({
+        Take_Id: r.Attendance_Id,
+        Take_Dt: r.Attendance_Date,
+        Topic: r.Session === 'second_half' ? 'Second Half' : 'First Half',
+        Faculty_Name: '',
+        present: r.Status === 'P' ? 1 : 0,
+        Late: 0,
+        session: r.Session,
+      }));
     }
 
     return NextResponse.json({

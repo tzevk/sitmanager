@@ -6,8 +6,7 @@ import { useRouter } from 'next/navigation';
 interface Lecture {
   Take_Id: number;
   Take_Dt: string;
-  Topic: string;
-  Faculty_Name: string;
+  session?: 'first_half' | 'second_half';
   present: number;
   Late: number;
 }
@@ -89,8 +88,7 @@ export default function AttendancePage() {
                 <tr className="bg-gray-50 border-b border-gray-100">
                   <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide w-10">#</th>
                   <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Date</th>
-                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Topic</th>
-                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell">Trainer</th>
+                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Session</th>
                   <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Status</th>
                 </tr>
               </thead>
@@ -101,8 +99,9 @@ export default function AttendancePage() {
                     <td className="px-5 py-3 text-xs text-gray-500 whitespace-nowrap">
                       {lec.Take_Dt ? new Date(lec.Take_Dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                     </td>
-                    <td className="px-5 py-3 text-xs text-gray-900 max-w-[220px] truncate">{lec.Topic || '—'}</td>
-                    <td className="px-5 py-3 text-xs text-gray-500 max-w-[160px] truncate hidden md:table-cell">{lec.Faculty_Name || '—'}</td>
+                    <td className="px-5 py-3 text-xs text-gray-900 max-w-[220px] truncate">
+                      {lec.session === 'second_half' ? 'Second Half' : 'First Half'}
+                    </td>
                     <td className="px-5 py-3 text-center">
                       {lec.present ? (
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${lec.Late ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
+import { toBatchNumber } from '@/lib/batch-display';
 
 /* ── Utilities ────────────────────────────────────────────────────── */
 function fmtPct(v: number) {
@@ -332,7 +333,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                     const fillPct   = max > 0 ? (confirmed / max) * 100 : 0;
                     return (
                       <tr key={`${b.Batch_Id || i}`} className="border-t border-gray-100 hover:bg-gray-50/50 transition-colors">
-                        <td className="px-5 py-3.5 font-mono font-semibold text-gray-800">{b.Batch_code || '—'}</td>
+                        <td className="px-5 py-3.5 font-mono font-semibold text-gray-800">{toBatchNumber(b.Batch_code)}</td>
                         <td className="px-4 py-3.5 text-gray-700">{b.CourseName || '—'}</td>
                         <td className="px-4 py-3.5 text-center tabular-nums text-gray-600">{b.Enquiries_Received ?? 0}</td>
                         <td className="px-4 py-3.5 text-center tabular-nums text-gray-600">{b.Enquiries_Contacted ?? 0}</td>
@@ -517,7 +518,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                 <tbody>
                   {alumniProgress.map((r: any, i: number) => (
                     <tr key={`${r.batch_no || i}`} className="border-t border-gray-100 hover:bg-gray-50/50">
-                      <td className="px-5 py-3 font-mono text-gray-700">{r.batch_no || '—'}</td>
+                      <td className="px-5 py-3 font-mono text-gray-700">{toBatchNumber(r.batch_no)}</td>
                       <td className="px-4 py-3 text-gray-700">{r.training_program || '—'}</td>
                       <td className="px-4 py-3 w-40"><Bar value={Number(r.registered_pct || 0)} /></td>
                     </tr>

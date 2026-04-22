@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { toBatchNumber } from '@/lib/batch-display';
 
 interface Batch { Batch_Id: number; Batch_code: string }
 interface LectureSummary {
@@ -310,7 +311,7 @@ export default function AssignmentsPage() {
             className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5] bg-white w-fit"
           >
             {batches.map(b => (
-              <option key={b.Batch_Id} value={b.Batch_Id}>{b.Batch_code}</option>
+              <option key={b.Batch_Id} value={b.Batch_Id}>{toBatchNumber(b.Batch_code)}</option>
             ))}
           </select>
         </div>

@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { toBatchNumber } from '@/lib/batch-display';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -610,7 +611,7 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
                       <option value="">— Select Batch —</option>
                       {batches.map((b) => (
                         <option key={b.Batch_Id} value={b.Batch_code}>
-                          {b.Batch_code} — {b.Category} ({b.SDate ? new Date(b.SDate).toLocaleDateString() : '—'})
+                          {toBatchNumber(b.Batch_code)} — {b.Category} ({b.SDate ? new Date(b.SDate).toLocaleDateString() : '—'})
                         </option>
                       ))}
                     </select>

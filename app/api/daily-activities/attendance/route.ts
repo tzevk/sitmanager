@@ -15,14 +15,45 @@ async function ensureAttendanceTable(pool: any) {
         Student_Id    INT      NOT NULL,
         Admission_Id  INT      NOT NULL,
         Attendance_Date DATE   NOT NULL,
+        Session       ENUM('first_half','second_half') NOT NULL DEFAULT 'first_half',
         Status        CHAR(1)  NOT NULL DEFAULT 'P' COMMENT 'P=Present, A=Absent',
         Remarks       VARCHAR(255) NULL,
         Created_At    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         Updated_At    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         IsDelete      TINYINT(1) DEFAULT 0,
-        UNIQUE KEY uq_attendance (Batch_Id, Student_Id, Attendance_Date)
+        UNIQUE KEY uq_attendance (Batch_Id, Student_Id, Attendance_Date, Session)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+
+    const [sessionCol] = await pool.query<any[]>(
+      `SELECT COUNT(*) AS cnt
+       FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'student_attendance'
+         AND COLUMN_NAME = 'Session'`
+    );
+    if (!sessionCol?.[0]?.cnt) {
+      await pool.query(
+        `ALTER TABLE student_attendance
+         ADD COLUMN Session ENUM('first_half','second_half') NOT NULL DEFAULT 'first_half' AFTER Attendance_Date`
+      );
+    }
+
+    const [uniqIdx] = await pool.query<any[]>(
+      `SELECT COUNT(*) AS cnt
+       FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'student_attendance'
+         AND INDEX_NAME = 'uq_attendance'`
+    );
+    if (uniqIdx?.[0]?.cnt) {
+      await pool.query(`ALTER TABLE student_attendance DROP INDEX uq_attendance`);
+    }
+    await pool.query(
+      `ALTER TABLE student_attendance
+       ADD UNIQUE KEY uq_attendance (Batch_Id, Student_Id, Attendance_Date, Session)`
+    );
+
     tableReady = true;
   } catch {
     tableReady = true;
@@ -41,6 +72,8 @@ export async function GET(req: NextRequest) {
     const options  = searchParams.get('options');
     const batchId  = searchParams.get('batchId');
     const date     = searchParams.get('date');
+    const sessionRaw = (searchParams.get('session') || 'first_half').toLowerCase();
+    const session = sessionRaw === 'second_half' ? 'second_half' : 'first_half';
 
     /* --- courses dropdown --- */
     if (options === 'courses') {
@@ -87,6 +120,7 @@ export async function GET(req: NextRequest) {
            ON att.Student_Id = s.Student_Id
            AND att.Batch_Id  = a.Batch_Id
            AND att.Attendance_Date = ?
+           AND att.Session = ?
            AND (att.IsDelete = 0 OR att.IsDelete IS NULL)
          WHERE a.Batch_Id = ?
            AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
@@ -94,14 +128,14 @@ export async function GET(req: NextRequest) {
          ORDER BY
            CASE WHEN a.Roll_No IS NULL OR a.Roll_No = '' THEN 1 ELSE 0 END,
            a.Roll_No + 0, s.Student_Name`,
-        [date, Number(batchId)]
+        [date, session, Number(batchId)]
       );
 
       /* summary counts */
       const present = students.filter((s) => s.attendanceStatus === 'P').length;
       const absent  = students.filter((s) => s.attendanceStatus === 'A').length;
 
-      return NextResponse.json({ students, summary: { present, absent, total: students.length } });
+      return NextResponse.json({ students, summary: { present, absent, total: students.length }, session });
     }
 
     return NextResponse.json({ error: 'Missing required params' }, { status: 400 });
@@ -121,11 +155,13 @@ export async function POST(req: NextRequest) {
     await ensureAttendanceTable(pool);
 
     const body = await req.json();
-    const { batchId, date, records } = body as {
+    const { batchId, date, session: sessionRaw, records } = body as {
       batchId: number;
       date: string;
+      session?: 'first_half' | 'second_half';
       records: { studentId: number; admissionId: number; status: 'P' | 'A' }[];
     };
+    const session = sessionRaw === 'second_half' ? 'second_half' : 'first_half';
 
     if (!batchId || !date || !Array.isArray(records) || records.length === 0) {
       return NextResponse.json({ error: 'batchId, date and records are required' }, { status: 400 });
@@ -138,14 +174,15 @@ export async function POST(req: NextRequest) {
       for (const rec of records) {
         await conn.query(
           `INSERT INTO student_attendance
-             (Batch_Id, Student_Id, Admission_Id, Attendance_Date, Status, IsDelete)
-           VALUES (?, ?, ?, ?, ?, 0)
+             (Batch_Id, Student_Id, Admission_Id, Attendance_Date, Session, Status, IsDelete)
+           VALUES (?, ?, ?, ?, ?, ?, 0)
            ON DUPLICATE KEY UPDATE
              Status     = VALUES(Status),
              Admission_Id = VALUES(Admission_Id),
+             Session    = VALUES(Session),
              IsDelete   = 0,
              Updated_At = CURRENT_TIMESTAMP`,
-          [batchId, rec.studentId, rec.admissionId, date, rec.status]
+          [batchId, rec.studentId, rec.admissionId, date, session, rec.status]
         );
       }
 
@@ -157,7 +194,7 @@ export async function POST(req: NextRequest) {
       conn.release();
     }
 
-    return NextResponse.json({ success: true, saved: records.length });
+    return NextResponse.json({ success: true, saved: records.length, session });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('Attendance POST error:', err);

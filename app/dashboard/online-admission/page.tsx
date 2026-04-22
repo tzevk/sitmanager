@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { toBatchNumber } from '@/lib/batch-display';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -318,7 +319,7 @@ export default function OnlineAdmissionPage() {
                       {r.Present_Mobile || '—'}
                     </td>
                     <td className={`py-2.5 px-4 whitespace-nowrap text-xs font-semibold ${rowTone}`}>
-                      {r.Batch_code || '—'}
+                      {toBatchNumber(r.Batch_code)}
                     </td>
                     <td className={`py-2.5 px-4 whitespace-nowrap text-xs ${rowTone}`}>
                       {r.Admission_Date

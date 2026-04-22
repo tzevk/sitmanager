@@ -13,7 +13,7 @@
   "crons": [
     {
       "path": "/api/cron/sync-inquiry-latest",
-      "schedule": "0 */2 * * *"
+      "schedule": "*/2 * * * *"
     },
     {
       "path": "/api/cron/sync-batch",

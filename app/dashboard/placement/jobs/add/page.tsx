@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { toBatchNumber } from '@/lib/batch-display';
 
 interface Course { Course_Id: number; Course_Name: string }
 interface Batch  { Batch_Id: number; Batch_code: string; Course_Id: number }
@@ -169,7 +170,7 @@ export default function AddJobPage() {
                   {batches.filter(b => selectedCourses.length === 0 || selectedCourses.includes(String(b.Course_Id))).map(b => (
                     <button key={b.Batch_Id} type="button" onClick={() => toggleBatch(String(b.Batch_Id))}
                       className={`px-2 py-1 rounded text-[11px] font-semibold border transition-colors ${selectedBatches.includes(String(b.Batch_Id)) ? 'bg-[#2E3093] text-white border-[#2E3093]' : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
-                      {b.Batch_code}
+                      {toBatchNumber(b.Batch_code)}
                     </button>
                   ))}
                 </div>

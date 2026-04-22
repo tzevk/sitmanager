@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { toBatchNumber } from '@/lib/batch-display';
 
 interface AcademicsData {
   student: {
@@ -43,6 +44,7 @@ interface AcademicsData {
     Faculty_Name: string;
     present: number;
     Late: number;
+    session?: 'first_half' | 'second_half';
   }>;
   upcoming_lectures: Array<{
     id: number;
@@ -168,7 +170,7 @@ export default function StudentDashboardPage() {
                 </div>
                 <div>
                   <p className="text-[10px] text-white/30 uppercase tracking-wide">Batch</p>
-                  <p className="text-xs font-semibold text-white">{student?.batch_code ?? '—'}</p>
+                  <p className="text-xs font-semibold text-white">{toBatchNumber(student?.batch_code)}</p>
                 </div>
               </div>
               {student?.batch_timings && (
@@ -225,7 +227,7 @@ export default function StudentDashboardPage() {
           </div>
         </div>
 
-        {/* Lectures attended */}
+        {/* Sessions attended */}
         <div className="group relative bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden">
           <div className="absolute top-0 right-0 w-20 h-20 rounded-bl-[40px] bg-blue-500 opacity-[0.07]" />
           <div className="flex items-center gap-2 mb-3">
@@ -237,7 +239,7 @@ export default function StudentDashboardPage() {
             <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Attended</span>
           </div>
           <p className="text-3xl font-black text-blue-600">{att.attended}</p>
-          <p className="text-xs text-gray-400 mt-1">of {att.total_lectures} lectures</p>
+          <p className="text-xs text-gray-400 mt-1">of {att.total_lectures} sessions</p>
           <div className="mt-3 h-1.5 rounded-full bg-gray-100 overflow-hidden">
             <div className="h-full rounded-full bg-blue-500 transition-all duration-700" style={{ width: att.total_lectures > 0 ? `${(att.attended / att.total_lectures) * 100}%` : '0%' }} />
           </div>
@@ -283,7 +285,7 @@ export default function StudentDashboardPage() {
       {/* Main content grid */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
-        {/* Recent Lectures — 2 cols */}
+        {/* Recent Attendance — 2 cols */}
         <div className="xl:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-6 py-5 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -293,8 +295,8 @@ export default function StudentDashboardPage() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-sm font-bold text-gray-900">Recent Lectures</h2>
-                <p className="text-[11px] text-gray-400">Your attendance record</p>
+                <h2 className="text-sm font-bold text-gray-900">Recent Attendance</h2>
+                <p className="text-[11px] text-gray-400">Marked from daily attendance</p>
               </div>
             </div>
             <Link href="/student-portal/dashboard/attendance" className="text-xs font-semibold text-[#2E3093] hover:text-[#2A6BB5] transition-colors flex items-center gap-1">
@@ -310,7 +312,7 @@ export default function StudentDashboardPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                   </svg>
                 </div>
-                <p className="text-sm text-gray-400">No lecture records yet</p>
+                <p className="text-sm text-gray-400">No attendance records yet</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -318,8 +320,7 @@ export default function StudentDashboardPage() {
                   <thead>
                     <tr className="bg-gray-50/60">
                       <th className="text-left px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Date</th>
-                      <th className="text-left px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Topic</th>
-                      <th className="text-left px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider hidden md:table-cell">Trainer</th>
+                      <th className="text-left px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Session</th>
                       <th className="text-center px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Status</th>
                     </tr>
                   </thead>
@@ -329,8 +330,9 @@ export default function StudentDashboardPage() {
                         <td className="px-6 py-3.5 text-xs text-gray-500 whitespace-nowrap font-medium">
                           {lec.Take_Dt ? new Date(lec.Take_Dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                         </td>
-                        <td className="px-6 py-3.5 text-xs text-gray-800 font-medium max-w-[200px] truncate">{lec.Topic || '—'}</td>
-                        <td className="px-6 py-3.5 text-xs text-gray-400 max-w-[140px] truncate hidden md:table-cell">{lec.Faculty_Name || '—'}</td>
+                        <td className="px-6 py-3.5 text-xs text-gray-800 font-medium max-w-[200px] truncate">
+                          {lec.session === 'second_half' ? 'Second Half' : 'First Half'}
+                        </td>
                         <td className="px-6 py-3.5 text-center">
                           {lec.present ? (
                             <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold ${lec.Late ? 'bg-amber-50 text-amber-600 ring-1 ring-amber-200' : 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200'}`}>

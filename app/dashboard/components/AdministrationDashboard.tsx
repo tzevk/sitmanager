@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { TableSkeleton, WidgetSkeleton } from './Skeletons';
+import { toBatchNumber } from '@/lib/batch-display';
 
 
 interface AdminTodoItem {
@@ -82,7 +83,7 @@ export default function AdministrationDashboard({
     })),
     ...(data?.trainingDevelopment?.upcomingExams ?? []).slice(0, 5).map((r: any) => ({
       type: 'Exams',
-      title: `${r.training_program || 'Exam'} (${r.batch_no || '-'})`,
+      title: `${r.training_program || 'Exam'} (${toBatchNumber(r.batch_no)})`,
       date: r.exam_date ? new Date(r.exam_date).toLocaleDateString('en-IN') : '-',
     })),
     ...(data?.trainingDevelopment?.siteVisits ?? []).slice(0, 5).map((r: any) => ({
@@ -97,7 +98,7 @@ export default function AdministrationDashboard({
     })),
     ...lecturesToday.slice(0, 5).map((r: any) => ({
       type: 'Lectures',
-      title: `${r.training_program || 'Lecture'} (${r.batch_no || '-'})`,
+      title: `${r.training_program || 'Lecture'} (${toBatchNumber(r.batch_no)})`,
       date: 'Today',
     })),
     ...todos.slice(0, 5).map((t) => ({
@@ -237,7 +238,7 @@ export default function AdministrationDashboard({
             <div className="p-4 space-y-2 max-h-[260px] overflow-auto">
               {lecturesToday.length === 0 ? <p className="text-sm text-gray-400">No lectures scheduled today</p> : lecturesToday.map((l: any, i: number) => (
                 <div key={`${l.batch_no || i}`} className="p-3 rounded-xl border border-gray-100 bg-gray-50/50 text-sm">
-                  <p className="font-semibold text-gray-800">{l.training_program || '-'} ({l.batch_no || '-'})</p>
+                  <p className="font-semibold text-gray-800">{l.training_program || '-'} ({toBatchNumber(l.batch_no)})</p>
                   <p className="text-xs text-gray-500 mt-1">{l.lecture_topic || '-'} · Room {l.room_no || '-'}</p>
                 </div>
               ))}

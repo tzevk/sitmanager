@@ -45,6 +45,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   const [courseId, setCourseId] = useState('');
   const [batchId, setBatchId]   = useState('');
   const [date, setDate]         = useState(todayStr());
+  const [sessionHalf, setSessionHalf] = useState<'first_half' | 'second_half'>('first_half');
 
   /* data */
   const [students, setStudents]   = useState<Student[]>([]);
@@ -83,7 +84,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     setLoaded(false);
     setSaved(false);
     setError('');
-  }, [batchId, date]);
+  }, [batchId, date, sessionHalf]);
 
   /* load students */
   const loadAttendance = useCallback(async () => {
@@ -92,7 +93,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     setError('');
     setSaved(false);
     try {
-      const res = await fetch(`/api/daily-activities/attendance?batchId=${batchId}&date=${date}`);
+      const res = await fetch(`/api/daily-activities/attendance?batchId=${batchId}&date=${date}&session=${sessionHalf}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load');
       const s: Student[] = data.students ?? [];
@@ -145,7 +146,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
       const res = await fetch('/api/daily-activities/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchId: Number(batchId), date, records }),
+        body: JSON.stringify({ batchId: Number(batchId), date, session: sessionHalf, records }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save');
@@ -271,6 +272,35 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
             />
           </div>
 
+          {/* Session toggle */}
+          <div className="flex flex-col gap-1 w-full sm:w-auto">
+            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Session</label>
+            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setSessionHalf('first_half')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                  sessionHalf === 'first_half'
+                    ? 'bg-[#2E3093] text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                First Half
+              </button>
+              <button
+                type="button"
+                onClick={() => setSessionHalf('second_half')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                  sessionHalf === 'second_half'
+                    ? 'bg-[#2E3093] text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Second Half
+              </button>
+            </div>
+          </div>
+
           {/* Load button */}
           <button
             onClick={loadAttendance}
@@ -324,6 +354,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                 {selectedBatch?.Batch_code}
                 {selectedBatch?.Timings ? ` · ${selectedBatch.Timings}` : ''} —{' '}
                 {new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                {` · ${sessionHalf === 'first_half' ? 'First Half' : 'Second Half'}`}
               </span>
               <span>{present} / {students.length} present</span>
             </div>

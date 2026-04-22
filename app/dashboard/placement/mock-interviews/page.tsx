@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
+import { toBatchNumber } from '@/lib/batch-display';
 
 interface BatchRow {
   Batch_Id: number;
@@ -316,7 +317,7 @@ export default function MockInterviewsPage() {
                           {dayBatchRows.map((entry) => (
                             <div key={`${d.key}-${entry.batch.Batch_Id}`} className="rounded border border-gray-200 bg-white/80 px-1 py-1">
                               <div className="text-[10px] font-semibold text-gray-800 truncate">{entry.batch.Course_Name || 'Training'}</div>
-                              <div className="text-[9px] text-gray-600 truncate">Batch: {entry.batch.Batch_code || `Batch ${entry.batch.Batch_Id}`}</div>
+                              <div className="text-[9px] text-gray-600 truncate">Batch: {toBatchNumber(entry.batch.Batch_code || entry.batch.Batch_Id)}</div>
                               {entry.isStart && <div className="text-[9px] text-green-700">Start: {formatDate(toDateKey(entry.batch.SDate))}</div>}
                               {entry.isEnd && <div className="text-[9px] text-blue-700">End: {formatDate(toDateKey(entry.batch.EDate))}</div>}
                             </div>
@@ -355,7 +356,7 @@ export default function MockInterviewsPage() {
                   <option value="">Select Batch</option>
                   {batches.map((b) => (
                     <option key={b.Batch_Id} value={b.Batch_Id}>
-                      {(b.Course_Name || 'Training')} - {b.Batch_code || `Batch ${b.Batch_Id}`}
+                      {(b.Course_Name || 'Training')} - {toBatchNumber(b.Batch_code || b.Batch_Id)}
                     </option>
                   ))}
                 </select>
@@ -427,7 +428,7 @@ export default function MockInterviewsPage() {
                     <div key={p.id} className="rounded-lg border border-gray-200 p-2.5 bg-gray-50">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="text-xs font-bold text-gray-800">{batch?.Course_Name || 'Training'} - {batch?.Batch_code || `Batch ${p.batchId}`}</div>
+                          <div className="text-xs font-bold text-gray-800">{batch?.Course_Name || 'Training'} - {toBatchNumber(batch?.Batch_code || p.batchId)}</div>
                           <div className="text-[11px] text-gray-600 mt-0.5">{p.time} | {p.mode}</div>
                           <div className="text-[11px] text-gray-600">Interviewer: {p.interviewer || '-'}</div>
                           {p.remarks && <div className="text-[11px] text-gray-700 mt-1">{p.remarks}</div>}
@@ -457,7 +458,7 @@ export default function MockInterviewsPage() {
               ) : (
                 batches.slice(0, 80).map((b) => (
                   <div key={b.Batch_Id} className="text-[11px] text-gray-700 rounded border border-gray-200 bg-gray-50 px-2 py-1.5">
-                    <span className="font-semibold">{b.Course_Name || 'Training'} - {b.Batch_code || `Batch ${b.Batch_Id}`}</span>
+                    <span className="font-semibold">{b.Course_Name || 'Training'} - {toBatchNumber(b.Batch_code || b.Batch_Id)}</span>
                     <div className="text-gray-600">{formatDate(toDateKey(b.SDate))} to {formatDate(toDateKey(b.EDate))}</div>
                   </div>
                 ))
