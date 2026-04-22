@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { sendOnlineAdmissionSubmissionEmail } from '@/lib/mailer';
+import { getTableCols } from '@/lib/db-schema';
 
 /* fallback labels for older DBs */
 const fallbackStatusMap: Record<number, string> = {
@@ -140,34 +141,45 @@ function buildAcademicRows(body: any, studentId: number) {
 }
 
 async function upsertAcademicRecords(pool: any, studentId: number, body: any) {
-  const academicRows = buildAcademicRows(body, studentId);
-  await pool.query('DELETE FROM student_master_aca_rec WHERE Student_Id = ?', [studentId]);
+  try {
+    const acaCols = await getTableCols(pool, 'student_master_aca_rec');
+    if (acaCols.size === 0) return; // table doesn't exist
 
-  for (const row of academicRows) {
-    await pool.query(
-      `INSERT INTO student_master_aca_rec (
-        Student_Id,
-        Aca_Qualification,
-        Discipline,
-        Institute,
-        Year,
-        Marks,
-        IsActive,
-        IsDelete,
-        Status_Remark,
-        Total_KT
-      ) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
-      [
-        row.studentId,
-        row.qualification,
-        row.discipline || null,
-        row.institute || null,
-        row.year || null,
-        row.marks || null,
-        row.statusRemark,
-        row.totalKt,
-      ]
-    );
+    const hasKt = acaCols.has('Total_KT');
+    const hasStatusRemark = acaCols.has('Status_Remark');
+    const academicRows = buildAcademicRows(body, studentId);
+
+    await pool.query('DELETE FROM student_master_aca_rec WHERE Student_Id = ?', [studentId]);
+
+    for (const row of academicRows) {
+      if (hasKt && hasStatusRemark) {
+        await pool.query(
+          `INSERT INTO student_master_aca_rec
+             (Student_Id, Aca_Qualification, Discipline, Institute, Year, Marks, IsActive, IsDelete, Status_Remark, Total_KT)
+           VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
+          [row.studentId, row.qualification, row.discipline || null, row.institute || null,
+           row.year || null, row.marks || null, row.statusRemark, row.totalKt]
+        );
+      } else if (hasStatusRemark) {
+        await pool.query(
+          `INSERT INTO student_master_aca_rec
+             (Student_Id, Aca_Qualification, Discipline, Institute, Year, Marks, IsActive, IsDelete, Status_Remark)
+           VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?)`,
+          [row.studentId, row.qualification, row.discipline || null, row.institute || null,
+           row.year || null, row.marks || null, row.statusRemark]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO student_master_aca_rec
+             (Student_Id, Aca_Qualification, Discipline, Institute, Year, Marks, IsActive, IsDelete)
+           VALUES (?, ?, ?, ?, ?, ?, 1, 0)`,
+          [row.studentId, row.qualification, row.discipline || null, row.institute || null,
+           row.year || null, row.marks || null]
+        );
+      }
+    }
+  } catch (err: any) {
+    console.warn('upsertAcademicRecords skipped:', err?.message);
   }
 }
 
@@ -187,24 +199,38 @@ export async function GET(req: NextRequest) {
     const dateFrom = searchParams.get('dateFrom') || '';
     const dateTo = searchParams.get('dateTo') || '';
 
+    // Discover which optional columns actually exist in this DB
+    const smCols = await getTableCols(pool, 'student_master');
+    const hasAdmission    = smCols.has('Admission');
+    const hasAdmissionDt  = smCols.has('Admission_Dt');
+    const hasBatchCode    = smCols.has('Batch_Code');
+
     const statusIdExpr = `CAST(NULLIF(TRIM(CAST(s.Status_id AS CHAR)), '') AS UNSIGNED)`;
     const statusTextExpr = `LOWER(TRIM(COALESCE(stm.Status, '')))`;
     const closedExpr = `(${statusTextExpr} LIKE '%closed%' OR ${statusTextExpr} REGEXP 'declin|reject|cancel|not interested|drop|left')`;
     const acceptedExpr = `(${statusTextExpr} LIKE '%accepted%' OR ${statusTextExpr} LIKE '%admitted%' OR ${statusTextExpr} LIKE '%confirm%')`;
     const openExpr = `(${statusTextExpr} LIKE '%open%' OR ${statusTextExpr} LIKE '%pending%')`;
+
+    /* ---- Build admission filter (only include columns that exist) ---- */
+    const admissionParts = ['s.Status_id = 8'];
+    if (hasAdmission)   admissionParts.push('s.Admission = 1');
+    if (hasAdmissionDt) admissionParts.push('s.Admission_Dt IS NOT NULL');
+    const admissionCond = `(${admissionParts.join(' OR ')})`;
+
     /* ---- Build WHERE ---- */
     const conditions: string[] = [
       '(s.IsDelete = 0 OR s.IsDelete IS NULL)',
-      '(s.Admission = 1 OR s.Status_id = 8 OR s.Admission_Dt IS NOT NULL)',
+      admissionCond,
     ];
     const params: (string | number)[] = [];
 
     if (search) {
-      conditions.push(
-        `(s.Student_Name LIKE ? OR s.Email LIKE ? OR s.Present_Mobile LIKE ? OR s.Batch_Code LIKE ?)`
-      );
+      const searchParts = ['s.Student_Name LIKE ?', 's.Email LIKE ?', 's.Present_Mobile LIKE ?'];
       const like = `%${search}%`;
-      params.push(like, like, like, like);
+      const searchVals: string[] = [like, like, like];
+      if (hasBatchCode) { searchParts.push('s.Batch_Code LIKE ?'); searchVals.push(like); }
+      conditions.push(`(${searchParts.join(' OR ')})`);
+      params.push(...searchVals);
     }
 
     if (statusCategory) {
@@ -217,14 +243,8 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (dateFrom) {
-      conditions.push('s.Admission_Dt >= ?');
-      params.push(dateFrom);
-    }
-    if (dateTo) {
-      conditions.push('s.Admission_Dt <= ?');
-      params.push(dateTo);
-    }
+    if (dateFrom && hasAdmissionDt) { conditions.push('s.Admission_Dt >= ?'); params.push(dateFrom); }
+    if (dateTo   && hasAdmissionDt) { conditions.push('s.Admission_Dt <= ?'); params.push(dateTo);   }
 
     const where = conditions.join(' AND ');
 
@@ -239,6 +259,9 @@ export async function GET(req: NextRequest) {
     const total = countRows[0]?.total ?? 0;
 
     /* ---- Data ---- */
+    const batchCodeSelect  = hasBatchCode    ? 's.Batch_Code as Batch_code'    : 'NULL as Batch_code';
+    const admissionDtSelect = hasAdmissionDt ? 's.Admission_Dt as Admission_Date' : 'NULL as Admission_Date';
+
     const dataSql = `
       SELECT
         s.Student_Id as Admission_Id,
@@ -246,8 +269,8 @@ export async function GET(req: NextRequest) {
         s.Student_Name,
         s.Email,
         s.Present_Mobile,
-        s.Batch_Code as Batch_code,
-        s.Admission_Dt as Admission_Date,
+        ${batchCodeSelect},
+        ${admissionDtSelect},
         s.Status_id as OnlineStateRaw,
         ${statusIdExpr} as OnlineStateId,
         COALESCE(stm.Status, '') as StatusText
@@ -309,7 +332,7 @@ export async function GET(req: NextRequest) {
       `SELECT DISTINCT ${statusIdExpr} as id
        FROM student_master s
        WHERE (s.IsDelete = 0 OR s.IsDelete IS NULL)
-         AND (s.Admission = 1 OR s.Status_id = 8 OR s.Admission_Dt IS NOT NULL)
+         AND ${admissionCond}
          AND ${statusIdExpr} IS NOT NULL`
     );
 
@@ -402,6 +425,9 @@ export async function POST(req: NextRequest) {
 
     const fullName = [body.firstName, body.middleName, body.lastName].filter(Boolean).join(' ');
 
+    // Discover schema once — reused for both createStudentMaster and main UPDATE
+    const smCols = await getTableCols(pool, 'student_master');
+
     // Look up Student_Inquiry by Inquiry_Id first (the URL param is Inquiry_Id, not student_master.Student_Id)
     const [siRows] = await pool.query<any[]>(
       `SELECT Inquiry_Id, Student_Id, Batch_Code, Course_Id
@@ -428,14 +454,31 @@ export async function POST(req: NextRequest) {
     };
 
     const createStudentMaster = async (): Promise<number> => {
+      // Build INSERT dynamically — only include columns that actually exist
+      type ColDef = { col: string; expr: string; val?: unknown };
+      const colDefs: ColDef[] = [
+        { col: 'Student_Name',   expr: '?', val: fullName },
+        { col: 'Email',          expr: '?', val: body.email },
+        { col: 'Present_Mobile', expr: '?', val: body.mobile },
+        { col: 'DOB',            expr: '?', val: body.dob || null },
+        { col: 'Sex',            expr: '?', val: body.gender || null },
+        { col: 'Nationality',    expr: '?', val: body.nationality || 'Indian' },
+        { col: 'Status_id',      expr: '?', val: 1 },
+      ];
+      if (smCols.has('Admission'))    colDefs.push({ col: 'Admission',    expr: '?', val: 0 });
+      if (smCols.has('Admission_Dt')) colDefs.push({ col: 'Admission_Dt', expr: 'NOW()' });
+      if (smCols.has('Date_Added'))   colDefs.push({ col: 'Date_Added',   expr: 'NOW()' });
+      if (smCols.has('updated_date')) colDefs.push({ col: 'updated_date', expr: 'NOW()' });
+
+      const colNames = colDefs.map(d => d.col).join(', ');
+      const colExprs = colDefs.map(d => d.expr).join(', ');
+      const colVals  = colDefs.filter(d => d.expr === '?').map(d => d.val);
+
       const [result] = await pool.query<any>(
-        `INSERT INTO student_master
-           (Student_Name, Email, Present_Mobile, DOB, Sex, Nationality, Admission, Status_id, Date_Added, updated_date)
-         VALUES (?, ?, ?, ?, ?, ?, 0, 1, NOW(), NOW())`,
-        [fullName, body.email, body.mobile, body.dob || null, body.gender || null, body.nationality || 'Indian']
+        `INSERT INTO student_master (${colNames}) VALUES (${colExprs})`,
+        colVals
       );
       const newId = result.insertId as number;
-      // Link back so future submissions resolve correctly
       await pool.query('UPDATE Student_Inquiry SET Student_Id = ? WHERE Inquiry_Id = ?', [newId, body.inquiryId]);
       return newId;
     };
@@ -461,69 +504,50 @@ export async function POST(req: NextRequest) {
       batchId = batchRows?.[0]?.Batch_Id ? Number(batchRows[0].Batch_Id) : null;
     }
 
-    // Update student_master with form data
+    // Update student_master — only touch columns that actually exist
+    type SetDef = { col: string; expr: string; val?: unknown };
+    const setDefs: SetDef[] = [
+      // Core columns — known to exist in all schema versions
+      { col: 'Student_Name',      expr: '?', val: fullName },
+      { col: 'Email',             expr: '?', val: body.email },
+      { col: 'Present_Mobile',    expr: '?', val: body.mobile },
+      { col: 'Present_Address',   expr: '?', val: body.presentAddress || null },
+      { col: 'Present_City',      expr: '?', val: body.presentCity || null },
+      { col: 'Present_Pin',       expr: '?', val: body.presentPin || null },
+      { col: 'Permanent_Address', expr: '?', val: body.permanentAddress || null },
+      { col: 'Permanent_State',   expr: '?', val: body.permanentState || null },
+      { col: 'Permanent_Country', expr: '?', val: body.permanentCountry || 'India' },
+      { col: 'Nationality',       expr: '?', val: body.nationality || 'Indian' },
+      { col: 'DOB',               expr: '?', val: body.dob || null },
+      { col: 'Sex',               expr: '?', val: body.gender || null },
+      { col: 'Status_id',         expr: '?', val: 8 },
+      { col: 'FName',             expr: '?', val: body.firstName || null },
+    ];
+    // Optional columns — only added if they exist in this DB
+    if (smCols.has('MName'))          setDefs.push({ col: 'MName',          expr: '?', val: body.middleName || null });
+    if (smCols.has('LName'))          setDefs.push({ col: 'LName',          expr: '?', val: body.lastName || null });
+    if (smCols.has('Nickname'))       setDefs.push({ col: 'Nickname',       expr: '?', val: body.shortName || null });
+    if (smCols.has('Present_Mobile2'))setDefs.push({ col: 'Present_Mobile2',expr: '?', val: body.telephone || null });
+    if (smCols.has('Present_State'))  setDefs.push({ col: 'Present_State',  expr: '?', val: body.presentState || null });
+    if (smCols.has('Permanent_City')) setDefs.push({ col: 'Permanent_City', expr: '?', val: body.permanentCity || null });
+    if (smCols.has('Permanent_Pin'))  setDefs.push({ col: 'Permanent_Pin',  expr: '?', val: body.permanentPin || null });
+    if (smCols.has('Father_Mobile'))  setDefs.push({ col: 'Father_Mobile',  expr: '?', val: body.familyContact || null });
+    if (smCols.has('Occupation'))     setDefs.push({ col: 'Occupation',     expr: '?', val: body.occupationalStatus || null });
+    if (smCols.has('Company'))        setDefs.push({ col: 'Company',        expr: '?', val: body.jobOrganisation || null });
+    if (smCols.has('Designation'))    setDefs.push({ col: 'Designation',    expr: '?', val: body.jobDesignation || null });
+    if (smCols.has('Total_Exp'))      setDefs.push({ col: 'Total_Exp',      expr: '?', val: toIntOrNull(body.totalOccupationYears) || 0 });
+    if (smCols.has('Remark'))         setDefs.push({ col: 'Remark',         expr: '?', val: body.educationRemark || null });
+    if (smCols.has('Batch_Code'))     setDefs.push({ col: 'Batch_Code',     expr: '?', val: body.batchCode || null });
+    if (smCols.has('Admission'))      setDefs.push({ col: 'Admission',      expr: '?', val: 1 });
+    if (smCols.has('Admission_Dt'))   setDefs.push({ col: 'Admission_Dt',   expr: 'NOW()' });
+    if (smCols.has('updated_date'))   setDefs.push({ col: 'updated_date',   expr: 'NOW()' });
+
+    const setSql  = setDefs.map(d => `${d.col} = ${d.expr}`).join(', ');
+    const setVals = setDefs.filter(d => d.expr === '?').map(d => d.val);
+
     await pool.query(
-      `UPDATE student_master SET
-        FName = ?,
-        MName = ?,
-        LName = ?,
-        Nickname = ?,
-        Student_Name = ?,
-        Email = ?,
-        Present_Mobile = ?,
-        Present_Mobile2 = ?,
-        Present_Address = ?,
-        Present_City = ?,
-        Present_Pin = ?,
-        Permanent_Address = ?,
-        Permanent_City = ?,
-        Permanent_Pin = ?,
-        Permanent_State = ?,
-        Permanent_Country = ?,
-        Nationality = ?,
-        DOB = ?,
-        Sex = ?,
-        Father_Mobile = ?,
-        Occupation = ?,
-        Company = ?,
-        Designation = ?,
-        Total_Exp = ?,
-        Remark = ?,
-        Batch_Code = ?,
-        Status_id = 8,
-        Admission = 1,
-        Admission_Dt = NOW(),
-        updated_date = NOW()
-      WHERE Student_Id = ?`,
-      [
-        body.firstName || null,
-        body.middleName || null,
-        body.lastName || null,
-        body.shortName || null,
-        fullName,
-        body.email,
-        body.mobile,
-        body.telephone || null,
-        body.presentAddress || null,
-        body.presentCity || null,
-        body.presentPin || null,
-        body.permanentAddress || null,
-        body.permanentCity || null,
-        body.permanentPin || null,
-        body.permanentState || null,
-        body.permanentCountry || 'India',
-        body.nationality || 'Indian',
-        body.dob || null,
-        body.gender || null,
-        body.familyContact || null,
-        body.occupationalStatus || null,
-        body.jobOrganisation || null,
-        body.jobDesignation || null,
-        toIntOrNull(body.totalOccupationYears) || 0,
-        body.educationRemark || null,
-        body.batchCode || null,
-        studentId,
-      ]
+      `UPDATE student_master SET ${setSql} WHERE Student_Id = ?`,
+      [...setVals, studentId]
     );
 
     const [existingAdmission] = await pool.query<any[]>(
