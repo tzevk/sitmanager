@@ -322,14 +322,9 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   const { session, loading, isSuperAdmin, hasAnyPermission } = usePermissions();
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [dropdownPos, setDropdownPos] = useState<{ left: number; top: number } | null>(null);
-  const [showWelcome, setShowWelcome] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    try {
-      return sessionStorage.getItem('sit-admin-welcome-seen') !== '1';
-    } catch {
-      return true;
-    }
-  });
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileOpenSection, setMobileOpenSection] = useState<string | null>(null);
+  const [showWelcome, setShowWelcome] = useState(false);
   const menuButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const menuScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -409,6 +404,14 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [session, showWelcome]);
 
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    if (mobileMenuOpen) document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileMenuOpen]);
+
   const welcomeQuote = pickDeterministicQuote(
     `${session?.email ?? ''}|${session?.firstName ?? ''}|${session?.lastName ?? ''}|${session?.role ?? ''}`,
   );
@@ -419,10 +422,74 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
       {openDropdown && (
         <div className="fixed inset-0 z-30" onClick={closeDropdown} />
       )}
+      {mobileMenuOpen && (
+        <button
+          type="button"
+          aria-label="Close mobile menu overlay"
+          className="fixed inset-0 z-40 bg-slate-900/45 backdrop-blur-[1px] md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
 
       {/* Navbar */}
       <nav className="bg-[#2A6BB5] shrink-0 z-40 overflow-y-visible border-b border-white/15 shadow-[0_6px_24px_rgba(46,48,147,0.18)]">
-        <div className="grid grid-cols-[auto_1fr_auto] items-center h-12 px-3 gap-3 relative">
+        <div className="md:hidden h-12 px-3 flex items-center justify-between relative">
+          <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-white/20" />
+
+          <button
+            type="button"
+            aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            className="p-2 rounded-lg text-white hover:bg-[#FAE452] hover:text-[#2E3093] transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+              {mobileMenuOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
+
+          <span
+            className="text-[14px] font-bold tracking-[0.12em] leading-none whitespace-nowrap"
+            style={{ fontFamily: 'var(--font-libre-franklin), sans-serif', color: '#FAE452' }}
+          >
+            SIT MANAGER
+          </span>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => {
+                if ('Notification' in window) {
+                  Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                      new Notification('SIT Manager', { body: 'Notifications are enabled!' });
+                    }
+                  });
+                }
+              }}
+              className="relative p-2 rounded-lg text-white hover:bg-[#FAE452] hover:text-[#2E3093] transition-colors"
+              title="Notifications"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="p-2 rounded-lg text-white hover:bg-[#FAE452] hover:text-[#2E3093] transition-colors"
+              title="Sign Out"
+              aria-label="Sign Out"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="hidden md:grid grid-cols-[auto_1fr_auto] items-center h-12 px-3 gap-3 relative">
           <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-white/20" />
           {/* Brand */}
           <div className="flex items-center gap-2.5 min-w-0">
@@ -541,6 +608,116 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </div>
+
+        <aside
+          className={`fixed top-12 bottom-0 left-0 z-50 w-[86vw] max-w-[340px] md:hidden bg-white border-r border-slate-200 shadow-[0_16px_40px_rgba(15,23,42,0.25)] transform transition-transform duration-300 ease-out ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
+          aria-hidden={!mobileMenuOpen}
+        >
+          <div className="h-full flex flex-col">
+            <div className="px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white">
+              <p className="text-xs uppercase tracking-widest text-white/75">Navigation</p>
+              <p className="text-sm font-semibold mt-1 truncate">
+                {session
+                  ? `${session.firstName} ${session.lastName}`.trim() || session.email
+                  : 'Guest'}
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-2">
+              {visibleMenuItems.map((item) => {
+                const hasSubMenu = Boolean(SUB_MENUS[item]);
+                const isExpanded = mobileOpenSection === item;
+                return (
+                  <div key={item} className="px-2 py-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (item === 'Dashboard') {
+                          router.push('/dashboard');
+                          setMobileMenuOpen(false);
+                          return;
+                        }
+                        if (!hasSubMenu) {
+                          setMobileMenuOpen(false);
+                          return;
+                        }
+                        setMobileOpenSection((prev) => (prev === item ? null : item));
+                      }}
+                      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                        activeMenu === item
+                          ? 'bg-[#FAE452]/70 text-[#2E3093]'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span className="truncate text-left">{item}</span>
+                      {hasSubMenu && (
+                        <svg
+                          className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      )}
+                    </button>
+
+                    {hasSubMenu && (
+                      <div className={`grid transition-all duration-300 ease-out ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                        <div className="overflow-hidden">
+                          <div className="pl-2 pr-1 py-1 space-y-0.5">
+                            {SUB_MENUS[item]
+                              .filter((subItem) => canAccessSubMenu(item, subItem))
+                              .map((subItem) => {
+                                const routeKey = `${item} > ${subItem}`;
+                                const route = SUB_MENU_ROUTES[routeKey];
+                                const routePath = route ? route.split('?')[0] : null;
+                                const isActive = !!(routePath && pathname.startsWith(routePath));
+                                return (
+                                  <button
+                                    key={subItem}
+                                    type="button"
+                                    onClick={() => {
+                                      if (!route) return;
+                                      router.push(route);
+                                      setMobileMenuOpen(false);
+                                    }}
+                                    disabled={!route}
+                                    className={`w-full text-left px-3 py-2 rounded-md text-[13px] transition-colors ${
+                                      !route
+                                        ? 'text-slate-400 cursor-not-allowed'
+                                        : isActive
+                                          ? 'bg-[#2E3093]/10 text-[#2E3093] font-semibold'
+                                          : 'text-slate-600 hover:bg-slate-100'
+                                    }`}
+                                  >
+                                    <span className="block truncate">{subItem}</span>
+                                  </button>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold text-white bg-[#2E3093] hover:bg-[#24267A] transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </aside>
 
         {/* Dropdown (fixed-position to avoid overflow clipping) */}
         {openDropdown && SUB_MENUS[openDropdown] && dropdownPos && (
