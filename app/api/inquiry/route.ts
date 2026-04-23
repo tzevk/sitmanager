@@ -38,18 +38,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
 
-    const sql = `
-      INSERT INTO Student_Inquiry (
-        Student_Name, Sex, DOB, Present_Mobile, Present_Mobile2,
-        Email, Nationality, Present_Country, Discussion,
-        OnlineState, Inquiry_Dt, Inquiry_From, Inquiry_Type,
-        Course_Id, Batch_Category_id, Batch_Code,
-        Qualification, Discipline, Percentage,
-        IsDelete, Inquiry, Date_Added
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'Inquiry', NOW())
-    `;
+    const sql = `INSERT INTO Student_Inquiry (
+          Student_Name, Sex, DOB, Present_Mobile, Present_Mobile2,
+          Email, Nationality, Present_Country, Discussion,
+          OnlineState, Inquiry_Dt, Inquiry_From, Inquiry_Type,
+          Course_Id, Batch_Category_id, Batch_Code,
+          Qualification, Discipline, Percentage,
+          IsDelete, Inquiry, Date_Added
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'Inquiry', NOW())`;
 
-    const params = [
+    const baseParams = [
       Student_Name?.trim() || null,
       Sex || null,
       DOB || null,
@@ -70,8 +68,7 @@ export async function POST(req: NextRequest) {
       Discipline || null,
       Percentage || null,
     ];
-
-    const [result] = await pool.query(sql, params);
+    const [result] = await pool.query(sql, baseParams);
     const insertId = (result as any).insertId;
 
     // Also insert into awt_inquirydiscussion so it shows in the list's Discussion column
@@ -299,12 +296,11 @@ export async function GET(req: NextRequest) {
         ? `si.${locationColumn} as Location,`
         : `NULL as Location,`;
       const [rows] = await pool.query(
-        `SELECT 
+        `SELECT
           si.Inquiry_Id as Student_Id,
           si.Student_Id as SourceStudentId,
           si.Student_Name,
           c.Course_Name as CourseName,
-          ${resolvedBatchCodeExpr} as Batch_Code,
           si.Inquiry_Dt,
           si.Present_Mobile,
           si.Email,
@@ -381,15 +377,11 @@ export async function GET(req: NextRequest) {
       const disciplineValue =
         (r.DisciplineName && String(r.DisciplineName).trim() ? String(r.DisciplineName).trim() : null)
         || (r.Discipline && String(r.Discipline).trim() ? String(r.Discipline).trim() : null);
-      const batchCodeValue = r.Batch_Code && String(r.Batch_Code).trim()
-        ? String(r.Batch_Code).trim()
-        : null;
 
       return {
         Student_Id: r.Student_Id,
         Student_Name: r.Student_Name,
         CourseName: r.CourseName,
-        Batch_Code: batchCodeValue,
         Inquiry_Dt: r.Inquiry_Dt,
         Present_Mobile: r.Present_Mobile,
         Email: r.Email,

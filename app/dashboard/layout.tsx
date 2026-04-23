@@ -257,6 +257,64 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Utility > Festival Photo Upload': ['festival_photo.view'],
 };
 
+const NAV_ICONS: Record<string, React.ReactNode> = {
+  'Dashboard': (
+    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+    </svg>
+  ),
+  'General Master': (
+    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+    </svg>
+  ),
+  'Masters': (
+    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+    </svg>
+  ),
+  'Admission Activity': (
+    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+    </svg>
+  ),
+  'Daily Activities': (
+    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  ),
+  'Admin/Accounts': (
+    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+    </svg>
+  ),
+  'Corporate Training': (
+    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+    </svg>
+  ),
+  'Placement': (
+    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+    </svg>
+  ),
+  'Reports': (
+    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+    </svg>
+  ),
+  'Role Right': (
+    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+    </svg>
+  ),
+  'Utility': (
+    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  ),
+};
+
 const WELCOME_QUOTES: Array<{ text: string; author: string }> = [
   { text: 'The only way to do great work is to love what you do.', author: 'Steve Jobs' },
   { text: 'It does not matter how slowly you go as long as you do not stop.', author: 'Confucius' },
@@ -304,17 +362,6 @@ function getInitials(firstName?: string, lastName?: string, email?: string) {
   return 'U';
 }
 
-function NavbarUserSkeleton() {
-  return (
-    <div className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-white/15 bg-white/10 min-w-[180px] animate-pulse">
-      <div className="w-7 h-7 rounded-full bg-white/30" />
-      <div className="min-w-0 leading-tight flex-1 space-y-1">
-        <div className="h-2.5 w-24 bg-white/30 rounded" />
-        <div className="h-2 w-16 bg-white/20 rounded" />
-      </div>
-    </div>
-  );
-}
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -432,15 +479,15 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Navbar */}
-      <nav className="bg-[#2A6BB5] shrink-0 z-40 overflow-y-visible border-b border-white/15 shadow-[0_6px_24px_rgba(46,48,147,0.18)]">
-        <div className="md:hidden h-12 px-3 flex items-center justify-between relative">
-          <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-white/20" />
+      <nav className="bg-[#2A6BB5] shrink-0 z-40 overflow-y-visible shadow-[0_4px_20px_rgba(46,48,147,0.22)]">
 
+        {/* ── Mobile bar ── */}
+        <div className="md:hidden h-12 px-3 flex items-center justify-between bg-[#2E3093]">
           <button
             type="button"
             aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
             onClick={() => setMobileMenuOpen((prev) => !prev)}
-            className="p-2 rounded-lg text-white hover:bg-[#FAE452] hover:text-[#2E3093] transition-colors"
+            className="p-2 rounded-lg text-white hover:bg-white/15 transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
               {mobileMenuOpen ? (
@@ -450,38 +497,12 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
               )}
             </svg>
           </button>
-
-          <span
-            className="text-[14px] font-bold tracking-[0.12em] leading-none whitespace-nowrap"
-            style={{ fontFamily: 'var(--font-libre-franklin), sans-serif', color: '#FAE452' }}
-          >
+          <span className="text-[14px] font-bold tracking-[0.12em] leading-none whitespace-nowrap"
+            style={{ fontFamily: 'var(--font-libre-franklin), sans-serif', color: '#FAE452' }}>
             SIT MANAGER
           </span>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => {
-                if ('Notification' in window) {
-                  Notification.requestPermission().then(permission => {
-                    if (permission === 'granted') {
-                      new Notification('SIT Manager', { body: 'Notifications are enabled!' });
-                    }
-                  });
-                }
-              }}
-              className="relative p-2 rounded-lg text-white hover:bg-[#FAE452] hover:text-[#2E3093] transition-colors"
-              title="Notifications"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-            </button>
-            <button
-              onClick={handleSignOut}
-              className="p-2 rounded-lg text-white hover:bg-[#FAE452] hover:text-[#2E3093] transition-colors"
-              title="Sign Out"
-              aria-label="Sign Out"
-            >
+          <div className="flex items-center gap-1">
+            <button onClick={handleSignOut} className="p-2 rounded-lg text-white hover:bg-white/15 transition-colors" aria-label="Sign Out">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
@@ -489,123 +510,115 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <div className="hidden md:grid grid-cols-[auto_1fr_auto] items-center h-12 px-3 gap-3 relative">
-          <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-white/20" />
+        {/* ── Desktop: Row 1 — Brand + User ── */}
+        <div className="hidden md:flex items-center justify-between h-10 px-4 bg-[#2E3093] border-b border-white/10">
           {/* Brand */}
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span
-              className="text-[15px] font-bold tracking-[0.14em] leading-none whitespace-nowrap"
-              style={{ fontFamily: 'var(--font-libre-franklin), sans-serif', color: '#FAE452' }}
-            >
-              SIT MANAGER
-            </span>
-          </div>
+          <span className="text-[14px] font-black tracking-[0.16em] leading-none whitespace-nowrap select-none"
+            style={{ fontFamily: 'var(--font-libre-franklin), sans-serif', color: '#FAE452' }}>
+            SIT MANAGER
+          </span>
 
-          {/* Menu (centered) */}
-          <div
-            ref={menuScrollRef}
-            className="overflow-x-auto overflow-y-visible"
-            onScroll={() => {
-              if (openDropdown) updateDropdownPos(openDropdown);
-            }}
-          >
-            <div className="flex items-center gap-1.5 h-12 px-1 w-max mx-auto relative">
-              {visibleMenuItems.map((item) => (
-                <div key={item} className="relative">
-                  <button
-                    ref={(el) => {
-                      menuButtonRefs.current[item] = el;
-                    }}
-                    onClick={() => {
-                      if (item === 'Dashboard') {
-                        setOpenDropdown(null);
-                        setDropdownPos(null);
-                        router.push('/dashboard');
-                      } else if (SUB_MENUS[item]) {
-                        const next = openDropdown === item ? null : item;
-                        setOpenDropdown(next);
-                        if (next) updateDropdownPos(next);
-                        else setDropdownPos(null);
-                      } else {
-                        setOpenDropdown(null);
-                        setDropdownPos(null);
-                      }
-                    }}
-                    className={`px-3.5 h-9 text-[13px] font-semibold whitespace-nowrap transition-all duration-200 flex items-center gap-1 rounded-md relative ${
-                      activeMenu === item
-                        ? "bg-[#FAE452] text-[#2E3093] shadow-[0_6px_18px_rgba(0,0,0,0.12)]"
-                        : 'bg-transparent text-white/90 hover:bg-[#FAE452] hover:text-[#2E3093]'
-                    }`}
-                  >
-                    {item}
-                    {SUB_MENUS[item] && (
-                      <svg className="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-2 min-w-0">
-            {/* User chip */}
+          {/* User + Actions */}
+          <div className="flex items-center gap-1.5">
             {loading ? (
-              <NavbarUserSkeleton />
+              <div className="flex items-center gap-2 px-2 py-1 rounded-lg border border-white/15 bg-white/10 min-w-[160px] animate-pulse">
+                <div className="w-6 h-6 rounded-full bg-white/30 shrink-0" />
+                <div className="space-y-1 flex-1">
+                  <div className="h-2 w-20 bg-white/30 rounded" />
+                  <div className="h-1.5 w-12 bg-white/20 rounded" />
+                </div>
+              </div>
             ) : (
-              <div
-                className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-white/15 bg-white/10 text-white min-w-0"
-                title={session?.email || ''}
-              >
-                <div className="w-7 h-7 rounded-full bg-[#FAE452] text-[#2E3093] flex items-center justify-center text-[12px] font-extrabold">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-white/15 bg-white/10 text-white" title={session?.email || ''}>
+                <div className="w-6 h-6 rounded-full bg-[#FAE452] text-[#2E3093] flex items-center justify-center text-[10px] font-black shrink-0">
                   {getInitials(session?.firstName, session?.lastName, session?.email)}
                 </div>
                 <div className="min-w-0 leading-tight">
-                  <div className="text-[12px] font-semibold truncate max-w-[180px]">
-                    {session
-                      ? `${session.firstName} ${session.lastName}`.trim() || session.email
-                      : 'Guest'}
+                  <div className="text-[11px] font-semibold truncate max-w-[150px]">
+                    {session ? `${session.firstName} ${session.lastName}`.trim() || session.email : 'Guest'}
                   </div>
-                  <div className="text-[10px] text-white/75 truncate max-w-[180px]">
-                    {session
-                      ? isSuperAdmin
-                        ? 'Super Admin'
-                        : session.department || `Role ${session.role}`
-                      : ''}
+                  <div className="text-[9px] text-white/65 truncate max-w-[150px]">
+                    {session ? (isSuperAdmin ? 'Super Admin' : session.department || `Role ${session.role}`) : ''}
                   </div>
                 </div>
               </div>
             )}
 
+            <div className="w-px h-4 bg-white/15 mx-0.5" />
+
             <button
               onClick={() => {
                 if ('Notification' in window) {
-                  Notification.requestPermission().then(permission => {
-                    if (permission === 'granted') {
-                      new Notification('SIT Manager', { body: 'Notifications are enabled!' });
-                    }
+                  Notification.requestPermission().then(p => {
+                    if (p === 'granted') new Notification('SIT Manager', { body: 'Notifications enabled!' });
                   });
                 }
               }}
-              className="relative p-2 rounded-lg text-white hover:bg-[#FAE452] hover:text-[#2E3093] transition-colors"
+              className="p-1.5 rounded-lg text-white/80 hover:bg-white/15 hover:text-white transition-colors"
               title="Notifications"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
             </button>
+
             <button
               onClick={handleSignOut}
-              className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-white hover:bg-[#FAE452] hover:text-[#2E3093] transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-white/80 hover:bg-[#FAE452] hover:text-[#2E3093] transition-colors text-[11px] font-semibold"
               title="Sign Out"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
-              <span className="text-xs font-semibold">Sign Out</span>
+              Sign Out
             </button>
+          </div>
+        </div>
+
+        {/* ── Desktop: Row 2 — Navigation ── */}
+        <div
+          ref={menuScrollRef}
+          className="hidden md:block overflow-x-auto overflow-y-visible relative"
+          onScroll={() => { if (openDropdown) updateDropdownPos(openDropdown); }}
+        >
+          {/* Yellow accent line at the very bottom */}
+          <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]/60 pointer-events-none" />
+
+          <div className="flex items-center h-9 px-2 w-max mx-auto">
+            {visibleMenuItems.map((item) => (
+              <button
+                key={item}
+                ref={(el) => { menuButtonRefs.current[item] = el; }}
+                onClick={() => {
+                  if (item === 'Dashboard') {
+                    setOpenDropdown(null);
+                    setDropdownPos(null);
+                    router.push('/dashboard');
+                  } else if (SUB_MENUS[item]) {
+                    const next = openDropdown === item ? null : item;
+                    setOpenDropdown(next);
+                    if (next) updateDropdownPos(next);
+                    else setDropdownPos(null);
+                  } else {
+                    setOpenDropdown(null);
+                    setDropdownPos(null);
+                  }
+                }}
+                className={`flex items-center gap-1.5 px-2.5 h-8 text-[11.5px] font-semibold whitespace-nowrap transition-all duration-150 rounded-md mx-0.5 ${
+                  activeMenu === item
+                    ? 'bg-[#FAE452] text-[#2E3093] shadow-sm'
+                    : 'text-white/85 hover:bg-white/15 hover:text-white'
+                }`}
+              >
+                {NAV_ICONS[item]}
+                <span>{item}</span>
+                {SUB_MENUS[item] && (
+                  <svg className={`w-2.5 h-2.5 opacity-70 transition-transform duration-150 ${openDropdown === item ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                  </svg>
+                )}
+              </button>
+            ))}
           </div>
         </div>
 
