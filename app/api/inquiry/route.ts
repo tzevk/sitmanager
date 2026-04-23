@@ -108,6 +108,8 @@ export async function GET(req: NextRequest) {
     /* --- Single inquiry by id --- */
     const singleId = url.searchParams.get('id');
     if (singleId) {
+      const disciplineNameExpr =
+        `COALESCE(NULLIF(TRIM(md.Deciplin), ''), NULLIF(TRIM(si.Discipline), ''))`;
       const sql = `
         SELECT
           si.Inquiry_Id as Student_Id, si.Student_Name, si.Sex, si.DOB,
@@ -116,10 +118,11 @@ export async function GET(req: NextRequest) {
           CAST(NULLIF(si.OnlineState, '') AS UNSIGNED) as Status_id,
           si.Inquiry_Dt, si.Inquiry_From, si.Inquiry_Type,
           si.Course_Id, si.Batch_Category_id, si.Batch_Code,
-          si.Qualification, si.Discipline, si.Percentage,
+          si.Qualification, si.Discipline, ${disciplineNameExpr} as DisciplineName, si.Percentage,
           c.Course_Name as CourseName
         FROM Student_Inquiry si
         LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
+        LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline), '') AS UNSIGNED)
         WHERE si.Inquiry_Id = ? AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
       `;
       const [rows] = await pool.query(sql, [parseInt(singleId)]);

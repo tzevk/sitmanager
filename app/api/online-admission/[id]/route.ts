@@ -301,6 +301,7 @@ export async function GET(
 
     // Format response
     const response = {
+      ...payload,
       admissionId: admission.Admission_Id,
       studentId: admission.Student_Id,
       firstName: payload.firstName || firstName,
@@ -317,11 +318,13 @@ export async function GET(
       presentAddress: admission.Present_Address || '',
       presentCity: admission.Present_City || '',
       presentPin: admission.Present_Pin || '',
+      presentState: payload.presentState || admission.Present_State || '',
       permanentAddress: admission.Permanent_Address || '',
       permanentCity: admission.Permanent_City || '',
       permanentPin: admission.Permanent_Pin || '',
       permanentState: admission.Permanent_State || '',
       permanentCountry: admission.Permanent_Country || 'India',
+      sameAsPresent: Boolean(payload.sameAsPresent),
       ...academicData,
       educationRemark: payload.educationRemark || admission.Remark || '',
       occupationalStatus: payload.occupationalStatus || admission.Occupation || '',
@@ -334,11 +337,14 @@ export async function GET(
       selfEmploymentDetails: payload.selfEmploymentDetails || '',
       trainingProgrammeId: payload.trainingProgrammeId || '',
       trainingProgrammeName: payload.trainingProgrammeName || '',
+      trainingProgram: payload.trainingProgram || payload.trainingProgrammeName || '',
       trainingCategory: payload.trainingCategory || '',
       batchCode: admission.Admission_Batch_code || admission.Student_Batch_Code || '',
       idProofType: payload.idProofType || '',
       consentAcknowledged: Boolean(payload.consentAcknowledged),
       experiencedConsentAcknowledged: Boolean(payload.experiencedConsentAcknowledged),
+      consentChecks: Array.isArray(payload.consentChecks) ? payload.consentChecks : [],
+      consentData: payload.consentData || { eligibility: '', qualification: '', candidateRemark: '' },
       termsAgreed: Boolean(payload.termsAgreed),
     };
 

@@ -175,7 +175,7 @@ export default function InquiryPage() {
   const followUps = rows.filter(hasScheduledFollowUp);
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="space-y-6">
       {permLoading ? <PermissionLoading /> : !canView ? <AccessDenied message="You do not have permission to view inquiries." /> : (<>
 
       {/* Header */}

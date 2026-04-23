@@ -269,15 +269,6 @@ function extractCorporateFollowupCandidates(opts: {
     || normalizeDateOnly(opts.inquiryDate)
     || null;
 
-  const discussion = String(opts.discussion || '').trim();
-  if (discussion) {
-    pushCandidate({
-      followupDate: fallbackDate,
-      purpose: 'Corporate Inquiry Discussion',
-      remarks: discussion,
-    });
-  }
-
   const followUpRaw = String(opts.followUpRaw || '').trim();
   if (followUpRaw) {
     try {
@@ -368,18 +359,8 @@ async function syncConsultancyFollowupsFromCorporate(opts: {
     inquiryDate: opts.inquiryDate,
   });
 
-  const fallbackDate =
-    normalizeDateOnly(opts.nextFollowUpDate)
-    || normalizeDateOnly(opts.initialFollowUpDate)
-    || normalizeDateOnly(opts.inquiryDate)
-    || null;
-
   if (candidates.length === 0) {
-    candidates.push({
-      followupDate: fallbackDate,
-      purpose: 'Corporate Inquiry Entry',
-      remarks: String(opts.discussion || '').trim() || null,
-    });
+    return;
   }
 
   await ensureConsultancyFollowupTable(opts.pool);
@@ -389,43 +370,19 @@ async function syncConsultancyFollowupsFromCorporate(opts: {
     || null;
 
   const corporateInquiryId = Number(opts.corporateInquiryId);
-  const hasCorporateInquiryId = Number.isFinite(corporateInquiryId) && corporateInquiryId > 0;
+  const sourceInquiryId = Number.isFinite(corporateInquiryId) && corporateInquiryId > 0 ? corporateInquiryId : null;
+
+  if (sourceInquiryId !== null) {
+    await opts.pool.query(
+      `DELETE FROM consultant_followup
+       WHERE Const_Id = ? AND Source_Inquiry_Id = ?`,
+      [opts.consultancyId, sourceInquiryId]
+    );
+  }
 
   for (const c of candidates) {
     let exists: any[] = [];
-    if (hasCorporateInquiryId) {
-      const [bySource] = await opts.pool.query<any[]>(
-        `SELECT Followup_Id
-         FROM consultant_followup
-         WHERE Const_Id = ?
-           AND Source_Inquiry_Id = ?
-           AND COALESCE(Followup_Date, '1900-01-01') = COALESCE(?, '1900-01-01')
-          AND LOWER(TRIM(COALESCE(Contact_Person, ''))) = LOWER(TRIM(COALESCE(?, '')))
-          AND LOWER(TRIM(COALESCE(Designation, ''))) = LOWER(TRIM(COALESCE(?, '')))
-          AND LOWER(TRIM(COALESCE(Mobile, ''))) = LOWER(TRIM(COALESCE(?, '')))
-          AND LOWER(TRIM(COALESCE(email, ''))) = LOWER(TRIM(COALESCE(?, '')))
-           AND LOWER(TRIM(COALESCE(Purpose, ''))) = LOWER(TRIM(COALESCE(?, '')))
-          AND LOWER(TRIM(COALESCE(Course, ''))) = LOWER(TRIM(COALESCE(?, '')))
-          AND LOWER(TRIM(COALESCE(Direct_Line, ''))) = LOWER(TRIM(COALESCE(?, '')))
-           AND LOWER(TRIM(COALESCE(Remarks, ''))) = LOWER(TRIM(COALESCE(?, '')))
-           AND (IsDelete = 0 OR IsDelete IS NULL)
-         LIMIT 1`,
-        [
-          opts.consultancyId,
-          corporateInquiryId,
-          c.followupDate,
-          c.contactPerson,
-          c.designation,
-          c.mobile,
-          c.email,
-          c.purpose,
-          c.course,
-          c.directLine,
-          c.remarks,
-        ]
-      );
-      exists = bySource;
-    } else {
+    if (sourceInquiryId === null) {
       const [legacyExists] = await opts.pool.query<any[]>(
         `SELECT Followup_Id
          FROM consultant_followup
@@ -474,7 +431,7 @@ async function syncConsultancyFollowupsFromCorporate(opts: {
         c.course || null,
         c.directLine || null,
         c.remarks,
-        hasCorporateInquiryId ? corporateInquiryId : null,
+        sourceInquiryId,
       ]
     );
   }

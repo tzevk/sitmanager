@@ -68,9 +68,13 @@ export default function EditOnlineAdmissionPage() {
     presentAddress: '',
     presentCity: '',
     presentPin: '',
+    presentState: '',
     permanentAddress: '',
+    permanentCity: '',
+    permanentPin: '',
     permanentState: '',
     permanentCountry: 'India',
+    sameAsPresent: false,
     
     // Education Details - SSC
     ssc_board: '',
@@ -130,8 +134,14 @@ export default function EditOnlineAdmissionPage() {
     
     // Training Details
     trainingCategory: '',
+    trainingProgram: '',
     batchCode: '',
     idProofType: '',
+    termsAgreed: false,
+    consentAcknowledged: false,
+    experiencedConsentAcknowledged: false,
+    consentChecks: [] as boolean[],
+    consentData: { eligibility: '', qualification: '', candidateRemark: '' },
   });
 
   useEffect(() => {
@@ -163,9 +173,13 @@ export default function EditOnlineAdmissionPage() {
         presentAddress: data.presentAddress || '',
         presentCity: data.presentCity || '',
         presentPin: data.presentPin || '',
+        presentState: data.presentState || '',
         permanentAddress: data.permanentAddress || '',
+        permanentCity: data.permanentCity || '',
+        permanentPin: data.permanentPin || '',
         permanentState: data.permanentState || '',
         permanentCountry: data.permanentCountry || 'India',
+        sameAsPresent: Boolean(data.sameAsPresent),
         ssc_board: data.ssc_board || '',
         ssc_schoolName: data.ssc_schoolName || '',
         ssc_yearOfPassing: data.ssc_yearOfPassing || '',
@@ -210,8 +224,14 @@ export default function EditOnlineAdmissionPage() {
         totalOccupationYears: data.totalOccupationYears || '',
         selfEmploymentDetails: data.selfEmploymentDetails || '',
         trainingCategory: data.trainingCategory || '',
+        trainingProgram: data.trainingProgram || data.trainingProgrammeName || '',
         batchCode: data.batchCode || '',
         idProofType: data.idProofType || '',
+        termsAgreed: Boolean(data.termsAgreed),
+        consentAcknowledged: Boolean(data.consentAcknowledged),
+        experiencedConsentAcknowledged: Boolean(data.experiencedConsentAcknowledged),
+        consentChecks: Array.isArray(data.consentChecks) ? data.consentChecks : [],
+        consentData: data.consentData || { eligibility: '', qualification: '', candidateRemark: '' },
       });
     } catch (err) {
       console.error('Error fetching admission data:', err);

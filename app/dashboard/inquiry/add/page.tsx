@@ -135,7 +135,7 @@ export default function AddInquiryPage() {
       setCategory(d.Batch_Category_id || '');
       setBatchCode(d.Batch_Code || '');
       setQualification(d.Qualification || '');
-      setDiscipline(d.Discipline || '');
+      setDiscipline(d.DisciplineName || d.Discipline || '');
       setPercentage(d.Percentage != null ? String(d.Percentage) : '');
     }).catch(console.error);
   }, [editId]);

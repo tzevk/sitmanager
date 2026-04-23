@@ -79,6 +79,23 @@ async function readFileAsAttachment(file: File): Promise<Attachment> {
   return { name: file.name, mime: file.type || 'application/octet-stream', dataUrl };
 }
 
+async function urlToDataUrl(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+    return dataUrl;
+  } catch {
+    return null;
+  }
+}
+
 const DEFAULT_ABOUT_ORGANISATION = `1. Introduction
 "Suvidya Institute of Technology Pvt. Ltd." is a Training organization formed to "Make Everyone Eligible for Working in Global Industry" by enhancing skills as per the industrial project activities. SIT training is supported by an EPC company "Ms. Accent Techno Solutions Pvt. Ltd." by providing working professionals as a Trainer and Providing project case studies for making training Rehearsal of actual working.
 
@@ -400,7 +417,7 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     const watermarkUrl = `${origin}/sit.png`;
 
-    const pageStyle = `min-height: 100vh; padding: 32px; position: relative; page-break-after: always; break-after: page;`;
+    const pageStyle = `min-height: 100vh; padding: 32px; position: relative; page-break-after: always; break-after: page; mso-page-break-after: always;`;
 
     return `
       <html>
@@ -412,7 +429,7 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
             body {
               font-family: "Segoe UI", Arial, sans-serif;
               color: #1a1a1a;
-              line-height: 1.5;
+              line-height: 1.45;
               background-image: url('${watermarkUrl}');
               background-repeat: no-repeat;
               background-position: center 42%;
@@ -428,6 +445,7 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
               pointer-events: none;
             }
             .page { ${pageStyle} }
+            .page > * { page-break-inside: avoid; }
             .page + .page { border-top: 2px dashed #d6d6d6; margin-top: 32px; }
             h1, h2, h3 { margin: 0; color: #1a1a1a; }
             h1 { font-size: 28px; }
@@ -445,6 +463,24 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
             .info-grid td { border: 1px solid #c9c9c9; padding: 8px 10px; font-size: 13px; }
             .kv-block { margin-top: 14px; font-size: 13px; border: 1px solid #d9d9d9; padding: 12px 14px; background: #fafafa; border-radius: 4px; }
             .kv-block .kv-title { font-weight: 600; margin-bottom: 6px; color: #2e3093; }
+            .content-block { border: 1px solid #d9d9d9; border-radius: 4px; background: #fcfcfc; padding: 12px 14px; }
+            @media print {
+              body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              .page {
+                min-height: auto;
+                margin: 0;
+                border-top: none !important;
+                page-break-after: always;
+                break-after: page;
+              }
+              .page:last-child {
+                page-break-after: auto;
+                break-after: auto;
+              }
+            }
           </style>
         </head>
         <body>
@@ -467,19 +503,19 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
             <div style="text-align:center; margin-bottom:18px;">${esc(venue || '-')}</div>
 
             <h3 style="margin-top:18px;">About Our Organisation</h3>
-            <div style="white-space: pre-line; margin-top: 8px;">${esc(aboutOrganisation || '-')}</div>
+            <div class="content-block" style="white-space: pre-line; margin-top: 8px;">${esc(aboutOrganisation || '-')}</div>
           </section>
 
-          <section class="page">
+          <section class="page" style="page-break-before:always; break-before:page; mso-page-break-before:always;">
             <div class="section-title">SUVIDYA INSTITUTE OF TECHNOLOGY PVT. LTD.</div>
             <div class="section-sub">${esc(trainingData.title || 'Training Contents')}</div>
 
-            <div class="info-band">
+            <div class="info-band" style="page-break-inside:avoid;">
               <div style="margin-bottom:6px;"><b>Training Venue :</b> ${esc(trainingData.venue || '-')}</div>
               <div>${esc(trainingData.participantsDesc || '-')}</div>
             </div>
 
-            <table class="schedule" style="margin-top:0;">
+            <table class="schedule" style="margin-top:0; page-break-inside:auto;">
               <thead>
                 <tr>
                   <th>Sr No.</th>
@@ -495,7 +531,7 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
               <tbody>${trainingRowsHtml}</tbody>
             </table>
 
-            <div class="please-note">
+            <div class="please-note" style="page-break-inside:avoid;">
               <div style="font-weight:bold;margin-bottom:6px;color:#2e3093;">Please Note</div>
               ${pleaseNoteHtml}
             </div>
@@ -503,8 +539,8 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
             ${renderAttachments(trainingAttachments)}
           </section>
 
-          <section class="page">
-            <div class="invoice-header">
+          <section class="page" style="page-break-before:always; break-before:page; mso-page-break-before:always;">
+            <div class="invoice-header" style="page-break-inside:avoid;">
               <img src="${watermarkUrl}" alt="SIT" style="width:72px;height:auto;" />
               <div>
                 <div style="font-size:20px;font-weight:bold;color:#2e3093;">${esc(quotationData.recipientCompany || '-')}</div>
@@ -513,7 +549,7 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
             </div>
             <div style="background:#fff28a;border:1px solid #c9c9c9;border-top:0;text-align:center;padding:10px;font-weight:bold;font-size:17px;letter-spacing:0.5px;">Proforma Invoice</div>
 
-            <table class="info-grid" style="width:100%;border-collapse:collapse;margin-top:0;">
+            <table class="info-grid" style="width:100%;border-collapse:collapse;margin-top:0; page-break-inside:avoid;">
               <tr>
                 <td style="background:#f4b55e;vertical-align:top;width:55%;">
                   <div style="font-weight:600;">Company Authority</div>
@@ -552,7 +588,7 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
               </tr>
             </table>
 
-            <table class="quote" style="margin-top:10px;">
+            <table class="quote" style="margin-top:10px; page-break-inside:auto;">
               <thead>
                 <tr>
                   <th>Sr.</th>
@@ -580,9 +616,9 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
               </tbody>
             </table>
 
-            ${quotationData.bankDetails ? `<div class="kv-block"><div class="kv-title">Bank details for Payment to SIT</div><div style="white-space:pre-line;">${esc(quotationData.bankDetails)}</div></div>` : ''}
-            ${quotationData.coordinator ? `<div class="kv-block"><div class="kv-title">SIT Coordinator Team</div><div style="white-space:pre-line;">${esc(quotationData.coordinator)}</div></div>` : ''}
-            ${quotationData.notes ? `<div class="kv-block"><div style="white-space:pre-line;">${esc(quotationData.notes)}</div></div>` : ''}
+            ${quotationData.bankDetails ? `<div class="kv-block" style="page-break-inside:avoid;"><div class="kv-title">Bank details for Payment to SIT</div><div style="white-space:pre-line;">${esc(quotationData.bankDetails)}</div></div>` : ''}
+            ${quotationData.coordinator ? `<div class="kv-block" style="page-break-inside:avoid;"><div class="kv-title">SIT Coordinator Team</div><div style="white-space:pre-line;">${esc(quotationData.coordinator)}</div></div>` : ''}
+            ${quotationData.notes ? `<div class="kv-block" style="page-break-inside:avoid;"><div style="white-space:pre-line;">${esc(quotationData.notes)}</div></div>` : ''}
 
             ${renderAttachments(quotationAttachments)}
             ${trainerCvAttachments.length > 0 ? `<div style="margin-top:18px;"><h3>TRAINER'S CV</h3>${renderAttachments(trainerCvAttachments)}</div>` : ''}
@@ -632,7 +668,7 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
     setDownloadingWord(true);
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const logoUrl = `${origin}/sit.png`;
+      const logoDataUrl = await urlToDataUrl(`${origin}/sit.png`);
 
       const e = (v: unknown) =>
         String(v ?? '')
@@ -673,6 +709,19 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
         </tr>${items}`;
       }).join('');
 
+      const headerWatermarkVml = logoDataUrl
+        ? `<!--[if gte vml 1]><v:shape id="WM" type="#_x0000_t75"
+  style="position:absolute;left:0;top:0;
+         width:300pt;height:180pt;z-index:-251658240;
+         mso-position-horizontal:center;mso-position-horizontal-relative:margin;
+         mso-position-vertical:center;mso-position-vertical-relative:margin;"
+  stroked="f" filled="f">
+  <v:imagedata src="${logoDataUrl}" o:title="" gain="19661" blacklevel="23000"/>
+  <w10:wrap type="none"/>
+  <w10:anchorlock/>
+</v:shape><![endif]-->`
+        : '';
+
       const wordHtml = `<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office"
       xmlns:w="urn:schemas-microsoft-com:office:word"
@@ -705,26 +754,18 @@ body { margin:0; padding:0; line-height:1.45; }
 p { margin:0 0 3pt 0; }
 table { border-collapse:collapse; }
 .pgbrk { page-break-before:always; mso-break-type:section-break; }
+.pgbrk { display:block; clear:both; height:0; margin:0; padding:0; page-break-before:always; break-before:page; mso-page-break-before:always; mso-break-type:section-break; }
 </style>
 </head>
 <body>
 
 <!-- ═══ HEADER ═══ -->
 <div style="mso-element:header" id="h1">
-<!--[if gte vml 1]><v:shape id="WM" type="#_x0000_t75"
-  style="position:absolute;left:0;top:0;
-         width:300pt;height:180pt;z-index:-251658240;
-         mso-position-horizontal:center;mso-position-horizontal-relative:margin;
-         mso-position-vertical:center;mso-position-vertical-relative:margin;"
-  stroked="f" filled="f">
-  <v:imagedata src="${logoUrl}" o:title="" gain="19661" blacklevel="23000"/>
-  <w10:wrap type="none"/>
-  <w10:anchorlock/>
-</v:shape><![endif]-->
+${headerWatermarkVml}
 <table style="width:100%;border:none;border-collapse:collapse;">
   <tr>
     <td style="border:none;padding:1pt 3pt;text-align:center;width:22%;">
-      <img src="${logoUrl}" alt="SIT" style="height:34pt;width:auto;"/>
+      ${logoDataUrl ? `<img src="${logoDataUrl}" alt="SIT" style="height:34pt;width:auto;"/>` : '<div style="height:34pt;"></div>'}
     </td>
     <td style="border:none;padding:1pt 3pt;text-align:center;width:18%;">
       <p style="font-size:14pt;font-weight:bold;color:#2E3093;margin:0;line-height:1;">EC</p>
@@ -755,7 +796,7 @@ table { border-collapse:collapse; }
       <p style="font-size:7pt;margin:0;color:#444;">P:0091-22-26682290&nbsp;&nbsp;M:0091-9167219403&nbsp;&nbsp;Web:www.suvidya.ac.in</p>
     </td>
     <td style="border:none;border-right:0.75pt solid #AAAAAA;padding:2pt 5pt;width:12%;text-align:center;vertical-align:middle;">
-      <p style="font-size:9pt;font-weight:bold;margin:0;">Page&nbsp;<!--[if supportFields]><span style="mso-element:field-begin"></span>PAGE<span style="mso-element:field-separator"></span><![endif]-->1<!--[if supportFields]><span style="mso-element:field-end"></span><![endif]-->&nbsp;of&nbsp;<!--[if supportFields]><span style="mso-element:field-begin"></span>NUMPAGES<span style="mso-element:field-separator"></span><![endif]-->4<!--[if supportFields]><span style="mso-element:field-end"></span><![endif]--></p>
+      <p style="font-size:9pt;font-weight:bold;margin:0;">Page&nbsp;<!--[if supportFields]><span style="mso-element:field-begin"></span>PAGE<span style="mso-element:field-separator"></span><![endif]-->1<!--[if supportFields]><span style="mso-element:field-end"></span><![endif]-->&nbsp;of&nbsp;<!--[if supportFields]><span style="mso-element:field-begin"></span>NUMPAGES<span style="mso-element:field-separator"></span><![endif]-->3<!--[if supportFields]><span style="mso-element:field-end"></span><![endif]--></p>
     </td>
     <td style="border:none;padding:2pt 4pt;width:36%;vertical-align:top;">
       <p style="font-size:7pt;margin:0;color:#444;">This Training Proposal is sole property of <b>Suvidya Institute of Technology Pvt. Ltd.</b>, prepared to enhance skills of actual working. Printing and/or copying invalidate the proposal.</p>
@@ -767,7 +808,7 @@ table { border-collapse:collapse; }
 
 <div class="Section1">
 
-<!-- ════ PAGE 1 : COVER ════ -->
+<!-- ════ PAGE 1 : ABOUT ORGANISATION ════ -->
 <table style="width:100%;border:none;border-collapse:collapse;margin-bottom:10pt;">
   <tr>
     <td style="border:none;padding:0;"><b>Ref. No.</b>&nbsp;&nbsp;${e(proposalRefNo || '')}</td>
@@ -781,7 +822,7 @@ table { border-collapse:collapse; }
 <p style="text-align:center;font-size:16pt;font-weight:bold;margin:0 0 28pt 0;font-family:Calibri,sans-serif;">${e(proposalTitle || '')}</p>
 
 <p style="text-align:center;margin:30pt 0 30pt 0;">
-  <img src="${logoUrl}" alt="SIT" style="width:160pt;height:auto;opacity:0.10;filter:alpha(opacity=10);"/>
+  ${logoDataUrl ? `<img src="${logoDataUrl}" alt="SIT" style="width:160pt;height:auto;opacity:0.035;filter:alpha(opacity=4);"/>` : ''}
 </p>
 
 <table align="center" style="width:60%;border:none;border-collapse:collapse;margin:0 auto;">
@@ -799,15 +840,12 @@ table { border-collapse:collapse; }
   </tr>
 </table>
 
-<div class="pgbrk"></div>
-
-<!-- ════ PAGE 2 : ABOUT ORGANISATION ════ -->
 <p style="font-size:14pt;font-weight:bold;text-align:center;margin:0 0 10pt 0;padding-bottom:4pt;border-bottom:1pt solid #AAAAAA;font-family:Calibri,sans-serif;">About Our Organisation</p>
 <div style="white-space:pre-wrap;font-size:11pt;line-height:1.5;text-align:justify;font-family:Calibri,sans-serif;">${e(aboutOrganisation || '')}</div>
 
 <div class="pgbrk"></div>
 
-<!-- ════ PAGE 3 : TRAINING CONTENTS ════ -->
+<!-- ════ PAGE 2 : TRAINING CONTENTS ════ -->
 <p style="background:#FFD700;text-align:center;padding:5pt 8pt;font-weight:bold;font-size:13pt;margin:0;border:0.75pt solid #999;font-family:Calibri,sans-serif;">${e((quotationData.recipientCompany || clientName || companyName || '') + (trainingData.venue || venue ? ' – ' + (trainingData.venue || venue) : ''))}</p>
 <p style="background:#F5F5DC;text-align:center;padding:4pt 8pt;font-weight:bold;font-size:11pt;margin:0;border:0.75pt solid #999;border-top:none;font-family:Calibri,sans-serif;">${e(trainingData.title || proposalTitle || '')}</p>
 ${trainingData.participantsDesc ? `<p style="padding:4pt 8pt;font-size:11pt;margin:0;border:0.75pt solid #999;border-top:none;background:#FFFEF0;font-family:Calibri,sans-serif;"><b>Participants –</b> ${e(trainingData.participantsDesc)}</p>` : ''}
@@ -837,11 +875,11 @@ ${trainingData.pleaseNote.length ? `<table style="width:100%;border:0.75pt solid
 
 <div class="pgbrk"></div>
 
-<!-- ════ PAGE 4 : PROFORMA INVOICE ════ -->
+<!-- ════ PAGE 3 : PROFORMA INVOICE ════ -->
 <table style="width:100%;border:0.75pt solid #AAAAAA;border-collapse:collapse;background:#F9F9F9;">
   <tr>
     <td style="border:none;padding:6pt 8pt;width:44pt;vertical-align:middle;">
-      <img src="${logoUrl}" alt="SIT" style="width:34pt;height:auto;"/>
+      ${logoDataUrl ? `<img src="${logoDataUrl}" alt="SIT" style="width:34pt;height:auto;"/>` : ''}
     </td>
     <td style="border:none;padding:6pt 8pt;vertical-align:middle;">
       <p style="font-size:13pt;font-weight:bold;margin:0;font-family:Calibri,sans-serif;">${e(quotationData.recipientCompany || clientName || companyName || '')}</p>

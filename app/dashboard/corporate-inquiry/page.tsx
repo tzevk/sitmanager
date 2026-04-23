@@ -37,6 +37,7 @@ interface CorporateInquiry {
   TrainingLocation?: string | null;
   TrainingDates?: string | null;
   Discussion?: string | null;
+  DiscussionOutcome?: 'Awarded' | 'Regretted' | 'On Hold' | null;
 }
 
 interface Pagination {
@@ -66,6 +67,21 @@ function rowColor(status: string | null | undefined, idx: number) {
   if (status === 'Final')           return 'bg-green-50 hover:bg-green-100';
   if (status === 'UnderDiscussion') return 'bg-blue-50 hover:bg-blue-100';
   return idx % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-gray-50/40 hover:bg-gray-50';
+}
+
+function DiscussionOutcomeBadge({ outcome }: { outcome: string | null | undefined }) {
+  if (!outcome) return <span className="text-xs text-gray-400">—</span>;
+  const map: Record<string, { label: string; cls: string }> = {
+    Awarded: { label: 'Awarded', cls: 'bg-emerald-100 text-emerald-700 border border-emerald-200' },
+    Regretted: { label: 'Regretted', cls: 'bg-rose-100 text-rose-700 border border-rose-200' },
+    'On Hold': { label: 'On Hold', cls: 'bg-amber-100 text-amber-700 border border-amber-200' },
+  };
+  const badge = map[outcome] ?? { label: outcome, cls: 'bg-gray-100 text-gray-600 border border-gray-200' };
+  return (
+    <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${badge.cls}`}>
+      {badge.label}
+    </span>
+  );
 }
 
 export default function CorporateInquiryPage() {
@@ -152,7 +168,7 @@ export default function CorporateInquiryPage() {
   };
 
   const handleExport = () => {
-    const headers = ['Id','Enquiry Date','Training Programme','Company Name','Company Location','Company Type','Company Authority','Coordinator Name','Coordinator Mobile','Coordinator Email','Training Mode','Training Location','Status','Disciplines','Remarks'];
+    const headers = ['Id','Enquiry Date','Training Programme','Company Name','Company Location','Company Type','Company Authority','Coordinator Name','Coordinator Mobile','Coordinator Email','Training Mode','Training Location','Status','Execution Outcome','Disciplines','Remarks'];
     const csvContent = [
       headers.join(','),
       ...inquiries.map((inq) => [
@@ -169,6 +185,7 @@ export default function CorporateInquiryPage() {
         `"${String(inq.TrainingMode || '').replace(/"/g,'""')}"`,
         `"${String(inq.TrainingLocation || '').replace(/"/g,'""')}"`,
         `"${String(inq.InquiryStatus === 'Rejected' ? 'Cancelled' : (inq.InquiryStatus || '')).replace(/"/g,'""')}"`,
+        `"${String(inq.DiscussionOutcome || '').replace(/"/g,'""')}"`,
         `"${String(inq.business || '').replace(/"/g,'""')}"`,
         `"${String(inq.Remark || '').replace(/"/g,'""')}"`,
       ].join(',')),
@@ -350,7 +367,10 @@ export default function CorporateInquiryPage() {
 
                     {/* Status */}
                     <td className="py-3 px-4 text-center">
-                      <StatusBadge status={inq.InquiryStatus} />
+                      <div className="flex flex-col items-center gap-1">
+                        <StatusBadge status={inq.InquiryStatus} />
+                        <DiscussionOutcomeBadge outcome={inq.DiscussionOutcome} />
+                      </div>
                     </td>
 
                     {/* Actions */}

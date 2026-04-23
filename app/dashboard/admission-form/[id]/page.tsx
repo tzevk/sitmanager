@@ -474,6 +474,7 @@ export default function AdmissionFormPage() {
         presentCity: formData.presentCity,
         presentPin: formData.presentPin,
         permanentAddress: formData.permanentAddress,
+        sameAsPresent: formData.sameAsPresent,
         permanentState: formData.permanentState,
         permanentCountry: formData.permanentCountry,
         // Education Details
@@ -521,8 +522,13 @@ export default function AdmissionFormPage() {
         totalOccupationYears: formData.totalOccupationYears,
         selfEmploymentDetails: formData.selfEmploymentDetails,
         trainingCategory: formData.trainingCategory,
+        trainingProgram: formData.trainingProgram,
         batchCode: formData.batchCode,
         idProofType: formData.idProofType,
+        termsAgreed: formData.termsAgreed,
+        consentAcknowledged,
+        consentChecks,
+        consentData,
       };
 
       const res = await fetch('/api/online-admission', {

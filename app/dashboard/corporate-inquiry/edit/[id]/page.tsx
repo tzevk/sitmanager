@@ -497,23 +497,25 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
             })),
           );
 
-          combinedFollowUps.push(
-            ...parsedFollowUp.meetings.map((m, idx) => {
-              const contact = legacyContacts[idx] || legacyContacts[0];
-              return {
-              date: m.date || '',
-              nextDate: m.nextDate || '',
-              contactPerson: contact?.fullName || parsedFollowUp.attendeeClient || '',
-              designation: contact?.jobTitle || '',
-              mobile: contact?.phoneNumber || '',
-              email: contact?.email || '',
-              purpose: 'Meeting',
-              course: '',
-              directLine: contact?.alternateNumber || '',
-              remark: m.remark || contact?.discussion || parsedFollowUp.meetingAgenda || '',
-            };
-            }),
-          );
+          if (parsedFollowUp.followUps.length === 0) {
+            combinedFollowUps.push(
+              ...parsedFollowUp.meetings.map((m, idx) => {
+                const contact = legacyContacts[idx] || legacyContacts[0];
+                return {
+                  date: m.date || '',
+                  nextDate: m.nextDate || '',
+                  contactPerson: contact?.fullName || parsedFollowUp.attendeeClient || '',
+                  designation: contact?.jobTitle || '',
+                  mobile: contact?.phoneNumber || '',
+                  email: contact?.email || '',
+                  purpose: 'Meeting',
+                  course: '',
+                  directLine: contact?.alternateNumber || '',
+                  remark: m.remark || contact?.discussion || parsedFollowUp.meetingAgenda || '',
+                };
+              }),
+            );
+          }
 
           const toFollowUpKey = (f: CorporateFollowUpItem) =>
             [
@@ -550,7 +552,8 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
             ).values(),
           );
 
-          if (baseFollowUps.length === 0) {
+          const hasFollowUpPayload = Boolean(String(inq?.FollowUp ?? '').trim());
+          if (baseFollowUps.length === 0 && !hasFollowUpPayload) {
             const fallbackFollowUp: CorporateFollowUpItem = {
               date: toDateInputValue(inq?.InitialFollowUpDate) || toDateInputValue(inq?.Idate),
               nextDate: toDateInputValue(inq?.NextFollowUpDate),
@@ -575,35 +578,9 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
             baseFollowUps = hasFallback ? [fallbackFollowUp] : [];
           }
 
-          if (consultancyId) {
-            try {
-              const params = new URLSearchParams({ constId: consultancyId });
-              const consultancyFollowupRes = await fetch(`/api/masters/consultancy/followups?${params.toString()}`, { method: 'GET' });
-              const consultancyFollowupData = await consultancyFollowupRes.json().catch(() => ({}));
-              const masterRows = Array.isArray(consultancyFollowupData?.rows) ? consultancyFollowupData.rows : [];
-              const mappedMasterFollowUps: CorporateFollowUpItem[] = masterRows.map((r: unknown) => {
-                const rec = typeof r === 'object' && r !== null ? (r as Record<string, unknown>) : {};
-                return {
-                date: toDateInputValue(rec.Followup_Date),
-                nextDate: '',
-                contactPerson: String(rec.Contact_Person ?? '').trim(),
-                designation: String(rec.Designation ?? '').trim(),
-                mobile: normalizeMultiValue(rec.Mobile ?? null),
-                email: normalizeMultiValue(rec.email ?? null),
-                purpose: String(rec.Purpose ?? '').trim(),
-                course: String(rec.Course ?? '').trim(),
-                directLine: normalizeMultiValue(rec.Direct_Line ?? null),
-                remark: String(rec.Remarks ?? '').trim(),
-              };
-              });
-
-              baseFollowUps = Array.from(
-                new Map([...baseFollowUps, ...mappedMasterFollowUps].map((f) => [toFollowUpKey(f), f] as const)).values(),
-              );
-            } catch {
-              // Non-blocking: keep local follow-up payload data even if master fetch fails.
-            }
-          }
+          // Do not merge legacy consultancy followups here.
+          // This editor should reflect only this inquiry's followup payload;
+          // otherwise deleted rows can reappear after reload.
 
           setFollowUps(baseFollowUps);
 
@@ -739,18 +716,6 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
         phoneNumbers: splitList(f.mobile),
         directLine: splitList(f.directLine).join(', '),
         alternateNumbers: splitList(f.directLine),
-      })),
-      contacts: followUps.map((f) => ({
-        fullName: f.contactPerson,
-        email: splitList(f.email).join(', '),
-        emails: splitList(f.email),
-        phoneNumber: splitList(f.mobile).join(', '),
-        phoneNumbers: splitList(f.mobile),
-        alternateNumber: splitList(f.directLine).join(', '),
-        alternateNumbers: splitList(f.directLine),
-        jobTitle: f.designation,
-        industry: '',
-        discussion: f.remark,
       })),
     });
 
