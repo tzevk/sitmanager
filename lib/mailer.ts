@@ -127,6 +127,37 @@ export function buildOnlineAdmissionSubmissionMailContent(params: {
   return { safeName, subject, text, html };
 }
 
+export function buildPublicInquirySubmissionMailContent(params: {
+  studentName?: string;
+  inquiryId: string | number;
+}) {
+  const safeName = (params.studentName || '').trim() || 'Student';
+  const inquiryId = String(params.inquiryId || '').trim();
+  const subject = 'Thank You for Contacting SIT';
+  const text = [
+    `Dear ${safeName},`,
+    '',
+    'Thank you for your enquiry at Suvidya Institute of Technology.',
+    inquiryId ? `Inquiry ID: ${inquiryId}` : '',
+    'Our team has received your details and will get in touch with you shortly.',
+    '',
+    'Regards,',
+    'Suvidya Institute of Technology',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const html = `
+    <p>Dear ${safeName},</p>
+    <p>Thank you for your enquiry at Suvidya Institute of Technology.</p>
+    ${inquiryId ? `<p><strong>Inquiry ID:</strong> ${inquiryId}</p>` : ''}
+    <p>Our team has received your details and will get in touch with you shortly.</p>
+    <p>Regards,<br/>Suvidya Institute of Technology</p>
+  `;
+
+  return { safeName, subject, text, html };
+}
+
 function assertMailerConfig() {
   if (MAIL_PROVIDER === 'ses') {
     if (!AWS_SES_FROM_EMAIL) {
@@ -247,6 +278,26 @@ export async function sendOnlineAdmissionSubmissionEmail(params: {
   const built = buildOnlineAdmissionSubmissionMailContent({
     studentName: params.studentName,
     applicationId: params.applicationId,
+  });
+
+  await sendAdmissionFormEmail({
+    toEmail: params.toEmail,
+    studentName: params.studentName,
+    admissionFormUrl: '#',
+    subject: built.subject,
+    text: built.text,
+    html: built.html,
+  });
+}
+
+export async function sendPublicInquirySubmissionEmail(params: {
+  toEmail: string;
+  studentName?: string;
+  inquiryId: string | number;
+}) {
+  const built = buildPublicInquirySubmissionMailContent({
+    studentName: params.studentName,
+    inquiryId: params.inquiryId,
   });
 
   await sendAdmissionFormEmail({

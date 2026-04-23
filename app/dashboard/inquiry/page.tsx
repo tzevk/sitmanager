@@ -116,6 +116,7 @@ export default function InquiryPage() {
   const [page, setPage] = useState(1);
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [sendingId, setSendingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -172,6 +173,25 @@ export default function InquiryPage() {
     } finally { setSendingId(null); }
   };
 
+  const handleDeleteInquiry = async (r: InquiryRow) => {
+    const ok = window.confirm(`Delete inquiry for ${formatName(r.Student_Name)}? This cannot be undone.`);
+    if (!ok) return;
+
+    setDeletingId(r.Student_Id);
+    try {
+      const res = await fetch(`/api/inquiry/${r.Student_Id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Failed to delete inquiry');
+      }
+      setFetchTrigger((t) => t + 1);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to delete inquiry');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const followUps = rows.filter(hasScheduledFollowUp);
 
   return (
@@ -185,17 +205,30 @@ export default function InquiryPage() {
           <h2 className="text-sm font-black text-white tracking-tight">Inquiry Listing</h2>
           <span className="text-[11px] text-white/60">{pagination.total.toLocaleString()} records</span>
         </div>
-        {canCreate && (
-          <button
-            onClick={() => router.push('/dashboard/inquiry/add')}
-            className="relative z-10 flex items-center gap-1 bg-white text-[#2E3093] px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-white/90 transition-colors"
+        <div className="relative z-10 flex items-center gap-2">
+          <a
+            href="/public/inquiry"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1 bg-white/15 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-white/25 transition-colors border border-white/20"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h6m0 0v6m0-6L10 16m-4 0h2a2 2 0 002-2V8a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" />
             </svg>
-            Add Inquiry
-          </button>
-        )}
+            Public Enquiry Form
+          </a>
+          {canCreate && (
+            <button
+              onClick={() => router.push('/dashboard/inquiry/add')}
+              className="flex items-center gap-1 bg-white text-[#2E3093] px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-white/90 transition-colors"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add Inquiry
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -316,11 +349,19 @@ export default function InquiryPage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                               </svg>}
                         </button>
-                        <button title="Delete" disabled={!canDelete}
-                          className={canDelete ? 'p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors' : 'p-1 rounded text-slate-200 cursor-not-allowed'}>
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
+                        <button
+                          title="Delete"
+                          onClick={() => handleDeleteInquiry(r)}
+                          disabled={!canDelete || deletingId === r.Student_Id}
+                          className={canDelete ? 'p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors disabled:opacity-50' : 'p-1 rounded text-slate-200 cursor-not-allowed'}
+                        >
+                          {deletingId === r.Student_Id ? (
+                            <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          )}
                         </button>
                       </div>
                     </td>

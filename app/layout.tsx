@@ -33,9 +33,9 @@ export const metadata: Metadata = {
   title: "SIT Manager",
   description: "Suvidya Institute of Technology Management System",
   icons: {
-    icon: '/sit.png',
-    shortcut: '/sit.png',
-    apple: '/sit.png',
+    icon: '/icon.png',
+    shortcut: '/icon.png',
+    apple: '/icon.png',
   },
   robots: "noindex, nofollow", // Private app - don't index
 };
