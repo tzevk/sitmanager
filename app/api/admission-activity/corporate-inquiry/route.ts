@@ -178,6 +178,52 @@ function normalizeMultiText(value: unknown): string | null {
   return str || null;
 }
 
+const columnLengthCache = new Map<string, Promise<number | null>>();
+
+async function getColumnMaxLength(
+  pool: ReturnType<typeof getPool>,
+  tableName: string,
+  columnName: string
+): Promise<number | null> {
+  const cacheKey = `${tableName}.${columnName}`;
+  const cached = columnLengthCache.get(cacheKey);
+  if (cached) return cached;
+
+  const query = (async () => {
+    try {
+      const [rows] = await pool.query<any[]>(
+        `SELECT CHARACTER_MAXIMUM_LENGTH AS max_len
+         FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = ?
+           AND COLUMN_NAME = ?
+         LIMIT 1`,
+        [tableName, columnName]
+      );
+      const maxLen = Number(rows?.[0]?.max_len);
+      return Number.isFinite(maxLen) && maxLen > 0 ? maxLen : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  columnLengthCache.set(cacheKey, query);
+  return query;
+}
+
+async function normalizeToColumnLength(
+  pool: ReturnType<typeof getPool>,
+  tableName: string,
+  columnName: string,
+  value: unknown
+): Promise<string | null> {
+  const raw = value === null || value === undefined ? '' : String(value).trim();
+  if (!raw) return null;
+  const maxLen = await getColumnMaxLength(pool, tableName, columnName);
+  if (!maxLen || raw.length <= maxLen) return raw;
+  return raw.slice(0, maxLen);
+}
+
 async function ensureConsultancyFollowupTable(pool: ReturnType<typeof getPool>) {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS consultant_followup (
@@ -850,7 +896,8 @@ export async function POST(req: NextRequest) {
 
     // Keep legacy columns populated where it makes sense.
     // `Place` is treated as Company Location; older clients may only send TrainingLocation.
-    const Place = body?.Place ?? TrainingLocation;
+    const Place = await normalizeToColumnLength(pool, 'corporate_inquiry', 'Place', body?.Place ?? TrainingLocation);
+    const consultancyCity = await normalizeToColumnLength(pool, 'consultant_mst', 'City', body?.Place ?? TrainingLocation);
     const Remark = body?.Remark ?? Discussion;
 
     const Idate = body?.Idate;
@@ -868,7 +915,7 @@ export async function POST(req: NextRequest) {
       phone: (Phone && String(Phone).trim()) || null,
       mobile: (Mobile && String(Mobile).trim()) || null,
       email: (Email && String(Email).trim()) || null,
-      city: (Place && String(Place).trim()) || null,
+      city: consultancyCity,
       companyType: (CompanyType && String(CompanyType).trim()) || null,
       dateAdded: (Idate && String(Idate).trim()) || null,
     });
@@ -1027,6 +1074,8 @@ export async function PUT(req: NextRequest) {
     const Place = body?.Place ?? TrainingLocation;
     const Remark = body?.Remark ?? Discussion;
     const Idate = body?.Idate;
+    const normalizedPlace = await normalizeToColumnLength(pool, 'corporate_inquiry', 'Place', Place);
+    const consultancyCity = await normalizeToColumnLength(pool, 'consultant_mst', 'City', Place);
 
     if (!Id) {
       return NextResponse.json({ error: 'ID is required' }, { status: 400 });
@@ -1045,7 +1094,7 @@ export async function PUT(req: NextRequest) {
       phone: (Phone && String(Phone).trim()) || null,
       mobile: (Mobile && String(Mobile).trim()) || null,
       email: (Email && String(Email).trim()) || null,
-      city: (Place && String(Place).trim()) || null,
+      city: consultancyCity,
       companyType: (CompanyType && String(CompanyType).trim()) || null,
       dateAdded: (Idate && String(Idate).trim()) || null,
     });
@@ -1092,7 +1141,7 @@ export async function PUT(req: NextRequest) {
         Mobile || null,
         Email || null,
         Course_Id || null,
-        Place || null,
+        normalizedPlace || null,
         body?.business || null,
         Remark || null,
         Idate || null,
