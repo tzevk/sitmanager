@@ -495,7 +495,7 @@ export default function PublicAdmissionFormPage() {
           return false;
         }
         break;
-      case 7:
+      case 6:
         if (!allSectionsChecked) {
           alert('Please read and acknowledge all sections of the Terms & Conditions');
           return false;
@@ -771,7 +771,7 @@ export default function PublicAdmissionFormPage() {
           <div className="flex items-center justify-between mb-2.5">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] rounded-lg flex items-center justify-center">
-                <i className={`fas ${STEPS[currentStep - 1].icon} text-white text-[10px]`}></i>
+                <i className={`fas ${STEPS[currentStep - 1]?.icon ?? ''} text-white text-[10px]`}></i>
               </div>
               <div>
                 <div className="text-xs font-bold text-gray-800 leading-tight">{STEPS[currentStep - 1].title}</div>
@@ -924,7 +924,7 @@ export default function PublicAdmissionFormPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
                     <h1 className="text-base sm:text-xl font-bold text-[#2E3093] flex items-center gap-2">
-                      <i className={`fas ${STEPS[currentStep - 1].icon} text-[#2A6BB5] text-sm sm:text-base`}></i>
+                      <i className={`fas ${STEPS[currentStep - 1]?.icon ?? ''} text-[#2A6BB5] text-sm sm:text-base`}></i>
                       <span className="truncate">{STEPS[currentStep - 1].title}</span>
                     </h1>
                     <p className="text-xs text-gray-600 mt-0.5 hidden sm:block">{STEPS[currentStep - 1].description}</p>
@@ -2506,7 +2506,7 @@ export default function PublicAdmissionFormPage() {
                       </button>
                     )}
 
-                    {currentStep < 7 ? (
+                    {currentStep < 6 ? (
                       <button type="button" onClick={() => nextStep(currentStep + 1)} className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#FAE452] to-[#FDD835] text-[#2E3093] rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all">
                         <span className="hidden sm:inline">Continue</span><span className="sm:hidden">Next</span> <i className="fas fa-arrow-right ml-1 sm:ml-2"></i>
                       </button>
