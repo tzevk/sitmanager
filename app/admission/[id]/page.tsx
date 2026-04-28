@@ -984,10 +984,10 @@ export default function PublicAdmissionFormPage() {
                           <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Date of Birth <span className="text-red-500">*</span></label>
                             {/* DD / MM / YYYY selects — browser-locale-independent */}
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
                               {(() => {
                                 const [yyyy = '', mm = '', dd = ''] = (formData.dob || '').split('-');
-                                const selCls = 'flex-1 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all bg-white';
+                                const selCls = 'w-full sm:flex-1 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all bg-white';
                                 const emit = (ndd: string, nmm: string, nyyyy: string) => {
                                   if (ndd && nmm && nyyyy && nyyyy.length === 4)
                                     handleChange('dob', `${nyyyy}-${nmm}-${ndd}`);
@@ -1002,14 +1002,14 @@ export default function PublicAdmissionFormPage() {
                                         <option key={d} value={String(d).padStart(2, '0')}>{String(d).padStart(2, '0')}</option>
                                       ))}
                                     </select>
-                                    <span className="text-gray-400 font-semibold">/</span>
+                                    <span className="text-gray-400 font-semibold hidden sm:inline">/</span>
                                     <select value={mm} onChange={(e) => emit(dd, e.target.value, yyyy)} className={selCls} required>
                                       <option value="">MM</option>
                                       {['01','02','03','04','05','06','07','08','09','10','11','12'].map((m, idx) => (
                                         <option key={m} value={m}>{['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][idx]}</option>
                                       ))}
                                     </select>
-                                    <span className="text-gray-400 font-semibold">/</span>
+                                    <span className="text-gray-400 font-semibold hidden sm:inline">/</span>
                                     <select value={yyyy} onChange={(e) => emit(dd, mm, e.target.value)} className={selCls} required>
                                       <option value="">YYYY</option>
                                       {Array.from({ length: 60 }, (_, i) => new Date().getFullYear() - 15 - i).map(y => (

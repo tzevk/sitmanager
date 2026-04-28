@@ -262,18 +262,17 @@ function AssignmentsTakenContent({ canCreate, canUpdate, canDelete }: { canView:
             <thead className="sticky top-0 bg-gradient-to-r from-gray-50 to-gray-100/80 z-10">
               <tr className="text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 <th className="py-3 px-4 border-b border-gray-200 w-16">Id</th>
-                <th className="py-3 px-4 border-b border-gray-200">Training Name</th>
+                <th className="py-3 px-4 border-b border-gray-200">Course Name</th>
                 <th className="py-3 px-4 border-b border-gray-200">Batch Code</th>
                 <th className="py-3 px-4 border-b border-gray-200">Assignment Name</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-28">Assignment Date</th>
-                <th className="py-3 px-4 border-b border-gray-200 w-20 text-center">Marks</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-28 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center">
+                  <td colSpan={6} className="py-12 text-center">
                     <div className="flex justify-center items-center gap-2 text-gray-400">
                       <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                       Loading assignments...
@@ -282,7 +281,7 @@ function AssignmentsTakenContent({ canCreate, canUpdate, canDelete }: { canView:
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center">
+                  <td colSpan={6} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center">
                         <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
@@ -321,15 +320,6 @@ function AssignmentsTakenContent({ canCreate, canUpdate, canDelete }: { canView:
                     </td>
                     <td className="py-2.5 px-4 text-gray-600 text-xs font-medium">
                       {formatDate(r.Assign_Dt)}
-                    </td>
-                    <td className="py-2.5 px-4 text-center">
-                      {r.Marks != null ? (
-                        <span className="inline-flex items-center justify-center min-w-[2rem] h-6 text-xs font-bold bg-amber-50 text-amber-700 rounded-full px-1.5">
-                          {r.Marks}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
                     </td>
                     <td className="py-2.5 px-4 text-center">
                       <div className="flex items-center justify-center gap-1">

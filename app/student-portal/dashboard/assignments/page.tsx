@@ -15,6 +15,16 @@ interface Assignment {
   was_present: number;
 }
 
+interface AssignmentMark {
+  assignmentname: string | null;
+  subjects: string | null;
+  Assign_Dt: string | null;
+  Return_Dt: string | null;
+  Marks: number | null;
+  MaxMarks: number | null;
+  Status: string | null;
+}
+
 interface AssignmentsData {
   summary: {
     total_given: number;
@@ -23,6 +33,7 @@ interface AssignmentsData {
     percentage: number;
   };
   assignments: Assignment[];
+  marks: AssignmentMark[];
 }
 
 export default function StudentAssignmentsPage() {
@@ -53,6 +64,7 @@ export default function StudentAssignmentsPage() {
 
   const summary = data?.summary ?? { total_given: 0, received: 0, pending: 0, percentage: 0 };
   const assignments = data?.assignments ?? [];
+  const marks = data?.marks ?? [];
 
   const filtered = assignments.filter((a) => {
     if (filter === 'received') return a.received === 1;
@@ -181,6 +193,71 @@ export default function StudentAssignmentsPage() {
           </div>
         )}
       </div>
+
+      {/* Assignment Marks */}
+      {marks.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="text-sm font-bold text-gray-900">Assignment Marks</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Marks scored in formal assignments</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Assignment</th>
+                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell">Subject</th>
+                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Date</th>
+                  <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Marks</th>
+                  <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {marks.map((m, idx) => {
+                  const scored = m.Marks ?? null;
+                  const max = m.MaxMarks ?? null;
+                  const pct = scored !== null && max ? Math.round((scored / max) * 100) : null;
+                  return (
+                    <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-5 py-3 text-xs font-medium text-gray-900">
+                        {m.assignmentname || '—'}
+                      </td>
+                      <td className="px-5 py-3 text-xs text-gray-500 hidden md:table-cell">
+                        {m.subjects || '—'}
+                      </td>
+                      <td className="px-5 py-3 text-xs text-gray-500 whitespace-nowrap">
+                        {m.Assign_Dt
+                          ? new Date(m.Assign_Dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : '—'}
+                      </td>
+                      <td className="px-5 py-3 text-center">
+                        {scored !== null ? (
+                          <span className={`text-sm font-bold ${pct !== null && pct >= 60 ? 'text-green-600' : 'text-red-500'}`}>
+                            {scored}{max ? `/${max}` : ''}
+                            {pct !== null && <span className="text-xs font-normal text-gray-400 ml-1">({pct}%)</span>}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-center">
+                        {m.Status ? (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold
+                            ${m.Status === 'Present' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                            {m.Status}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

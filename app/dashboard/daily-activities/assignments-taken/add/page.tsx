@@ -13,6 +13,17 @@ interface Batch { Batch_Id: number; Batch_code: string; Category: string | null;
 interface Faculty { Faculty_Id: number; Faculty_Name: string; }
 interface AssignmentDef { id: number; assignmentname: string; subjects: string | null; marks: string | null; assignmentdate: string | null; }
 
+interface StudentRow {
+  Admission_Id: number;
+  Student_Id: number;
+  Student_Code: string;
+  Student_Name: string;
+  row_num: number;
+  marks: string;
+  status: string;
+  actual_dt: string;
+}
+
 interface FormData {
   Course_Id: string;
   Batch_Id: string;
@@ -46,6 +57,8 @@ export default function AddAssignmentTakenPage() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [assignmentDefs, setAssignmentDefs] = useState<AssignmentDef[]>([]);
+  const [students, setStudents] = useState<StudentRow[]>([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [error, setError] = useState('');
@@ -77,15 +90,20 @@ export default function AddAssignmentTakenPage() {
         const data = await res.json();
         if (data.assignment) {
           const a = data.assignment;
+          const toDateStr = (v: unknown) => {
+            if (!v) return '';
+            if (v instanceof Date) return v.toISOString().slice(0, 10);
+            return String(v).slice(0, 10);
+          };
           setForm({
             Course_Id: String(a.Course_Id || ''),
             Batch_Id: String(a.Batch_Id || ''),
             Assignment_Id: String(a.Assignment_Id || ''),
             Assign_No: String(a.Assign_No || ''),
-            Marks: String(a.Marks || ''),
+            Marks: String(a.Marks ?? ''),
             Faculty_Id: String(a.Faculty_Id || ''),
-            Assign_Dt: a.Assign_Dt || '',
-            Return_Dt: a.Return_Dt || '',
+            Assign_Dt: toDateStr(a.Assign_Dt),
+            Return_Dt: toDateStr(a.Return_Dt),
           });
         }
       } catch { /* ignore */ }
@@ -117,22 +135,47 @@ export default function AddAssignmentTakenPage() {
     })();
   }, [form.Batch_Id]);
 
+  /* ── Load students when batch changes ── */
+  useEffect(() => {
+    if (!form.Batch_Id) { setStudents([]); return; }
+    setStudentsLoading(true);
+    (async () => {
+      try {
+        const givenId = isEdit ? editId : '0';
+        const res = await fetch(
+          `/api/daily-activities/assignments-taken?options=students&batchId=${form.Batch_Id}&givenId=${givenId}`
+        );
+        const data = await res.json();
+        setStudents(
+          (data.students || []).map((s: StudentRow & { existing_marks: string | null; existing_status: string | null; existing_actual_dt: string | null }) => ({
+            ...s,
+            marks: s.existing_marks != null ? String(s.existing_marks) : '',
+            status: s.existing_status || 'Present',
+            actual_dt: s.existing_actual_dt ? String(s.existing_actual_dt).slice(0, 10) : '',
+          }))
+        );
+      } catch { /* ignore */ }
+      setStudentsLoading(false);
+    })();
+  }, [form.Batch_Id, editId, isEdit]);
+
   /* ── Auto-fill from selected assignment definition ── */
   const handleAssignmentSelect = (assignmentId: string) => {
-    setForm(prev => ({ ...prev, Assignment_Id: assignmentId }));
     const def = assignmentDefs.find(a => String(a.id) === assignmentId);
-    if (def) {
-      setForm(prev => ({
-        ...prev,
-        Assignment_Id: assignmentId,
-        Marks: def.marks || prev.Marks,
-        Assign_Dt: def.assignmentdate || prev.Assign_Dt,
-      }));
-    }
+    setForm(prev => ({
+      ...prev,
+      Assignment_Id: assignmentId,
+      Marks: def?.marks || prev.Marks,
+      Assign_Dt: def?.assignmentdate ? def.assignmentdate.slice(0, 10) : prev.Assign_Dt,
+    }));
   };
 
   const set = (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [field]: e.target.value }));
+
+  const updateStudent = (idx: number, field: 'marks' | 'status' | 'actual_dt', value: string) => {
+    setStudents(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+  };
 
   /* ── Submit ── */
   const handleSubmit = async (e: React.FormEvent) => {
@@ -150,6 +193,12 @@ export default function AddAssignmentTakenPage() {
         Faculty_Id: form.Faculty_Id ? parseInt(form.Faculty_Id) : null,
         Assign_Dt: form.Assign_Dt || null,
         Return_Dt: form.Return_Dt || null,
+        students: students.map(s => ({
+          Student_Id: s.Student_Id,
+          marks: s.marks,
+          status: s.status,
+          actual_dt: s.actual_dt || null,
+        })),
       };
       if (isEdit) payload.Given_Id = parseInt(editId!);
 
@@ -211,6 +260,7 @@ export default function AddAssignmentTakenPage() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-5">
+
           {/* Messages */}
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 text-sm text-red-600 flex items-center gap-2">
@@ -229,13 +279,14 @@ export default function AddAssignmentTakenPage() {
             </div>
           )}
 
-          {/* ── Core Details ── */}
+          {/* ── Assignment Details ── */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-            <h3 className="text-sm font-bold text-[#2E3093] uppercase tracking-wider mb-4">Assignment Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <h3 className="text-sm font-bold text-[#2E3093] uppercase tracking-wider mb-4">Add Assignment Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+
               {/* Course */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Course <span className="text-red-400">*</span></label>
+                <label className="text-xs font-semibold text-gray-600">Course Name <span className="text-red-400">*</span></label>
                 <select value={form.Course_Id} onChange={set('Course_Id')} required
                   className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white">
                   <option value="">— Select Course —</option>
@@ -257,10 +308,10 @@ export default function AddAssignmentTakenPage() {
                 </select>
               </div>
 
-              {/* Assignment Definition */}
+              {/* Assignment */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Assignment</label>
-                <select value={form.Assignment_Id} onChange={(e) => handleAssignmentSelect(e.target.value)} disabled={!form.Batch_Id}
+                <label className="text-xs font-semibold text-gray-600">Assignment Name</label>
+                <select value={form.Assignment_Id} onChange={e => handleAssignmentSelect(e.target.value)} disabled={!form.Batch_Id}
                   className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white disabled:opacity-50">
                   <option value="">— Select Assignment —</option>
                   {assignmentDefs.map(a => (
@@ -269,6 +320,13 @@ export default function AddAssignmentTakenPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Max Marks (read-only) */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-gray-600">Max Marks</label>
+                <input type="number" value={form.Marks} onChange={set('Marks')} placeholder="e.g. 25"
+                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
               </div>
 
               {/* Assignment Date */}
@@ -280,15 +338,15 @@ export default function AddAssignmentTakenPage() {
 
               {/* Return Date */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Return Date</label>
+                <label className="text-xs font-semibold text-gray-600">Return Date <span className="text-red-400">*</span></label>
                 <input type="date" value={form.Return_Dt} onChange={set('Return_Dt')}
                   className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
               </div>
 
-              {/* Marks */}
+              {/* Assignment No */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Marks</label>
-                <input type="number" value={form.Marks} onChange={set('Marks')} placeholder="e.g. 25"
+                <label className="text-xs font-semibold text-gray-600">Assignment Number <span className="text-red-400">*</span></label>
+                <input type="number" value={form.Assign_No} onChange={set('Assign_No')} placeholder="e.g. 1"
                   className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
               </div>
 
@@ -301,31 +359,92 @@ export default function AddAssignmentTakenPage() {
                   {faculties.map(f => <option key={f.Faculty_Id} value={f.Faculty_Id}>{f.Faculty_Name}</option>)}
                 </select>
               </div>
+            </div>
 
-              {/* Assignment No */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Assignment No.</label>
-                <input type="number" value={form.Assign_No} onChange={set('Assign_No')} placeholder="e.g. 1"
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
-              </div>
+            {/* Submit buttons */}
+            <div className="flex items-center gap-3 mt-5 pt-4 border-t border-gray-100">
+              <button type="submit" disabled={saving}
+                className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-[#2E3093] hover:bg-[#23257A] rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition shadow-md">
+                {saving && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                {isEdit ? 'Update Assignment' : 'Submit'}
+              </button>
+              <button type="button" onClick={() => router.push('/dashboard/daily-activities/assignments-taken')}
+                className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition">
+                Cancel
+              </button>
             </div>
           </div>
 
-          {/* ── Submit ── */}
-          <div className="flex items-center gap-3">
-            <button type="submit" disabled={saving}
-              className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-[#2E3093] hover:bg-[#23257A] rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition shadow-md">
-              {saving && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-              {isEdit ? 'Update Assignment' : 'Save Assignment'}
-            </button>
-            <button type="button" onClick={() => router.push('/dashboard/daily-activities/assignments-taken')}
-              className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition">
-              Cancel
-            </button>
-          </div>
+          {/* ── Student Table ── */}
+          {form.Batch_Id && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              {studentsLoading ? (
+                <div className="py-10 flex items-center justify-center gap-2 text-gray-400 text-sm">
+                  <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                  Loading students...
+                </div>
+              ) : students.length === 0 ? (
+                <div className="py-10 text-center text-sm text-gray-400">No students found for this batch.</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-gradient-to-r from-gray-50 to-gray-100/80">
+                    <tr className="text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                      <th className="py-3 px-4 border-b border-gray-200 w-12">Id</th>
+                      <th className="py-3 px-4 border-b border-gray-200 w-36">Student Code</th>
+                      <th className="py-3 px-4 border-b border-gray-200">Student Name</th>
+                      <th className="py-3 px-4 border-b border-gray-200 w-40">Marks</th>
+                      <th className="py-3 px-4 border-b border-gray-200 w-40">Status</th>
+                      <th className="py-3 px-4 border-b border-gray-200 w-40">Actual Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {students.map((s, idx) => (
+                      <tr key={s.Student_Id} className="hover:bg-blue-50/20 transition-colors">
+                        <td className="py-2.5 px-4 text-xs text-gray-400">{s.row_num}</td>
+                        <td className="py-2.5 px-4">
+                          <span className="text-xs font-mono text-gray-700">{s.Student_Code || s.Student_Id}</span>
+                        </td>
+                        <td className="py-2.5 px-4 text-sm font-medium text-gray-800">{s.Student_Name}</td>
+                        <td className="py-2.5 px-4">
+                          <input
+                            type="number"
+                            value={s.marks}
+                            onChange={e => updateStudent(idx, 'marks', e.target.value)}
+                            placeholder="—"
+                            min={0}
+                            max={form.Marks ? parseInt(form.Marks) : undefined}
+                            className="w-full h-8 px-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]"
+                          />
+                        </td>
+                        <td className="py-2.5 px-4">
+                          <select
+                            value={s.status}
+                            onChange={e => updateStudent(idx, 'status', e.target.value)}
+                            className="w-full h-8 px-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white"
+                          >
+                            <option value="Present">Present</option>
+                            <option value="Absent">Absent</option>
+                          </select>
+                        </td>
+                        <td className="py-2.5 px-4">
+                          <input
+                            type="date"
+                            value={s.actual_dt}
+                            onChange={e => updateStudent(idx, 'actual_dt', e.target.value)}
+                            className="w-full h-8 px-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
         </form>
       )}
     </div>

@@ -16,7 +16,9 @@ async function ensureAttendanceTable(pool: any) {
         Admission_Id  INT      NOT NULL,
         Attendance_Date DATE   NOT NULL,
         Session       ENUM('first_half','second_half') NOT NULL DEFAULT 'first_half',
-        Status        CHAR(1)  NOT NULL DEFAULT 'P' COMMENT 'P=Present, A=Absent',
+        In_Time       TIME     NULL,
+        Out_Time      TIME     NULL,
+        Status        CHAR(1)  NOT NULL DEFAULT 'P' COMMENT 'P=Present, A=Absent, L=Late',
         Remarks       VARCHAR(255) NULL,
         Created_At    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         Updated_At    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -37,6 +39,28 @@ async function ensureAttendanceTable(pool: any) {
         `ALTER TABLE student_attendance
          ADD COLUMN Session ENUM('first_half','second_half') NOT NULL DEFAULT 'first_half' AFTER Attendance_Date`
       );
+    }
+
+    // ensure In_Time and Out_Time columns exist
+    const [inTimeCol] = await pool.query(
+      `SELECT COUNT(*) AS cnt
+       FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'student_attendance'
+         AND COLUMN_NAME = 'In_Time'`
+    );
+    if (!inTimeCol?.[0]?.cnt) {
+      await pool.query(`ALTER TABLE student_attendance ADD COLUMN In_Time TIME NULL AFTER Session`);
+    }
+    const [outTimeCol] = await pool.query(
+      `SELECT COUNT(*) AS cnt
+       FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'student_attendance'
+         AND COLUMN_NAME = 'Out_Time'`
+    );
+    if (!outTimeCol?.[0]?.cnt) {
+      await pool.query(`ALTER TABLE student_attendance ADD COLUMN Out_Time TIME NULL AFTER In_Time`);
     }
 
     const [uniqIdx] = await pool.query(
@@ -113,7 +137,9 @@ export async function GET(req: NextRequest) {
            COALESCE(a.Roll_No, '') AS rollNo,
            s.Present_Mobile AS mobile,
            COALESCE(att.Status, '') AS attendanceStatus,
-           att.Attendance_Id
+           att.Attendance_Id,
+           att.In_Time,
+           att.Out_Time
          FROM admission_master a
          JOIN student_master s ON a.Student_Id = s.Student_Id
          LEFT JOIN student_attendance att
@@ -159,7 +185,7 @@ export async function POST(req: NextRequest) {
       batchId: number;
       date: string;
       session?: 'first_half' | 'second_half';
-      records: { studentId: number; admissionId: number; status: 'P' | 'A' }[];
+      records: { studentId: number; admissionId: number; status: 'P' | 'A' | 'L'; In_Time?: string; Out_Time?: string }[];
     };
     const session = sessionRaw === 'second_half' ? 'second_half' : 'first_half';
 
@@ -174,15 +200,17 @@ export async function POST(req: NextRequest) {
       for (const rec of records) {
         await conn.query(
           `INSERT INTO student_attendance
-             (Batch_Id, Student_Id, Admission_Id, Attendance_Date, Session, Status, IsDelete)
-           VALUES (?, ?, ?, ?, ?, ?, 0)
+             (Batch_Id, Student_Id, Admission_Id, Attendance_Date, Session, Status, In_Time, Out_Time, IsDelete)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
            ON DUPLICATE KEY UPDATE
              Status     = VALUES(Status),
              Admission_Id = VALUES(Admission_Id),
              Session    = VALUES(Session),
+             In_Time    = VALUES(In_Time),
+             Out_Time   = VALUES(Out_Time),
              IsDelete   = 0,
              Updated_At = CURRENT_TIMESTAMP`,
-          [batchId, rec.studentId, rec.admissionId, date, session, rec.status]
+          [batchId, rec.studentId, rec.admissionId, date, session, rec.status, rec.In_Time || null, rec.Out_Time || null]
         );
       }
 

@@ -13,11 +13,13 @@ interface Student {
   studentName: string;
   rollNo: string;
   mobile: string;
-  attendanceStatus: 'P' | 'A' | '';
+  attendanceStatus: 'P' | 'A' | 'L' | '';
   Attendance_Id?: number;
+  In_Time?: string | null;
+  Out_Time?: string | null;
 }
 
-type StatusMap = Record<number, 'P' | 'A' | ''>;
+type StatusMap = Record<number, 'P' | 'A' | 'L' | ''>;
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 function todayStr() {
@@ -96,7 +98,11 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
       const res = await fetch(`/api/daily-activities/attendance?batchId=${batchId}&date=${date}&session=${sessionHalf}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load');
-      const s: Student[] = data.students ?? [];
+      const s: Student[] = (data.students ?? []).map((st: any) => ({
+        ...st,
+        In_Time: st.In_Time ?? st.InTime ?? null,
+        Out_Time: st.Out_Time ?? st.OutTime ?? null,
+      }));
       setStudents(s);
       const map: StatusMap = {};
       s.forEach(st => { map[st.Student_Id] = st.attendanceStatus; });
@@ -110,13 +116,13 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   }, [batchId, date]);
 
   /* toggle one student */
-  const toggle = (studentId: number, status: 'P' | 'A') => {
+  const toggle = (studentId: number, status: 'P' | 'A' | 'L') => {
     setStatusMap(prev => ({ ...prev, [studentId]: prev[studentId] === status ? '' : status }));
     setSaved(false);
   };
 
   /* bulk actions */
-  const markAll = (status: 'P' | 'A') => {
+  const markAll = (status: 'P' | 'A' | 'L') => {
     const map: StatusMap = {};
     filtered.forEach(s => { map[s.Student_Id] = status; });
     setStatusMap(prev => ({ ...prev, ...map }));
@@ -133,7 +139,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   const save = async () => {
     const records = students
       .filter(s => statusMap[s.Student_Id])
-      .map(s => ({ studentId: s.Student_Id, admissionId: s.Admission_Id, status: statusMap[s.Student_Id] as 'P' | 'A' }));
+      .map(s => ({ studentId: s.Student_Id, admissionId: s.Admission_Id, status: statusMap[s.Student_Id] as 'P' | 'A' | 'L' }));
 
     if (!records.length) {
       setError('Please mark attendance for at least one student.');
@@ -167,7 +173,8 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   );
   const present    = students.filter(s => statusMap[s.Student_Id] === 'P').length;
   const absent     = students.filter(s => statusMap[s.Student_Id] === 'A').length;
-  const unmarked   = students.length - present - absent;
+  const late       = students.filter(s => statusMap[s.Student_Id] === 'L').length;
+  const unmarked   = students.length - present - absent - late;
   const percentage = pct(present, students.length);
   const selectedBatch = batches.find(b => String(b.Batch_Id) === batchId);
 
@@ -333,6 +340,12 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
                 A: {absent}
               </span>
+              {late > 0 && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-100">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                  L: {late}
+                </span>
+              )}
               {unmarked > 0 && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-600 border border-amber-100">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
@@ -407,6 +420,15 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                   All Present
+                </button>
+                <button
+                  onClick={() => markAll('L')}
+                  className="inline-flex flex-1 sm:flex-none justify-center items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100 transition"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3" />
+                  </svg>
+                  All Late
                 </button>
                 <button
                   onClick={() => markAll('A')}
@@ -486,6 +508,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                         <p className="text-sm font-semibold text-gray-800 truncate">{student.studentName}</p>
                         <p className="text-xs text-gray-500 mt-0.5">Roll: {student.rollNo || '—'} · Code: {student.Student_Code || '—'}</p>
                         <p className="text-xs text-gray-400 mt-0.5">Mobile: {student.mobile || '—'}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">In: {student.In_Time ? student.In_Time : '—'} · Out: {student.Out_Time ? student.Out_Time : '—'}</p>
                       </div>
                       <span className="inline-flex items-center justify-center w-8 h-6 text-xs font-bold bg-[#2E3093]/8 text-[#2E3093] rounded-full shrink-0">
                         {idx + 1}
@@ -507,6 +530,20 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                           </svg>
                           Present
+                        </button>
+                        <button
+                          onClick={() => toggle(student.Student_Id, 'L')}
+                          title="Mark Late"
+                          className={`flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ${
+                            status === 'L'
+                              ? 'bg-amber-500 text-white shadow-sm shadow-amber-200'
+                              : 'bg-gray-100 text-gray-500 hover:bg-amber-100 hover:text-amber-700'
+                          }`}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3" />
+                          </svg>
+                          Late
                         </button>
                         <button
                           onClick={() => toggle(student.Student_Id, 'A')}
@@ -547,6 +584,8 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                   <th className="py-3 px-4 border-b border-gray-200 w-28">Code</th>
                   <th className="py-3 px-4 border-b border-gray-200">Student Name</th>
                   <th className="py-3 px-4 border-b border-gray-200 w-36">Mobile</th>
+                  <th className="py-3 px-4 border-b border-gray-200 w-20">In</th>
+                  <th className="py-3 px-4 border-b border-gray-200 w-20">Out</th>
                   <th className="py-3 px-4 border-b border-gray-200 w-36 text-center">Attendance</th>
                 </tr>
               </thead>
@@ -597,6 +636,16 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                         {student.mobile || <span className="text-gray-300">—</span>}
                       </td>
 
+                      {/* In_Time */}
+                      <td className="py-2.5 px-4 text-xs text-gray-600 text-center">
+                        {student.In_Time ? student.In_Time : <span className="text-gray-300">—</span>}
+                      </td>
+
+                      {/* Out_Time */}
+                      <td className="py-2.5 px-4 text-xs text-gray-600 text-center">
+                        {student.Out_Time ? student.Out_Time : <span className="text-gray-300">—</span>}
+                      </td>
+
                       {/* Attendance toggle */}
                       <td className="py-2.5 px-4">
                         {canCreate ? (
@@ -615,20 +664,34 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                               </svg>
                               P
                             </button>
-                            <button
-                              onClick={() => toggle(student.Student_Id, 'A')}
-                              title="Mark Absent"
-                              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ${
-                                status === 'A'
-                                  ? 'bg-red-500 text-white shadow-sm shadow-red-200 scale-105'
-                                  : 'bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-500'
-                              }`}
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                              A
-                            </button>
+                              <button
+                                onClick={() => toggle(student.Student_Id, 'L')}
+                                title="Mark Late"
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ${
+                                  status === 'L'
+                                    ? 'bg-amber-500 text-white shadow-sm shadow-amber-200 scale-105'
+                                    : 'bg-gray-100 text-gray-400 hover:bg-amber-100 hover:text-amber-700'
+                                }`}
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3" />
+                                </svg>
+                                L
+                              </button>
+                              <button
+                                onClick={() => toggle(student.Student_Id, 'A')}
+                                title="Mark Absent"
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ${
+                                  status === 'A'
+                                    ? 'bg-red-500 text-white shadow-sm shadow-red-200 scale-105'
+                                    : 'bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-500'
+                                }`}
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                A
+                              </button>
                           </div>
                         ) : (
                           <div className="flex justify-center">

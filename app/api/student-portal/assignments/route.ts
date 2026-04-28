@@ -66,9 +66,29 @@ export async function GET(req: NextRequest) {
       [studentId, batchId]
     );
 
+    // Marks from assignment_given_child (formal assignments entered by admin)
+    let marksData: any[] = [];
+    try {
+      const [marksRows] = await pool.query<any[]>(
+        `SELECT agc.Marks, agc.Status,
+                at.Assign_Dt, at.Return_Dt, at.Marks AS MaxMarks,
+                am.assignmentname, am.subjects
+         FROM assignment_given_child agc
+         JOIN assignment_taken at ON agc.Given_Id = at.Given_Id
+         LEFT JOIN assignmentstaken am ON at.Assignment_Id = am.id
+         WHERE agc.Student_Id = ? AND at.Batch_Id = ?
+           AND (agc.IsDelete = 0 OR agc.IsDelete IS NULL)
+           AND (at.IsDelete = 0 OR at.IsDelete IS NULL)
+         ORDER BY at.Assign_Dt DESC`,
+        [studentId, batchId]
+      );
+      marksData = marksRows;
+    } catch { /* ignore if table schema differs */ }
+
     return NextResponse.json({
       summary: { total_given: totalGiven, received, pending, percentage },
       assignments,
+      marks: marksData,
     });
   } catch (err: unknown) {
     console.error('Student assignments API error:', err);

@@ -77,20 +77,75 @@ export async function GET(req: NextRequest) {
 
     if (fetchOptions === 'assignments') {
       const batchId = searchParams.get('batchId');
-      if (!batchId) return NextResponse.json({ assignments: [] });
+      const parsedBatchId = batchId ? parseInt(batchId, 10) : NaN;
+      if (isNaN(parsedBatchId)) return NextResponse.json({ assignments: [] });
       const [assignments] = await pool.query(
         `SELECT id, assignmentname, subjects, marks, assignmentdate
          FROM assignmentstaken
          WHERE batch_id = ? AND (deleted = 0 OR deleted IS NULL)
          ORDER BY id DESC`,
-        [batchId]
+        [parsedBatchId]
       );
       return NextResponse.json({ assignments });
     }
 
+    if (fetchOptions === 'students') {
+      const batchId = searchParams.get('batchId');
+      const givenId = searchParams.get('givenId');
+      if (!batchId) return NextResponse.json({ students: [] });
+
+      // Get all students enrolled in this batch
+      const [students] = await pool.query(
+        `SELECT
+           a.Admission_Id,
+           a.Student_Id,
+           a.Student_Code,
+           s.Student_Name
+         FROM admission_master a
+         JOIN student_master s ON a.Student_Id = s.Student_Id
+         WHERE a.Batch_Id = ?
+           AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
+           AND (a.Cancel = 0 OR a.Cancel IS NULL)
+         ORDER BY CAST(COALESCE(a.Roll_No, '0') AS UNSIGNED), s.Student_Name`,
+        [parseInt(batchId)]
+      );
+
+      // Fetch existing marks/status from assignment_given_child if editing
+      const existingMap: Record<string, any> = {};
+      if (givenId && parseInt(givenId) > 0) {
+        try {
+          const [existing] = await pool.query(
+            `SELECT * FROM assignment_given_child WHERE Given_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+            [parseInt(givenId)]
+          );
+          for (const row of existing as any[]) {
+            const key = String(row.Student_Id ?? row.Admission_Id ?? '');
+            if (key) existingMap[key] = row;
+          }
+        } catch { /* ignore — table may lack IsDelete column */ }
+      }
+
+      const result = (students as any[]).map((s: any, idx: number) => {
+        const existing = existingMap[String(s.Student_Id)] ?? existingMap[String(s.Admission_Id)] ?? null;
+        return {
+          ...s,
+          row_num: idx + 1,
+          existing_marks: existing?.Marks_Given ?? existing?.Marks ?? null,
+          existing_status: existing?.Status ?? null,
+          existing_actual_dt: existing?.Actual_Dt ?? null,
+        };
+      });
+
+      return NextResponse.json({ students: result });
+    }
+
     /* --- List with pagination --- */
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
-    const limit = Math.min(100, Math.max(10, parseInt(searchParams.get('limit') || '25')));
+    const rawPage = searchParams.get('page');
+    const parsedPage = parseInt(rawPage || '1', 10);
+    const page = isNaN(parsedPage) ? 1 : Math.max(1, parsedPage);
+    const rawLimit = searchParams.get('limit');
+    const parsedLimit = parseInt(rawLimit || '25', 10);
+    const limit = isNaN(parsedLimit) ? 25 : Math.min(100, Math.max(10, parsedLimit));
     const offset = (page - 1) * limit;
 
     const search = searchParams.get('search')?.trim() || '';
@@ -110,9 +165,9 @@ export async function GET(req: NextRequest) {
       params.push(s, s, s, s);
     }
     if (courseId) { conditions.push('at.Course_Id = ?'); params.push(parseInt(courseId)); }
-    if (batchId) { conditions.push('at.Batch_Id = ?'); params.push(parseInt(batchId)); }
+    if (batchId)  { conditions.push('at.Batch_Id = ?');  params.push(parseInt(batchId)); }
     if (dateFrom) { conditions.push('at.Assign_Dt >= ?'); params.push(dateFrom); }
-    if (dateTo) { conditions.push('at.Assign_Dt <= ?'); params.push(dateTo); }
+    if (dateTo)   { conditions.push('at.Assign_Dt <= ?'); params.push(dateTo); }
 
     const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
@@ -210,6 +265,21 @@ export async function POST(req: NextRequest) {
     );
     const insertId = (result as any).insertId;
 
+    // Save per-student marks/status to assignment_given_child
+    const students: any[] = body.students || [];
+    for (const s of students) {
+      const studentId = s.Student_Id ?? s.Admission_Id;
+      if (!studentId) continue;
+      try {
+        await pool.query(
+          `INSERT INTO assignment_given_child (Given_Id, Student_Id, Marks_Given, Status, Actual_Dt, IsActive, IsDelete)
+           VALUES (?, ?, ?, ?, ?, 1, 0)
+           ON DUPLICATE KEY UPDATE Marks_Given = VALUES(Marks_Given), Status = VALUES(Status), Actual_Dt = VALUES(Actual_Dt)`,
+          [insertId, studentId, s.marks !== '' ? s.marks : null, s.status || null, s.actual_dt || null]
+        );
+      } catch { /* ignore column mismatch gracefully */ }
+    }
+
     return NextResponse.json({ success: true, Given_Id: insertId });
   } catch (error: any) {
     console.error('Assignments taken POST error:', error);
@@ -246,6 +316,21 @@ export async function PUT(req: NextRequest) {
         Given_Id,
       ]
     );
+
+    // Upsert per-student marks/status
+    const students: any[] = body.students || [];
+    for (const s of students) {
+      const studentId = s.Student_Id ?? s.Admission_Id;
+      if (!studentId) continue;
+      try {
+        await pool.query(
+          `INSERT INTO assignment_given_child (Given_Id, Student_Id, Marks_Given, Status, Actual_Dt, IsActive, IsDelete)
+           VALUES (?, ?, ?, ?, ?, 1, 0)
+           ON DUPLICATE KEY UPDATE Marks_Given = VALUES(Marks_Given), Status = VALUES(Status), Actual_Dt = VALUES(Actual_Dt)`,
+          [Given_Id, studentId, s.marks !== '' ? s.marks : null, s.status || null, s.actual_dt || null]
+        );
+      } catch { /* ignore column mismatch gracefully */ }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

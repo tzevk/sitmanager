@@ -3461,27 +3461,27 @@ export default function EditBatchPage() {
 
     switch (activeTab) {
       case 'batch-details':
-        return <BatchDetailsTab />;
+        return BatchDetailsTab();
       case 'fees-structure':
-        return <FeesStructureTab />;
+        return FeesStructureTab();
       case 'assignment-details':
-        return <AssignmentDetailsTab />;
+        return AssignmentDetailsTab();
       case 'unit-test-details':
-        return <UnitTestDetailsTab />;
+        return UnitTestDetailsTab();
       case 'discipline-moc':
-        return <DisciplineMocTab />;
+        return DisciplineMocTab();
       case 'feedback-details':
-        return <FeedbackDetailsTab />;
+        return FeedbackDetailsTab();
       case 'standard-lecture-plan':
-        return <StandardLecturePlanTab />;
+        return StandardLecturePlanTab();
       case 'lecture-plan':
-        return <LecturePlanTab />;
+        return LecturePlanTab();
       case 'convocation-details':
-        return <ConvocationDetailsTab />;
+        return ConvocationDetailsTab();
       case 'site-visit':
-        return <SiteVisitTab />;
+        return SiteVisitTab();
       case 'final-exam-details':
-        return <FinalExamDetailsTab />;
+        return FinalExamDetailsTab();
       default:
         return null;
     }
