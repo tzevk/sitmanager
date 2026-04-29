@@ -28,6 +28,7 @@ interface InquiryRow {
   Batch_code: string;
   Batch_Category: string;
   Discussion: string;
+  followUps: { date: string; discussion: string }[];
 }
 
 interface Course {
@@ -73,12 +74,18 @@ const DEFAULT_COLOR = { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border
 /* ------------------------------------------------------------------ */
 /*  Helper: format date                                                */
 /* ------------------------------------------------------------------ */
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
 function fmtDate(d: string | null | undefined): string {
   if (!d) return '';
+  // Parse YYYY-MM-DD directly to avoid UTC→local timezone shift
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d));
+  if (iso) return `${iso[3]} ${MONTHS_SHORT[parseInt(iso[2]) - 1]} ${iso[1]}`;
   const dt = new Date(d);
   if (isNaN(dt.getTime())) return d;
-  return dt.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return `${String(dt.getDate()).padStart(2,'0')} ${MONTHS_SHORT[dt.getMonth()]} ${dt.getFullYear()}`;
 }
+
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -151,9 +158,9 @@ function InquiryReportContent({
   /* ---- Active filter count (excluding dates) ---- */
   const activeFilters = [courseId, batchType, batchId, inquiryType, inquiryFrom].filter(Boolean).length;
 
-  /* ---- Load dropdown options ---- */
+  /* ---- Load dropdown options (live from Student_Inquiry) ---- */
   useEffect(() => {
-    fetch('/api/inquiry/options')
+    fetch('/api/reports/inquiry/options')
       .then((r) => r.json())
       .then((data) => {
         setCourses(data.courses || []);
@@ -224,7 +231,7 @@ function InquiryReportContent({
   const exportCSV = useCallback(() => {
     if (!rows.length) return;
     const headers = [
-      'Sr No', 'Name', 'Mobile', 'Email', 'Course', 'Batch', 'Batch Category',
+      'Sr No', 'Name', 'Mobile', 'Email', 'Training', 'Batch', 'Batch Category',
       'Inquiry Date', 'Inquiry Type', 'Inquiry From', 'Status', 'Qualification',
       'Discipline', 'Percentage', 'Discussion',
     ];
@@ -232,7 +239,7 @@ function InquiryReportContent({
       r.srNo, r.Student_Name, r.Present_Mobile, r.Email, r.Course_Name,
       r.Batch_code, r.Batch_Category, fmtDate(r.Inquiry_Dt), r.Inquiry_Type,
       r.Inquiry_From, r.Status, r.Qualification, r.Discipline, r.Percentage,
-      `"${(r.Discussion || '').replace(/"/g, '""')}"`,
+      `"${(r.followUps.length ? r.followUps.map(f => `[${fmtDate(f.date)}] ${f.discussion}`).join(' | ') : r.Discussion || '').replace(/"/g, '""')}"`,
     ]);
     const csv = [headers.join(','), ...csvRows.map((r) => r.join(','))].join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -248,7 +255,6 @@ function InquiryReportContent({
   const exportExcel = useCallback(async () => {
     if (!rows.length) return;
 
-    /* --- Status color maps (ARGB hex) --- */
     const statusExcelBg: Record<string, string> = {
       'New': 'FFDBEAFE', 'Contacted': 'FFCFFAFE', 'Inquiry': 'FFE0E7FF',
       'Follow Up': 'FFFEF9C3', 'Interested': 'FFD1FAE5', 'Not Interested': 'FFFEE2E2',
@@ -268,214 +274,211 @@ function InquiryReportContent({
       'Enrolled': 'FF15803D', 'Dropped': 'FF52525B', 'Archived': 'FF57534E',
     };
 
-    const thinBorder = (color: string): ExcelJS.Border => ({ style: 'thin', color: { argb: color } });
-    const allBorders = (c: string) => ({ top: thinBorder(c), bottom: thinBorder(c), left: thinBorder(c), right: thinBorder(c) });
+    const border = (color: string): ExcelJS.Border => ({ style: 'thin', color: { argb: color } });
+    const borders = (c: string) => ({ top: border(c), bottom: border(c), left: border(c), right: border(c) });
+    const fill = (argb: string): ExcelJS.Fill => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
 
     const wb = new ExcelJS.Workbook();
     wb.creator = 'SIT Manager';
     wb.created = new Date();
     const ws = wb.addWorksheet('Inquiry Report', {
-      views: [{ state: 'frozen', ySplit: 4 }],
+      views: [{ state: 'frozen', ySplit: 5 }],
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
     });
 
     const colCount = 15;
     const courseName = courses.find(c => String(c.id) === courseId)?.name || '';
-    const filterDesc = [
-      `Period: ${fmtDate(dateFrom)} to ${fmtDate(dateTo)}`,
-      courseId ? `Course: ${courseName}` : '',
-      batchType ? `Batch Type: ${batchType}` : '',
-      inquiryType ? `Inquiry Type: ${inquiryType}` : '',
-      inquiryFrom ? `Inquiry From: ${inquiryFrom}` : '',
-      `Total Records: ${total}`,
-    ].filter(Boolean).join('  |  ');
 
-    /* ====================== ROW 1: Title ====================== */
+    /* ── Row 1: Institute name bar ── */
     ws.mergeCells(1, 1, 1, colCount);
-    const titleRow = ws.getRow(1);
-    titleRow.height = 36;
-    const titleCell = ws.getCell('A1');
-    titleCell.value = `Suvidya Institute of Technology — Inquiry Report${courseName ? ' — ' + courseName : ''}`;
-    titleCell.font = { size: 15, bold: true, color: { argb: 'FFFFFFFF' } };
-    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E3093' } };
-    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    titleCell.border = allBorders('FF2E3093');
+    const r1 = ws.getRow(1);
+    r1.height = 30;
+    const c1 = ws.getCell('A1');
+    c1.value = 'SUVIDYA INSTITUTE OF TECHNOLOGY';
+    c1.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+    c1.fill = fill('FF2E3093');
+    c1.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    /* ====================== ROW 2: Filter info ====================== */
+    /* ── Row 2: Report title bar ── */
     ws.mergeCells(2, 1, 2, colCount);
-    const subRow = ws.getRow(2);
-    subRow.height = 22;
-    const subCell = ws.getCell('A2');
-    subCell.value = filterDesc;
-    subCell.font = { size: 9, italic: true, color: { argb: 'FF555555' } };
-    subCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8E8F0' } };
-    subCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    subCell.border = allBorders('FFCCCCCC');
+    const r2 = ws.getRow(2);
+    r2.height = 22;
+    const c2 = ws.getCell('A2');
+    c2.value = `Inquiry Report${courseName ? ' — ' + courseName : ''}`;
+    c2.font = { name: 'Calibri', size: 11, bold: false, italic: true, color: { argb: 'FFFFFFFF' } };
+    c2.fill = fill('FF3D4DB5');
+    c2.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    /* ====================== ROW 3: Blank spacer ====================== */
-    ws.getRow(3).height = 6;
+    /* ── Row 3: Filter summary bar ── */
+    ws.mergeCells(3, 1, 3, colCount);
+    const r3 = ws.getRow(3);
+    r3.height = 18;
+    const filterParts = [
+      `Period: ${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`,
+      courseId ? `Training: ${courseName}` : '',
+      batchType ? `Batch Type: ${batchType}` : '',
+      inquiryType ? `Enquiry Type: ${inquiryType}` : '',
+      inquiryFrom ? `Source: ${inquiryFrom}` : '',
+      `Total: ${total}`,
+    ].filter(Boolean);
+    const c3 = ws.getCell('A3');
+    c3.value = filterParts.join('   ·   ');
+    c3.font = { name: 'Calibri', size: 9, color: { argb: 'FF374151' } };
+    c3.fill = fill('FFEBECF5');
+    c3.alignment = { horizontal: 'center', vertical: 'middle' };
+    c3.border = { bottom: border('FFCCCCDD') };
 
-    /* ====================== ROW 4: Column Headers ====================== */
+    /* ── Row 4: Spacer ── */
+    ws.getRow(4).height = 4;
+
+    /* ── Row 5: Column headers ── */
     const headers = [
-      'Sr No', 'Name', 'Mobile', 'Email', 'Course', 'Batch', 'Batch Category',
-      'Inquiry Date', 'Inquiry Type', 'Inquiry From', 'Status', 'Qualification',
+      'Sr', 'Name', 'Mobile', 'Email', 'Training', 'Batch', 'Batch Category',
+      'Inquiry Date', 'Enq. Type', 'Source', 'Status', 'Qualification',
       'Discipline', 'Percentage', 'Discussion',
     ];
-    const headerRow = ws.getRow(4);
-    headerRow.height = 28;
+    const headerRow = ws.getRow(5);
+    headerRow.height = 26;
     headers.forEach((h, ci) => {
       const cell = headerRow.getCell(ci + 1);
       cell.value = h;
-      cell.font = { size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A6BB5' } };
+      cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = fill('FF2A6BB5');
       cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      cell.border = allBorders('FF1A5A9E');
+      cell.border = borders('FF1A5A9E');
     });
 
-    /* ====================== DATA ROWS ====================== */
+    /* ── Data rows (start row 6) ── */
     rows.forEach((r, i) => {
-      const rowIdx = 5 + i;
+      const rowIdx = 6 + i;
       const exRow = ws.getRow(rowIdx);
       exRow.height = 20;
-      const isEven = i % 2 === 0;
-      const stripeBg = isEven ? 'FFFFFFFF' : 'FFF8FAFC';
+      const stripeBg = i % 2 === 0 ? 'FFFFFFFF' : 'FFF7F8FD';
       const statusBg = statusExcelBg[r.Status] || 'FFF3F4F6';
-      const statusFn = statusExcelFont[r.Status] || 'FF333333';
+      const statusFn = statusExcelFont[r.Status] || 'FF374151';
 
+      const followUpText = r.followUps.length
+        ? r.followUps.map(f => `[${fmtDate(f.date)}] ${f.discussion}`).join('\n')
+        : (r.Discussion || '');
       const vals: (string | number)[] = [
         r.srNo, r.Student_Name, r.Present_Mobile, r.Email, r.Course_Name,
         r.Batch_code, r.Batch_Category, fmtDate(r.Inquiry_Dt), r.Inquiry_Type,
         r.Inquiry_From, r.Status, r.Qualification, r.Discipline, r.Percentage,
-        r.Discussion || '',
+        followUpText,
       ];
 
       vals.forEach((v, ci) => {
         const cell = exRow.getCell(ci + 1);
         cell.value = v;
-        cell.border = allBorders('FFE5E7EB');
+        cell.border = borders('FFE5E7EB');
+        cell.font = { name: 'Calibri', size: 9, color: { argb: 'FF374151' } };
+        cell.fill = fill(stripeBg);
+        cell.alignment = { vertical: 'middle' };
 
-        if (ci === 10) {
-          /* Status column — color-coded */
-          cell.font = { size: 9, bold: true, color: { argb: statusFn } };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: statusBg } };
-          cell.alignment = { horizontal: 'center', vertical: 'middle' };
-        } else if (ci === 0) {
-          /* Sr No — centered */
-          cell.font = { size: 9, color: { argb: 'FF9CA3AF' } };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: stripeBg } };
+        if (ci === 0) {
+          cell.font = { name: 'Calibri', size: 8, color: { argb: 'FF9CA3AF' } };
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
         } else if (ci === 1) {
-          /* Name — bold */
-          cell.font = { size: 9, bold: true, color: { argb: 'FF111827' } };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: stripeBg } };
-          cell.alignment = { vertical: 'middle' };
+          cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: 'FF111827' } };
+        } else if (ci === 10) {
+          cell.font = { name: 'Calibri', size: 8, bold: true, color: { argb: statusFn } };
+          cell.fill = fill(statusBg);
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        } else if (ci === 7) {
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
         } else if (ci === 14) {
-          /* Discussion — wrap text */
-          cell.font = { size: 9, color: { argb: 'FF4B5563' } };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: stripeBg } };
           cell.alignment = { vertical: 'middle', wrapText: true };
-        } else {
-          cell.font = { size: 9, color: { argb: 'FF4B5563' } };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: stripeBg } };
-          cell.alignment = { vertical: 'middle' };
+          cell.font = { name: 'Calibri', size: 8, color: { argb: 'FF6B7280' } };
         }
       });
     });
 
-    /* ====================== STATUS SUMMARY SECTION ====================== */
+    /* ── Status Summary (placed to the right of data, cols 17-19) ── */
     const summaryEntries = Object.entries(statusSummary).sort(([, a], [, b]) => b - a);
-    const gapRow = 5 + rows.length;
-    ws.getRow(gapRow).height = 10;
+    const sumStartCol = 17;
 
-    /* Summary title */
-    const smTitleRowIdx = gapRow + 1;
-    ws.mergeCells(smTitleRowIdx, 1, smTitleRowIdx, 2);
-    const smTitleCell = ws.getCell(smTitleRowIdx, 1);
-    smTitleCell.value = 'Status Summary';
-    smTitleCell.font = { size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
-    smTitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E3093' } };
-    smTitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    smTitleCell.border = allBorders('FF2E3093');
-    ws.getRow(smTitleRowIdx).height = 26;
-
-    /* Sub-headers */
-    const smSubRowIdx = smTitleRowIdx + 1;
-    ['Status', 'Count'].forEach((h, ci) => {
-      const cell = ws.getCell(smSubRowIdx, ci + 1);
-      cell.value = h;
-      cell.font = { size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4B5EAA' } };
+    // Summary header
+    ws.getCell(5, sumStartCol).value = 'Status';
+    ws.getCell(5, sumStartCol + 1).value = 'Count';
+    ws.getCell(5, sumStartCol + 2).value = '%';
+    [sumStartCol, sumStartCol + 1, sumStartCol + 2].forEach(col => {
+      const cell = ws.getCell(5, col);
+      cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = fill('FF2E3093');
       cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      cell.border = allBorders('FF3B4D8A');
+      cell.border = borders('FF1E2470');
     });
-    ws.getRow(smSubRowIdx).height = 22;
 
-    /* Summary data rows */
     summaryEntries.forEach(([statusName, count], i) => {
-      const rowIdx = smSubRowIdx + 1 + i;
+      const rowIdx = 6 + i;
+      const pct = total > 0 ? ((count / total) * 100).toFixed(1) + '%' : '0%';
       const sBg = statusExcelBg[statusName] || 'FFF9FAFB';
-      const sFnt = statusExcelFont[statusName] || 'FF333333';
-      const exRow = ws.getRow(rowIdx);
-      exRow.height = 20;
+      const sFnt = statusExcelFont[statusName] || 'FF374151';
 
-      const statusCell = exRow.getCell(1);
-      statusCell.value = statusName;
-      statusCell.font = { size: 9, color: { argb: sFnt } };
-      statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: sBg } };
-      statusCell.alignment = { vertical: 'middle' };
-      statusCell.border = allBorders('FFD1D5DB');
+      const sCell = ws.getCell(rowIdx, sumStartCol);
+      sCell.value = statusName;
+      sCell.font = { name: 'Calibri', size: 9, color: { argb: sFnt } };
+      sCell.fill = fill(sBg);
+      sCell.alignment = { vertical: 'middle' };
+      sCell.border = borders('FFD1D5DB');
 
-      const countCell = exRow.getCell(2);
-      countCell.value = count;
-      countCell.font = { size: 9, bold: true, color: { argb: sFnt } };
-      countCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: sBg } };
-      countCell.alignment = { horizontal: 'center', vertical: 'middle' };
-      countCell.border = allBorders('FFD1D5DB');
+      const cCell = ws.getCell(rowIdx, sumStartCol + 1);
+      cCell.value = count;
+      cCell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: sFnt } };
+      cCell.fill = fill(sBg);
+      cCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cCell.border = borders('FFD1D5DB');
+
+      const pCell = ws.getCell(rowIdx, sumStartCol + 2);
+      pCell.value = pct;
+      pCell.font = { name: 'Calibri', size: 8, color: { argb: 'FF6B7280' } };
+      pCell.fill = fill(sBg);
+      pCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      pCell.border = borders('FFD1D5DB');
     });
 
-    /* TOTAL row */
-    const totalRowIdx = smSubRowIdx + 1 + summaryEntries.length;
-    const totalExRow = ws.getRow(totalRowIdx);
-    totalExRow.height = 24;
-    const totalLabelCell = totalExRow.getCell(1);
-    totalLabelCell.value = 'TOTAL';
-    totalLabelCell.font = { size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-    totalLabelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
-    totalLabelCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    totalLabelCell.border = allBorders('FF1E3A5F');
+    // Total row in summary
+    const totalSumRowIdx = 6 + summaryEntries.length;
+    [sumStartCol, sumStartCol + 1, sumStartCol + 2].forEach((col, ci) => {
+      const cell = ws.getCell(totalSumRowIdx, col);
+      cell.value = ci === 0 ? 'TOTAL' : ci === 1 ? total : '100%';
+      cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = fill('FF1E3A5F');
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = borders('FF1E3A5F');
+    });
+    ws.getRow(totalSumRowIdx).height = 22;
 
-    const totalValCell = totalExRow.getCell(2);
-    totalValCell.value = total;
-    totalValCell.font = { size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-    totalValCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
-    totalValCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    totalValCell.border = allBorders('FF1E3A5F');
-
-    /* ====================== Column Widths ====================== */
+    /* ── Column widths ── */
     ws.columns = [
-      { width: 8 },   // Sr No
-      { width: 28 },  // Name
-      { width: 16 },  // Mobile
-      { width: 30 },  // Email
-      { width: 30 },  // Course
-      { width: 15 },  // Batch
-      { width: 18 },  // Batch Category
-      { width: 16 },  // Inquiry Date
-      { width: 16 },  // Inquiry Type
-      { width: 16 },  // Inquiry From
-      { width: 18 },  // Status
-      { width: 16 },  // Qualification
-      { width: 16 },  // Discipline
-      { width: 12 },  // Percentage
-      { width: 35 },  // Discussion
+      { width: 6 },   // Sr
+      { width: 26 },  // Name
+      { width: 15 },  // Mobile
+      { width: 28 },  // Email
+      { width: 28 },  // Training
+      { width: 14 },  // Batch
+      { width: 16 },  // Batch Category
+      { width: 14 },  // Inquiry Date
+      { width: 14 },  // Enq. Type
+      { width: 14 },  // Source
+      { width: 16 },  // Status
+      { width: 15 },  // Qualification
+      { width: 14 },  // Discipline
+      { width: 11 },  // Percentage
+      { width: 32 },  // Discussion
+      { width: 3 },   // gap
+      { width: 18 },  // Summary: Status
+      { width: 8 },   // Summary: Count
+      { width: 8 },   // Summary: %
     ];
 
-    /* ====================== Auto-filter on header row ====================== */
-    ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + rows.length, column: colCount } };
+    /* ── Auto-filter on header row ── */
+    ws.autoFilter = { from: { row: 5, column: 1 }, to: { row: 5 + rows.length, column: colCount } };
 
-    /* ====================== Generate & Download ====================== */
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    saveAs(blob, `Inquiry_Report_${dateFrom}_to_${dateTo}.xlsx`);
+    const label = `${fmtDate(dateFrom).replace(/ /g,'_')}_to_${fmtDate(dateTo).replace(/ /g,'_')}`;
+    saveAs(blob, `Inquiry_Report_${label}.xlsx`);
   }, [rows, dateFrom, dateTo, courseId, courses, batchType, inquiryType, inquiryFrom, total, statusSummary]);
 
   /* ---- Print ---- */
@@ -795,7 +798,7 @@ function InquiryReportContent({
                     <th className="px-3 py-2.5 text-left font-semibold border-r border-[#1a5a9e] whitespace-nowrap">Name</th>
                     <th className="px-3 py-2.5 text-left font-semibold border-r border-[#1a5a9e] whitespace-nowrap">Mobile</th>
                     <th className="px-3 py-2.5 text-left font-semibold border-r border-[#1a5a9e] whitespace-nowrap">Email</th>
-                    <th className="px-3 py-2.5 text-left font-semibold border-r border-[#1a5a9e] whitespace-nowrap">Course</th>
+                    <th className="px-3 py-2.5 text-left font-semibold border-r border-[#1a5a9e] whitespace-nowrap">Training</th>
                     <th className="px-3 py-2.5 text-left font-semibold border-r border-[#1a5a9e] whitespace-nowrap">Batch</th>
                     <th className="px-3 py-2.5 text-left font-semibold border-r border-[#1a5a9e] whitespace-nowrap">Inquiry Date</th>
                     <th className="px-3 py-2.5 text-left font-semibold border-r border-[#1a5a9e] whitespace-nowrap">Type</th>
@@ -829,8 +832,19 @@ function InquiryReportContent({
                             {r.Status}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate" title={r.Discussion}>
-                          {r.Discussion}
+                        <td className="px-3 py-2 align-top max-w-[260px]">
+                          {r.followUps.length > 0 ? (
+                            <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                              {r.followUps.map((f, fi) => (
+                                <div key={fi} className="text-[10px]">
+                                  <span className="font-semibold text-[#2A6BB5] mr-1">{fmtDate(f.date)}</span>
+                                  <span className="text-gray-600">{f.discussion}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-[10px]">—</span>
+                          )}
                         </td>
                       </tr>
                     );
