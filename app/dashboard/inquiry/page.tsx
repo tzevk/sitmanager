@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -101,20 +101,23 @@ const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs 
 
 export default function InquiryPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { canView, canUpdate, canDelete, canCreate, loading: permLoading } = useResourcePermissions('inquiry');
   const [rows, setRows] = useState<InquiryRow[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
   const [filters, setFilters] = useState<Filters>({ disciplines: [], inquiryTypes: [], trainings: [], statusOptions: [] });
   const [loading, setLoading] = useState(true);
 
-  const [search, setSearch] = useState('');
-  const [discipline, setDiscipline] = useState('');
-  const [inquiryType, setInquiryType] = useState('');
-  const [status, setStatus] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [training, setTraining] = useState('');
-  const [page, setPage] = useState(1);
+  // Initialise from URL so filters survive navigate-away → back
+  const [search, setSearch] = useState(() => searchParams.get('search') || '');
+  const [discipline, setDiscipline] = useState(() => searchParams.get('discipline') || '');
+  const [inquiryType, setInquiryType] = useState(() => searchParams.get('inquiryType') || '');
+  const [status, setStatus] = useState(() => searchParams.get('status') || '');
+  const [dateFrom, setDateFrom] = useState(() => searchParams.get('dateFrom') || '');
+  const [dateTo, setDateTo] = useState(() => searchParams.get('dateTo') || '');
+  const [training, setTraining] = useState(() => searchParams.get('training') || '');
+  const [page, setPage] = useState(() => Math.max(1, parseInt(searchParams.get('page') || '1')));
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -143,8 +146,18 @@ export default function InquiryPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const doSearch = () => { setPage(1); setFetchTrigger(t => t + 1); };
+  const syncUrl = (params: Record<string, string>) => {
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v) p.set(k, v); });
+    router.replace(p.toString() ? `${pathname}?${p}` : pathname, { scroll: false });
+  };
+
+  const doSearch = () => {
+    syncUrl({ search, discipline, inquiryType, status, dateFrom, dateTo, training });
+    setPage(1); setFetchTrigger(t => t + 1);
+  };
   const doClear = () => {
+    router.replace(pathname, { scroll: false });
     setSearch(''); setDiscipline(''); setInquiryType('');
     setStatus(''); setDateFrom(''); setDateTo(''); setTraining('');
     setPage(1); setFetchTrigger(t => t + 1);
