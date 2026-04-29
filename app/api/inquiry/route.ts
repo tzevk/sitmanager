@@ -143,6 +143,7 @@ export async function GET(req: NextRequest) {
     const discipline = url.searchParams.get('discipline') || '';
     const inquiryType = url.searchParams.get('inquiryType') || '';
     const location = (url.searchParams.get('location') || '').trim();
+    const training = url.searchParams.get('training') || '';
     const statusId = url.searchParams.get('status') || '';
     const dateFrom = url.searchParams.get('dateFrom') || '';
     const dateTo = url.searchParams.get('dateTo') || '';
@@ -238,6 +239,11 @@ export async function GET(req: NextRequest) {
     if (dateTo) {
       conditions.push(`${inquiryDtAsDate} <= ?`);
       params.push(dateTo);
+    }
+
+    if (training) {
+      conditions.push(`c.Course_Name = ?`);
+      params.push(training);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE (${conditions.join(') AND (')})` : '';
@@ -366,6 +372,14 @@ export async function GET(req: NextRequest) {
     const [typesResult] = await pool.query(
       "SELECT DISTINCT Inquiry_Type FROM Student_Inquiry WHERE Inquiry_Type IS NOT NULL AND Inquiry_Type != '' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Inquiry_Type"
     );
+    const [trainingsResult] = await pool.query(
+      `SELECT DISTINCT c.Course_Name
+       FROM Student_Inquiry si
+       LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
+       WHERE c.Course_Name IS NOT NULL AND c.Course_Name != ''
+         AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
+       ORDER BY c.Course_Name`
+    );
 
     // Build enriched rows
     const rows = (dataRows as any[]).map((r: any) => {
@@ -402,6 +416,7 @@ export async function GET(req: NextRequest) {
 
     const disciplines = (disciplinesResult as any[]).map((d: any) => d.Discipline);
     const inquiryTypes = (typesResult as any[]).map((t: any) => t.Inquiry_Type);
+    const trainings = (trainingsResult as any[]).map((r: any) => r.Course_Name);
 
     // Status mapping (prefer DB; fallback to common labels)
     const fallbackStatusMap: Record<number, string> = {
@@ -477,6 +492,7 @@ export async function GET(req: NextRequest) {
       filters: {
         disciplines,
         inquiryTypes,
+        trainings,
         statusOptions,
       },
     });

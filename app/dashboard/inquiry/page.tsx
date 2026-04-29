@@ -47,7 +47,7 @@ interface InquiryRow {
 }
 
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
-interface Filters { disciplines: string[]; inquiryTypes: string[]; statusOptions: { id: number; label: string }[]; }
+interface Filters { disciplines: string[]; inquiryTypes: string[]; trainings: string[]; statusOptions: { id: number; label: string }[]; }
 
 function hasLatestFollowUp(r: InquiryRow) { return Boolean(r.Discussion && r.Discussion !== 'NULL' && r.Discussion.trim()); }
 function hasScheduledFollowUp(r: InquiryRow) { return Boolean(r.NextFollowUpDate); }
@@ -104,7 +104,7 @@ export default function InquiryPage() {
   const { canView, canUpdate, canDelete, canCreate, loading: permLoading } = useResourcePermissions('inquiry');
   const [rows, setRows] = useState<InquiryRow[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
-  const [filters, setFilters] = useState<Filters>({ disciplines: [], inquiryTypes: [], statusOptions: [] });
+  const [filters, setFilters] = useState<Filters>({ disciplines: [], inquiryTypes: [], trainings: [], statusOptions: [] });
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState('');
@@ -113,6 +113,7 @@ export default function InquiryPage() {
   const [status, setStatus] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [training, setTraining] = useState('');
   const [page, setPage] = useState(1);
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [sendingId, setSendingId] = useState<number | null>(null);
@@ -128,6 +129,7 @@ export default function InquiryPage() {
       if (status) p.set('status', status);
       if (dateFrom) p.set('dateFrom', dateFrom);
       if (dateTo) p.set('dateTo', dateTo);
+      if (training) p.set('training', training);
       const res = await fetch(`/api/inquiry?${p}`);
       const ct = res.headers.get('content-type') || '';
       const data = ct.includes('application/json') ? await res.json() : {};
@@ -144,7 +146,7 @@ export default function InquiryPage() {
   const doSearch = () => { setPage(1); setFetchTrigger(t => t + 1); };
   const doClear = () => {
     setSearch(''); setDiscipline(''); setInquiryType('');
-    setStatus(''); setDateFrom(''); setDateTo('');
+    setStatus(''); setDateFrom(''); setDateTo(''); setTraining('');
     setPage(1); setFetchTrigger(t => t + 1);
   };
 
@@ -253,6 +255,10 @@ export default function InquiryPage() {
         </select>
         <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} title="From date" className={`${ctrl} w-[130px]`} />
         <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} title="To date" className={`${ctrl} w-[130px]`} />
+        <select value={training} onChange={e => setTraining(e.target.value)} className={`${ctrl} w-[140px]`}>
+          <option value="">Training</option>
+          {filters.trainings.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
         <button onClick={doSearch} className="flex items-center gap-1 bg-[#2E3093] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-[#252880] transition-colors">
           <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -272,7 +278,7 @@ export default function InquiryPage() {
               <tr className="text-[10px] uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-200">
                 <th className="text-left py-2 px-3 font-bold">#</th>
                 <th className="text-left py-2 px-3 font-bold">Name</th>
-                <th className="text-left py-2 px-3 font-bold">Course</th>
+                <th className="text-left py-2 px-3 font-bold">Training</th>
                 <th className="text-left py-2 px-3 font-bold">Mobile</th>
                 <th className="text-left py-2 px-3 font-bold">Email</th>
                 <th className="text-left py-2 px-3 font-bold">Discipline</th>
@@ -414,7 +420,7 @@ export default function InquiryPage() {
               <thead>
                 <tr className="text-[10px] uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-100">
                   <th className="text-left py-2 px-3 font-bold">Name</th>
-                  <th className="text-left py-2 px-3 font-bold">Course</th>
+                  <th className="text-left py-2 px-3 font-bold">Training</th>
                   <th className="text-left py-2 px-3 font-bold">Mobile</th>
                   <th className="text-left py-2 px-3 font-bold">Follow-Up Date</th>
                   <th className="text-left py-2 px-3 font-bold">By</th>
