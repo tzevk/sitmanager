@@ -311,11 +311,9 @@ export default function PublicInquiryPage() {
                     <label className={labelCls}>Date of Birth</label>
                     <input
                       className={inputCls}
+                      type="date"
                       value={dob}
-                        onChange={(e) => setDob(formatDobInput(e.target.value))}
-                      placeholder="dd/mm/yyyy"
-                        inputMode="numeric"
-                        maxLength={10}
+                      onChange={(e) => setDob(e.target.value)}
                     />
                   </div>
 

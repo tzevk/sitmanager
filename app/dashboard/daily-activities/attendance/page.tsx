@@ -621,7 +621,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
               <button
                 onClick={save}
                 disabled={saving || (!students.some(s => statusMapFH[s.Student_Id]) && !students.some(s => statusMapSH[s.Student_Id]))}
-                className="sm:hidden inline-flex w-full justify-center items-center gap-1.5 px-4 py-2 text-sm font-bold rounded-lg bg-[#2E3093] text-white hover:bg-[#252780] transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex w-full sm:w-auto justify-center items-center gap-1.5 px-4 py-2 text-sm font-bold rounded-lg bg-[#2E3093] text-white hover:bg-[#252780] transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving ? (
                   <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Saving…</>
