@@ -11,9 +11,9 @@ export async function GET(
     const pool = getPool();
 
     const [rows] = await pool.query(
-      `SELECT id, subject, date, created_date
+      `SELECT id, subject, date
        FROM batch_feedback_master
-       WHERE batch_id = ? AND deleted = 0
+       WHERE batch_id = ? AND (deleted = 0 OR deleted IS NULL)
        ORDER BY id ASC`,
       [id]
     );
@@ -21,10 +21,7 @@ export async function GET(
     return NextResponse.json({ feedbacks: rows });
   } catch (error) {
     console.error('Error fetching feedbacks:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch feedbacks' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch feedbacks' }, { status: 500 });
   }
 }
 
@@ -40,51 +37,51 @@ export async function POST(
     const pool = getPool();
 
     const [result] = await pool.query<ResultSetHeader>(
-      `INSERT INTO batch_feedback_master (batch_id, subject, date, created_date, deleted)
-       VALUES (?, ?, ?, NOW(), 0)`,
+      `INSERT INTO batch_feedback_master (batch_id, subject, date, deleted)
+       VALUES (?, ?, ?, 0)`,
       [id, subject, date || null]
     );
 
-    return NextResponse.json({ 
-      success: true, 
-      id: result.insertId 
-    });
+    return NextResponse.json({ success: true, id: result.insertId });
   } catch (error) {
     console.error('Error creating feedback:', error);
-    return NextResponse.json(
-      { error: 'Failed to create feedback' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to create feedback' }, { status: 500 });
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-) {
+export async function PUT(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const feedbackId = searchParams.get('feedbackId');
+    const body = await request.json();
+    const { id, subject, date } = body;
 
-    if (!feedbackId) {
-      return NextResponse.json(
-        { error: 'Feedback ID required' },
-        { status: 400 }
-      );
-    }
+    if (!id) return NextResponse.json({ error: 'Feedback ID required' }, { status: 400 });
 
     const pool = getPool();
 
     await pool.query(
-      `UPDATE batch_feedback_master SET deleted = 1 WHERE id = ?`,
-      [feedbackId]
+      `UPDATE batch_feedback_master SET subject = ?, date = ? WHERE id = ?`,
+      [subject, date || null, id]
     );
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error('Error updating feedback:', error);
+    return NextResponse.json({ error: 'Failed to update feedback' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const feedbackId = request.nextUrl.searchParams.get('feedbackId');
+
+    if (!feedbackId) return NextResponse.json({ error: 'Feedback ID required' }, { status: 400 });
+
+    const pool = getPool();
+    await pool.query(`UPDATE batch_feedback_master SET deleted = 1 WHERE id = ?`, [feedbackId]);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
     console.error('Error deleting feedback:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete feedback' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to delete feedback' }, { status: 500 });
   }
 }

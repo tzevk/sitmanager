@@ -11,9 +11,9 @@ export async function GET(
     const pool = getPool();
 
     const [rows] = await pool.query(
-      `SELECT id, subject, date, marks, created_date
+      `SELECT id, subject, date, marks
        FROM batch_moc_master
-       WHERE batch_id = ? AND deleted = 0
+       WHERE batch_id = ? AND (deleted = 0 OR deleted IS NULL)
        ORDER BY id ASC`,
       [id]
     );
@@ -21,10 +21,7 @@ export async function GET(
     return NextResponse.json({ disciplines: rows });
   } catch (error) {
     console.error('Error fetching disciplines:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch disciplines' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch disciplines' }, { status: 500 });
   }
 }
 
@@ -40,51 +37,51 @@ export async function POST(
     const pool = getPool();
 
     const [result] = await pool.query<ResultSetHeader>(
-      `INSERT INTO batch_moc_master (batch_id, subject, date, marks, created_date, deleted)
-       VALUES (?, ?, ?, ?, NOW(), 0)`,
+      `INSERT INTO batch_moc_master (batch_id, subject, date, marks, deleted)
+       VALUES (?, ?, ?, ?, 0)`,
       [id, subject, date || null, marks || null]
     );
 
-    return NextResponse.json({ 
-      success: true, 
-      id: result.insertId 
-    });
+    return NextResponse.json({ success: true, id: result.insertId });
   } catch (error) {
     console.error('Error creating discipline:', error);
-    return NextResponse.json(
-      { error: 'Failed to create discipline' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to create discipline' }, { status: 500 });
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-) {
+export async function PUT(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const disciplineId = searchParams.get('disciplineId');
+    const body = await request.json();
+    const { id, subject, date, marks } = body;
 
-    if (!disciplineId) {
-      return NextResponse.json(
-        { error: 'Discipline ID required' },
-        { status: 400 }
-      );
-    }
+    if (!id) return NextResponse.json({ error: 'Discipline ID required' }, { status: 400 });
 
     const pool = getPool();
 
     await pool.query(
-      `UPDATE batch_moc_master SET deleted = 1 WHERE id = ?`,
-      [disciplineId]
+      `UPDATE batch_moc_master SET subject = ?, date = ?, marks = ? WHERE id = ?`,
+      [subject, date || null, marks || null, id]
     );
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error('Error updating discipline:', error);
+    return NextResponse.json({ error: 'Failed to update discipline' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const disciplineId = request.nextUrl.searchParams.get('disciplineId');
+
+    if (!disciplineId) return NextResponse.json({ error: 'Discipline ID required' }, { status: 400 });
+
+    const pool = getPool();
+    await pool.query(`UPDATE batch_moc_master SET deleted = 1 WHERE id = ?`, [disciplineId]);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
     console.error('Error deleting discipline:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete discipline' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to delete discipline' }, { status: 500 });
   }
 }

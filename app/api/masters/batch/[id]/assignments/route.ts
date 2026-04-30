@@ -11,9 +11,9 @@ export async function GET(
     const pool = getPool();
 
     const [rows] = await pool.query(
-      `SELECT id, assignmentname, subjects, marks, assignmentdate, created_date
+      `SELECT id, assignmentname, subjects, marks, assignmentdate
        FROM assignmentstaken
-       WHERE batch_id = ? AND deleted = 0
+       WHERE batch_id = ? AND (deleted = 0 OR deleted IS NULL)
        ORDER BY id ASC`,
       [id]
     );
@@ -21,10 +21,7 @@ export async function GET(
     return NextResponse.json({ assignments: rows });
   } catch (error) {
     console.error('Error fetching assignments:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch assignments' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch assignments' }, { status: 500 });
   }
 }
 
@@ -40,51 +37,53 @@ export async function POST(
     const pool = getPool();
 
     const [result] = await pool.query<ResultSetHeader>(
-      `INSERT INTO assignmentstaken (batch_id, assignmentname, subjects, marks, assignmentdate, created_date, deleted)
-       VALUES (?, ?, ?, ?, ?, NOW(), 0)`,
-      [id, assignmentname, subjects || null, marks, assignmentdate || null]
+      `INSERT INTO assignmentstaken (batch_id, assignmentname, subjects, marks, assignmentdate, deleted)
+       VALUES (?, ?, ?, ?, ?, 0)`,
+      [id, assignmentname, subjects || null, marks || null, assignmentdate || null]
     );
 
-    return NextResponse.json({ 
-      success: true, 
-      id: result.insertId 
-    });
+    return NextResponse.json({ success: true, id: result.insertId });
   } catch (error) {
     console.error('Error creating assignment:', error);
-    return NextResponse.json(
-      { error: 'Failed to create assignment' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to create assignment' }, { status: 500 });
   }
 }
 
-export async function DELETE(
+export async function PUT(
   request: NextRequest,
 ) {
   try {
-    const { searchParams } = new URL(request.url);
-    const assignmentId = searchParams.get('assignmentId');
+    const body = await request.json();
+    const { id, assignmentname, subjects, marks, assignmentdate } = body;
 
-    if (!assignmentId) {
-      return NextResponse.json(
-        { error: 'Assignment ID required' },
-        { status: 400 }
-      );
-    }
+    if (!id) return NextResponse.json({ error: 'Assignment ID required' }, { status: 400 });
 
     const pool = getPool();
 
     await pool.query(
-      `UPDATE assignmentstaken SET deleted = 1 WHERE id = ?`,
-      [assignmentId]
+      `UPDATE assignmentstaken SET assignmentname = ?, subjects = ?, marks = ?, assignmentdate = ? WHERE id = ?`,
+      [assignmentname, subjects || null, marks || null, assignmentdate || null, id]
     );
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error('Error updating assignment:', error);
+    return NextResponse.json({ error: 'Failed to update assignment' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const assignmentId = request.nextUrl.searchParams.get('assignmentId');
+
+    if (!assignmentId) return NextResponse.json({ error: 'Assignment ID required' }, { status: 400 });
+
+    const pool = getPool();
+    await pool.query(`UPDATE assignmentstaken SET deleted = 1 WHERE id = ?`, [assignmentId]);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
     console.error('Error deleting assignment:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete assignment' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to delete assignment' }, { status: 500 });
   }
 }

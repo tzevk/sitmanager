@@ -11,13 +11,28 @@ export async function GET(
 
     const sql = `
       SELECT
-        b.*,
-        c.Course_Name
+        b.Batch_Id, b.Batch_code, b.Category, b.Timings,
+        b.No_of_Lectures,
+        IFNULL(b.UnitTestWtg, 0) AS UnitTestWtg,
+        IFNULL(b.AssignWtg, 0)   AS AssignWtg,
+        IFNULL(b.ExamWtg, 0)     AS ExamWtg,
+        IFNULL(b.AttendWtg, 0)   AS AttendWtg,
+        c.Course_Name, c.Course_Id,
+        b.SDate, b.EDate,
+        b.Passing_Criteria,
+        b.Admission_Date, b.ActualDate, b.Duration, b.Training_Coordinator,
+        b.Min_Qualification, b.Documents_Required,
+        b.Fees_Full_Payment, b.Fees_Installment_Payment, b.Actual_Fees_Payment,
+        b.Max_Students, b.Course_description, b.Corporate,
+        b.ConvocationDate, b.Convocationday,
+        b.FullAttendWtg, b.INR_Basic, b.INR_ServiceTax,
+        b.INR_Total, b.Dollar_Basic, b.Dollar_ServiceTax, b.Dollar_Total,
+        b.TaxRate, b.Site_Visit_Dt, b.Site_company, b.Site_Place,
+        b.Contact_Person, b.Designation, b.Telephone, b.Comments, b.LateMarkLimit,
+        b.CourseName, b.NoStudent, b.Attachment
       FROM batch_mst b
       LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
       WHERE b.Batch_Id = ?
-        AND b.IsActive = 1
-        AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
     `;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [rows] = await pool.query<any[]>(sql, [id]);

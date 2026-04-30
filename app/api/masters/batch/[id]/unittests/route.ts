@@ -11,9 +11,9 @@ export async function GET(
     const pool = getPool();
 
     const [rows] = await pool.query(
-      `SELECT id, subject, utdate, duration, marks, created_date
+      `SELECT id, subject, utdate, duration, marks
        FROM awt_unittesttaken
-       WHERE batch_id = ? AND deleted = 0
+       WHERE batch_id = ? AND (deleted = 0 OR deleted IS NULL)
        ORDER BY id ASC`,
       [id]
     );
@@ -21,10 +21,7 @@ export async function GET(
     return NextResponse.json({ unittests: rows });
   } catch (error) {
     console.error('Error fetching unit tests:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch unit tests' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch unit tests' }, { status: 500 });
   }
 }
 
@@ -40,51 +37,51 @@ export async function POST(
     const pool = getPool();
 
     const [result] = await pool.query<ResultSetHeader>(
-      `INSERT INTO awt_unittesttaken (batch_id, subject, utdate, duration, marks, created_date, deleted)
-       VALUES (?, ?, ?, ?, ?, NOW(), 0)`,
+      `INSERT INTO awt_unittesttaken (batch_id, subject, utdate, duration, marks, deleted)
+       VALUES (?, ?, ?, ?, ?, 0)`,
       [id, subject, utdate || null, duration || null, marks || null]
     );
 
-    return NextResponse.json({ 
-      success: true, 
-      id: result.insertId 
-    });
+    return NextResponse.json({ success: true, id: result.insertId });
   } catch (error) {
     console.error('Error creating unit test:', error);
-    return NextResponse.json(
-      { error: 'Failed to create unit test' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to create unit test' }, { status: 500 });
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-) {
+export async function PUT(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const unittestId = searchParams.get('unittestId');
+    const body = await request.json();
+    const { id, subject, utdate, duration, marks } = body;
 
-    if (!unittestId) {
-      return NextResponse.json(
-        { error: 'Unit Test ID required' },
-        { status: 400 }
-      );
-    }
+    if (!id) return NextResponse.json({ error: 'Unit Test ID required' }, { status: 400 });
 
     const pool = getPool();
 
     await pool.query(
-      `UPDATE awt_unittesttaken SET deleted = 1 WHERE id = ?`,
-      [unittestId]
+      `UPDATE awt_unittesttaken SET subject = ?, utdate = ?, duration = ?, marks = ? WHERE id = ?`,
+      [subject, utdate || null, duration || null, marks || null, id]
     );
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error('Error updating unit test:', error);
+    return NextResponse.json({ error: 'Failed to update unit test' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const unittestId = request.nextUrl.searchParams.get('unittestId');
+
+    if (!unittestId) return NextResponse.json({ error: 'Unit Test ID required' }, { status: 400 });
+
+    const pool = getPool();
+    await pool.query(`UPDATE awt_unittesttaken SET deleted = 1 WHERE id = ?`, [unittestId]);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
     console.error('Error deleting unit test:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete unit test' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to delete unit test' }, { status: 500 });
   }
 }

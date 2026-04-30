@@ -11,10 +11,10 @@ export async function GET(
     const pool = getPool();
 
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT id, subject, exam_date, max_marks, duration, created_date
+      `SELECT Exam_Id AS id, Subject AS subject, Exam_Date AS exam_date, Max_Marks AS max_marks, Duration AS duration
        FROM batch_final_exam
-       WHERE batch_id = ? AND deleted = 0
-       ORDER BY id ASC`,
+       WHERE Batch_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+       ORDER BY Exam_Id ASC`,
       [id]
     );
 
@@ -40,8 +40,8 @@ export async function POST(
     const pool = getPool();
 
     const [result] = await pool.query<ResultSetHeader>(
-      `INSERT INTO batch_final_exam (batch_id, subject, exam_date, max_marks, duration, created_date, deleted)
-       VALUES (?, ?, ?, ?, ?, NOW(), 0)`,
+      `INSERT INTO batch_final_exam (Batch_Id, Subject, Exam_Date, Max_Marks, Duration, IsDelete)
+       VALUES (?, ?, ?, ?, ?, 0)`,
       [id, subject, exam_date || null, max_marks || null, duration || null]
     );
 
@@ -73,7 +73,7 @@ export async function PUT(request: NextRequest) {
     const pool = getPool();
 
     await pool.query(
-      `UPDATE batch_final_exam SET subject = ?, exam_date = ?, max_marks = ?, duration = ? WHERE id = ?`,
+      `UPDATE batch_final_exam SET Subject = ?, Exam_Date = ?, Max_Marks = ?, Duration = ? WHERE Exam_Id = ?`,
       [subject, exam_date || null, max_marks || null, duration || null, id]
     );
 
@@ -89,8 +89,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const examId = searchParams.get('examId');
+    const examId = request.nextUrl.searchParams.get('examId');
 
     if (!examId) {
       return NextResponse.json(
@@ -102,7 +101,7 @@ export async function DELETE(request: NextRequest) {
     const pool = getPool();
 
     await pool.query(
-      `UPDATE batch_final_exam SET deleted = 1 WHERE id = ?`,
+      `UPDATE batch_final_exam SET IsDelete = 1 WHERE Exam_Id = ?`,
       [examId]
     );
 

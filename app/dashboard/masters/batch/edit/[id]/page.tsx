@@ -164,17 +164,17 @@ interface BatchData {
 }
 
 const TABS = [
-  { id: 'batch-details', label: 'Batch Details' },
+  { id: 'batch-details',         label: 'Batch Details' },
+  { id: 'fees-structure',        label: 'Fees Structure' },
+  { id: 'assignment-details',    label: 'Assignment Details' },
+  { id: 'unit-test-details',     label: 'Unit Test Details' },
+  { id: 'discipline-moc',        label: 'DISCIPLINE / MOC Details' },
+  { id: 'feedback-details',      label: 'FeedBack Details' },
   { id: 'standard-lecture-plan', label: 'Standard Lecture Plan' },
-  { id: 'lecture-plan', label: 'Lecture Plan' },
-  { id: 'unit-test-details', label: 'Unit Test Details' },
-  { id: 'final-exam-details', label: 'Final Exam Details' },
-  { id: 'assignment-details', label: 'Assignment Details' },
-  { id: 'discipline-moc', label: 'DISCIPLINE / MOC Details' },
-  { id: 'fees-structure', label: 'Fees Structure' },
-  { id: 'feedback-details', label: 'FeedBack Details' },
-  { id: 'convocation-details', label: 'Convocation Details' },
-  { id: 'site-visit', label: 'Site Visit' },
+  { id: 'lecture-plan',          label: 'Lecture Plan' },
+  { id: 'convocation-details',   label: 'Convocation Details' },
+  { id: 'result-structure',      label: 'Result Structure' },
+  { id: 'site-visit',            label: 'Site Visit / Final Exam Details' },
 ];
 
 /* Shared styles - compact */
@@ -370,6 +370,11 @@ export default function EditBatchPage() {
   });
   // Lecture Plan is edited inline (no modal)
 
+  /* Grade Boundaries state */
+  const [gradeBoundaries, setGradeBoundaries] = useState<Array<{ id: number; startFrom: number; endTo: number; grade: string }>>([]);
+  const [newGradeBoundary, setNewGradeBoundary] = useState({ startFrom: '', endTo: '', grade: '' });
+  const [editingGradeBoundaryId, setEditingGradeBoundaryId] = useState<number | null>(null);
+
   const updateStandardLectureInline = (id: number, patch: Partial<StandardLecture>) => {
     setStandardLectures(prev => prev.map(l => (l.id === id ? { ...l, ...patch } : l)));
   };
@@ -476,6 +481,12 @@ export default function EditBatchPage() {
     Telephone: '',
     Site_Visit_Dt: '',
     Site_Place: '',
+    // Result Structure fields
+    UnitTestWtg: '',
+    AssignWtg: '',
+    ExamWtg: '',
+    AttendWtg: '',
+    FullAttendWtg: '',
   });
 
   /* Fetch courses */
@@ -777,7 +788,7 @@ export default function EditBatchPage() {
   }, [batchId]);
 
   useEffect(() => {
-    if (activeTab === 'final-exam-details' && batchId) {
+    if (activeTab === 'site-visit' && batchId) {
       fetchFinalExams();
     }
   }, [activeTab, batchId, fetchFinalExams]);
@@ -860,7 +871,60 @@ export default function EditBatchPage() {
           Telephone: d.Telephone || '',
           Site_Visit_Dt: formatDateForInput(d.Site_Visit_Dt),
           Site_Place: d.Site_Place || '',
+          // Result Structure fields
+          UnitTestWtg: d.UnitTestWtg?.toString() || '',
+          AssignWtg: d.AssignWtg?.toString() || '',
+          ExamWtg: d.ExamWtg?.toString() || '',
+          AttendWtg: d.AttendWtg?.toString() || '',
+          FullAttendWtg: d.FullAttendWtg?.toString() || '',
         });
+
+        // Initialize grade boundaries from Passing_Criteria
+        const criteria = d.Passing_Criteria || '';
+        let boundaries: Array<{ id: number; startFrom: number; endTo: number; grade: string }> = [];
+        let idCounter = 1;
+
+        try {
+          if (criteria.trim().startsWith('[')) {
+            const parsed = JSON.parse(criteria);
+            if (Array.isArray(parsed)) {
+              boundaries = parsed.map((item, i) => ({
+                id: i + 1,
+                startFrom: Number(item.start || item.startFrom || 0),
+                endTo: Number(item.end || item.endTo || 0),
+                grade: item.grade || '',
+              }));
+            }
+          } else if (criteria.trim()) {
+            const lines = criteria.split(/[,\n;]+/).filter((l: string) => l.trim());
+            lines.forEach((line: string) => {
+              const match = line.trim().match(/^([ABC]\+?)\s*[:=\s]+\s*(\d+(?:\.\d+)?)\s*(?:to|[-–])\s*(\d+(?:\.\d+)?)?/i);
+              if (match) {
+                boundaries.push({
+                  id: idCounter++,
+                  startFrom: Number(match[3] || match[2]),
+                  endTo: Number(match[2]),
+                  grade: match[1],
+                });
+              }
+            });
+          }
+        } catch (e) {
+          // Parsing failed, will use defaults
+        }
+
+        if (boundaries.length === 0) {
+          boundaries = [
+            { id: 1, startFrom: 90, endTo: 100, grade: 'A+' },
+            { id: 2, startFrom: 80, endTo: 89.99, grade: 'A' },
+            { id: 3, startFrom: 70, endTo: 79.99, grade: 'B+' },
+            { id: 4, startFrom: 60, endTo: 69.99, grade: 'B' },
+            { id: 5, startFrom: 50, endTo: 59.99, grade: 'C' },
+            { id: 6, startFrom: 0, endTo: 49.99, grade: 'NO CERTIFICATE' },
+          ];
+        }
+
+        setGradeBoundaries(boundaries);
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : 'Failed to load data';
         setError(message);
@@ -942,6 +1006,12 @@ export default function EditBatchPage() {
           Actual_Fees_Payment: formData.Actual_Fees_Payment ? Number(formData.Actual_Fees_Payment) : null,
           Fees_Full_Payment: formData.Fees_Full_Payment ? Number(formData.Fees_Full_Payment) : null,
           Fees_Installment_Payment: formData.Fees_Installment_Payment ? Number(formData.Fees_Installment_Payment) : null,
+          // Result Structure
+          UnitTestWtg: formData.UnitTestWtg ? Number(formData.UnitTestWtg) : null,
+          AssignWtg: formData.AssignWtg ? Number(formData.AssignWtg) : null,
+          ExamWtg: formData.ExamWtg ? Number(formData.ExamWtg) : null,
+          AttendWtg: formData.AttendWtg ? Number(formData.AttendWtg) : null,
+          FullAttendWtg: formData.FullAttendWtg ? Number(formData.FullAttendWtg) : null,
         }),
       });
 
@@ -3453,8 +3523,252 @@ export default function EditBatchPage() {
           />
         </div>
       </div>
+
+      {/* Final Exam Details section */}
+      <div className="pt-4 border-t border-gray-200">
+        <h3 className="text-xs font-bold text-[#2E3093] mb-2">Final Exam Details</h3>
+        {FinalExamDetailsTab()}
+      </div>
     </div>
   );
+
+  /* Tab Content: Result Structure */
+  const ResultStructureTab = () => {
+    const handleAddBoundary = () => {
+      const newId = Math.max(...gradeBoundaries.map(b => b.id), 0) + 1;
+      setGradeBoundaries([...gradeBoundaries, { id: newId, startFrom: 0, endTo: 0, grade: '' }]);
+    };
+
+    const handleUpdateBoundary = (id: number, field: string, value: any) => {
+      setGradeBoundaries(gradeBoundaries.map(b => 
+        b.id === id ? { ...b, [field]: field === 'grade' ? value : Number(value) || 0 } : b
+      ));
+    };
+
+    const handleDeleteBoundary = (id: number) => {
+      if (gradeBoundaries.length > 1) {
+        setGradeBoundaries(gradeBoundaries.filter(b => b.id !== id));
+      }
+    };
+
+    const handleSaveBoundaries = () => {
+      // Format as JSON
+      const criteria = JSON.stringify(gradeBoundaries.map(b => ({
+        start: b.startFrom,
+        end: b.endTo,
+        grade: b.grade
+      })));
+      handleChange('Passing_Criteria', criteria);
+      alert('Grade boundaries saved successfully!');
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Weightage Section */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-700 mb-3">Score Weightage</h3>
+          <p className="text-xs text-gray-500 mb-3">
+            Define the weightage (%) for each component. Total should sum to 100.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Unit Test Weightage (%)</label>
+              <input type="number" min="0" max="100" className={inputCls}
+                value={formData.UnitTestWtg}
+                onChange={e => handleChange('UnitTestWtg', e.target.value)}
+                placeholder="e.g. 35" />
+            </div>
+            <div>
+              <label className={labelCls}>Assignment Weightage (%)</label>
+              <input type="number" min="0" max="100" className={inputCls}
+                value={formData.AssignWtg}
+                onChange={e => handleChange('AssignWtg', e.target.value)}
+                placeholder="e.g. 15" />
+            </div>
+            <div>
+              <label className={labelCls}>Final Exam Weightage (%)</label>
+              <input type="number" min="0" max="100" className={inputCls}
+                value={formData.ExamWtg}
+                onChange={e => handleChange('ExamWtg', e.target.value)}
+                placeholder="e.g. 50" />
+            </div>
+            <div>
+              <label className={labelCls}>Attendance Weightage (%)</label>
+              <input type="number" min="0" max="100" className={inputCls}
+                value={formData.AttendWtg}
+                onChange={e => handleChange('AttendWtg', e.target.value)}
+                placeholder="e.g. 0" />
+            </div>
+            <div>
+              <label className={labelCls}>Full Attendance Weightage (%)</label>
+              <input type="number" min="0" max="100" className={inputCls}
+                value={formData.FullAttendWtg}
+                onChange={e => handleChange('FullAttendWtg', e.target.value)}
+                placeholder="e.g. 0" />
+            </div>
+          </div>
+          {(() => {
+            const total = [formData.UnitTestWtg, formData.AssignWtg, formData.ExamWtg, formData.AttendWtg, formData.FullAttendWtg]
+              .reduce((s, v) => s + (Number(v) || 0), 0);
+            return (
+              <p className={`text-xs font-semibold mt-2 ${total === 100 ? 'text-green-600' : total > 0 ? 'text-orange-500' : 'text-gray-400'}`}>
+                Total: {total}% {total === 100 ? 'Valid' : total > 0 ? '(should be 100)' : ''}
+              </p>
+            );
+          })()}
+        </div>
+
+        {/* Grade Boundaries Section */}
+        <div className="border-t border-gray-200 pt-4">
+          <h3 className="text-xs font-semibold text-gray-700 mb-3">Grade Boundaries</h3>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="px-3 py-2 text-left font-semibold text-gray-700 w-12">*</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-700">Start From</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-700">End To</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-700">Garde</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-700">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gradeBoundaries.map((boundary, idx) => (
+                  <tr key={boundary.id} className="border-b border-gray-200 hover:bg-gray-50">
+                    <td className="px-3 py-2 text-gray-600 font-medium">{idx + 1}</td>
+                    {editingGradeBoundaryId === boundary.id ? (
+                      <>
+                        <td className="px-2 py-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={boundary.startFrom}
+                            onChange={(e) => handleUpdateBoundary(boundary.id, 'startFrom', e.target.value)}
+                            className="w-24 px-2 py-1 border border-gray-300 rounded text-xs"
+                          />
+                        </td>
+                        <td className="px-2 py-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={boundary.endTo}
+                            onChange={(e) => handleUpdateBoundary(boundary.id, 'endTo', e.target.value)}
+                            className="w-24 px-2 py-1 border border-gray-300 rounded text-xs"
+                          />
+                        </td>
+                        <td className="px-2 py-1">
+                          <input
+                            type="text"
+                            value={boundary.grade}
+                            onChange={(e) => handleUpdateBoundary(boundary.id, 'grade', e.target.value)}
+                            className="w-24 px-2 py-1 border border-gray-300 rounded text-xs"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <button
+                            onClick={() => setEditingGradeBoundaryId(null)}
+                            className="text-green-600 hover:text-green-800 font-medium"
+                          >
+                            Save
+                          </button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-3 py-2 text-gray-800">{boundary.startFrom}</td>
+                        <td className="px-3 py-2 text-gray-800">{boundary.endTo}</td>
+                        <td className="px-3 py-2 text-gray-800">{boundary.grade}</td>
+                        <td className="px-3 py-2 text-left">
+                          <button
+                            onClick={() => setEditingGradeBoundaryId(boundary.id)}
+                            className="text-blue-600 hover:text-blue-800 font-medium"
+                          >
+                            Edit
+                          </button>
+                          <span className="text-gray-300 mx-2">/</span>
+                          <button
+                            onClick={() => handleDeleteBoundary(boundary.id)}
+                            className="text-red-600 hover:text-red-800 font-medium"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+
+                {/* Add New Row */}
+                <tr className="bg-gray-50/50">
+                  <td className="px-3 py-2"></td>
+                  <td className="px-2 py-1">
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="Enter.."
+                      value={newGradeBoundary.startFrom}
+                      onChange={(e) => setNewGradeBoundary({ ...newGradeBoundary, startFrom: e.target.value })}
+                      className="w-24 px-2 py-1 border border-gray-300 rounded text-xs placeholder:text-gray-400"
+                    />
+                  </td>
+                  <td className="px-2 py-1">
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="Enter.."
+                      value={newGradeBoundary.endTo}
+                      onChange={(e) => setNewGradeBoundary({ ...newGradeBoundary, endTo: e.target.value })}
+                      className="w-24 px-2 py-1 border border-gray-300 rounded text-xs placeholder:text-gray-400"
+                    />
+                  </td>
+                  <td className="px-2 py-1">
+                    <input
+                      type="text"
+                      placeholder="Enter.."
+                      value={newGradeBoundary.grade}
+                      onChange={(e) => setNewGradeBoundary({ ...newGradeBoundary, grade: e.target.value })}
+                      className="w-24 px-2 py-1 border border-gray-300 rounded text-xs placeholder:text-gray-400"
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <button
+                      onClick={() => {
+                        const newId = Math.max(...gradeBoundaries.map(b => b.id), 0) + 1;
+                        setGradeBoundaries([
+                          ...gradeBoundaries,
+                          {
+                            id: newId,
+                            startFrom: Number(newGradeBoundary.startFrom) || 0,
+                            endTo: Number(newGradeBoundary.endTo) || 0,
+                            grade: newGradeBoundary.grade
+                          }
+                        ]);
+                        setNewGradeBoundary({ startFrom: '', endTo: '', grade: '' });
+                      }}
+                      disabled={!newGradeBoundary.grade}
+                      className="bg-gray-800 hover:bg-gray-900 text-white px-3 py-1 rounded text-xs font-medium disabled:opacity-50"
+                    >
+                      Save
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-4 flex justify-end">
+            <button
+              onClick={handleSaveBoundaries}
+              className="bg-[#2E3093] hover:bg-[#252780] text-white px-4 py-1.5 rounded text-xs font-medium"
+            >
+              Update Boundaries
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const renderTabContent = () => {
     if (!batchData) return null;
@@ -3478,10 +3792,10 @@ export default function EditBatchPage() {
         return LecturePlanTab();
       case 'convocation-details':
         return ConvocationDetailsTab();
+      case 'result-structure':
+        return ResultStructureTab();
       case 'site-visit':
         return SiteVisitTab();
-      case 'final-exam-details':
-        return FinalExamDetailsTab();
       default:
         return null;
     }

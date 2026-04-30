@@ -98,6 +98,7 @@ function statusBar(id: number | null, label: string) {
 }
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
+const INQUIRY_FILTERS_STORAGE_KEY = 'dashboard.inquiry.list.url';
 
 export default function InquiryPage() {
   const router = useRouter();
@@ -146,6 +147,20 @@ export default function InquiryPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Persist/restore filters until explicitly cleared.
+  useEffect(() => {
+    const hasUrlFilters = searchParams.toString().length > 0;
+    if (hasUrlFilters) {
+      sessionStorage.setItem(INQUIRY_FILTERS_STORAGE_KEY, `${pathname}?${searchParams.toString()}`);
+      return;
+    }
+
+    const savedUrl = sessionStorage.getItem(INQUIRY_FILTERS_STORAGE_KEY);
+    if (savedUrl && savedUrl.startsWith('/dashboard/inquiry') && savedUrl !== pathname) {
+      router.replace(savedUrl, { scroll: false });
+    }
+  }, [pathname, router, searchParams]);
+
   const syncUrl = (params: Record<string, string>) => {
     const p = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => { if (v) p.set(k, v); });
@@ -153,15 +168,35 @@ export default function InquiryPage() {
   };
 
   const doSearch = () => {
-    syncUrl({ search, discipline, inquiryType, status, dateFrom, dateTo, training });
+    const params = { search, discipline, inquiryType, status, dateFrom, dateTo, training };
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v) p.set(k, v); });
+    const nextUrl = p.toString() ? `${pathname}?${p.toString()}` : pathname;
+    sessionStorage.setItem(INQUIRY_FILTERS_STORAGE_KEY, nextUrl);
+    syncUrl(params);
     setPage(1); setFetchTrigger(t => t + 1);
   };
   const doClear = () => {
     router.replace(pathname, { scroll: false });
+    sessionStorage.removeItem(INQUIRY_FILTERS_STORAGE_KEY);
     setSearch(''); setDiscipline(''); setInquiryType('');
     setStatus(''); setDateFrom(''); setDateTo(''); setTraining('');
     setPage(1); setFetchTrigger(t => t + 1);
   };
+
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (search) p.set('search', search);
+    if (discipline) p.set('discipline', discipline);
+    if (inquiryType) p.set('inquiryType', inquiryType);
+    if (status) p.set('status', status);
+    if (dateFrom) p.set('dateFrom', dateFrom);
+    if (dateTo) p.set('dateTo', dateTo);
+    if (training) p.set('training', training);
+    if (page > 1) p.set('page', String(page));
+    const nextUrl = p.toString() ? `${pathname}?${p.toString()}` : pathname;
+    sessionStorage.setItem(INQUIRY_FILTERS_STORAGE_KEY, nextUrl);
+  }, [search, discipline, inquiryType, status, dateFrom, dateTo, training, page, pathname]);
 
   const buildReturnTo = () => {
     const p = new URLSearchParams();

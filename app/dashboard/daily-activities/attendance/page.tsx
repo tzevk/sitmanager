@@ -244,7 +244,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
             <button
               onClick={save}
               disabled={saving || (!students.some(s => statusMapFH[s.Student_Id]) && !students.some(s => statusMapSH[s.Student_Id]))}
-              className="inline-flex w-full sm:w-auto justify-center items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg bg-white text-[#2E3093] hover:bg-white/90 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="hidden sm:inline-flex w-full sm:w-auto justify-center items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg bg-white text-[#2E3093] hover:bg-white/90 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? (
                 <><div className="w-3.5 h-3.5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />Saving…</>
@@ -606,13 +606,32 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
 
         {/* ── Footer ── */}
         {loaded && students.length > 0 && (
-          <div className="flex-shrink-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 px-4 py-3 border-t border-gray-100">
-            <span className="text-xs text-gray-400">
-              Showing {filtered.length} of {students.length} students{search ? ` matching "${search}"` : ''}
-            </span>
-            <span className="text-xs text-gray-400">
-              {fhUnmarked > 0 || shUnmarked > 0 ? `FH: ${fhUnmarked} · SH: ${shUnmarked} not yet marked` : 'All students marked'}
-            </span>
+          <div className="flex-shrink-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-1.5 px-4 py-3 border-t border-gray-100">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+              <span className="text-xs text-gray-400">
+                Showing {filtered.length} of {students.length} students{search ? ` matching "${search}"` : ''}
+              </span>
+              <span className="text-xs text-gray-400 hidden sm:inline">·</span>
+              <span className="text-xs text-gray-400">
+                {fhUnmarked > 0 || shUnmarked > 0 ? `FH: ${fhUnmarked} · SH: ${shUnmarked} not yet marked` : 'All students marked'}
+              </span>
+            </div>
+
+            {canCreate && (
+              <button
+                onClick={save}
+                disabled={saving || (!students.some(s => statusMapFH[s.Student_Id]) && !students.some(s => statusMapSH[s.Student_Id]))}
+                className="sm:hidden inline-flex w-full justify-center items-center gap-1.5 px-4 py-2 text-sm font-bold rounded-lg bg-[#2E3093] text-white hover:bg-[#252780] transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? (
+                  <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Saving…</>
+                ) : saved ? (
+                  <><svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>Saved!</>
+                ) : (
+                  <><svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>Save Attendance</>
+                )}
+              </button>
+            )}
           </div>
         )}
       </div>
