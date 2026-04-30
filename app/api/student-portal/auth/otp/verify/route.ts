@@ -1,15 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
-import { jwtVerify, SignJWT } from 'jose';
-import crypto from 'crypto';
+import { SignJWT } from 'jose';
 import { loginRateLimiter } from '@/lib/rate-limit';
 
 const STUDENT_COOKIE = 'sit_student_session';
 const SESSION_DURATION = 60 * 60 * 12; // 12 hours
-
-const OTP_COOKIE = 'sit_student_otp';
-const OTP_BYPASS = process.env.STUDENT_PORTAL_OTP_BYPASS === '1';
 
 function getSecretKey(): Uint8Array {
   const secret = process.env.JWT_SECRET;
@@ -17,118 +13,37 @@ function getSecretKey(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
-function normalizeMobile(input: string): string | null {
-  const digits = String(input ?? '').replace(/\D/g, '');
-  if (digits.length === 10) return digits;
-  if (digits.length > 10) return digits.slice(-10);
-  return null;
-}
-
-function hashOtp(mobile: string, otp: string): string {
-  const secret = process.env.JWT_SECRET;
-  if (!secret || secret.length < 32) throw new Error('JWT_SECRET not configured');
-  return crypto.createHash('sha256').update(`${mobile}:${otp}:${secret}`).digest('hex');
-}
-
-function safeEqualHex(a: string, b: string): boolean {
-  try {
-    const bufA = Buffer.from(a, 'hex');
-    const bufB = Buffer.from(b, 'hex');
-    if (bufA.length !== bufB.length) return false;
-    return crypto.timingSafeEqual(bufA, bufB);
-  } catch {
-    return false;
-  }
-}
-
-type OtpTokenPayload = {
-  type: 'student_otp';
-  studentId: number | null;
-  mobile: string;
-  otpHash: string;
-};
-
 export async function POST(req: NextRequest) {
   const blocked = loginRateLimiter(req);
   if (blocked) return blocked;
 
   try {
     const body = await req.json();
-    const mobile = normalizeMobile(body?.mobile);
-    const otp = String(body?.otp ?? '').trim();
+    const rollNo = String(body?.rollNo ?? '').trim();
 
-    if (!mobile) {
-      return NextResponse.json({ success: false, message: 'Valid mobile number is required' }, { status: 400 });
-    }
-
-    if (!OTP_BYPASS && !otp) {
-      return NextResponse.json({ success: false, message: 'OTP is required' }, { status: 400 });
+    if (!rollNo) {
+      return NextResponse.json({ success: false, message: 'Roll number is required' }, { status: 400 });
     }
 
     const pool = getPool();
 
-    let user: any;
-    if (OTP_BYPASS) {
-      const [rows] = await pool.query<any[]>(
-        `SELECT s.Student_Id, s.Student_Name, s.Email,
-                spa.Id AS Auth_Id
-         FROM student_master s
-         LEFT JOIN student_portal_auth spa ON spa.Student_Id = s.Student_Id AND spa.IsActive = 1
-         WHERE (s.IsDelete = 0 OR s.IsDelete IS NULL)
-           AND (
-             (s.Present_Mobile IS NOT NULL AND s.Present_Mobile LIKE CONCAT('%', ?))
-             OR (s.Present_Mobile2 IS NOT NULL AND s.Present_Mobile2 LIKE CONCAT('%', ?))
-           )
-         LIMIT 1`,
-        [mobile, mobile]
-      );
+    const [rows] = await pool.query<any[]>(
+      `SELECT s.Student_Id, s.Student_Name, s.Email,
+              spa.Id AS Auth_Id
+       FROM admission_master a
+       JOIN student_master s ON a.Student_Id = s.Student_Id
+       LEFT JOIN student_portal_auth spa ON spa.Student_Id = s.Student_Id AND spa.IsActive = 1
+       WHERE a.Roll_No = ?
+         AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
+       LIMIT 1`,
+      [rollNo]
+    );
 
-      if (!rows.length) {
-        return NextResponse.json({ success: false, message: 'Student not found for this mobile number' }, { status: 401 });
-      }
-
-      user = rows[0];
-    } else {
-      const otpToken = req.cookies.get(OTP_COOKIE)?.value;
-      if (!otpToken) {
-        return NextResponse.json({ success: false, message: 'OTP expired. Please request a new OTP.' }, { status: 401 });
-      }
-
-      let payload: OtpTokenPayload;
-      try {
-        const verified = await jwtVerify(otpToken, getSecretKey());
-        payload = verified.payload as unknown as OtpTokenPayload;
-        if (payload?.type !== 'student_otp') throw new Error('Invalid OTP token');
-      } catch {
-        return NextResponse.json({ success: false, message: 'OTP expired. Please request a new OTP.' }, { status: 401 });
-      }
-
-      if (payload.mobile !== mobile) {
-        return NextResponse.json({ success: false, message: 'OTP does not match this mobile number' }, { status: 401 });
-      }
-
-      const expectedHash = hashOtp(mobile, otp);
-      if (!safeEqualHex(payload.otpHash, expectedHash)) {
-        return NextResponse.json({ success: false, message: 'Invalid OTP' }, { status: 401 });
-      }
-
-      const [rows] = await pool.query<any[]>(
-        `SELECT s.Student_Id, s.Student_Name, s.Email,
-                spa.Id AS Auth_Id
-         FROM student_master s
-         LEFT JOIN student_portal_auth spa ON spa.Student_Id = s.Student_Id AND spa.IsActive = 1
-         WHERE s.Student_Id = ?
-           AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
-         LIMIT 1`,
-        [payload.studentId]
-      );
-
-      if (!rows.length) {
-        return NextResponse.json({ success: false, message: 'Student not found or inactive' }, { status: 401 });
-      }
-
-      user = rows[0];
+    if (!rows.length) {
+      return NextResponse.json({ success: false, message: 'Student not found for this roll number' }, { status: 401 });
     }
+
+    const user = rows[0];
 
     if (user.Auth_Id) {
       await pool.query(`UPDATE student_portal_auth SET Last_Login = NOW() WHERE Id = ?`, [user.Auth_Id]);
@@ -161,17 +76,6 @@ export async function POST(req: NextRequest) {
       path: '/',
       maxAge: SESSION_DURATION,
     });
-
-    // Consume OTP token when OTP mode is used.
-    if (!OTP_BYPASS) {
-      response.cookies.set(OTP_COOKIE, '', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 0,
-      });
-    }
 
     return response;
   } catch (err: unknown) {

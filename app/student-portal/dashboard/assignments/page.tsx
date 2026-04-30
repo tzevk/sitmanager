@@ -26,12 +26,7 @@ interface AssignmentMark {
 }
 
 interface AssignmentsData {
-  summary: {
-    total_given: number;
-    received: number;
-    pending: number;
-    percentage: number;
-  };
+  summary: { total_given: number; received: number; pending: number; percentage: number };
   assignments: Assignment[];
   marks: AssignmentMark[];
 }
@@ -56,7 +51,7 @@ export default function StudentAssignmentsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full min-h-[300px]">
+      <div className="flex items-center justify-center min-h-[50vh]">
         <div className="w-8 h-8 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -65,199 +60,123 @@ export default function StudentAssignmentsPage() {
   const summary = data?.summary ?? { total_given: 0, received: 0, pending: 0, percentage: 0 };
   const assignments = data?.assignments ?? [];
   const marks = data?.marks ?? [];
-
-  const filtered = assignments.filter((a) => {
-    if (filter === 'received') return a.received === 1;
-    if (filter === 'pending') return a.received === 0;
-    return true;
-  });
-
-  const pctColor = summary.percentage >= 75 ? 'text-green-600' : summary.percentage >= 50 ? 'text-amber-600' : 'text-red-500';
-  const pctBg = summary.percentage >= 75 ? 'bg-green-50 border-green-200' : summary.percentage >= 50 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200';
+  const filtered = assignments.filter(a =>
+    filter === 'received' ? a.received === 1 : filter === 'pending' ? a.received === 0 : true
+  );
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-lg font-bold text-gray-900">Assignments</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Track your assignment submissions</p>
+    <div className="pb-4">
+
+      {/* Hero */}
+      <div className="bg-[#2E3093] px-5 pt-6 pb-10">
+        <p className="text-white/40 text-[11px] font-medium uppercase tracking-widest">Assignments</p>
+        <div className="flex items-end gap-2 mt-1">
+          <p className="text-6xl font-black text-white leading-none">{summary.received}</p>
+          <p className="text-2xl font-black text-white/30 mb-1">/ {summary.total_given}</p>
+        </div>
+        <div className="mt-4 h-[3px] bg-white/10 rounded-full overflow-hidden">
+          <div className="h-full bg-[#FAE452] rounded-full" style={{ width: `${summary.percentage}%` }} />
+        </div>
+        <p className="text-white/40 text-[11px] mt-1.5">
+          {summary.percentage}% submitted{summary.pending > 0 ? ` · ${summary.pending} pending` : ' · all done'}
+        </p>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className={`rounded-xl border p-4 ${pctBg}`}>
-          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Completion</p>
-          <p className={`text-3xl font-bold mt-1 ${pctColor}`}>{summary.percentage}%</p>
-          <p className="text-xs text-gray-500 mt-1">
-            {summary.percentage >= 75 ? 'Good standing' : `${summary.pending} pending`}
-          </p>
-        </div>
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Total Given</p>
-          <p className="text-3xl font-bold mt-1 text-blue-600">{summary.total_given}</p>
-          <p className="text-xs text-gray-500 mt-1">assignments</p>
-        </div>
-        <div className="rounded-xl border border-green-200 bg-green-50 p-4">
-          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Submitted</p>
-          <p className="text-3xl font-bold mt-1 text-green-600">{summary.received}</p>
-          <p className="text-xs text-gray-500 mt-1">completed</p>
-        </div>
-        <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
-          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Pending</p>
-          <p className="text-3xl font-bold mt-1 text-orange-600">{summary.pending}</p>
-          <p className="text-xs text-gray-500 mt-1">to submit</p>
-        </div>
+      {/* Stats strip */}
+      <div className="px-4 -mt-5 grid grid-cols-3 gap-2">
+        {[
+          { label: 'Total', value: summary.total_given, color: 'text-gray-900' },
+          { label: 'Submitted', value: summary.received, color: 'text-green-600' },
+          { label: 'Pending', value: summary.pending, color: 'text-orange-500' },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="bg-white rounded-xl border border-gray-100 p-3 text-center">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{label}</p>
+            <p className={`text-2xl font-black mt-0.5 ${color}`}>{value}</p>
+          </div>
+        ))}
       </div>
 
-      {/* Filter + List */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-bold text-gray-900">All Assignments</h2>
-            <p className="text-xs text-gray-400 mt-0.5">{filtered.length} of {assignments.length} shown</p>
-          </div>
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
-            {(['all', 'received', 'pending'] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all
-                  ${filter === f
-                    ? 'bg-white text-[#2E3093] shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                {f === 'all' ? 'All' : f === 'received' ? 'Submitted' : 'Pending'}
-              </button>
-            ))}
-          </div>
+      {/* Filter + list */}
+      <div className="px-4 mt-4">
+        <div className="flex items-center gap-1 mb-3 bg-white border border-gray-100 rounded-xl p-1">
+          {(['all', 'received', 'pending'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${
+                filter === f ? 'bg-[#2E3093] text-white' : 'text-gray-400'
+              }`}
+            >
+              {f === 'all' ? 'All' : f === 'received' ? 'Submitted' : 'Pending'}
+            </button>
+          ))}
         </div>
 
         {filtered.length === 0 ? (
-          <div className="px-5 py-10 text-center text-gray-400 text-sm">
-            {assignments.length === 0 ? 'No assignments given yet.' : 'No assignments match this filter.'}
+          <div className="bg-white rounded-xl border border-gray-100 px-4 py-10 text-center text-sm text-gray-400">
+            {assignments.length === 0 ? 'No assignments yet' : 'No assignments match'}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Date</th>
-                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Topic</th>
-                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell">Trainer</th>
-                  <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden sm:table-cell">Present</th>
-                  <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {filtered.map((a) => (
-                  <tr key={a.Take_Id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-5 py-3 text-xs text-gray-500 whitespace-nowrap">
-                      {a.Take_Dt
-                        ? new Date(a.Take_Dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                        : '—'}
-                    </td>
-                    <td className="px-5 py-3 text-xs text-gray-900 max-w-[200px] truncate">
-                      {a.Topic || a.Lecture_Name || '—'}
-                    </td>
-                    <td className="px-5 py-3 text-xs text-gray-500 max-w-[140px] truncate hidden md:table-cell">
-                      {a.Faculty_Name || '—'}
-                    </td>
-                    <td className="px-5 py-3 text-center hidden sm:table-cell">
-                      {a.was_present ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700">Yes</span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-600">No</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      {a.received ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                          Submitted
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-orange-100 text-orange-600">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Pending
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="bg-white rounded-xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
+            {filtered.map(a => (
+              <div key={a.Take_Id} className="flex items-center justify-between px-4 py-3 gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-gray-800 truncate">
+                    {a.Topic || a.Lecture_Name || 'Assignment'}
+                  </p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    {a.Faculty_Name || '—'}
+                    {a.Take_Dt && ` · ${new Date(a.Take_Dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`}
+                  </p>
+                </div>
+                <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0 ${
+                  a.received ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-600'
+                }`}>
+                  {a.received ? 'Done' : 'Pending'}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      {/* Assignment Marks */}
+      {/* Marks */}
       {marks.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-bold text-gray-900">Assignment Marks</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Marks scored in formal assignments</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Assignment</th>
-                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell">Subject</th>
-                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Date</th>
-                  <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Marks</th>
-                  <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {marks.map((m, idx) => {
-                  const scored = m.Marks ?? null;
-                  const max = m.MaxMarks ?? null;
-                  const pct = scored !== null && max ? Math.round((scored / max) * 100) : null;
-                  return (
-                    <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-5 py-3 text-xs font-medium text-gray-900">
-                        {m.assignmentname || '—'}
-                      </td>
-                      <td className="px-5 py-3 text-xs text-gray-500 hidden md:table-cell">
-                        {m.subjects || '—'}
-                      </td>
-                      <td className="px-5 py-3 text-xs text-gray-500 whitespace-nowrap">
-                        {m.Assign_Dt
-                          ? new Date(m.Assign_Dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                          : '—'}
-                      </td>
-                      <td className="px-5 py-3 text-center">
-                        {scored !== null ? (
-                          <span className={`text-sm font-bold ${pct !== null && pct >= 60 ? 'text-green-600' : 'text-red-500'}`}>
-                            {scored}{max ? `/${max}` : ''}
-                            {pct !== null && <span className="text-xs font-normal text-gray-400 ml-1">({pct}%)</span>}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400 text-xs">—</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-center">
-                        {m.Status ? (
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold
-                            ${m.Status === 'Present' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                            {m.Status}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400 text-xs">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        <div className="px-4 mt-5">
+          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2.5">Marks</h2>
+          <div className="bg-white rounded-xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
+            {marks.map((m, idx) => {
+              const scored = m.Marks ?? null;
+              const max = m.MaxMarks ?? null;
+              const pct = scored !== null && max ? Math.round((scored / max) * 100) : null;
+              return (
+                <div key={idx} className="flex items-center justify-between px-4 py-3 gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-gray-800 truncate">{m.assignmentname || '—'}</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">
+                      {m.subjects || '—'}
+                      {m.Assign_Dt && ` · ${new Date(m.Assign_Dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}`}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    {scored !== null ? (
+                      <>
+                        <p className={`text-sm font-black ${pct !== null && pct >= 60 ? 'text-[#2E3093]' : 'text-red-500'}`}>
+                          {scored}{max ? `/${max}` : ''}
+                        </p>
+                        {pct !== null && <p className="text-[10px] text-gray-400">{pct}%</p>}
+                      </>
+                    ) : (
+                      <p className="text-xs text-gray-400">—</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
+
     </div>
   );
 }

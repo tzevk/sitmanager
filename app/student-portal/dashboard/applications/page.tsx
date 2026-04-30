@@ -55,7 +55,7 @@ export default function MyApplicationsPage() {
   }, [router]);
 
   return (
-    <div className="p-6">
+    <div className="p-4">
         <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-6 py-4 shadow-md mb-5">
           <h1 className="text-base font-bold text-white">My Applications</h1>
           <p className="text-xs text-white/70 mt-0.5">Track your application status and progress</p>

@@ -67,7 +67,18 @@ export default function AddInquiryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get('editId') ? parseInt(searchParams.get('editId')!) : null;
+  const returnToParam = searchParams.get('returnTo') || '';
   const { canCreate, canUpdate, loading: permLoading } = useResourcePermissions('inquiry');
+
+  const goBackToList = useCallback(() => {
+    const decoded = returnToParam ? decodeURIComponent(returnToParam) : '';
+    // Guard against open redirects; only allow returning inside inquiry listing.
+    if (decoded.startsWith('/dashboard/inquiry')) {
+      router.push(decoded);
+      return;
+    }
+    router.push('/dashboard/inquiry');
+  }, [router, returnToParam]);
 
   const [activeTab, setActiveTab] = useState<'personal' | 'discussion'>('personal');
   const [opts, setOpts] = useState<FormOptions | null>(null);
@@ -186,7 +197,7 @@ export default function AddInquiryPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
-      router.push('/dashboard/inquiry');
+      goBackToList();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Save failed');
     } finally { setSaving(false); }
@@ -246,7 +257,7 @@ export default function AddInquiryPage() {
       {/* Header — title left, actions right */}
       <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-4 py-2 flex items-center gap-3 relative overflow-hidden">
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
-        <button onClick={() => router.push('/dashboard/inquiry')} className="relative z-10 p-1 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors shrink-0">
+        <button onClick={goBackToList} className="relative z-10 p-1 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors shrink-0">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
@@ -273,7 +284,7 @@ export default function AddInquiryPage() {
               Mail
             </button>
           )}
-          <button onClick={() => router.push('/dashboard/inquiry')}
+          <button onClick={goBackToList}
             className="px-3 py-1 text-xs font-semibold text-white/70 hover:text-white transition-colors">
             Cancel
           </button>

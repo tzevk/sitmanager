@@ -31,90 +31,96 @@ export default function AttendancePage() {
     })();
   }, [router]);
 
-  const filtered = filter === 'all' ? lectures : lectures.filter(l => filter === 'present' ? l.present : !l.present);
-  const attColor = summary.percentage >= 75 ? 'text-green-600' : summary.percentage >= 60 ? 'text-amber-600' : 'text-red-500';
-
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full min-h-[300px]">
+      <div className="flex items-center justify-center min-h-[50vh]">
         <div className="w-8 h-8 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  return (
-    <div className="p-6 space-y-6">
+  const filtered = filter === 'all' ? lectures : lectures.filter(l => filter === 'present' ? l.present : !l.present);
+  const attStatus = summary.percentage >= 75 ? 'good' : summary.percentage >= 60 ? 'warning' : 'low';
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Total</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{summary.total_lectures}</p>
+  return (
+    <div className="pb-4">
+
+      {/* Hero */}
+      <div className="bg-[#2E3093] px-5 pt-6 pb-10">
+        <p className="text-white/40 text-[11px] font-medium uppercase tracking-widest">Attendance</p>
+        <div className="flex items-end gap-2 mt-1">
+          <p className="text-6xl font-black text-white leading-none">{summary.percentage}</p>
+          <p className="text-2xl font-black text-white/40 mb-1">%</p>
         </div>
-        <div className="bg-green-50 rounded-xl border border-green-200 p-4 text-center">
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Present</p>
-          <p className="text-2xl font-bold text-green-600 mt-1">{summary.attended}</p>
+        <div className="mt-4 h-[3px] bg-white/10 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-[#FAE452] rounded-full transition-all"
+            style={{ width: `${summary.percentage}%` }}
+          />
         </div>
-        <div className="bg-red-50 rounded-xl border border-red-200 p-4 text-center">
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Absent</p>
-          <p className="text-2xl font-bold text-red-500 mt-1">{summary.absent}</p>
-        </div>
-        <div className="bg-blue-50 rounded-xl border border-blue-200 p-4 text-center">
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Percentage</p>
-          <p className={`text-2xl font-bold mt-1 ${attColor}`}>{summary.percentage}%</p>
-        </div>
+        <p className="text-white/40 text-[11px] mt-1.5">
+          {attStatus === 'good' ? 'On track' : attStatus === 'warning' ? 'Needs improvement' : 'Below minimum'}
+        </p>
       </div>
 
-      {/* Filter tabs + table */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
-          <h2 className="text-sm font-bold text-gray-900">Attendance Records</h2>
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-            {(['all', 'present', 'absent'] as const).map(f => (
-              <button key={f} onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${filter === f ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                {f === 'all' ? `All (${lectures.length})` : f === 'present' ? `Present (${summary.attended})` : `Absent (${summary.absent})`}
-              </button>
-            ))}
+      {/* Stats strip — overlap */}
+      <div className="px-4 -mt-5 grid grid-cols-3 gap-2">
+        {[
+          { label: 'Total', value: summary.total_lectures, color: 'text-gray-900' },
+          { label: 'Present', value: summary.attended, color: 'text-green-600' },
+          { label: 'Absent', value: summary.absent, color: 'text-red-500' },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="bg-white rounded-xl border border-gray-100 p-3 text-center">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{label}</p>
+            <p className={`text-2xl font-black mt-0.5 ${color}`}>{value}</p>
           </div>
+        ))}
+      </div>
+
+      {/* Filter + list */}
+      <div className="px-4 mt-4">
+        <div className="flex items-center gap-1 mb-3 bg-white border border-gray-100 rounded-xl p-1">
+          {(['all', 'present', 'absent'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${
+                filter === f ? 'bg-[#2E3093] text-white' : 'text-gray-400'
+              }`}
+            >
+              {f === 'all' ? `All (${lectures.length})` : f === 'present' ? `Present (${summary.attended})` : `Absent (${summary.absent})`}
+            </button>
+          ))}
         </div>
 
         {filtered.length === 0 ? (
-          <div className="px-5 py-10 text-center text-gray-400 text-sm">No records found.</div>
+          <div className="bg-white rounded-xl border border-gray-100 px-4 py-10 text-center text-sm text-gray-400">
+            No records
+          </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide w-10">#</th>
-                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Date</th>
-                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Session</th>
-                  <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {filtered.map((lec, idx) => (
-                  <tr key={lec.Take_Id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-5 py-3 text-xs text-gray-400">{idx + 1}</td>
-                    <td className="px-5 py-3 text-xs text-gray-500 whitespace-nowrap">
+          <div className="bg-white rounded-xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
+            {filtered.map((lec, idx) => (
+              <div key={lec.Take_Id} className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] font-bold text-gray-300 w-5 text-right">{idx + 1}</span>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-800">
                       {lec.Take_Dt ? new Date(lec.Take_Dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                    </td>
-                    <td className="px-5 py-3 text-xs text-gray-900 max-w-[220px] truncate">
+                    </p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">
                       {lec.session === 'second_half' ? 'Second Half' : 'First Half'}
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      {lec.present ? (
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${lec.Late ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
-                          {lec.Late ? 'Late' : 'Present'}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-600">Absent</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </p>
+                  </div>
+                </div>
+                <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
+                  lec.present
+                    ? lec.Late ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+                    : 'bg-red-100 text-red-600'
+                }`}>
+                  {lec.present ? (lec.Late ? 'Late' : 'Present') : 'Absent'}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </div>

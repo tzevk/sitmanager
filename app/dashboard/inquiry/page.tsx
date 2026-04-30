@@ -163,6 +163,20 @@ export default function InquiryPage() {
     setPage(1); setFetchTrigger(t => t + 1);
   };
 
+  const buildReturnTo = () => {
+    const p = new URLSearchParams();
+    if (search) p.set('search', search);
+    if (discipline) p.set('discipline', discipline);
+    if (inquiryType) p.set('inquiryType', inquiryType);
+    if (status) p.set('status', status);
+    if (dateFrom) p.set('dateFrom', dateFrom);
+    if (dateTo) p.set('dateTo', dateTo);
+    if (training) p.set('training', training);
+    if (page > 1) p.set('page', String(page));
+    const qs = p.toString();
+    return qs ? `${pathname}?${qs}` : pathname;
+  };
+
   const handleSendAdmissionForm = async (r: InquiryRow) => {
     const recipient = String(r.Email || '').trim();
     if (!recipient) { alert('No email address found. Please update inquiry email first.'); return; }
@@ -352,7 +366,12 @@ export default function InquiryPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
                         </button>
-                        <button title="Edit" onClick={() => router.push(`/dashboard/inquiry/add?editId=${r.Student_Id}`)}
+                        <button
+                          title="Edit"
+                          onClick={() => {
+                            const returnTo = encodeURIComponent(buildReturnTo());
+                            router.push(`/dashboard/inquiry/add?editId=${r.Student_Id}&returnTo=${returnTo}`);
+                          }}
                           disabled={!canUpdate}
                           className={canUpdate ? 'p-1 rounded hover:bg-emerald-50 text-slate-300 hover:text-emerald-600 transition-colors' : 'p-1 rounded text-slate-200 cursor-not-allowed'}>
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

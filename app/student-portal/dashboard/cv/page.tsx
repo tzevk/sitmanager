@@ -134,35 +134,31 @@ export default function MyCVPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+    <div className="p-4 space-y-4">
 
       {/* Hero Header */}
-      <div className="relative overflow-hidden rounded-2xl p-6 sm:p-8"
+      <div className="relative overflow-hidden rounded-2xl p-5"
         style={{ background: 'linear-gradient(135deg, #1a1d5e 0%, #2E3093 30%, #2A6BB5 70%, #3b82f6 100%)' }}
       >
-        {/* Decorative shapes */}
-        <div className="absolute top-0 right-0 w-72 h-72 bg-[#FAE452]/10 rounded-full -translate-y-1/2 translate-x-1/3 blur-2xl" />
-        <div className="absolute bottom-0 left-1/3 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 blur-2xl" />
-        <div className="absolute top-6 right-8 w-16 h-16 border border-white/10 rounded-2xl rotate-12 hidden sm:block" />
-        <div className="absolute bottom-4 right-32 w-10 h-10 border border-white/10 rounded-full hidden sm:block" />
+        <div className="absolute top-0 right-0 w-56 h-56 bg-[#FAE452]/10 rounded-full -translate-y-1/2 translate-x-1/3 blur-2xl" />
 
-        <div className="relative flex flex-col sm:flex-row sm:items-center gap-6">
+        <div className="relative flex items-center gap-4">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-                <svg className="w-5 h-5 text-[#FAE452]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-[#FAE452]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                 </svg>
               </div>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-white">My CVs / Resumes</h1>
-                <p className="text-white/50 text-sm mt-0.5">Upload, manage, and organize your resumes for job applications</p>
+                <h1 className="text-lg font-bold text-white">My CVs / Resumes</h1>
+                <p className="text-white/50 text-xs mt-0.5">Upload and manage your resumes</p>
               </div>
             </div>
           </div>
 
           {/* Stats */}
-          <div className="flex gap-4 sm:gap-6 shrink-0">
+          <div className="flex gap-3 shrink-0">
             <div className="text-center">
               <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center mx-auto mb-1">
                 <span className="text-2xl font-black text-white">{cvs.length}</span>

@@ -101,7 +101,7 @@ export default function JobsPage() {
   };
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 space-y-4">
       {/* Header */}
       <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-2xl px-6 py-4 shadow-md">
         <h1 className="text-base font-bold text-white">Campus Placement Jobs</h1>
