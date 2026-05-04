@@ -197,6 +197,7 @@ export async function POST(req: NextRequest) {
     try {
       await conn.beginTransaction();
 
+      // 1. Save to student_attendance
       for (const rec of records) {
         await conn.query(
           `INSERT INTO student_attendance
@@ -212,6 +213,73 @@ export async function POST(req: NextRequest) {
              Updated_At = CURRENT_TIMESTAMP`,
           [batchId, rec.studentId, rec.admissionId, date, session, rec.status, rec.In_Time || null, rec.Out_Time || null]
         );
+      }
+
+      // 2. Sync to lecture_taken_master + lecture_taken_child for final report
+      const lectureStart = session === 'second_half' ? '02:00PM' : '09:00AM';
+
+      // Get Course_Id for this batch
+      const [batchRows] = await conn.query<any[]>(
+        `SELECT Course_Id FROM batch_mst WHERE Batch_Id = ? LIMIT 1`,
+        [batchId]
+      );
+      const courseId = batchRows[0]?.Course_Id ?? null;
+
+      // Find or create the lecture_taken_master record for (Batch_Id, date, session)
+      const [existingLecture] = await conn.query<any[]>(
+        `SELECT MAX(Take_Id) AS Take_Id
+         FROM lecture_taken_master
+         WHERE Batch_Id = ? AND Take_Dt = ? AND Lecture_Start = ?
+           AND (IsDelete = 0 OR IsDelete IS NULL)`,
+        [batchId, date, lectureStart]
+      );
+      let takeId: number = existingLecture[0]?.Take_Id ?? null;
+
+      if (!takeId) {
+        const [ins] = await conn.query<any>(
+          `INSERT INTO lecture_taken_master
+             (Course_Id, Batch_Id, Take_Dt, Lecture_Start, IsActive, IsDelete)
+           VALUES (?, ?, ?, ?, 1, 0)`,
+          [courseId, batchId, date, lectureStart]
+        );
+        takeId = ins.insertId;
+      }
+
+      // Get student names in bulk
+      const studentIds = records.map((r) => r.studentId);
+      const [nameRows] = await conn.query<any[]>(
+        `SELECT Student_Id, Student_Name FROM student_master WHERE Student_Id IN (?)`,
+        [studentIds]
+      );
+      const nameMap: Record<number, string> = {};
+      for (const row of nameRows) nameMap[row.Student_Id] = row.Student_Name;
+
+      // Upsert lecture_taken_child for each student
+      for (const rec of records) {
+        const studentName = nameMap[rec.studentId] || '';
+        const studentAtten = rec.status === 'A' ? 'Absent' : 'Present';
+        const late = rec.status === 'L' ? 'Yes' : 'No';
+
+        const [existing] = await conn.query<any[]>(
+          `SELECT ID FROM lecture_taken_child WHERE Take_Id = ? AND Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+          [takeId, rec.studentId]
+        );
+
+        if (existing.length > 0) {
+          await conn.query(
+            `UPDATE lecture_taken_child
+             SET Student_Atten = ?, Late = ?, IsActive = 1, IsDelete = 0
+             WHERE Take_Id = ? AND Student_Id = ?`,
+            [studentAtten, late, takeId, rec.studentId]
+          );
+        } else {
+          await conn.query(
+            `INSERT INTO lecture_taken_child
+               (Take_Id, Student_Id, Student_Name, Student_Atten, Late, IsActive, IsDelete)
+             VALUES (?, ?, ?, ?, ?, 1, 0)`,
+            [takeId, rec.studentId, studentName, studentAtten, late]
+          );
+        }
       }
 
       await conn.commit();

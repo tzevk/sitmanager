@@ -29,6 +29,11 @@ interface PlacementRow {
   InterviewDate: string | null;
   Result: string | null;
 }
+interface DocumentRow {
+  id: number;
+  doc_name: string;
+  upload_image: string;
+}
 
 const TABS = [
   { id: 'personal',     label: 'Personal Info' },
@@ -53,16 +58,16 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
-      <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-5 py-3 border-b border-slate-200">
-        <h3 className="text-[13px] font-black text-[#2E3093] flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg bg-[#2E3093]/10 flex items-center justify-center">
+    <div className="rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-4 py-2 border-b border-slate-200">
+        <h3 className="text-[12px] font-black text-[#2E3093] flex items-center gap-1.5">
+          <span className="w-5 h-5 rounded-md bg-[#2E3093]/10 flex items-center justify-center">
             {icon}
           </span>
           {title}
         </h3>
       </div>
-      <div className="px-5 py-4">{children}</div>
+      <div className="px-4 py-3">{children}</div>
     </div>
   );
 }
@@ -91,16 +96,26 @@ export default function EditStudentPage() {
   const INQUIRY_MODES = ['Walk-in', 'Phone', 'Mail', 'Website', 'Reference', 'Consultancy', 'Advertisement', 'Social Media', 'Personal', 'Other'];
 
   /* discussion */
-  const [discussions,   setDiscussions]   = useState<Discussion[]>([]);
-  const [newDiscussion, setNewDiscussion] = useState('');
-  const [discLoading,   setDiscLoading]   = useState(false);
+  const [discussions, setDiscussions] = useState<Discussion[]>([]);
+  const [discLoading, setDiscLoading] = useState(false);
+  const [discError, setDiscError] = useState('');
 
   /* placement */
   const [placement, setPlacement] = useState<PlacementRow[]>([]);
 
+  /* documents */
+  const [documents, setDocuments] = useState<DocumentRow[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [docsError, setDocsError] = useState('');
+
   /* photo */
   const [photo, setPhoto] = useState<string>('');
   const [photoUploading, setPhotoUploading] = useState(false);
+
+  /* sidebar stats */
+  const [batchStartDate, setBatchStartDate] = useState('');
+  const [batchEndDate, setBatchEndDate] = useState('');
+  const [onlineAdmissionDate, setOnlineAdmissionDate] = useState('');
 
   /* ---- form ---- */
   const [form, setForm] = useState({
@@ -110,7 +125,8 @@ export default function EditStudentPage() {
     Email: '', Present_Mobile: '', Telephone: '',
     Present_Address: '', Present_City: '', Present_State: '',
     Present_Pin: '', Present_Country: 'India',
-    Permanent_Address: '', Permanent_State: '', Permanent_Country: 'India',
+    Permanent_Address: '', Permanent_City: '', Permanent_Pin: '',
+    Permanent_State: '', Permanent_Country: 'India',
     /* Academic */
     Qualification: '', Discipline: '', Percentage: '',
     Course_Id: '', Batch_code: '', Batch_Category_id: '',
@@ -120,7 +136,11 @@ export default function EditStudentPage() {
     /* Inquiry meta */
     Inquiry_From: '', Inquiry_Type: '', Inquiry_Dt: '',
     /* Status */
-    Status_id: '',
+    Status_id: '', Status_date: '',
+    /* Admission */
+    Admission_Dt: '',
+    /* Student portal / referral */
+    Login_Password: '', Refered_By: '',
   });
 
   const set = (field: string, value: string) =>
@@ -157,6 +177,8 @@ export default function EditStudentPage() {
           Present_Pin:      s.Present_Pin != null ? String(s.Present_Pin) : '',
           Present_Country:  s.Present_Country  || 'India',
           Permanent_Address: s.Permanent_Address || '',
+          Permanent_City:   s.Permanent_City   || '',
+          Permanent_Pin:    s.Permanent_Pin != null ? String(s.Permanent_Pin) : '',
           Permanent_State:  s.Permanent_State  || '',
           Permanent_Country: s.Permanent_Country || 'India',
           Qualification:    s.Qualification    || '',
@@ -165,8 +187,8 @@ export default function EditStudentPage() {
           Course_Id:        s.Course_Id        ? String(s.Course_Id) : '',
           Batch_code:       s.Batch_Code       || s.Batch_code || '',
           Batch_Category_id: s.Batch_Category_id != null ? String(s.Batch_Category_id) : '',
-          OccupationalStatus: s.OccupationalStatus || '',
-          Organisation:     s.Organisation     || '',
+          OccupationalStatus: s.OccupationalStatus || s.Occupation || '',
+          Organisation:     s.Organisation     || s.Company || '',
           Designation:      s.Designation      || '',
           JobDescription:   s.JobDescription   || '',
           WorkingSince:     s.WorkingSince ? String(s.WorkingSince).slice(0, 10) : '',
@@ -175,7 +197,15 @@ export default function EditStudentPage() {
           Inquiry_Type:     s.Inquiry_Type     || '',
           Inquiry_Dt:       s.Inquiry_Dt ? String(s.Inquiry_Dt).slice(0, 10) : '',
           Status_id:        s.Status_id != null ? String(s.Status_id) : '',
+          Status_date:      s.Status_date ? String(s.Status_date).slice(0, 10) : '',
+          Admission_Dt:     s.Admission_Dt ? String(s.Admission_Dt).slice(0, 10) : '',
+          Login_Password:   s.Login_Password   || '',
+          Refered_By:       s.Refered_By       || '',
         });
+
+        setBatchStartDate(s.Batch_StartDate ? String(s.Batch_StartDate).slice(0, 10) : '');
+        setBatchEndDate(s.Batch_EndDate ? String(s.Batch_EndDate).slice(0, 10) : '');
+        setOnlineAdmissionDate(s.OnlineAdmission_Date ? String(s.OnlineAdmission_Date).slice(0, 10) : '');
 
         setCourses(data.courses           ?? []);
         setBatches(data.batches           ?? []);
@@ -183,6 +213,7 @@ export default function EditStudentPage() {
         setBatchCategories(data.batchCategories ?? []);
         setDiscussions(data.discussions ?? []);
         setPlacement(data.placement    ?? []);
+        setDocuments(data.documents    ?? []);
         // Photo — accept common column name variants from student_master
         setPhoto(s.Photo || s.Student_Photo || s.PhotoPath || s.Photo_Path || '');
       } catch (e: unknown) {
@@ -199,13 +230,49 @@ export default function EditStudentPage() {
   const fetchDiscussions = useCallback(async () => {
     if (!studentId) return;
     setDiscLoading(true);
+    setDiscError('');
     try {
       const res  = await fetch(`/api/admission-activity/student/${studentId}/discussions`);
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setDiscussions(data.discussions ?? []);
-    } catch { /* silent */ }
+    } catch (e: unknown) {
+      setDiscError(e instanceof Error ? e.message : 'Failed to load discussions');
+    }
     setDiscLoading(false);
   }, [studentId]);
+
+  // Refresh discussions whenever the Discussion tab is opened
+  useEffect(() => {
+    if (activeTab === 'discussion' && studentId) {
+      fetchDiscussions();
+    }
+  }, [activeTab, studentId, fetchDiscussions]);
+
+  /* ------------------------------------------------------------------ */
+  /*  Fetch documents                                                     */
+  /* ------------------------------------------------------------------ */
+  const fetchDocuments = useCallback(async () => {
+    if (!studentId) return;
+    setDocsLoading(true);
+    setDocsError('');
+    try {
+      const res  = await fetch(`/api/admission-activity/student/${studentId}/documents`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setDocuments(data.documents ?? []);
+    } catch (e: unknown) {
+      setDocsError(e instanceof Error ? e.message : 'Failed to load documents');
+    }
+    setDocsLoading(false);
+  }, [studentId]);
+
+  // Refresh documents whenever the Documents tab is opened
+  useEffect(() => {
+    if (activeTab === 'documents' && studentId) {
+      fetchDocuments();
+    }
+  }, [activeTab, studentId, fetchDocuments]);
 
   /* ------------------------------------------------------------------ */
   /*  Save                                                                */
@@ -230,38 +297,17 @@ export default function EditStudentPage() {
     }
   };
 
-  /* ------------------------------------------------------------------ */
-  /*  Add discussion                                                      */
-  /* ------------------------------------------------------------------ */
-  const handleAddDiscussion = async () => {
-    if (!newDiscussion.trim()) return;
-    setDiscLoading(true);
-    try {
-      const res = await fetch(`/api/admission-activity/student/${studentId}/discussions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ discussion: newDiscussion }),
-      });
-      if (!res.ok) throw new Error('Failed to add discussion');
-      setNewDiscussion('');
-      fetchDiscussions();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to add discussion');
-    }
-    setDiscLoading(false);
-  };
-
   if (permLoading || loading) return <PermissionLoading />;
   if (!canUpdate) return <AccessDenied />;
 
-  /* Shared CSS — match Inquiry / Online Admission styling */
-  const labelCls = 'block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5';
+  /* Shared CSS — compact style */
+  const labelCls = 'block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1';
   const inputCls =
-    'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] placeholder:text-slate-400 transition-all font-medium';
+    'w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/10 focus:border-[#2E3093] placeholder:text-slate-400 transition-all font-medium';
   const selectCls =
-    'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] transition-all font-medium';
+    'w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/10 focus:border-[#2E3093] transition-all font-medium';
   const textareaCls =
-    'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] placeholder:text-slate-400 transition-all font-medium resize-none';
+    'w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/10 focus:border-[#2E3093] placeholder:text-slate-400 transition-all font-medium resize-none';
 
   const filteredBatches = form.Course_Id
     ? batches.filter((b) => String(b.Course_Id) === form.Course_Id)
@@ -269,45 +315,44 @@ export default function EditStudentPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header (match Inquiry styling) */}
-      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-2xl px-8 py-6 shadow-[0_10px_30px_rgba(46,48,147,0.18)] relative overflow-hidden">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-6 py-4 shadow-[0_6px_20px_rgba(46,48,147,0.15)] relative overflow-hidden">
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
-
-        <div className="flex items-center gap-4 relative z-10">
+        <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
+        <div className="flex items-center gap-3 relative z-10">
           <button
             type="button"
             onClick={() => router.push('/dashboard/student')}
-            className="p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white transition-colors"
+            className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
           <div>
-            <h2 className="text-2xl font-black text-white tracking-tight">
+            <h2 className="text-lg font-black text-white tracking-tight">
               Edit Student
               {form.Student_Name && (
-                <span className="ml-2 text-white/80 font-semibold text-base">— {form.Student_Name}</span>
+                <span className="ml-2 text-white/80 font-semibold text-sm">— {form.Student_Name}</span>
               )}
             </h2>
-            <p className="text-[13px] text-white/80 font-medium mt-1">Students &gt; Edit &gt; #{studentId}</p>
+            <p className="text-[11px] text-white/70 font-medium">Students &gt; Edit &gt; #{studentId}</p>
           </div>
         </div>
       </div>
 
       {/* ── Card ── */}
-      <form onSubmit={handleSave} className="bg-white rounded-2xl border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.03)] overflow-hidden">
+      <form onSubmit={handleSave} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         {/* Tabs */}
-        <div className="flex border-b border-slate-200 px-5 bg-slate-50/80 overflow-x-auto">
+        <div className="flex border-b border-slate-200 px-4 bg-slate-50/80 overflow-x-auto">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-4 py-3 text-sm font-bold border-b-2 transition-all whitespace-nowrap ${
+              className={`flex items-center gap-1 px-3 py-2.5 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
                 activeTab === tab.id
-                  ? 'border-[#2E3093] text-[#2E3093] bg-white -mb-px rounded-t-lg'
+                  ? 'border-[#2E3093] text-[#2E3093] bg-white -mb-px rounded-t-md'
                   : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -327,165 +372,358 @@ export default function EditStudentPage() {
         )}
 
         {/* Body */}
-        <div className="px-5 py-5 bg-slate-50/40">
+        <div className="px-4 py-4 bg-slate-50/40">
 
-          {/* ════════════ PERSONAL INFO ════════════ */}
+          {/* ==== PERSONAL INFO ==== */}
           {activeTab === 'personal' && (
-            <div className="space-y-3">
+            <div className="space-y-4">
 
-              {/* Photo card */}
-              <SectionCard
-                title="Student Photo"
-                icon={
-                  <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                }
-              >
-                <div className="flex items-start gap-4 py-1">
-                  {/* Preview */}
-                  <div className="shrink-0">
-                    {photo ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={photo.startsWith('http') || photo.startsWith('/') ? photo : `/uploads/students/${photo}`}
-                        alt="Student photo"
-                        className="w-24 h-24 rounded-lg object-cover border border-gray-200 shadow-sm"
-                        onError={() => setPhoto('')}
-                      />
-                    ) : (
-                      <div className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 flex flex-col items-center justify-center gap-1">
-                        <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+              {/* ── 3-column grid matching old system layout ── */}
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr_200px] gap-4 items-start">
+
+                {/* ── Column 1: Student Details ── */}
+                <SectionCard
+                  title="Student Details"
+                  icon={
+                    <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  }
+                >
+                  <div className="flex flex-col gap-3">
+                    {/* Photo */}
+                    <div className="flex items-center gap-3">
+                      {photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={photo.startsWith('http') || photo.startsWith('/') ? photo : `/uploads/students/${photo}`}
+                          alt="Student photo"
+                          className="w-16 h-16 rounded-lg object-cover border border-gray-200 shadow-sm shrink-0"
+                          onError={() => setPhoto('')}
+                        />
+                      ) : (
+                        <div className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 flex flex-col items-center justify-center gap-0.5 shrink-0">
+                          <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                          </svg>
+                          <span className="text-[9px] text-gray-400">No photo</span>
+                        </div>
+                      )}
+                      <label className="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#2E3093]/10 hover:bg-[#2E3093]/20 text-[#2E3093] text-[11px] font-semibold transition-colors">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                         </svg>
-                        <span className="text-[10px] text-gray-400">No photo</span>
+                        {photoUploading ? 'Uploading…' : 'Change Photo'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          disabled={photoUploading}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            if (file.size > 2 * 1024 * 1024) { setError('Photo must be smaller than 2 MB'); return; }
+                            setPhotoUploading(true);
+                            try {
+                              const fd = new FormData();
+                              fd.append('photo', file);
+                              fd.append('studentId', studentId);
+                              const res = await fetch(`/api/admission-activity/student/${studentId}/photo`, { method: 'POST', body: fd });
+                              const data = await res.json();
+                              if (!res.ok) throw new Error(data.error || 'Upload failed');
+                              setPhoto(data.photoUrl ?? data.photo ?? '');
+                            } catch (err: unknown) {
+                              setError(err instanceof Error ? err.message : 'Photo upload failed');
+                            } finally { setPhotoUploading(false); }
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                    {/* B.M. ID */}
+                    <div>
+                      <label className={labelCls}>B.M. ID</label>
+                      <input value={studentId} readOnly className={`${inputCls} bg-slate-100 cursor-default`} />
+                    </div>
+
+                    {/* Name parts */}
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <div>
+                        <label className={labelCls}>First <span className="text-red-400">*</span></label>
+                        <input type="text" value={form.FName} onChange={(e) => set('FName', e.target.value)} className={inputCls} placeholder="First" required />
                       </div>
-                    )}
-                  </div>
+                      <div>
+                        <label className={labelCls}>Middle</label>
+                        <input type="text" value={form.MName} onChange={(e) => set('MName', e.target.value)} className={inputCls} placeholder="Middle" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Last <span className="text-red-400">*</span></label>
+                        <input type="text" value={form.LName} onChange={(e) => set('LName', e.target.value)} className={inputCls} placeholder="Last" required />
+                      </div>
+                    </div>
 
-                  {/* Upload */}
-                  <div className="flex-1 space-y-2">
-                    <p className="text-[11px] text-gray-500">Upload a passport-size photo (JPEG / PNG, max 2 MB).</p>
-                    <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#2E3093]/10 hover:bg-[#2E3093]/20 text-[#2E3093] text-xs font-semibold transition-colors">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                    {/* Gender + Nationality */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className={labelCls}>Gender</label>
+                        <select value={form.Sex} onChange={(e) => set('Sex', e.target.value)} className={selectCls}>
+                          <option value="">— Select —</option>
+                          <option>Male</option>
+                          <option>Female</option>
+                          <option>Other</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Nationality</label>
+                        <input type="text" value={form.Nationality} onChange={(e) => set('Nationality', e.target.value)} className={inputCls} />
+                      </div>
+                    </div>
+
+                    {/* DOB */}
+                    <div>
+                      <label className={labelCls}>Date of Birth</label>
+                      <input type="date" value={form.DOB} onChange={(e) => set('DOB', e.target.value)} className={inputCls} />
+                    </div>
+
+                    {/* Portal Password */}
+                    <div>
+                      <label className={labelCls}>Portal Password</label>
+                      <input type="text" value={form.Login_Password} onChange={(e) => set('Login_Password', e.target.value)} className={inputCls} placeholder="Student portal login password" />
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label className={labelCls}>Email <span className="text-red-400">*</span></label>
+                      <input type="email" value={form.Email} onChange={(e) => set('Email', e.target.value)} className={inputCls} placeholder="Email address" />
+                    </div>
+
+                    {/* Batch Code (read-only display) */}
+                    <div>
+                      <label className={labelCls}>Batch Code</label>
+                      <input value={form.Batch_code} readOnly className={`${inputCls} bg-slate-100 cursor-default`} />
+                    </div>
+
+                    {/* How they know SIT */}
+                    <div>
+                      <label className={labelCls}>How They Know SIT</label>
+                      <select value={form.Inquiry_From} onChange={(e) => set('Inquiry_From', e.target.value)} className={selectCls}>
+                        <option value="">— Select —</option>
+                        {INQUIRY_MODES.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Referred By */}
+                    <div>
+                      <label className={labelCls}>Referred By</label>
+                      <input type="text" value={form.Refered_By} onChange={(e) => set('Refered_By', e.target.value)} className={inputCls} placeholder="Referral name" />
+                    </div>
+                  </div>
+                </SectionCard>
+
+                {/* ── Column 2: Training + Online Admission + Status + Permanent Address ── */}
+                <div className="space-y-3">
+
+                  {/* Training Programme & Batch Detail */}
+                  <SectionCard
+                    title="Training Programme & Batch Detail"
+                    icon={
+                      <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
                       </svg>
-                      {photoUploading ? 'Uploading…' : 'Choose Photo'}
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className="hidden"
-                        disabled={photoUploading}
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          if (file.size > 2 * 1024 * 1024) {
-                            setError('Photo must be smaller than 2 MB');
-                            return;
-                          }
-                          setPhotoUploading(true);
-                          try {
-                            const fd = new FormData();
-                            fd.append('photo', file);
-                            fd.append('studentId', studentId);
-                            const res = await fetch(`/api/admission-activity/student/${studentId}/photo`, {
-                              method: 'POST',
-                              body: fd,
-                            });
-                            const data = await res.json();
-                            if (!res.ok) throw new Error(data.error || 'Upload failed');
-                            setPhoto(data.photoUrl ?? data.photo ?? '');
-                          } catch (err: unknown) {
-                            setError(err instanceof Error ? err.message : 'Photo upload failed');
-                          } finally {
-                            setPhotoUploading(false);
-                          }
-                        }}
-                      />
-                    </label>
-                    {photo && (
-                      <p className="text-[10px] text-gray-400 truncate max-w-[200px]">{photo}</p>
-                    )}
+                    }
+                  >
+                    <div className="space-y-2">
+                      <div>
+                        <label className={labelCls}>Training Programme</label>
+                        <select
+                          value={form.Course_Id}
+                          onChange={(e) => { set('Course_Id', e.target.value); set('Batch_code', ''); }}
+                          className={selectCls}
+                        >
+                          <option value="">— Select Course —</option>
+                          {courses.map((c) => (
+                            <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className={labelCls}>Batch</label>
+                          <select value={form.Batch_code} onChange={(e) => set('Batch_code', e.target.value)} className={selectCls}>
+                            <option value="">— Select Batch —</option>
+                            {filteredBatches.map((b) => (
+                              <option key={b.Batch_Id} value={b.Batch_code}>{b.Batch_code}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className={labelCls}>Category</label>
+                          <select value={form.Batch_Category_id} onChange={(e) => set('Batch_Category_id', e.target.value)} className={selectCls}>
+                            <option value="">— Select —</option>
+                            {batchCategories.map((bc) => (
+                              <option key={bc.label} value={bc.label}>{bc.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Inquiry Type</label>
+                        <select value={form.Inquiry_Type} onChange={(e) => set('Inquiry_Type', e.target.value)} className={selectCls}>
+                          <option value="">— Select —</option>
+                          <option value="Walk-in">Walk-in</option>
+                          <option value="Reference">Reference</option>
+                          <option value="Online">Online</option>
+                          <option value="Consultancy">Consultancy</option>
+                          <option value="Advertisement">Advertisement</option>
+                          <option value="Social Media">Social Media</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                    </div>
+                  </SectionCard>
+
+                  {/* Online Admission Details */}
+                  <SectionCard
+                    title="Online Admission Details"
+                    icon={
+                      <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    }
+                  >
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className={labelCls}>Admission Date</label>
+                          <input type="date" value={form.Admission_Dt} onChange={(e) => set('Admission_Dt', e.target.value)} className={inputCls} />
+                        </div>
+                        <div>
+                          <label className={labelCls}>Inquiry Date</label>
+                          <input type="date" value={form.Inquiry_Dt} onChange={(e) => set('Inquiry_Dt', e.target.value)} className={inputCls} />
+                        </div>
+                      </div>
+                      {/* Show online form submission indicator */}
+                      <div className="flex items-center gap-2 py-1.5 px-3 rounded-lg bg-slate-50 border border-slate-200">
+                        {onlineAdmissionDate ? (
+                          <>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                              Online Form Submitted
+                            </span>
+                            <span className="text-xs text-slate-500">{onlineAdmissionDate}</span>
+                          </>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">No online admission form on record</span>
+                        )}
+                      </div>
+                    </div>
+                  </SectionCard>
+
+                  {/* Status + Status Date */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelCls}>Status</label>
+                      <select value={form.Status_id} onChange={(e) => set('Status_id', e.target.value)} className={selectCls}>
+                        <option value="">— Select —</option>
+                        {statuses.map((s) => (
+                          <option key={s.id} value={s.id}>{s.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Status Date</label>
+                      <input type="date" value={form.Status_date} onChange={(e) => set('Status_date', e.target.value)} className={inputCls} />
+                    </div>
+                  </div>
+
+                  {/* Permanent Address */}
+                  <SectionCard
+                    title="Permanent Address"
+                    icon={
+                      <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                      </svg>
+                    }
+                  >
+                    <div className="space-y-2">
+                      <div>
+                        <label className={labelCls}>Address</label>
+                        <textarea value={form.Permanent_Address} onChange={(e) => set('Permanent_Address', e.target.value)} rows={3} className={textareaCls} placeholder="Permanent address" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className={labelCls}>City</label>
+                          <input type="text" value={form.Permanent_City} onChange={(e) => set('Permanent_City', e.target.value)} className={inputCls} placeholder="City" />
+                        </div>
+                        <div>
+                          <label className={labelCls}>PIN Code</label>
+                          <input type="text" value={form.Permanent_Pin} onChange={(e) => set('Permanent_Pin', e.target.value)} className={inputCls} placeholder="PIN" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className={labelCls}>State</label>
+                          <input type="text" value={form.Permanent_State} onChange={(e) => set('Permanent_State', e.target.value)} className={inputCls} placeholder="State" />
+                        </div>
+                        <div>
+                          <label className={labelCls}>Country</label>
+                          <input type="text" value={form.Permanent_Country} onChange={(e) => set('Permanent_Country', e.target.value)} className={inputCls} placeholder="Country" />
+                        </div>
+                      </div>
+                    </div>
+                  </SectionCard>
+                </div>
+
+                {/* ── Column 3: Student Info Sidebar (read-only) ── */}
+                <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                  <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-4 py-3 border-b border-slate-200">
+                    <h3 className="text-[13px] font-black text-[#2E3093] flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-lg bg-[#2E3093]/10 flex items-center justify-center">
+                        <svg className="w-3 h-3 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                      </span>
+                      Student Info
+                    </h3>
+                  </div>
+                  <div className="px-4 py-3 space-y-2.5">
+                    {[
+                      { label: 'Balance Fees',    value: '—' },
+                      { label: 'Assignment Avg',  value: '—' },
+                      { label: 'Unit Test Avg',   value: '—' },
+                      { label: 'Final Exam',      value: '—' },
+                      { label: 'Attendance (%)',  value: '—' },
+                      { label: 'Final Total',     value: '—' },
+                    ].map((item) => (
+                      <div key={item.label} className="flex items-center justify-between">
+                        <span className="text-[11px] text-slate-500 font-medium">{item.label}</span>
+                        <span className="text-[11px] font-bold text-slate-700">{item.value}</span>
+                      </div>
+                    ))}
+                    <div className="border-t border-slate-200 pt-2.5 mt-1">
+                      <p className="text-[10px] font-black text-[#2E3093] uppercase tracking-widest mb-2">Batch Details</p>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-slate-500">Batch Start</span>
+                          <span className="text-[11px] font-semibold text-slate-700">{batchStartDate || '—'}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-slate-500">Batch End</span>
+                          <span className="text-[11px] font-semibold text-slate-700">{batchEndDate || '—'}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </SectionCard>
+              </div>
 
+              {/* ── Full-width: Present Address ── */}
               <SectionCard
-                title="Basic Information"
-                icon={
-                  <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                }
-              >
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
-                  <div>
-                    <label className={labelCls}>First Name <span className="text-red-400">*</span></label>
-                    <input type="text" value={form.FName} onChange={(e) => set('FName', e.target.value)} className={inputCls} placeholder="First name" required />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Middle Name</label>
-                    <input type="text" value={form.MName} onChange={(e) => set('MName', e.target.value)} className={inputCls} placeholder="Middle name" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Last Name <span className="text-red-400">*</span></label>
-                    <input type="text" value={form.LName} onChange={(e) => set('LName', e.target.value)} className={inputCls} placeholder="Last name" required />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Date of Birth</label>
-                    <input type="date" value={form.DOB} onChange={(e) => set('DOB', e.target.value)} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Gender</label>
-                    <select value={form.Sex} onChange={(e) => set('Sex', e.target.value)} className={selectCls}>
-                      <option value="">— Select —</option>
-                      <option>Male</option>
-                      <option>Female</option>
-                      <option>Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelCls}>Nationality</label>
-                    <input type="text" value={form.Nationality} onChange={(e) => set('Nationality', e.target.value)} className={inputCls} placeholder="Nationality" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Status</label>
-                    <select value={form.Status_id} onChange={(e) => set('Status_id', e.target.value)} className={selectCls}>
-                      <option value="">— Select —</option>
-                      {statuses.map((s) => (
-                        <option key={s.id} value={s.id}>{s.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </SectionCard>
-
-              <SectionCard
-                title="Contact Information"
-                icon={
-                  <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                  </svg>
-                }
-              >
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
-                  <div>
-                    <label className={labelCls}>Email <span className="text-red-400">*</span></label>
-                    <input type="email" value={form.Email} onChange={(e) => set('Email', e.target.value)} className={inputCls} placeholder="Email address" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Mobile <span className="text-red-400">*</span></label>
-                    <input type="tel" value={form.Present_Mobile} onChange={(e) => set('Present_Mobile', e.target.value)} className={inputCls} placeholder="Mobile number" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Telephone</label>
-                    <input type="tel" value={form.Telephone} onChange={(e) => set('Telephone', e.target.value)} className={inputCls} placeholder="Landline" />
-                  </div>
-                </div>
-              </SectionCard>
-
-              <SectionCard
-                title="Address Details"
+                title="Present Address"
                 icon={
                   <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -493,37 +731,41 @@ export default function EditStudentPage() {
                   </svg>
                 }
               >
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
-                  <div className="col-span-2">
-                    <label className={labelCls}>Present Address</label>
-                    <textarea value={form.Present_Address} onChange={(e) => set('Present_Address', e.target.value)} rows={3} className={textareaCls} placeholder="Present address" />
-                  </div>
-                  <div className="col-span-2">
-                    <label className={labelCls}>Permanent Address</label>
-                    <textarea value={form.Permanent_Address} onChange={(e) => set('Permanent_Address', e.target.value)} rows={3} className={textareaCls} placeholder="Permanent address" />
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-3 gap-y-2">
+                  <div className="col-span-2 md:col-span-4 lg:col-span-6">
+                    <label className={labelCls}>Address</label>
+                    <textarea value={form.Present_Address} onChange={(e) => set('Present_Address', e.target.value)} rows={2} className={textareaCls} placeholder="Present address" />
                   </div>
                   <div>
                     <label className={labelCls}>City</label>
                     <input type="text" value={form.Present_City} onChange={(e) => set('Present_City', e.target.value)} className={inputCls} placeholder="City" />
                   </div>
                   <div>
-                    <label className={labelCls}>State</label>
-                    <input type="text" value={form.Present_State} onChange={(e) => set('Present_State', e.target.value)} className={inputCls} placeholder="State" />
-                  </div>
-                  <div>
                     <label className={labelCls}>PIN Code</label>
                     <input type="text" value={form.Present_Pin} onChange={(e) => set('Present_Pin', e.target.value)} className={inputCls} placeholder="PIN" />
                   </div>
                   <div>
+                    <label className={labelCls}>State</label>
+                    <input type="text" value={form.Present_State} onChange={(e) => set('Present_State', e.target.value)} className={inputCls} placeholder="State" />
+                  </div>
+                  <div>
                     <label className={labelCls}>Country</label>
                     <input type="text" value={form.Present_Country} onChange={(e) => set('Present_Country', e.target.value)} className={inputCls} placeholder="Country" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Mobile <span className="text-red-400">*</span></label>
+                    <input type="tel" value={form.Present_Mobile} onChange={(e) => set('Present_Mobile', e.target.value)} className={inputCls} placeholder="Mobile" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Telephone</label>
+                    <input type="tel" value={form.Telephone} onChange={(e) => set('Telephone', e.target.value)} className={inputCls} placeholder="Landline" />
                   </div>
                 </div>
               </SectionCard>
             </div>
           )}
 
-          {/* ════════════ ACADEMIC QUALIFICATION ════════════ */}
+          {/* ==== ACADEMIC QUALIFICATION ==== */}
           {activeTab === 'academic' && (
             <div className="space-y-3">
               <SectionCard
@@ -583,7 +825,7 @@ export default function EditStudentPage() {
             </div>
           )}
 
-          {/* ════════════ COMPANY INFORMATION ════════════ */}
+          {/* ==== COMPANY INFORMATION ==== */}
           {activeTab === 'company' && (
             <div className="space-y-3">
               <SectionCard
@@ -669,42 +911,9 @@ export default function EditStudentPage() {
             </div>
           )}
 
-          {/* ════════════ DISCUSSION ════════════ */}
+          {/* ==== DISCUSSION ==== */}
           {activeTab === 'discussion' && (
             <div className="space-y-3">
-              {/* Add new */}
-              <SectionCard
-                title="New Discussion"
-                icon={
-                  <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                  </svg>
-                }
-              >
-                <textarea
-                  value={newDiscussion}
-                  onChange={(e) => setNewDiscussion(e.target.value)}
-                  placeholder="Type your notes here..."
-                  rows={3}
-                  className={textareaCls}
-                />
-                <button
-                  type="button"
-                  onClick={handleAddDiscussion}
-                  disabled={discLoading || !newDiscussion.trim()}
-                  className="mt-2 flex items-center gap-2 bg-[#2E3093] hover:bg-[#252780] text-white px-4 py-1.5 rounded text-xs font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50"
-                >
-                  {discLoading ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                    </svg>
-                  )}
-                  Add Note
-                </button>
-              </SectionCard>
-
               {/* History */}
               <div className="rounded-lg border border-gray-200 overflow-hidden shadow-sm">
                 <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-3 py-1.5 border-b border-gray-200">
@@ -721,7 +930,13 @@ export default function EditStudentPage() {
                   </h4>
                 </div>
                 <div className="px-3 py-2">
-                  {discussions.length === 0 ? (
+                  {discLoading ? (
+                    <div className="flex justify-center py-6">
+                      <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  ) : discError ? (
+                    <p className="text-xs text-red-500 text-center py-6">{discError}</p>
+                  ) : discussions.length === 0 ? (
                     <p className="text-xs text-gray-400 text-center py-6">No discussions yet.</p>
                   ) : (
                     <div className="space-y-3">
@@ -748,7 +963,7 @@ export default function EditStudentPage() {
             </div>
           )}
 
-          {/* ════════════ PLACEMENT ════════════ */}
+          {/* ==== PLACEMENT ==== */}
           {activeTab === 'placement' && (
             <div className="space-y-3">
               <SectionCard
@@ -823,25 +1038,80 @@ export default function EditStudentPage() {
             </div>
           )}
 
-          {/* ════════════ DOCUMENTS ════════════ */}
+          {/* ==== DOCUMENTS ==== */}
           {activeTab === 'documents' && (
             <div className="space-y-3">
               <SectionCard
-                title="Document Management"
+                title={`Documents (${documents.length})`}
                 icon={
-                  <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <svg className="w-3 h-3 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
                 }
               >
-                <div className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2.5 flex items-start gap-2">
-                  <svg className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <p className="text-xs text-blue-700">
-                    Document upload functionality will be available soon. For now, you can update other student details.
-                  </p>
-                </div>
+                {docsLoading ? (
+                  <div className="flex justify-center py-8">
+                    <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : docsError ? (
+                  <p className="text-xs text-red-500 text-center py-8">{docsError}</p>
+                ) : documents.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <svg className="w-10 h-10 text-slate-200 mb-2" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    <p className="text-xs text-slate-500 font-semibold">No documents uploaded yet</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Documents submitted via the online form will appear here.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
+                    {documents.map((doc) => {
+                      const fileUrl = `/api/student-documents/${studentId}/${doc.upload_image}`;
+                      const ext = doc.upload_image.split('.').pop()?.toLowerCase() ?? '';
+                      const isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext);
+                      const isPdf = ext === 'pdf';
+                      const label = doc.doc_name
+                        .replace(/_file$/, '')
+                        .replace(/_/g, ' ')
+                        .replace(/\b\w/g, (c) => c.toUpperCase());
+                      return (
+                        <a
+                          key={doc.id}
+                          href={fileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group flex flex-col items-center gap-1.5 p-3 rounded-lg border border-slate-200 bg-white hover:border-[#2E3093]/40 hover:bg-[#2E3093]/5 transition-all"
+                        >
+                          {isImage ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={fileUrl}
+                              alt={label}
+                              className="w-full h-16 object-cover rounded-md border border-slate-100"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          ) : (
+                            <div className="w-full h-16 rounded-md bg-slate-100 flex items-center justify-center">
+                              {isPdf ? (
+                                <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                </svg>
+                              ) : (
+                                <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                </svg>
+                              )}
+                            </div>
+                          )}
+                          <span className="text-[11px] font-semibold text-slate-600 group-hover:text-[#2E3093] text-center leading-tight line-clamp-2">
+                            {label}
+                          </span>
+                          <span className="text-[10px] uppercase font-bold text-slate-400">{ext}</span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
               </SectionCard>
             </div>
           )}
@@ -852,12 +1122,12 @@ export default function EditStudentPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="flex items-center justify-center gap-2 bg-[#2E3093] hover:bg-[#252780] text-white px-4 py-1.5 rounded text-xs font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50"
+                className="flex items-center justify-center gap-1.5 bg-[#2E3093] hover:bg-[#252780] text-white px-4 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm disabled:opacity-50"
               >
                 {submitting ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 )}
@@ -866,7 +1136,7 @@ export default function EditStudentPage() {
               <button
                 type="button"
                 onClick={() => router.push('/dashboard/student')}
-                className="px-4 py-1.5 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-all shadow-sm"
+                className="px-4 py-1.5 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all shadow-sm"
               >
                 Cancel
               </button>

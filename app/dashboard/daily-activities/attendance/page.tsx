@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { PermissionGate } from '@/components/ui/PermissionGate';
 
 /* ─── Types ───────────────────────────────────────────────────────── */
@@ -56,6 +57,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   const [saved, setSaved]                     = useState(false);
   const [error, setError]                     = useState('');
   const [loaded, setLoaded]                   = useState(false);
+  const [feedbackUrl, setFeedbackUrl]         = useState('');
 
   /* load courses */
   useEffect(() => {
@@ -84,6 +86,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     setLoaded(false);
     setSaved(false);
     setError('');
+    setFeedbackUrl('');
   }, [batchId, date]);
 
   /* load both halves in parallel */
@@ -193,6 +196,19 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
         }
       }
       setSaved(true);
+      // Generate a geo-locked feedback link for this batch+date
+      try {
+        const selectedBatchObj = batches.find(b => String(b.Batch_Id) === batchId);
+        const fbRes = await fetch('/api/daily-activities/attendance/feedback-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batchId: Number(batchId), date, batchName: selectedBatchObj?.Batch_code }),
+        });
+        if (fbRes.ok) {
+          const fbData = await fbRes.json();
+          setFeedbackUrl(fbData.url || '');
+        }
+      } catch { /* non-critical */ }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to save attendance');
     } finally {
@@ -240,21 +256,32 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
             </div>
           </div>
 
-          {canCreate && loaded && students.length > 0 && (
-            <button
-              onClick={save}
-              disabled={saving || (!students.some(s => statusMapFH[s.Student_Id]) && !students.some(s => statusMapSH[s.Student_Id]))}
-              className="hidden sm:inline-flex w-full sm:w-auto justify-center items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg bg-white text-[#2E3093] hover:bg-white/90 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          <div className="flex items-center gap-2">
+            <Link
+              href="/dashboard/daily-activities/attendance/feedback"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white/15 text-white hover:bg-white/25 transition-colors"
             >
-              {saving ? (
-                <><div className="w-3.5 h-3.5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />Saving…</>
-              ) : saved ? (
-                <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>Saved!</>
-              ) : (
-                <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>Save Attendance</>
-              )}
-            </button>
-          )}
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+              </svg>
+              Feedback Reports
+            </Link>
+            {canCreate && loaded && students.length > 0 && (
+              <button
+                onClick={save}
+                disabled={saving || (!students.some(s => statusMapFH[s.Student_Id]) && !students.some(s => statusMapSH[s.Student_Id]))}
+                className="hidden sm:inline-flex w-full sm:w-auto justify-center items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg bg-white text-[#2E3093] hover:bg-white/90 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? (
+                  <><div className="w-3.5 h-3.5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />Saving…</>
+                ) : saved ? (
+                  <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>Saved!</>
+                ) : (
+                  <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>Save Attendance</>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -417,9 +444,39 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
           </div>
         )}
         {saved && (
-          <div className="mx-4 my-2 flex items-center gap-3 px-4 py-2.5 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
-            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-            Attendance saved successfully.
+          <div className="mx-4 my-2 space-y-2">
+            <div className="flex items-center gap-3 px-4 py-2.5 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              Attendance saved successfully.
+            </div>
+            {feedbackUrl && (
+              <div className="px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-blue-700 mb-1.5 flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                  </svg>
+                  Geo-locked Feedback Link <span className="font-normal normal-case text-blue-500">(valid 24h · within 500m of institute)</span>
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    readOnly
+                    value={feedbackUrl}
+                    className="flex-1 text-xs bg-white border border-blue-200 rounded-md px-2.5 py-1.5 text-blue-800 truncate focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { navigator.clipboard.writeText(feedbackUrl); }}
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#2E3093] text-white rounded-md hover:bg-[#252780] transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Copy
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

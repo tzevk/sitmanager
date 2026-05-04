@@ -15,22 +15,28 @@ export async function GET(
     const pool = getPool();
     const { id } = await params;
 
-    // Student + admission + batch + course
+    // Student + admission + batch + course + online form date
     const [rows] = await pool.query<any[]>(
       `SELECT
          s.*,
          a.Admission_Id, a.Batch_Id, a.Admission_Date,
-         b.Batch_code,
-         b.SDate AS Batch_StartDate,
-         b.EDate AS Batch_EndDate,
+         COALESCE(b.Batch_code, b2.Batch_code) AS Batch_code,
+         COALESCE(b.SDate, b2.SDate) AS Batch_StartDate,
+         COALESCE(b.EDate, b2.EDate) AS Batch_EndDate,
          c.Course_Name,
-         st.Status AS Status_name
+         st.Status AS Status_name,
+         oap.Created_At AS OnlineAdmission_Date
        FROM student_master s
        LEFT JOIN admission_master a
          ON s.Student_Id = a.Student_Id AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
        LEFT JOIN batch_mst b ON a.Batch_Id = b.Batch_Id
+       LEFT JOIN batch_mst b2
+         ON b2.Batch_code = s.Batch_Code AND (b2.IsDelete = 0 OR b2.IsDelete IS NULL)
        LEFT JOIN course_mst c ON s.Course_Id = c.Course_Id
        LEFT JOIN status_master st ON s.Status_id = st.Id
+       LEFT JOIN Student_Inquiry si
+         ON si.Student_Id = s.Student_Id AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
+       LEFT JOIN online_admission_payload oap ON oap.Inquiry_Id = si.Inquiry_Id
        WHERE s.Student_Id = ? AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
        LIMIT 1`,
       [id]
@@ -52,12 +58,29 @@ export async function GET(
       [id]
     );
 
-    // Discussions
+    // Inquiry_Id for this student (needed for discussions)
+    const [inqRows] = await pool.query<any[]>(
+      `SELECT Inquiry_Id FROM Student_Inquiry
+       WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+       ORDER BY Inquiry_Id DESC LIMIT 1`,
+      [id]
+    );
+    const inquiryId = inqRows[0]?.Inquiry_Id ?? null;
+
+    // Discussions (linked via Inquiry_Id for new records, student_id for older ones)
     const [discussions] = await pool.query<any[]>(
-      `SELECT id, date, discussion, created_by, created_date
+      `SELECT id, date, discussion, created_by, created_date, nextdate
        FROM awt_inquirydiscussion
-       WHERE Inquiry_id = ? AND deleted = 0
+       WHERE deleted = 0 AND (Inquiry_id = ? OR student_id = ?)
        ORDER BY id DESC`,
+      [inquiryId ?? -1, id]
+    );
+
+    // Documents
+    const [documents] = await pool.query<any[]>(
+      `SELECT id, doc_name, upload_image FROM documents
+       WHERE Student_id = ?
+       ORDER BY id ASC`,
       [id]
     );
 
@@ -84,6 +107,8 @@ export async function GET(
       student: rows[0],
       placement,
       discussions,
+      documents,
+      inquiryId,
       courses,
       batches,
       statuses,
@@ -115,7 +140,7 @@ export async function PUT(
       DOB, Sex, Nationality,
       Email, Present_Mobile, Telephone,
       Present_Address, Present_City, Present_State, Present_Pin, Present_Country,
-      Permanent_Address, Permanent_State, Permanent_Country,
+      Permanent_Address, Permanent_City, Permanent_Pin, Permanent_State, Permanent_Country,
       // Academic
       Qualification, Discipline, Percentage, Course_Id,
       Batch_Code, Batch_code, Batch_Category_id,
@@ -124,7 +149,11 @@ export async function PUT(
       // Inquiry meta
       Inquiry_From, Inquiry_Type, Inquiry_Dt,
       // Status
-      Status_id,
+      Status_id, Status_date,
+      // Student portal / referral
+      Login_Password, Refered_By,
+      // Admission date
+      Admission_Dt,
     } = body;
 
     const fullName = Student_Name ||
@@ -148,6 +177,8 @@ export async function PUT(
          Present_Pin = ?,
          Present_Country = ?,
          Permanent_Address = ?,
+         Permanent_City = ?,
+         Permanent_Pin = ?,
          Permanent_State = ?,
          Permanent_Country = ?,
          Qualification = ?,
@@ -165,7 +196,11 @@ export async function PUT(
          Inquiry_From = ?,
          Inquiry_Type = ?,
          Inquiry_Dt = ?,
-         Status_id = ?
+         Admission_Dt = ?,
+         Status_id = ?,
+         Status_date = ?,
+         Login_Password = ?,
+         Refered_By = ?
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
       [
         fullName,
@@ -184,6 +219,8 @@ export async function PUT(
         Present_Pin || null,
         Present_Country || null,
         Permanent_Address || null,
+        Permanent_City || null,
+        Permanent_Pin || null,
         Permanent_State || null,
         Permanent_Country || null,
         Qualification || null,
@@ -201,7 +238,11 @@ export async function PUT(
         Inquiry_From || null,
         Inquiry_Type || null,
         Inquiry_Dt || null,
+        Admission_Dt || null,
         Status_id ? parseInt(Status_id) : null,
+        Status_date || null,
+        Login_Password || null,
+        Refered_By || null,
         id,
       ]
     );

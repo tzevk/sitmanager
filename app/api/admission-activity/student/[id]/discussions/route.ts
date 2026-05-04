@@ -15,12 +15,22 @@ export async function GET(
     const pool = getPool();
     const { id } = await params;
 
-    const [rows] = await pool.query<any[]>(
-      `SELECT id, date, discussion, created_by, created_date
-       FROM awt_inquirydiscussion
-       WHERE Inquiry_id = ? AND deleted = 0
-       ORDER BY id DESC`,
+    // Look up the actual Inquiry_Id for this student
+    const [inqRows] = await pool.query<any[]>(
+      `SELECT Inquiry_Id FROM Student_Inquiry
+       WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+       ORDER BY Inquiry_Id DESC LIMIT 1`,
       [id]
+    );
+    const inquiryId = inqRows[0]?.Inquiry_Id ?? null;
+
+    // Query by Inquiry_id OR student_id to cover both old and new records
+    const [rows] = await pool.query<any[]>(
+      `SELECT id, date, discussion, created_by, created_date, nextdate
+       FROM awt_inquirydiscussion
+       WHERE deleted = 0 AND (Inquiry_id = ? OR student_id = ?)
+       ORDER BY id DESC`,
+      [inquiryId ?? -1, id]
     );
 
     return NextResponse.json({ discussions: rows });
@@ -47,11 +57,24 @@ export async function POST(
       return NextResponse.json({ error: 'Discussion text is required' }, { status: 400 });
     }
 
+    // Look up the actual Inquiry_Id for this student
+    const [inqRows] = await pool.query<any[]>(
+      `SELECT Inquiry_Id FROM Student_Inquiry
+       WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+       ORDER BY Inquiry_Id DESC LIMIT 1`,
+      [id]
+    );
+    const inquiryId = inqRows[0]?.Inquiry_Id ?? null;
+
+    if (!inquiryId) {
+      return NextResponse.json({ error: 'No inquiry record found for this student' }, { status: 404 });
+    }
+
     const [result] = await pool.query(
       `INSERT INTO awt_inquirydiscussion
          (Inquiry_id, date, discussion, deleted, created_by, created_date)
        VALUES (?, CURDATE(), ?, 0, 1, NOW())`,
-      [id, discussion.trim()]
+      [inquiryId, discussion.trim()]
     );
 
     return NextResponse.json({ success: true, id: (result as any).insertId });
