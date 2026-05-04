@@ -43,14 +43,15 @@ export async function GET(req: NextRequest) {
     /* --- Report data --- */
     const courseId = url.searchParams.get('courseId');
     const batchId = url.searchParams.get('batchId');
-    const takeDate = url.searchParams.get('takeDate');
 
-    if (!courseId || !batchId || !takeDate) {
+    if (!courseId || !batchId) {
       return NextResponse.json(
-        { error: 'courseId, batchId and takeDate are required' },
+        { error: 'courseId and batchId are required' },
         { status: 400 }
       );
     }
+
+    const batchIdInt = parseInt(batchId);
 
     /* --- Get batch & course info --- */
     const [batchInfo] = await pool.query(
@@ -59,123 +60,115 @@ export async function GET(req: NextRequest) {
        FROM batch_mst b
        LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
        WHERE b.Batch_Id = ?`,
-      [parseInt(batchId)]
+      [batchIdInt]
     );
     const batch = (batchInfo as any[])[0] || {};
 
-    /* --- Get all lectures taken for this batch on the given date --- */
+    /* --- Get unique lectures per (date, start-time) slot ---
+         Duplicate entries exist where the same slot was entered multiple times.
+         We keep MAX(Take_Id) per (Take_Dt, Lecture_Start) so the most-recent
+         (and correct) attendance record is used. */
     const [lectures] = await pool.query(
-      `SELECT lt.Take_Id, lt.Lecture_Name, lt.Take_Dt,
-              lt.Lecture_Start, lt.Lecture_End, lt.Duration,
-              lt.ClassRoom, lt.Topic,
-              f.Faculty_Name
+      `SELECT lt.Take_Id, lt.Take_Dt, lt.Lecture_Start, lt.Lecture_End,
+              lt.Duration, lt.Topic
        FROM lecture_taken_master lt
-       LEFT JOIN faculty_master f ON lt.Faculty_Id = f.Faculty_Id
-       WHERE lt.Batch_Id = ?
-         AND lt.Take_Dt = ?
-         AND (lt.IsDelete = 0 OR lt.IsDelete IS NULL)
-       ORDER BY lt.Lecture_Start, lt.Take_Id`,
-      [parseInt(batchId), takeDate]
+       INNER JOIN (
+         SELECT MAX(Take_Id) AS Take_Id
+         FROM lecture_taken_master
+         WHERE Batch_Id = ?
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+         GROUP BY Take_Dt, Lecture_Start
+       ) dedup ON lt.Take_Id = dedup.Take_Id
+       ORDER BY lt.Take_Dt, lt.Lecture_Start`,
+      [batchIdInt]
     );
     const lectureRows = lectures as any[];
+
+    /* --- Get students enrolled in this batch via admission_master --- */
+    const [enrolledRows] = await pool.query(
+      `SELECT DISTINCT sm.Student_Id, sm.Student_Name
+       FROM admission_master am
+       JOIN student_master sm ON sm.Student_Id = am.Student_Id
+       WHERE am.Batch_Id = ?
+         AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+         AND am.IsActive = 1
+         AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+       ORDER BY sm.Student_Name`,
+      [batchIdInt]
+    );
+    const students = enrolledRows as any[];
 
     if (lectureRows.length === 0) {
       return NextResponse.json({
         batch,
         lectures: [],
-        students: [],
-        summary: { totalStudents: 0, totalLectures: 0 },
-        filters: { courseId, batchId, takeDate },
+        students,
+        attendanceMap: {},
+        studentSummary: {},
+        summary: { totalStudents: students.length, totalLectures: 0 },
+        filters: { courseId, batchId },
       });
     }
 
     const takeIds = lectureRows.map((l: any) => l.Take_Id);
 
-    /* --- Get attendance records for all lectures on that date --- */
-    const [attendance] = await pool.query(
-      `SELECT ltc.Take_Id, ltc.Student_Id, ltc.Student_Name,
-              ltc.Student_Atten, ltc.In_Time, ltc.Out_Time, ltc.Late
+    /* --- Get attendance for all lectures --- */
+    const [attendanceData] = await pool.query(
+      `SELECT ltc.Take_Id, ltc.Student_Id, ltc.Student_Atten, ltc.Late
        FROM lecture_taken_child ltc
        WHERE ltc.Take_Id IN (${takeIds.map(() => '?').join(',')})
-         AND (ltc.IsDelete = 0 OR ltc.IsDelete IS NULL)
-       ORDER BY ltc.Student_Name, ltc.Take_Id`,
+         AND (ltc.IsDelete = 0 OR ltc.IsDelete IS NULL)`,
       takeIds
     );
-    const attendanceRows = attendance as any[];
+    const attendanceRows = attendanceData as any[];
 
-    /* --- Build student-level data with per-lecture attendance --- */
-    const studentMap = new Map<number, any>();
+    /* --- Build attendance map: { [Take_Id]: { [Student_Id]: { status, late } } } --- */
+    const attendanceMap: Record<string, Record<string, { status: string; late: boolean }>> = {};
+    const summaryAcc: Record<string, { lateCount: number; presentCount: number }> = {};
 
-    for (const a of attendanceRows) {
-      if (!studentMap.has(a.Student_Id)) {
-        studentMap.set(a.Student_Id, {
-          Student_Id: a.Student_Id,
-          Student_Name: a.Student_Name,
-          lectures: {},
-          presentCount: 0,
-          absentCount: 0,
-          lateCount: 0,
-        });
-      }
-      const s = studentMap.get(a.Student_Id)!;
-      const status = (a.Student_Atten || '').trim();
-      s.lectures[a.Take_Id] = {
-        status,
-        inTime: a.In_Time || '',
-        outTime: a.Out_Time || '',
-        late: (a.Late || '').trim(),
-      };
-      if (status === 'Present') s.presentCount++;
-      else s.absentCount++;
-      if ((a.Late || '').trim() === 'Yes') s.lateCount++;
+    for (const s of students) {
+      summaryAcc[String(s.Student_Id)] = { lateCount: 0, presentCount: 0 };
     }
 
-    /* --- Build result arrays --- */
-    const students = Array.from(studentMap.values())
-      .sort((a, b) => a.Student_Name.localeCompare(b.Student_Name))
-      .map((s, idx) => ({
-        srNo: idx + 1,
-        ...s,
-        percentage: lectureRows.length > 0
-          ? Math.round((s.presentCount / lectureRows.length) * 100)
-          : 0,
-      }));
+    for (const a of attendanceRows) {
+      const takeKey = String(a.Take_Id);
+      const studKey = String(a.Student_Id);
+      if (!attendanceMap[takeKey]) attendanceMap[takeKey] = {};
+      const status = (a.Student_Atten || '').trim();
+      const late = (a.Late || '').trim() === 'Yes';
+      attendanceMap[takeKey][studKey] = { status, late };
+      if (summaryAcc[studKey]) {
+        if (status === 'Present') summaryAcc[studKey].presentCount++;
+        if (late) summaryAcc[studKey].lateCount++;
+      }
+    }
 
-    const totalStudents = students.length;
     const totalLectures = lectureRows.length;
-    const overallPresent = students.reduce((sum: number, s: any) => sum + s.presentCount, 0);
-    const overallAbsent = students.reduce((sum: number, s: any) => sum + s.absentCount, 0);
-
-    /* --- Per-lecture summary (present count per lecture) --- */
-    const lectureSummary = lectureRows.map((l: any) => {
-      const present = attendanceRows.filter(
-        (a: any) => a.Take_Id === l.Take_Id && (a.Student_Atten || '').trim() === 'Present'
-      ).length;
-      const absent = attendanceRows.filter(
-        (a: any) => a.Take_Id === l.Take_Id && (a.Student_Atten || '').trim() !== 'Present'
-      ).length;
-      return {
-        ...l,
-        presentCount: present,
-        absentCount: absent,
-        totalStudents,
+    const studentSummary: Record<string, { lateCount: number; presentCount: number; effectivePresent: number; percentage: string }> = {};
+    for (const s of students) {
+      const key = String(s.Student_Id);
+      const ss = summaryAcc[key] || { lateCount: 0, presentCount: 0 };
+      // Every 3 late marks counts as 1 absent (deducted from present count)
+      const lateDeductions = Math.floor(ss.lateCount / 3);
+      const effectivePresent = Math.max(0, ss.presentCount - lateDeductions);
+      studentSummary[key] = {
+        lateCount: ss.lateCount,
+        presentCount: ss.presentCount,
+        effectivePresent,
+        percentage: totalLectures > 0
+          ? ((effectivePresent / totalLectures) * 100).toFixed(2)
+          : '0.00',
       };
-    });
+    }
 
     return NextResponse.json({
       batch,
-      lectures: lectureSummary,
+      lectures: lectureRows,
       students,
-      summary: {
-        totalStudents,
-        totalLectures,
-        overallPresent,
-        overallAbsent,
-        averageAttendance: totalStudents > 0 && totalLectures > 0
-          ? Math.round((overallPresent / (totalStudents * totalLectures)) * 100)
-          : 0,
-      },
-      filters: { courseId, batchId, takeDate },
+      attendanceMap,
+      studentSummary,
+      summary: { totalStudents: students.length, totalLectures },
+      filters: { courseId, batchId },
     });
   } catch (err: any) {
     console.error('Attendance report error:', err);

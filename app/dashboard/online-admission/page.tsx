@@ -16,6 +16,7 @@ interface AdmissionRow {
   Admission_Date: string | null;
   Status_id: number | null;
   StatusLabel: string;
+  StatusCategory: string;
   Cancel: string | null;
   IsActive: number;
 }
@@ -115,19 +116,16 @@ export default function OnlineAdmissionPage() {
     URL.revokeObjectURL(url);
   };
 
-  const statusColor = (label: string) => {
-    const l = label.toLowerCase();
-    if (l === 'accepted') return 'text-emerald-600';
-    if (l === 'closed') return 'text-red-500';
-    if (l === 'open') return 'text-black';
-    return 'text-black';
+  const rowTextColor = (category: string) => {
+    if (category === 'accepted') return 'text-emerald-700';
+    if (category === 'closed') return 'text-red-600';
+    return 'text-slate-700';
   };
 
-  const statusRowTextColor = (label: string) => {
-    const l = label.toLowerCase();
-    if (l === 'accepted') return 'text-emerald-500';
-    if (l === 'closed') return 'text-red-500';
-    return 'text-black';
+  const statusBadgeCls = (category: string) => {
+    if (category === 'accepted') return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+    if (category === 'closed') return 'bg-red-50 text-red-600 border border-red-200';
+    return 'bg-amber-50 text-amber-700 border border-amber-200';
   };
 
   const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
@@ -202,7 +200,7 @@ export default function OnlineAdmissionPage() {
               ) : rows.length === 0 ? (
                 <tr><td colSpan={8} className="py-10 text-center text-xs text-slate-400">No admissions found</td></tr>
               ) : rows.map(r => {
-                const tone = statusRowTextColor(r.StatusLabel);
+                const tone = rowTextColor(r.StatusCategory);
                 return (
                   <tr key={r.Admission_Id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                     <td className={`py-1.5 px-3 font-mono ${tone}`}>{r.Admission_Id}</td>
@@ -217,7 +215,11 @@ export default function OnlineAdmissionPage() {
                     <td className={`py-1.5 px-3 whitespace-nowrap ${tone}`}>
                       {r.Admission_Date ? new Date(r.Admission_Date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'}
                     </td>
-                    <td className={`py-1.5 px-3 text-center font-semibold ${statusColor(r.StatusLabel)}`}>{r.StatusLabel}</td>
+                    <td className="py-1.5 px-3 text-center">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusBadgeCls(r.StatusCategory)}`}>
+                        {r.StatusLabel}
+                      </span>
+                    </td>
                     <td className="py-1.5 px-3">
                       <div className="flex items-center justify-center gap-0.5">
                         <button title="View" className="p-1 rounded hover:bg-blue-50 text-slate-300 hover:text-[#2A6BB5] transition-colors">

@@ -346,6 +346,7 @@ export default function InquiryPage() {
                 <th className="text-left py-2 px-3 font-bold">Discipline</th>
                 <th className="text-left py-2 px-3 font-bold">Type</th>
                 <th className="text-left py-2 px-3 font-bold">Date</th>
+                <th className="text-left py-2 px-3 font-bold">Last Discussion</th>
                 <th className="text-center py-2 px-3 font-bold">Status</th>
                 <th className="text-center py-2 px-3 font-bold">Actions</th>
               </tr>
@@ -353,7 +354,7 @@ export default function InquiryPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center">
+                  <td colSpan={11} className="py-10 text-center">
                     <div className="inline-flex flex-col items-center gap-1.5">
                       <div className="w-6 h-6 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                       <span className="text-xs text-slate-400">Loading…</span>
@@ -362,7 +363,7 @@ export default function InquiryPage() {
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center text-xs text-slate-400">No inquiries found</td>
+                  <td colSpan={11} className="py-10 text-center text-xs text-slate-400">No inquiries found</td>
                 </tr>
               ) : rows.map((r, i) => {
                 const attended = hasLatestFollowUp(r);
@@ -388,6 +389,28 @@ export default function InquiryPage() {
                     </td>
                     <td className="py-1.5 px-3 whitespace-nowrap">{r.Inquiry_Type || r.Inquiry_From || '—'}</td>
                     <td className="py-1.5 px-3 whitespace-nowrap">{formatDate(r.Inquiry_Dt)}</td>
+                    <td className="py-1.5 px-3 max-w-[220px]">
+                      {(() => {
+                        const raw = (r.Discussion || '').trim();
+                        if (!raw || raw === 'NULL') return <span className="text-slate-300">—</span>;
+                        // Parse "counsellor - note" format
+                        const dashIdx = raw.indexOf(' - ');
+                        const hasCounsellor = dashIdx > 0 && dashIdx < 30;
+                        const counsellor = hasCounsellor ? raw.slice(0, dashIdx).trim() : null;
+                        const note = hasCounsellor ? raw.slice(dashIdx + 3).trim() : raw;
+                        return (
+                          <div className="flex flex-col gap-0.5">
+                            {counsellor && (
+                              <span className="inline-flex items-center gap-1">
+                                <span className="text-[9px] font-bold uppercase tracking-wide bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full max-w-[80px] truncate">{counsellor}</span>
+                                {r.DiscussionDate && <span className="text-[9px] text-slate-400 whitespace-nowrap">{formatDate(r.DiscussionDate)}</span>}
+                              </span>
+                            )}
+                            <span className="line-clamp-2 text-slate-600 leading-snug">{note}</span>
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td className="py-1.5 px-3 text-center">
                       <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(r.Status_id, r.StatusLabel)}`}>
                         {r.StatusLabel}

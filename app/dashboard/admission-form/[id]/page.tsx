@@ -229,13 +229,27 @@ export default function AdmissionFormPage() {
       const res = await fetch(`/api/inquiry?id=${studentId}`);
       const data = await res.json();
       if (data.inquiry) {
-        // Pre-fill form with existing data
+        // Pre-fill form with existing data — normalize DOB for input[type=date]
+        const normalizeDateForInput = (v: any) => {
+          if (!v && v !== 0) return '';
+          const s = String(v).trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+          if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
+          if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+            const [dd, mm, yyyy] = s.split('/');
+            return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+          }
+          const dt = new Date(s);
+          if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
+          return '';
+        };
+
         setFormData(prev => ({
           ...prev,
           fullName: data.inquiry.Student_Name || '',
           email: data.inquiry.Email || '',
           mobile: data.inquiry.Present_Mobile || '',
-          dob: data.inquiry.DOB || '',
+          dob: normalizeDateForInput(data.inquiry.DOB || data.inquiry.dob),
           gender: data.inquiry.Sex || '',
           nationality: data.inquiry.Nationality || 'Indian',
           batchCode: data.inquiry.Batch_Code || '',

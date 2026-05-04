@@ -108,6 +108,8 @@ export default function AddInquiryPage() {
   const [newDiscussion, setNewDiscussion] = useState('');
   const [newNextDate, setNewNextDate] = useState(today());
   const [discLoading, setDiscLoading] = useState(false);
+  const [editingDiscId, setEditingDiscId] = useState<number | null>(null);
+  const [editingDiscText, setEditingDiscText] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -215,6 +217,27 @@ export default function AddInquiryPage() {
       setNewDiscussion(''); setNewNextDate(today()); fetchDiscussions();
     } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed'); }
     setDiscLoading(false);
+  };
+
+  const handleSaveEditDisc = async (id: number) => {
+    if (!editingDiscText.trim()) return;
+    try {
+      const res = await fetch('/api/inquiry/discussions', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, discussion: editingDiscText }),
+      });
+      if (!res.ok) throw new Error('Failed to update');
+      setEditingDiscId(null); setEditingDiscText(''); fetchDiscussions();
+    } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed'); }
+  };
+
+  const handleDeleteDisc = async (id: number) => {
+    if (!confirm('Delete this discussion entry?')) return;
+    try {
+      const res = await fetch(`/api/inquiry/discussions?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete');
+      fetchDiscussions();
+    } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed'); }
   };
 
   const openMailModal = () => {
@@ -478,11 +501,56 @@ export default function AddInquiryPage() {
                           {i < discussions.length - 1 && <div className="w-px flex-1 bg-slate-200 mt-1" />}
                         </div>
                         <div className="flex-1 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100 mb-1">
-                          <p className="text-xs text-slate-800">{d.discussion}</p>
-                          <div className="flex gap-4 mt-1">
-                            <span className="text-[10px] text-slate-400">Date: <span className="text-slate-600 font-medium">{fmtDate(d.date)}</span></span>
-                            <span className="text-[10px] text-slate-400">Follow-up: <span className="text-[#2E3093] font-medium">{fmtDate(d.nextdate)}</span></span>
-                          </div>
+                          {editingDiscId === d.id ? (
+                            <div className="space-y-2">
+                              <textarea
+                                value={editingDiscText}
+                                onChange={(e) => setEditingDiscText(e.target.value)}
+                                rows={3}
+                                className="w-full text-xs border border-slate-300 rounded-md p-2 resize-none focus:outline-none focus:ring-2 focus:ring-[#2E3093]"
+                              />
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleSaveEditDisc(d.id)}
+                                  className="px-2.5 py-1 text-[10px] font-semibold bg-[#2E3093] text-white rounded hover:bg-[#252780] transition-colors"
+                                >Save</button>
+                                <button
+                                  onClick={() => { setEditingDiscId(null); setEditingDiscText(''); }}
+                                  className="px-2.5 py-1 text-[10px] font-semibold bg-white text-slate-600 border border-slate-300 rounded hover:bg-slate-50 transition-colors"
+                                >Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-xs text-slate-800 flex-1">{d.discussion}</p>
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button
+                                    onClick={() => { setEditingDiscId(d.id); setEditingDiscText(d.discussion); }}
+                                    title="Edit"
+                                    className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-[#2E3093] transition-colors"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 0l.172.172a2 2 0 010 2.828L12 16H9v-3z" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteDisc(d.id)}
+                                    title="Delete"
+                                    className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-red-500 transition-colors"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex gap-4 mt-1">
+                                <span className="text-[10px] text-slate-400">Date: <span className="text-slate-600 font-medium">{fmtDate(d.date)}</span></span>
+                                <span className="text-[10px] text-slate-400">Follow-up: <span className="text-[#2E3093] font-medium">{fmtDate(d.nextdate)}</span></span>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     ))}

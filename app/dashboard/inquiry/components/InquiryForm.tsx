@@ -91,6 +91,8 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
   const [newDiscussion, setNewDiscussion] = useState('');
   const [discussionLoading, setDiscussionLoading] = useState(false);
+  const [editingDiscussionId, setEditingDiscussionId] = useState<number | null>(null);
+  const [editingDiscussionText, setEditingDiscussionText] = useState('');
 
   /* ui state */
   const [saving, setSaving] = useState(false);
@@ -208,6 +210,34 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
       setError(err.message);
     }
     setDiscussionLoading(false);
+  };
+
+  const handleSaveEditDiscussion = async (id: number) => {
+    if (!editingDiscussionText.trim()) return;
+    try {
+      const res = await fetch('/api/inquiry/discussions', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, discussion: editingDiscussionText }),
+      });
+      if (!res.ok) throw new Error('Failed to update');
+      setEditingDiscussionId(null);
+      setEditingDiscussionText('');
+      fetchDiscussions();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteDiscussion = async (id: number) => {
+    if (!confirm('Delete this discussion entry?')) return;
+    try {
+      const res = await fetch(`/api/inquiry/discussions?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete');
+      fetchDiscussions();
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
 
   const handleSendAdmissionForm = async () => {
@@ -737,16 +767,65 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
                             key={d.id}
                             className="bg-gray-50 rounded-lg p-3 border border-gray-100"
                           >
-                            <p className="text-sm text-gray-700">{d.discussion}</p>
-                            <p className="text-[11px] text-gray-400 mt-1.5">
-                              {d.date
-                                ? new Date(d.date).toLocaleDateString('en-IN', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric',
-                                  })
-                                : '—'}
-                            </p>
+                            {editingDiscussionId === d.id ? (
+                              <div className="space-y-2">
+                                <textarea
+                                  value={editingDiscussionText}
+                                  onChange={(e) => setEditingDiscussionText(e.target.value)}
+                                  rows={3}
+                                  className="w-full text-sm border border-gray-300 rounded-md p-2 resize-none focus:outline-none focus:ring-2 focus:ring-[#2E3093]"
+                                />
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleSaveEditDiscussion(d.id)}
+                                    className="px-3 py-1 text-xs font-semibold bg-[#2E3093] text-white rounded-md hover:bg-[#252780] transition-colors"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    onClick={() => { setEditingDiscussionId(null); setEditingDiscussionText(''); }}
+                                    className="px-3 py-1 text-xs font-semibold bg-white text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-sm text-gray-700 flex-1">{d.discussion}</p>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                      onClick={() => { setEditingDiscussionId(d.id); setEditingDiscussionText(d.discussion); }}
+                                      title="Edit"
+                                      className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-[#2E3093] transition-colors"
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 0l.172.172a2 2 0 010 2.828L12 16H9v-3z" />
+                                      </svg>
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteDiscussion(d.id)}
+                                      title="Delete"
+                                      className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-red-500 transition-colors"
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                </div>
+                                <p className="text-[11px] text-gray-400 mt-1.5">
+                                  {d.date
+                                    ? new Date(d.date).toLocaleDateString('en-IN', {
+                                        day: '2-digit',
+                                        month: 'short',
+                                        year: 'numeric',
+                                      })
+                                    : '—'}
+                                </p>
+                              </>
+                            )}
                           </div>
                         ))}
                       </div>

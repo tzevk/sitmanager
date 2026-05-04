@@ -40,6 +40,7 @@ export default function PublicAdmissionFormPage() {
   const forcedStep = Number(searchParams.get('step') || '0');
 
   const [submitted, setSubmitted] = useState(false);
+  const [submittedStudentId, setSubmittedStudentId] = useState<number | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -227,7 +228,23 @@ export default function PublicAdmissionFormPage() {
       const raw = localStorage.getItem(draftKey);
       if (!raw) return;
       const { data } = JSON.parse(raw) as { data: typeof formData };
-      if (data) setFormData(prev => ({ ...prev, ...data }));
+      if (data) {
+        const normalizeDateForInput = (v: any) => {
+          if (!v && v !== 0) return '';
+          const s = String(v).trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+          if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
+          if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+            const [dd, mm, yyyy] = s.split('/');
+            return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+          }
+          const dt = new Date(s);
+          if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
+          return '';
+        };
+        const patched = { ...data, dob: normalizeDateForInput((data as any).dob) };
+        setFormData(prev => ({ ...prev, ...patched }));
+      }
     } catch { /* ignore corrupt draft */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
@@ -489,6 +506,16 @@ export default function PublicAdmissionFormPage() {
           return false;
         }
         break;
+      case 3:
+        if (!formData.trainingProgrammeId || !formData.trainingProgrammeName) {
+          alert('Please select a Training Programme');
+          return false;
+        }
+        if (!formData.batchCode) {
+          alert('Please select a Batch');
+          return false;
+        }
+        break;
       case 5:
         if (!formData.modeOfPayment) {
           alert('Please select a Mode of Payment');
@@ -541,6 +568,11 @@ export default function PublicAdmissionFormPage() {
       setCurrentStep(2);
       return;
     }
+    if (!formData.trainingProgrammeId || !formData.batchCode) {
+      alert('Please complete Step 3: Select a Training Programme and Batch');
+      setCurrentStep(3);
+      return;
+    }
     if (!formData.modeOfPayment) {
       alert('Please complete Step 5: Select a Mode of Payment');
       setCurrentStep(5);
@@ -568,12 +600,22 @@ export default function PublicAdmissionFormPage() {
         mobile: formData.mobile,
         telephone: formData.telephone,
         familyContact: formData.familyContact,
+        presentFlat: formData.presentFlat,
+        presentBuilding: formData.presentBuilding,
+        presentStreet: formData.presentStreet,
+        presentArea: formData.presentArea,
+        presentLandmark: formData.presentLandmark,
         presentAddress: [formData.presentFlat, formData.presentBuilding, formData.presentStreet, formData.presentArea, formData.presentLandmark].filter(Boolean).join(', '),
         presentCity: formData.presentCity,
         presentDistrict: formData.presentDistrict,
         presentState: formData.presentState,
         presentPin: formData.presentPin,
         presentCountry: formData.presentCountry,
+        permanentFlat: formData.permanentFlat,
+        permanentBuilding: formData.permanentBuilding,
+        permanentStreet: formData.permanentStreet,
+        permanentArea: formData.permanentArea,
+        permanentLandmark: formData.permanentLandmark,
         permanentAddress: [formData.permanentFlat, formData.permanentBuilding, formData.permanentStreet, formData.permanentArea, formData.permanentLandmark].filter(Boolean).join(', '),
         permanentCity: formData.permanentCity,
         permanentDistrict: formData.permanentDistrict,
@@ -623,12 +665,16 @@ export default function PublicAdmissionFormPage() {
         workingFromMonths: formData.workingFromMonths,
         totalOccupationYears: formData.totalOccupationYears,
         selfEmploymentDetails: formData.selfEmploymentDetails,
+        trainingProgrammeId: formData.trainingProgrammeId,
         trainingProgrammeName: formData.trainingProgrammeName,
         trainingCategory: formData.trainingCategory,
         batchCode: formData.batchCode,
         modeOfPayment: formData.modeOfPayment,
+        sameAsPresent: formData.sameAsPresent,
         consentAcknowledged: consentAcknowledged,
         experiencedConsentAcknowledged: experiencedConsentAcknowledged,
+        consentChecks: consentChecks,
+        consentData: consentData,
         termsAgreed: formData.termsAgreed,
       };
 
@@ -641,6 +687,7 @@ export default function PublicAdmissionFormPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
+        setSubmittedStudentId(data.inquiryId ?? data.studentId ?? null);
         setSubmitted(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
@@ -709,7 +756,7 @@ export default function PublicAdmissionFormPage() {
               </ul>
             </div>
             <p className="text-xs text-gray-500">
-              Application ID: <span className="font-mono font-semibold text-gray-700">#{studentId}</span>
+              Application ID: <span className="font-mono font-semibold text-gray-700">#{submittedStudentId ?? studentId}</span>
             </p>
           </div>
         </div>
@@ -983,42 +1030,14 @@ export default function PublicAdmissionFormPage() {
                           </div>
                           <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Date of Birth <span className="text-red-500">*</span></label>
-                            {/* DD / MM / YYYY selects — browser-locale-independent */}
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
-                              {(() => {
-                                const [yyyy = '', mm = '', dd = ''] = (formData.dob || '').split('-');
-                                const selCls = 'w-full sm:flex-1 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all bg-white';
-                                const emit = (ndd: string, nmm: string, nyyyy: string) => {
-                                  if (ndd && nmm && nyyyy && nyyyy.length === 4)
-                                    handleChange('dob', `${nyyyy}-${nmm}-${ndd}`);
-                                  else
-                                    handleChange('dob', '');
-                                };
-                                return (
-                                  <>
-                                    <select value={dd} onChange={(e) => emit(e.target.value, mm, yyyy)} className={selCls} required>
-                                      <option value="">DD</option>
-                                      {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
-                                        <option key={d} value={String(d).padStart(2, '0')}>{String(d).padStart(2, '0')}</option>
-                                      ))}
-                                    </select>
-                                    <span className="text-gray-400 font-semibold hidden sm:inline">/</span>
-                                    <select value={mm} onChange={(e) => emit(dd, e.target.value, yyyy)} className={selCls} required>
-                                      <option value="">MM</option>
-                                      {['01','02','03','04','05','06','07','08','09','10','11','12'].map((m, idx) => (
-                                        <option key={m} value={m}>{['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][idx]}</option>
-                                      ))}
-                                    </select>
-                                    <span className="text-gray-400 font-semibold hidden sm:inline">/</span>
-                                    <select value={yyyy} onChange={(e) => emit(dd, mm, e.target.value)} className={selCls} required>
-                                      <option value="">YYYY</option>
-                                      {Array.from({ length: 60 }, (_, i) => new Date().getFullYear() - 15 - i).map(y => (
-                                        <option key={y} value={String(y)}>{y}</option>
-                                      ))}
-                                    </select>
-                                  </>
-                                );
-                              })()}
+                            <div className="flex">
+                              <input
+                                type="date"
+                                value={formData.dob || ''}
+                                onChange={(e) => handleChange('dob', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all"
+                                required
+                              />
                             </div>
                           </div>
                           <div>

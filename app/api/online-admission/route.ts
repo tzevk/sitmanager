@@ -2,602 +2,369 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { apiRateLimiter } from '@/lib/rate-limit';
 import { sendOnlineAdmissionSubmissionEmail } from '@/lib/mailer';
-import { getTableCols } from '@/lib/db-schema';
-
-/* fallback labels for older DBs */
-const fallbackStatusMap: Record<number, string> = {
-  0: 'New Inquiry',
-  1: 'Follow Up',
-  2: 'Interested',
-  3: 'Confirmed',
-  4: 'Not Interested',
-  5: 'Batch Started',
-  6: 'Batch Completed',
-  7: 'Cancelled',
-  8: 'Admitted',
-  9: 'Left',
-  10: 'On Hold',
-  12: 'Prospective',
-  13: 'Walk In',
-  15: 'Re-inquiry',
-  16: 'Demo Attended',
-  17: 'Demo Scheduled',
-  19: 'Online Inquiry',
-  23: 'Document Pending',
-  24: 'Fees Pending',
-  25: 'Transfer',
-  26: 'Need Based Training',
-  27: 'Duplicate',
-  29: 'Corporate',
-  34: 'Assessment Done',
-  35: 'Refund',
-  40: 'Counselling Done',
-};
 
 const ONLINE_ADMISSION_PAYLOAD_TABLE = 'online_admission_payload';
 
-const toIntOrNull = (value: unknown): number | null => {
-  const n = Number(value);
-  return Number.isFinite(n) ? Math.trunc(n) : null;
+// Cache the schema-check across requests so we don't run INFORMATION_SCHEMA
+// queries on every page load. Reset on hot-reload (module re-evaluates).
+let payloadTableReady = false;
+
+// MySQL "zero" datetime values surface as '0000-00-00 00:00:00' or epoch — both
+// produce Invalid Date in JS. Normalize to null so the UI shows '—'.
+function safeDate(value: unknown): string | null {
+  if (value == null) return null;
+  const s = String(value);
+  if (!s || s.startsWith('0000-')) return null;
+  const t = new Date(s).getTime();
+  if (!Number.isFinite(t) || t <= 0) return null;
+  return s;
+}
+
+const fallbackStatusMap: Record<number, string> = {
+  0: 'New Inquiry', 1: 'Follow Up', 2: 'Interested', 3: 'Confirmed',
+  4: 'Not Interested', 5: 'Batch Started', 6: 'Batch Completed',
+  7: 'Cancelled', 8: 'Admitted', 9: 'Left', 10: 'On Hold',
+  12: 'Prospective', 13: 'Walk In', 15: 'Re-inquiry',
+  16: 'Demo Attended', 17: 'Demo Scheduled', 19: 'Online Inquiry',
+  23: 'Document Pending', 24: 'Fees Pending', 25: 'Transfer',
+  26: 'Need Based Training', 27: 'Duplicate', 29: 'Corporate',
+  34: 'Assessment Done', 35: 'Refund', 40: 'Counselling Done',
 };
 
-const toStr = (value: unknown): string => (value == null ? '' : String(value));
+async function ensurePayloadTable(pool: any) {
+  if (payloadTableReady) return;
 
-async function ensureOnlineAdmissionPayloadTable(pool: any) {
+  try {
+    const [pkRows] = await pool.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = 'PRIMARY'
+       LIMIT 1`,
+      [ONLINE_ADMISSION_PAYLOAD_TABLE]
+    ) as [any[], any];
+
+    const pkCol: string = String((pkRows as any[])[0]?.COLUMN_NAME ?? '');
+
+    if (pkCol && pkCol !== 'Inquiry_Id') {
+      console.log(`[online_admission_payload] dropping old schema (PK was ${pkCol})`);
+      await pool.query(`DROP TABLE ${ONLINE_ADMISSION_PAYLOAD_TABLE}`);
+    }
+  } catch {
+    // Table doesn't exist yet — CREATE below handles it
+  }
+
   await pool.query(
     `CREATE TABLE IF NOT EXISTS ${ONLINE_ADMISSION_PAYLOAD_TABLE} (
-      Student_Id INT NOT NULL PRIMARY KEY,
-      Payload LONGTEXT NULL,
+      Inquiry_Id INT NOT NULL PRIMARY KEY,
+      Payload    LONGTEXT NULL,
       Created_At DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       Updated_At DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   );
+
+  payloadTableReady = true;
 }
 
-async function upsertOnlineAdmissionPayload(pool: any, studentId: number, body: any) {
-  await ensureOnlineAdmissionPayloadTable(pool);
+async function savePayload(pool: any, inquiryId: number, body: any) {
+  await ensurePayloadTable(pool);
   await pool.query(
-    `INSERT INTO ${ONLINE_ADMISSION_PAYLOAD_TABLE} (Student_Id, Payload)
+    `INSERT INTO ${ONLINE_ADMISSION_PAYLOAD_TABLE} (Inquiry_Id, Payload)
      VALUES (?, ?)
-     ON DUPLICATE KEY UPDATE Payload = VALUES(Payload)`,
-    [studentId, JSON.stringify(body)]
+     ON DUPLICATE KEY UPDATE Payload = VALUES(Payload), Updated_At = NOW()`,
+    [inquiryId, JSON.stringify(body)]
   );
 }
 
-function buildAcademicRows(body: any, studentId: number) {
-  const rows = [
-    {
-      qualification: 'SSC',
-      discipline: toStr(body.ssc_board),
-      institute: toStr(body.ssc_schoolName),
-      year: toStr(body.ssc_yearOfPassing),
-      marks: toStr(body.ssc_percentage),
-      totalKt: toIntOrNull(body.ssc_ktCount) ?? 0,
-      statusRemark: JSON.stringify({
-        level: 'ssc',
-        board: toStr(body.ssc_board),
-        ktDetails: Array.isArray(body.ssc_ktDetails) ? body.ssc_ktDetails : [],
-      }),
-    },
-    {
-      qualification: 'HSC',
-      discipline: toStr(body.hsc_stream || body.hsc_board),
-      institute: toStr(body.hsc_collegeName),
-      year: toStr(body.hsc_yearOfPassing),
-      marks: toStr(body.hsc_percentage),
-      totalKt: toIntOrNull(body.hsc_ktCount) ?? 0,
-      statusRemark: JSON.stringify({
-        level: 'hsc',
-        board: toStr(body.hsc_board),
-        stream: toStr(body.hsc_stream),
-        ktDetails: Array.isArray(body.hsc_ktDetails) ? body.hsc_ktDetails : [],
-      }),
-    },
-    {
-      qualification: 'Diploma',
-      discipline: toStr(body.diploma_specialization || body.diploma_degree),
-      institute: toStr(body.diploma_institute),
-      year: toStr(body.diploma_yearOfPassing),
-      marks: toStr(body.diploma_percentage),
-      totalKt: toIntOrNull(body.diploma_ktCount) ?? 0,
-      statusRemark: JSON.stringify({
-        level: 'diploma',
-        degree: toStr(body.diploma_degree),
-        ktDetails: Array.isArray(body.diploma_ktDetails) ? body.diploma_ktDetails : [],
-      }),
-    },
-    {
-      qualification: 'Graduation',
-      discipline: toStr(body.grad_specialization || body.grad_degree),
-      institute: toStr(body.grad_university),
-      year: toStr(body.grad_yearOfPassing),
-      marks: toStr(body.grad_percentage),
-      totalKt: toIntOrNull(body.grad_ktCount) ?? 0,
-      statusRemark: JSON.stringify({
-        level: 'graduation',
-        degree: toStr(body.grad_degree),
-        ktDetails: Array.isArray(body.grad_ktDetails) ? body.grad_ktDetails : [],
-      }),
-    },
-    {
-      qualification: 'Post Graduation',
-      discipline: toStr(body.postgrad_specialization || body.postgrad_degree),
-      institute: toStr(body.postgrad_university),
-      year: toStr(body.postgrad_yearOfPassing),
-      marks: toStr(body.postgrad_percentage),
-      totalKt: toIntOrNull(body.postgrad_ktCount) ?? 0,
-      statusRemark: JSON.stringify({
-        level: 'postgrad',
-        degree: toStr(body.postgrad_degree),
-        ktDetails: Array.isArray(body.postgrad_ktDetails) ? body.postgrad_ktDetails : [],
-      }),
-    },
-  ];
-
-  return rows
-    .filter((r) => r.institute || r.year || r.marks || r.discipline)
-    .map((r) => ({ ...r, studentId }));
-}
-
-async function upsertAcademicRecords(pool: any, studentId: number, body: any) {
-  try {
-    const acaCols = await getTableCols(pool, 'student_master_aca_rec');
-    if (acaCols.size === 0) return; // table doesn't exist
-
-    const hasKt = acaCols.has('Total_KT');
-    const hasStatusRemark = acaCols.has('Status_Remark');
-    const academicRows = buildAcademicRows(body, studentId);
-
-    await pool.query('DELETE FROM student_master_aca_rec WHERE Student_Id = ?', [studentId]);
-
-    for (const row of academicRows) {
-      if (hasKt && hasStatusRemark) {
-        await pool.query(
-          `INSERT INTO student_master_aca_rec
-             (Student_Id, Aca_Qualification, Discipline, Institute, Year, Marks, IsActive, IsDelete, Status_Remark, Total_KT)
-           VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
-          [row.studentId, row.qualification, row.discipline || null, row.institute || null,
-           row.year || null, row.marks || null, row.statusRemark, row.totalKt]
-        );
-      } else if (hasStatusRemark) {
-        await pool.query(
-          `INSERT INTO student_master_aca_rec
-             (Student_Id, Aca_Qualification, Discipline, Institute, Year, Marks, IsActive, IsDelete, Status_Remark)
-           VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?)`,
-          [row.studentId, row.qualification, row.discipline || null, row.institute || null,
-           row.year || null, row.marks || null, row.statusRemark]
-        );
-      } else {
-        await pool.query(
-          `INSERT INTO student_master_aca_rec
-             (Student_Id, Aca_Qualification, Discipline, Institute, Year, Marks, IsActive, IsDelete)
-           VALUES (?, ?, ?, ?, ?, ?, 1, 0)`,
-          [row.studentId, row.qualification, row.discipline || null, row.institute || null,
-           row.year || null, row.marks || null]
-        );
-      }
-    }
-  } catch (err: any) {
-    console.warn('upsertAcademicRecords skipped:', err?.message);
-  }
-}
-
+/* ─── GET — listing ─────────────────────────────────────────────────────── */
 export async function GET(req: NextRequest) {
   try {
+    const rateLimited = apiRateLimiter(req);
+    if (rateLimited) return rateLimited;
+
     const auth = await requirePermission(req, 'online_admission.view');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
     const { searchParams } = new URL(req.url);
 
-    const page = Math.max(1, Number(searchParams.get('page')) || 1);
-    const limit = Math.min(100, Math.max(10, Number(searchParams.get('limit')) || 25));
+    const page   = Math.max(1, Number(searchParams.get('page'))  || 1);
+    const limit  = Math.min(100, Math.max(10, Number(searchParams.get('limit')) || 25));
     const offset = (page - 1) * limit;
+    // Cap rows pulled from each source so we don't ship the whole table for
+    // an admin listing. Sort/paginate happens in JS after the merge.
+    const fetchCap = Math.min(2000, offset + limit * 4);
 
-    const search = searchParams.get('search')?.trim() || '';
+    const search         = searchParams.get('search')?.trim()  || '';
     const statusCategory = (searchParams.get('statusCategory') || '').trim().toLowerCase();
-    const dateFrom = searchParams.get('dateFrom') || '';
-    const dateTo = searchParams.get('dateTo') || '';
+    const dateFrom       = searchParams.get('dateFrom') || '';
+    const dateTo         = searchParams.get('dateTo')   || '';
 
-    // Discover which optional columns actually exist in this DB
-    const smCols = await getTableCols(pool, 'student_master');
-    const hasAdmission    = smCols.has('Admission');
-    const hasAdmissionDt  = smCols.has('Admission_Dt');
-    const hasBatchCode    = smCols.has('Batch_Code');
+    await ensurePayloadTable(pool);
 
-    const statusIdExpr = `CAST(NULLIF(TRIM(CAST(s.Status_id AS CHAR)), '') AS UNSIGNED)`;
-    const statusTextExpr = `LOWER(TRIM(COALESCE(stm.Status, '')))`;
-    const closedExpr = `(${statusTextExpr} LIKE '%closed%' OR ${statusTextExpr} REGEXP 'declin|reject|cancel|not interested|drop|left')`;
-    const acceptedExpr = `(${statusTextExpr} LIKE '%accepted%' OR ${statusTextExpr} LIKE '%admitted%' OR ${statusTextExpr} LIKE '%confirm%')`;
-    const openExpr = `(${statusTextExpr} LIKE '%open%' OR ${statusTextExpr} LIKE '%pending%')`;
-
-    /* ---- Build admission filter (only include columns that exist) ---- */
-    const admissionParts = ['s.Status_id = 8'];
-    if (hasAdmission)   admissionParts.push('s.Admission = 1');
-    if (hasAdmissionDt) admissionParts.push('s.Admission_Dt IS NOT NULL');
-    const admissionCond = `(${admissionParts.join(' OR ')})`;
-
-    /* ---- Build WHERE ---- */
-    const conditions: string[] = [
-      '(s.IsDelete = 0 OR s.IsDelete IS NULL)',
-      admissionCond,
+    /* ---- New entries: have a payload record ---- */
+    const newConditions: string[] = [
+      `(si.IsDelete = 0 OR si.IsDelete IS NULL)`,
     ];
-    const params: (string | number)[] = [];
+    const newParams: (string | number)[] = [];
 
     if (search) {
-      const searchParts = ['s.Student_Name LIKE ?', 's.Email LIKE ?', 's.Present_Mobile LIKE ?'];
+      newConditions.push(
+        `(si.Student_Name LIKE ? OR si.Email LIKE ? OR si.Present_Mobile LIKE ? OR CAST(si.Inquiry_Id AS CHAR) LIKE ?)`
+      );
       const like = `%${search}%`;
-      const searchVals: string[] = [like, like, like];
-      if (hasBatchCode) { searchParts.push('s.Batch_Code LIKE ?'); searchVals.push(like); }
-      conditions.push(`(${searchParts.join(' OR ')})`);
-      params.push(...searchVals);
+      newParams.push(like, like, like, like);
+    }
+    if (dateFrom) { newConditions.push('oap.Created_At >= ?'); newParams.push(dateFrom); }
+    if (dateTo)   { newConditions.push('oap.Created_At <= ?'); newParams.push(dateTo); }
+
+    const [newRows] = await pool.query<any[]>(
+      `SELECT
+         si.Inquiry_Id                                        AS Inquiry_Id,
+         COALESCE(si.Student_Name, sm.Student_Name, '')       AS Student_Name,
+         COALESCE(si.Email, sm.Email, '')                     AS Email,
+         COALESCE(si.Present_Mobile, sm.Present_Mobile, '')   AS Present_Mobile,
+         COALESCE(sm.Batch_Code, si.Batch_Code, '')           AS Batch_code,
+         COALESCE(sm.Admission_Dt, oap.Created_At)            AS Admission_Date,
+         COALESCE(sm.Status_id, si.OnlineState)               AS Status_id,
+         COALESCE(stm_sm.Status, stm_si.Status, '')           AS StatusText
+       FROM ${ONLINE_ADMISSION_PAYLOAD_TABLE} oap
+       JOIN Student_Inquiry si ON si.Inquiry_Id = oap.Inquiry_Id
+       LEFT JOIN student_master sm
+         ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+       LEFT JOIN Status_Master stm_sm ON stm_sm.Id = sm.Status_id
+       LEFT JOIN Status_Master stm_si ON stm_si.Id = si.OnlineState
+       WHERE ${newConditions.join(' AND ')}
+       ORDER BY oap.Created_At DESC
+       LIMIT ?`,
+      [...newParams, fetchCap]
+    );
+
+    /* ---- Link-sent entries: Student_Inquiry with admission_done=2 (admission link sent) ----
+       Status comes from student_master.Status_id which tracks the actual admission state:
+       8=Admission Taken / 9=Accepted → green, 5=Closed → red, else → open/black. */
+    let oldRows: any[] = [];
+    try {
+      const oldConditions: string[] = [
+        `si.admission_done = 2`,
+        `si.Student_Id IS NOT NULL`,
+        `(si.IsDelete = 0 OR si.IsDelete IS NULL)`,
+        `NOT EXISTS (
+           SELECT 1 FROM ${ONLINE_ADMISSION_PAYLOAD_TABLE} oap2
+           WHERE oap2.Inquiry_Id = si.Inquiry_Id
+         )`,
+      ];
+      const oldParams: (string | number)[] = [];
+
+      if (search) {
+        oldConditions.push(
+          `(si.Student_Name LIKE ? OR sm.Student_Name LIKE ? OR si.Email LIKE ? OR sm.Email LIKE ? OR si.Present_Mobile LIKE ? OR sm.Present_Mobile LIKE ? OR CAST(si.Inquiry_Id AS CHAR) LIKE ?)`
+        );
+        const like = `%${search}%`;
+        oldParams.push(like, like, like, like, like, like, like);
+      }
+      if (dateFrom) { oldConditions.push('sm.Admission_Dt >= ?'); oldParams.push(dateFrom); }
+      if (dateTo)   { oldConditions.push('sm.Admission_Dt <= ?'); oldParams.push(dateTo); }
+
+      const [result] = await pool.query<any[]>(
+        `SELECT
+           si.Inquiry_Id                                       AS Admission_Id,
+           si.Inquiry_Id                                       AS Inquiry_Id,
+           COALESCE(sm.Student_Name, si.Student_Name, '')      AS Student_Name,
+           COALESCE(sm.Email, si.Email, '')                    AS Email,
+           COALESCE(sm.Present_Mobile, si.Present_Mobile, '')  AS Present_Mobile,
+           COALESCE(sm.Batch_Code, si.Batch_Code, '')          AS Batch_code,
+           sm.Admission_Dt                                     AS Admission_Date,
+           sm.Status_id                                        AS Status_id,
+           COALESCE(stm.Status, '')                            AS StatusText,
+           1                                                   AS IsLegacy
+         FROM Student_Inquiry si
+         JOIN student_master sm
+           ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+         LEFT JOIN Status_Master stm ON stm.Id = sm.Status_id
+         WHERE ${oldConditions.join(' AND ')}
+         ORDER BY si.Inquiry_Id DESC
+         LIMIT ?`,
+        [...oldParams, fetchCap]
+      );
+      oldRows = result as any[];
+    } catch (oldErr: any) {
+      console.warn('Online Admission link-sent entries query skipped:', oldErr?.message);
     }
 
-    if (statusCategory) {
-      if (statusCategory === 'closed') {
-        conditions.push(closedExpr);
-      } else if (statusCategory === 'open') {
-        conditions.push(`(${openExpr} OR (NOT ${closedExpr} AND NOT ${acceptedExpr}))`);
-      } else if (statusCategory === 'accepted') {
-        conditions.push(acceptedExpr);
-      }
-    }
+    /* ---- Combine — new entries first, then old. No dedupe by id. ---- */
+    let allRows: any[] = [
+      ...(newRows as any[]).map((r: any) => ({
+        ...r,
+        Admission_Id: r.Inquiry_Id,
+        IsLegacy: 0,
+      })),
+      ...oldRows,
+    ];
 
-    if (dateFrom && hasAdmissionDt) { conditions.push('s.Admission_Dt >= ?'); params.push(dateFrom); }
-    if (dateTo   && hasAdmissionDt) { conditions.push('s.Admission_Dt <= ?'); params.push(dateTo);   }
-
-    const where = conditions.join(' AND ');
-
-    /* ---- Count ---- */
-    const countSql = `
-      SELECT COUNT(*) AS total
-      FROM student_master s
-      LEFT JOIN Status_Master stm ON stm.Id = ${statusIdExpr}
-      WHERE ${where}
-    `;
-    const [countRows] = await pool.query<any[]>(countSql, params);
-    const total = countRows[0]?.total ?? 0;
-
-    /* ---- Data ---- */
-    const batchCodeSelect  = hasBatchCode    ? 's.Batch_Code as Batch_code'    : 'NULL as Batch_code';
-    const admissionDtSelect = hasAdmissionDt ? 's.Admission_Dt as Admission_Date' : 'NULL as Admission_Date';
-
-    const dataSql = `
-      SELECT
-        s.Student_Id as Admission_Id,
-        s.Student_Id,
-        s.Student_Name,
-        s.Email,
-        s.Present_Mobile,
-        ${batchCodeSelect},
-        ${admissionDtSelect},
-        s.Status_id as OnlineStateRaw,
-        ${statusIdExpr} as OnlineStateId,
-        COALESCE(stm.Status, '') as StatusText
-      FROM student_master s
-      LEFT JOIN Status_Master stm ON stm.Id = ${statusIdExpr}
-      WHERE ${where}
-      ORDER BY s.Student_Id DESC
-      LIMIT ? OFFSET ?
-    `;
-    const dataParams = [...params, limit, offset];
-    const [rows] = await pool.query<any[]>(dataSql, dataParams);
-
-    // Load all status labels from DB (support both new and legacy table names).
-    let statusOptions: { id: number; label: string }[] = [];
-    const pushStatuses = (rows: any[]) => {
-      for (const r of rows) {
-        const id = Number(r?.id);
-        const label = String(r?.label ?? '').trim();
-        if (!Number.isFinite(id) || !label) continue;
-        if (!statusOptions.some((s) => s.id === id)) {
-          statusOptions.push({ id, label });
-        }
-      }
+    /* ---- Status options (built before filtering so the dropdown is complete) ---- */
+    const statusOptions: { id: number; label: string }[] = [];
+    const seen = new Set<number>();
+    const pushStatus = (id: number, label: string) => {
+      if (!Number.isFinite(id) || seen.has(id)) return;
+      statusOptions.push({ id, label });
+      seen.add(id);
     };
 
     try {
-      const [statusRows] = await pool.query<any[]>(
-        `SELECT Status_id as id, Status as label
-         FROM awt_status
-         WHERE Status_id IS NOT NULL
-         ORDER BY Status_id`
+      const [dbStatuses] = await pool.query<any[]>(
+        `SELECT DISTINCT sm.Status_id as id, COALESCE(MAX(stm.Status), '') as label
+         FROM Student_Inquiry si
+         JOIN student_master sm
+           ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+         LEFT JOIN Status_Master stm ON stm.Id = sm.Status_id
+         WHERE si.admission_done = 2 AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
+         GROUP BY sm.Status_id ORDER BY sm.Status_id`
       );
-      pushStatuses(statusRows as any[]);
-    } catch {
-      // Ignore and continue with other sources.
+      for (const r of dbStatuses as any[]) pushStatus(Number(r.id), r.label);
+    } catch { /* ignore */ }
+
+    for (const [id, label] of Object.entries(fallbackStatusMap)) {
+      pushStatus(Number(id), label);
     }
-
-    try {
-      const [legacyRows] = await pool.query<any[]>(
-        `SELECT Id as id, Status as label
-         FROM Status_Master
-         WHERE Id IS NOT NULL
-         ORDER BY Id`
-      );
-      pushStatuses(legacyRows as any[]);
-    } catch {
-      // Ignore and continue with fallback map.
-    }
-
-    if (statusOptions.length === 0) {
-      statusOptions = Object.entries(fallbackStatusMap).map(([id, label]) => ({
-        id: Number(id),
-        label,
-      }));
-    }
-
-    // Ensure every status present in admissions data is included in options.
-    const [statusInAdmissions] = await pool.query<any[]>(
-      `SELECT DISTINCT ${statusIdExpr} as id
-       FROM student_master s
-       WHERE (s.IsDelete = 0 OR s.IsDelete IS NULL)
-         AND ${admissionCond}
-         AND ${statusIdExpr} IS NOT NULL`
-    );
-
-    const seen = new Set(statusOptions.map((s) => s.id));
-    for (const r of statusInAdmissions as any[]) {
-      const id = Number(r?.id);
-      if (!Number.isFinite(id) || seen.has(id)) continue;
-      statusOptions.push({
-        id,
-        label: fallbackStatusMap[id] ?? `Status ${id}`,
-      });
-      seen.add(id);
-    }
-
-    // Also include statuses in the current paginated result set.
-    for (const r of rows) {
-      const id = Number(r?.OnlineStateId);
-      if (!Number.isFinite(id) || seen.has(id)) continue;
-      statusOptions.push({
-        id,
-        label: fallbackStatusMap[id] ?? `Status ${id}`,
-      });
-      seen.add(id);
-    }
-
     statusOptions.sort((a, b) => a.id - b.id);
 
     const statusLabelMap: Record<number, string> = Object.fromEntries(
-      statusOptions.map((s) => [s.id, s.label])
+      statusOptions.map(s => [s.id, s.label])
     );
 
-    const categoryLabel = (r: any): 'Closed' | 'Open' | 'Accepted' => {
-      const base = String(r?.StatusText || statusLabelMap[r?.OnlineStateId] || '').toLowerCase();
-      const isClosed = /closed/.test(base) || /(declin|reject|cancel|not interested|drop|left)/.test(base);
-      if (isClosed) return 'Closed';
-
-      const isAccepted = /accepted|admitted|confirm/.test(base);
-      if (isAccepted) return 'Accepted';
-
-      const isOpen = /open|pending/.test(base) || base.length === 0;
-      if (isOpen) return 'Open';
-
-      return 'Open';
+    const categoryLabel = (statusId: number, statusText: string): 'open' | 'accepted' | 'closed' => {
+      // Status_id from student_master: 8=Admission Taken, 9=Accepted, 10=Accepted Closed → green
+      // Status_id 5=Closed, 11=Denied, 13=Close, 27=Not interested (closed) → red
+      if ([8, 9, 10].includes(statusId)) return 'accepted';
+      if ([5, 11, 13, 27].includes(statusId)) return 'closed';
+      const base = (statusText || '').toLowerCase();
+      if (/accepted|admitted|confirm|taken/.test(base)) return 'accepted';
+      if (/cancel|reject|closed|not interested|drop|left|denied/.test(base)) return 'closed';
+      return 'open';
     };
 
-    /* map status labels */
-    const mapped = rows.map((r: any) => ({
-      ...r,
-      Status_id: r.OnlineStateId,
-      StatusLabel: categoryLabel(r),
-    }));
+    // Enrich with labels and normalize date fields so the UI never shows "Invalid Date"
+    allRows = allRows.map((r: any) => {
+      const label = String(r.StatusText || statusLabelMap[r.Status_id] || '').trim() || 'Open';
+      return {
+        ...r,
+        Admission_Date: safeDate(r.Admission_Date),
+        DOB: safeDate(r.DOB),
+        StatusLabel: label,
+        StatusCategory: categoryLabel(Number(r.Status_id), label),
+      };
+    });
+
+    if (statusCategory) {
+      allRows = allRows.filter((r: any) => (r.StatusCategory as string).toLowerCase() === statusCategory);
+    }
+
+    allRows.sort((a: any, b: any) => {
+      const da = a.Admission_Date ? new Date(a.Admission_Date).getTime() : 0;
+      const db = b.Admission_Date ? new Date(b.Admission_Date).getTime() : 0;
+      return db - da;
+    });
+
+    const total = allRows.length;
+    const pageRows = allRows.slice(offset, offset + limit);
 
     return NextResponse.json({
-      rows: mapped,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      rows: pageRows,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
       statusOptions,
     });
   } catch (err: unknown) {
     console.error('Online Admission GET error:', err);
-    const message = err instanceof Error ? err.message : "Unknown error"; return NextResponse.json({ error: message }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
+/* ─── POST — form submission ────────────────────────────────────────────── */
 export async function POST(req: NextRequest) {
   try {
+    const rateLimited = apiRateLimiter(req);
+    if (rateLimited) return rateLimited;
+
     const pool = getPool();
     const body = await req.json();
 
-    // Basic validation
     if (!body.inquiryId) {
       return NextResponse.json({ error: 'Inquiry ID is required' }, { status: 400 });
     }
-    if (!body.firstName || !body.lastName) {
-      return NextResponse.json({ error: 'First name and last name are required' }, { status: 400 });
-    }
-    if (!body.email) {
-      return NextResponse.json({ error: 'Email is required' }, { status: 400 });
-    }
-    if (!body.mobile) {
-      return NextResponse.json({ error: 'Mobile number is required' }, { status: 400 });
-    }
-    if (!body.ssc_board || !body.ssc_schoolName || !body.ssc_yearOfPassing || !body.ssc_percentage) {
-      return NextResponse.json({ error: 'SSC education details are required' }, { status: 400 });
+
+    const inquiryId = Number(body.inquiryId);
+    if (!Number.isFinite(inquiryId) || inquiryId <= 0) {
+      return NextResponse.json({ error: 'Invalid Inquiry ID' }, { status: 400 });
     }
 
-    const fullName = [body.firstName, body.middleName, body.lastName].filter(Boolean).join(' ');
-
-    // Discover schema once — reused for both createStudentMaster and main UPDATE
-    const smCols = await getTableCols(pool, 'student_master');
-
-    // Look up Student_Inquiry by Inquiry_Id first (the URL param is Inquiry_Id, not student_master.Student_Id)
+    // Validate inquiry exists
     const [siRows] = await pool.query<any[]>(
-      `SELECT Inquiry_Id, Student_Id, Batch_Code, Course_Id
+      `SELECT Inquiry_Id, Student_Name, Email
        FROM Student_Inquiry
        WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
-      [body.inquiryId]
+      [inquiryId]
     );
-
-    if (!siRows || siRows.length === 0) {
+    if (!(siRows as any[]).length) {
       return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
     }
 
-    const inquiry = siRows[0];
-    const batchCode = body.batchCode || inquiry.Batch_Code || null;
-    const courseId = inquiry.Course_Id || null;
+    const inquiry = (siRows as any[])[0];
 
-    // Resolve or create student_master record
-    let studentId: number;
-    const linkedStudentId = inquiry.Student_Id ? Number(inquiry.Student_Id) : null;
+    // Strip non-serializable File objects before saving payload
+    const stripFiles = (arr: any[]) =>
+      Array.isArray(arr) ? arr.map(({ marksheetFile: _f, ...rest }: any) => rest) : arr;
 
-    const studentExists = async (id: number): Promise<boolean> => {
-      const [rows] = await pool.query<any[]>('SELECT Student_Id FROM student_master WHERE Student_Id = ?', [id]);
-      return !!(rows as any[]).length;
+    const cleanBody = {
+      ...body,
+      ssc_ktDetails:      stripFiles(body.ssc_ktDetails),
+      hsc_ktDetails:      stripFiles(body.hsc_ktDetails),
+      diploma_ktDetails:  stripFiles(body.diploma_ktDetails),
+      grad_ktDetails:     stripFiles(body.grad_ktDetails),
+      postgrad_ktDetails: stripFiles(body.postgrad_ktDetails),
     };
 
-    const createStudentMaster = async (): Promise<number> => {
-      // Build INSERT dynamically — only include columns that actually exist
-      type ColDef = { col: string; expr: string; val?: unknown };
-      const colDefs: ColDef[] = [
-        { col: 'Student_Name',   expr: '?', val: fullName },
-        { col: 'Email',          expr: '?', val: body.email },
-        { col: 'Present_Mobile', expr: '?', val: body.mobile },
-        { col: 'DOB',            expr: '?', val: body.dob || null },
-        { col: 'Sex',            expr: '?', val: body.gender || null },
-        { col: 'Nationality',    expr: '?', val: body.nationality || 'Indian' },
-        { col: 'Status_id',      expr: '?', val: 1 },
-      ];
-      if (smCols.has('Admission'))    colDefs.push({ col: 'Admission',    expr: '?', val: 0 });
-      if (smCols.has('Admission_Dt')) colDefs.push({ col: 'Admission_Dt', expr: 'NOW()' });
-      if (smCols.has('Date_Added'))   colDefs.push({ col: 'Date_Added',   expr: 'NOW()' });
-      if (smCols.has('updated_date')) colDefs.push({ col: 'updated_date', expr: 'NOW()' });
+    // Save full form payload keyed by Inquiry_Id
+    await savePayload(pool, inquiryId, cleanBody);
 
-      const colNames = colDefs.map(d => d.col).join(', ');
-      const colExprs = colDefs.map(d => d.expr).join(', ');
-      const colVals  = colDefs.filter(d => d.expr === '?').map(d => d.val);
-
-      const [result] = await pool.query<any>(
-        `INSERT INTO student_master (${colNames}) VALUES (${colExprs})`,
-        colVals
-      );
-      const newId = result.insertId as number;
-      await pool.query('UPDATE Student_Inquiry SET Student_Id = ? WHERE Inquiry_Id = ?', [newId, body.inquiryId]);
-      return newId;
-    };
-
-    if (linkedStudentId && await studentExists(linkedStudentId)) {
-      studentId = linkedStudentId;
-    } else {
-      // Check legacy case: student_master.Student_Id happens to equal the Inquiry_Id
-      if (await studentExists(Number(body.inquiryId))) {
-        studentId = Number(body.inquiryId);
-      } else {
-        studentId = await createStudentMaster();
-      }
-    }
-
-    let batchId: number | null = null;
-
-    if (batchCode) {
-      const [batchRows] = await pool.query<any[]>(
-        'SELECT Batch_Id FROM batch_mst WHERE Batch_code = ? LIMIT 1',
-        [batchCode]
-      );
-      batchId = batchRows?.[0]?.Batch_Id ? Number(batchRows[0].Batch_Id) : null;
-    }
-
-    // Update student_master — only touch columns that actually exist
-    type SetDef = { col: string; expr: string; val?: unknown };
-    const setDefs: SetDef[] = [
-      // Core columns — known to exist in all schema versions
-      { col: 'Student_Name',      expr: '?', val: fullName },
-      { col: 'Email',             expr: '?', val: body.email },
-      { col: 'Present_Mobile',    expr: '?', val: body.mobile },
-      { col: 'Present_Address',   expr: '?', val: body.presentAddress || null },
-      { col: 'Present_City',      expr: '?', val: body.presentCity || null },
-      { col: 'Present_Pin',       expr: '?', val: body.presentPin || null },
-      { col: 'Permanent_Address', expr: '?', val: body.permanentAddress || null },
-      { col: 'Permanent_State',   expr: '?', val: body.permanentState || null },
-      { col: 'Permanent_Country', expr: '?', val: body.permanentCountry || 'India' },
-      { col: 'Nationality',       expr: '?', val: body.nationality || 'Indian' },
-      { col: 'DOB',               expr: '?', val: body.dob || null },
-      { col: 'Sex',               expr: '?', val: body.gender || null },
-      { col: 'Status_id',         expr: '?', val: 8 },
-      { col: 'FName',             expr: '?', val: body.firstName || null },
-    ];
-    // Optional columns — only added if they exist in this DB
-    if (smCols.has('MName'))          setDefs.push({ col: 'MName',          expr: '?', val: body.middleName || null });
-    if (smCols.has('LName'))          setDefs.push({ col: 'LName',          expr: '?', val: body.lastName || null });
-    if (smCols.has('Nickname'))       setDefs.push({ col: 'Nickname',       expr: '?', val: body.shortName || null });
-    if (smCols.has('Present_Mobile2'))setDefs.push({ col: 'Present_Mobile2',expr: '?', val: body.telephone || null });
-    if (smCols.has('Present_State'))  setDefs.push({ col: 'Present_State',  expr: '?', val: body.presentState || null });
-    if (smCols.has('Permanent_City')) setDefs.push({ col: 'Permanent_City', expr: '?', val: body.permanentCity || null });
-    if (smCols.has('Permanent_Pin'))  setDefs.push({ col: 'Permanent_Pin',  expr: '?', val: body.permanentPin || null });
-    if (smCols.has('Father_Mobile'))  setDefs.push({ col: 'Father_Mobile',  expr: '?', val: body.familyContact || null });
-    if (smCols.has('Occupation'))     setDefs.push({ col: 'Occupation',     expr: '?', val: body.occupationalStatus || null });
-    if (smCols.has('Company'))        setDefs.push({ col: 'Company',        expr: '?', val: body.jobOrganisation || null });
-    if (smCols.has('Designation'))    setDefs.push({ col: 'Designation',    expr: '?', val: body.jobDesignation || null });
-    if (smCols.has('Total_Exp'))      setDefs.push({ col: 'Total_Exp',      expr: '?', val: toIntOrNull(body.totalOccupationYears) || 0 });
-    if (smCols.has('Remark'))         setDefs.push({ col: 'Remark',         expr: '?', val: body.educationRemark || null });
-    if (smCols.has('Batch_Code'))     setDefs.push({ col: 'Batch_Code',     expr: '?', val: body.batchCode || null });
-    if (smCols.has('Admission'))      setDefs.push({ col: 'Admission',      expr: '?', val: 1 });
-    if (smCols.has('Admission_Dt'))   setDefs.push({ col: 'Admission_Dt',   expr: 'NOW()' });
-    if (smCols.has('updated_date'))   setDefs.push({ col: 'updated_date',   expr: 'NOW()' });
-
-    const setSql  = setDefs.map(d => `${d.col} = ${d.expr}`).join(', ');
-    const setVals = setDefs.filter(d => d.expr === '?').map(d => d.val);
-
-    await pool.query(
-      `UPDATE student_master SET ${setSql} WHERE Student_Id = ?`,
-      [...setVals, studentId]
-    );
-
-    const [existingAdmission] = await pool.query<any[]>(
-      `SELECT Admission_Id FROM admission_master WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
-      [studentId]
-    );
-
-    let admissionId = existingAdmission?.[0]?.Admission_Id ?? null;
-    if (admissionId) {
+    // Update inquiry: mark as "Document Pending" (shows as Open until admin accepts)
+    // Also update basic contact info from the form so it's visible in the listing
+    const fullName = [body.firstName, body.middleName, body.lastName].filter(Boolean).join(' ');
+    try {
       await pool.query(
-        `UPDATE admission_master
-         SET Batch_Id = ?, Course_Id = ?, Admission_Date = NOW(), IsActive = 1, Cancel = 0, IsDelete = 0
-         WHERE Admission_Id = ?`,
-        [batchId || null, courseId || null, admissionId]
+        `UPDATE Student_Inquiry
+         SET OnlineState = 23,
+             Student_Name = COALESCE(NULLIF(?, ''), Student_Name),
+             Email        = COALESCE(NULLIF(?, ''), Email),
+             Present_Mobile = COALESCE(NULLIF(?, ''), Present_Mobile),
+             Batch_Code   = COALESCE(NULLIF(?, ''), Batch_Code)
+         WHERE Inquiry_Id = ?`,
+        [fullName || null, body.email || null, body.mobile || null, body.batchCode || null, inquiryId]
       );
-    } else {
-      const [admissionResult] = await pool.query<any>(
-        `INSERT INTO admission_master (
-          Student_Id,
-          Batch_Id,
-          Course_Id,
-          Admission_Date,
-          IsActive,
-          Cancel,
-          IsDelete
-        ) VALUES (?, ?, ?, NOW(), 1, 0, 0)`,
-        [studentId, batchId || null, courseId || null]
-      );
-      admissionId = admissionResult.insertId;
+    } catch (siErr: any) {
+      console.warn('Student_Inquiry update skipped:', siErr?.message);
     }
 
-    await upsertAcademicRecords(pool, studentId, body);
-    await upsertOnlineAdmissionPayload(pool, studentId, body);
-
-    const recipientEmail = String(body?.email || '').trim();
+    // Send confirmation email
+    const recipientEmail = String(body?.email || inquiry?.Email || '').trim();
+    const studentName    = fullName || String(inquiry?.Student_Name || '').trim();
     if (recipientEmail) {
       try {
         await sendOnlineAdmissionSubmissionEmail({
           toEmail: recipientEmail,
-          studentName: fullName,
-          applicationId: studentId,
+          studentName,
+          applicationId: inquiryId,
         });
       } catch (mailErr) {
         console.error('Online Admission confirmation email error:', mailErr);
       }
     }
 
+    console.log(`[online-admission POST] saved payload for inquiryId=${inquiryId}`);
+
     return NextResponse.json({
       success: true,
-      admissionId,
+      inquiryId,
       message: 'Application submitted successfully',
     });
   } catch (err: unknown) {

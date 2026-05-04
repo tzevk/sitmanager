@@ -29,29 +29,27 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid inquiryId' }, { status: 400 });
     }
 
-    // Legacy compatibility: discussions may reference either Inquiry_Id or Student_Id.
+    // Canonicalize inquiry id: discussions are stored against a canonical Inquiry_Id.
+    // Accept callers providing either Inquiry_Id or Student_Id, but resolve to a single
+    // canonical Inquiry_Id to avoid pulling discussions for other linked inquiries.
     const [mapRows] = await pool.query(
-      `SELECT Inquiry_Id, Student_Id
+      `SELECT Inquiry_Id
        FROM Student_Inquiry
-       WHERE Inquiry_Id = ? OR Student_Id = ?`,
+       WHERE Inquiry_Id = ? OR Student_Id = ?
+       ORDER BY Inquiry_Id DESC
+       LIMIT 1`,
       [inquiryIdNum, inquiryIdNum]
     );
-
-    const ids = Array.from(new Set([
-      inquiryIdNum,
-      ...(mapRows as any[]).flatMap((r: any) => [Number(r?.Inquiry_Id), Number(r?.Student_Id)]),
-    ].filter((v) => Number.isFinite(v) && Number(v) > 0)));
+    const canonicalInquiryId = Number((mapRows as any[])[0]?.Inquiry_Id || inquiryIdNum);
 
     const withNextDate = await hasNextDateColumn(pool);
     const nextDateSelect = withNextDate ? 'nextdate' : 'NULL as nextdate';
-    const idPlaceholders = ids.map(() => '?').join(',');
-
     const [rows] = await pool.query(
       `SELECT id, date, ${nextDateSelect}, discussion, created_by, created_date
        FROM awt_inquirydiscussion
-       WHERE Inquiry_id IN (${idPlaceholders}) AND (deleted = 0 OR deleted IS NULL)
+       WHERE Inquiry_id = ? AND (deleted = 0 OR deleted IS NULL)
        ORDER BY id ASC`,
-      ids
+      [canonicalInquiryId]
     );
 
     return NextResponse.json({ discussions: rows });
@@ -116,6 +114,68 @@ export async function POST(req: NextRequest) {
     console.error('Discussions POST error:', error);
     return NextResponse.json(
       { error: 'Failed to add discussion', details: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT — update a discussion entry
+export async function PUT(req: NextRequest) {
+  try {
+    const pool = getPool();
+    const body = await req.json();
+    const { id, discussion } = body;
+
+    if (!id || !discussion?.trim()) {
+      return NextResponse.json({ error: 'id and discussion are required' }, { status: 400 });
+    }
+
+    const idNum = Number(id);
+    if (!Number.isFinite(idNum) || idNum <= 0) {
+      return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
+    }
+
+    await pool.query(
+      `UPDATE awt_inquirydiscussion SET discussion = ? WHERE id = ? AND (deleted = 0 OR deleted IS NULL)`,
+      [discussion.trim(), idNum]
+    );
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('Discussions PUT error:', error);
+    return NextResponse.json(
+      { error: 'Failed to update discussion', details: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE — soft-delete a discussion entry
+export async function DELETE(req: NextRequest) {
+  try {
+    const pool = getPool();
+    const url = req.nextUrl;
+    const id = url.searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    }
+
+    const idNum = Number(id);
+    if (!Number.isFinite(idNum) || idNum <= 0) {
+      return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
+    }
+
+    await pool.query(
+      `UPDATE awt_inquirydiscussion SET deleted = 1 WHERE id = ?`,
+      [idNum]
+    );
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('Discussions DELETE error:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete discussion', details: error.message },
       { status: 500 }
     );
   }
