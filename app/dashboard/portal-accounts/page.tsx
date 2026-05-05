@@ -41,6 +41,25 @@ export default function PortalAccountsPage() {
     isActive: true,
   });
 
+  // ── Student bulk tab state ───────────────────────────────────────────
+  type StudentRow = {
+    Student_Id: number; Roll_No: string | null; Student_Name: string;
+    Email: string | null; Present_Mobile: string | null;
+    auth_id: number | null; existing_username: string | null; account_active: number | null;
+  };
+  const [studentCourseId, setStudentCourseId] = useState('');
+  const [studentBatchId, setStudentBatchId]   = useState('');
+  const [studentCourses, setStudentCourses]   = useState<Array<{ Course_Id: number; Course_Name: string }>>([]);
+  const [studentBatches, setStudentBatches]   = useState<Array<{ Batch_Id: number; Batch_code: string; Category: string }>>([]);
+  const [studentRows, setStudentRows]         = useState<StudentRow[]>([]);
+  const [studentLoading, setStudentLoading]   = useState(false);
+  const [studentSearch, setStudentSearch]     = useState('');
+  const [studentPasswords, setStudentPasswords] = useState<Record<number, string>>({});
+  const [studentActiveMap, setStudentActiveMap] = useState<Record<number, boolean>>({});
+  const [studentSavingId, setStudentSavingId]   = useState<number | null>(null);
+  const [bulkCreating, setBulkCreating]         = useState(false);
+  const [bulkSending, setBulkSending]           = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState<string>('');
@@ -130,6 +149,116 @@ export default function PortalAccountsPage() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
+
+  // ── Student helpers ──────────────────────────────────────────────────
+  function suggestStudentUsername(rollNo: string | null, studentId: number): string {
+    if (rollNo && rollNo.trim()) return rollNo.trim().toLowerCase();
+    return `student.${studentId}`;
+  }
+
+  function exportStudentCsv(filteredRows: StudentRow[]) {
+    if (!filteredRows.length) return;
+    const pwMap: Record<number, string> = { ...studentPasswords };
+    for (const r of filteredRows) {
+      if (!r.auth_id && !pwMap[r.Student_Id]) pwMap[r.Student_Id] = generatePassword(10);
+    }
+    setStudentPasswords(pwMap);
+    const headers = ['Student ID', 'Roll No', 'Student Name', 'Email', 'Mobile', 'Username', 'Password', 'Has Account'];
+    const rows = filteredRows.map(r => {
+      const username = r.existing_username || suggestStudentUsername(r.Roll_No, r.Student_Id);
+      const password = r.auth_id ? '' : (pwMap[r.Student_Id] || '');
+      return [r.Student_Id, r.Roll_No || '', r.Student_Name || '', r.Email || '', r.Present_Mobile || '', username, password, r.auth_id ? 'Yes' : 'No'];
+    });
+    downloadCsv(`portal-accounts-students-batch${studentBatchId}.csv`, headers, rows);
+  }
+
+  async function createStudentAccount(studentId: number, rollNo: string | null) {
+    const username = suggestStudentUsername(rollNo, studentId);
+    const password = studentPasswords[studentId] || generatePassword(10);
+    if (!studentPasswords[studentId]) setStudentPasswords(prev => ({ ...prev, [studentId]: password }));
+    setStudentSavingId(studentId);
+    setError(''); setSuccess('');
+    try {
+      const res = await fetch('/api/admin/portal-accounts/student', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId, username, password, isActive: studentActiveMap[studentId] ?? true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || data?.error || 'Failed');
+      setStudentRows(prev => prev.map(r =>
+        r.Student_Id === studentId ? { ...r, auth_id: 1, existing_username: username, account_active: 1 } : r
+      ));
+      setSuccess(`Account created: ${username}`);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to create account');
+    } finally {
+      setStudentSavingId(null);
+    }
+  }
+
+  async function bulkCreateStudentAccounts(rows: StudentRow[]) {
+    const toCreate = rows.filter(r => !r.auth_id);
+    if (!toCreate.length) { setError('All selected students already have accounts'); return; }
+    setBulkCreating(true); setError(''); setSuccess('');
+    let created = 0; let failed = 0;
+    for (const r of toCreate) {
+      const username = suggestStudentUsername(r.Roll_No, r.Student_Id);
+      const password = studentPasswords[r.Student_Id] || generatePassword(10);
+      if (!studentPasswords[r.Student_Id]) setStudentPasswords(prev => ({ ...prev, [r.Student_Id]: password }));
+      try {
+        const res = await fetch('/api/admin/portal-accounts/student', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId: r.Student_Id, username, password, isActive: studentActiveMap[r.Student_Id] ?? true }),
+        });
+        if (res.ok) {
+          created++;
+          setStudentRows(prev => prev.map(s =>
+            s.Student_Id === r.Student_Id ? { ...s, auth_id: 1, existing_username: username, account_active: 1 } : s
+          ));
+        } else { failed++; }
+      } catch { failed++; }
+    }
+    setBulkCreating(false);
+    setSuccess(`Bulk create done: ${created} created${failed ? `, ${failed} failed` : ''}`);
+  }
+
+  async function bulkSendCredentials(rows: StudentRow[]) {
+    // Only send to students where we have a plaintext password AND an email
+    const eligible = rows.filter(r => studentPasswords[r.Student_Id] && r.Email);
+    const noEmail  = rows.filter(r => studentPasswords[r.Student_Id] && !r.Email);
+    if (!eligible.length) {
+      setError(`No students to email${noEmail.length ? ` (${noEmail.length} have no email on record)` : ' — load a batch and create accounts first'}`);
+      return;
+    }
+    const skippedNote = noEmail.length ? ` (${noEmail.length} will be skipped — no email on record)` : '';
+    const confirmed = window.confirm(
+      `Send login credentials to ${eligible.length} student${eligible.length !== 1 ? 's' : ''}?${skippedNote}\n\nThis will email each student their username and password.`
+    );
+    if (!confirmed) return;
+    setBulkSending(true); setError(''); setSuccess('');
+    try {
+      const payload = eligible.map(r => ({
+        email: r.Email!,
+        studentName: r.Student_Name,
+        username: r.existing_username || suggestStudentUsername(r.Roll_No, r.Student_Id),
+        password: studentPasswords[r.Student_Id],
+      }));
+      const res = await fetch('/api/admin/portal-accounts/student/send-credentials', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ students: payload }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || 'Send failed');
+      const skipped = noEmail.length;
+      setSuccess(
+        `Emails sent: ${data.sent}${data.failed ? `, ${data.failed} failed` : ''}${skipped ? ` · ${skipped} skipped (no email)` : ''}`
+      );
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to send emails');
+    } finally {
+      setBulkSending(false);
+    }
   }
 
   function exportFacultyCsv() {
@@ -335,50 +464,52 @@ export default function PortalAccountsPage() {
     };
   }, [tab, permLoading, canCreate, scheduleDate]);
 
+  // Load courses for student tab
+  useEffect(() => {
+    if (tab !== 'student' || permLoading || !canCreate) return;
+    fetch('/api/daily-activities/attendance?options=courses')
+      .then(r => r.json())
+      .then(d => setStudentCourses(Array.isArray(d.courses) ? d.courses : []))
+      .catch(() => {});
+  }, [tab, permLoading, canCreate]);
+
+  // Load batches when course changes
+  useEffect(() => {
+    if (!studentCourseId) { setStudentBatches([]); setStudentBatchId(''); return; }
+    fetch(`/api/daily-activities/attendance?options=batches&courseId=${studentCourseId}`)
+      .then(r => r.json())
+      .then(d => setStudentBatches(Array.isArray(d.batches) ? d.batches : []))
+      .catch(() => {});
+  }, [studentCourseId]);
+
+  // Load students when batch changes
+  useEffect(() => {
+    if (!studentBatchId) { setStudentRows([]); return; }
+    setStudentLoading(true);
+    fetch(`/api/admin/portal-accounts/student?batchId=${studentBatchId}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.success) { setError(d.message || 'Failed to load students'); return; }
+        const rows: StudentRow[] = Array.isArray(d.rows) ? d.rows : [];
+        setStudentRows(rows);
+        setStudentActiveMap(prev => {
+          const next = { ...prev };
+          rows.forEach(r => { if (next[r.Student_Id] === undefined) next[r.Student_Id] = (r.account_active ?? 1) === 1; });
+          return next;
+        });
+        setStudentPasswords(prev => {
+          const next = { ...prev };
+          rows.forEach(r => { if (!r.auth_id && !next[r.Student_Id]) next[r.Student_Id] = generatePassword(10); });
+          return next;
+        });
+      })
+      .catch(() => setError('Failed to load students'))
+      .finally(() => setStudentLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentBatchId]);
+
   if (permLoading || employeePermLoading) return <PermissionLoading />;
   if (!canCreate) return <AccessDenied message="You do not have permission to create accounts." />;
-
-  async function submitStudent() {
-    setError('');
-    setSuccess('');
-
-    const studentId = toInt(studentForm.studentId);
-    if (!studentId) {
-      setError('Student ID is required');
-      return;
-    }
-    if (!studentForm.username.trim()) {
-      setError('Username is required');
-      return;
-    }
-    if (!studentForm.password) {
-      setError('Password is required');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const res = await fetch('/api/admin/portal-accounts/student', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentId,
-          username: studentForm.username.trim(),
-          password: studentForm.password,
-          isActive: studentForm.isActive,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.message || data?.error || 'Failed to create student account');
-
-      setSuccess(`Student account saved for username: ${studentForm.username.trim()}`);
-      setStudentForm(prev => ({ ...prev, password: '' }));
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to create student account');
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <div className="space-y-3">
@@ -687,59 +818,181 @@ export default function PortalAccountsPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="grid grid-cols-4 gap-2">
-                    <div className="col-span-1">
-                      <label className={labelCls}>Student ID</label>
-                      <input
-                        className={inputCls}
-                        value={studentForm.studentId}
-                        onChange={(e) => setStudentForm(prev => ({ ...prev, studentId: e.target.value }))}
-                        placeholder="e.g. 456"
-                        inputMode="numeric"
-                      />
+                  {/* ── Course + Batch selectors ── */}
+                  <div className="rounded-lg border border-gray-200 bg-white overflow-hidden shadow-sm">
+                    <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center gap-2 overflow-x-auto">
+                      <span className="text-[11px] font-bold text-gray-700 shrink-0">Course</span>
+                      <select
+                        className="bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] max-w-[180px]"
+                        value={studentCourseId}
+                        onChange={e => { setStudentCourseId(e.target.value); setStudentBatchId(''); }}
+                      >
+                        <option value="">— Select —</option>
+                        {studentCourses.map(c => (
+                          <option key={c.Course_Id} value={String(c.Course_Id)}>{c.Course_Name}</option>
+                        ))}
+                      </select>
+                      <span className="text-[11px] font-bold text-gray-700 shrink-0">Batch</span>
+                      <select
+                        className="bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] disabled:opacity-50 max-w-[180px]"
+                        value={studentBatchId}
+                        onChange={e => setStudentBatchId(e.target.value)}
+                        disabled={!studentCourseId}
+                      >
+                        <option value="">— Select —</option>
+                        {studentBatches.map(b => (
+                          <option key={b.Batch_Id} value={String(b.Batch_Id)}>
+                            {b.Batch_code}{b.Category ? ` · ${b.Category}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {studentBatchId && (
+                        <>
+                          <input
+                            className="w-36 bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] shrink-0"
+                            placeholder="Search name / roll…"
+                            value={studentSearch}
+                            onChange={e => setStudentSearch(e.target.value)}
+                          />
+                          <span className="text-[11px] text-gray-400 whitespace-nowrap shrink-0">
+                            {studentLoading ? 'Loading…' : `${studentRows.length} students · ${studentRows.filter(r => r.auth_id).length} with accounts`}
+                          </span>
+                          <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                            <button type="button" className={btnGhost}
+                              onClick={() => exportStudentCsv(
+                                studentSearch
+                                  ? studentRows.filter(r => (r.Roll_No || '').toLowerCase().includes(studentSearch.toLowerCase()) || (r.Student_Name || '').toLowerCase().includes(studentSearch.toLowerCase()))
+                                  : studentRows
+                              )}
+                              disabled={studentLoading || !studentRows.length}
+                            >
+                              Export CSV
+                            </button>
+                            <button type="button" className={btnPrimarySm}
+                              onClick={() => bulkCreateStudentAccounts(
+                                studentSearch
+                                  ? studentRows.filter(r => (r.Roll_No || '').toLowerCase().includes(studentSearch.toLowerCase()) || (r.Student_Name || '').toLowerCase().includes(studentSearch.toLowerCase()))
+                                  : studentRows
+                              )}
+                              disabled={bulkCreating || bulkSending || studentLoading || !studentRows.length}
+                            >
+                              {bulkCreating ? 'Creating…' : 'Create All'}
+                            </button>
+                            <button type="button"
+                              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm ring-1 ring-emerald-700/20 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                              onClick={() => bulkSendCredentials(
+                                studentSearch
+                                  ? studentRows.filter(r => (r.Roll_No || '').toLowerCase().includes(studentSearch.toLowerCase()) || (r.Student_Name || '').toLowerCase().includes(studentSearch.toLowerCase()))
+                                  : studentRows
+                              )}
+                              disabled={bulkSending || bulkCreating || studentLoading || !studentRows.length}
+                              title="Email login credentials to each student who has an email on record"
+                            >
+                              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                              </svg>
+                              {bulkSending ? 'Sending…' : 'Send Credentials'}
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
-                    <div className="col-span-1">
-                      <label className={labelCls}>Username</label>
-                      <input
-                        className={inputCls}
-                        value={studentForm.username}
-                        onChange={(e) => setStudentForm(prev => ({ ...prev, username: e.target.value }))}
-                        placeholder="student_username"
-                      />
-                    </div>
-                    <div className="col-span-1">
-                      <label className={labelCls}>Password</label>
-                      <input
-                        className={inputCls}
-                        value={studentForm.password}
-                        onChange={(e) => setStudentForm(prev => ({ ...prev, password: e.target.value }))}
-                        placeholder="password"
-                        type="password"
-                      />
-                    </div>
-                    <div className="col-span-1 flex items-end gap-2">
-                      <label className="flex items-center gap-2 text-xs text-gray-700">
-                        <input
-                          type="checkbox"
-                          checked={studentForm.isActive}
-                          onChange={(e) => setStudentForm(prev => ({ ...prev, isActive: e.target.checked }))}
-                        />
-                        Active
-                      </label>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button className={btnPrimary} onClick={submitStudent} disabled={saving}>
-                      {saving ? 'Saving…' : 'Save Student Account'}
-                    </button>
-                    <button
-                      className={btnGhost}
-                      type="button"
-                      onClick={() => setStudentForm({ studentId: '', username: '', password: '', isActive: true })}
-                      disabled={saving}
-                    >
-                      Clear
-                    </button>
+
+                    {/* ── Student table ── */}
+                    {!studentBatchId ? (
+                      <div className="py-12 text-center text-sm text-gray-400">Select a course and batch to view students</div>
+                    ) : studentLoading ? (
+                      <div className="py-12 text-center">
+                        <div className="w-6 h-6 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin mx-auto" />
+                      </div>
+                    ) : (
+                      <div className="relative h-[60vh] overflow-x-auto overflow-y-scroll overscroll-contain">
+                        <table className="min-w-[900px] w-full text-xs">
+                          <thead className="bg-gray-50 sticky top-0 z-10">
+                            <tr className="text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                              <th className="px-3 py-2 bg-gray-50 w-16">Roll No</th>
+                              <th className="px-3 py-2 bg-gray-50">Student Name</th>
+                              <th className="px-3 py-2 bg-gray-50 w-32">Username</th>
+                              <th className="px-3 py-2 bg-gray-50 w-28">Password</th>
+                              <th className="px-3 py-2 bg-gray-50 w-24">Status</th>
+                              <th className="px-3 py-2 bg-gray-50 w-40">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(studentSearch
+                              ? studentRows.filter(r =>
+                                  (r.Roll_No || '').toLowerCase().includes(studentSearch.toLowerCase()) ||
+                                  (r.Student_Name || '').toLowerCase().includes(studentSearch.toLowerCase())
+                                )
+                              : studentRows
+                            ).map(r => {
+                              const username = r.existing_username || suggestStudentUsername(r.Roll_No, r.Student_Id);
+                              const password = studentPasswords[r.Student_Id] || '';
+                              const hasAccount = Boolean(r.auth_id);
+                              const isSaving = studentSavingId === r.Student_Id;
+                              return (
+                                <tr key={r.Student_Id} className="border-t border-gray-100 hover:bg-gray-50/40">
+                                  <td className="px-3 py-2 font-mono text-gray-600">{r.Roll_No || '—'}</td>
+                                  <td className="px-3 py-2 text-gray-800 font-medium">
+                                    {r.Student_Name || '—'}
+                                    {r.Email && <span className="block text-[10px] text-gray-400 font-normal">{r.Email}</span>}
+                                  </td>
+                                  <td className="px-3 py-2 font-mono text-gray-700">{username}</td>
+                                  <td className="px-3 py-2">
+                                    {hasAccount ? (
+                                      <span className="text-[10px] text-gray-400 italic">••••••••</span>
+                                    ) : (
+                                      <input
+                                        className="w-full bg-white border border-gray-200 rounded px-2 py-1 text-xs font-mono text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093]"
+                                        value={password}
+                                        onChange={e => setStudentPasswords(prev => ({ ...prev, [r.Student_Id]: e.target.value }))}
+                                        placeholder="password"
+                                      />
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <span className={`px-2 py-0.5 rounded-full border text-[10px] font-semibold ${
+                                      hasAccount
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-amber-50 text-amber-700 border-amber-200'
+                                    }`}>
+                                      {hasAccount ? 'Active' : 'No account'}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex items-center gap-2">
+                                      <label className="inline-flex items-center gap-1.5 select-none">
+                                        <input
+                                          type="checkbox"
+                                          className="sr-only peer"
+                                          checked={studentActiveMap[r.Student_Id] ?? true}
+                                          onChange={e => setStudentActiveMap(prev => ({ ...prev, [r.Student_Id]: e.target.checked }))}
+                                          disabled={isSaving || bulkCreating}
+                                        />
+                                        <span className="relative w-8 h-4 rounded-full bg-gray-200 border border-gray-300 peer-focus:outline-none peer-checked:bg-[#2E3093] peer-checked:border-[#2E3093] peer-disabled:opacity-60 transition-colors">
+                                          <span className="absolute top-[1px] left-[1px] w-3 h-3 rounded-full bg-white border border-gray-300 shadow-sm transition-transform peer-checked:translate-x-4" />
+                                        </span>
+                                      </label>
+                                      <button
+                                        type="button"
+                                        className={btnPrimarySm}
+                                        onClick={() => createStudentAccount(r.Student_Id, r.Roll_No)}
+                                        disabled={isSaving || bulkCreating}
+                                      >
+                                        {isSaving ? 'Saving…' : hasAccount ? 'Update' : 'Create'}
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            {studentRows.length === 0 && !studentLoading && (
+                              <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400">No students found in this batch</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

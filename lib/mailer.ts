@@ -290,6 +290,81 @@ export async function sendOnlineAdmissionSubmissionEmail(params: {
   });
 }
 
+export function buildStudentPortalCredentialsMailContent(params: {
+  studentName?: string;
+  username: string;
+  password: string;
+  loginUrl?: string;
+}) {
+  const safeName = (params.studentName || '').trim() || 'Student';
+  const loginUrl = params.loginUrl || 'https://sit.suvidya.ac.in/student-portal';
+  const subject = 'Your SIT Student Portal Login Credentials';
+
+  const text = [
+    `Dear ${safeName},`,
+    '',
+    'Your Student Portal account has been created at Suvidya Institute of Technology.',
+    '',
+    `Username : ${params.username}`,
+    `Password : ${params.password}`,
+    '',
+    `Login here: ${loginUrl}`,
+    '',
+    'Please keep your credentials safe and do not share them with anyone.',
+    'If you face any issues logging in, please contact the administration.',
+    '',
+    'Regards,',
+    'Suvidya Institute of Technology',
+  ].join('\n');
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+      <div style="background:linear-gradient(135deg,#2E3093,#2A6BB5);padding:24px 28px;">
+        <h2 style="color:#fff;margin:0;font-size:18px;">Student Portal Credentials</h2>
+        <p style="color:rgba(255,255,255,0.75);margin:4px 0 0;font-size:13px;">Suvidya Institute of Technology</p>
+      </div>
+      <div style="padding:24px 28px;">
+        <p style="color:#374151;margin-top:0;">Dear <strong>${safeName}</strong>,</p>
+        <p style="color:#374151;">Your Student Portal account has been created. Use the details below to log in:</p>
+        <table style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:16px 20px;width:100%;margin:16px 0;border-collapse:collapse;">
+          <tr>
+            <td style="padding:8px 12px;color:#6b7280;font-size:13px;width:100px;">Username</td>
+            <td style="padding:8px 12px;font-weight:bold;font-size:14px;font-family:monospace;color:#1f2937;letter-spacing:0.5px;">${params.username}</td>
+          </tr>
+          <tr style="border-top:1px solid #e5e7eb;">
+            <td style="padding:8px 12px;color:#6b7280;font-size:13px;">Password</td>
+            <td style="padding:8px 12px;font-weight:bold;font-size:14px;font-family:monospace;color:#1f2937;letter-spacing:0.5px;">${params.password}</td>
+          </tr>
+        </table>
+        <p style="text-align:center;margin:20px 0;">
+          <a href="${loginUrl}" style="background:#2E3093;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:bold;display:inline-block;">Login to Student Portal</a>
+        </p>
+        <p style="color:#6b7280;font-size:12px;margin-bottom:0;">Please keep your credentials safe. If you face any issues logging in, contact the administration.</p>
+      </div>
+    </div>
+  `;
+
+  return { safeName, subject, text, html };
+}
+
+export async function sendStudentPortalCredentialsEmail(params: {
+  toEmail: string;
+  studentName?: string;
+  username: string;
+  password: string;
+  loginUrl?: string;
+}) {
+  const built = buildStudentPortalCredentialsMailContent(params);
+  await sendAdmissionFormEmail({
+    toEmail: params.toEmail,
+    studentName: params.studentName,
+    admissionFormUrl: '#',
+    subject: built.subject,
+    text: built.text,
+    html: built.html,
+  });
+}
+
 export async function sendPublicInquirySubmissionEmail(params: {
   toEmail: string;
   studentName?: string;

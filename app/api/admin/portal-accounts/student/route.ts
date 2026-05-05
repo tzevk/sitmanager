@@ -28,6 +28,49 @@ async function ensureStudentAuthTable(pool: any) {
   `);
 }
 
+export async function GET(req: NextRequest) {
+  const auth = await requirePermission(req, 'user.create');
+  if (auth instanceof NextResponse) return auth;
+
+  try {
+    const { searchParams } = new URL(req.url);
+    const batchId = Number(searchParams.get('batchId'));
+    if (!batchId) return NextResponse.json({ success: false, message: 'batchId is required' }, { status: 400 });
+
+    const pool = getPool();
+    await ensureStudentAuthTable(pool);
+
+    const [rows] = await pool.query<any[]>(
+      `SELECT
+         a.Student_Id,
+         a.Roll_No,
+         s.Student_Name,
+         s.Email,
+         s.Present_Mobile,
+         spa.Id         AS auth_id,
+         spa.Username   AS existing_username,
+         spa.IsActive   AS account_active
+       FROM admission_master a
+       JOIN student_master s ON s.Student_Id = a.Student_Id
+       LEFT JOIN student_portal_auth spa ON spa.Student_Id = a.Student_Id
+       WHERE a.Batch_Id = ?
+         AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
+         AND (a.Cancel   = 0 OR a.Cancel   IS NULL)
+         AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
+       ORDER BY
+         CASE WHEN a.Roll_No IS NULL OR a.Roll_No = '' THEN 1 ELSE 0 END,
+         a.Roll_No + 0, s.Student_Name`,
+      [batchId]
+    );
+
+    return NextResponse.json({ success: true, rows });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Server error';
+    console.error('Admin list student accounts error:', err);
+    return NextResponse.json({ success: false, message }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   const auth = await requirePermission(req, 'user.create');
   if (auth instanceof NextResponse) return auth;

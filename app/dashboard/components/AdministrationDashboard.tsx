@@ -237,7 +237,7 @@ export default function AdministrationDashboard({
             <div className="px-5 py-4 bg-gradient-to-r from-[#2A6BB5] to-[#2E3093] text-white font-bold">Lectures Scheduled Today</div>
             <div className="p-4 space-y-2 max-h-[260px] overflow-auto">
               {lecturesToday.length === 0 ? <p className="text-sm text-gray-400">No lectures scheduled today</p> : lecturesToday.map((l: any, i: number) => (
-                <div key={`${l.batch_no || i}`} className="p-3 rounded-xl border border-gray-100 bg-gray-50/50 text-sm">
+                <div key={`${l.batch_no}-${l.lecture_topic}-${i}`} className="p-3 rounded-xl border border-gray-100 bg-gray-50/50 text-sm">
                   <p className="font-semibold text-gray-800">{l.training_program || '-'} ({toBatchNumber(l.batch_no)})</p>
                   <p className="text-xs text-gray-500 mt-1">{l.lecture_topic || '-'} · Room {l.room_no || '-'}</p>
                 </div>
