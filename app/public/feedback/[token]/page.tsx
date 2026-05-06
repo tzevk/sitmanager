@@ -27,7 +27,7 @@ function fmtDate(d: string) {
   return `${day}/${m}/${y}`;
 }
 
-type GeoState = 'idle' | 'checking' | 'denied' | 'unavailable' | 'timeout' | 'far' | 'ok' | 'unsupported';
+type GeoState = 'idle' | 'checking' | 'denied' | 'unavailable' | 'timeout' | 'inaccurate' | 'far' | 'ok' | 'unsupported';
 type Student = { rollNo: string; studentName: string };
 
 export default function FeedbackPage() {
@@ -101,35 +101,47 @@ export default function FeedbackPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionInfo]);
 
-  /* 3. Geolocation */
+  /* 3. Geolocation — uses watchPosition for Android reliability.
+     Android's getCurrentPosition often fires the error callback before GPS
+     warms up; watchPosition keeps trying until a fix arrives. */
   const checkLocation = useCallback(() => {
     if (!navigator.geolocation) { setGeoState('unsupported'); return; }
     setGeoState('checking');
-    // First try without high-accuracy (faster, works on WiFi/cell), then escalate
-    const tryPosition = (highAccuracy: boolean) => {
-      navigator.geolocation.getCurrentPosition(
-        pos => {
-          const dist = haversineMeters(pos.coords.latitude, pos.coords.longitude, TARGET_LAT, TARGET_LNG);
-          setDistance(Math.round(dist));
-          setGeoState(dist <= MAX_DISTANCE_M ? 'ok' : 'far');
-        },
-        err => {
-          if (err.code === 1 /* PERMISSION_DENIED */) {
-            setGeoState('denied');
-          } else if (err.code === 2 /* POSITION_UNAVAILABLE */ && highAccuracy) {
-            // Retry without high accuracy (falls back to WiFi/cell positioning)
-            tryPosition(false);
-          } else if (err.code === 2) {
-            setGeoState('unavailable');
-          } else {
-            // TIMEOUT or unknown
-            setGeoState('timeout');
-          }
-        },
-        { enableHighAccuracy: highAccuracy, timeout: highAccuracy ? 12000 : 20000, maximumAge: 30000 }
-      );
+
+    let watchId: number | null = null;
+    let settled = false;
+
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+      fn();
     };
-    tryPosition(true);
+
+    // Hard timeout — if no position arrives within 25 s, give up
+    const hardTimeout = setTimeout(() => settle(() => setGeoState('timeout')), 25000);
+
+    watchId = navigator.geolocation.watchPosition(
+      pos => {
+        clearTimeout(hardTimeout);
+        // Android 12+ "approximate location" grants yield accuracy ~3 km — detect and reject
+        if (pos.coords.accuracy > 2000) {
+          settle(() => setGeoState('inaccurate'));
+          return;
+        }
+        const dist = haversineMeters(pos.coords.latitude, pos.coords.longitude, TARGET_LAT, TARGET_LNG);
+        setDistance(Math.round(dist));
+        settle(() => setGeoState(dist <= MAX_DISTANCE_M ? 'ok' : 'far'));
+      },
+      err => {
+        clearTimeout(hardTimeout);
+        if (err.code === 1 /* PERMISSION_DENIED */)  settle(() => setGeoState('denied'));
+        else if (err.code === 2 /* POSITION_UNAVAILABLE */) settle(() => setGeoState('unavailable'));
+        else /* TIMEOUT */                            settle(() => setGeoState('timeout'));
+      },
+      // enableHighAccuracy: false = WiFi/cell first (fast, works indoors on Android)
+      { enableHighAccuracy: false, timeout: 20000, maximumAge: 60000 }
+    );
   }, []);
 
   /* 4. Student picker */
@@ -266,6 +278,26 @@ export default function FeedbackPage() {
                       </div>
                       <button onClick={checkLocation} className="w-full py-2.5 rounded-xl bg-[#2E3093] text-white text-sm font-semibold hover:bg-[#252780] transition-colors">Try Again</button>
                     </>
+                  )}
+
+                  {geoState === 'inaccurate' && (
+                    <>
+                      <div className="w-14 h-14 rounded-full bg-yellow-50 flex items-center justify-center">
+                        <svg className="w-7 h-7 text-yellow-500" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">Precise Location Required</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Your device is sharing only your <strong>approximate</strong> location, which is not accurate enough.
+                          In your Android settings, go to <strong>Location → App permissions → Browser → Use precise location</strong> and try again.
+                        </p>
+                      </div>
+                      <button onClick={checkLocation} className="w-full py-2.5 rounded-xl bg-[#2E3093] text-white text-sm font-semibold hover:bg-[#252780] transition-colors">Try Again</button>
+                    </>
+                  )}
                   )}
 
                   {geoState === 'unavailable' && (
