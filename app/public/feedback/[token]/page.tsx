@@ -298,7 +298,6 @@ export default function FeedbackPage() {
                       <button onClick={checkLocation} className="w-full py-2.5 rounded-xl bg-[#2E3093] text-white text-sm font-semibold hover:bg-[#252780] transition-colors">Try Again</button>
                     </>
                   )}
-                  )}
 
                   {geoState === 'unavailable' && (
                     <>
