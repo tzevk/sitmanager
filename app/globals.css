@@ -190,9 +190,25 @@ body {
     border: none !important;
   }
 
-  /* Ensure table borders print */
+  /* Page setup — A4 landscape, tight margins */
+  @page {
+    size: A4 landscape;
+    margin: 5mm 5mm;
+  }
+
+  /* Allow overflow containers to render fully */
+  .overflow-x-auto,
+  .overflow-x-scroll {
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Ensure table fills page and borders print */
   table {
     border-collapse: collapse !important;
+    width: 100% !important;
+    table-layout: auto !important;
   }
 
   table th {
@@ -202,10 +218,23 @@ body {
     print-color-adjust: exact !important;
   }
 
+  /* Compact cells — 6pt is the sweet spot for A4 landscape */
   table td, table th {
     border: 1px solid #d1d5db !important;
-    padding: 4px 8px !important;
-    font-size: 8pt !important;
+    padding: 2px 3px !important;
+    font-size: 6pt !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+  }
+
+  /* Release Tailwind fixed widths that would blow out the table */
+  .min-w-\[120px\],
+  .min-w-\[100px\],
+  .min-w-\[80px\] {
+    min-width: 0 !important;
+  }
+  .whitespace-nowrap {
+    white-space: normal !important;
   }
 
   /* Color-code status badges in print */
@@ -214,25 +243,19 @@ body {
     print-color-adjust: exact !important;
   }
 
-  /* Report header gradient line */
+  /* Report header/footer gradient lines */
   .report-header-line,
   .report-footer-line {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* Page setup */
-  @page {
-    size: landscape;
-    margin: 12mm 10mm;
-  }
-
-  /* Keep rows together */
+  /* Keep rows together across pages */
   tr {
     page-break-inside: avoid;
   }
 
-  /* Footer on every page */
+  /* Footer pinned at bottom */
   .report-footer {
     position: fixed;
     bottom: 0;

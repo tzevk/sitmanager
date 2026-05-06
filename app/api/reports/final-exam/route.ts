@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { getAttendanceSummary } from '@/lib/attendance-summary';
 
 /* ─── Schema discovery ─────────────────────────────────────────────── */
 
@@ -392,45 +393,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    /* ── 10. Total lecture count for attendance denominator ── */
-    const [ltmCount] = await pool.query(
-      `SELECT COUNT(*) AS total
-       FROM lecture_taken_master
-       WHERE Batch_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
-      [batchId]
-    );
-    const totalLectures = Number((ltmCount as any[])[0]?.total) || 0;
-
-    /* ── 11. Per-student attendance from lecture_taken_child ── */
-    const attendMap: Record<number, { present: number; total: number }> = {};
-    if (totalLectures > 0) {
-      try {
-        // lecture_taken_child.Student_Atten stores 'Present','Absent' or 1/0
-        const [attRows] = await pool.query(
-          `SELECT ltc.Student_Id,
-                  COUNT(*) AS Total_Records,
-                  SUM(CASE
-                    WHEN TRIM(ltc.Student_Atten) IN ('Present','P','1') THEN 1
-                    ELSE 0
-                  END) AS Present_Count
-           FROM lecture_taken_child ltc
-           JOIN lecture_taken_master ltm ON ltc.Take_Id = ltm.Take_Id
-           WHERE ltm.Batch_Id = ?
-             AND (ltc.IsDelete = 0 OR ltc.IsDelete IS NULL)
-             AND (ltm.IsDelete = 0 OR ltm.IsDelete IS NULL)
-           GROUP BY ltc.Student_Id`,
-          [batchId]
-        );
-        for (const r of attRows as any[]) {
-          attendMap[r.Student_Id] = {
-            present: Number(r.Present_Count) || 0,
-            total:   Number(r.Total_Records) || 0,
-          };
-        }
-      } catch (e) {
-        console.warn('lecture_taken_child query failed:', (e as any).message);
-      }
-    }
+    /* ── 10 & 11. Attendance via shared helper (dedup + 3-late = 1-absent rule) ── */
+    const attSummary = await getAttendanceSummary(pool, batchId);
+    const totalLectures = attSummary.totalLectures;
 
     /* ── 12. Build per-student result rows ── */
     const utTotalMax = unitTests.reduce((s: number, u: any) => s + Number(u.Max_Marks), 0);
@@ -467,10 +432,10 @@ export async function GET(req: NextRequest) {
       const feObtained = finalExams.reduce((sum: number, f: any) => sum + (feMarks[f.Take_Id] || 0), 0);
       const feAvg = feTotalMax > 0 ? roundH((feObtained / feTotalMax) * feWtg) : 0;
 
-      /* attendance */
-      const attData     = attendMap[sid] || { present: 0, total: 0 };
-      const baseLectures = totalLectures > 0 ? totalLectures : attData.total;
-      const presentCount = attData.present;
+      /* attendance — from shared helper (dedup + 3-late = 1-absent rule) */
+      const attData      = attSummary.students[sid] || { effectivePresent: 0, presentCount: 0, lateCount: 0, lateDeductions: 0, percentage: 0 };
+      const baseLectures = totalLectures;
+      const presentCount = attData.effectivePresent;
       const absentDays   = Math.max(0, baseLectures - presentCount);
       const attendPct    = baseLectures > 0 ? roundH((presentCount / baseLectures) * 100) : 0;
       const absentPct    = baseLectures > 0 ? roundH((absentDays  / baseLectures) * 100) : 0;
@@ -481,6 +446,7 @@ export async function GET(req: NextRequest) {
       return {
         srNo:         idx + 1,
         Student_Id:   sid,
+        Student_Code: s.Student_Code || '',
         Student_Name: s.Student_Name,
         Roll_No:      s.Roll_No || '',
         unitTestMarks:   utMarks,

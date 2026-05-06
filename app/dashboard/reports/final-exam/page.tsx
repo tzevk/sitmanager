@@ -16,6 +16,7 @@ interface FECol    { Take_Id: number; Test_No: number; Max_Marks: number; Test_D
 interface StudentRow {
   srNo: number;
   Student_Id: number;
+  Student_Code: string;
   Student_Name: string;
   Roll_No: string;
   unitTestMarks: Record<number, number>;
@@ -164,7 +165,7 @@ function FinalExamReportContent() {
     const { batch, unitTests, assignments, finalExams, students } = report;
 
     const headers = [
-      'Sr.No', 'Student Id', 'Name',
+      'Sr.No', 'Student Code', 'Name',
       ...unitTests.map((u, i) => `UT${i + 1} (${u.Max_Marks})`),
       'UT Average',
       ...assignments.map((a, i) => `AS${i + 1} (${a.Max_Marks})`),
@@ -177,7 +178,7 @@ function FinalExamReportContent() {
     ];
 
     const rows = students.map(s => [
-      s.srNo, s.Student_Id, s.Student_Name,
+      s.srNo, s.Student_Code, s.Student_Name,
       ...unitTests.map(u => s.unitTestMarks[u.Take_Id] ?? 0),
       fmt2(s.utAvg),
       ...assignments.map(a => s.assignmentMarks[a.Given_Id] ?? 0),
@@ -402,6 +403,9 @@ function FinalExamReportContent() {
 function BatchTable({ report }: { report: ReportData }) {
   const { batch, unitTests, assignments, finalExams, students } = report;
 
+  /* Sort by Final Total % descending; re-number srNo for display */
+  const sortedStudents = [...students].sort((a, b) => b.totalScore - a.totalScore);
+
   const utWtg = Number(batch.UnitTestWtg) || 0;
   const asWtg = Number(batch.AssignWtg)   || 0;
   const feWtg = Number(batch.ExamWtg)     || 0;
@@ -435,7 +439,7 @@ function BatchTable({ report }: { report: ReportData }) {
             {/* ── Row 1: group headers ── */}
             <tr className="bg-[#2E3093] text-white">
               <th className={thBase} rowSpan={2}>Sr No</th>
-              <th className={thBase} rowSpan={2}>Student Id</th>
+              <th className={thBase} rowSpan={2}>Student Code</th>
               <th className={`${thBase} text-left min-w-[120px]`} rowSpan={2}>Name</th>
 
               {/* Unit Test group */}
@@ -493,11 +497,11 @@ function BatchTable({ report }: { report: ReportData }) {
           </thead>
 
           <tbody>
-            {students.map((s, i) => (
+            {sortedStudents.map((s, i) => (
               <tr key={s.Student_Id}
                 className={`border-b border-gray-100 hover:bg-blue-50/40 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
-                <td className={`${tdBase} text-gray-400`}>{s.srNo}</td>
-                <td className={tdBase}>{s.Student_Id}</td>
+                <td className={`${tdBase} text-gray-400`}>{i + 1}</td>
+                <td className={tdBase}>{s.Student_Code}</td>
                 <td className={`${tdBase} text-left font-medium text-gray-900 whitespace-nowrap`}>{s.Student_Name}</td>
 
                 {/* UT marks */}
@@ -543,7 +547,7 @@ function BatchTable({ report }: { report: ReportData }) {
       {/* Footer legend */}
       <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex flex-wrap items-center justify-between gap-2 text-[10px] text-gray-500">
         <span>
-          {students.length} students &nbsp;|&nbsp;
+          {sortedStudents.length} students &nbsp;|&nbsp;
           {unitTests.length} unit test(s) &nbsp;|&nbsp;
           {assignments.length} assignment(s) &nbsp;|&nbsp;
           {finalExams.length} final exam(s)
@@ -572,7 +576,7 @@ function StudentCard({ report }: { report: ReportData }) {
           <div>
             <h2 className="text-base font-bold text-[#2E3093]">{s.Student_Name}</h2>
             <p className="text-xs text-gray-500 mt-0.5">
-              ID: {s.Student_Id} &nbsp;|&nbsp; Roll No: {s.Roll_No || 'N/A'} &nbsp;|&nbsp;
+              Code: {s.Student_Code} &nbsp;|&nbsp; Roll No: {s.Roll_No || 'N/A'} &nbsp;|&nbsp;
               Batch: {batch.Batch_code} &nbsp;|&nbsp; Course: {batch.Course_Name}
             </p>
           </div>

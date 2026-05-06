@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { getAttendanceSummary } from '@/lib/attendance-summary';
 
 /* ---------- GET — Full Attendance Report ---------- */
 export async function GET(req: NextRequest) {
@@ -112,7 +113,7 @@ export async function GET(req: NextRequest) {
 
     const takeIds = lectureRows.map((l: any) => l.Take_Id);
 
-    /* --- Get attendance for all lectures --- */
+    /* --- Build attendance map for per-cell display --- */
     const [attendanceData] = await pool.query(
       `SELECT ltc.Take_Id, ltc.Student_Id, ltc.Student_Atten, ltc.Late
        FROM lecture_taken_child ltc
@@ -121,43 +122,29 @@ export async function GET(req: NextRequest) {
       takeIds
     );
     const attendanceRows = attendanceData as any[];
-
-    /* --- Build attendance map: { [Take_Id]: { [Student_Id]: { status, late } } } --- */
     const attendanceMap: Record<string, Record<string, { status: string; late: boolean }>> = {};
-    const summaryAcc: Record<string, { lateCount: number; presentCount: number }> = {};
-
-    for (const s of students) {
-      summaryAcc[String(s.Student_Id)] = { lateCount: 0, presentCount: 0 };
-    }
-
     for (const a of attendanceRows) {
       const takeKey = String(a.Take_Id);
       const studKey = String(a.Student_Id);
       if (!attendanceMap[takeKey]) attendanceMap[takeKey] = {};
-      const status = (a.Student_Atten || '').trim();
-      const late = (a.Late || '').trim() === 'Yes';
-      attendanceMap[takeKey][studKey] = { status, late };
-      if (summaryAcc[studKey]) {
-        if (status === 'Present') summaryAcc[studKey].presentCount++;
-        if (late) summaryAcc[studKey].lateCount++;
-      }
+      attendanceMap[takeKey][studKey] = {
+        status: (a.Student_Atten || '').trim(),
+        late:   (a.Late || '').trim() === 'Yes',
+      };
     }
 
-    const totalLectures = lectureRows.length;
+    /* --- Summary totals via shared helper (dedup + late rule) --- */
+    const attSummary = await getAttendanceSummary(pool, batchIdInt);
+    const totalLectures = attSummary.totalLectures;
     const studentSummary: Record<string, { lateCount: number; presentCount: number; effectivePresent: number; percentage: string }> = {};
     for (const s of students) {
       const key = String(s.Student_Id);
-      const ss = summaryAcc[key] || { lateCount: 0, presentCount: 0 };
-      // Every 3 late marks counts as 1 absent (deducted from present count)
-      const lateDeductions = Math.floor(ss.lateCount / 3);
-      const effectivePresent = Math.max(0, ss.presentCount - lateDeductions);
+      const ss = attSummary.students[s.Student_Id] || { presentCount: 0, lateCount: 0, lateDeductions: 0, effectivePresent: 0, percentage: 0 };
       studentSummary[key] = {
-        lateCount: ss.lateCount,
-        presentCount: ss.presentCount,
-        effectivePresent,
-        percentage: totalLectures > 0
-          ? ((effectivePresent / totalLectures) * 100).toFixed(2)
-          : '0.00',
+        lateCount:      ss.lateCount,
+        presentCount:   ss.presentCount,
+        effectivePresent: ss.effectivePresent,
+        percentage:     ss.percentage.toFixed(2),
       };
     }
 
