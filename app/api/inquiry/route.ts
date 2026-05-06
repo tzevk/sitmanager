@@ -441,6 +441,8 @@ export async function GET(req: NextRequest) {
       27: 'Enrolled',
       29: 'Dropped',
       33: 'Archived',
+      34: 'Duplicate Entry',
+      35: 'Next Batch',
     };
 
     type StatusOption = { id: number; label: string };

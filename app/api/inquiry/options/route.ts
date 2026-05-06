@@ -84,6 +84,8 @@ export async function GET() {
           { id: 27, label: 'Enrolled' },
           { id: 29, label: 'Dropped' },
           { id: 33, label: 'Archived' },
+          { id: 34, label: 'Duplicate Entry' },
+          { id: 35, label: 'Next Batch' },
         ];
       }
 

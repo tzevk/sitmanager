@@ -282,6 +282,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       ...createPermissions('batch_moving', 'Batch Moving'),
       ...createPermissions('batch_transfer', 'Batch Transfer'),
       ...createPermissions('batch_cancellation', 'Batch Cancellation'),
+      ...createPermissions('finance', 'Finance Dashboard'),
     ],
   },
 

@@ -31,6 +31,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Masters > Employee': '/dashboard/masters/employee',
   'Masters > Library Book': '/dashboard/masters/library-book',
   'Masters > Trainer': '/dashboard/masters/faculty',
+  'Admin/Accounts > Finance Dashboard': '/dashboard/finance',
   'Admin/Accounts > Employee Profession Tax': '/dashboard/account-master/employee-profession-tax',
   'Admin/Accounts > Account Head': '/dashboard/account-master/account-head',
   'Admin/Accounts > Assets': '/dashboard/account-master/assets',
@@ -150,6 +151,7 @@ const SUB_MENUS: Record<string, string[]> = {
     'Inquiry Report',
   ],
   'Admin/Accounts': [
+    'Finance Dashboard',
     'Employee Profession Tax',
     'Account Head',
     'Assets',
@@ -221,6 +223,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Masters > Employee': ['employee.view'],
   'Masters > Library Book': ['library_book.view'],
   'Masters > Trainer': ['faculty.view'],
+  'Admin/Accounts > Finance Dashboard': ['finance.view'],
   'Admin/Accounts > Employee Profession Tax': ['profession_tax.view'],
   'Admin/Accounts > Account Head': ['account_head.view'],
   'Admin/Accounts > Assets': ['assets.view'],
@@ -382,6 +385,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     if (path.startsWith('/dashboard/masters')) return 'Masters';
     if (path.startsWith('/dashboard/daily-activities')) return 'Daily Activities';
     if (path.startsWith('/dashboard/account-master')) return 'Admin/Accounts';
+    if (path.startsWith('/dashboard/finance')) return 'Admin/Accounts';
     if (path.startsWith('/dashboard/reports')) return 'Reports';
     if (path.startsWith('/dashboard/role-right')) return 'Role Right';
     if (path.startsWith('/dashboard/portal-accounts')) return 'Role Right';

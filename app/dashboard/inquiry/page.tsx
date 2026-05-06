@@ -63,8 +63,9 @@ function statusPill(id: number | null, label: string) {
     if ([1,2,3].includes(id)) return 'bg-blue-100 text-blue-700';
     if ([5,24].includes(id)) return 'bg-orange-100 text-orange-700';
     if ([4,15,25].includes(id)) return 'bg-amber-100 text-amber-700';
-    if ([6,9,19,29].includes(id)) return 'bg-red-100 text-red-600';
+    if ([6,9,19,29,34].includes(id)) return 'bg-red-100 text-red-600';
     if ([8,33].includes(id)) return 'bg-gray-100 text-gray-500';
+    if ([35].includes(id)) return 'bg-indigo-100 text-indigo-700';
     if ([12,16].includes(id)) return 'bg-purple-100 text-purple-700';
     if ([18,26].includes(id)) return 'bg-slate-100 text-slate-500';
   }
@@ -84,7 +85,8 @@ function statusBar(id: number | null, label: string) {
     if ([1,2,3].includes(id)) return 'bg-blue-400';
     if ([5,24].includes(id)) return 'bg-orange-400';
     if ([4,15,25].includes(id)) return 'bg-amber-400';
-    if ([6,9,19,29].includes(id)) return 'bg-red-400';
+    if ([6,9,19,29,34].includes(id)) return 'bg-red-400';
+    if ([35].includes(id)) return 'bg-indigo-400';
     if ([12,16].includes(id)) return 'bg-purple-400';
     if ([18,26].includes(id)) return 'bg-slate-400';
   }
