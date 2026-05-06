@@ -158,53 +158,64 @@ body {
 
 /* ===== PRINT STYLES ===== */
 @media print {
-  /* Hide everything except the report */
-  body {
+  /* ── 1. Reset layout shell constraints ── */
+  html, body {
     overflow: visible !important;
     height: auto !important;
+    width: auto !important;
+    background: white !important;
   }
 
-  header, nav, .form-card:has(h2.section-title:first-child) {
+  /* The dashboard root wrapper: fixed inset-0 overflow-hidden */
+  body > div,
+  body > div > div {
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    width: auto !important;
+    display: block !important;
+    background: white !important;
+  }
+
+  /* The <main> scroll container */
+  main {
+    overflow: visible !important;
+    height: auto !important;
+    flex: none !important;
+    padding: 0 !important;
+  }
+
+  /* ── 2. Hide everything except the report ── */
+  nav,
+  header {
     display: none !important;
   }
 
-  /* Hide filter card & summary card on print, keep only the printable report */
+  /* Hide all siblings of the report area (works for both space-y-4 and space-y-5) */
+  .space-y-4 > *:not(.report-print-area),
   .space-y-5 > *:not(#inquiry-report-print):not(.report-print-area) {
     display: none !important;
   }
 
-  /* Make the report fill the page */
+  /* ── 3. Make report area fill the page ── */
   .report-print-area {
     display: block !important;
     position: static !important;
+    width: 100% !important;
   }
 
   .report-print-area .hidden.print\:block {
     display: block !important;
   }
 
-  /* Remove card shadows for print */
+  /* ── 4. Remove card chrome ── */
   .form-card {
     box-shadow: none !important;
     border-radius: 0 !important;
     border: none !important;
   }
 
-  /* Page setup — A4 landscape, tight margins */
-  @page {
-    size: A4 landscape;
-    margin: 5mm 5mm;
-  }
-
-  /* Allow overflow containers to render fully */
-  .overflow-x-auto,
-  .overflow-x-scroll {
-    overflow: visible !important;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  /* Ensure table fills page and borders print */
+  /* ── 5. Table print styles ── */
   table {
     border-collapse: collapse !important;
     width: 100% !important;
@@ -218,7 +229,7 @@ body {
     print-color-adjust: exact !important;
   }
 
-  /* Compact cells — 6pt is the sweet spot for A4 landscape */
+  /* Compact cells for A4 landscape */
   table td, table th {
     border: 1px solid #d1d5db !important;
     padding: 2px 3px !important;
@@ -227,7 +238,7 @@ body {
     word-break: break-word !important;
   }
 
-  /* Release Tailwind fixed widths that would blow out the table */
+  /* Release fixed widths that blow out the table */
   .min-w-\[120px\],
   .min-w-\[100px\],
   .min-w-\[80px\] {
@@ -237,25 +248,32 @@ body {
     white-space: normal !important;
   }
 
-  /* Color-code status badges in print */
-  table td span[class*="rounded-full"] {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
+  /* Allow scroll containers to render fully */
+  .overflow-x-auto,
+  .overflow-x-scroll {
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
-  /* Report header/footer gradient lines */
+  /* Color-code badges */
+  table td span[class*="rounded-full"],
   .report-header-line,
   .report-footer-line {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* Keep rows together across pages */
+  /* ── 6. Page setup — A4 landscape ── */
+  @page {
+    size: A4 landscape;
+    margin: 5mm 5mm;
+  }
+
   tr {
     page-break-inside: avoid;
   }
 
-  /* Footer pinned at bottom */
   .report-footer {
     position: fixed;
     bottom: 0;
