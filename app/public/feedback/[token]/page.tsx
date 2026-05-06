@@ -27,7 +27,7 @@ function fmtDate(d: string) {
   return `${day}/${m}/${y}`;
 }
 
-type GeoState = 'idle' | 'checking' | 'denied' | 'far' | 'ok' | 'unsupported';
+type GeoState = 'idle' | 'checking' | 'denied' | 'unavailable' | 'timeout' | 'far' | 'ok' | 'unsupported';
 type Student = { rollNo: string; studentName: string };
 
 export default function FeedbackPage() {
@@ -105,15 +105,31 @@ export default function FeedbackPage() {
   const checkLocation = useCallback(() => {
     if (!navigator.geolocation) { setGeoState('unsupported'); return; }
     setGeoState('checking');
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        const dist = haversineMeters(pos.coords.latitude, pos.coords.longitude, TARGET_LAT, TARGET_LNG);
-        setDistance(Math.round(dist));
-        setGeoState(dist <= MAX_DISTANCE_M ? 'ok' : 'far');
-      },
-      () => setGeoState('denied'),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+    // First try without high-accuracy (faster, works on WiFi/cell), then escalate
+    const tryPosition = (highAccuracy: boolean) => {
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const dist = haversineMeters(pos.coords.latitude, pos.coords.longitude, TARGET_LAT, TARGET_LNG);
+          setDistance(Math.round(dist));
+          setGeoState(dist <= MAX_DISTANCE_M ? 'ok' : 'far');
+        },
+        err => {
+          if (err.code === 1 /* PERMISSION_DENIED */) {
+            setGeoState('denied');
+          } else if (err.code === 2 /* POSITION_UNAVAILABLE */ && highAccuracy) {
+            // Retry without high accuracy (falls back to WiFi/cell positioning)
+            tryPosition(false);
+          } else if (err.code === 2) {
+            setGeoState('unavailable');
+          } else {
+            // TIMEOUT or unknown
+            setGeoState('timeout');
+          }
+        },
+        { enableHighAccuracy: highAccuracy, timeout: highAccuracy ? 12000 : 20000, maximumAge: 30000 }
+      );
+    };
+    tryPosition(true);
   }, []);
 
   /* 4. Student picker */
@@ -247,6 +263,36 @@ export default function FeedbackPage() {
                       <div>
                         <p className="text-sm font-semibold text-gray-800">Location Permission Denied</p>
                         <p className="text-xs text-gray-500 mt-1">Please allow location access in your browser settings and try again.</p>
+                      </div>
+                      <button onClick={checkLocation} className="w-full py-2.5 rounded-xl bg-[#2E3093] text-white text-sm font-semibold hover:bg-[#252780] transition-colors">Try Again</button>
+                    </>
+                  )}
+
+                  {geoState === 'unavailable' && (
+                    <>
+                      <div className="w-14 h-14 rounded-full bg-yellow-50 flex items-center justify-center">
+                        <svg className="w-7 h-7 text-yellow-500" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">Location Unavailable</p>
+                        <p className="text-xs text-gray-500 mt-1">Your device could not determine your position. Enable Wi-Fi or move to a spot with better signal, then try again.</p>
+                      </div>
+                      <button onClick={checkLocation} className="w-full py-2.5 rounded-xl bg-[#2E3093] text-white text-sm font-semibold hover:bg-[#252780] transition-colors">Try Again</button>
+                    </>
+                  )}
+
+                  {geoState === 'timeout' && (
+                    <>
+                      <div className="w-14 h-14 rounded-full bg-orange-50 flex items-center justify-center">
+                        <svg className="w-7 h-7 text-orange-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">Location Timed Out</p>
+                        <p className="text-xs text-gray-500 mt-1">Your device took too long to get a GPS fix. Make sure location is on and try again.</p>
                       </div>
                       <button onClick={checkLocation} className="w-full py-2.5 rounded-xl bg-[#2E3093] text-white text-sm font-semibold hover:bg-[#252780] transition-colors">Try Again</button>
                     </>
