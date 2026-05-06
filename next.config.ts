@@ -24,7 +24,9 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['mysql2'],
 
   experimental: {
-    optimizeCss: true,
+    // optimizeCss uses `critters` (fs.readFile) which triggers a Turbopack NFT whole-project
+    // trace warning. Only enable it for production webpack builds, not Turbopack / dev.
+    optimizeCss: process.env.NODE_ENV === 'production' && process.env.TURBOPACK !== '1',
     optimizePackageImports: ['react-icons', 'jose', 'lucide-react', '@tiptap/react', '@tiptap/starter-kit'],
     staleTimes: {
       dynamic: 30,
