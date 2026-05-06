@@ -152,10 +152,12 @@ function AttendanceReportContent({ canExport }: { canExport: boolean }) {
         ...students.map((s) => (ta[String(s.Student_Id)]?.status === 'Present' ? '1' : '-')),
       ].join(','));
     }
-    rows.push(['Total Lecture',   '', ...students.map(() => String(summary?.totalLectures ?? 0))].join(','));
-    rows.push(['Total Late Mark', '', ...students.map((s) => String(studentSummary[String(s.Student_Id)]?.lateCount ?? 0))].join(','));
-    rows.push(['Attend Total',    '', ...students.map((s) => String(studentSummary[String(s.Student_Id)]?.effectivePresent ?? 0))].join(','));
-    rows.push(['Percentage (%)',  '', ...students.map((s) => `${studentSummary[String(s.Student_Id)]?.percentage ?? '0.00'}%`)].join(','));
+    rows.push(['Total Lecture',    '', ...students.map(() => String(summary?.totalLectures ?? 0))].join(','));
+    rows.push(['Total Late Mark',  '', ...students.map((s) => String(studentSummary[String(s.Student_Id)]?.lateCount ?? 0))].join(','));
+    rows.push(['Late Deductions',  '', ...students.map((s) => String(Math.floor((studentSummary[String(s.Student_Id)]?.lateCount ?? 0) / 3)))].join(','));
+    rows.push(['Attend Total',     '', ...students.map((s) => String(studentSummary[String(s.Student_Id)]?.presentCount ?? 0))].join(','));
+    rows.push(['Eff. Attend',      '', ...students.map((s) => String(studentSummary[String(s.Student_Id)]?.effectivePresent ?? 0))].join(','));
+    rows.push(['Percentage (%)',   '', ...students.map((s) => `${studentSummary[String(s.Student_Id)]?.percentage ?? '0.00'}%`)].join(','));
     const blob = new Blob(['\uFEFF' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -217,7 +219,9 @@ function AttendanceReportContent({ canExport }: { canExport: boolean }) {
     [
       { label: 'Total Lecture',   bg: 'FFE0F2FE', fg: 'FF1D4ED8', val: () => summary?.totalLectures ?? 0 },
       { label: 'Total Late Mark', bg: 'FFFEF9C3', fg: 'FFA16207', val: (sid: string) => studentSummary[sid]?.lateCount ?? 0 },
-      { label: 'Attend Total',    bg: 'FFDCFCE7', fg: 'FF166534', val: (sid: string) => studentSummary[sid]?.effectivePresent ?? 0 },
+      { label: 'Late Deductions', bg: 'FFFDE8C8', fg: 'FF92400E', val: (sid: string) => Math.floor((studentSummary[sid]?.lateCount ?? 0) / 3) },
+      { label: 'Attend Total',    bg: 'FFDCFCE7', fg: 'FF166534', val: (sid: string) => studentSummary[sid]?.presentCount ?? 0 },
+      { label: 'Eff. Attend',     bg: 'FFD1FAE5', fg: 'FF065F46', val: (sid: string) => studentSummary[sid]?.effectivePresent ?? 0 },
       { label: 'Percentage (%)',  bg: 'FFE0F2FE', fg: 'FF1D4ED8', val: (sid: string) => `${studentSummary[sid]?.percentage ?? '0.00'}%` },
     ].forEach((def, si) => {
       const row = ws.getRow(dStart + si); row.height = 18;
@@ -396,7 +400,9 @@ function AttendanceReportContent({ canExport }: { canExport: boolean }) {
                 {([
                   { label: 'Total Lecture',   bg: '#dbeafe', labelBg: '#1d4ed8', fg: '#1e3a8a', val: () => String(summary?.totalLectures ?? 0) },
                   { label: 'Total Late Mark', bg: '#fef3c7', labelBg: '#d97706', fg: '#78350f', val: (sid: string) => String(studentSummary[sid]?.lateCount ?? 0) },
-                  { label: 'Attend Total',    bg: '#dcfce7', labelBg: '#16a34a', fg: '#14532d', val: (sid: string) => String(studentSummary[sid]?.effectivePresent ?? 0) },
+                  { label: 'Late Deductions', bg: '#fde8c8', labelBg: '#b45309', fg: '#92400e', val: (sid: string) => String(Math.floor((studentSummary[sid]?.lateCount ?? 0) / 3)) },
+                  { label: 'Attend Total',    bg: '#dcfce7', labelBg: '#16a34a', fg: '#14532d', val: (sid: string) => String(studentSummary[sid]?.presentCount ?? 0) },
+                  { label: 'Eff. Attend',     bg: '#bbf7d0', labelBg: '#15803d', fg: '#14532d', val: (sid: string) => String(studentSummary[sid]?.effectivePresent ?? 0) },
                   { label: 'Percentage (%)',  bg: '#e0e7ff', labelBg: '#4338ca', fg: '#1e1b4b', val: (sid: string) => { const p = parseFloat(studentSummary[sid]?.percentage ?? '0'); return `${p.toFixed(2)}%`; }, pct: true },
                 ] as { label: string; bg: string; labelBg: string; fg: string; val: (s: string) => string; pct?: boolean }[]).map((row, ri) => (
                   <tr key={ri} style={{ borderTop: ri === 0 ? '2px solid #9ca3af' : undefined }}>

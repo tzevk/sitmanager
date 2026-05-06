@@ -451,12 +451,11 @@ export async function GET(req: NextRequest) {
       const sid = s.Student_Id;
 
       /* unit test
-       * Formula: (sum_of_obtained / 100) × UnitTestWtg
-       * The denominator is always 100 (unit tests are normalised out of 100).
+       * Formula: (sum_of_obtained / utTotalMax) × UnitTestWtg
        */
       const utMarks: Record<number, number> = utMarksMap[sid] || {};
       const utObtained = unitTests.reduce((sum: number, ut: any) => sum + (utMarks[ut.Take_Id] || 0), 0);
-      const utAvg = roundH((utObtained / 100) * utWtg);
+      const utAvg = utTotalMax > 0 ? roundH((utObtained / utTotalMax) * utWtg) : 0;
 
       /* assignment — denominator is the actual sum of assignment max marks */
       const asMarks: Record<number, number> = assignMarksMap[sid] || {};
