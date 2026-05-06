@@ -34,21 +34,29 @@ export async function GET(
 
     const batchId = row.Batch_Id;
 
-    /* ?students=1 — return students marked Present for this batch + date */
-    if (req.nextUrl.searchParams.get('students') === '1') {
+    /* ?verify=1&rollNo=X&phone=Y — verify roll number + phone, must be marked Present */
+    if (req.nextUrl.searchParams.get('verify') === '1') {
+      const rollNo = req.nextUrl.searchParams.get('rollNo')?.trim() ?? '';
+      const phone  = req.nextUrl.searchParams.get('phone')?.trim().replace(/\D/g, '') ?? '';
+      if (!rollNo || !phone) {
+        return NextResponse.json({ error: 'Roll number and phone are required' }, { status: 400 });
+      }
       const [students] = await pool.query<any[]>(
-        `SELECT COALESCE(a.Roll_No, '') AS rollNo, s.Student_Name AS studentName
+        `SELECT s.Student_Name AS studentName, a.Roll_No AS rollNo
          FROM student_attendance sa
          JOIN admission_master a ON a.Student_Id = sa.Student_Id AND a.Batch_Id = sa.Batch_Id
          JOIN student_master s ON s.Student_Id = sa.Student_Id
          WHERE sa.Batch_Id = ? AND sa.Attendance_Date = ? AND sa.Status = 'P'
            AND (sa.IsDelete IS NULL OR sa.IsDelete = 0)
-           AND a.Roll_No IS NOT NULL AND a.Roll_No != ''
-         GROUP BY a.Roll_No, s.Student_Name
-         ORDER BY CAST(a.Roll_No AS UNSIGNED), s.Student_Name`,
-        [batchId, String(row.date).slice(0, 10)]
+           AND a.Roll_No = ?
+           AND REGEXP_REPLACE(COALESCE(s.Present_Mobile,''), '[^0-9]', '') LIKE ?
+         LIMIT 1`,
+        [batchId, String(row.date).slice(0, 10), rollNo, `%${phone.slice(-10)}`]
       );
-      return NextResponse.json({ students });
+      if (!students.length) {
+        return NextResponse.json({ error: 'Roll number and phone number do not match, or you are not marked present.' }, { status: 403 });
+      }
+      return NextResponse.json({ studentName: students[0].studentName, rollNo: students[0].rollNo });
     }
 
     return NextResponse.json({

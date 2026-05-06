@@ -12,8 +12,6 @@ function fmtDate(d: string) {
   return `${day}/${m}/${y}`;
 }
 
-type Student = { rollNo: string; studentName: string };
-
 export default function FeedbackPage() {
   const params = useParams();
   const token = params.token as string;
@@ -22,23 +20,28 @@ export default function FeedbackPage() {
   const [sessionInfo, setSessionInfo] = useState<{ batchName: string; date: string } | null>(null);
   const [tokenError, setTokenError] = useState('');
 
-  /* students (present only) */
-  const [students, setStudents] = useState<Student[]>([]);
-  const [studentsLoading, setStudentsLoading] = useState(false);
-
   /* device fingerprint */
   const [deviceId, setDeviceId] = useState('');
 
-  /* form */
-  const [rollNo, setRollNo] = useState('');
+  /* verify step */
+  const [inputRollNo, setInputRollNo]     = useState('');
+  const [inputPhone, setInputPhone]       = useState('');
+  const [verifying, setVerifying]         = useState(false);
+  const [verifyError, setVerifyError]     = useState('');
+  const [verified, setVerified]           = useState(false);
+
+  /* identity (set after verify) */
+  const [rollNo, setRollNo]           = useState('');
   const [studentName, setStudentName] = useState('');
-  const [rating, setRating] = useState(0);
+
+  /* rating form */
+  const [rating, setRating]         = useState(0);
   const [improvement, setImprovement] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting]   = useState(false);
+  const [submitted, setSubmitted]     = useState(false);
   const [submitError, setSubmitError] = useState('');
 
-  /* 0. Device ID */
+  /* 0. Device ID + already-submitted check */
   useEffect(() => {
     if (!token) return;
     if (localStorage.getItem(`sit_fb_submitted_${token}`) === '1') {
@@ -63,30 +66,32 @@ export default function FeedbackPage() {
       .catch(() => setTokenError('Unable to load feedback session.'));
   }, [token]);
 
-  /* 2. Load present students */
-  useEffect(() => {
-    if (!sessionInfo) return;
-    setStudentsLoading(true);
-    fetch(`/api/public/feedback/${token}?students=1`)
-      .then(r => r.json())
-      .then(d => setStudents(d.students ?? []))
-      .catch(() => {/* non-critical */})
-      .finally(() => setStudentsLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionInfo]);
-
-  /* 3. Student picker */
-  const handleStudentSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    setRollNo(val);
-    setStudentName(students.find(s => s.rollNo === val)?.studentName ?? '');
-    setSubmitError('');
+  /* 2. Verify roll number + phone */
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputRollNo.trim()) { setVerifyError('Enter your roll number.'); return; }
+    if (!inputPhone.trim())  { setVerifyError('Enter your registered phone number.'); return; }
+    setVerifying(true);
+    setVerifyError('');
+    try {
+      const res = await fetch(
+        `/api/public/feedback/${token}?verify=1&rollNo=${encodeURIComponent(inputRollNo.trim())}&phone=${encodeURIComponent(inputPhone.trim())}`
+      );
+      const data = await res.json();
+      if (!res.ok) { setVerifyError(data.error || 'Verification failed.'); return; }
+      setRollNo(data.rollNo);
+      setStudentName(data.studentName);
+      setVerified(true);
+    } catch {
+      setVerifyError('Network error. Please try again.');
+    } finally {
+      setVerifying(false);
+    }
   };
 
-  /* 4. Submit */
+  /* 3. Submit feedback */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!rollNo) { setSubmitError('Please select your roll number.'); return; }
     if (rating < 1) { setSubmitError('Please select a rating.'); return; }
     setSubmitting(true);
     setSubmitError('');
@@ -165,47 +170,75 @@ export default function FeedbackPage() {
                 </div>
               )}
 
-              {/* Feedback form */}
-              {!submitted && (
-                <form onSubmit={handleSubmit} className="p-5 space-y-5">
+              {/* Step 1 — verify identity */}
+              {!submitted && !verified && (
+                <form onSubmit={handleVerify} className="p-5 space-y-4">
+                  <p className="text-xs text-gray-500">Enter your roll number and registered phone number to verify your identity.</p>
 
-                  {/* Roll number dropdown — only present students */}
                   <div>
                     <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-1">
-                      Select Your Roll Number <span className="text-red-400">*</span>
+                      Roll Number <span className="text-red-400">*</span>
                     </label>
-                    {studentsLoading ? (
-                      <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
-                        <span className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin block" />
-                        Loading…
-                      </div>
-                    ) : students.length === 0 ? (
-                      <p className="text-xs text-gray-400 py-2">No attendance recorded for this session yet.</p>
-                    ) : (
-                      <select
-                        value={rollNo}
-                        onChange={handleStudentSelect}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
-                      >
-                        <option value="">— Select your roll number —</option>
-                        {students.map(s => (
-                          <option key={s.rollNo} value={s.rollNo}>
-                            {s.rollNo} — {s.studentName}
-                          </option>
-                        ))}
-                      </select>
-                    )}
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={inputRollNo}
+                      onChange={e => { setInputRollNo(e.target.value); setVerifyError(''); }}
+                      placeholder="e.g. 1234"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+                    />
                   </div>
 
-                  {/* Student name (read-only, auto-filled) */}
-                  {studentName && (
-                    <div className="flex items-center gap-2 text-xs text-[#2E3093] bg-[#2E3093]/5 border border-[#2E3093]/20 rounded-lg px-3 py-2">
-                      <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-1">
+                      Registered Phone Number <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      value={inputPhone}
+                      onChange={e => { setInputPhone(e.target.value); setVerifyError(''); }}
+                      placeholder="10-digit mobile number"
+                      maxLength={15}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+                    />
+                  </div>
+
+                  {verifyError && (
+                    <p className="text-xs text-red-500 flex items-start gap-1.5">
+                      <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
                       </svg>
-                      <span className="font-semibold">{studentName}</span>
-                    </div>
+                      {verifyError}
+                    </p>
                   )}
+
+                  <button
+                    type="submit"
+                    disabled={verifying}
+                    className="w-full py-2.5 rounded-xl bg-[#2E3093] text-white text-sm font-semibold hover:bg-[#252780] transition-colors disabled:opacity-50"
+                  >
+                    {verifying ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Verifying…
+                      </span>
+                    ) : 'Verify & Continue'}
+                  </button>
+                </form>
+              )}
+
+              {/* Step 2 — rating form */}
+              {!submitted && verified && (
+                <form onSubmit={handleSubmit} className="p-5 space-y-5">
+
+                  {/* Verified identity badge */}
+                  <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span><span className="font-semibold">{studentName}</span> — Roll No. {rollNo}</span>
+                  </div>
 
                   {/* Rating */}
                   <div>
@@ -231,7 +264,7 @@ export default function FeedbackPage() {
                     </div>
                   </div>
 
-                  {/* Improvement text — only for Unsatisfactory */}
+                  {/* Improvement — only for Unsatisfactory */}
                   {rating === 1 && (
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-1">
@@ -251,7 +284,7 @@ export default function FeedbackPage() {
 
                   <button
                     type="submit"
-                    disabled={submitting || rating < 1 || !rollNo}
+                    disabled={submitting || rating < 1}
                     className="w-full py-2.5 rounded-xl bg-[#2E3093] text-white text-sm font-semibold hover:bg-[#252780] transition-colors disabled:opacity-50"
                   >
                     {submitting ? (
@@ -274,3 +307,4 @@ export default function FeedbackPage() {
     </div>
   );
 }
+
