@@ -1,29 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { NextRequest, NextResponse } from 'next/server';
-import { getPool } from '@/lib/db';
-import { requirePermission } from '@/lib/api-auth';
+import { idHandlers } from '@/lib/finance-resource';
+import { FINANCE_LOANS } from '@/lib/finance-tables';
 
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission(req, 'finance.update');
-  if (auth instanceof NextResponse) return auth;
-  try {
-    const { id } = await params;
-    const { bank_name, outstanding, paid } = await req.json();
-    await getPool().query(
-      'UPDATE finance_loans SET bank_name=?, outstanding=?, paid=? WHERE id=?',
-      [bank_name, outstanding ?? 0, paid ?? 0, id]
-    );
-    const [rows] = await getPool().query<any[]>('SELECT * FROM finance_loans WHERE id=?', [id]);
-    return NextResponse.json({ row: rows[0] });
-  } catch (err: any) { return NextResponse.json({ error: err.message }, { status: 500 }); }
-}
-
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission(req, 'finance.delete');
-  if (auth instanceof NextResponse) return auth;
-  try {
-    const { id } = await params;
-    await getPool().query('DELETE FROM finance_loans WHERE id=?', [id]);
-    return NextResponse.json({ ok: true });
-  } catch (err: any) { return NextResponse.json({ error: err.message }, { status: 500 }); }
-}
+const handlers = idHandlers(FINANCE_LOANS);
+export const PUT    = handlers.PUT;
+export const DELETE = handlers.DELETE;

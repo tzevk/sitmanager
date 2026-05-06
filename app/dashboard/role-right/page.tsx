@@ -34,8 +34,8 @@ export default function RoleRightPage() {
   const [stats, setStats] = useState<PermissionStats | null>(null);
   
   const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState<'roles' | 'create-user'>(
-    tabParam === 'create-user' ? 'create-user' : 'roles'
+  const [activeTab, setActiveTab] = useState<'roles' | 'create-user' | 'manage-accounts'>(
+    tabParam === 'create-user' ? 'create-user' : tabParam === 'manage-accounts' ? 'manage-accounts' : 'roles'
   );
 
   const fetchRoles = useCallback(async () => {
@@ -169,6 +169,16 @@ export default function RoleRightPage() {
               }`}
             >
               <FaUserPlus className="w-4 h-4" /> Create User
+            </button>
+            <button
+              onClick={() => setActiveTab('manage-accounts')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'manage-accounts'
+                  ? 'border-[#2E3093] text-[#2E3093]'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <FaKey className="w-4 h-4" /> Manage Accounts
             </button>
           </div>
 
@@ -306,11 +316,253 @@ export default function RoleRightPage() {
             ))}
           </div>
         )
-      ) : (
+      ) : activeTab === 'create-user' ? (
         /* Create User Tab */
         <CreateUser />
+      ) : (
+        /* Manage Accounts Tab */
+        <ManageAccounts />
       )}
     </div>
+  );
+}
+
+// Manage Accounts Component — view all existing accounts and change their role
+function ManageAccounts() {
+  const [users, setUsers] = useState<any[]>([]);
+  const [roles, setRoles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [pagination, setPagination] = useState({ page: 1, limit: 25, total: 0, totalPages: 0 });
+
+  // Modal
+  const [editUser, setEditUser] = useState<any | null>(null);
+  const [newRoleId, setNewRoleId] = useState<number>(0);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const fetchUsers = useCallback((page = 1, q = '') => {
+    setLoading(true);
+    const params = new URLSearchParams({ page: String(page), limit: '25', search: q });
+    fetch(`/api/roles/users?${params}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          setUsers(d.data || []);
+          setPagination(p => ({ ...p, page, total: d.pagination?.total ?? 0, totalPages: d.pagination?.totalPages ?? 0 }));
+        }
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/roles').then(r => r.json()).then(d => { if (d.success) setRoles(d.data || []); });
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const openEdit = (user: any) => {
+    setEditUser(user);
+    setNewRoleId(user.role_id || 0);
+    setError('');
+    setSuccess('');
+  };
+
+  const handleUpdateRole = async () => {
+    if (!newRoleId) { setError('Please select a role'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      const res = await fetch('/api/roles/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: editUser.id, roleId: newRoleId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSuccess('Role updated successfully');
+        fetchUsers(pagination.page, search);
+        setTimeout(() => setEditUser(null), 1200);
+      } else {
+        setError(data.error || 'Failed to update role');
+      }
+    } catch {
+      setError('Failed to update role');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-gray-100 flex items-center gap-3">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
+            <FaSearch className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => { setSearch(e.target.value); fetchUsers(1, e.target.value); }}
+              placeholder="Search accounts…"
+              className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 bg-white"
+            />
+          </div>
+          <span className="text-xs text-gray-400">{pagination.total} account{pagination.total !== 1 ? 's' : ''}</span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-[11px] uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100">
+                <th className="text-left py-3 px-4 font-semibold">Name</th>
+                <th className="text-left py-3 px-4 font-semibold">Email / Username</th>
+                <th className="text-left py-3 px-4 font-semibold">Current Role</th>
+                <th className="text-center py-3 px-4 font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={4} className="py-8 text-center text-gray-400">
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                    Loading accounts…
+                  </div>
+                </td></tr>
+              ) : users.length === 0 ? (
+                <tr><td colSpan={4} className="py-8 text-center text-gray-400">
+                  <FaUsers className="w-10 h-10 mx-auto mb-2 text-gray-200" />
+                  No accounts found
+                </td></tr>
+              ) : users.map(u => (
+                <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-[#2E3093]/10 flex items-center justify-center text-[#2E3093] text-xs font-bold">
+                        {`${(u.firstname || '')[0] || ''}${(u.lastname || '')[0] || ''}`.toUpperCase() || 'U'}
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-800">{[u.firstname, u.lastname].filter(Boolean).join(' ') || u.username}</div>
+                        <div className="text-xs text-gray-400">ID #{u.id}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="text-sm text-gray-700">{u.email || '—'}</div>
+                    <div className="text-xs text-gray-400">@{u.username}</div>
+                  </td>
+                  <td className="py-3 px-4">
+                    {u.role_name ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#2E3093]/10 text-[#2E3093] border border-[#2E3093]/20">
+                        <FaShieldAlt className="w-3 h-3" /> {u.role_name}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400 italic">No role assigned</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <button
+                      onClick={() => openEdit(u)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#2E3093]/30 text-[#2E3093] hover:bg-[#2E3093]/5 text-xs font-medium transition-colors"
+                    >
+                      <FaEdit className="w-3 h-3" /> Change Role
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {pagination.totalPages > 1 && (
+          <div className="p-4 border-t border-gray-100 flex items-center justify-between">
+            <div className="text-sm text-gray-500">
+              {(pagination.page - 1) * 25 + 1}–{Math.min(pagination.page * 25, pagination.total)} of {pagination.total}
+            </div>
+            <div className="flex gap-1">
+              <button onClick={() => fetchUsers(pagination.page - 1, search)} disabled={pagination.page === 1}
+                className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50">
+                Previous
+              </button>
+              <button onClick={() => fetchUsers(pagination.page + 1, search)} disabled={pagination.page === pagination.totalPages}
+                className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50">
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Edit Role Modal */}
+      {editUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/50" onClick={() => !saving && setEditUser(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-[#2E3093]/10 flex items-center justify-center">
+                  <FaKey className="w-5 h-5 text-[#2E3093]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-800">Update Account Role</h3>
+                  <p className="text-xs text-gray-400">{[editUser.firstname, editUser.lastname].filter(Boolean).join(' ') || editUser.username}</p>
+                </div>
+              </div>
+              <button onClick={() => !saving && setEditUser(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                <FaTimes className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {success && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3 text-sm text-emerald-700 flex items-center gap-2">
+                  <FaCheck className="w-4 h-4" /> {success}
+                </div>
+              )}
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Current Role</label>
+                <div className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
+                  {editUser.role_name || <span className="text-gray-400 italic">None</span>}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Assign New Role <span className="text-red-500">*</span></label>
+                <select
+                  value={newRoleId}
+                  onChange={e => setNewRoleId(parseInt(e.target.value))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] bg-white"
+                >
+                  <option value={0}>Select a role…</option>
+                  {roles.map(r => (
+                    <option key={r.id} value={r.id}>{r.title}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-3 pt-1">
+                <button onClick={() => setEditUser(null)} disabled={saving}
+                  className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm font-medium text-gray-600 transition-colors">
+                  Cancel
+                </button>
+                <button onClick={handleUpdateRole} disabled={saving || newRoleId === 0}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#2E3093] hover:bg-[#252780] text-white text-sm font-semibold transition-colors disabled:opacity-60">
+                  {saving ? (
+                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving…</>
+                  ) : (
+                    <><FaShieldAlt className="w-4 h-4" /> Update Role</>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
