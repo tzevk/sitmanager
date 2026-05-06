@@ -34,16 +34,19 @@ export async function GET(
 
     const batchId = row.Batch_Id;
 
-    /* ?students=1 — return full student list for dropdown */
+    /* ?students=1 — return students marked Present for this batch + date */
     if (req.nextUrl.searchParams.get('students') === '1') {
       const [students] = await pool.query<any[]>(
         `SELECT COALESCE(a.Roll_No, '') AS rollNo, s.Student_Name AS studentName
-         FROM admission_master a
-         JOIN student_master s ON s.Student_Id = a.Student_Id
-         WHERE a.Batch_Id = ? AND (a.IsDelete IS NULL OR a.IsDelete = 0)
+         FROM student_attendance sa
+         JOIN admission_master a ON a.Student_Id = sa.Student_Id AND a.Batch_Id = sa.Batch_Id
+         JOIN student_master s ON s.Student_Id = sa.Student_Id
+         WHERE sa.Batch_Id = ? AND sa.Attendance_Date = ? AND sa.Status = 'Present'
+           AND (sa.IsDelete IS NULL OR sa.IsDelete = 0)
            AND a.Roll_No IS NOT NULL AND a.Roll_No != ''
+         GROUP BY a.Roll_No, s.Student_Name
          ORDER BY CAST(a.Roll_No AS UNSIGNED), s.Student_Name`,
-        [batchId]
+        [batchId, String(row.date).slice(0, 10)]
       );
       return NextResponse.json({ students });
     }
@@ -92,6 +95,24 @@ export async function POST(
     }
     if (!rollNo?.trim()) {
       return NextResponse.json({ error: 'Roll number is required' }, { status: 400 });
+    }
+
+    /* Verify the student was marked present for this session */
+    const [presentCheck] = await pool.query<any[]>(
+      `SELECT sa.Attendance_Id
+       FROM student_attendance sa
+       JOIN admission_master a ON a.Student_Id = sa.Student_Id AND a.Batch_Id = sa.Batch_Id
+       WHERE sa.Batch_Id = ? AND sa.Attendance_Date = ? AND sa.Status = 'Present'
+         AND (sa.IsDelete IS NULL OR sa.IsDelete = 0)
+         AND a.Roll_No = ?
+       LIMIT 1`,
+      [rows[0].Batch_Id, rows[0].date, rollNo.trim()]
+    );
+    if (!presentCheck.length) {
+      return NextResponse.json(
+        { error: 'Your roll number was not marked present for this session.' },
+        { status: 403 }
+      );
     }
 
     await pool.query(`
