@@ -16,6 +16,7 @@ import CbdDashboard from './components/CbdDashboard';
 import TrainingDevelopmentDashboard from './components/TrainingDevelopmentDashboard';
 import AdministrationDashboard from './components/AdministrationDashboard';
 import PlacementDepartmentDashboard from './components/PlacementDepartmentDashboard';
+import FinanceDashboard from './components/FinanceDashboard';
 
 interface TodoItem {
   id: string;
@@ -309,6 +310,7 @@ export default function DashboardPage() {
             <option value="corporate_training">Corporate Training</option>
             <option value="placement">Placement Department</option>
             <option value="training_and_development">Training and Development</option>
+            <option value="accounts">Finance / Accounts</option>
           </select>
         )}
       </div>
@@ -452,6 +454,7 @@ export default function DashboardPage() {
                   <option value="corporate_training">Corporate Training</option>
                   <option value="placement">Placement Department</option>
                   <option value="training_and_development">Training and Development</option>
+                  <option value="accounts">Finance / Accounts</option>
                 </select>
               )}
             </div>
@@ -528,6 +531,15 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+      </div>
+    );
+  }
+
+  if (activeDepartment === 'accounts') {
+    return (
+      <div className="space-y-4">
+        {profileHeader}
+        <FinanceDashboard />
       </div>
     );
   }

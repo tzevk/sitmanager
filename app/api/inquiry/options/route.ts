@@ -86,6 +86,7 @@ export async function GET() {
           { id: 33, label: 'Archived' },
           { id: 34, label: 'Duplicate Entry' },
           { id: 35, label: 'Next Batch' },
+          { id: 36, label: 'Not Eligible' },
         ];
       }
 

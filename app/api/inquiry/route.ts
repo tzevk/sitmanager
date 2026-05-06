@@ -443,6 +443,7 @@ export async function GET(req: NextRequest) {
       33: 'Archived',
       34: 'Duplicate Entry',
       35: 'Next Batch',
+      36: 'Not Eligible',
     };
 
     type StatusOption = { id: number; label: string };
