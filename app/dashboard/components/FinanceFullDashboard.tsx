@@ -910,9 +910,9 @@ function CashflowTab() {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   PAGE ROOT
+   FINANCE FULL DASHBOARD (embeddable component)
 ════════════════════════════════════════════════════════════════════ */
-export default function FinanceDashboardPage() {
+export default function FinanceFullDashboard() {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
 
   const tabContent: Record<TabId, ReactNode> = {

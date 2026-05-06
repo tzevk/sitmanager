@@ -3,6 +3,31 @@ import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 
 const MAIL_PROVIDER = (process.env.ADMISSION_MAIL_PROVIDER || 'smtp').trim().toLowerCase();
 
+/** Branded email signature appended to every outgoing mail. */
+export function buildEmailSignature(): { html: string; text: string } {
+  const html = `
+    <table style="width:100%;max-width:600px;border-collapse:collapse;margin-top:28px;border-top:2px solid #2E3093;padding-top:0;">
+      <tr>
+        <td style="padding:16px 0 12px;">
+          <p style="margin:0 0 2px;font-size:13px;color:#374151;">Regards,</p>
+          <p style="margin:0;font-size:15px;font-weight:700;color:#2E3093;letter-spacing:0.2px;">Suvidya Institute of Technology</p>
+        </td>
+      </tr>
+    </table>`;
+  const text = '\n\nRegards,\nSuvidya Institute of Technology';
+  return { html, text };
+}
+
+/** Wraps body HTML in a consistent email shell with the SIT signature footer. */
+export function withEmailSignature(bodyHtml: string): string {
+  const sig = buildEmailSignature();
+  return `
+    <div style="font-family:Arial,Helvetica,sans-serif;color:#374151;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto;padding:24px 20px;">
+      ${bodyHtml}
+      ${sig.html}
+    </div>`;
+}
+
 // SMTP Configuration
 const SMTP_HOST = process.env.ADMISSION_SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.ADMISSION_SMTP_PORT || '587', 10);
@@ -85,14 +110,14 @@ export function buildAdmissionFormMailContent(params: {
     'We look forward to being a part of your professional journey.',
   ].join('\n');
 
-  const html = `
-    <p>Dear ${safeName},</p>
+  const html = withEmailSignature(`
+    <p>Dear <strong>${safeName}</strong>,</p>
     <p>Thank you for your interest in our training programs at Suvidya Institute of Technology.</p>
     <p>To proceed with the admission process, please complete the admission form using the link below:</p>
-    <p><a href="${params.admissionFormUrl}">${params.admissionFormUrl}</a></p>
+    <p><a href="${params.admissionFormUrl}" style="color:#2E3093;font-weight:bold;">${params.admissionFormUrl}</a></p>
     <p>Once submitted, our team will review your application and guide you through the next steps.</p>
     <p>We look forward to being a part of your professional journey.</p>
-  `;
+  `);
 
   return { safeName, subject, text, html };
 }
@@ -116,13 +141,13 @@ export function buildOnlineAdmissionSubmissionMailContent(params: {
     .filter(Boolean)
     .join('\n');
 
-  const html = `
-    <p>Dear ${safeName},</p>
+  const html = withEmailSignature(`
+    <p>Dear <strong>${safeName}</strong>,</p>
     <p>Thank you for submitting your online admission form to Suvidya Institute of Technology.</p>
     ${appId ? `<p><strong>Application ID:</strong> ${appId}</p>` : ''}
     <p>Our admissions team will review your application and contact you with the next steps.</p>
     <p>If you have any questions, please reply to this email.</p>
-  `;
+  `);
 
   return { safeName, subject, text, html };
 }
@@ -147,13 +172,12 @@ export function buildPublicInquirySubmissionMailContent(params: {
     .filter(Boolean)
     .join('\n');
 
-  const html = `
-    <p>Dear ${safeName},</p>
+  const html = withEmailSignature(`
+    <p>Dear <strong>${safeName}</strong>,</p>
     <p>Thank you for your enquiry at Suvidya Institute of Technology.</p>
     ${inquiryId ? `<p><strong>Inquiry ID:</strong> ${inquiryId}</p>` : ''}
     <p>Our team has received your details and will get in touch with you shortly.</p>
-    <p>Regards,<br/>Suvidya Institute of Technology</p>
-  `;
+  `);
 
   return { safeName, subject, text, html };
 }
@@ -317,8 +341,9 @@ export function buildStudentPortalCredentialsMailContent(params: {
     'Suvidya Institute of Technology',
   ].join('\n');
 
+  const sig = buildEmailSignature();
   const html = `
-    <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
       <div style="background:linear-gradient(135deg,#2E3093,#2A6BB5);padding:24px 28px;">
         <h2 style="color:#fff;margin:0;font-size:18px;">Student Portal Credentials</h2>
         <p style="color:rgba(255,255,255,0.75);margin:4px 0 0;font-size:13px;">Suvidya Institute of Technology</p>
@@ -340,6 +365,7 @@ export function buildStudentPortalCredentialsMailContent(params: {
           <a href="${loginUrl}" style="background:#2E3093;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:bold;display:inline-block;">Login to Student Portal</a>
         </p>
         <p style="color:#6b7280;font-size:12px;margin-bottom:0;">Please keep your credentials safe. If you face any issues logging in, contact the administration.</p>
+        ${sig.html}
       </div>
     </div>
   `;
