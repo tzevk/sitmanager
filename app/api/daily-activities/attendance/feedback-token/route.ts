@@ -47,9 +47,12 @@ export async function POST(req: NextRequest) {
       [token, batchId, date, batchName || null, expiresAt]
     );
 
+    const proto = req.headers.get('x-forwarded-proto') || 'https';
+    const host  = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
+      || (host ? `${proto}://${host}` : null)
       || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-      || `${req.headers.get('x-forwarded-proto') || 'https'}://${req.headers.get('host')}`;
+      || 'https://suvidya.app';
     const url = `${baseUrl}/public/feedback/${token}`;
 
     return NextResponse.json({ token, url, expiresAt: expiresAt.toISOString() });
