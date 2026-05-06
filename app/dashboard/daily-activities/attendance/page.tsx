@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
 import { PermissionGate } from '@/components/ui/PermissionGate';
 
 /* ─── Types ───────────────────────────────────────────────────────── */
@@ -51,6 +50,9 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   const [statusMapSH, setStatusMapSH] = useState<StatusMap>({});
   const [search, setSearch]         = useState('');
 
+  /* feedback column */
+  const [feedbackMap, setFeedbackMap] = useState<Record<string, { rating: number; comments: string | null }>>({});
+
   /* ui */
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [saving, setSaving]                   = useState(false);
@@ -83,6 +85,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     setStudents([]);
     setStatusMapFH({});
     setStatusMapSH({});
+    setFeedbackMap({});
     setLoaded(false);
     setSaved(false);
     setError('');
@@ -123,6 +126,12 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
       setStatusMapFH(fh);
       setStatusMapSH(sh);
       setLoaded(true);
+
+      /* Load feedback for this batch+date (non-critical) */
+      fetch(`/api/daily-activities/attendance/feedback-reports?batchId=${batchId}&date=${date}`)
+        .then(r => r.json())
+        .then(d => { if (d.feedback) setFeedbackMap(d.feedback); })
+        .catch(() => {/* non-critical */});
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load students');
     } finally {
@@ -257,15 +266,6 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
           </div>
 
           <div className="flex items-center gap-2">
-            <Link
-              href="/dashboard/daily-activities/attendance/feedback"
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white/15 text-white hover:bg-white/25 transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
-              </svg>
-              Feedback Reports
-            </Link>
             {canCreate && loaded && students.length > 0 && (
               <button
                 onClick={save}
@@ -453,10 +453,9 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
               <div className="px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-[11px] font-bold uppercase tracking-widest text-blue-700 mb-1.5 flex items-center gap-1.5">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
                   </svg>
-                  Geo-locked Feedback Link <span className="font-normal normal-case text-blue-500">(valid 24h · within 500m of institute)</span>
+                  Student Feedback Link <span className="font-normal normal-case text-blue-500">(valid 24h · present students only)</span>
                 </p>
                 <div className="flex items-center gap-2">
                   <input
@@ -572,6 +571,9 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                   <th className="py-3 px-4 border-b border-gray-200 text-center bg-purple-50/60 border-l border-purple-100">
                     <span className="text-purple-700">2nd Half</span>
                   </th>
+                  <th className="py-3 px-4 border-b border-gray-200 text-center bg-amber-50/60 border-l border-amber-100">
+                    <span className="text-amber-700">Feedback</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -652,6 +654,36 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                           </div>
                         )}
                       </td>
+
+                      {/* Feedback */}
+                      {(() => {
+                        const fb = student.rollNo ? feedbackMap[student.rollNo] : undefined;
+                        const RATING_COLORS: Record<number, string> = {
+                          5: 'bg-emerald-50 text-emerald-700', 4: 'bg-green-50 text-green-700',
+                          3: 'bg-blue-50 text-blue-700', 2: 'bg-amber-50 text-amber-700', 1: 'bg-red-50 text-red-600',
+                        };
+                        const RATING_LABELS: Record<number, string> = {
+                          5: 'Excellent', 4: 'Very Good', 3: 'Good', 2: 'Satisfactory', 1: 'Unsatisfactory',
+                        };
+                        return (
+                          <td className="py-2.5 px-3 bg-amber-50/20 border-l border-amber-100/60">
+                            {fb ? (
+                              <div className="flex flex-col items-center gap-0.5">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${RATING_COLORS[fb.rating] ?? 'bg-gray-50 text-gray-600'}`}>
+                                  {fb.rating} — {RATING_LABELS[fb.rating] ?? fb.rating}
+                                </span>
+                                {fb.comments && (
+                                  <span className="text-[10px] text-gray-400 italic max-w-[120px] truncate" title={fb.comments}>&ldquo;{fb.comments}&rdquo;</span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="flex justify-center">
+                                <span className="text-gray-300 text-xs">—</span>
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })()}
                     </tr>
                   );
                 })}

@@ -41,7 +41,7 @@ export async function GET(
          FROM student_attendance sa
          JOIN admission_master a ON a.Student_Id = sa.Student_Id AND a.Batch_Id = sa.Batch_Id
          JOIN student_master s ON s.Student_Id = sa.Student_Id
-         WHERE sa.Batch_Id = ? AND sa.Attendance_Date = ? AND sa.Status = 'Present'
+         WHERE sa.Batch_Id = ? AND sa.Attendance_Date = ? AND sa.Status = 'P'
            AND (sa.IsDelete IS NULL OR sa.IsDelete = 0)
            AND a.Roll_No IS NOT NULL AND a.Roll_No != ''
          GROUP BY a.Roll_No, s.Student_Name
@@ -102,7 +102,7 @@ export async function POST(
       `SELECT sa.Attendance_Id
        FROM student_attendance sa
        JOIN admission_master a ON a.Student_Id = sa.Student_Id AND a.Batch_Id = sa.Batch_Id
-       WHERE sa.Batch_Id = ? AND sa.Attendance_Date = ? AND sa.Status = 'Present'
+       WHERE sa.Batch_Id = ? AND sa.Attendance_Date = ? AND sa.Status = 'P'
          AND (sa.IsDelete IS NULL OR sa.IsDelete = 0)
          AND a.Roll_No = ?
        LIMIT 1`,

@@ -4,7 +4,8 @@ import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
 /* GET /api/daily-activities/attendance/feedback-reports
-   Returns all attendance feedback grouped by date → batch → students.
+   - No params → all feedback grouped by date → batch → students
+   - ?batchId=X&date=YYYY-MM-DD → flat list for the attendance table column
    Requires attendance.view permission.
 */
 export async function GET(req: NextRequest) {
@@ -13,8 +14,26 @@ export async function GET(req: NextRequest) {
 
   try {
     const pool = getPool();
+    const sp = req.nextUrl.searchParams;
+    const batchId = sp.get('batchId');
+    const date    = sp.get('date');
 
-    /* Flat list — order: newest date first, then batch name, then roll number */
+    /* ── Attendance-page column mode: flat per-student feedback ── */
+    if (batchId && date) {
+      const [rows] = await pool.query<any[]>(`
+        SELECT af.roll_no, af.rating, af.comments
+        FROM attendance_feedback af
+        LEFT JOIN attendance_feedback_token aft ON aft.token = af.token
+        WHERE af.Batch_Id = ? AND DATE(af.date) = ?
+          AND (af.roll_no IS NOT NULL AND af.roll_no != '')
+        ORDER BY CAST(af.roll_no AS UNSIGNED), af.roll_no
+      `, [batchId, date]);
+      const map: Record<string, { rating: number; comments: string | null }> = {};
+      for (const r of rows) map[r.roll_no] = { rating: r.rating, comments: r.comments ?? null };
+      return NextResponse.json({ feedback: map });
+    }
+
+    /* ── Full grouped report mode ── */
     const [rows] = await pool.query<any[]>(`
       SELECT
         af.id,
