@@ -31,6 +31,12 @@ export async function GET(req: NextRequest) {
          FROM batch_mst
          WHERE Course_Id = ? AND IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL)
            AND Category IS NOT NULL AND Category != ''
+           AND LOWER(Category) NOT LIKE '%corporate%'
+           AND (Cancel IS NULL OR Cancel = 0)
+           AND (
+             (Admission_Date IS NOT NULL AND Admission_Date >= CURDATE())
+             OR (Admission_Date IS NULL AND SDate IS NOT NULL AND SDate >= CURDATE())
+           )
          ORDER BY Category ASC`,
         [courseId]
       );
@@ -38,10 +44,16 @@ export async function GET(req: NextRequest) {
     }
 
     // Return batch codes for this course + category (including total fees)
+    // Only show batches where admission is still open or start date is upcoming
     const [batches] = await pool.query<(RowDataPacket & { batchCode: string; timings: string | null; totalFees: number | null })[]>(
       `SELECT Batch_code AS batchCode, Timings AS timings, INR_Total AS totalFees
        FROM batch_mst
        WHERE Course_Id = ? AND Category = ? AND IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL)
+         AND (Cancel IS NULL OR Cancel = 0)
+         AND (
+           (Admission_Date IS NOT NULL AND Admission_Date >= CURDATE())
+           OR (Admission_Date IS NULL AND SDate IS NOT NULL AND SDate >= CURDATE())
+         )
        ORDER BY Batch_Id DESC`,
       [courseId, category]
     );

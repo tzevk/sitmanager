@@ -63,6 +63,7 @@ export default function AdmissionFormPage() {
   const [consentChecks, setConsentChecks] = useState<boolean[]>(Array(5).fill(false));
   const [consentData, setConsentData] = useState({ eligibility: '', qualification: '', candidateRemark: '' });
   const allConsentChecked = consentChecks.every(Boolean);
+  const [batches, setBatches] = useState<{ Batch_Id: number; Batch_code: string | null; Category: string | null }[]>([]);
   
   // Refs for debouncing university search
   const gradSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -209,8 +210,23 @@ export default function AdmissionFormPage() {
 
   useEffect(() => {
     fetchStudentData();
+    fetchBatches();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId]);
+
+  const fetchBatches = async () => {
+    try {
+      const res = await fetch('/api/masters/annual-batch?limit=100&page=1');
+      const data = await res.json();
+      if (data.data && Array.isArray(data.data)) {
+        const filtered = (data.data as { Batch_Id: number; Batch_code: string | null; Category: string | null }[])
+          .filter(b => !b.Category?.toLowerCase().includes('corporate'));
+        setBatches(filtered);
+      }
+    } catch {
+      // silently ignore — batch dropdown will just be empty
+    }
+  };
 
   // Auto-calculate total occupation years from working years and months
   useEffect(() => {
@@ -2548,7 +2564,7 @@ export default function AdmissionFormPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="md:col-span-2">
                       <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                        Training Program <span className="text-red-500">*</span>
+                        Training Programme <span className="text-red-500">*</span>
                       </label>
                       <select
                         value={formData.trainingProgram}
@@ -2611,13 +2627,18 @@ export default function AdmissionFormPage() {
                       <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                         Batch Code
                       </label>
-                      <input
-                        type="text"
+                      <select
                         value={formData.batchCode}
                         onChange={(e) => handleChange('batchCode', e.target.value)}
-                        placeholder="Enter batch code"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all"
-                      />
+                      >
+                        <option value="">Select Batch</option>
+                        {batches.map(b => (
+                          <option key={b.Batch_Id} value={b.Batch_code ?? ''}>
+                            {(b.Batch_code ?? '').toUpperCase()}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>

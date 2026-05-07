@@ -313,6 +313,18 @@ export default function PublicAdmissionFormPage() {
     }
   }, [formData.workingFromYears, formData.workingFromMonths, formData.totalOccupationYears]);
 
+  // Whenever trainingProgrammeId changes, ensure categories are loaded
+  useEffect(() => {
+    if (!formData.trainingProgrammeId || batchCategories.length > 0) return;
+    setLoadingCategories(true);
+    fetch(`/api/public/batches?courseId=${formData.trainingProgrammeId}`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setBatchCategories(d.categories); })
+      .catch(() => { /* non-fatal */ })
+      .finally(() => setLoadingCategories(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.trainingProgrammeId]);
+
   const fetchCourses = async () => {
     setLoadingCourses(true);
     try {
@@ -420,6 +432,15 @@ export default function PublicAdmissionFormPage() {
           grad_specialization: data.inquiry.Discipline || '',
           grad_percentage: data.inquiry.Percentage ? String(data.inquiry.Percentage) : '',
         }));
+
+        // Pre-fetch categories for the pre-filled course so the dropdown is ready
+        if (data.inquiry.Course_Id) {
+          try {
+            const catRes = await fetch(`/api/public/batches?courseId=${data.inquiry.Course_Id}`);
+            const catData = await catRes.json();
+            if (catData.success) setBatchCategories(catData.categories);
+          } catch { /* non-fatal */ }
+        }
       }
     } catch {
       // Pre-fill not critical — student can fill in manually
@@ -2115,7 +2136,7 @@ export default function PublicAdmissionFormPage() {
                                 <option value="">Select batch code</option>
                                 {availableBatches.map((b) => (
                                   <option key={b.batchCode} value={b.batchCode}>
-                                    {b.batchCode}{b.timings ? ` — ${b.timings}` : ''}
+                                    {b.batchCode.toUpperCase()}
                                   </option>
                                 ))}
                               </select>
