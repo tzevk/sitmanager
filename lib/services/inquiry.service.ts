@@ -240,7 +240,7 @@ export async function getInquiryById(id: number): Promise<any | null> {
 
 export async function listInquiries(params: InquiryListParams): Promise<InquiryListResult> {
   const pool = getPool();
-  await ensureInquirySchema(pool);
+  try { await ensureInquirySchema(pool); } catch { /* best-effort schema migration */ }
   const {
     page, limit, search = '', discipline = '', inquiryType = '',
     location = '', training = '', statusId = '', dateFrom = '', dateTo = '',
@@ -283,12 +283,18 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     conditions.push('si.OnlineState = ?');
     queryParams.push(parseInt(statusId));
   }
+  const INQUIRY_DATE_EXPR =
+    `COALESCE(` +
+    `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),19),'%Y-%m-%d %H:%i:%s'),` +
+    `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%Y-%m-%d'),` +
+    `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%d-%m-%Y'),` +
+    `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%d/%m/%Y'))`;
   if (dateFrom) {
-    conditions.push('si._inquiry_date >= ?');
+    conditions.push(`${INQUIRY_DATE_EXPR} >= ?`);
     queryParams.push(dateFrom);
   }
   if (dateTo) {
-    conditions.push('si._inquiry_date <= ?');
+    conditions.push(`${INQUIRY_DATE_EXPR} <= ?`);
     queryParams.push(dateTo);
   }
   if (training) {
@@ -313,12 +319,17 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   total = (countResult as any[])[0]?.total || 0;
 
   const [sortedIds] = await pool.query(
-    `SELECT si.Inquiry_Id, si._inquiry_date as sort_date
+    `SELECT si.Inquiry_Id
      FROM Student_Inquiry si
      LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
      LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)
      ${whereClause}
-     ORDER BY si._inquiry_date DESC, si.Inquiry_Id DESC
+     ORDER BY COALESCE(
+       STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),19),'%Y-%m-%d %H:%i:%s'),
+       STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%Y-%m-%d'),
+       STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%d-%m-%Y'),
+       STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%d/%m/%Y')
+     ) DESC, si.Inquiry_Id DESC
      LIMIT ? OFFSET ?`,
     [...queryParams, limit, offset]
   );
