@@ -421,8 +421,8 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       Inquiry_Type: inquiryTypeVal,
       Status_id: r.Status_id ?? null,
       StatusLabel:
-        (r.OnlineStateRaw?.trim() || null) ??
         statusMap[r.Status_id] ??
+        (r.OnlineStateRaw?.trim() || null) ??
         (r.Status_id != null ? `Status ${r.Status_id}` : 'Open'),
       Discussion: r.LatestDiscussion || inlineDisc || null,
       DiscussionDate: r.LatestDiscDate ?? null,
