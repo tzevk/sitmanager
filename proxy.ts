@@ -59,6 +59,10 @@ const PUBLIC_PREFIXES = [
   '/api/student-portal',
   '/trainer-portal',
   '/api/trainer-portal',
+  '/api/online-admission',
+  '/api/colleges-by-city',
+  '/api/search-universities',
+  '/public',
 ];
 
 // File extensions that should always be served publicly
@@ -99,7 +103,13 @@ export async function proxy(request: NextRequest) {
     }
     // Redirect to signin for page requests
     const url = request.nextUrl.clone();
-    url.pathname = '/signin';
+    if (pathname.startsWith('/student-portal/')) {
+      url.pathname = '/student-portal/signin';
+    } else if (pathname.startsWith('/trainer-portal/')) {
+      url.pathname = '/trainer-portal/signin';
+    } else {
+      url.pathname = '/signin';
+    }
     url.searchParams.set('callbackUrl', pathname);
     return NextResponse.redirect(url);
   }
