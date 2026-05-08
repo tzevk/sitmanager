@@ -12,49 +12,35 @@ import { getSession, SessionData } from '@/lib/session';
 import { getPool } from '@/lib/db';
 import { ALL_PERMISSIONS } from '@/lib/rbac';
 import { isSuperAdminRole } from '@/lib/super-admin';
+import { cache } from '@/lib/cache';
 
-// ── Cache role permissions in-memory (per serverless instance) ──────
-interface PermissionCacheEntry {
-  permissions: string[];
-  expiry: number;
-}
-
-const permissionCache = new Map<number, PermissionCacheEntry>();
 const PERMISSION_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-interface SuperAdminCacheEntry {
-  isSuperAdmin: boolean;
-  expiry: number;
-}
-
-const superAdminCache = new Map<number, SuperAdminCacheEntry>();
+function permKey(roleId: number) { return `perm:role:${roleId}`; }
+function saKey(roleId: number) { return `perm:sa:${roleId}`; }
 
 async function getIsSuperAdminCached(roleId: number, pool: ReturnType<typeof getPool>): Promise<boolean> {
-  const now = Date.now();
-  const hit = superAdminCache.get(roleId);
-  if (hit && hit.expiry > now) return hit.isSuperAdmin;
+  const hit = await cache.get<boolean>(saKey(roleId));
+  if (hit !== null) return hit;
 
   const isSa = await isSuperAdminRole(roleId, pool);
-  superAdminCache.set(roleId, { isSuperAdmin: isSa, expiry: now + PERMISSION_CACHE_TTL });
+  await cache.set(saKey(roleId), isSa, PERMISSION_CACHE_TTL);
   return isSa;
 }
 
 /**
- * Get permissions for a role, with in-memory caching
+ * Get permissions for a role, cached globally in Redis (falls back to in-memory).
  */
 export async function getRolePermissions(roleId: number): Promise<string[]> {
-  const now = Date.now();
-  const cached = permissionCache.get(roleId);
-  if (cached && cached.expiry > now) {
-    return cached.permissions;
-  }
+  const hit = await cache.get<string[]>(permKey(roleId));
+  if (hit !== null) return hit;
 
   const pool = getPool();
 
   // Super admin gets all permissions (do not assume a fixed role id)
   if (await getIsSuperAdminCached(roleId, pool)) {
     const all = ALL_PERMISSIONS.map(p => p.id);
-    permissionCache.set(roleId, { permissions: all, expiry: now + PERMISSION_CACHE_TTL });
+    await cache.set(permKey(roleId), all, PERMISSION_CACHE_TTL);
     return all;
   }
 
@@ -65,18 +51,17 @@ export async function getRolePermissions(roleId: number): Promise<string[]> {
   );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const permissions = (rows as any[]).map((r: any) => r.permission_id);
-  permissionCache.set(roleId, { permissions, expiry: now + PERMISSION_CACHE_TTL });
+  await cache.set(permKey(roleId), permissions, PERMISSION_CACHE_TTL);
   return permissions;
 }
 
 /** Invalidate cached permissions for a specific role or all roles */
-export function invalidatePermissionCache(roleId?: number) {
+export async function invalidatePermissionCache(roleId?: number) {
   if (roleId !== undefined) {
-    permissionCache.delete(roleId);
-    superAdminCache.delete(roleId);
+    await cache.delete(permKey(roleId));
+    await cache.delete(saKey(roleId));
   } else {
-    permissionCache.clear();
-    superAdminCache.clear();
+    await cache.deleteByPrefix('perm:');
   }
 }
 

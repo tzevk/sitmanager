@@ -21,7 +21,7 @@ const DDL = `
 
 /** GET — fetch a single record for the requested month. */
 export async function GET(req: NextRequest) {
-  const limited = apiRateLimiter(req);
+  const limited = await apiRateLimiter(req);
   if (limited) return limited;
   const auth = await requirePermission(req, 'finance.view');
   if (auth instanceof NextResponse) return auth;
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
 /** PUT — upsert by month_year. */
 export async function PUT(req: NextRequest) {
-  const limited = apiRateLimiter(req);
+  const limited = await apiRateLimiter(req);
   if (limited) return limited;
   const auth = await requirePermission(req, 'finance.update');
   if (auth instanceof NextResponse) return auth;

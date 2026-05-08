@@ -36,7 +36,7 @@ interface RouteParams {
 // GET: Get single role with permissions
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const rateLimited = apiRateLimiter(request);
+    const rateLimited = await apiRateLimiter(request);
     if (rateLimited) return rateLimited;
 
     const session = await getSession(request);
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // PUT: Update role
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    const rateLimited = apiRateLimiter(request);
+    const rateLimited = await apiRateLimiter(request);
     if (rateLimited) return rateLimited;
 
     const session = await getSession(request);

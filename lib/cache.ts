@@ -1,93 +1,98 @@
-/**
- * Simple in-memory cache with TTL support
- */
+import { redis } from './redis';
+
+// ── In-memory fallback (used when REDIS_URL is not set) ──────────────────────
+
 interface CacheEntry<T> {
   data: T;
   expiry: number;
 }
 
 class MemoryCache {
-  private cache: Map<string, CacheEntry<unknown>> = new Map();
-  private defaultTTL: number = 60 * 1000; // 1 minute default
+  private store: Map<string, CacheEntry<unknown>> = new Map();
 
-  /**
-   * Get item from cache
-   */
   get<T>(key: string): T | null {
-    const entry = this.cache.get(key) as CacheEntry<T> | undefined;
-    
+    const entry = this.store.get(key) as CacheEntry<T> | undefined;
     if (!entry) return null;
-    
-    if (Date.now() > entry.expiry) {
-      this.cache.delete(key);
-      return null;
-    }
-    
+    if (Date.now() > entry.expiry) { this.store.delete(key); return null; }
     return entry.data;
   }
 
-  /**
-   * Set item in cache
-   * @param key Cache key
-   * @param data Data to cache
-   * @param ttl Time to live in milliseconds (default: 1 minute)
-   */
-  set<T>(key: string, data: T, ttl: number = this.defaultTTL): void {
-    this.cache.set(key, {
-      data,
-      expiry: Date.now() + ttl,
-    });
+  set<T>(key: string, data: T, ttlMs: number): void {
+    this.store.set(key, { data, expiry: Date.now() + ttlMs });
   }
 
-  /**
-   * Delete item from cache
-   */
-  delete(key: string): void {
-    this.cache.delete(key);
-  }
+  delete(key: string): void { this.store.delete(key); }
 
-  /**
-   * Delete all items matching a prefix
-   */
   deleteByPrefix(prefix: string): void {
-    for (const key of this.cache.keys()) {
-      if (key.startsWith(prefix)) {
-        this.cache.delete(key);
-      }
+    for (const key of this.store.keys()) {
+      if (key.startsWith(prefix)) this.store.delete(key);
     }
   }
 
-  /**
-   * Clear all cache
-   */
-  clear(): void {
-    this.cache.clear();
-  }
+  clear(): void { this.store.clear(); }
+  size(): number { return this.store.size; }
 
-  /**
-   * Get cache size
-   */
-  size(): number {
-    return this.cache.size;
-  }
-
-  /**
-   * Clean up expired entries
-   */
   cleanup(): void {
     const now = Date.now();
-    for (const [key, entry] of this.cache.entries()) {
-      if (now > entry.expiry) {
-        this.cache.delete(key);
-      }
+    for (const [key, entry] of this.store.entries()) {
+      if (now > entry.expiry) this.store.delete(key);
     }
   }
 }
 
-// Singleton instance
-export const cache = new MemoryCache();
+const mem = new MemoryCache();
 
-// Cache key generators
+if (typeof setInterval !== 'undefined') {
+  setInterval(() => mem.cleanup(), 5 * 60 * 1000);
+}
+
+// ── Unified async cache (Redis when available, memory otherwise) ──────────────
+
+export const cache = {
+  async get<T>(key: string): Promise<T | null> {
+    if (redis) {
+      const raw = await redis.get(key);
+      if (raw == null) return null;
+      try { return JSON.parse(raw) as T; } catch { return null; }
+    }
+    return mem.get<T>(key);
+  },
+
+  async set<T>(key: string, data: T, ttlMs: number = 60_000): Promise<void> {
+    if (redis) {
+      await redis.set(key, JSON.stringify(data), 'PX', ttlMs);
+      return;
+    }
+    mem.set(key, data, ttlMs);
+  },
+
+  async delete(key: string): Promise<void> {
+    if (redis) { await redis.del(key); return; }
+    mem.delete(key);
+  },
+
+  async deleteByPrefix(prefix: string): Promise<void> {
+    if (redis) {
+      // SCAN instead of KEYS to avoid blocking the server
+      let cursor = '0';
+      do {
+        const [next, keys] = await redis.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 100);
+        cursor = next;
+        if (keys.length) await redis.del(...keys);
+      } while (cursor !== '0');
+      return;
+    }
+    mem.deleteByPrefix(prefix);
+  },
+
+  async clear(): Promise<void> {
+    if (redis) { await redis.flushdb(); return; }
+    mem.clear();
+  },
+};
+
+// ── Cache key generators ──────────────────────────────────────────────────────
+
 export const cacheKeys = {
   corporateInquiry: {
     list: (params: { page: number; limit: number; search: string; status?: string }) =>
@@ -115,20 +120,13 @@ export const cacheKeys = {
     list: (params: string) => `consultancy_report:list:${params}`,
     prefix: 'consultancy_report:',
   },
-  // Add more cache keys as needed
 };
 
-// Cache TTLs (in milliseconds)
+// ── TTLs (milliseconds) ───────────────────────────────────────────────────────
+
 export const cacheTTL = {
-  short: 30 * 1000,      // 30 seconds
-  medium: 2 * 60 * 1000, // 2 minutes
-  long: 10 * 60 * 1000,  // 10 minutes
-  veryLong: 60 * 60 * 1000, // 1 hour
+  short: 30_000,
+  medium: 2 * 60_000,
+  long: 10 * 60_000,
+  veryLong: 60 * 60_000,
 };
-
-// Run cleanup every 5 minutes
-if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
-    cache.cleanup();
-  }, 5 * 60 * 1000);
-}

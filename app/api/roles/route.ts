@@ -1,225 +1,75 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { cached, getPool } from '@/lib/db';
-import { ALL_PERMISSIONS, PERMISSION_GROUPS } from '@/lib/rbac';
+import { PERMISSION_GROUPS, ALL_PERMISSIONS } from '@/lib/rbac';
 import { getSession } from '@/lib/session';
-import { isSuperAdminRole } from '@/lib/super-admin';
 import { apiRateLimiter } from '@/lib/rate-limit';
 import { logTableActivity } from '@/lib/activity-log';
+import { listRoles, createRole } from '@/lib/services/roles.service';
 
-// Ensure role_permissions table exists
-async function ensureTable(pool: any) {
-  await pool.execute(`
-    CREATE TABLE IF NOT EXISTS role_permissions (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      role_id INT NOT NULL,
-      permission_id VARCHAR(100) NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY unique_role_permission (role_id, permission_id),
-      INDEX idx_role_id (role_id),
-      FOREIGN KEY (role_id) REFERENCES role(id) ON DELETE CASCADE
-    )
-  `);
-}
-
-async function ensureDashboardDepartmentColumn(pool: any) {
-  await cached('schema:role_dashboard_dept', 60 * 60 * 1000, async () => {
-    const [cols] = await pool.execute(
-      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'role' AND COLUMN_NAME = 'dashboard_department'`
-    );
-    if ((cols as any[]).length === 0) {
-      await pool.execute(`ALTER TABLE role ADD COLUMN dashboard_department VARCHAR(50) DEFAULT NULL`);
-    }
-    return true;
-  });
-}
-
-async function ensureRolePermissionsTableOnce(pool: any) {
-  await cached('schema:role_permissions', 60 * 60 * 1000, async () => {
-    await ensureTable(pool);
-    return true;
-  });
-}
-
-// GET: List all roles with their permissions
 export async function GET(request: NextRequest) {
   try {
-    const rateLimited = apiRateLimiter(request);
+    const rateLimited = await apiRateLimiter(request);
     if (rateLimited) return rateLimited;
 
     const session = await getSession(request);
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const pool = getPool();
-    await ensureRolePermissionsTableOnce(pool);
-    await ensureDashboardDepartmentColumn(pool);
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
-    const includeDeleted = searchParams.get('includeDeleted') === 'true';
-    const withPermissions = searchParams.get('withPermissions') !== 'false';
-
-    let query = `
-      SELECT r.id, r.title, r.description, r.created_by, r.created_date,
-             r.updated_by, r.updated_date, r.\`delete\` as deleted,
-             r.dashboard_department
-      FROM role r
-    `;
-    
-    if (!includeDeleted) {
-      query += ' WHERE r.`delete` = 0';
-    }
-    
-    query += ' ORDER BY r.id ASC';
-
-    const [roles] = await pool.execute(query);
-
-    if (withPermissions) {
-      // Get permissions for all roles
-      const [permissions] = await pool.execute(`
-        SELECT role_id, permission_id FROM role_permissions
-      `);
-      
-      const permissionMap = new Map<number, string[]>();
-      for (const p of permissions as any[]) {
-        if (!permissionMap.has(p.role_id)) {
-          permissionMap.set(p.role_id, []);
-        }
-        permissionMap.get(p.role_id)!.push(p.permission_id);
-      }
-
-      // Attach permissions to roles
-      for (const role of roles as any[]) {
-        role.permissions = permissionMap.get(role.id) || [];
-        // Special case: Super Admin has all permissions
-        if (await isSuperAdminRole(role.id, pool)) {
-          role.permissions = ALL_PERMISSIONS.map(p => p.id);
-          role.isSystemRole = true;
-        }
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: roles,
-      meta: {
-        totalPermissions: ALL_PERMISSIONS.length,
-        permissionGroups: PERMISSION_GROUPS.length,
-      },
+    const { roles, meta } = await listRoles({
+      includeDeleted: searchParams.get('includeDeleted') === 'true',
+      withPermissions: searchParams.get('withPermissions') !== 'false',
     });
+
+    return NextResponse.json({ success: true, data: roles, meta });
   } catch (error) {
     console.error('Error fetching roles:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch roles' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: 'Failed to fetch roles' }, { status: 500 });
   }
 }
 
-// POST: Create a new role
 export async function POST(request: NextRequest) {
   try {
-    const rateLimited = apiRateLimiter(request);
+    const rateLimited = await apiRateLimiter(request);
     if (rateLimited) return rateLimited;
 
     const session = await getSession(request);
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const pool = getPool();
-    await ensureRolePermissionsTableOnce(pool);
-    await ensureDashboardDepartmentColumn(pool);
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
-    const { title, description, permissions, dashboard_department } = body;
 
-    if (!title || typeof title !== 'string' || title.trim().length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Role title is required' },
-        { status: 400 }
-      );
-    }
+    const role = await createRole({
+      title: body.title,
+      description: body.description,
+      permissions: body.permissions,
+      dashboard_department: body.dashboard_department,
+      createdBy: session.userId,
+    });
 
-    if (!Array.isArray(permissions)) {
-      return NextResponse.json(
-        { success: false, error: 'Permissions must be an array' },
-        { status: 400 }
-      );
-    }
-
-    // Validate permissions exist
-    const validPermissionIds = new Set(ALL_PERMISSIONS.map(p => p.id));
-    const invalidPermissions = permissions.filter(p => !validPermissionIds.has(p));
-    if (invalidPermissions.length > 0) {
-      return NextResponse.json(
-        { success: false, error: `Invalid permissions: ${invalidPermissions.join(', ')}` },
-        { status: 400 }
-      );
-    }
-
-    // Start transaction
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-
-      // Insert role
-      const [result] = await connection.execute(
-        `INSERT INTO role (title, description, created_by, created_date, \`delete\`, dashboard_department)
-         VALUES (?, ?, ?, NOW(), 0, ?)`,
-        [title.trim(), description || '', session.userId, dashboard_department || null]
-      );
-
-      const roleId = (result as any).insertId;
-
-      // Insert permissions
-      if (permissions.length > 0) {
-        const permissionValues = permissions.map(p => [roleId, p]);
-        await connection.query(
-          `INSERT INTO role_permissions (role_id, permission_id) VALUES ?`,
-          [permissionValues]
-        );
-      }
-
-      await connection.commit();
-
-      await logTableActivity(request, {
+    await Promise.all([
+      logTableActivity(request, {
         tableName: 'role',
         action: 'CREATE',
-        recordId: roleId,
-        details: { title: title.trim(), permissionsCount: permissions.length },
-      });
-
-      await logTableActivity(request, {
+        recordId: role.id,
+        details: { title: role.title, permissionsCount: role.permissions.length },
+      }),
+      logTableActivity(request, {
         tableName: 'role_permissions',
         action: 'CREATE',
-        recordId: roleId,
-        details: { roleId, permissions },
-      });
+        recordId: role.id,
+        details: { roleId: role.id, permissions: role.permissions },
+      }),
+    ]);
 
-      return NextResponse.json({
-        success: true,
-        data: {
-          id: roleId,
-          title: title.trim(),
-          description: description || '',
-          permissions,
-          dashboard_department: dashboard_department || null,
-        },
-        message: 'Role created successfully',
-      });
-    } catch (err) {
-      await connection.rollback();
-      throw err;
-    } finally {
-      connection.release();
+    return NextResponse.json({
+      success: true,
+      data: role,
+      message: 'Role created successfully',
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    if (message.startsWith('Invalid permissions') || message.includes('required')) {
+      return NextResponse.json({ success: false, error: message }, { status: 400 });
     }
-  } catch (error) {
     console.error('Error creating role:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to create role' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: 'Failed to create role' }, { status: 500 });
   }
 }

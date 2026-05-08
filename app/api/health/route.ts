@@ -11,7 +11,7 @@ import { healthRateLimiter } from '@/lib/rate-limit';
  */
 export async function GET(request: NextRequest) {
   // Rate limit health checks to prevent abuse
-  const rateLimited = healthRateLimiter(request);
+  const rateLimited = await healthRateLimiter(request);
   if (rateLimited) return rateLimited;
 
   const start = Date.now();

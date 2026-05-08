@@ -76,7 +76,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const rateLimited = apiRateLimiter(req);
+    const rateLimited = await apiRateLimiter(req);
     if (rateLimited) return rateLimited;
 
     const auth = await requirePermission(req, 'online_admission.view');

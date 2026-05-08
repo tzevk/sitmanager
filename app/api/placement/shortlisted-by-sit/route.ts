@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
 
     // Cache check
     const cacheKey = `shortlisted_sit:list:${page}:${limit}:${search}`;
-    const cachedData = cache.get<any>(cacheKey);
+    const cachedData = await cache.get<any>(cacheKey);
     if (cachedData) {
       return NextResponse.json(cachedData, { headers: { 'X-Cache': 'HIT' } });
     }
@@ -104,7 +104,7 @@ export async function GET(req: NextRequest) {
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
 
-    cache.set(cacheKey, responseData, cacheTTL.medium);
+    await cache.set(cacheKey, responseData, cacheTTL.medium);
     return NextResponse.json(responseData, { headers: { 'X-Cache': 'MISS' } });
   } catch (err: unknown) {
     console.error('Shortlisted By SIT GET error:', err);
@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    cache.deleteByPrefix('shortlisted_sit:');
+    await cache.deleteByPrefix('shortlisted_sit:');
     return NextResponse.json({ success: true, insertId: compReqId });
   } catch (err: unknown) {
     console.error('Shortlisted By SIT POST error:', err);
@@ -208,7 +208,7 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    cache.deleteByPrefix('shortlisted_sit:');
+    await cache.deleteByPrefix('shortlisted_sit:');
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     console.error('Shortlisted By SIT PUT error:', err);
@@ -233,7 +233,7 @@ export async function DELETE(req: NextRequest) {
     await pool.query(`UPDATE company_requirements_apk SET IsDelete = 1 WHERE CompReqId = ?`, [id]);
     await pool.query(`UPDATE company_req_batch_details_apk SET IsDelete = 1 WHERE CompanyReqId = ?`, [id]);
 
-    cache.deleteByPrefix('shortlisted_sit:');
+    await cache.deleteByPrefix('shortlisted_sit:');
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     console.error('Shortlisted By SIT DELETE error:', err);

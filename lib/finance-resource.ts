@@ -22,7 +22,7 @@ export interface ResourceConfig {
 export function collectionHandlers(cfg: ResourceConfig) {
   return {
     async GET(req: NextRequest) {
-      const limited = apiRateLimiter(req);
+      const limited = await apiRateLimiter(req);
       if (limited) return limited;
       const auth = await requirePermission(req, 'finance.view');
       if (auth instanceof NextResponse) return auth;
@@ -49,7 +49,7 @@ export function collectionHandlers(cfg: ResourceConfig) {
     },
 
     async POST(req: NextRequest) {
-      const limited = apiRateLimiter(req);
+      const limited = await apiRateLimiter(req);
       if (limited) return limited;
       const auth = await requirePermission(req, 'finance.create');
       if (auth instanceof NextResponse) return auth;
@@ -83,7 +83,7 @@ export function collectionHandlers(cfg: ResourceConfig) {
 export function idHandlers(cfg: ResourceConfig) {
   return {
     async PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-      const limited = apiRateLimiter(req);
+      const limited = await apiRateLimiter(req);
       if (limited) return limited;
       const auth = await requirePermission(req, 'finance.update');
       if (auth instanceof NextResponse) return auth;
@@ -112,7 +112,7 @@ export function idHandlers(cfg: ResourceConfig) {
     },
 
     async DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-      const limited = apiRateLimiter(req);
+      const limited = await apiRateLimiter(req);
       if (limited) return limited;
       const auth = await requirePermission(req, 'finance.delete');
       if (auth instanceof NextResponse) return auth;

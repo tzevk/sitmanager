@@ -11,7 +11,7 @@ const factory = collectionHandlers(FINANCE_CASHFLOW);
 
 /** Custom GET adds q (free-text) + dateFrom/dateTo filters on top of the factory's type/category. */
 export async function GET(req: NextRequest) {
-  const limited = apiRateLimiter(req);
+  const limited = await apiRateLimiter(req);
   if (limited) return limited;
   const auth = await requirePermission(req, 'finance.view');
   if (auth instanceof NextResponse) return auth;

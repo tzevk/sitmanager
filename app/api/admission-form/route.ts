@@ -7,7 +7,7 @@ import { logTableActivity } from '@/lib/activity-log';
 
 export async function POST(req: NextRequest) {
   try {
-    const rateLimited = apiRateLimiter(req);
+    const rateLimited = await apiRateLimiter(req);
     if (rateLimited) return rateLimited;
 
     const auth = await requirePermission(req, 'online_admission.create');
@@ -181,7 +181,7 @@ export async function POST(req: NextRequest) {
 // GET - Fetch admission form data for editing
 export async function GET(req: NextRequest) {
   try {
-    const rateLimited = apiRateLimiter(req);
+    const rateLimited = await apiRateLimiter(req);
     if (rateLimited) return rateLimited;
 
     const auth = await requirePermission(req, 'online_admission.view');

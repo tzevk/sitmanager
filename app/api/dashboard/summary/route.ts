@@ -16,7 +16,7 @@ async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallb
 
 export async function GET(request: NextRequest) {
   try {
-    const rateLimited = dashboardRateLimiter(request);
+    const rateLimited = await dashboardRateLimiter(request);
     if (rateLimited) return rateLimited;
 
     const auth = await requireAuth(request);

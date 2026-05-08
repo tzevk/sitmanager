@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
 
     // Cache check
     const cacheKey = `cv_shortlisted:list:${page}:${limit}:${search}`;
-    const cachedData = cache.get<any>(cacheKey);
+    const cachedData = await cache.get<any>(cacheKey);
     if (cachedData) {
       return NextResponse.json(cachedData, { headers: { 'X-Cache': 'HIT' } });
     }
@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
 
-    cache.set(cacheKey, responseData, cacheTTL.medium);
+    await cache.set(cacheKey, responseData, cacheTTL.medium);
     return NextResponse.json(responseData, { headers: { 'X-Cache': 'MISS' } });
   } catch (err: unknown) {
     console.error('CV Shortlisted GET error:', err);
@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    cache.deleteByPrefix('cv_shortlisted:');
+    await cache.deleteByPrefix('cv_shortlisted:');
     return NextResponse.json({ success: true, insertId: cvId });
   } catch (err: unknown) {
     console.error('CV Shortlisted POST error:', err);
@@ -216,7 +216,7 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    cache.deleteByPrefix('cv_shortlisted:');
+    await cache.deleteByPrefix('cv_shortlisted:');
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     console.error('CV Shortlisted PUT error:', err);
@@ -241,7 +241,7 @@ export async function DELETE(req: NextRequest) {
     await pool.query(`UPDATE cv_shortlisted SET IsDelete = 1 WHERE id = ?`, [id]);
     await pool.query(`UPDATE cvchild SET IsDelete = 1 WHERE CV_Id = ?`, [id]);
 
-    cache.deleteByPrefix('cv_shortlisted:');
+    await cache.deleteByPrefix('cv_shortlisted:');
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     console.error('CV Shortlisted DELETE error:', err);

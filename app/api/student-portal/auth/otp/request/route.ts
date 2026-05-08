@@ -37,7 +37,7 @@ function makeTraceId(): string {
 }
 
 export async function POST(req: NextRequest) {
-  const blocked = loginRateLimiter(req);
+  const blocked = await loginRateLimiter(req);
   if (blocked) return blocked;
 
   try {

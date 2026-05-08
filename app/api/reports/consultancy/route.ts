@@ -8,7 +8,7 @@ import { apiRateLimiter } from '@/lib/rate-limit';
 // GET - consultancy report with filters
 export async function GET(req: NextRequest) {
   try {
-    const rateLimited = apiRateLimiter(req);
+    const rateLimited = await apiRateLimiter(req);
     if (rateLimited) return rateLimited;
 
     const auth = await requirePermission(req, 'consultancy_report.view');
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
     // Cache key
     const cacheKey = `consultancy_report:list:${page}:${limit}:${search}:${courseId}:${city}:${purpose}:${fromDate}:${toDate}:${country}:${companyStatus}:${industry}`;
-    const cachedData = cache.get<any>(cacheKey);
+    const cachedData = await cache.get<any>(cacheKey);
     if (cachedData) {
       return NextResponse.json(cachedData, { headers: { 'X-Cache': 'HIT' } });
     }
@@ -151,7 +151,7 @@ export async function GET(req: NextRequest) {
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
 
-    cache.set(cacheKey, responseData, cacheTTL.medium);
+    await cache.set(cacheKey, responseData, cacheTTL.medium);
     return NextResponse.json(responseData, { headers: { 'X-Cache': 'MISS' } });
   } catch (err: unknown) {
     console.error('Consultancy Report GET error:', err);

@@ -615,7 +615,7 @@ export async function GET(req: NextRequest) {
 
     // Check cache first
     const cacheKey = cacheKeys.corporateInquiry.list({ page, limit, search, status });
-    const cached = cache.get<any>(cacheKey);
+    const cached = await cache.get<any>(cacheKey);
     if (cached) {
       return NextResponse.json(cached, {
         headers: { 'X-Cache': 'HIT' }
@@ -715,7 +715,7 @@ export async function GET(req: NextRequest) {
     };
 
     // Store in cache for future requests
-    cache.set(cacheKey, responseData, cacheTTL.medium);
+    await cache.set(cacheKey, responseData, cacheTTL.medium);
 
     return NextResponse.json(responseData, {
       headers: { 'X-Cache': 'MISS' }
@@ -845,7 +845,7 @@ export async function PATCH(req: NextRequest) {
       [...values, Id]
     );
 
-    cache.deleteByPrefix(cacheKeys.corporateInquiry.prefix);
+    await cache.deleteByPrefix(cacheKeys.corporateInquiry.prefix);
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
@@ -1007,7 +1007,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Invalidate cache on data modification
-    cache.deleteByPrefix(cacheKeys.corporateInquiry.prefix);
+    await cache.deleteByPrefix(cacheKeys.corporateInquiry.prefix);
 
     await logTableActivity(req, {
       tableName: 'corporate_inquiry',
@@ -1170,7 +1170,7 @@ export async function PUT(req: NextRequest) {
     );
 
     // Invalidate cache on data modification
-    cache.deleteByPrefix(cacheKeys.corporateInquiry.prefix);
+    await cache.deleteByPrefix(cacheKeys.corporateInquiry.prefix);
 
     await logTableActivity(req, {
       tableName: 'corporate_inquiry',
@@ -1202,7 +1202,7 @@ export async function DELETE(req: NextRequest) {
     await pool.query(`UPDATE corporate_inquiry SET IsDelete = 1 WHERE Id = ?`, [id]);
 
     // Invalidate cache on data modification
-    cache.deleteByPrefix(cacheKeys.corporateInquiry.prefix);
+    await cache.deleteByPrefix(cacheKeys.corporateInquiry.prefix);
 
     await logTableActivity(req, {
       tableName: 'corporate_inquiry',

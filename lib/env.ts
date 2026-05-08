@@ -26,6 +26,7 @@ const REQUIRED_ENV = [...DB_REQUIRED_ENV, ...AUTH_REQUIRED_ENV] as const;
 const OPTIONAL_ENV = [
   'DB_PORT',       // defaults to 3306
   'NODE_ENV',      // defaults to development
+  'REDIS_URL',     // Upstash Redis URL — enables distributed rate-limit & permission cache
   'VERCEL',        // set automatically by Vercel
   'VERCEL_URL',    // set automatically by Vercel
 ] as const;

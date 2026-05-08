@@ -1,12 +1,12 @@
 /**
- * In-memory rate limiter for API routes.
+ * Rate limiter for API routes.
  *
- * Uses a sliding-window counter per IP. Works well for single-instance
- * deployments and provides basic protection in serverless (per-instance).
- * For distributed rate limiting at scale, consider Upstash Redis or similar.
+ * Uses Redis when REDIS_URL is set (distributed, works across all instances).
+ * Falls back to in-memory sliding-window counter (per-instance) otherwise.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { redis } from './redis';
 
 interface RateLimitEntry {
   count: number;
@@ -14,15 +14,13 @@ interface RateLimitEntry {
 }
 
 interface RateLimiterOptions {
-  /** Maximum requests allowed in the window */
   maxRequests: number;
-  /** Window duration in seconds */
   windowSeconds: number;
 }
 
-const stores = new Map<string, Map<string, RateLimitEntry>>();
+// ── In-memory fallback ────────────────────────────────────────────────────────
 
-// Periodic cleanup to prevent memory leaks (every 60 seconds)
+const stores = new Map<string, Map<string, RateLimitEntry>>();
 let cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
 function ensureCleanup() {
@@ -31,61 +29,94 @@ function ensureCleanup() {
     const now = Date.now();
     for (const [, store] of stores) {
       for (const [key, entry] of store) {
-        if (entry.resetAt <= now) {
-          store.delete(key);
-        }
+        if (entry.resetAt <= now) store.delete(key);
       }
     }
   }, 60_000);
-  // Allow process to exit cleanly
   if (cleanupInterval && typeof cleanupInterval === 'object' && 'unref' in cleanupInterval) {
     cleanupInterval.unref();
   }
 }
 
-/**
- * Create a rate limiter instance.
- *
- * @example
- * const loginLimiter = createRateLimiter({ maxRequests: 5, windowSeconds: 60 });
- *
- * export async function POST(req: NextRequest) {
- *   const blocked = loginLimiter(req);
- *   if (blocked) return blocked;
- *   // ... handle request
- * }
- */
+function memCheck(
+  ip: string,
+  storeKey: string,
+  maxRequests: number,
+  windowSeconds: number
+): { allowed: boolean; remaining: number; resetAt: number } {
+  if (!stores.has(storeKey)) stores.set(storeKey, new Map());
+  const store = stores.get(storeKey)!;
+  ensureCleanup();
+
+  const now = Date.now();
+  const windowMs = windowSeconds * 1000;
+  const entry = store.get(ip);
+
+  if (!entry || entry.resetAt <= now) {
+    store.set(ip, { count: 1, resetAt: now + windowMs });
+    return { allowed: true, remaining: maxRequests - 1, resetAt: now + windowMs };
+  }
+
+  entry.count++;
+  return {
+    allowed: entry.count <= maxRequests,
+    remaining: Math.max(0, maxRequests - entry.count),
+    resetAt: entry.resetAt,
+  };
+}
+
+// ── Redis check (atomic via Lua) ──────────────────────────────────────────────
+
+const LUA_SCRIPT = `
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local current = redis.call('GET', key)
+if current == false then
+  redis.call('SET', key, 1, 'EX', window)
+  return {1, limit - 1, window}
+end
+current = tonumber(current)
+if current >= limit then
+  local ttl = redis.call('TTL', key)
+  return {0, 0, ttl}
+end
+redis.call('INCR', key)
+local ttl = redis.call('TTL', key)
+return {1, limit - current - 1, ttl}
+`;
+
+async function redisCheck(
+  ip: string,
+  storeKey: string,
+  maxRequests: number,
+  windowSeconds: number
+): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
+  const key = `rl:${storeKey}:${ip}`;
+  const result = await redis!.eval(LUA_SCRIPT, 1, key, String(maxRequests), String(windowSeconds)) as [number, number, number];
+  const [allowed, remaining, ttl] = result;
+  return {
+    allowed: allowed === 1,
+    remaining,
+    resetAt: Date.now() + ttl * 1000,
+  };
+}
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+
 export function createRateLimiter(options: RateLimiterOptions) {
   const { maxRequests, windowSeconds } = options;
   const storeKey = `${maxRequests}:${windowSeconds}`;
 
-  if (!stores.has(storeKey)) {
-    stores.set(storeKey, new Map());
-  }
-  const store = stores.get(storeKey)!;
-  ensureCleanup();
-
-  /**
-   * Check rate limit for a request. Returns null if allowed,
-   * or a 429 NextResponse if rate-limited.
-   */
-  return function checkRateLimit(request: NextRequest): NextResponse | null {
+  return async function checkRateLimit(request: NextRequest): Promise<NextResponse | null> {
     const ip = getClientIp(request);
-    const now = Date.now();
-    const windowMs = windowSeconds * 1000;
 
-    const entry = store.get(ip);
+    const { allowed, remaining, resetAt } = redis
+      ? await redisCheck(ip, storeKey, maxRequests, windowSeconds)
+      : memCheck(ip, storeKey, maxRequests, windowSeconds);
 
-    if (!entry || entry.resetAt <= now) {
-      // New window
-      store.set(ip, { count: 1, resetAt: now + windowMs });
-      return null;
-    }
-
-    entry.count++;
-
-    if (entry.count > maxRequests) {
-      const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+    if (!allowed) {
+      const retryAfter = Math.ceil((resetAt - Date.now()) / 1000);
       return NextResponse.json(
         {
           error: 'Too Many Requests',
@@ -97,7 +128,7 @@ export function createRateLimiter(options: RateLimiterOptions) {
             'Retry-After': String(retryAfter),
             'X-RateLimit-Limit': String(maxRequests),
             'X-RateLimit-Remaining': '0',
-            'X-RateLimit-Reset': String(Math.ceil(entry.resetAt / 1000)),
+            'X-RateLimit-Reset': String(Math.ceil(resetAt / 1000)),
           },
         }
       );
@@ -107,45 +138,17 @@ export function createRateLimiter(options: RateLimiterOptions) {
   };
 }
 
-/**
- * Extract client IP from request, handling proxies/load balancers.
- */
 function getClientIp(request: NextRequest): string {
-  // Vercel/Cloudflare set these headers
   const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) {
-    // x-forwarded-for can contain multiple IPs; leftmost is the client
-    return forwarded.split(',')[0].trim();
-  }
+  if (forwarded) return forwarded.split(',')[0].trim();
   const realIp = request.headers.get('x-real-ip');
   if (realIp) return realIp.trim();
-
-  // Fallback
   return '127.0.0.1';
 }
 
-// ── Pre-configured limiters for common use cases ──────────────────
+// ── Pre-configured limiters ───────────────────────────────────────────────────
 
-/** Strict limiter for authentication endpoints: 5 attempts per 60 seconds */
-export const loginRateLimiter = createRateLimiter({
-  maxRequests: 5,
-  windowSeconds: 60,
-});
-
-/** General API limiter: 100 requests per 60 seconds */
-export const apiRateLimiter = createRateLimiter({
-  maxRequests: 100,
-  windowSeconds: 60,
-});
-
-/** Dashboard limiter: 60 requests per 60 seconds */
-export const dashboardRateLimiter = createRateLimiter({
-  maxRequests: 60,
-  windowSeconds: 60,
-});
-
-/** Health check limiter: 10 requests per 60 seconds */
-export const healthRateLimiter = createRateLimiter({
-  maxRequests: 10,
-  windowSeconds: 60,
-});
+export const loginRateLimiter = createRateLimiter({ maxRequests: 5, windowSeconds: 60 });
+export const apiRateLimiter = createRateLimiter({ maxRequests: 100, windowSeconds: 60 });
+export const dashboardRateLimiter = createRateLimiter({ maxRequests: 60, windowSeconds: 60 });
+export const healthRateLimiter = createRateLimiter({ maxRequests: 10, windowSeconds: 60 });
