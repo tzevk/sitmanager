@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PERMISSION_GROUPS, ALL_PERMISSIONS } from '@/lib/rbac';
 import { getSession } from '@/lib/session';
 import { apiRateLimiter } from '@/lib/rate-limit';
 import { logTableActivity } from '@/lib/activity-log';

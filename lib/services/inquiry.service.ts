@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { getPool } from '@/lib/db';
+import { cached, getPool } from '@/lib/db';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -74,18 +74,55 @@ export interface InquiryListResult {
   };
 }
 
-// ── SQL fragments shared across queries ───────────────────────────────────────
+// ── Schema helpers ────────────────────────────────────────────────────────────
 
-const INQUIRY_DT_AS_DATE =
-  `COALESCE(` +
-  `STR_TO_DATE(SUBSTRING(si.Inquiry_Dt,1,19),'%Y-%m-%d %H:%i:%s'),` +
-  `STR_TO_DATE(SUBSTRING(si.Inquiry_Dt,1,10),'%Y-%m-%d'),` +
-  `STR_TO_DATE(SUBSTRING(si.Inquiry_Dt,1,10),'%d-%m-%Y'),` +
-  `STR_TO_DATE(SUBSTRING(si.Inquiry_Dt,1,10),'%d/%m/%Y'),` +
-  `STR_TO_DATE(SUBSTRING(si.Inquiry_Dt,1,10),'%d.%m.%Y'),` +
-  `STR_TO_DATE(SUBSTRING(si.Inquiry_Dt,1,10),'%Y/%m/%d'),` +
-  `DATE('1970-01-01')` +
-  `)`;
+async function ensureInquirySchema(pool: ReturnType<typeof getPool>): Promise<void> {
+  await cached('schema:inquiry_indexes', 60 * 60 * 1000, async () => {
+    // Add virtual generated column so _inquiry_date can be indexed
+    const [colRows] = await pool.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Student_Inquiry'
+         AND COLUMN_NAME = '_inquiry_date'`
+    );
+    if ((colRows as any[]).length === 0) {
+      await pool.query(
+        `ALTER TABLE Student_Inquiry ADD COLUMN _inquiry_date DATE GENERATED ALWAYS AS (` +
+        `COALESCE(` +
+        `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),19),'%Y-%m-%d %H:%i:%s'),` +
+        `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),10),'%Y-%m-%d'),` +
+        `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),10),'%d-%m-%Y'),` +
+        `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),10),'%d/%m/%Y')` +
+        `)) VIRTUAL`
+      );
+    }
+
+    const indexes: Array<{ table: string; name: string; cols: string }> = [
+      { table: 'Student_Inquiry',       name: 'idx_si_list',     cols: 'IsDelete, _inquiry_date, Inquiry_Id' },
+      { table: 'Student_Inquiry',       name: 'idx_si_status',   cols: 'IsDelete, OnlineState, Inquiry_Id' },
+      { table: 'Student_Inquiry',       name: 'idx_si_type',     cols: 'IsDelete, Inquiry_Type, Inquiry_Id' },
+      { table: 'Student_Inquiry',       name: 'idx_si_course',   cols: 'IsDelete, Course_Id, Inquiry_Id' },
+      { table: 'awt_inquirydiscussion', name: 'idx_disc_lookup', cols: 'Inquiry_id, deleted, id' },
+    ];
+
+    const [existingRows] = await pool.query(
+      `SELECT INDEX_NAME, TABLE_NAME FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME IN ('Student_Inquiry','awt_inquirydiscussion')
+       GROUP BY TABLE_NAME, INDEX_NAME`
+    );
+    const existing = new Set(
+      (existingRows as any[]).map((r: any) => `${r.TABLE_NAME}.${r.INDEX_NAME}`)
+    );
+
+    await Promise.all(
+      indexes
+        .filter((ix) => !existing.has(`${ix.table}.${ix.name}`))
+        .map((ix) => pool.query(`ALTER TABLE \`${ix.table}\` ADD INDEX \`${ix.name}\` (${ix.cols})`))
+    );
+
+    return true;
+  });
+}
 
 const DISCIPLINE_NAME_EXPR =
   `COALESCE(NULLIF(TRIM(md.Deciplin),''), NULLIF(TRIM(si.Discipline),''))`;
@@ -203,6 +240,7 @@ export async function getInquiryById(id: number): Promise<any | null> {
 
 export async function listInquiries(params: InquiryListParams): Promise<InquiryListResult> {
   const pool = getPool();
+  await ensureInquirySchema(pool);
   const {
     page, limit, search = '', discipline = '', inquiryType = '',
     location = '', training = '', statusId = '', dateFrom = '', dateTo = '',
@@ -246,11 +284,11 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     queryParams.push(parseInt(statusId));
   }
   if (dateFrom) {
-    conditions.push(`${INQUIRY_DT_AS_DATE} >= ?`);
+    conditions.push('si._inquiry_date >= ?');
     queryParams.push(dateFrom);
   }
   if (dateTo) {
-    conditions.push(`${INQUIRY_DT_AS_DATE} <= ?`);
+    conditions.push('si._inquiry_date <= ?');
     queryParams.push(dateTo);
   }
   if (training) {
@@ -260,40 +298,32 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
 
   const whereClause = `WHERE (${conditions.join(') AND (')})`;
 
-  // Paginate via temporary table on a single connection
   let total = 0;
   let pageIds: number[] = [];
   let sortOrder = new Map<number, number>();
 
-  const conn = await pool.getConnection();
-  try {
-    await conn.query('DROP TEMPORARY TABLE IF EXISTS tmp_sort_keys');
-    await conn.query(
-      `CREATE TEMPORARY TABLE tmp_sort_keys (
-         Inquiry_Id INT PRIMARY KEY, sort_date DATE,
-         INDEX(sort_date), INDEX(Inquiry_Id)
-       ) ENGINE=MEMORY
-       SELECT si.Inquiry_Id, ${INQUIRY_DT_AS_DATE} as sort_date
-       FROM Student_Inquiry si
-       LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
-       LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)
-       ${whereClause}`,
-      queryParams
-    );
-    const [countResult] = await conn.query('SELECT COUNT(*) as total FROM tmp_sort_keys');
-    total = (countResult as any[])[0]?.total || 0;
+  const [countResult] = await pool.query(
+    `SELECT COUNT(*) as total
+     FROM Student_Inquiry si
+     LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
+     LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)
+     ${whereClause}`,
+    queryParams
+  );
+  total = (countResult as any[])[0]?.total || 0;
 
-    const [sortedIds] = await conn.query(
-      `SELECT Inquiry_Id, sort_date FROM tmp_sort_keys
-       ORDER BY sort_date DESC, Inquiry_Id DESC LIMIT ? OFFSET ?`,
-      [limit, offset]
-    );
-    pageIds = (sortedIds as any[]).map((r: any) => r.Inquiry_Id);
-    sortOrder = new Map((sortedIds as any[]).map((r: any, i: number) => [r.Inquiry_Id, i]));
-  } finally {
-    try { await conn.query('DROP TEMPORARY TABLE IF EXISTS tmp_sort_keys'); } catch { /* ignore */ }
-    conn.release();
-  }
+  const [sortedIds] = await pool.query(
+    `SELECT si.Inquiry_Id, si._inquiry_date as sort_date
+     FROM Student_Inquiry si
+     LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
+     LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)
+     ${whereClause}
+     ORDER BY si._inquiry_date DESC, si.Inquiry_Id DESC
+     LIMIT ? OFFSET ?`,
+    [...queryParams, limit, offset]
+  );
+  pageIds = (sortedIds as any[]).map((r: any) => r.Inquiry_Id);
+  sortOrder = new Map((sortedIds as any[]).map((r: any, i: number) => [r.Inquiry_Id, i]));
 
   // Fetch full rows for page IDs
   let dataRows: any[] = [];

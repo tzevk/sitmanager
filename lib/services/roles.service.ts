@@ -235,6 +235,63 @@ export async function updateRole(id: number, input: UpdateRoleInput): Promise<vo
   }
 }
 
+export async function updateRolePartial(
+  id: number,
+  input: Partial<UpdateRoleInput>
+): Promise<void> {
+  const { title, description, permissions, dashboard_department, updatedBy } = input;
+
+  if (permissions !== undefined) {
+    if (!Array.isArray(permissions)) throw new Error('Permissions must be an array');
+    validatePermissions(permissions);
+  }
+
+  const pool = getPool();
+  await ensurePermissionsTable(pool);
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const setClauses: string[] = [];
+    const values: any[] = [];
+
+    if (title) { setClauses.push('title = ?'); values.push(title.trim()); }
+    if (description !== undefined) { setClauses.push('description = ?'); values.push(description); }
+    if (dashboard_department !== undefined) { setClauses.push('dashboard_department = ?'); values.push(dashboard_department ?? null); }
+    if (updatedBy) { setClauses.push('updated_by = ?', 'updated_date = NOW()'); values.push(updatedBy); }
+
+    if (setClauses.length > 0) {
+      await conn.execute(`UPDATE role SET ${setClauses.join(', ')} WHERE id = ?`, [...values, id]);
+    }
+
+    if (permissions !== undefined) {
+      await conn.execute('DELETE FROM role_permissions WHERE role_id = ?', [id]);
+      if (permissions.length > 0) {
+        await conn.query('INSERT INTO role_permissions (role_id, permission_id) VALUES ?', [
+          permissions.map((p) => [id, p]),
+        ]);
+      }
+    }
+
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+export async function countUsersWithRole(id: number): Promise<number> {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    'SELECT COUNT(*) as count FROM awt_adminuser WHERE role = ? AND deleted = 0',
+    [id]
+  );
+  return Number((rows as any[])[0]?.count ?? 0);
+}
+
 export async function deleteRole(id: number, deletedBy: number): Promise<void> {
   const pool = getPool();
   await pool.execute(
