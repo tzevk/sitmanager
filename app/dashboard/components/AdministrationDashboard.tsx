@@ -133,7 +133,7 @@ export default function AdministrationDashboard({
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {loading ? <TableSkeleton rows={5} cols={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold">To Do List</div>
             <div className="p-4 border-b border-gray-100 grid grid-cols-1 md:grid-cols-5 gap-2">
               <input id="admin-task" className="md:col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Task Name" />
@@ -198,7 +198,7 @@ export default function AdministrationDashboard({
         )}
 
         {loading ? <WidgetSkeleton lines={8} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2A6BB5] to-[#2E3093] text-white font-bold">Calendar</div>
             <div className="p-4 space-y-2 max-h-[420px] overflow-auto">
               {calendarEvents.length === 0 ? (
@@ -219,7 +219,7 @@ export default function AdministrationDashboard({
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {loading ? <WidgetSkeleton lines={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold">Follow Ups Today</div>
             <div className="p-4 space-y-2 max-h-[260px] overflow-auto">
               {followUpsToday.length === 0 ? <p className="text-sm text-gray-400">No follow ups today</p> : followUpsToday.map((f: any, i: number) => (
@@ -233,7 +233,7 @@ export default function AdministrationDashboard({
         )}
 
         {loading ? <WidgetSkeleton lines={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2A6BB5] to-[#2E3093] text-white font-bold">Lectures Scheduled Today</div>
             <div className="p-4 space-y-2 max-h-[260px] overflow-auto">
               {lecturesToday.length === 0 ? <p className="text-sm text-gray-400">No lectures scheduled today</p> : lecturesToday.map((l: any, i: number) => (
@@ -247,7 +247,7 @@ export default function AdministrationDashboard({
         )}
 
         {loading ? <WidgetSkeleton lines={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold">Meetings</div>
             <div className="p-4 space-y-2 max-h-[260px] overflow-auto">
               {meetings.length === 0 ? <p className="text-sm text-gray-400">No meetings found</p> : meetings.map((m: any, i: number) => (
@@ -263,7 +263,7 @@ export default function AdministrationDashboard({
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {loading ? <WidgetSkeleton lines={5} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2A6BB5] to-[#2E3093] text-white font-bold">Department Performance</div>
             <div className="p-4 grid grid-cols-2 gap-3">
               {deptPerf.map((p) => (
@@ -277,7 +277,7 @@ export default function AdministrationDashboard({
         )}
 
         {loading ? <WidgetSkeleton lines={5} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold">Weekly Report</div>
             <div className="p-4 space-y-2">
               {weeklyReport.length === 0 ? <p className="text-sm text-gray-400">No weekly report data</p> : weeklyReport.map((w: any, i: number) => (

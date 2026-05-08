@@ -470,7 +470,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-gray-50 overflow-hidden">
+    <div className="fixed inset-0 flex flex-col bg-[#F1F5F9] overflow-hidden">
       {/* Close dropdown when clicking outside */}
       {openDropdown && (
         <div className="fixed inset-0 z-30" onClick={closeDropdown} />
@@ -536,7 +536,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
               </div>
             ) : (
               <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-white/15 bg-white/10 text-white" title={session?.email || ''}>
-                <div className="w-6 h-6 rounded-full bg-[#FAE452] text-[#2E3093] flex items-center justify-center text-[10px] font-black shrink-0">
+                <div className="w-6 h-6 rounded-full bg-white/25 text-white flex items-center justify-center text-[10px] font-black shrink-0">
                   {getInitials(session?.firstName, session?.lastName, session?.email)}
                 </div>
                 <div className="min-w-0 leading-tight">
@@ -570,7 +570,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
 
             <button
               onClick={handleSignOut}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-white/80 hover:bg-[#FAE452] hover:text-[#2E3093] transition-colors text-[11px] font-semibold"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-white/80 hover:bg-white/15 hover:text-white transition-colors text-[11px] font-semibold"
               title="Sign Out"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -612,7 +612,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
                 }}
                 className={`flex items-center gap-1.5 px-2.5 h-8 text-[11.5px] font-semibold whitespace-nowrap transition-all duration-150 rounded-md mx-0.5 ${
                   activeMenu === item
-                    ? 'bg-[#FAE452] text-[#2E3093] shadow-sm'
+                    ? 'bg-white/20 text-white shadow-sm'
                     : 'text-white/85 hover:bg-white/15 hover:text-white'
                 }`}
               >
@@ -664,7 +664,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
                       }}
                       className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
                         activeMenu === item
-                          ? 'bg-[#FAE452]/70 text-[#2E3093]'
+                          ? 'bg-[#2E3093]/8 text-[#2E3093]'
                           : 'text-slate-700 hover:bg-slate-100'
                       }`}
                     >
@@ -762,8 +762,8 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
                   className={`w-full text-left px-4 py-2 text-[13px] font-medium transition-colors whitespace-nowrap ${
                     route
                       ? isActive
-                        ? 'bg-[#FAE452]/45 text-[#2E3093]'
-                        : 'text-[#2E3093] hover:bg-[#FAE452]/40'
+                        ? 'bg-[#2E3093]/8 text-[#2E3093]'
+                        : 'text-[#2E3093] hover:bg-[#2E3093]/5'
                       : 'text-gray-400 cursor-not-allowed'
                   }`}
                 >

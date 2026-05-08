@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
+import { PageHeader, FilterBar, PrimaryBtn, GhostBtn } from '@/components/ui/PageHeader';
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
@@ -264,41 +265,29 @@ export default function InquiryPage() {
     <div className="space-y-6">
       {permLoading ? <PermissionLoading /> : !canView ? <AccessDenied message="You do not have permission to view inquiries." /> : (<>
 
-      {/* Header */}
-      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-2.5 flex items-center justify-between relative overflow-hidden">
-        <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
-        <div className="relative z-10 flex items-center gap-3">
-          <h2 className="text-sm font-black text-white tracking-tight">Inquiry Listing</h2>
-          <span className="text-[11px] text-white/60">{pagination.total.toLocaleString()} records</span>
-        </div>
-        <div className="relative z-10 flex items-center gap-2">
-          <a
-            href="/public/inquiry"
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1 bg-white/15 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-white/25 transition-colors border border-white/20"
-          >
+      <PageHeader
+        title="Inquiry Listing"
+        breadcrumbs={[{ label: 'Admission Activity' }, { label: 'Inquiry' }]}
+        meta={`${pagination.total.toLocaleString()} records`}
+        action={<>
+          <GhostBtn href="/public/inquiry" target="_blank" rel="noreferrer">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h6m0 0v6m0-6L10 16m-4 0h2a2 2 0 002-2V8a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" />
             </svg>
-            Public Enquiry Form
-          </a>
+            Public Form
+          </GhostBtn>
           {canCreate && (
-            <button
-              onClick={() => router.push('/dashboard/inquiry/add')}
-              className="flex items-center gap-1 bg-white text-[#2E3093] px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-white/90 transition-colors"
-            >
+            <PrimaryBtn onClick={() => router.push('/dashboard/inquiry/add')}>
               <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
               Add Inquiry
-            </button>
+            </PrimaryBtn>
           )}
-        </div>
-      </div>
+        </>}
+      />
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 bg-white rounded-xl border border-slate-200 px-4 py-2.5">
+      <FilterBar>
         <input
           type="text" value={search} placeholder="Search name, mobile, email…"
           onChange={e => setSearch(e.target.value)}
@@ -329,17 +318,17 @@ export default function InquiryPage() {
           </svg>
           Search
         </button>
-        <button onClick={doClear} className="px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors">
+        <button onClick={doClear} className="px-3 py-1.5 text-xs font-semibold text-slate-500 border border-zinc-200 rounded-lg hover:border-zinc-300 transition-colors">
           Clear
         </button>
-      </div>
+      </FilterBar>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-[#2E3093]/10 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-[10px] uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-200">
+              <tr className="text-[10px] uppercase tracking-wider text-[#2A6BB5]/60 bg-zinc-50 border-b border-zinc-200">
                 <th className="text-left py-2 px-3 font-bold">#</th>
                 <th className="text-left py-2 px-3 font-bold">Name</th>
                 <th className="text-left py-2 px-3 font-bold">Training</th>
@@ -372,7 +361,7 @@ export default function InquiryPage() {
                 const colorCls = isPendingFollowUp(r) ? '[&>td]:text-purple-600' : attended ? '[&>td]:text-slate-800' : '[&>td]:text-red-500';
                 return (
                   <tr key={r.Student_Id} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${colorCls}`}>
-                    <td className="py-1.5 px-3 font-semibold relative pl-5">
+                    <td className="py-1.5 px-3 font-semibold font-mono tabular-nums relative pl-5">
                       <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${statusBar(r.Status_id, r.StatusLabel)} rounded-r`} />
                       {(pagination.page - 1) * pagination.limit + i + 1}
                     </td>

@@ -66,7 +66,7 @@ function Sparkline({ data, color = '#2E3093' }: { data: number[]; color?: string
 // --- Stat Card ---
 function StatCard({ icon, label, value, color, glow }: { icon: React.ReactNode; label: string; value: number | string; color: string; glow: string }) {
   return (
-    <div className="relative overflow-hidden rounded-3xl p-6 flex flex-col justify-center gap-3 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100/80 transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] hover:-translate-y-1 group">
+    <div className="relative overflow-hidden rounded-3xl p-6 flex flex-col justify-center gap-3 bg-white border border-[#2E3093]/10 transition-all duration-300 hover:-translate-y-1 group">
       {/* Background soft glow */ }
       <div className={`absolute -right-6 -top-6 w-32 h-32 rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity duration-500 ${glow} pointer-events-none`}></div>
       <div className="flex items-center gap-4 relative z-10">
@@ -74,8 +74,8 @@ function StatCard({ icon, label, value, color, glow }: { icon: React.ReactNode; 
           {icon}
         </div>
         <div className="min-w-0">
-          <p className="text-3xl font-black text-gray-900 leading-none tracking-tight">{typeof value === 'number' ? value.toLocaleString() : value}</p>
-          <p className="text-[11px] text-gray-500 mt-1.5 font-bold uppercase tracking-widest">{label}</p>
+          <p className="text-3xl font-semibold text-[#2E3093] leading-none tracking-tight">{typeof value === 'number' ? value.toLocaleString() : value}</p>
+          <p className="text-[11px] text-[#2A6BB5]/70 mt-1.5 font-semibold uppercase tracking-widest">{label}</p>
         </div>
       </div>
     </div>
@@ -85,7 +85,7 @@ function StatCard({ icon, label, value, color, glow }: { icon: React.ReactNode; 
 // --- Widget Card Wrapper ---
 function Widget({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100/50 overflow-hidden flex flex-col backdrop-blur-sm ${className}`}>
+    <div className={`bg-white rounded-3xl border border-[#2E3093]/10 overflow-hidden flex flex-col ${className}`}>
       {children}
     </div>
   );
@@ -95,7 +95,7 @@ function WidgetHeader({ title, icon, badge, accent = 'from-[#2E3093] to-[#2A6BB5
   return (
     <div className={`bg-gradient-to-r ${accent} px-6 py-4 flex items-center gap-3 relative overflow-hidden`}>
       <div className="absolute inset-0 bg-white/5 mix-blend-overlay"></div>
-      <div className="absolute left-0 right-0 bottom-0 h-1 bg-[#FAE452] opacity-80"></div>
+      <div className="absolute left-0 right-0 bottom-0 h-px bg-white/30"></div>
       <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shadow-inner relative z-10 border border-white/20">{icon}</div>
       <h2 className="text-white font-bold text-[15px] tracking-wide flex-1 relative z-10">{title}</h2>
       {badge !== undefined && (
@@ -326,7 +326,7 @@ export default function DashboardPage() {
               <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.083 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
               </svg>
-              <span className={`absolute -right-1.5 -top-1.5 min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-black border border-white ${showFollowupReminder ? 'bg-rose-500 text-white animate-pulse' : 'bg-[#FAE452] text-[#2E3093]'}`}>
+              <span className={`absolute -right-1.5 -top-1.5 min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-black border border-white ${showFollowupReminder ? 'bg-rose-500 text-white animate-pulse' : 'bg-[#2E3093] text-white'}`}>
                 {showFollowupReminder ? newFollowupCount : recentFollowups.length}
               </span>
             </span>
@@ -471,7 +471,7 @@ export default function DashboardPage() {
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.083 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
                     </svg>
-                    <span className={`absolute -right-1.5 -top-1.5 min-w-[16px] h-4 px-0.5 inline-flex items-center justify-center rounded-full text-[9px] font-black border border-white ${showFollowupReminder ? 'bg-rose-500 text-white animate-pulse' : 'bg-[#FAE452] text-[#2E3093]'}`}>
+                    <span className={`absolute -right-1.5 -top-1.5 min-w-[16px] h-4 px-0.5 inline-flex items-center justify-center rounded-full text-[9px] font-black border border-white ${showFollowupReminder ? 'bg-rose-500 text-white animate-pulse' : 'bg-[#2E3093] text-white'}`}>
                       {showFollowupReminder ? newFollowupCount : recentFollowups.length}
                     </span>
                   </span>
@@ -652,7 +652,7 @@ export default function DashboardPage() {
         <StatCard
           icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>}
           label="Active Batches" value={qs.activeBatches}
-          color="bg-gradient-to-br from-[#FAE452] to-[#FAE452] text-[#2E3093]" glow="bg-[#FAE452]"
+          color="bg-gradient-to-br from-[#2A6BB5]/20 to-[#2E3093]/10 text-[#2E3093] border border-[#2E3093]/15" glow="bg-[#2A6BB5]"
         />
         <StatCard
           icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>}
@@ -868,7 +868,7 @@ export default function DashboardPage() {
                         </div>
                       </button>
                       <span className={`flex-1 text-[13px] font-medium transition-all ${todo.done ? 'line-through text-gray-400' : 'text-slate-700'}`}>{todo.text}</span>
-                      <button onClick={() => removeTodo(todo.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-[#2E3093] transition-all p-1.5 bg-slate-50 hover:bg-[#FAE452]/25 rounded-lg border border-transparent hover:border-[#FAE452]/40">
+                      <button onClick={() => removeTodo(todo.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-[#2E3093] transition-all p-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg border border-transparent hover:border-slate-200">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                       </button>
                     </div>
@@ -897,12 +897,12 @@ export default function DashboardPage() {
               <div className="space-y-3">
                 {(data?.notices ?? []).map((n: any) => (
                   <div key={n.id} className="p-4 rounded-2xl bg-gradient-to-br from-[#2A6BB5]/5 to-white border border-[#2A6BB5]/12 hover:shadow-md hover:border-[#2A6BB5]/25 transition-all duration-300 relative overflow-hidden group">
-                    <div className="absolute top-0 left-0 w-1 h-full bg-[#FAE452] opacity-60 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="absolute top-0 left-0 w-1 h-full bg-[#2A6BB5]/50 group-hover:bg-[#2A6BB5] transition-colors"></div>
                     <div className="text-[13px] text-slate-700 font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: n.specification }} />
                     <div className="flex items-center gap-3 mt-3 text-[10px] text-[#2A6BB5]/80 font-semibold uppercase tracking-wider">
                       {n.startdate && <span className="flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg> {n.startdate}</span>}
                       {n.enddate && <span className="flex items-center gap-1">To: {n.enddate}</span>}
-                      {n.created_date && <span className="ml-auto bg-[#FAE452]/35 text-[#2E3093] px-2 py-0.5 rounded-md border border-[#FAE452]/50">{new Date(n.created_date).toLocaleDateString()}</span>}
+                      {n.created_date && <span className="ml-auto bg-[#2E3093]/8 text-[#2E3093] px-2 py-0.5 rounded-md border border-[#2E3093]/12">{new Date(n.created_date).toLocaleDateString()}</span>}
                     </div>
                   </div>
                 ))}
@@ -934,7 +934,7 @@ export default function DashboardPage() {
                 <p className="text-2xl font-black text-[#2E3093] relative z-10">{data?.enquiryReport?.summary?.total_enquiries ?? 0}</p>
                 <p className="text-[10px] text-[#2A6BB5]/80 mt-1 font-bold uppercase tracking-widest relative z-10">Student</p>
               </div>
-              <div className="bg-gradient-to-br from-[#FAE452]/35 to-white rounded-2xl p-4 text-center border border-[#FAE452]/60 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+              <div className="bg-gradient-to-br from-[#2E3093]/6 to-white rounded-2xl p-4 text-center border border-[#2E3093]/12 relative overflow-hidden group hover:border-[#2E3093]/20 transition-all">
                 <div className="absolute inset-0 bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <p className="text-2xl font-black text-[#2E3093] relative z-10">{data?.enquiryReport?.corporateTotal ?? 0}</p>
                 <p className="text-[10px] text-[#2E3093]/75 mt-1 font-bold uppercase tracking-widest relative z-10">Corporate</p>
@@ -1063,14 +1063,14 @@ export default function DashboardPage() {
                     {rows.map((r: any, i: number) => {
                       const pct = r.placedPct ?? 0;
                       const pctColor = pct >= 70
-                        ? 'text-[#2E3093] bg-[#FAE452]/70 ring-[#FAE452]/50'
+                        ? 'text-[#2E3093] bg-[#2E3093]/10 ring-[#2E3093]/20'
                         : pct >= 40
                           ? 'text-[#2A6BB5] bg-[#2A6BB5]/10 ring-[#2A6BB5]/20'
                           : 'text-[#2E3093] bg-[#2E3093]/8 ring-[#2E3093]/15';
                       return (
                         <tr key={r.batchCode ?? i} className="group hover:bg-gradient-to-r hover:from-[#2A6BB5]/5 hover:to-white transition-all duration-300">
                           <td className="py-3.5 px-5 font-bold text-slate-800 max-w-[240px] relative">
-                            <span className="absolute inset-y-0 left-0 w-1 bg-[#FAE452] opacity-0 group-hover:opacity-100 transition-opacity"></span>
+                            <span className="absolute inset-y-0 left-0 w-1 bg-[#2E3093] opacity-0 group-hover:opacity-100 transition-opacity"></span>
                             <span className="truncate block group-hover:text-[#2A6BB5] transition-colors drop-shadow-sm pl-1">{r.courseName || 'N/A'}</span>
                           </td>
                           <td className="py-3.5 px-4 text-center"><span className="font-mono bg-slate-50 border border-slate-200 text-slate-600 shadow-sm rounded-lg px-2.5 py-1 text-[11px] font-semibold">{toBatchNumber(r.batchCode)}</span></td>
@@ -1097,7 +1097,7 @@ export default function DashboardPage() {
                       <td className="py-4 px-4 text-center text-slate-500 text-[13px]">{totals.others}</td>
                       <td className="py-4 px-4 text-center text-[#2E3093] border-l border-slate-200/60 text-[13px]">{totals.interviewed}</td>
                       <td className="py-4 px-4 text-center text-[#2A6BB5] text-[15px] drop-shadow-sm">{totals.placed}</td>
-                      <td className="py-4 px-5 text-center"><span className={`inline-flex items-center justify-center min-w-[52px] px-3 py-1.5 rounded-xl text-[13px] font-black shadow-md border border-white/60 ${totalPct >= 70 ? 'text-[#2E3093] bg-[#FAE452]/75 border-[#FAE452]/60' : totalPct >= 40 ? 'text-[#2A6BB5] bg-[#2A6BB5]/10 border-[#2A6BB5]/15' : 'text-[#2E3093] bg-[#2E3093]/8 border-[#2E3093]/12'}`}>{totalPct}%</span></td>
+                      <td className="py-4 px-5 text-center"><span className={`inline-flex items-center justify-center min-w-[52px] px-3 py-1.5 rounded-xl text-[13px] font-black shadow-md border border-white/60 ${totalPct >= 70 ? 'text-[#2A6BB5] bg-[#2A6BB5]/12 border-[#2A6BB5]/20' : totalPct >= 40 ? 'text-[#2A6BB5] bg-[#2A6BB5]/10 border-[#2A6BB5]/15' : 'text-[#2E3093] bg-[#2E3093]/8 border-[#2E3093]/12'}`}>{totalPct}%</span></td>
                     </tr>
                   </tfoot>
                 </table>

@@ -2,13 +2,16 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #1a1f3c;   /* dark indigo-gray — never pure black */
+  --text-heading: #2E3093;
+  --text-label:   #2A6BB5b3; /* #2A6BB5 at 70% */
+  --text-muted:   #64748b;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-public-sans);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -16,7 +19,7 @@ html,
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-public-sans), 'Public Sans', system-ui, sans-serif;
   margin: 0;
   padding: 0;
   overflow-x: hidden;

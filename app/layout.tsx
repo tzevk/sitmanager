@@ -1,12 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Libre_Franklin } from "next/font/google";
+import { Public_Sans, Geist_Mono, Libre_Franklin } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const publicSans = Public_Sans({
+  variable: "--font-public-sans",
   subsets: ["latin"],
-  display: "swap", // Optimize font loading
+  display: "swap",
   preload: true,
+  weight: ["300", "400", "500", "600", "700", "800"],
 });
 
 const geistMono = Geist_Mono({
@@ -57,7 +58,7 @@ export default function RootLayout({
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${libreFranklin.variable} antialiased h-full`}
+        className={`${publicSans.variable} ${geistMono.variable} ${libreFranklin.variable} antialiased h-full`}
         suppressHydrationWarning
       >
         {children}

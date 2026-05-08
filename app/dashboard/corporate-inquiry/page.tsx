@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FaPlus, FaFileExport, FaEdit, FaSearch, FaChevronLeft, FaChevronRight, FaTimesCircle, FaCheckCircle, FaFileSignature } from 'react-icons/fa';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
+import { PageHeader, GhostBtn, PrimaryBtn } from '@/components/ui/PageHeader';
 
 interface CorporateInquiry {
   Id: number;
@@ -203,35 +204,27 @@ export default function CorporateInquiryPage() {
   return (
     <div className="space-y-6">
 
-      {/* ── Header ── */}
-      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-6 py-4 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-white font-bold text-xl tracking-tight">Corporate Inquiry</h1>
-          <p className="text-blue-200 text-sm mt-0.5">{pagination.total.toLocaleString()} total inquiries</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition-colors border border-white/20"
-          >
-            <FaFileExport className="w-3.5 h-3.5" /> Export
-          </button>
+      <PageHeader
+        title="Corporate Inquiry"
+        breadcrumbs={[{ label: 'Corporate Training' }, { label: 'Corporate Inquiry' }]}
+        meta={`${pagination.total.toLocaleString()} records`}
+        action={<>
+          <GhostBtn onClick={handleExport}>
+            <FaFileExport className="w-3 h-3" /> Export
+          </GhostBtn>
           {canCreate && (
-            <button
-              onClick={() => router.push('/dashboard/corporate-inquiry/add')}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white text-[#2E3093] font-bold text-sm shadow hover:bg-blue-50 transition-colors"
-            >
-              <FaPlus className="w-3.5 h-3.5" /> Add Inquiry
-            </button>
+            <PrimaryBtn onClick={() => router.push('/dashboard/corporate-inquiry/add')}>
+              <FaPlus className="w-3 h-3" /> Add Inquiry
+            </PrimaryBtn>
           )}
-        </div>
-      </div>
+        </>}
+      />
 
       {/* ── Table Card ── */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+      <div className="bg-white rounded-xl border border-[#2E3093]/10 overflow-hidden flex flex-col">
 
         {/* Search bar */}
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
+        <div className="px-3 py-2 border-b border-zinc-100 bg-zinc-50 flex items-center gap-3">
           <div className="relative flex-1 max-w-sm">
             <FaSearch className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -252,8 +245,8 @@ export default function CorporateInquiryPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-[11px] uppercase tracking-wider text-gray-500 bg-gray-50 border-b border-gray-200">
-                <th className="text-left py-3 px-4 font-semibold w-12">#</th>
+              <tr className="text-[10px] uppercase tracking-wider text-[#2A6BB5]/60 bg-zinc-50 border-b border-zinc-200">
+                <th className="text-left py-2 px-3 font-semibold w-10 font-mono">#</th>
                 <th className="text-left py-3 px-4 font-semibold">Date</th>
                 <th className="text-left py-3 px-4 font-semibold">Training Programme</th>
                 <th className="text-left py-3 px-4 font-semibold">Company</th>

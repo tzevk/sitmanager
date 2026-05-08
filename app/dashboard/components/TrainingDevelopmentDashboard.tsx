@@ -32,7 +32,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
       {loading ? (
         <TableSkeleton rows={6} cols={7} />
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
           <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold">Ongoing Batches</div>
           <div className="overflow-auto max-h-[340px]">
             <table className="w-full text-sm">
@@ -70,7 +70,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 2) Low Attendance Students */}
         {loading ? <TableSkeleton rows={5} cols={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2A6BB5] to-[#2E3093] text-white font-bold">Low Attendance Students</div>
             <div className="overflow-auto max-h-[280px]">
               <table className="w-full text-sm">
@@ -100,7 +100,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
 
         {/* 3) Low Performing Students */}
         {loading ? <TableSkeleton rows={5} cols={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold">Low Performing Students</div>
             <div className="overflow-auto max-h-[280px]">
               <table className="w-full text-sm">
@@ -132,7 +132,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 4) Upcoming Exams */}
         {loading ? <TableSkeleton rows={5} cols={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2A6BB5] to-[#2E3093] text-white font-bold">Upcoming Exams</div>
             <div className="overflow-auto max-h-[280px]">
               <table className="w-full text-sm">
@@ -162,7 +162,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
 
         {/* 5) Finished Exams */}
         {loading ? <TableSkeleton rows={5} cols={5} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold">Finished Exams</div>
             <div className="overflow-auto max-h-[280px]">
               <table className="w-full text-sm">
@@ -196,7 +196,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 6) Today's Lectures */}
         {loading ? <TableSkeleton rows={5} cols={5} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2A6BB5] to-[#2E3093] text-white font-bold">Today&apos;s Lectures</div>
             <div className="overflow-auto max-h-[280px]">
               <table className="w-full text-sm">
@@ -228,7 +228,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
 
         {/* 7) Google Reviews Pending */}
         {loading ? <WidgetSkeleton lines={2} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold">Google Reviews Pending</div>
             <div className="p-6 flex items-center justify-center">
               <div className="text-center">
@@ -243,7 +243,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* 8) Upcoming Convocations */}
         {loading ? <WidgetSkeleton lines={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2A6BB5] to-[#2E3093] text-white font-bold">Upcoming Convocations</div>
             <div className="p-4 space-y-2 max-h-[260px] overflow-auto">
               {upcomingConvocations.length === 0 ? <p className="text-sm text-gray-400">No upcoming convocations</p> :
@@ -259,7 +259,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
 
         {/* 9) Site Visits */}
         {loading ? <WidgetSkeleton lines={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold">Site Visits</div>
             <div className="p-4 space-y-2 max-h-[260px] overflow-auto">
               {siteVisits.length === 0 ? <p className="text-sm text-gray-400">No site visits records</p> :
@@ -275,7 +275,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: { data: 
 
         {/* 10) Admission Cancelled */}
         {loading ? <WidgetSkeleton lines={4} /> : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#2A6BB5] to-[#2E3093] text-white font-bold">Admission Cancelled</div>
             <div className="p-4 space-y-2 max-h-[260px] overflow-auto">
               {admissionCancelled.length === 0 ? <p className="text-sm text-gray-400">No cancelled admissions</p> :
