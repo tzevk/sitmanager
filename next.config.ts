@@ -66,13 +66,6 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // Static assets — immutable
-        source: '/_next/static/:path*',
-        headers: [
-          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
-        ],
-      },
-      {
         // Fonts
         source: '/fonts/:path*',
         headers: [

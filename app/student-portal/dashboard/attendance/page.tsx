@@ -2,10 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import AttendanceCalendar from './AttendanceCalendar';
 
 interface Lecture {
   Take_Id: number;
   Take_Dt: string;
+  Topic?: string;
+  Faculty_Name?: string;
   session?: 'first_half' | 'second_half';
   present: number;
   Late: number;
@@ -17,6 +20,7 @@ export default function AttendancePage() {
   const [summary, setSummary] = useState({ total_lectures: 0, attended: 0, absent: 0, percentage: 0 });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'present' | 'absent'>('all');
+  const [view, setView] = useState<'calendar' | 'list'>('calendar');
 
   useEffect(() => {
     (async () => {
@@ -77,51 +81,78 @@ export default function AttendancePage() {
         ))}
       </div>
 
-      {/* Filter + list */}
+      {/* View toggle + content */}
       <div className="px-4 mt-4">
-        <div className="flex items-center gap-1 mb-3 bg-white border border-gray-100 rounded-xl p-1">
-          {(['all', 'present', 'absent'] as const).map(f => (
+
+        {/* Toggle */}
+        <div className="flex items-center gap-1 mb-3 bg-white border border-[#2E3093]/10 rounded-xl p-1">
+          {(['calendar', 'list'] as const).map(v => (
             <button
-              key={f}
-              onClick={() => setFilter(f)}
+              key={v}
+              onClick={() => setView(v)}
               className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${
-                filter === f ? 'bg-[#2E3093] text-white' : 'text-gray-400'
+                view === v ? 'bg-[#2E3093] text-white' : 'text-[#2A6BB5]/60'
               }`}
             >
-              {f === 'all' ? `All (${lectures.length})` : f === 'present' ? `Present (${summary.attended})` : `Absent (${summary.absent})`}
+              {v === 'calendar' ? 'Calendar' : 'List'}
             </button>
           ))}
         </div>
 
-        {filtered.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-100 px-4 py-10 text-center text-sm text-gray-400">
-            No records
-          </div>
+        {view === 'calendar' ? (
+          <AttendanceCalendar lectures={lectures} />
         ) : (
-          <div className="bg-white rounded-xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
-            {filtered.map((lec, idx) => (
-              <div key={lec.Take_Id} className="flex items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-[11px] font-bold text-gray-300 w-5 text-right">{idx + 1}</span>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-800">
-                      {lec.Take_Dt ? new Date(lec.Take_Dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                    </p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">
-                      {lec.session === 'second_half' ? 'Second Half' : 'First Half'}
-                    </p>
-                  </div>
-                </div>
-                <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
-                  lec.present
-                    ? lec.Late ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
-                    : 'bg-red-100 text-red-600'
-                }`}>
-                  {lec.present ? (lec.Late ? 'Late' : 'Present') : 'Absent'}
-                </span>
+          <>
+            {/* List filter tabs */}
+            <div className="flex items-center gap-1 mb-3 bg-white border border-[#2E3093]/10 rounded-xl p-1">
+              {(['all', 'present', 'absent'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${
+                    filter === f ? 'bg-[#2E3093] text-white' : 'text-[#2A6BB5]/60'
+                  }`}
+                >
+                  {f === 'all' ? `All (${lectures.length})` : f === 'present' ? `Present (${summary.attended})` : `Absent (${summary.absent})`}
+                </button>
+              ))}
+            </div>
+
+            {filtered.length === 0 ? (
+              <div className="bg-white rounded-xl border border-[#2E3093]/10 px-4 py-10 text-center text-sm text-[#2A6BB5]/40">
+                No records
               </div>
-            ))}
-          </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-[#2E3093]/10 overflow-hidden divide-y divide-zinc-50">
+                {filtered.map((lec, idx) => (
+                  <div key={lec.Take_Id} className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[11px] font-bold text-zinc-300 w-5 text-right font-mono tabular-nums">{idx + 1}</span>
+                      <div>
+                        <p className="text-xs font-semibold text-[#1a1f3c]">
+                          {lec.Take_Dt ? new Date(lec.Take_Dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                        </p>
+                        {lec.Topic ? (
+                          <p className="text-[11px] text-[#2A6BB5]/70 mt-0.5 truncate max-w-[180px]">{lec.Topic}</p>
+                        ) : (
+                          <p className="text-[11px] text-zinc-400 mt-0.5">
+                            {lec.session === 'second_half' ? 'Second Half' : 'First Half'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
+                      lec.present
+                        ? lec.Late ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+                        : 'bg-red-100 text-red-600'
+                    }`}>
+                      {lec.present ? (lec.Late ? 'Late' : 'Present') : 'Absent'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -10,10 +10,13 @@ declare global {
 function createClient(): Redis | null {
   if (!REDIS_URL) return null;
 
+  const isTLS = REDIS_URL.startsWith('rediss://');
+
   const client = new Redis(REDIS_URL, {
     maxRetriesPerRequest: 3,
     enableReadyCheck: true,
     lazyConnect: false,
+    ...(isTLS && { tls: { rejectUnauthorized: false } }),
   });
 
   client.on('error', (err) => {
