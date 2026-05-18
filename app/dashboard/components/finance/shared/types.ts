@@ -82,19 +82,6 @@ export interface CashflowProjection {
 export type CashflowType   = 'Payment' | 'Receipt';
 export type CashflowEntity = 'SIT' | 'Accent';
 
-export type BatchMarketingStatus = 'Pending' | 'Done';
-
-export interface BatchMarketing {
-  id: number;
-  batch_name: string;
-  training_name: string;
-  batch_start_date: string | null;
-  batch_announcement_date: string | null;
-  meta_ads_date: string | null;
-  flyer_status: BatchMarketingStatus;
-  announcement_status: BatchMarketingStatus;
-  meta_ads_status: BatchMarketingStatus;
-}
 
 export interface CashflowTxn {
   id: number;

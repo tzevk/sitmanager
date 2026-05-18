@@ -272,52 +272,5 @@ export const FINANCE_CASHFLOW: ResourceConfig = {
   ],
 };
 
-const BATCH_MARKETING_STATUS = ['Pending', 'Done'] as const;
-
-function subtractMonths(dateStr: string | null, months: number): string | null {
-  if (!dateStr) return null;
-  const d = new Date(dateStr + 'T00:00:00');
-  if (isNaN(d.getTime())) return null;
-  d.setMonth(d.getMonth() - months);
-  return d.toISOString().slice(0, 10);
-}
-
-export const FINANCE_CBD_BATCH_MARKETING: ResourceConfig = {
-  table: 'finance_cbd_batch_marketing',
-  ddl: `
-    CREATE TABLE IF NOT EXISTS finance_cbd_batch_marketing (
-      id                      INT AUTO_INCREMENT PRIMARY KEY,
-      batch_name              VARCHAR(200) NOT NULL DEFAULT '',
-      training_name           VARCHAR(200) NOT NULL DEFAULT '',
-      batch_start_date        DATE NULL,
-      batch_announcement_date DATE NULL,
-      meta_ads_date           DATE NULL,
-      flyer_status            ENUM('Pending','Done') NOT NULL DEFAULT 'Pending',
-      announcement_status     ENUM('Pending','Done') NOT NULL DEFAULT 'Pending',
-      meta_ads_status         ENUM('Pending','Done') NOT NULL DEFAULT 'Pending',
-      created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      KEY idx_batch_start (batch_start_date)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-  `,
-  migrations: `
-    ALTER TABLE finance_cbd_batch_marketing
-      ADD COLUMN IF NOT EXISTS training_name VARCHAR(200) NOT NULL DEFAULT ''
-  `,
-  defaultOrder: 'COALESCE(batch_start_date, "9999-12-31") ASC, id ASC',
-  validate: (b) => {
-    const startDate = nullableDate(b.batch_start_date);
-    return [
-      { col: 'batch_name',              val: safeString(b.batch_name, 200) },
-      { col: 'training_name',           val: safeString(b.training_name, 200) },
-      { col: 'batch_start_date',        val: startDate },
-      { col: 'batch_announcement_date', val: subtractMonths(startDate, 3) },
-      { col: 'meta_ads_date',           val: subtractMonths(startDate, 1) },
-      { col: 'flyer_status',            val: oneOf(b.flyer_status, BATCH_MARKETING_STATUS, 'Pending') },
-      { col: 'announcement_status',     val: oneOf(b.announcement_status, BATCH_MARKETING_STATUS, 'Pending') },
-      { col: 'meta_ads_status',         val: oneOf(b.meta_ads_status, BATCH_MARKETING_STATUS, 'Pending') },
-    ];
-  },
-};
-
 /* Utility wrappers used directly by salary-cashflow's bespoke route. */
 export { numOrZero, nonNegNum, nullableString, safeString, nullableMonth, nullableDate, oneOf };

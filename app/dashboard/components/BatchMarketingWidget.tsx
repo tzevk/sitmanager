@@ -2,18 +2,18 @@
 
 import { useCallback, useState, useEffect } from 'react';
 
-type BMStatus = 'Pending' | 'Done';
+type BMStatus = 'Pending' | 'In Progress' | 'Done';
+type StatusField = 'flyer_status' | 'announcement_status' | 'meta_ads_status';
 
-interface BatchMarketing {
+interface MarketingRecord {
   id: number;
   batch_name: string;
   training_name: string;
   batch_start_date: string | null;
-  batch_announcement_date: string | null;
-  meta_ads_date: string | null;
   flyer_status: BMStatus;
   announcement_status: BMStatus;
   meta_ads_status: BMStatus;
+  is_locked: number;
 }
 
 interface BatchOption {
@@ -23,15 +23,19 @@ interface BatchOption {
   SDate: string | null;
 }
 
-type ModalState = { open: false } | { open: true; editing: BatchMarketing | null };
+interface LocalStatus {
+  id?: number;
+  flyer_status: BMStatus;
+  announcement_status: BMStatus;
+  meta_ads_status: BMStatus;
+  is_locked: boolean;
+}
 
-const EMPTY_FORM = {
-  batch_name: '',
-  training_name: '',
-  batch_start_date: '',
-  flyer_status: 'Pending' as BMStatus,
-  announcement_status: 'Pending' as BMStatus,
-  meta_ads_status: 'Pending' as BMStatus,
+const DEFAULT_STATUS: Omit<LocalStatus, 'id'> = {
+  flyer_status: 'Pending',
+  announcement_status: 'Pending',
+  meta_ads_status: 'Pending',
+  is_locked: false,
 };
 
 function subtractMonths(dateStr: string, months: number): string {
@@ -46,323 +50,313 @@ function toDateStr(val: string | null | undefined): string {
   return s.slice(0, 10);
 }
 
-function fmtDate(d: string | null) {
+function fmtDate(d: string | null | undefined) {
   if (!d) return '—';
   const [y, m, day] = d.split('-');
   return `${day}/${m}/${y}`;
 }
 
-function StatusBadge({ status }: { status: BMStatus }) {
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${
-      status === 'Done'
-        ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200'
-        : 'bg-amber-100 text-amber-700 ring-1 ring-amber-200'
-    }`}>
-      {status === 'Done' ? '✓' : '○'} {status}
-    </span>
-  );
+function isNext6Months(sdate: string | null): boolean {
+  if (!sdate) return false;
+  const start = new Date(toDateStr(sdate) + 'T00:00:00');
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const cap = new Date();
+  cap.setMonth(cap.getMonth() + 6);
+  cap.setHours(0, 0, 0, 0);
+  return start >= now && start <= cap;
 }
 
-function StatusSelect({ value, onChange }: { value: BMStatus; onChange: (v: BMStatus) => void }) {
+function statusCls(status: BMStatus) {
+  if (status === 'Done')        return 'bg-emerald-100 text-emerald-700 ring-emerald-200';
+  if (status === 'In Progress') return 'bg-blue-100 text-blue-700 ring-blue-200';
+  return 'bg-amber-100 text-amber-700 ring-amber-200';
+}
+
+function StatusSelect({ status, field, batchCode, onUpdate, disabled }: {
+  status: BMStatus;
+  field: StatusField;
+  batchCode: string;
+  onUpdate: (batchCode: string, field: StatusField, val: BMStatus) => void;
+  disabled: boolean;
+}) {
   return (
     <select
-      value={value}
-      onChange={e => onChange(e.target.value as BMStatus)}
-      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+      value={status}
+      disabled={disabled}
+      onChange={e => onUpdate(batchCode, field, e.target.value as BMStatus)}
+      className={`text-[10px] font-bold rounded-full px-2 py-0.5 border-0 ring-1 outline-none transition-colors ${statusCls(status)} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
     >
-      <option value="Pending">Pending</option>
-      <option value="Done">Done</option>
+      <option value="Pending">○ Pending</option>
+      <option value="In Progress">◑ In Progress</option>
+      <option value="Done">✓ Done</option>
     </select>
   );
 }
 
-export default function BatchMarketingWidget() {
-  const [rows, setRows]                 = useState<BatchMarketing[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [batchOptions, setBatchOptions] = useState<BatchOption[]>([]);
-  const [selectedBatch, setSelectedBatch] = useState('');
-  const [modal, setModal]               = useState<ModalState>({ open: false });
-  const [form, setForm]                 = useState(EMPTY_FORM);
-  const [saving, setSaving]             = useState(false);
+function ActionBtn({ onClick, disabled, title, className, children }: {
+  onClick: () => void;
+  disabled: boolean;
+  title: string;
+  className: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`p-1.5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
 
-  /* fetch saved records */
-  const load = useCallback(async () => {
+export default function BatchMarketingWidget() {
+  const [batches, setBatches]   = useState<BatchOption[]>([]);
+  const [statuses, setStatuses] = useState<Map<string, LocalStatus>>(new Map());
+  const [saving, setSaving]     = useState<Set<string>>(new Set());
+  const [loading, setLoading]   = useState(true);
+
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/finance/cbd-batch-marketing', { cache: 'no-store' });
-      if (res.ok) setRows((await res.json()).rows ?? []);
+      const [batchRes, marketingRes] = await Promise.all([
+        fetch('/api/inquiry/batches'),
+        fetch('/api/cbd-batch-marketing', { cache: 'no-store' }),
+      ]);
+      const batchData     = batchRes.ok     ? await batchRes.json()     : { batches: [] };
+      const marketingData = marketingRes.ok ? await marketingRes.json() : { rows: [] };
+
+      const upcoming: BatchOption[] = (batchData.batches ?? []).filter((b: BatchOption) =>
+        isNext6Months(b.SDate)
+      );
+      upcoming.sort((a, b) => (toDateStr(a.SDate) < toDateStr(b.SDate) ? -1 : 1));
+      setBatches(upcoming);
+
+      const statusMap = new Map<string, LocalStatus>();
+      for (const r of (marketingData.rows ?? []) as MarketingRecord[]) {
+        statusMap.set(r.batch_name, {
+          id: r.id,
+          flyer_status: r.flyer_status,
+          announcement_status: r.announcement_status,
+          meta_ads_status: r.meta_ads_status,
+          is_locked: r.is_locked === 1,
+        });
+      }
+      setStatuses(statusMap);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  /* fetch batch master options */
-  useEffect(() => {
-    fetch('/api/inquiry/batches')
-      .then(r => r.json())
-      .then(data => setBatchOptions(data.batches ?? []))
-      .catch(() => {});
+  useEffect(() => { loadData(); }, [loadData]);
+
+  /* shared upsert helper used by status change + lock toggle */
+  const upsert = useCallback(async (
+    batchCode: string,
+    batch: BatchOption,
+    next: Omit<LocalStatus, 'id'>,
+    currentId?: number,
+  ): Promise<number | undefined> => {
+    const startDate = toDateStr(batch.SDate);
+    const payload = {
+      batch_name:          batchCode,
+      training_name:       batch.Course_Name ?? '',
+      batch_start_date:    startDate || null,
+      flyer_status:        next.flyer_status,
+      announcement_status: next.announcement_status,
+      meta_ads_status:     next.meta_ads_status,
+      is_locked:           next.is_locked ? 1 : 0,
+    };
+
+    if (currentId) {
+      await fetch(`/api/cbd-batch-marketing/${currentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      return currentId;
+    } else {
+      const res = await fetch('/api/cbd-batch-marketing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return (await res.json()).row?.id;
+    }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
-  const openAdd = () => {
-    setForm(EMPTY_FORM);
-    setSelectedBatch('');
-    setModal({ open: true, editing: null });
-  };
-
-  const openEdit = (r: BatchMarketing) => {
-    setSelectedBatch('');
-    setForm({
-      batch_name: r.batch_name,
-      training_name: r.training_name,
-      batch_start_date: r.batch_start_date ?? '',
-      flyer_status: r.flyer_status,
-      announcement_status: r.announcement_status,
-      meta_ads_status: r.meta_ads_status,
-    });
-    setModal({ open: true, editing: r });
-  };
-
-  const remove = useCallback(async (id: number) => {
-    if (!confirm('Delete this batch marketing record?')) return;
-    await fetch(`/api/finance/cbd-batch-marketing/${id}`, { method: 'DELETE' });
-    load();
-  }, [load]);
-
-  /* when user picks a batch from the dropdown, auto-fill fields */
-  const handleBatchSelect = (batchId: string) => {
-    setSelectedBatch(batchId);
-    if (!batchId) return;
-    const batch = batchOptions.find(b => String(b.Batch_Id) === batchId);
+  const handleStatusChange = useCallback(async (batchCode: string, field: StatusField, value: BMStatus) => {
+    const batch   = batches.find(b => b.Batch_code === batchCode);
     if (!batch) return;
-    setForm(f => ({
-      ...f,
-      batch_name: batch.Batch_code ?? '',
-      training_name: batch.Course_Name ?? '',
-      batch_start_date: toDateStr(batch.SDate),
-    }));
-  };
+    const current = statuses.get(batchCode);
+    if (current?.is_locked) return;
 
-  const save = useCallback(async () => {
-    setSaving(true);
+    const next: Omit<LocalStatus, 'id'> = { ...(current ?? DEFAULT_STATUS), [field]: value };
+    setStatuses(prev => new Map(prev).set(batchCode, { ...next, id: current?.id }));
+    setSaving(prev => new Set([...prev, batchCode]));
+
     try {
-      const editing = modal.open ? (modal as { open: true; editing: BatchMarketing | null }).editing : null;
-      const url    = editing ? `/api/finance/cbd-batch-marketing/${editing.id}` : '/api/finance/cbd-batch-marketing';
-      const method = editing ? 'PUT' : 'POST';
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          batch_name: form.batch_name.trim(),
-          training_name: form.training_name.trim(),
-          batch_start_date: form.batch_start_date || null,
-          flyer_status: form.flyer_status,
-          announcement_status: form.announcement_status,
-          meta_ads_status: form.meta_ads_status,
-        }),
-      });
-      if (res.ok) {
-        setModal({ open: false });
-        load();
+      const newId = await upsert(batchCode, batch, next, current?.id);
+      if (newId && !current?.id) {
+        setStatuses(prev => {
+          const m = new Map(prev);
+          const s = m.get(batchCode);
+          if (s) m.set(batchCode, { ...s, id: newId });
+          return m;
+        });
       }
+    } catch {
+      setStatuses(prev => {
+        const m = new Map(prev);
+        if (current) m.set(batchCode, current); else m.delete(batchCode);
+        return m;
+      });
     } finally {
-      setSaving(false);
+      setSaving(prev => { const s = new Set(prev); s.delete(batchCode); return s; });
     }
-  }, [form, modal, load]);
+  }, [batches, statuses, upsert]);
 
-  const announcementDate = form.batch_start_date ? subtractMonths(form.batch_start_date, 3) : null;
-  const metaAdsDate      = form.batch_start_date ? subtractMonths(form.batch_start_date, 1) : null;
+  const handleLockToggle = useCallback(async (batchCode: string, lock: boolean) => {
+    const batch   = batches.find(b => b.Batch_code === batchCode);
+    if (!batch) return;
+    const current = statuses.get(batchCode);
+    if (!current?.id) return;
+
+    const next: Omit<LocalStatus, 'id'> = { ...(current ?? DEFAULT_STATUS), is_locked: lock };
+    setStatuses(prev => new Map(prev).set(batchCode, { ...next, id: current.id }));
+    setSaving(prev => new Set([...prev, batchCode]));
+
+    try {
+      await upsert(batchCode, batch, next, current.id);
+    } catch {
+      setStatuses(prev => {
+        const m = new Map(prev);
+        m.set(batchCode, current);
+        return m;
+      });
+    } finally {
+      setSaving(prev => { const s = new Set(prev); s.delete(batchCode); return s; });
+    }
+  }, [batches, statuses, upsert]);
+
+  const handleDelete = useCallback(async (batchCode: string) => {
+    const record = statuses.get(batchCode);
+    if (!record?.id) return;
+    if (!confirm('Delete marketing record for this batch? Statuses will reset to Pending.')) return;
+
+    setSaving(prev => new Set([...prev, batchCode]));
+    try {
+      await fetch(`/api/cbd-batch-marketing/${record.id}`, { method: 'DELETE' });
+      setStatuses(prev => { const m = new Map(prev); m.delete(batchCode); return m; });
+    } finally {
+      setSaving(prev => { const s = new Set(prev); s.delete(batchCode); return s; });
+    }
+  }, [statuses]);
 
   return (
-    <>
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100" style={{ borderLeft: '3px solid #2A6BB5' }}>
-          <span className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'color-mix(in srgb, #2A6BB5 10%, transparent)' }}>
-            <span style={{ color: '#2A6BB5' }}>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
-              </svg>
-            </span>
-          </span>
-          <span className="font-bold text-gray-800 text-sm flex-1">Batch Marketing Tracker</span>
-          {!loading && <span className="text-[11px] font-semibold text-gray-400 tabular-nums">{rows.length}</span>}
-          <button
-            onClick={openAdd}
-            className="ml-2 flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#2E3093] text-white hover:bg-[#252780] transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100" style={{ borderLeft: '3px solid #2A6BB5' }}>
+        <span className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'color-mix(in srgb, #2A6BB5 10%, transparent)' }}>
+          <span style={{ color: '#2A6BB5' }}>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
             </svg>
-            Add
-          </button>
-        </div>
+          </span>
+        </span>
+        <span className="font-bold text-gray-800 text-sm flex-1">Batch Marketing Tracker</span>
+        {!loading && (
+          <span className="text-[11px] font-semibold text-gray-400 tabular-nums">
+            {batches.length} {batches.length === 1 ? 'batch' : 'batches'} (next 6 months)
+          </span>
+        )}
+      </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-left">Training Name</th>
-                <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-left">Batch Name</th>
-                <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">Start Date</th>
-                <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">Announcement Date</th>
-                <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">Announcement</th>
-                <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">Meta Ads Date</th>
-                <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">Meta Ads</th>
-                <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">Flyer</th>
-                <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <tr key={i} className="border-t border-gray-100">
-                    {Array.from({ length: 9 }).map((_, j) => (
-                      <td key={j} className="px-4 py-3">
-                        <div className="h-3 bg-gray-100 rounded animate-pulse" style={{ width: j <= 1 ? '70%' : '50%' }} />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : rows.length === 0 ? (
-                <tr><td colSpan={9} className="px-5 py-10 text-center text-sm text-gray-400">No batch marketing records yet — click Add to get started</td></tr>
-              ) : (
-                rows.map((r, i) => (
-                  <tr key={r.id} className={`border-t border-gray-100 hover:bg-gray-50/50 transition-colors ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
-                    <td className="px-4 py-3.5 text-gray-700">{r.training_name || '—'}</td>
-                    <td className="px-4 py-3.5 font-semibold text-gray-800">{r.batch_name || '—'}</td>
-                    <td className="px-4 py-3.5 text-center tabular-nums text-gray-600">{fmtDate(r.batch_start_date)}</td>
-                    <td className="px-4 py-3.5 text-center tabular-nums text-[#2A6BB5] font-medium">{fmtDate(r.batch_announcement_date)}</td>
-                    <td className="px-4 py-3.5 text-center"><StatusBadge status={r.announcement_status} /></td>
-                    <td className="px-4 py-3.5 text-center tabular-nums text-gray-500">{fmtDate(r.meta_ads_date)}</td>
-                    <td className="px-4 py-3.5 text-center"><StatusBadge status={r.meta_ads_status} /></td>
-                    <td className="px-4 py-3.5 text-center"><StatusBadge status={r.flyer_status} /></td>
-                    <td className="px-4 py-3.5 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button onClick={() => openEdit(r)} className="p-1.5 rounded-lg text-gray-400 hover:text-[#2E3093] hover:bg-[#2E3093]/10 transition-colors" title="Edit">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b border-gray-100">
+            <tr>
+              <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-left">Training Name</th>
+              <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-left">Batch</th>
+              <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">Start Date</th>
+              <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">Announcement Date</th>
+              <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">Announcement</th>
+              <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">Meta Ads Date</th>
+              <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">Meta Ads</th>
+              <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">Flyer</th>
+              <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <tr key={i} className="border-t border-gray-100">
+                  {Array.from({ length: 9 }).map((_, j) => (
+                    <td key={j} className="px-4 py-3">
+                      <div className="h-3 bg-gray-100 rounded animate-pulse" style={{ width: j <= 1 ? '70%' : '50%' }} />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : batches.length === 0 ? (
+              <tr><td colSpan={9} className="px-5 py-10 text-center text-sm text-gray-400">No batches found in the next 6 months</td></tr>
+            ) : (
+              batches.map((b, i) => {
+                const startStr         = toDateStr(b.SDate);
+                const announcementDate = startStr ? subtractMonths(startStr, 3) : null;
+                const metaAdsDate      = startStr ? subtractMonths(startStr, 1) : null;
+                const status   = statuses.get(b.Batch_code);
+                const locked   = status?.is_locked ?? false;
+                const hasRecord = !!status?.id;
+                const isSaving  = saving.has(b.Batch_code);
+
+                return (
+                  <tr key={b.Batch_Id} className={`border-t border-gray-100 transition-colors ${locked ? 'bg-gray-50/80' : i % 2 === 1 ? 'bg-gray-50/30' : 'hover:bg-gray-50/50'}`}>
+                    <td className="px-4 py-3 text-gray-700">{b.Course_Name || '—'}</td>
+                    <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">{b.Batch_code}</td>
+                    <td className="px-4 py-3 text-center tabular-nums text-gray-600 text-xs">{fmtDate(startStr)}</td>
+                    <td className="px-4 py-3 text-center tabular-nums font-medium text-[#2A6BB5] text-xs">{fmtDate(announcementDate)}</td>
+                    <td className="px-4 py-3 text-center">
+                      <StatusSelect status={status?.announcement_status ?? 'Pending'} field="announcement_status" batchCode={b.Batch_code} onUpdate={handleStatusChange} disabled={locked || isSaving} />
+                    </td>
+                    <td className="px-4 py-3 text-center tabular-nums text-gray-500 text-xs">{fmtDate(metaAdsDate)}</td>
+                    <td className="px-4 py-3 text-center">
+                      <StatusSelect status={status?.meta_ads_status ?? 'Pending'} field="meta_ads_status" batchCode={b.Batch_code} onUpdate={handleStatusChange} disabled={locked || isSaving} />
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <StatusSelect status={status?.flyer_status ?? 'Pending'} field="flyer_status" batchCode={b.Batch_code} onUpdate={handleStatusChange} disabled={locked || isSaving} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1">
+                        {/* Lock */}
+                        <ActionBtn onClick={() => handleLockToggle(b.Batch_code, true)} disabled={!hasRecord || locked || isSaving} title="Lock row" className="text-gray-400 hover:text-amber-600 hover:bg-amber-50">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
                           </svg>
-                        </button>
-                        <button onClick={() => remove(r.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Delete">
+                        </ActionBtn>
+                        {/* Unlock */}
+                        <ActionBtn onClick={() => handleLockToggle(b.Batch_code, false)} disabled={!hasRecord || !locked || isSaving} title="Unlock row" className="text-gray-400 hover:text-emerald-600 hover:bg-emerald-50">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 014-4 4 4 0 014 4M6 11h12a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6a2 2 0 012-2z" />
+                          </svg>
+                        </ActionBtn>
+                        {/* Delete */}
+                        <ActionBtn onClick={() => handleDelete(b.Batch_code)} disabled={!hasRecord || isSaving} title="Delete record" className="text-gray-400 hover:text-red-600 hover:bg-red-50">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
-                        </button>
+                        </ActionBtn>
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
-
-      {/* Modal */}
-      {modal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setModal({ open: false })}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-gray-800">
-                {(modal as { open: true; editing: BatchMarketing | null }).editing ? 'Edit Batch Marketing' : 'Add Batch Marketing'}
-              </h3>
-              <button onClick={() => setModal({ open: false })} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {/* Batch selector — picks from batch master */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  Select Batch (from Batch Master)
-                  {batchOptions.length === 0 && <span className="ml-1.5 text-gray-400 font-normal">loading…</span>}
-                </label>
-                <select
-                  value={selectedBatch}
-                  onChange={e => handleBatchSelect(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
-                >
-                  <option value="">— pick a batch to auto-fill —</option>
-                  {batchOptions.map(b => (
-                    <option key={b.Batch_Id} value={String(b.Batch_Id)}>
-                      {b.Course_Name ? `${b.Course_Name} · ` : ''}{b.Batch_code}{b.SDate ? ` (${toDateStr(b.SDate)})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="border-t border-dashed border-gray-200 pt-3 grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Training Name</label>
-                  <input
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
-                    value={form.training_name}
-                    onChange={e => setForm(f => ({ ...f, training_name: e.target.value }))}
-                    placeholder="e.g. Java Programming"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Batch Name / Code</label>
-                  <input
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
-                    value={form.batch_name}
-                    onChange={e => setForm(f => ({ ...f, batch_name: e.target.value }))}
-                    placeholder="e.g. BTH-001"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Batch Start Date</label>
-                <input
-                  type="date"
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
-                  value={form.batch_start_date}
-                  onChange={e => setForm(f => ({ ...f, batch_start_date: e.target.value }))}
-                />
-                {form.batch_start_date && (
-                  <div className="mt-1.5 flex gap-4 text-[11px] bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
-                    <span className="text-blue-600">Announcement date: <strong>{fmtDate(announcementDate)}</strong></span>
-                    <span className="text-gray-500">Meta Ads date: <strong className="text-gray-700">{fmtDate(metaAdsDate)}</strong></span>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Flyer Status</label>
-                  <StatusSelect value={form.flyer_status} onChange={v => setForm(f => ({ ...f, flyer_status: v }))} />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Announcement</label>
-                  <StatusSelect value={form.announcement_status} onChange={v => setForm(f => ({ ...f, announcement_status: v }))} />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Meta Ads</label>
-                  <StatusSelect value={form.meta_ads_status} onChange={v => setForm(f => ({ ...f, meta_ads_status: v }))} />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-1">
-              <button onClick={() => setModal({ open: false })} className="px-4 py-2 text-sm font-semibold rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
-                Cancel
-              </button>
-              <button onClick={save} disabled={saving} className="px-4 py-2 text-sm font-semibold rounded-xl bg-[#2E3093] text-white hover:bg-[#252780] disabled:opacity-50 transition-colors">
-                {saving ? 'Saving…' : 'Save'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+    </div>
   );
 }

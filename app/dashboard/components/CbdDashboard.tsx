@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
 import BatchMarketingWidget from './BatchMarketingWidget';
+import AnnualTargetsWidget from './AnnualTargetsWidget';
 import { toBatchNumber } from '@/lib/batch-display';
 
 /* ── Utilities ────────────────────────────────────────────────────── */
@@ -182,53 +183,8 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
       {/* ①½  Batch Marketing Tracker */}
       <BatchMarketingWidget />
 
-      {/* ②  Annual Targets */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <CardHeader
-          title="Annual Targets"
-          accent="#2E3093"
-          icon={Icons.target}
-          count={loading ? undefined : annualTargets.length}
-        />
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <Th>Training Program Name</Th>
-                <Th center>Target Students</Th>
-                <Th center>Students Admitted</Th>
-                <Th center>Average Student per Batch</Th>
-                <Th>Percentage Achieved</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <PulseRows cols={5} rows={5} />
-              ) : annualTargets.length === 0 ? (
-                <tr><td colSpan={5}><Empty text="No annual targets available" /></td></tr>
-              ) : (
-                annualTargets.map((row: any, i: number) => {
-                  const minStu      = parseInt(row.min_students_batch) || 15;
-                  const targetFreq  = Number(row.target_frequency) || 1;
-                  const targetStu   = minStu * targetFreq;
-                  const admitted    = Number(row.students_admitted) || 0;
-                  const avg         = targetFreq > 0 ? admitted / targetFreq : 0;
-                  const achieved    = targetStu > 0 ? (admitted / targetStu) * 100 : 0;
-                  return (
-                    <tr key={`${row.Course_Id || i}`} className="border-t border-gray-100 hover:bg-gray-50/50 transition-colors">
-                      <td className="px-5 py-3.5 font-semibold text-gray-800">{row.CourseName || '—'}</td>
-                      <td className="px-4 py-3.5 text-center tabular-nums text-gray-600">{targetStu}</td>
-                      <td className="px-4 py-3.5 text-center tabular-nums font-semibold text-gray-800">{admitted}</td>
-                      <td className="px-4 py-3.5 text-center tabular-nums text-gray-500">{avg.toFixed(1)}</td>
-                      <td className="px-4 py-3.5 w-44"><Bar value={achieved} /></td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* ②  Annual Targets — data loaded from uploaded Excel */}
+      <AnnualTargetsWidget />
 
       {/* ③  Seminar Targets + Exhibition Targets */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
