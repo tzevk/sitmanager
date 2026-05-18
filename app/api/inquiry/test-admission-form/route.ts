@@ -24,18 +24,18 @@ export async function POST(req: NextRequest) {
     const today = new Date().toISOString().slice(0, 10);
 
     const insertSql = `
-      INSERT INTO student_master (
+      INSERT INTO Student_Inquiry (
         Student_Name,
         Present_Mobile,
         Email,
         Discussion,
-        Status_id,
+        OnlineState,
         Inquiry_Dt,
         Inquiry_From,
         Inquiry_Type,
         IsDelete,
         Inquiry,
-        created_date
+        Date_Added
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'Inquiry', NOW())
     `;
 

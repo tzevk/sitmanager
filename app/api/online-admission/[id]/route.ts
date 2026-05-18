@@ -28,7 +28,19 @@ async function ensurePayloadTable(pool: any) {
     ) as [any[], any];
     const pkCol: string = String((pkRows as any[])[0]?.COLUMN_NAME ?? '');
     if (pkCol && pkCol !== 'Inquiry_Id') {
-      await pool.query(`DROP TABLE ${ONLINE_ADMISSION_PAYLOAD_TABLE}`);
+      await pool.query(`DROP TABLE \`${ONLINE_ADMISSION_PAYLOAD_TABLE}\``);
+    } else if (pkCol === 'Inquiry_Id') {
+      // If a legacy Student_Id NOT NULL column exists, make it nullable so the
+      // INSERT (which only specifies Inquiry_Id + Payload) doesn't fail.
+      const [badCol] = await pool.query(
+        `SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+           AND COLUMN_NAME = 'Student_Id' AND IS_NULLABLE = 'NO' LIMIT 1`,
+        [ONLINE_ADMISSION_PAYLOAD_TABLE]
+      ) as [any[], any];
+      if ((badCol as any[]).length > 0) {
+        await pool.query(`ALTER TABLE \`${ONLINE_ADMISSION_PAYLOAD_TABLE}\` MODIFY COLUMN Student_Id INT NULL`);
+      }
     }
   } catch { /* table doesn't exist yet */ }
 
