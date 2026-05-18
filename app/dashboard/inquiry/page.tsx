@@ -113,15 +113,34 @@ export default function InquiryPage() {
   const [filters, setFilters] = useState<Filters>({ disciplines: [], inquiryTypes: [], trainings: [], statusOptions: [] });
   const [loading, setLoading] = useState(true);
 
-  // Initialise from URL so filters survive navigate-away → back
-  const [search, setSearch] = useState(() => searchParams.get('search') || '');
-  const [discipline, setDiscipline] = useState(() => searchParams.get('discipline') || '');
-  const [inquiryType, setInquiryType] = useState(() => searchParams.get('inquiryType') || '');
-  const [status, setStatus] = useState(() => searchParams.get('status') || '');
-  const [dateFrom, setDateFrom] = useState(() => searchParams.get('dateFrom') || '');
-  const [dateTo, setDateTo] = useState(() => searchParams.get('dateTo') || '');
-  const [training, setTraining] = useState(() => searchParams.get('training') || '');
-  const [page, setPage] = useState(() => Math.max(1, parseInt(searchParams.get('page') || '1')));
+  // Read filter value from URL params, falling back to sessionStorage so filters
+  // are correct on the very first render when returning from the edit page.
+  const getInitParam = (key: string) => {
+    const urlVal = searchParams.get(key);
+    if (urlVal !== null) return urlVal;
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem(INQUIRY_FILTERS_STORAGE_KEY);
+      if (saved) return new URLSearchParams(saved.split('?')[1] || '').get(key) || '';
+    }
+    return '';
+  };
+
+  const [search, setSearch] = useState(() => getInitParam('search'));
+  const [discipline, setDiscipline] = useState(() => getInitParam('discipline'));
+  const [inquiryType, setInquiryType] = useState(() => getInitParam('inquiryType'));
+  const [status, setStatus] = useState(() => getInitParam('status'));
+  const [dateFrom, setDateFrom] = useState(() => getInitParam('dateFrom'));
+  const [dateTo, setDateTo] = useState(() => getInitParam('dateTo'));
+  const [training, setTraining] = useState(() => getInitParam('training'));
+  const [page, setPage] = useState(() => {
+    const urlPage = parseInt(searchParams.get('page') || '0');
+    if (urlPage > 0) return urlPage;
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem(INQUIRY_FILTERS_STORAGE_KEY);
+      if (saved) return Math.max(1, parseInt(new URLSearchParams(saved.split('?')[1] || '').get('page') || '1'));
+    }
+    return 1;
+  });
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -150,16 +169,17 @@ export default function InquiryPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Persist/restore filters until explicitly cleared.
+  // Sync the URL to match active filters (state is authoritative; URL is derived).
   useEffect(() => {
     const hasUrlFilters = searchParams.toString().length > 0;
     if (hasUrlFilters) {
       sessionStorage.setItem(INQUIRY_FILTERS_STORAGE_KEY, `${pathname}?${searchParams.toString()}`);
       return;
     }
-
+    // URL has no params — if we restored filters from sessionStorage, push them
+    // back into the URL so the address bar stays consistent.
     const savedUrl = sessionStorage.getItem(INQUIRY_FILTERS_STORAGE_KEY);
-    if (savedUrl && savedUrl.startsWith('/dashboard/inquiry') && savedUrl !== pathname) {
+    if (savedUrl?.startsWith('/dashboard/inquiry') && savedUrl !== pathname) {
       router.replace(savedUrl, { scroll: false });
     }
   }, [pathname, router, searchParams]);
@@ -197,8 +217,10 @@ export default function InquiryPage() {
     if (dateTo) p.set('dateTo', dateTo);
     if (training) p.set('training', training);
     if (page > 1) p.set('page', String(page));
-    const nextUrl = p.toString() ? `${pathname}?${p.toString()}` : pathname;
-    sessionStorage.setItem(INQUIRY_FILTERS_STORAGE_KEY, nextUrl);
+    // Only persist when at least one filter is active — doClear() owns the removal.
+    if (p.toString()) {
+      sessionStorage.setItem(INQUIRY_FILTERS_STORAGE_KEY, `${pathname}?${p.toString()}`);
+    }
   }, [search, discipline, inquiryType, status, dateFrom, dateTo, training, page, pathname]);
 
   const buildReturnTo = () => {
