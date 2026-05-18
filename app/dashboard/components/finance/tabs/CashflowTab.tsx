@@ -4,15 +4,56 @@ import { useCallback, useMemo, useState } from 'react';
 import { useFinanceResource } from '../shared/useFinanceResource';
 import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, TotalRow, SectionTitle, thCls, tdCls, tdNum, inpCls, lblCls, trCls, downloadCsv } from '../shared/primitives';
 import { fmt, todayISO } from '../shared/format';
-import type { CashflowTxn, CashflowType } from '../shared/types';
+import type { CashflowTxn, CashflowType, CashflowEntity } from '../shared/types';
 import CashflowCategoryBars from '../charts/CashflowCategoryBars';
 import { detectCashflowAnomalies, categoryMoMGrowth } from '../shared/predictions';
 
-const CF_TYPES: CashflowType[] = ['Payment', 'Receipt'];
-const CF_CATS  = ['Salary', 'Rent', 'Utilities', 'Fees', 'Vendor', 'Loan EMI', 'Miscellaneous'];
+const CF_TYPES: CashflowType[]     = ['Payment', 'Receipt'];
+const CF_ENTITIES: CashflowEntity[] = ['SIT', 'Accent'];
+
+const SIT_CATS = [
+  'OD Interest / Loan EMI',
+  'Management Car Expenses',
+  'Management Salary',
+  'Employee Salary',
+  'Trainers Payment',
+  'Food',
+  'Utility',
+  'Marketing - SIT',
+  'Travelling Expense - Staff (Marketing)',
+  'Software',
+  'Stationary',
+  'Infrastructure',
+  'Taxes',
+];
+
+const ACCENT_CATS = [
+  'OD Interest / Loan EMI',
+  'Management Car Expenses',
+  'Management Salary',
+  'Employee Salary',
+  'Trainers Payment',
+  'Food',
+  'Utility',
+  'Marketing - Accent',
+  'Travelling Expense - Staff (Marketing)',
+  'Software',
+  'Stationary',
+  'Infrastructure',
+  'Taxes',
+];
+
+const ALL_CATS = Array.from(new Set([...SIT_CATS, ...ACCENT_CATS]));
+
+function catsFor(entity: CashflowEntity | ''): string[] {
+  if (entity === 'Accent') return ACCENT_CATS;
+  if (entity === 'SIT')    return SIT_CATS;
+  return ALL_CATS;
+}
 
 export default function CashflowTab() {
   const [search, setSearch] = useState('');
+  const [entity, setEntity] = useState<'' | CashflowEntity>('');
   const [type, setType]     = useState<'' | CashflowType>('');
   const [category, setCat]  = useState('');
   const [dateFrom, setFrom] = useState('');
@@ -23,27 +64,29 @@ export default function CashflowTab() {
   const query = useMemo(() => {
     const p = new URLSearchParams();
     if (search)   p.set('q', search);
+    if (entity)   p.set('entity', entity);
     if (type)     p.set('type', type);
     if (category) p.set('category', category);
     if (dateFrom) p.set('dateFrom', dateFrom);
     if (dateTo)   p.set('dateTo', dateTo);
     return p.toString();
-  }, [search, type, category, dateFrom, dateTo]);
+  }, [search, entity, type, category, dateFrom, dateTo]);
 
   const cash = useFinanceResource<CashflowTxn>('/api/finance/cashflow', { query: query || undefined });
 
   /* ── modal ──────────────────────────────────────── */
   const [modal, setModal] = useState<{ open: boolean; editing: CashflowTxn | null }>({ open: false, editing: null });
-  const [form, setForm]   = useState({ date: '', type: 'Payment' as CashflowType, category: 'Salary', description: '', payment: '', receipt: '', ref_no: '' });
+  const [form, setForm]   = useState({ date: '', entity: 'SIT' as CashflowEntity, type: 'Payment' as CashflowType, category: SIT_CATS[0], description: '', payment: '', receipt: '', ref_no: '' });
   const [saving, setSaving] = useState(false);
 
   const openAdd = useCallback(() => {
-    setForm({ date: todayISO(), type: 'Payment', category: 'Salary', description: '', payment: '', receipt: '', ref_no: '' });
+    setForm({ date: todayISO(), entity: 'SIT', type: 'Payment', category: SIT_CATS[0], description: '', payment: '', receipt: '', ref_no: '' });
     setModal({ open: true, editing: null });
   }, []);
   const openEdit = useCallback((r: CashflowTxn) => {
     setForm({
       date: r.date ?? '',
+      entity: r.entity ?? 'SIT',
       type: r.type,
       category: r.category,
       description: r.description ?? '',
@@ -58,6 +101,7 @@ export default function CashflowTab() {
     try {
       await cash.save({
         date: form.date,
+        entity: form.entity,
         type: form.type,
         category: form.category,
         description: form.description.trim(),
@@ -75,13 +119,14 @@ export default function CashflowTab() {
     const q = search.trim().toLowerCase();
     return cash.rows.filter(r => {
       if (q && !`${r.description ?? ''} ${r.ref_no ?? ''} ${r.category}`.toLowerCase().includes(q)) return false;
-      if (type     && r.type     !== type)     return false;
-      if (category && r.category !== category) return false;
-      if (dateFrom && (r.date ?? '') < dateFrom) return false;
-      if (dateTo   && (r.date ?? '') > dateTo)   return false;
+      if (entity   && (r.entity ?? 'SIT') !== entity) return false;
+      if (type     && r.type     !== type)             return false;
+      if (category && r.category !== category)         return false;
+      if (dateFrom && (r.date ?? '') < dateFrom)       return false;
+      if (dateTo   && (r.date ?? '') > dateTo)         return false;
       return true;
     });
-  }, [cash.rows, search, type, category, dateFrom, dateTo]);
+  }, [cash.rows, search, entity, type, category, dateFrom, dateTo]);
 
   /* ── memoised aggregates ────────────────────────── */
   const totals = useMemo(() => ({
@@ -170,7 +215,7 @@ export default function CashflowTab() {
               <select value={category} onChange={e => setCat(e.target.value)}
                 className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-40 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
                 <option value="">All categories</option>
-                {CF_CATS.map(c => <option key={c} value={c}>{c}</option>)}
+                {catsFor(entity).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
@@ -340,7 +385,7 @@ export default function CashflowTab() {
         </div>
         <div><label className={lblCls}>Category</label>
           <select className={inpCls} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-            {CF_CATS.map(c => <option key={c}>{c}</option>)}
+            {catsFor(form.entity).map(c => <option key={c}>{c}</option>)}
           </select>
         </div>
         <div><label className={lblCls}>Description</label><input className={inpCls} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>

@@ -10,26 +10,28 @@ export async function GET(req: NextRequest) {
     const category = url.searchParams.get('category') || '';
 
     const conditions: string[] = [
-      'IsActive = 1',
-      '(IsDelete = 0 OR IsDelete IS NULL)',
+      'b.IsActive = 1',
+      '(b.IsDelete = 0 OR b.IsDelete IS NULL)',
     ];
     const params: any[] = [];
 
     if (courseId) {
-      conditions.push('Course_Id = ?');
+      conditions.push('b.Course_Id = ?');
       params.push(parseInt(courseId));
     }
     if (category) {
-      conditions.push('Category = ?');
+      conditions.push('b.Category = ?');
       params.push(category);
     }
 
     const sql = `
-      SELECT Batch_Id, Batch_code, Course_Id, Category, SDate
-      FROM batch_mst
+      SELECT b.Batch_Id, b.Batch_code, b.Course_Id, b.Category, b.SDate,
+             c.Course_Name
+      FROM batch_mst b
+      LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
       WHERE ${conditions.join(' AND ')}
-      ORDER BY SDate DESC
-      LIMIT 100
+      ORDER BY b.SDate DESC
+      LIMIT 200
     `;
 
     const [rows] = await pool.query(sql, params);

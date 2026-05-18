@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
+import BatchMarketingWidget from './BatchMarketingWidget';
 import { toBatchNumber } from '@/lib/batch-display';
 
 /* ── Utilities ────────────────────────────────────────────────────── */
@@ -177,6 +178,9 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
           </div>
         )}
       </div>
+
+      {/* ①½  Batch Marketing Tracker */}
+      <BatchMarketingWidget />
 
       {/* ②  Annual Targets */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">

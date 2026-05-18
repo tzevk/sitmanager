@@ -10,6 +10,8 @@ export interface ResourceConfig {
   table: string;
   /** CREATE TABLE IF NOT EXISTS DDL — runs once per process via ensureOnce. */
   ddl: string;
+  /** Optional ALTER TABLE migration for new columns on existing tables (idempotent). */
+  migrations?: string;
   /** Default ORDER BY clause for the list endpoint (without leading "ORDER BY"). */
   defaultOrder: string;
   /** Optional list of supported equality query params → DB columns. */
@@ -27,7 +29,7 @@ export function collectionHandlers(cfg: ResourceConfig) {
       const auth = await requirePermission(req, 'finance.view');
       if (auth instanceof NextResponse) return auth;
       try {
-        await ensureOnce(getPool(), cfg.table, cfg.ddl);
+        await ensureOnce(getPool(), cfg.table, cfg.ddl, cfg.migrations);
         const url = new URL(req.url);
 
         const where: string[] = [];
@@ -54,7 +56,7 @@ export function collectionHandlers(cfg: ResourceConfig) {
       const auth = await requirePermission(req, 'finance.create');
       if (auth instanceof NextResponse) return auth;
       try {
-        await ensureOnce(getPool(), cfg.table, cfg.ddl);
+        await ensureOnce(getPool(), cfg.table, cfg.ddl, cfg.migrations);
         const body = await req.json().catch(() => null);
         if (!body || typeof body !== 'object') return badRequest('Invalid JSON body');
 
@@ -88,7 +90,7 @@ export function idHandlers(cfg: ResourceConfig) {
       const auth = await requirePermission(req, 'finance.update');
       if (auth instanceof NextResponse) return auth;
       try {
-        await ensureOnce(getPool(), cfg.table, cfg.ddl);
+        await ensureOnce(getPool(), cfg.table, cfg.ddl, cfg.migrations);
         const { id: rawId } = await params;
         const id = parseId(rawId);
         if (id == null) return badRequest('Invalid id');
@@ -117,7 +119,7 @@ export function idHandlers(cfg: ResourceConfig) {
       const auth = await requirePermission(req, 'finance.delete');
       if (auth instanceof NextResponse) return auth;
       try {
-        await ensureOnce(getPool(), cfg.table, cfg.ddl);
+        await ensureOnce(getPool(), cfg.table, cfg.ddl, cfg.migrations);
         const { id: rawId } = await params;
         const id = parseId(rawId);
         if (id == null) return badRequest('Invalid id');

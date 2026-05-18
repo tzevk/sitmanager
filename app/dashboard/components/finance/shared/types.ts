@@ -11,6 +11,8 @@ export interface DeptPerf {
   department: string;
   amount_achieved: number;
   target_amount: number;
+  expense_actual: number;
+  expense_target: number;
 }
 
 export interface SalaryCashflow {
@@ -77,11 +79,27 @@ export interface CashflowProjection {
   loan_repayment: number;
 }
 
-export type CashflowType = 'Payment' | 'Receipt';
+export type CashflowType   = 'Payment' | 'Receipt';
+export type CashflowEntity = 'SIT' | 'Accent';
+
+export type BatchMarketingStatus = 'Pending' | 'Done';
+
+export interface BatchMarketing {
+  id: number;
+  batch_name: string;
+  training_name: string;
+  batch_start_date: string | null;
+  batch_announcement_date: string | null;
+  meta_ads_date: string | null;
+  flyer_status: BatchMarketingStatus;
+  announcement_status: BatchMarketingStatus;
+  meta_ads_status: BatchMarketingStatus;
+}
 
 export interface CashflowTxn {
   id: number;
   date: string | null;
+  entity: CashflowEntity;
   type: CashflowType;
   category: string;
   description: string | null;

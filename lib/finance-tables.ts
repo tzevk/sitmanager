@@ -8,8 +8,9 @@
 import { numOrZero, nonNegNum, nullableString, safeString, nullableMonth, nullableDate, oneOf } from './finance-helpers';
 import type { ResourceConfig } from './finance-resource';
 
-const STATUS_VALUES = ['Pending', 'Paid', 'Overdue'] as const;
-const CASHFLOW_TYPES = ['Payment', 'Receipt'] as const;
+const STATUS_VALUES    = ['Pending', 'Paid', 'Overdue'] as const;
+const CASHFLOW_TYPES   = ['Payment', 'Receipt'] as const;
+const CASHFLOW_ENTITIES = ['SIT', 'Accent'] as const;
 
 export const FINANCE_LOANS: ResourceConfig = {
   table: 'finance_loans',
@@ -44,9 +45,16 @@ export const FINANCE_DEPT_PERFORMANCE: ResourceConfig = {
       department      VARCHAR(150) NOT NULL,
       amount_achieved DECIMAL(14,2) NOT NULL DEFAULT 0,
       target_amount   DECIMAL(14,2) NOT NULL DEFAULT 0,
+      expense_actual  DECIMAL(14,2) NOT NULL DEFAULT 0,
+      expense_target  DECIMAL(14,2) NOT NULL DEFAULT 0,
       created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       KEY idx_month_year (month_year)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `,
+  migrations: `
+    ALTER TABLE finance_dept_performance
+      ADD COLUMN IF NOT EXISTS expense_actual DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS expense_target DECIMAL(14,2) NOT NULL DEFAULT 0
   `,
   defaultOrder: 'month_year DESC, id ASC',
   filters: [{ param: 'month_year', column: 'month_year' }],
@@ -60,6 +68,8 @@ export const FINANCE_DEPT_PERFORMANCE: ResourceConfig = {
       { col: 'department',      val: dept },
       { col: 'amount_achieved', val: nonNegNum(b.amount_achieved) },
       { col: 'target_amount',   val: nonNegNum(b.target_amount) },
+      { col: 'expense_actual',  val: nonNegNum(b.expense_actual) },
+      { col: 'expense_target',  val: nonNegNum(b.expense_target) },
     ];
   },
 };
@@ -227,31 +237,86 @@ export const FINANCE_CASHFLOW: ResourceConfig = {
     CREATE TABLE IF NOT EXISTS finance_cashflow (
       id          INT AUTO_INCREMENT PRIMARY KEY,
       date        DATE NULL,
+      entity      ENUM('SIT','Accent') NOT NULL DEFAULT 'SIT',
       type        ENUM('Payment','Receipt') NOT NULL DEFAULT 'Payment',
-      category    VARCHAR(80) NOT NULL DEFAULT 'Miscellaneous',
+      category    VARCHAR(100) NOT NULL DEFAULT 'Miscellaneous',
       description VARCHAR(500) NULL,
       payment     DECIMAL(14,2) NOT NULL DEFAULT 0,
       receipt     DECIMAL(14,2) NOT NULL DEFAULT 0,
       ref_no      VARCHAR(80) NULL,
       created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       KEY idx_date (date),
+      KEY idx_entity (entity),
       KEY idx_category (category)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `,
+  migrations: `
+    ALTER TABLE finance_cashflow
+      ADD COLUMN IF NOT EXISTS entity ENUM('SIT','Accent') NOT NULL DEFAULT 'SIT'
+  `,
   defaultOrder: 'date DESC, id DESC',
   filters: [
+    { param: 'entity',   column: 'entity' },
     { param: 'type',     column: 'type' },
     { param: 'category', column: 'category' },
   ],
   validate: (b) => [
     { col: 'date',        val: nullableDate(b.date) },
+    { col: 'entity',      val: oneOf(b.entity, CASHFLOW_ENTITIES, 'SIT') },
     { col: 'type',        val: oneOf(b.type, CASHFLOW_TYPES, 'Payment') },
-    { col: 'category',    val: safeString(b.category, 80) || 'Miscellaneous' },
+    { col: 'category',    val: safeString(b.category, 100) || 'Miscellaneous' },
     { col: 'description', val: nullableString(b.description, 500) },
     { col: 'payment',     val: nonNegNum(b.payment) },
     { col: 'receipt',     val: nonNegNum(b.receipt) },
     { col: 'ref_no',      val: nullableString(b.ref_no, 80) },
   ],
+};
+
+const BATCH_MARKETING_STATUS = ['Pending', 'Done'] as const;
+
+function subtractMonths(dateStr: string | null, months: number): string | null {
+  if (!dateStr) return null;
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return null;
+  d.setMonth(d.getMonth() - months);
+  return d.toISOString().slice(0, 10);
+}
+
+export const FINANCE_CBD_BATCH_MARKETING: ResourceConfig = {
+  table: 'finance_cbd_batch_marketing',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS finance_cbd_batch_marketing (
+      id                      INT AUTO_INCREMENT PRIMARY KEY,
+      batch_name              VARCHAR(200) NOT NULL DEFAULT '',
+      training_name           VARCHAR(200) NOT NULL DEFAULT '',
+      batch_start_date        DATE NULL,
+      batch_announcement_date DATE NULL,
+      meta_ads_date           DATE NULL,
+      flyer_status            ENUM('Pending','Done') NOT NULL DEFAULT 'Pending',
+      announcement_status     ENUM('Pending','Done') NOT NULL DEFAULT 'Pending',
+      meta_ads_status         ENUM('Pending','Done') NOT NULL DEFAULT 'Pending',
+      created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_batch_start (batch_start_date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `,
+  migrations: `
+    ALTER TABLE finance_cbd_batch_marketing
+      ADD COLUMN IF NOT EXISTS training_name VARCHAR(200) NOT NULL DEFAULT ''
+  `,
+  defaultOrder: 'COALESCE(batch_start_date, "9999-12-31") ASC, id ASC',
+  validate: (b) => {
+    const startDate = nullableDate(b.batch_start_date);
+    return [
+      { col: 'batch_name',              val: safeString(b.batch_name, 200) },
+      { col: 'training_name',           val: safeString(b.training_name, 200) },
+      { col: 'batch_start_date',        val: startDate },
+      { col: 'batch_announcement_date', val: subtractMonths(startDate, 3) },
+      { col: 'meta_ads_date',           val: subtractMonths(startDate, 1) },
+      { col: 'flyer_status',            val: oneOf(b.flyer_status, BATCH_MARKETING_STATUS, 'Pending') },
+      { col: 'announcement_status',     val: oneOf(b.announcement_status, BATCH_MARKETING_STATUS, 'Pending') },
+      { col: 'meta_ads_status',         val: oneOf(b.meta_ads_status, BATCH_MARKETING_STATUS, 'Pending') },
+    ];
+  },
 };
 
 /* Utility wrappers used directly by salary-cashflow's bespoke route. */

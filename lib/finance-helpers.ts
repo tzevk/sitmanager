@@ -74,12 +74,17 @@ export function badRequest(message: string) {
 const ensured = new Set<string>();
 
 /**
- * Run a CREATE TABLE IF NOT EXISTS once per process. Subsequent calls are no-ops.
+ * Run a CREATE TABLE IF NOT EXISTS once per process, then an optional ALTER
+ * migration (for adding new columns to existing tables). Subsequent calls are
+ * no-ops within the same process.
  * Pass a stable `key` (the table name) plus the actual SQL.
  */
-export async function ensureOnce(pool: any, key: string, ddl: string): Promise<void> {
+export async function ensureOnce(pool: any, key: string, ddl: string, migration?: string): Promise<void> {
   if (ensured.has(key)) return;
   await pool.query(ddl);
+  if (migration) {
+    try { await pool.query(migration); } catch { /* column already exists — safe to ignore */ }
+  }
   ensured.add(key);
 }
 
