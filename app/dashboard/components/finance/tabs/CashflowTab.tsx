@@ -223,10 +223,6 @@ export default function CashflowTab() {
     })));
   }, [filteredRows]);
 
-  const companySummary = useMemo(() => {
-    return [];
-  }, []);
-
   const handleClear = useCallback(() => {
     setSearch(''); setType(''); setCat(''); setMonth(''); setFrom(''); setTo('');
   }, []);
@@ -433,44 +429,6 @@ export default function CashflowTab() {
           </div>
         </div>
       </div>
-
-      {/* ── Company-wise Summary ────────────────────── */}
-      {companySummary.length > 0 && (
-        <div>
-          <SectionTitle>Company-wise Summary</SectionTitle>
-          <div className="overflow-x-auto rounded-xl border border-gray-200">
-            <table className="w-full border-collapse">
-              <thead><tr className="bg-[#2E3093]">
-                <th className={thCls}>Company</th>
-                <th className={`${thCls} text-center`}>Total Payment (₹)</th>
-                <th className={`${thCls} text-center`}>Total Receipt (₹)</th>
-                <th className={`${thCls} text-center`}>Net (₹)</th>
-              </tr></thead>
-              <tbody className="divide-y divide-gray-100">
-                {companySummary.map((r, i) => {
-                  const net = r.receipt - r.payment;
-                  return (
-                    <tr key={r.entity} className={net < 0 ? 'bg-red-50/30 hover:bg-red-50/50 transition-colors' : trCls(i)}>
-                      <td className={tdCls}><span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#2E3093]/10 text-[#2E3093]">{r.entity}</span></td>
-                      <td className={`${tdNum} text-red-600`}>{fmt(r.payment)}</td>
-                      <td className={`${tdNum} text-emerald-700`}>{fmt(r.receipt)}</td>
-                      <td className={`${tdNum} font-semibold ${net < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(net)}</td>
-                    </tr>
-                  );
-                })}
-                <TotalRow>
-                  <td className="px-3 py-2 text-xs text-[#2E3093]">Grand Total</td>
-                  <td className="px-3 py-2 text-xs text-center text-red-600">{fmt(totals.payment)}</td>
-                  <td className="px-3 py-2 text-xs text-center text-emerald-700">{fmt(totals.receipt)}</td>
-                  <td className={`px-3 py-2 text-xs text-center font-semibold ${totals.receipt - totals.payment < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
-                    {fmt(totals.receipt - totals.payment)}
-                  </td>
-                </TotalRow>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       <CashflowCategoryBars rows={filteredRows} />
 
