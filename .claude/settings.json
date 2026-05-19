@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(mkdir -p /Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar/\\\\[id\\\\])"
+    ],
+    "additionalDirectories": [
+      "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar"
     ]
   }
 }

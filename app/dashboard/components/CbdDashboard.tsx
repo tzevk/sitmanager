@@ -2,6 +2,7 @@
 import React from 'react';
 import BatchMarketingWidget from './BatchMarketingWidget';
 import AnnualTargetsWidget from './AnnualTargetsWidget';
+import ContentCalendarWidget from './ContentCalendarWidget';
 import { toBatchNumber } from '@/lib/batch-display';
 
 /* ── Utilities ────────────────────────────────────────────────────── */
@@ -119,15 +120,10 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
   const alumniProgress  = data?.alumniRegistration ?? [];
   const sourceRows      = data?.sourcePerformance ?? [];
 
-  const upcomingBatches = (data?.upcomingBatches ?? []).filter((b: any) => {
-    if (!b?.SDate) return false;
-    const start = new Date(b.SDate);
-    if (Number.isNaN(start.getTime())) return false;
-    const now = new Date();
-    const cap = new Date();
-    cap.setMonth(cap.getMonth() + 3);
-    return start >= now && start <= cap;
-  });
+  // SQL already filters to CURDATE()..+3 months; just drop rows with no date
+  const upcomingBatches = (data?.upcomingBatches ?? []).filter(
+    (b: any) => !!b?.SDate
+  );
 
   const leadSummary = data?.enquiryReport?.summary ?? {};
   const funnel = {
@@ -182,6 +178,9 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
 
       {/* ①½  Batch Marketing Tracker */}
       <BatchMarketingWidget />
+
+      {/* ①¾  Content Calendar */}
+      <ContentCalendarWidget />
 
       {/* ②  Annual Targets — data loaded from uploaded Excel */}
       <AnnualTargetsWidget />

@@ -333,6 +333,19 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       ...createPermissions('shortlisted_company', 'Shortlisted by Company'),
     ],
   },
+
+  // -------------------------------------------------------------------------
+  // CBD / MARKETING
+  // -------------------------------------------------------------------------
+  {
+    id: 'cbd_marketing',
+    name: 'CBD & Marketing',
+    description: 'Content calendar and marketing planning',
+    icon: 'calendar',
+    permissions: [
+      ...createPermissions('cbd_content', 'CBD Content Calendar'),
+    ],
+  },
 ];
 
 // ============================================================================

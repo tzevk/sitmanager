@@ -174,54 +174,44 @@ async function fetchDashboardData(dept?: string) {
       ORDER BY c.Course_Id, month
     `, []) : Promise.resolve([]),
 
-    // 2. Upcoming batches
+    // 2. Upcoming batches — pre-aggregate inquiry stats once, then JOIN (avoids 4 correlated subqueries per batch)
     needsUpcomingBatches ? safeQuery(pool, `
       SELECT b.Batch_Id, b.Batch_code, b.SDate, b.EDate,
         b.Category, b.Duration, b.Timings,
         b.Training_Coordinator, b.INR_Basic,
         b.Admission_Date, b.Max_Students,
         b.NoStudent,
-        c.Course_Name AS CourseName
-        ,(
-          SELECT COUNT(*)
-          FROM student_inquiry si
-          WHERE si.Batch_Code = b.Batch_code
-            AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
-        ) AS Enquiries_Received
-        ,(
-          SELECT COUNT(*)
-          FROM student_inquiry si
-          WHERE si.Batch_Code = b.Batch_code
-            AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
-            AND TRIM(IFNULL(si.Discussion, '')) <> ''
-        ) AS Enquiries_Contacted
-        ,(
-          SELECT COUNT(*)
-          FROM student_inquiry si
-          WHERE si.Batch_Code = b.Batch_code
-            AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
-            AND (
-              LOWER(IFNULL(si.Inquiry, '')) IN ('yes', 'y', 'interested')
-              OR LOWER(IFNULL(si.JobRequired, '')) IN ('yes', 'y')
-              OR LOWER(IFNULL(si.Discussion, '')) LIKE '%interested%'
-            )
-        ) AS Interested_Students
-        ,(
-          SELECT COUNT(*)
-          FROM student_inquiry si
-          WHERE si.Batch_Code = b.Batch_code
-            AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
-            AND (
-              LOWER(IFNULL(si.Admission, '')) IN ('yes', 'y', '1', 'true')
-              OR IFNULL(si.admission_done, 0) = 1
-            )
-        ) AS Confirmed_Admissions
+        c.Course_Name AS CourseName,
+        COALESCE(si_agg.Enquiries_Received, 0)    AS Enquiries_Received,
+        COALESCE(si_agg.Enquiries_Contacted, 0)   AS Enquiries_Contacted,
+        COALESCE(si_agg.Interested_Students, 0)   AS Interested_Students,
+        COALESCE(si_agg.Confirmed_Admissions, 0)  AS Confirmed_Admissions
       FROM batch_mst b
       LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
+      LEFT JOIN (
+        SELECT
+          Batch_Code,
+          COUNT(*) AS Enquiries_Received,
+          SUM(CASE WHEN TRIM(IFNULL(Discussion, '')) <> '' THEN 1 ELSE 0 END) AS Enquiries_Contacted,
+          SUM(CASE
+            WHEN LOWER(IFNULL(Inquiry, '')) IN ('yes', 'y', 'interested')
+              OR LOWER(IFNULL(JobRequired, '')) IN ('yes', 'y')
+              OR LOWER(IFNULL(Discussion, '')) LIKE '%interested%'
+            THEN 1 ELSE 0 END) AS Interested_Students,
+          SUM(CASE
+            WHEN LOWER(IFNULL(Admission, '')) IN ('yes', 'y', '1', 'true')
+              OR IFNULL(admission_done, 0) = 1
+            THEN 1 ELSE 0 END) AS Confirmed_Admissions
+        FROM student_inquiry
+        WHERE (IsDelete = 0 OR IsDelete IS NULL)
+        GROUP BY Batch_Code
+      ) si_agg ON si_agg.Batch_Code = b.Batch_code
       WHERE b.SDate >= CURDATE()
+        AND b.SDate <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
         AND (b.IsDelete IS NULL OR b.IsDelete = 0)
         AND (b.Cancel IS NULL OR b.Cancel = 0)
-      ORDER BY b.SDate ASC LIMIT 20
+      ORDER BY b.SDate ASC
+      LIMIT 50
     `, []) : Promise.resolve([]),
 
     // 3a. Enquiry summary
@@ -668,12 +658,15 @@ async function fetchDashboardData(dept?: string) {
       ) x
     `, []) : Promise.resolve([]),
 
-    // 9. Pending fees
+    // 9. Pending fees — exclude cancelled admissions; explicit CAST handles VARCHAR Fees column
     needsPendingFees ? safeQuery(pool, `
       SELECT
         am.Admission_Id AS id,
         sm.Student_Name AS student_name,
-        GREATEST(IFNULL(am.Fees, 0) - IFNULL(paid.total_paid, 0), 0) AS amount
+        GREATEST(
+          CAST(IFNULL(am.Fees, 0) AS DECIMAL(15,2)) - IFNULL(paid.total_paid, 0),
+          0
+        ) AS amount
       FROM admission_master am
       LEFT JOIN student_master sm ON sm.Student_Id = am.Student_Id
       LEFT JOIN (
@@ -683,7 +676,8 @@ async function fetchDashboardData(dept?: string) {
         GROUP BY Admission_Id
       ) paid ON paid.Admission_Id = am.Admission_Id
       WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
-        AND IFNULL(am.Fees, 0) > IFNULL(paid.total_paid, 0)
+        AND (am.Cancel IS NULL OR LOWER(TRIM(CAST(am.Cancel AS CHAR))) IN ('no', '0', 'false', ''))
+        AND CAST(IFNULL(am.Fees, 0) AS DECIMAL(15,2)) > IFNULL(paid.total_paid, 0)
       ORDER BY amount DESC
       LIMIT 30
     `, []) : Promise.resolve([]),
