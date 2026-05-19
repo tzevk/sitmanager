@@ -440,7 +440,7 @@ export default function BatchMarketingWidget() {
                       </td>
 
                       {/* Start date */}
-                      <td className="px-3 py-2.5 text-center text-xs tabular-nums text-gray-600 whitespace-nowrap font-medium">
+                      <td className="px-3 py-2.5 text-center text-[10px] tabular-nums text-gray-600 whitespace-nowrap font-medium">
                         {fmtDate(startStr)}
                       </td>
 

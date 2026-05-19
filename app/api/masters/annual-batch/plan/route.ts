@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { ResultSetHeader, RowDataPacket } from 'mysql2';
-import { requirePermission } from '@/lib/api-auth';
+import { requirePermission, requireAuth } from '@/lib/api-auth';
 
 async function ensureTable(pool: ReturnType<typeof getPool>) {
   await pool.query(`
@@ -30,7 +30,7 @@ async function ensureTable(pool: ReturnType<typeof getPool>) {
 /* GET - list annual batch plan rows */
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requirePermission(req, ['annual_batch.view']);
+    const auth = await requireAuth(req);
     if (auth instanceof NextResponse) return auth;
 
     const pool = getPool();
@@ -54,12 +54,43 @@ export async function GET(req: NextRequest) {
           (SELECT b.INR_Basic FROM batch_mst b
            WHERE b.Course_Id = p.Course_Id AND b.INR_Basic > 0
            ORDER BY b.Batch_Id DESC LIMIT 1),
-        0) AS Fees
+        0) AS Fees,
+        (SELECT COUNT(*)
+         FROM student_master sm
+         WHERE sm.Course_Id = p.Course_Id
+           AND sm.Admission_Dt IS NOT NULL
+           AND sm.Admission_Dt > '2000-01-01'
+           AND YEAR(sm.Admission_Dt) = p.Plan_Year
+           AND (sm.IsDelete IS NULL OR sm.IsDelete = 0)
+        ) AS Students_Admitted_Live,
+        (SELECT COUNT(DISTINCT b2.Batch_Id)
+         FROM batch_mst b2
+         WHERE b2.Course_Id = p.Course_Id
+           AND b2.SDate IS NOT NULL
+           AND YEAR(b2.SDate) = p.Plan_Year
+           AND (b2.IsDelete IS NULL OR b2.IsDelete = 0)
+           AND (b2.Cancel IS NULL OR b2.Cancel = 0)
+        ) AS Frequency_Conducted_Live
        FROM annual_batch_plan p ${where} ORDER BY Training_Program_Name ASC`,
       params
     );
 
-    return NextResponse.json({ rows });
+    const enriched = (rows as any[]).map((r) => {
+      const admitted = Number(r.Students_Admitted_Live ?? 0);
+      const freqConducted = Number(r.Frequency_Conducted_Live ?? r.Frequency_Conducted ?? 0);
+      const target =
+        Number(r.Yearly_Students_Target) ||
+        Number(r.Target_Frequency) * Number(r.Min_Students_Per_Batch);
+      const pct = target > 0 ? (admitted / target) * 100 : 0;
+      return {
+        ...r,
+        Students_Admitted: admitted,
+        Frequency_Conducted: freqConducted,
+        Percentage: Number(pct.toFixed(2)),
+      };
+    });
+
+    return NextResponse.json({ rows: enriched });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to fetch annual batch plan';
     return NextResponse.json({ error: message }, { status: 500 });
