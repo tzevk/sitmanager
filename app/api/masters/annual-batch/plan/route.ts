@@ -59,15 +59,16 @@ export async function GET(req: NextRequest) {
          FROM student_master sm
          WHERE sm.Course_Id = p.Course_Id
            AND sm.Admission_Dt IS NOT NULL
-           AND sm.Admission_Dt > '2000-01-01'
-           AND YEAR(sm.Admission_Dt) = p.Plan_Year
+           AND sm.Admission_Dt >= CONCAT(p.Plan_Year, '-04-01')
+           AND sm.Admission_Dt <  CONCAT(p.Plan_Year + 1, '-04-01')
            AND (sm.IsDelete IS NULL OR sm.IsDelete = 0)
         ) AS Students_Admitted_Live,
         (SELECT COUNT(DISTINCT b2.Batch_Id)
          FROM batch_mst b2
          WHERE b2.Course_Id = p.Course_Id
            AND b2.SDate IS NOT NULL
-           AND YEAR(b2.SDate) = p.Plan_Year
+           AND b2.SDate >= CONCAT(p.Plan_Year, '-04-01')
+           AND b2.SDate <  CONCAT(p.Plan_Year + 1, '-04-01')
            AND (b2.IsDelete IS NULL OR b2.IsDelete = 0)
            AND (b2.Cancel IS NULL OR b2.Cancel = 0)
         ) AS Frequency_Conducted_Live
