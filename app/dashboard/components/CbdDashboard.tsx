@@ -1,3 +1,4 @@
+'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
 import BatchMarketingWidget from './BatchMarketingWidget';
@@ -18,6 +19,47 @@ function tone(v: number) {
   if (v >= 80) return { text: 'text-emerald-600', bar: 'bg-emerald-500' };
   if (v >= 50) return { text: 'text-amber-600',   bar: 'bg-amber-400'   };
   return         { text: 'text-rose-600',   bar: 'bg-rose-500'   };
+}
+
+const TABLE_CLS = 'w-full text-sm [&_th]:border-r [&_th]:border-gray-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-gray-200 [&_td:last-child]:border-r-0';
+
+type SeminarStatus = 'Planned' | 'Scheduled' | 'Completed' | 'Cancelled';
+
+type ExhibitionStatus = 'Planned' | 'Booked' | 'Completed' | 'Cancelled';
+
+interface SeminarPlannerRow {
+  id: string;
+  month: string;
+  date: string;
+  college: string;
+  topic: string;
+  speaker: string;
+  status: SeminarStatus;
+}
+
+interface ExhibitionPlannerRow {
+  id: string;
+  title: string;
+  date: string;
+  location: string;
+  status: ExhibitionStatus;
+}
+
+const SEMINAR_STATUSES: SeminarStatus[] = ['Planned', 'Scheduled', 'Completed', 'Cancelled'];
+const EXHIBITION_STATUSES: ExhibitionStatus[] = ['Planned', 'Booked', 'Completed', 'Cancelled'];
+
+function seminarStatusCls(status: SeminarStatus) {
+  if (status === 'Completed') return 'bg-emerald-100 text-emerald-700 ring-emerald-200';
+  if (status === 'Scheduled') return 'bg-blue-100 text-blue-700 ring-blue-200';
+  if (status === 'Cancelled') return 'bg-rose-100 text-rose-700 ring-rose-200';
+  return 'bg-amber-100 text-amber-700 ring-amber-200';
+}
+
+function exhibitionStatusCls(status: ExhibitionStatus) {
+  if (status === 'Completed') return 'bg-emerald-100 text-emerald-700 ring-emerald-200';
+  if (status === 'Booked') return 'bg-blue-100 text-blue-700 ring-blue-200';
+  if (status === 'Cancelled') return 'bg-rose-100 text-rose-700 ring-rose-200';
+  return 'bg-amber-100 text-amber-700 ring-amber-200';
 }
 
 /* ── Shared primitives ────────────────────────────────────────────── */
@@ -48,25 +90,40 @@ function CardHeader({
 }) {
   return (
     <div
-      className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100"
-      style={{ borderLeft: `3px solid ${accent}` }}
+      className="flex items-center gap-3 px-4 py-3 border-b"
+      style={{
+        borderBottomColor: `color-mix(in srgb, ${accent} 15%, #e5e7eb)`,
+        background: `linear-gradient(to right, color-mix(in srgb, ${accent} 8%, white), color-mix(in srgb, ${accent} 3%, white) 60%, white)`,
+      }}
     >
       <span
-        className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-        style={{ background: `color-mix(in srgb, ${accent} 10%, transparent)` }}
+        className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+        style={{
+          background: `linear-gradient(135deg, color-mix(in srgb, ${accent} 20%, white), color-mix(in srgb, ${accent} 10%, white))`,
+          boxShadow: `0 1px 4px color-mix(in srgb, ${accent} 25%, transparent)`,
+        }}
       >
-        <span style={{ color: accent }} className="[&_svg]:w-3.5 [&_svg]:h-3.5">{icon}</span>
+        <span style={{ color: accent }} className="[&_svg]:w-4 [&_svg]:h-4">{icon}</span>
       </span>
-      <span className="font-bold text-gray-800 text-sm flex-1">{title}</span>
+      <span className="font-bold text-gray-800 text-sm flex-1 tracking-tight">{title}</span>
       {count !== undefined && (
-        <span className="text-[11px] font-semibold text-gray-400 tabular-nums">{count}</span>
+        <span
+          className="text-[10px] font-bold tabular-nums px-2 py-0.5 rounded-full border"
+          style={{
+            background: `color-mix(in srgb, ${accent} 10%, white)`,
+            color: accent,
+            borderColor: `color-mix(in srgb, ${accent} 20%, transparent)`,
+          }}
+        >
+          {count}
+        </span>
       )}
     </div>
   );
 }
 
 function Empty({ text = 'No data available' }: { text?: string }) {
-  return <p className="px-5 py-10 text-center text-sm text-gray-400">{text}</p>;
+  return <p className="px-5 py-6 text-center text-sm text-gray-400">{text}</p>;
 }
 
 function PulseRows({ cols, rows = 4 }: { cols: number; rows?: number }) {
@@ -75,7 +132,7 @@ function PulseRows({ cols, rows = 4 }: { cols: number; rows?: number }) {
       {Array.from({ length: rows }).map((_, i) => (
         <tr key={i}>
           {Array.from({ length: cols }).map((_, j) => (
-            <td key={j} className="px-5 py-3">
+            <td key={j} className="px-4 py-2">
               <div
                 className="h-3 bg-gray-100 rounded animate-pulse"
                 style={{ width: j === 0 ? '70%' : '40%' }}
@@ -90,7 +147,7 @@ function PulseRows({ cols, rows = 4 }: { cols: number; rows?: number }) {
 
 function Th({ children, center }: { children: React.ReactNode; center?: boolean }) {
   return (
-    <th className={`py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap ${center ? 'text-center' : 'text-left'}`}>
+    <th className={`py-2 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap ${center ? 'text-center' : 'text-left'}`}>
       {children}
     </th>
   );
@@ -112,7 +169,6 @@ const Icons = {
 
 /* ── Component ────────────────────────────────────────────────────── */
 export default function CbdDashboard({ data, loading }: { data: any; loading: boolean }) {
-  const annualTargets   = data?.annualTargets?.batchTargets ?? [];
   const seminarTargets  = data?.seminarTargets ?? [];
   const pendingFollowups = data?.pendingFollowups ?? [];
   const dailyActivity   = data?.dailyActivity ?? [];
@@ -120,9 +176,113 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
   const alumniProgress  = data?.alumniRegistration ?? [];
   const sourceRows      = data?.sourcePerformance ?? [];
 
-  // SQL already filters to CURDATE()..+3 months; just drop rows with no date
+  const initialSeminarPlan = React.useMemo<SeminarPlannerRow[]>(() => {
+    return (seminarTargets as any[]).map((row: any, i: number) => ({
+      id: String(row.id ?? `seminar-${i}`),
+      month: String(row.month ?? ''),
+      date: String(row.date ?? ''),
+      college: String(row.college_name ?? ''),
+      topic: String(row.topic ?? ''),
+      speaker: String(row.speaker ?? ''),
+      status: 'Planned',
+    }));
+  }, [seminarTargets]);
+
+  const initialExhibitionPlan = React.useMemo<ExhibitionPlannerRow[]>(() => {
+    const seededRows = Array.isArray(data?.exhibitionTargets?.rows)
+      ? data.exhibitionTargets.rows
+      : [];
+
+    if (seededRows.length > 0) {
+      return seededRows.map((row: any, i: number) => ({
+        id: String(row.id ?? `exhibition-${i}`),
+        title: String(row.title ?? row.exhibition_name ?? ''),
+        date: String(row.date ?? row.exhibition_date ?? ''),
+        location: String(row.location ?? row.city ?? ''),
+        status: EXHIBITION_STATUSES.includes(String(row.status) as ExhibitionStatus)
+          ? (String(row.status) as ExhibitionStatus)
+          : 'Planned',
+      }));
+    }
+
+    const plannedCount = Math.max(0, Number(data?.exhibitionTargets?.planned || 0));
+    const placeholderCount = Math.min(plannedCount, 3);
+    return Array.from({ length: placeholderCount }).map((_, i) => ({
+      id: `exhibition-plan-${i}`,
+      title: '',
+      date: '',
+      location: '',
+      status: 'Planned' as ExhibitionStatus,
+    }));
+  }, [data?.exhibitionTargets]);
+
+  const seminarSeedSignature = React.useMemo(
+    () => initialSeminarPlan
+      .map(r => `${r.id}|${r.month}|${r.date}|${r.college}|${r.topic}|${r.speaker}|${r.status}`)
+      .join('||'),
+    [initialSeminarPlan]
+  );
+
+  const [seminarPlan, setSeminarPlan] = React.useState<SeminarPlannerRow[]>([]);
+  const [exhibitionPlan, setExhibitionPlan] = React.useState<ExhibitionPlannerRow[]>([]);
+  const lastSeminarSeedRef = React.useRef('');
+  const lastExhibitionSeedRef = React.useRef('');
+
+  React.useEffect(() => {
+    if (!seminarSeedSignature) return;
+    if (seminarSeedSignature === lastSeminarSeedRef.current) return;
+    setSeminarPlan(initialSeminarPlan);
+    lastSeminarSeedRef.current = seminarSeedSignature;
+  }, [initialSeminarPlan, seminarSeedSignature]);
+
+  const exhibitionSeedSignature = React.useMemo(
+    () => initialExhibitionPlan
+      .map(r => `${r.id}|${r.title}|${r.date}|${r.location}|${r.status}`)
+      .join('||'),
+    [initialExhibitionPlan]
+  );
+
+  React.useEffect(() => {
+    if (exhibitionSeedSignature === lastExhibitionSeedRef.current) return;
+    setExhibitionPlan(initialExhibitionPlan);
+    lastExhibitionSeedRef.current = exhibitionSeedSignature;
+  }, [initialExhibitionPlan, exhibitionSeedSignature]);
+
+  const setSeminarField = (id: string, key: keyof SeminarPlannerRow, value: string) => {
+    setSeminarPlan(prev => prev.map(r => (r.id === id ? { ...r, [key]: value } : r)));
+  };
+
+  const addSeminarRow = () => {
+    const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setSeminarPlan(prev => ([
+      ...prev,
+      { id: uid, month: '', date: '', college: '', topic: '', speaker: '', status: 'Planned' },
+    ]));
+  };
+
+  const removeSeminarRow = (id: string) => {
+    setSeminarPlan(prev => prev.filter(r => r.id !== id));
+  };
+
+  const setExhibitionField = (id: string, key: keyof ExhibitionPlannerRow, value: string) => {
+    setExhibitionPlan(prev => prev.map(r => (r.id === id ? { ...r, [key]: value } : r)));
+  };
+
+  const addExhibitionRow = () => {
+    const uid = `exhibition-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setExhibitionPlan(prev => ([
+      ...prev,
+      { id: uid, title: '', date: '', location: '', status: 'Planned' },
+    ]));
+  };
+
+  const removeExhibitionRow = (id: string) => {
+    setExhibitionPlan(prev => prev.filter(r => r.id !== id));
+  };
+
+  // Keep rows that have a batch code; SDate can be null for inquiry-only batch codes.
   const upcomingBatches = (data?.upcomingBatches ?? []).filter(
-    (b: any) => !!b?.SDate
+    (b: any) => !!(b?.Batch_code || b?.batchCode)
   );
 
   const leadSummary = data?.enquiryReport?.summary ?? {};
@@ -134,28 +294,28 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
   };
 
   const funnelSteps = [
-    { label: 'Total Enquiries', value: funnel.total,     pct: null,                                                          color: '#2E3093' },
-    { label: 'Contacted',       value: funnel.contacted, pct: funnel.total ? funnel.contacted  / funnel.total * 100 : null,  color: '#2A6BB5' },
-    { label: 'Interested',      value: funnel.interested,pct: funnel.total ? funnel.interested / funnel.total * 100 : null,  color: '#059669' },
-    { label: 'Converted',       value: funnel.converted, pct: funnel.total ? funnel.converted  / funnel.total * 100 : null,  color: '#D97706' },
+    { label: 'Total Enquiries', value: funnel.total,      pct: null,                                                         color: '#2E3093', bg: 'bg-indigo-50/70' },
+    { label: 'Contacted',       value: funnel.contacted,  pct: funnel.total ? funnel.contacted  / funnel.total * 100 : null, color: '#2A6BB5', bg: 'bg-blue-50/70'   },
+    { label: 'Interested',      value: funnel.interested, pct: funnel.total ? funnel.interested / funnel.total * 100 : null, color: '#059669', bg: 'bg-emerald-50/70' },
+    { label: 'Converted',       value: funnel.converted,  pct: funnel.total ? funnel.converted  / funnel.total * 100 : null, color: '#D97706', bg: 'bg-amber-50/70'   },
   ];
 
   return (
-    <div className="space-y-5 pb-8">
+    <div className="space-y-3 pb-4 rounded-2xl bg-gradient-to-br from-indigo-50/60 via-blue-50/40 to-purple-50/30 p-2">
 
       {/* ①  Total Lead Funnel Summary */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <CardHeader title="Total Lead Funnel Summary" accent="#2E3093" icon={Icons.funnel} />
         {loading ? (
-          <div className="p-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-24 rounded-lg bg-gray-100 animate-pulse" />
+              <div key={i} className="h-14 rounded-lg bg-gray-100 animate-pulse" />
             ))}
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100">
             {funnelSteps.map((step, i) => (
-              <div key={step.label} className="flex flex-col items-center justify-center py-7 px-4 text-center relative">
+              <div key={step.label} className={`flex flex-col items-center justify-center py-4 px-4 text-center relative ${step.bg}`}>
                 {i > 0 && i < 4 && (
                   <div className="hidden sm:block absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 z-10">
                     <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
@@ -163,12 +323,12 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                     </svg>
                   </div>
                 )}
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">{step.label}</p>
-                <p className="text-4xl font-black tabular-nums leading-none" style={{ color: step.color }}>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">{step.label}</p>
+                <p className="text-2xl font-black tabular-nums leading-none" style={{ color: step.color }}>
                   {step.value.toLocaleString('en-IN')}
                 </p>
                 {step.pct !== null && (
-                  <p className="text-[11px] text-gray-400 mt-2">{fmtPct(step.pct)} of total</p>
+                  <p className="text-[11px] text-gray-400 mt-1">{fmtPct(step.pct)} of total</p>
                 )}
               </div>
             ))}
@@ -186,39 +346,114 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
       <AnnualTargetsWidget />
 
       {/* ③  Seminar Targets + Exhibition Targets */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
 
-        {/* Seminar Targets */}
+        {/* Seminar Schedule Planner */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden lg:col-span-2">
           <CardHeader
-            title="Seminar Targets"
+            title="Seminar Schedule Planner"
             accent="#2A6BB5"
             icon={Icons.calendar}
-            count={loading ? undefined : seminarTargets.length}
+            count={loading ? undefined : seminarPlan.length}
           />
+          <div className="px-4 py-2 border-b border-gray-200 bg-sky-50/40 flex items-center justify-between">
+            <p className="text-[11px] text-slate-600 font-medium">Manage upcoming seminar slots in one planner.</p>
+            <button
+              onClick={addSeminarRow}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold text-white bg-[#2A6BB5] hover:bg-[#235894] transition-colors"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add Slot
+            </button>
+          </div>
           <div className="overflow-x-auto">
             <div className="max-h-72 overflow-y-auto">
-              <table className="w-full text-sm">
+              <table className={TABLE_CLS}>
                 <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
                   <tr>
-                    <Th>Month</Th>
-                    <Th>College Names</Th>
                     <Th center>Date</Th>
-                    <Th>Annual Percentage</Th>
+                    <Th>Month</Th>
+                    <Th>College</Th>
+                    <Th>Topic</Th>
+                    <Th>Speaker</Th>
+                    <Th>Status</Th>
+                    <Th center>Actions</Th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
-                    <PulseRows cols={4} />
-                  ) : seminarTargets.length === 0 ? (
-                    <tr><td colSpan={4}><Empty text="No seminar target records available" /></td></tr>
+                    <PulseRows cols={7} />
+                  ) : seminarPlan.length === 0 ? (
+                    <tr><td colSpan={7}><Empty text="No seminar schedule rows available" /></td></tr>
                   ) : (
-                    seminarTargets.map((row: any, i: number) => (
-                      <tr key={`${row.id || i}`} className="border-t border-gray-100 hover:bg-gray-50/50">
-                        <td className="px-5 py-3 text-gray-500">{row.month || '—'}</td>
-                        <td className="px-4 py-3 font-medium text-gray-800">{row.college_name || '—'}</td>
-                        <td className="px-4 py-3 text-center tabular-nums text-gray-500">{row.date || '—'}</td>
-                        <td className="px-4 py-3 w-40"><Bar value={Number(row.annual_percentage || 0)} /></td>
+                    seminarPlan.map((row) => (
+                      <tr key={row.id} className="border-t border-gray-100 hover:bg-gray-50/50">
+                        <td className="px-3 py-2.5">
+                          <input
+                            type="date"
+                            value={row.date}
+                            onChange={e => setSeminarField(row.id, 'date', e.target.value)}
+                            className="w-full min-w-[125px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
+                          />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <input
+                            type="text"
+                            value={row.month}
+                            onChange={e => setSeminarField(row.id, 'month', e.target.value)}
+                            placeholder="Month"
+                            className="w-full min-w-[88px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
+                          />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <input
+                            type="text"
+                            value={row.college}
+                            onChange={e => setSeminarField(row.id, 'college', e.target.value)}
+                            placeholder="College"
+                            className="w-full min-w-[150px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
+                          />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <input
+                            type="text"
+                            value={row.topic}
+                            onChange={e => setSeminarField(row.id, 'topic', e.target.value)}
+                            placeholder="Topic"
+                            className="w-full min-w-[140px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
+                          />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <input
+                            type="text"
+                            value={row.speaker}
+                            onChange={e => setSeminarField(row.id, 'speaker', e.target.value)}
+                            placeholder="Speaker"
+                            className="w-full min-w-[120px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
+                          />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <select
+                            value={row.status}
+                            onChange={e => setSeminarField(row.id, 'status', e.target.value as SeminarStatus)}
+                            className={`w-full min-w-[105px] text-[11px] font-semibold rounded-full px-2 py-1 border-0 ring-1 ${seminarStatusCls(row.status)}`}
+                          >
+                            {SEMINAR_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <button
+                            onClick={() => removeSeminarRow(row.id)}
+                            className="inline-flex items-center justify-center p-1.5 rounded-md text-rose-500 hover:bg-rose-50 transition-colors"
+                            title="Remove row"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -230,28 +465,98 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
 
         {/* Exhibition Targets */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <CardHeader title="Exhibition Targets" accent="#2E3093" icon={Icons.star} />
+          <CardHeader
+            title="Exhibition Planner"
+            accent="#2E3093"
+            icon={Icons.star}
+            count={loading ? undefined : exhibitionPlan.length}
+          />
           {loading ? (
             <div className="p-5 space-y-3">
               {[...Array(3)].map((_, i) => <div key={i} className="h-16 rounded-lg bg-gray-100 animate-pulse" />)}
             </div>
           ) : (
-            <div className="divide-y divide-gray-100">
-              <div className="flex items-center justify-between px-5 py-5">
-                <span className="text-sm text-gray-500 font-medium">Planned</span>
-                <span className="text-3xl font-black tabular-nums text-[#2E3093]">
-                  {data?.exhibitionTargets?.planned ?? 0}
-                </span>
+            <div>
+              <div className="px-3 py-2 border-b border-gray-200 bg-indigo-50/50 flex items-center justify-between">
+                <p className="text-[11px] text-slate-600 font-medium">Small planner for upcoming exhibitions.</p>
+                <button
+                  onClick={addExhibitionRow}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold text-white bg-[#2E3093] hover:bg-[#25267d] transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add
+                </button>
               </div>
-              <div className="flex items-center justify-between px-5 py-5">
-                <span className="text-sm text-gray-500 font-medium">Completed</span>
-                <span className="text-3xl font-black tabular-nums text-emerald-600">
-                  {data?.exhibitionTargets?.completed ?? 0}
-                </span>
-              </div>
-              <div className="px-5 py-5">
-                <p className="text-sm text-gray-500 font-medium mb-2.5">Achievement</p>
-                <Bar value={Number(data?.exhibitionTargets?.achievement_pct || 0)} />
+              <div className="max-h-64 overflow-auto">
+                <table className={TABLE_CLS}>
+                  <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
+                    <tr>
+                      <Th>Exhibition</Th>
+                      <Th center>Date</Th>
+                      <Th>Location</Th>
+                      <Th>Status</Th>
+                      <Th center>Action</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {exhibitionPlan.length === 0 ? (
+                      <tr><td colSpan={5}><Empty text="No exhibition slots planned" /></td></tr>
+                    ) : (
+                      exhibitionPlan.map((row) => (
+                        <tr key={row.id} className="border-t border-gray-100 hover:bg-gray-50/50">
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={row.title}
+                              onChange={e => setExhibitionField(row.id, 'title', e.target.value)}
+                              placeholder="Exhibition name"
+                              className="w-full min-w-[130px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="date"
+                              value={row.date}
+                              onChange={e => setExhibitionField(row.id, 'date', e.target.value)}
+                              className="w-full min-w-[120px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={row.location}
+                              onChange={e => setExhibitionField(row.id, 'location', e.target.value)}
+                              placeholder="Location"
+                              className="w-full min-w-[110px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <select
+                              value={row.status}
+                              onChange={e => setExhibitionField(row.id, 'status', e.target.value as ExhibitionStatus)}
+                              className={`w-full min-w-[96px] text-[11px] font-semibold rounded-full px-2 py-1 border-0 ring-1 ${exhibitionStatusCls(row.status)}`}
+                            >
+                              {EXHIBITION_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <button
+                              onClick={() => removeExhibitionRow(row.id)}
+                              className="inline-flex items-center justify-center p-1.5 rounded-md text-rose-500 hover:bg-rose-50 transition-colors"
+                              title="Remove row"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -267,8 +572,8 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
           count={loading ? undefined : upcomingBatches.length}
         />
         <div className="overflow-x-auto">
-          <div className="max-h-80 overflow-y-auto">
-            <table className="w-full text-sm">
+          <div className="max-h-72 overflow-y-auto">
+            <table className={TABLE_CLS}>
               <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
                 <tr>
                   <Th>Batch number</Th>
@@ -287,18 +592,20 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                   <tr><td colSpan={7}><Empty text="No upcoming batches for the next 3 months" /></td></tr>
                 ) : (
                   upcomingBatches.map((b: any, i: number) => {
-                    const confirmed = Number(b.NoStudent || 0);
+                    const confirmed = Number(b.Confirmed_Admissions ?? b.NoStudent ?? 0);
                     const max       = Number(b.Max_Students || 0);
                     const fillPct   = max > 0 ? (confirmed / max) * 100 : 0;
                     return (
                       <tr key={`${b.Batch_Id || i}`} className="border-t border-gray-100 hover:bg-gray-50/50 transition-colors">
-                        <td className="px-5 py-3.5 font-mono font-semibold text-gray-800">{toBatchNumber(b.Batch_code)}</td>
-                        <td className="px-4 py-3.5 text-gray-700">{b.CourseName || '—'}</td>
-                        <td className="px-4 py-3.5 text-center tabular-nums text-gray-600">{b.Enquiries_Received ?? 0}</td>
-                        <td className="px-4 py-3.5 text-center tabular-nums text-gray-600">{b.Enquiries_Contacted ?? 0}</td>
-                        <td className="px-4 py-3.5 text-center tabular-nums text-gray-600">{b.Interested_Students ?? 0}</td>
-                        <td className="px-4 py-3.5 text-center tabular-nums font-semibold text-gray-800">{confirmed}</td>
-                        <td className="px-4 py-3.5 w-40"><Bar value={fillPct} /></td>
+                        <td className="px-4 py-2.5">
+                          <span className="font-mono font-semibold text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md border border-indigo-100">{toBatchNumber(b.Batch_code)}</span>
+                        </td>
+                        <td className="px-4 py-2.5 text-gray-700 font-medium">{b.CourseName || '—'}</td>
+                        <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Enquiries_Received ?? 0}</td>
+                        <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Enquiries_Contacted ?? 0}</td>
+                        <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Interested_Students ?? 0}</td>
+                        <td className="px-4 py-2.5 text-center tabular-nums font-semibold text-gray-800">{confirmed}</td>
+                        <td className="px-4 py-2.5 w-40"><Bar value={fillPct} /></td>
                       </tr>
                     );
                   })
@@ -310,7 +617,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
       </div>
 
       {/* ⑤  Pending Followups · Daily Activity Tracker · Source Wise Performance */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
 
         {/* Pending Followups */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -330,8 +637,8 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
             ) : (
               <div className="divide-y divide-gray-100">
                 {pendingFollowups.map((f: any, i: number) => (
-                  <div key={`${f.id || i}`} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50/50">
-                    <div className="w-8 h-8 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center text-xs font-bold shrink-0">
+                  <div key={`${f.id || i}`} className={`flex items-center gap-3 px-4 py-2 hover:bg-rose-50/30 ${i % 2 === 0 ? 'bg-white' : 'bg-rose-50/20'}`}>
+                    <div className="w-7 h-7 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center text-xs font-bold shrink-0">
                       {(f.name || f.student_name || 'F')[0].toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -358,9 +665,13 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
             ) : (
               <div className="divide-y divide-gray-100">
                 {dailyActivity.map((a: any, i: number) => (
-                  <div key={`${a.id || i}`} className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/50">
+                  <div key={`${a.id || i}`} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50/50">
                     <span className="text-sm text-gray-600">{a.label || a.activity || '—'}</span>
-                    <span className="text-xl font-black tabular-nums text-[#2E3093]">{a.value ?? 0}</span>
+                    <span className={`text-sm font-black tabular-nums px-2.5 py-0.5 rounded-full ${
+                      i === 0 ? 'bg-blue-100 text-blue-700' :
+                      i === 1 ? 'bg-emerald-100 text-emerald-700' :
+                               'bg-amber-100 text-amber-700'
+                    }`}>{a.value ?? 0}</span>
                   </div>
                 ))}
               </div>
@@ -384,7 +695,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
             ) : sourceRows.length === 0 ? (
               <Empty text="No source data available" />
             ) : (
-              <table className="w-full text-sm">
+              <table className={TABLE_CLS}>
                 <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
                   <tr>
                     <Th>Source</Th>
@@ -398,10 +709,17 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                     const conv = Number(r.conversion_pct || 0);
                     const t = tone(conv);
                     return (
-                      <tr key={`${r.source || i}`} className="border-t border-gray-100 hover:bg-gray-50/50">
-                        <td className="px-5 py-2.5 font-medium text-gray-700 truncate max-w-[8rem]">{r.source || '—'}</td>
-                        <td className="px-3 py-2.5 text-center tabular-nums text-gray-600">{r.leads ?? 0}</td>
-                        <td className="px-3 py-2.5 text-center tabular-nums text-gray-600">{r.admissions ?? 0}</td>
+                      <tr key={`${r.source || i}`} className={`border-t border-gray-100 transition-colors ${i === 0 ? 'bg-blue-50/40 hover:bg-blue-50/60' : 'hover:bg-gray-50/50'}`}>
+                        <td className="px-5 py-2.5 font-medium text-gray-700 truncate max-w-[8rem]">
+                          {i === 0 && <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5 mb-0.5" />}
+                          {r.source || '—'}
+                        </td>
+                        <td className="px-3 py-2.5 text-center tabular-nums">
+                          <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">{r.leads ?? 0}</span>
+                        </td>
+                        <td className="px-3 py-2.5 text-center tabular-nums">
+                          <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">{r.admissions ?? 0}</span>
+                        </td>
                         <td className="px-3 py-2.5">
                           <span className={`text-xs font-bold tabular-nums ${t.text}`}>{fmtPct(conv)}</span>
                         </td>
@@ -416,7 +734,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
       </div>
 
       {/* ⑥  Pending Fees · Alumni Registration Progress */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
         {/* Pending Fees */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -436,11 +754,15 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
             ) : (
               <div className="divide-y divide-gray-100">
                 {pendingFees.map((f: any, i: number) => (
-                  <div key={`${f.id || i}`} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50/50">
+                  <div key={`${f.id || i}`} className="flex items-center justify-between px-4 py-2 hover:bg-gray-50/50">
                     <span className="text-sm text-gray-700 truncate max-w-[55%]">
                       {f.student_name || f.name || 'Student'}
                     </span>
-                    <span className="text-sm font-bold text-rose-600 tabular-nums">
+                    <span className={`text-sm font-bold tabular-nums px-2 py-0.5 rounded-md ${
+                      Number(f.amount) >= 20000 ? 'bg-red-100 text-red-700' :
+                      Number(f.amount) >= 10000 ? 'bg-orange-100 text-orange-700' :
+                                                  'bg-rose-50 text-rose-600'
+                    }`}>
                       {f.amount ? `₹ ${Number(f.amount).toLocaleString('en-IN')}` : '—'}
                     </span>
                   </div>
@@ -466,7 +788,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
             ) : alumniProgress.length === 0 ? (
               <Empty text="No alumni registration data" />
             ) : (
-              <table className="w-full text-sm">
+              <table className={TABLE_CLS}>
                 <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
                   <tr>
                     <Th>Batch No.</Th>
@@ -477,9 +799,9 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                 <tbody>
                   {alumniProgress.map((r: any, i: number) => (
                     <tr key={`${r.batch_no || i}`} className="border-t border-gray-100 hover:bg-gray-50/50">
-                      <td className="px-5 py-3 font-mono text-gray-700">{toBatchNumber(r.batch_no)}</td>
-                      <td className="px-4 py-3 text-gray-700">{r.training_program || '—'}</td>
-                      <td className="px-4 py-3 w-40"><Bar value={Number(r.registered_pct || 0)} /></td>
+                      <td className="px-4 py-2 font-mono text-gray-700">{toBatchNumber(r.batch_no)}</td>
+                      <td className="px-3 py-2 text-gray-700">{r.training_program || '—'}</td>
+                      <td className="px-3 py-2 w-40"><Bar value={Number(r.registered_pct || 0)} /></td>
                     </tr>
                   ))}
                 </tbody>

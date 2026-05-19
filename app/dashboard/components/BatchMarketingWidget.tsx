@@ -373,8 +373,8 @@ export default function BatchMarketingWidget() {
       {/* Table */}
       <div className="overflow-x-auto">
         <div className="max-h-[480px] overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
+          <table className="w-full text-sm [&_th]:border-r [&_th]:border-gray-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-gray-200 [&_td:last-child]:border-r-0">
+            <thead className="bg-gray-50 border-b border-gray-300 sticky top-0 z-10">
               <tr>
                 <th className="py-2.5 px-4 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-left">Training Program</th>
                 <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-left whitespace-nowrap">Batch</th>
@@ -391,7 +391,7 @@ export default function BatchMarketingWidget() {
             <tbody>
               {loading ? (
                 Array.from({length: 5}).map((_, i) => (
-                  <tr key={i} className="border-t border-gray-100">
+                  <tr key={i} className="border-t border-gray-200">
                     {Array.from({length: 10}).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-3 bg-gray-100 rounded animate-pulse" style={{ width: j === 0 ? '70%' : '50%' }} />
@@ -420,7 +420,7 @@ export default function BatchMarketingWidget() {
                   return (
                     <tr
                       key={`${b.Batch_Id}-${b.Batch_code}-${toDateStr(b.SDate)}-${i}`}
-                      className={`border-t border-gray-100 transition-colors ${
+                      className={`border-t border-gray-200 transition-colors ${
                         locked ? 'bg-gray-50/80' : i % 2 === 1 ? 'bg-gray-50/20' : 'hover:bg-gray-50/40'
                       }`}
                     >

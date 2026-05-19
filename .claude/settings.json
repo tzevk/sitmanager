@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npx eslint *)",
-      "Bash(mkdir -p /Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar/\\\\[id\\\\])"
+      "Bash(mkdir -p /Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar/\\\\[id\\\\])",
+      "Bash(python3 -c ' *)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar"

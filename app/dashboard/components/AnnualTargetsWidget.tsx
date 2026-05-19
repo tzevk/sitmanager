@@ -83,8 +83,8 @@ export default function AnnualTargetsWidget() {
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-100">
+        <table className="w-full text-sm [&_th]:border-r [&_th]:border-gray-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-gray-200 [&_td:last-child]:border-r-0">
+          <thead className="bg-gray-50 border-b border-gray-300">
             <tr>
               <th className="py-2.5 px-5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-left">Training Programme Name</th>
               <th className="py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">Target Students</th>
@@ -96,7 +96,7 @@ export default function AnnualTargetsWidget() {
           <tbody>
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} className="border-t border-gray-100">
+                <tr key={i} className="border-t border-gray-200">
                   {Array.from({ length: 5 }).map((_, j) => (
                     <td key={j} className="px-4 py-3">
                       <div className="h-3 bg-gray-100 rounded animate-pulse" style={{ width: j === 0 ? '70%' : '40%' }} />
@@ -119,7 +119,7 @@ export default function AnnualTargetsWidget() {
                 const avg    = freq > 0 ? adm / freq : 0;
                 const pct    = Number(r.Percentage) || (tgt > 0 ? (adm / tgt) * 100 : 0);
                 return (
-                  <tr key={r.Plan_Id} className={`border-t border-gray-100 hover:bg-gray-50/50 transition-colors ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
+                  <tr key={r.Plan_Id} className={`border-t border-gray-200 hover:bg-gray-50/50 transition-colors ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
                     <td className="px-5 py-3.5 font-semibold text-gray-800">{r.Training_Program_Name}</td>
                     <td className="px-4 py-3.5 text-center tabular-nums text-gray-600">{tgt.toLocaleString('en-IN')}</td>
                     <td className="px-4 py-3.5 text-center tabular-nums font-semibold text-gray-800">{adm.toLocaleString('en-IN')}</td>

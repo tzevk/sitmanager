@@ -45,7 +45,9 @@ async function fetchDashboardData(dept?: string) {
   const isPlacement = dept === 'placement';
   const isGeneral = !isCbd && !isTd && !isAdmin && !isPlacement;
 
-  const needsAnnualTargets = isGeneral || isCbd;
+  // CBD uses AnnualTargetsWidget which fetches /api/masters/annual-batch/plan independently —
+  // the batch-targets query has 4 correlated subqueries per course and takes ~30s for nothing.
+  const needsAnnualTargets = isGeneral;
   const needsUpcomingBatches = isGeneral || isCbd;
   const needsEnquiries = isGeneral || isCbd || isAdmin;
   const needsPlacement = isGeneral || isAdmin || isPlacement;
@@ -174,43 +176,90 @@ async function fetchDashboardData(dept?: string) {
       ORDER BY c.Course_Id, month
     `, []) : Promise.resolve([]),
 
-    // 2. Upcoming batches — pre-aggregate inquiry stats once, then JOIN (avoids 4 correlated subqueries per batch)
+    // 2. Upcoming batches — inquiry-first (group by inquiry Batch_Code), then enrich from batch master
     needsUpcomingBatches ? safeQuery(pool, `
-      SELECT b.Batch_Id, b.Batch_code, b.SDate, b.EDate,
-        b.Category, b.Duration, b.Timings,
-        b.Training_Coordinator, b.INR_Basic,
-        b.Admission_Date, b.Max_Students,
-        b.NoStudent,
-        c.Course_Name AS CourseName,
-        COALESCE(si_agg.Enquiries_Received, 0)    AS Enquiries_Received,
-        COALESCE(si_agg.Enquiries_Contacted, 0)   AS Enquiries_Contacted,
-        COALESCE(si_agg.Interested_Students, 0)   AS Interested_Students,
-        COALESCE(si_agg.Confirmed_Admissions, 0)  AS Confirmed_Admissions
-      FROM batch_mst b
-      LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
-      LEFT JOIN (
+      SELECT
+        q.Batch_Id,
+        q.Batch_code,
+        DATE_FORMAT(q.ParsedSDate, '%Y-%m-%d') AS SDate,
+        DATE_FORMAT(q.ParsedEDate, '%Y-%m-%d') AS EDate,
+        q.Category,
+        q.Duration,
+        q.Timings,
+        q.Training_Coordinator,
+        q.INR_Basic,
+        DATE_FORMAT(q.ParsedAdmissionDate, '%Y-%m-%d') AS Admission_Date,
+        q.Max_Students,
+        q.NoStudent,
+        q.CourseName,
+        q.Enquiries_Received,
+        q.Enquiries_Contacted,
+        q.Interested_Students,
+        q.Confirmed_Admissions
+      FROM (
         SELECT
-          Batch_Code,
-          COUNT(*) AS Enquiries_Received,
-          SUM(CASE WHEN TRIM(IFNULL(Discussion, '')) <> '' THEN 1 ELSE 0 END) AS Enquiries_Contacted,
-          SUM(CASE
-            WHEN LOWER(IFNULL(Inquiry, '')) IN ('yes', 'y', 'interested')
-              OR LOWER(IFNULL(JobRequired, '')) IN ('yes', 'y')
-              OR LOWER(IFNULL(Discussion, '')) LIKE '%interested%'
-            THEN 1 ELSE 0 END) AS Interested_Students,
-          SUM(CASE
-            WHEN LOWER(IFNULL(Admission, '')) IN ('yes', 'y', '1', 'true')
-              OR IFNULL(admission_done, 0) = 1
-            THEN 1 ELSE 0 END) AS Confirmed_Admissions
-        FROM student_inquiry
-        WHERE (IsDelete = 0 OR IsDelete IS NULL)
-        GROUP BY Batch_Code
-      ) si_agg ON si_agg.Batch_Code = b.Batch_code
-      WHERE b.SDate >= CURDATE()
-        AND b.SDate <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
-        AND (b.IsDelete IS NULL OR b.IsDelete = 0)
-        AND (b.Cancel IS NULL OR b.Cancel = 0)
-      ORDER BY b.SDate ASC
+          b.Batch_Id,
+          si.Batch_code,
+          b.Category,
+          b.Duration,
+          b.Timings,
+          b.Training_Coordinator,
+          b.INR_Basic,
+          b.Max_Students,
+          b.NoStudent,
+          COALESCE(c_batch.Course_Name, c_si.Course_Name, '') AS CourseName,
+          si.Enquiries_Received,
+          si.Enquiries_Contacted,
+          si.Interested_Students,
+          si.Confirmed_Admissions,
+          COALESCE(
+            STR_TO_DATE(CAST(b.SDate AS CHAR), '%Y-%m-%d'),
+            STR_TO_DATE(CAST(b.SDate AS CHAR), '%d-%m-%Y'),
+            STR_TO_DATE(CAST(b.SDate AS CHAR), '%d/%m/%Y'),
+            STR_TO_DATE(CAST(b.SDate AS CHAR), '%m/%d/%Y')
+          ) AS ParsedSDate,
+          COALESCE(
+            STR_TO_DATE(CAST(b.EDate AS CHAR), '%Y-%m-%d'),
+            STR_TO_DATE(CAST(b.EDate AS CHAR), '%d-%m-%Y'),
+            STR_TO_DATE(CAST(b.EDate AS CHAR), '%d/%m/%Y'),
+            STR_TO_DATE(CAST(b.EDate AS CHAR), '%m/%d/%Y')
+          ) AS ParsedEDate,
+          COALESCE(
+            STR_TO_DATE(CAST(b.Admission_Date AS CHAR), '%Y-%m-%d'),
+            STR_TO_DATE(CAST(b.Admission_Date AS CHAR), '%d-%m-%Y'),
+            STR_TO_DATE(CAST(b.Admission_Date AS CHAR), '%d/%m/%Y'),
+            STR_TO_DATE(CAST(b.Admission_Date AS CHAR), '%m/%d/%Y')
+          ) AS ParsedAdmissionDate
+        FROM (
+          SELECT
+            TRIM(Batch_Code) AS Batch_code,
+            MAX(CAST(NULLIF(TRIM(CAST(Course_Id AS CHAR)), '') AS UNSIGNED)) AS Course_Id,
+            COUNT(*) AS Enquiries_Received,
+            SUM(CASE WHEN TRIM(IFNULL(Discussion, '')) <> '' THEN 1 ELSE 0 END) AS Enquiries_Contacted,
+            SUM(CASE
+              WHEN LOWER(IFNULL(Inquiry, '')) IN ('yes', 'y', 'interested')
+                OR LOWER(IFNULL(JobRequired, '')) IN ('yes', 'y')
+                OR LOWER(IFNULL(Discussion, '')) LIKE '%interested%'
+              THEN 1 ELSE 0 END) AS Interested_Students,
+            SUM(CASE
+              WHEN LOWER(IFNULL(Admission, '')) IN ('yes', 'y', '1', 'true')
+                OR IFNULL(admission_done, 0) = 1
+              THEN 1 ELSE 0 END) AS Confirmed_Admissions
+          FROM student_inquiry
+          WHERE (IsDelete = 0 OR IsDelete IS NULL)
+            AND TRIM(IFNULL(Batch_Code, '')) <> ''
+          GROUP BY TRIM(Batch_Code)
+        ) si
+        LEFT JOIN batch_mst b
+          ON LOWER(TRIM(b.Batch_code)) = LOWER(si.Batch_code)
+         AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
+         AND (b.Cancel IS NULL OR b.Cancel = 0)
+        LEFT JOIN course_mst c_batch ON b.Course_Id = c_batch.Course_Id
+        LEFT JOIN course_mst c_si ON si.Course_Id = c_si.Course_Id
+      ) q
+      WHERE q.ParsedSDate >= CURDATE()
+        AND q.ParsedSDate <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
+      ORDER BY q.ParsedSDate ASC, q.Enquiries_Received DESC
       LIMIT 50
     `, []) : Promise.resolve([]),
 
@@ -673,9 +722,11 @@ async function fetchDashboardData(dept?: string) {
         SELECT Admission_Id, SUM(IFNULL(Total_Amt, 0)) AS total_paid
         FROM s_fees_mst
         WHERE (IsDelete IS NULL OR IsDelete = 0)
+          AND Date_Added >= DATE_SUB(CURDATE(), INTERVAL 3 YEAR)
         GROUP BY Admission_Id
       ) paid ON paid.Admission_Id = am.Admission_Id
       WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
+        AND am.Admission_Date >= DATE_SUB(CURDATE(), INTERVAL 3 YEAR)
         AND (am.Cancel IS NULL OR LOWER(TRIM(CAST(am.Cancel AS CHAR))) IN ('no', '0', 'false', ''))
         AND CAST(IFNULL(am.Fees, 0) AS DECIMAL(15,2)) > IFNULL(paid.total_paid, 0)
       ORDER BY amount DESC
@@ -699,6 +750,7 @@ async function fetchDashboardData(dept?: string) {
         AND (sm.IsDelete IS NULL OR sm.IsDelete = 0)
       WHERE (b.IsDelete IS NULL OR b.IsDelete = 0)
         AND b.Batch_code IS NOT NULL AND b.Batch_code <> ''
+        AND b.EDate >= DATE_SUB(CURDATE(), INTERVAL 2 YEAR)
       GROUP BY b.Batch_code, COALESCE(c.Course_Name, b.CourseName, 'N/A')
       HAVING COUNT(sm.Student_Id) > 0
       ORDER BY registered_pct ASC, b.Batch_code DESC
@@ -1002,6 +1054,39 @@ async function fetchDashboardData(dept?: string) {
   // ── Shape the response ──────────────────────────────────────────
   const esRow = (enquirySummaryRows as Record<string, number>[])[0] ?? {};
 
+  // If the optimized upcoming-batches query fails (safeQuery => []),
+  // fall back to a simpler batches-only query so the widget still loads.
+  const upcomingBatchesFinal = (needsUpcomingBatches && (upcomingBatches as any[]).length === 0)
+    ? await safeQuery(pool, `
+      SELECT
+        b.Batch_Id,
+        b.Batch_code,
+        b.SDate,
+        b.EDate,
+        b.Category,
+        b.Duration,
+        b.Timings,
+        b.Training_Coordinator,
+        b.INR_Basic,
+        b.Admission_Date,
+        b.Max_Students,
+        b.NoStudent,
+        c.Course_Name AS CourseName,
+        0 AS Enquiries_Received,
+        0 AS Enquiries_Contacted,
+        0 AS Interested_Students,
+        0 AS Confirmed_Admissions
+      FROM batch_mst b
+      LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
+      WHERE b.SDate >= CURDATE()
+        AND b.SDate <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
+        AND (b.IsDelete IS NULL OR b.IsDelete = 0)
+        AND (b.Cancel IS NULL OR b.Cancel = 0)
+      ORDER BY b.SDate ASC
+      LIMIT 50
+    `, [])
+    : upcomingBatches;
+
   // Merge placement data: batch rows + student aggregates + interview counts
   const studentAggMap: Record<string, { cv_received: number; self_placement: number; placement_blocked: number }> = {};
   for (const sa of placementStudentAgg as any[]) {
@@ -1085,7 +1170,7 @@ async function fetchDashboardData(dept?: string) {
       batchTargets: batchTargets,
       sparklineData: sparklineData,
     },
-    upcomingBatches,
+    upcomingBatches: upcomingBatchesFinal,
     sourcePerformance,
     leadFunnel,
     seminarTargets: (seminarTargetsRows as any[]).length > 0 ? seminarTargetsRows : seminarTargetsFallbackRows,
