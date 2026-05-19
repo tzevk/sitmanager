@@ -70,7 +70,7 @@ export default function CtTab() {
       <div>
         <TableHeader title="Corporate Training — Yearly" onAdd={openAdd} />
         <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full border-collapse">
+          <table className="w-full border-separate border-spacing-0">
             <thead><tr className="bg-[#2E3093]">
               <th className={thCls}>Month</th>
               <th className={thCls}>Training Program Name</th>
@@ -82,7 +82,7 @@ export default function CtTab() {
               <th className={`${thCls} text-center`}>Profit %</th>
               <th className={`${thCls} text-center`}>Actions</th>
             </tr></thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {ct.loading ? <TableSkeleton cols={9} /> :
                sortedRows.length === 0 ? <EmptyRow cols={9} /> :
                sortedRows.map((r, i) => {

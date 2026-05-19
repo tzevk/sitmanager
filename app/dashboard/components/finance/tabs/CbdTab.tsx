@@ -110,7 +110,7 @@ export default function CbdTab() {
           </select>
         </div>
         <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full border-collapse">
+          <table className="w-full border-separate border-spacing-0">
             <thead><tr className="bg-[#2E3093]">
               <th className={thCls}>Training Programme</th>
               <th className={`${thCls} text-center`}>Target Freq.</th>
@@ -122,58 +122,59 @@ export default function CbdTab() {
               <th className={`${thCls} text-center`}>Fees Received (₹)</th>
               <th className={`${thCls} text-center`}>% Achievement</th>
             </tr></thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {targetsLoading ? <TableSkeleton cols={9} /> :
                annualTargets.length === 0 ? <EmptyRow cols={9} message={`No annual targets found for ${year}.`} /> :
-               annualTargets.map((r, i) => {
-                const tgt          = Number(r.Yearly_Students_Target) || (Number(r.Target_Frequency) * Number(r.Min_Students_Per_Batch));
-                const adm          = Number(r.Students_Admitted) || 0;
-                const fees         = Number(r.Fees) || 0;
-                const feesTarget   = fees * tgt;
-                const feesReceived = fees * adm;
-                const pct          = Number(r.Percentage) || (tgt > 0 ? (adm / tgt) * 100 : 0);
-                return (
-                  <tr key={r.Plan_Id} className={trCls(i)}>
-                    <td className={tdCls}>{r.Training_Program_Name}</td>
-                    <td className={tdNum}>{r.Target_Frequency}</td>
-                    <td className={tdNum}>{r.Frequency_Conducted}</td>
-                    <td className={tdNum}>{tgt.toLocaleString('en-IN')}</td>
-                    <td className={tdNum}>{adm.toLocaleString('en-IN')}</td>
-                    <td className={tdNum}>{fees ? fmt(fees) : '—'}</td>
-                    <td className={tdNum}>{feesTarget ? fmt(feesTarget) : '—'}</td>
-                    <td className={tdNum}>{feesReceived ? fmt(feesReceived) : '—'}</td>
-                    <td className={tdNum}><PctBar value={pct} denominator={100} /></td>
-                  </tr>
-                );
-               })}
-              {annualTargets.length > 0 && (
-                <TotalRow>
-                  <td className="px-3 py-2 text-xs text-[#2E3093]">Total ({annualTargets.length})</td>
-                  <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{annualTargets.reduce((s, r) => s + Number(r.Target_Frequency), 0)}</td>
-                  <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{annualTargets.reduce((s, r) => s + Number(r.Frequency_Conducted), 0)}</td>
-                  <td className="px-3 py-2 text-xs text-center text-[#2E3093]">
-                    {annualTargets.reduce((s, r) => s + (Number(r.Yearly_Students_Target) || (Number(r.Target_Frequency) * Number(r.Min_Students_Per_Batch))), 0).toLocaleString('en-IN')}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{annualTargets.reduce((s, r) => s + Number(r.Students_Admitted), 0).toLocaleString('en-IN')}</td>
-                  <td />
-                  <td className="px-3 py-2 text-xs text-center text-[#2E3093]">
-                    {fmt(annualTargets.reduce((s, r) => {
-                      const tgt = Number(r.Yearly_Students_Target) || (Number(r.Target_Frequency) * Number(r.Min_Students_Per_Batch));
-                      return s + (Number(r.Fees) * tgt);
-                    }, 0))}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-center text-[#2E3093]">
-                    {fmt(annualTargets.reduce((s, r) => s + (Number(r.Fees) * Number(r.Students_Admitted)), 0))}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-center text-[#2E3093]">
-                    {(() => {
-                      const totalTarget = annualTargets.reduce((s, r) => s + (Number(r.Yearly_Students_Target) || (Number(r.Target_Frequency) * Number(r.Min_Students_Per_Batch))), 0);
-                      const totalAdmitted = annualTargets.reduce((s, r) => s + Number(r.Students_Admitted), 0);
-                      return totalTarget > 0 ? `${((totalAdmitted / totalTarget) * 100).toFixed(1)}%` : '—';
-                    })()}
-                  </td>
-                </TotalRow>
-              )}
+               <>
+                 <TotalRow>
+                   <td className="px-3 py-2 text-xs text-[#2E3093]">Total ({annualTargets.length})</td>
+                   <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{annualTargets.reduce((s, r) => s + Number(r.Target_Frequency), 0)}</td>
+                   <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{annualTargets.reduce((s, r) => s + Number(r.Frequency_Conducted), 0)}</td>
+                   <td className="px-3 py-2 text-xs text-center text-[#2E3093]">
+                     {annualTargets.reduce((s, r) => s + (Number(r.Yearly_Students_Target) || (Number(r.Target_Frequency) * Number(r.Min_Students_Per_Batch))), 0).toLocaleString('en-IN')}
+                   </td>
+                   <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{annualTargets.reduce((s, r) => s + Number(r.Students_Admitted), 0).toLocaleString('en-IN')}</td>
+                   <td />
+                   <td className="px-3 py-2 text-xs text-center text-[#2E3093]">
+                     {fmt(annualTargets.reduce((s, r) => {
+                       const tgt = Number(r.Yearly_Students_Target) || (Number(r.Target_Frequency) * Number(r.Min_Students_Per_Batch));
+                       return s + (Number(r.Fees) * tgt);
+                     }, 0))}
+                   </td>
+                   <td className="px-3 py-2 text-xs text-center text-[#2E3093]">
+                     {fmt(annualTargets.reduce((s, r) => s + (Number(r.Fees) * Number(r.Students_Admitted)), 0))}
+                   </td>
+                   <td className="px-3 py-2 text-xs text-center text-[#2E3093]">
+                     {(() => {
+                       const totalTarget = annualTargets.reduce((s, r) => s + (Number(r.Yearly_Students_Target) || (Number(r.Target_Frequency) * Number(r.Min_Students_Per_Batch))), 0);
+                       const totalAdmitted = annualTargets.reduce((s, r) => s + Number(r.Students_Admitted), 0);
+                       return totalTarget > 0 ? `${((totalAdmitted / totalTarget) * 100).toFixed(1)}%` : '—';
+                     })()}
+                   </td>
+                 </TotalRow>
+                 {annualTargets.map((r, i) => {
+                  const tgt          = Number(r.Yearly_Students_Target) || (Number(r.Target_Frequency) * Number(r.Min_Students_Per_Batch));
+                  const adm          = Number(r.Students_Admitted) || 0;
+                  const fees         = Number(r.Fees) || 0;
+                  const feesTarget   = fees * tgt;
+                  const feesReceived = fees * adm;
+                  const pct          = Number(r.Percentage) || (tgt > 0 ? (adm / tgt) * 100 : 0);
+                  return (
+                    <tr key={r.Plan_Id} className={trCls(i)}>
+                      <td className={tdCls}>{r.Training_Program_Name}</td>
+                      <td className={tdNum}>{r.Target_Frequency}</td>
+                      <td className={tdNum}>{r.Frequency_Conducted}</td>
+                      <td className={tdNum}>{tgt.toLocaleString('en-IN')}</td>
+                      <td className={tdNum}>{adm.toLocaleString('en-IN')}</td>
+                      <td className={tdNum}>{fees ? fmt(fees) : '—'}</td>
+                      <td className={tdNum}>{feesTarget ? fmt(feesTarget) : '—'}</td>
+                      <td className={tdNum}>{feesReceived ? fmt(feesReceived) : '—'}</td>
+                      <td className={tdNum}><PctBar value={pct} denominator={100} /></td>
+                    </tr>
+                  );
+                 })}
+               </>
+              }
             </tbody>
           </table>
         </div>
@@ -203,7 +204,7 @@ export default function CbdTab() {
           }
         />
         <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full border-collapse">
+          <table className="w-full border-separate border-spacing-0">
             <thead><tr className="bg-[#2E3093]">
               <th className={thCls}>Student Name</th>
               <th className={thCls}>Batch / Programme</th>
@@ -212,7 +213,7 @@ export default function CbdTab() {
               <th className={`${thCls} text-center`}>Pending (₹)</th>
               <th className={`${thCls} text-center`}>Recovery Priority</th>
             </tr></thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {feesLoading ? <TableSkeleton cols={6} /> :
                feeRows.length === 0 ? <EmptyRow cols={6} message="No pending fees found." /> :
                feeRows.map((r, i) => {

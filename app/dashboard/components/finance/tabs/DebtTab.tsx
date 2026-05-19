@@ -217,7 +217,7 @@ export default function DebtTab() {
       <div>
         <TableHeader title="Debt Remaining by Bank" />
         <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-          <table className="w-full border-collapse">
+          <table className="w-full border-separate border-spacing-0">
             <thead>
               <tr className="bg-gradient-to-r from-[#2E3093] to-[#3d40a8]">
                 <th className={thCls}>Bank Name</th>
@@ -227,7 +227,7 @@ export default function DebtTab() {
                 <th className={`${thCls} text-right`}>Share %</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {loans.loading ? <TableSkeleton cols={5} /> :
                debtRemainingByBank.length === 0 ? <EmptyRow cols={5} message="No bank debt records found." /> :
                debtRemainingByBank.map((r, i) => {
@@ -298,7 +298,7 @@ export default function DebtTab() {
       <div>
         <TableHeader title="Debt Plan vs Actual" onAdd={openAddPlan} />
         <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-          <table className="w-full border-collapse">
+          <table className="w-full border-separate border-spacing-0">
             <thead>
               <tr className="bg-gradient-to-r from-[#2E3093] to-[#3d40a8]">
                 <th className={thCls}>Bank Name</th>
@@ -311,7 +311,7 @@ export default function DebtTab() {
                 <th className={`${thCls} text-center`}>Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {plans.loading ? <TableSkeleton cols={8} /> :
                sortedPlans.length === 0 ? <EmptyRow cols={8} /> :
                sortedPlans.map((r, i) => {
@@ -381,7 +381,7 @@ export default function DebtTab() {
         <div>
           <TableHeader title="Projected Cashflow — Upcoming Months" onAdd={openAddProj} />
           <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-            <table className="w-full border-collapse">
+            <table className="w-full border-separate border-spacing-0">
               <thead>
                 <tr className="bg-gradient-to-r from-[#2E3093] to-[#3d40a8]">
                   <th className={thCls}>Month</th>
@@ -392,7 +392,7 @@ export default function DebtTab() {
                   <th className={`${thCls} text-center`}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody>
                 {projections.loading ? <TableSkeleton cols={6} /> :
                  sortedProj.length === 0 ? <EmptyRow cols={6} /> :
                  sortedProj.map((r, i) => {

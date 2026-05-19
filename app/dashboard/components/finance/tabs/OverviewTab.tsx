@@ -276,7 +276,7 @@ export default function OverviewTab() {
       <div>
         <TableHeader title={`Department Performance — ${monthLabel}`} onAdd={openAddDept} />
         <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full border-collapse">
+          <table className="w-full border-separate border-spacing-0">
             <thead><tr className="bg-[#2E3093]">
               <th className={thCls}>Department</th>
               <th className={`${thCls} text-center`}>Amount Achieved (₹)</th>
@@ -284,7 +284,7 @@ export default function OverviewTab() {
               <th className={`${thCls} text-center`}>%age</th>
               <th className={`${thCls} text-center`}>Actions</th>
             </tr></thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {depts.loading ? <TableSkeleton cols={5} /> :
                depts.rows.length === 0 ? <EmptyRow cols={5} /> :
                depts.rows.map((r, i) => (
@@ -314,7 +314,7 @@ export default function OverviewTab() {
       <div>
         <TableHeader title="Outstanding Loans" onAdd={openAddLoan} />
         <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full border-collapse">
+          <table className="w-full border-separate border-spacing-0">
             <thead><tr className="bg-[#2E3093]">
               <th className={thCls}>Bank Name</th>
               <th className={`${thCls} text-center`}>Outstanding Amount (₹)</th>
@@ -322,7 +322,7 @@ export default function OverviewTab() {
               <th className={`${thCls} text-center`}>%age Paid</th>
               <th className={`${thCls} text-center`}>Actions</th>
             </tr></thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {loans.loading ? <TableSkeleton cols={5} /> :
                loans.rows.length === 0 ? <EmptyRow cols={5} /> :
                [...loans.rows].sort((a, b) => Number(b.outstanding) - Number(a.outstanding)).map((r, i) => {

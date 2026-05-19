@@ -285,38 +285,41 @@ export const FINANCE_CASHFLOW: ResourceConfig = {
     CREATE TABLE IF NOT EXISTS finance_cashflow (
       id          INT AUTO_INCREMENT PRIMARY KEY,
       date        DATE NULL,
-      entity      ENUM('SIT','Suvidya','SIT Alumni','Accent','ATS') NOT NULL DEFAULT 'Suvidya',
       type        ENUM('Payment','Receipt') NOT NULL DEFAULT 'Payment',
       category    VARCHAR(100) NOT NULL DEFAULT 'Miscellaneous',
       description VARCHAR(500) NULL,
       payment     DECIMAL(14,2) NOT NULL DEFAULT 0,
       receipt     DECIMAL(14,2) NOT NULL DEFAULT 0,
-      ref_no      VARCHAR(80) NULL,
+      ref_no      VARCHAR(200) NULL,
+      company     VARCHAR(100) NULL,
+      department  VARCHAR(100) NULL,
       created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       KEY idx_date (date),
-      KEY idx_entity (entity),
       KEY idx_category (category)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `,
   migrations: `
     ALTER TABLE finance_cashflow
-      MODIFY COLUMN entity ENUM('SIT','Suvidya','SIT Alumni','Accent','ATS') NOT NULL DEFAULT 'Suvidya'
+      ADD COLUMN IF NOT EXISTS company    VARCHAR(100) NULL,
+      ADD COLUMN IF NOT EXISTS department VARCHAR(100) NULL
   `,
   defaultOrder: 'date DESC, id DESC',
   filters: [
-    { param: 'entity',   column: 'entity' },
-    { param: 'type',     column: 'type' },
-    { param: 'category', column: 'category' },
+    { param: 'type',       column: 'type' },
+    { param: 'category',   column: 'category' },
+    { param: 'company',    column: 'company' },
+    { param: 'department', column: 'department' },
   ],
   validate: (b) => [
     { col: 'date',        val: nullableDate(b.date) },
-    { col: 'entity',      val: oneOf(b.entity, CASHFLOW_ENTITIES, 'SIT') },
     { col: 'type',        val: oneOf(b.type, CASHFLOW_TYPES, 'Payment') },
     { col: 'category',    val: safeString(b.category, 100) || 'Miscellaneous' },
     { col: 'description', val: nullableString(b.description, 500) },
     { col: 'payment',     val: nonNegNum(b.payment) },
     { col: 'receipt',     val: nonNegNum(b.receipt) },
-    { col: 'ref_no',      val: nullableString(b.ref_no, 80) },
+    { col: 'company',     val: nullableString(b.company, 100) },
+    { col: 'department',  val: nullableString(b.department, 100) },
   ],
 };
 

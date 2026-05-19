@@ -84,7 +84,7 @@ export default function MonthlyTab({ apiPath, title }: Props) {
         </div>
       )}
       <div className="overflow-x-auto rounded-xl border border-gray-200">
-        <table className="w-full border-collapse">
+        <table className="w-full border-separate border-spacing-0">
           <thead><tr className="bg-[#2E3093]">
             <th className={thCls}>Month</th>
             <th className={`${thCls} text-center`}>Actual Cost (₹)</th>
@@ -92,7 +92,7 @@ export default function MonthlyTab({ apiPath, title }: Props) {
             <th className={`${thCls} text-center`}>%age</th>
             <th className={`${thCls} text-center`}>Actions</th>
           </tr></thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {data.loading ? <TableSkeleton cols={5} /> :
              sortedRows.length === 0 ? <EmptyRow cols={5} /> :
              sortedRows.map((r, i) => (

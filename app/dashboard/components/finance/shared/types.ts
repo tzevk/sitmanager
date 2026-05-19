@@ -81,17 +81,16 @@ export interface CashflowProjection {
 }
 
 export type CashflowType   = 'Payment' | 'Receipt';
-export type CashflowEntity = 'SIT' | 'Suvidya' | 'SIT Alumni' | 'Accent' | 'ATS';
-
 
 export interface CashflowTxn {
   id: number;
   date: string | null;
-  entity: CashflowEntity;
   type: CashflowType;
   category: string;
   description: string | null;
   payment: number;
   receipt: number;
   ref_no: string | null;
+  company: string | null;
+  department: string | null;
 }

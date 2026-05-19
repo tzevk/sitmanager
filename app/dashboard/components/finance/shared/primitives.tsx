@@ -4,15 +4,15 @@ import { ReactNode, useEffect, useRef } from 'react';
 import { useEscape } from './ToastProvider';
 
 /* Style tokens used across every finance tab. */
-export const thCls  = 'px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wide whitespace-nowrap';
-export const tdCls  = 'px-3 py-2.5 text-xs text-gray-700';
-export const tdNum  = 'px-3 py-2.5 text-xs text-center text-gray-700';
+export const thCls  = 'px-3 py-2.5 text-left text-[10px] font-semibold text-white uppercase tracking-wide whitespace-nowrap border border-white/20';
+export const tdCls  = 'px-3 py-2.5 text-xs text-gray-700 border border-gray-200 bg-white';
+export const tdNum  = 'px-3 py-2.5 text-xs text-center text-gray-700 border border-gray-200 bg-white';
 export const inpCls = 'w-full text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] transition-colors';
 export const lblCls = 'block text-[10px] font-semibold text-gray-400 mb-0.5 uppercase tracking-wide';
 
 /** Returns className for a table data row — pass the row index for alternating stripes + hover. */
 export function trCls(i: number): string {
-  return `group transition-colors ${i % 2 === 0 ? 'bg-white hover:bg-indigo-50/30' : 'bg-gray-50/50 hover:bg-indigo-50/30'}`;
+  return `group transition-colors bg-white hover:bg-indigo-50/20`;
 }
 
 export function SectionTitle({ children }: { children: ReactNode }) {
