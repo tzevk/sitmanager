@@ -165,7 +165,13 @@ export default function CbdTab() {
                   <td className="px-3 py-2 text-xs text-center text-[#2E3093]">
                     {fmt(annualTargets.reduce((s, r) => s + (Number(r.Fees) * Number(r.Students_Admitted)), 0))}
                   </td>
-                  <td />
+                  <td className="px-3 py-2 text-xs text-center text-[#2E3093]">
+                    {(() => {
+                      const totalTarget = annualTargets.reduce((s, r) => s + (Number(r.Yearly_Students_Target) || (Number(r.Target_Frequency) * Number(r.Min_Students_Per_Batch))), 0);
+                      const totalAdmitted = annualTargets.reduce((s, r) => s + Number(r.Students_Admitted), 0);
+                      return totalTarget > 0 ? `${((totalAdmitted / totalTarget) * 100).toFixed(1)}%` : '—';
+                    })()}
+                  </td>
                 </TotalRow>
               )}
             </tbody>

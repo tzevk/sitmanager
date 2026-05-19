@@ -6,68 +6,7 @@ import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, TotalRow, Sect
 import { fmt } from '../shared/format';
 import type { CtRow } from '../shared/types';
 
-interface CtYearlyRow {
-  id: number;
-  training_name: string;
-  duration_of_program: string | null;
-  frequency_conducted: number;
-  target_frequency_batches: number;
-  min_students_per_batch: number;
-  students_admitted_yearly: number;
-  yearly_students_target: number;
-}
-
 export default function CtTab() {
-  /* ── Yearly table ── */
-  const yearly = useFinanceResource<CtYearlyRow>('/api/finance/ct-yearly');
-
-  const [yearlyModal, setYearlyModal] = useState<{ open: boolean; editing: CtYearlyRow | null }>({ open: false, editing: null });
-  const [yearlyForm, setYearlyForm] = useState({
-    training_name: '',
-    duration_of_program: '',
-    frequency_conducted: '',
-    target_frequency_batches: '',
-    min_students_per_batch: '',
-    students_admitted_yearly: '',
-    yearly_students_target: '',
-  });
-  const [yearlySaving, setYearlySaving] = useState(false);
-
-  const openYearlyAdd = useCallback(() => {
-    setYearlyForm({ training_name: '', duration_of_program: '', frequency_conducted: '', target_frequency_batches: '', min_students_per_batch: '', students_admitted_yearly: '', yearly_students_target: '' });
-    setYearlyModal({ open: true, editing: null });
-  }, []);
-
-  const openYearlyEdit = useCallback((r: CtYearlyRow) => {
-    setYearlyForm({
-      training_name: r.training_name ?? '',
-      duration_of_program: r.duration_of_program ?? '',
-      frequency_conducted: String(r.frequency_conducted ?? 0),
-      target_frequency_batches: String(r.target_frequency_batches ?? 0),
-      min_students_per_batch: String(r.min_students_per_batch ?? 0),
-      students_admitted_yearly: String(r.students_admitted_yearly ?? 0),
-      yearly_students_target: String(r.yearly_students_target ?? 0),
-    });
-    setYearlyModal({ open: true, editing: r });
-  }, []);
-
-  const saveYearly = useCallback(async () => {
-    setYearlySaving(true);
-    try {
-      await yearly.save({
-        training_name: yearlyForm.training_name.trim(),
-        duration_of_program: yearlyForm.duration_of_program.trim() || null,
-        frequency_conducted: Number(yearlyForm.frequency_conducted),
-        target_frequency_batches: Number(yearlyForm.target_frequency_batches),
-        min_students_per_batch: Number(yearlyForm.min_students_per_batch),
-        students_admitted_yearly: Number(yearlyForm.students_admitted_yearly),
-        yearly_students_target: Number(yearlyForm.yearly_students_target),
-      } as Partial<CtYearlyRow>, yearlyModal.editing);
-      setYearlyModal({ open: false, editing: null });
-    } catch { /* toast */ }
-    setYearlySaving(false);
-  }, [yearly, yearlyForm, yearlyModal.editing]);
-
   /* ── Monthly table ── */
   const ct = useFinanceResource<CtRow>('/api/finance/ct-performance');
 
@@ -127,51 +66,9 @@ export default function CtTab() {
 
   return (
     <div className="space-y-6">
-      {/* ── Yearly Performance ── */}
-      <div>
-        <TableHeader title="Corporate Training — Yearly Performance" onAdd={openYearlyAdd} />
-        <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full border-collapse">
-            <thead><tr className="bg-[#2E3093]">
-              <th className={thCls}>Training Program Name</th>
-              <th className={thCls}>Duration</th>
-              <th className={`${thCls} text-center`}>Freq. Conducted</th>
-              <th className={`${thCls} text-center`}>Target Freq. (Batches)</th>
-              <th className={`${thCls} text-center`}>Min Students / Batch</th>
-              <th className={`${thCls} text-center`}>Students Admitted</th>
-              <th className={`${thCls} text-center`}>Yearly Target</th>
-              <th className={`${thCls} text-center`}>% Achievement</th>
-              <th className={`${thCls} text-center`}>Actions</th>
-            </tr></thead>
-            <tbody className="divide-y divide-gray-100">
-              {yearly.loading ? <TableSkeleton cols={9} /> :
-               yearly.rows.length === 0 ? <EmptyRow cols={9} /> :
-               yearly.rows.map((r, i) => {
-                 const target = Number(r.yearly_students_target) || (Number(r.target_frequency_batches) * Number(r.min_students_per_batch));
-                 const admitted = Number(r.students_admitted_yearly) || 0;
-                 const pct = target > 0 ? (admitted / target) * 100 : 0;
-                 return (
-                   <tr key={r.id} className={trCls(i)}>
-                     <td className={tdCls}>{r.training_name}</td>
-                     <td className={tdCls}>{r.duration_of_program || '—'}</td>
-                     <td className={tdNum}>{r.frequency_conducted}</td>
-                     <td className={tdNum}>{r.target_frequency_batches}</td>
-                     <td className={tdNum}>{r.min_students_per_batch}</td>
-                     <td className={tdNum}>{admitted.toLocaleString('en-IN')}</td>
-                     <td className={tdNum}>{target.toLocaleString('en-IN')}</td>
-                     <td className={tdNum}><PctBar value={pct} denominator={100} /></td>
-                     <RowActions onEdit={() => openYearlyEdit(r)} onDelete={() => yearly.remove(r.id)} />
-                   </tr>
-                 );
-               })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
       {/* ── Monthly Performance ── */}
       <div>
-        <TableHeader title="Corporate Training — Monthly Performance" onAdd={openAdd} />
+        <TableHeader title="Corporate Training — Yearly" onAdd={openAdd} />
         <div className="overflow-x-auto rounded-xl border border-gray-200">
           <table className="w-full border-collapse">
             <thead><tr className="bg-[#2E3093]">
@@ -229,46 +126,6 @@ export default function CtTab() {
           </table>
         </div>
       </div>
-
-      {/* ── Yearly record modal ── */}
-      <Modal
-        open={yearlyModal.open}
-        title={yearlyModal.editing ? 'Edit Yearly CT Record' : 'Add Yearly CT Record'}
-        saving={yearlySaving}
-        onClose={() => setYearlyModal({ open: false, editing: null })}
-        onSave={saveYearly}
-      >
-        <div>
-          <label className={lblCls}>Training Program Name</label>
-          <input className={inpCls} value={yearlyForm.training_name} onChange={e => setYearlyForm(f => ({ ...f, training_name: e.target.value }))} />
-        </div>
-        <div>
-          <label className={lblCls}>Duration of Program</label>
-          <input className={inpCls} placeholder="e.g. 3 Days" value={yearlyForm.duration_of_program} onChange={e => setYearlyForm(f => ({ ...f, duration_of_program: e.target.value }))} />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={lblCls}>Frequency Conducted</label>
-            <input type="number" min="0" className={inpCls} value={yearlyForm.frequency_conducted} onChange={e => setYearlyForm(f => ({ ...f, frequency_conducted: e.target.value }))} />
-          </div>
-          <div>
-            <label className={lblCls}>Target Frequency (Batches)</label>
-            <input type="number" min="0" className={inpCls} value={yearlyForm.target_frequency_batches} onChange={e => setYearlyForm(f => ({ ...f, target_frequency_batches: e.target.value }))} />
-          </div>
-          <div>
-            <label className={lblCls}>Min Students per Batch</label>
-            <input type="number" min="0" className={inpCls} value={yearlyForm.min_students_per_batch} onChange={e => setYearlyForm(f => ({ ...f, min_students_per_batch: e.target.value }))} />
-          </div>
-          <div>
-            <label className={lblCls}>Students Admitted Yearly</label>
-            <input type="number" min="0" className={inpCls} value={yearlyForm.students_admitted_yearly} onChange={e => setYearlyForm(f => ({ ...f, students_admitted_yearly: e.target.value }))} />
-          </div>
-        </div>
-        <div>
-          <label className={lblCls}>Yearly Students Target</label>
-          <input type="number" min="0" className={inpCls} value={yearlyForm.yearly_students_target} onChange={e => setYearlyForm(f => ({ ...f, yearly_students_target: e.target.value }))} />
-        </div>
-      </Modal>
 
       {/* ── Monthly record modal ── */}
       <Modal

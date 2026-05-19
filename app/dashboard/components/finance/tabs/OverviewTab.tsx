@@ -201,76 +201,6 @@ export default function OverviewTab() {
         <span className="text-xs text-gray-400">FY {year}–{String(year + 1).slice(-2)}</span>
       </div>
 
-      {/* Dept Performance */}
-      <div>
-        <TableHeader title={`Department Performance — ${monthLabel}`} onAdd={openAddDept} />
-        <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full border-collapse">
-            <thead><tr className="bg-[#2E3093]">
-              <th className={thCls}>Department</th>
-              <th className={`${thCls} text-center`}>Amount Achieved (₹)</th>
-              <th className={`${thCls} text-center`}>Target Amount (₹)</th>
-              <th className={`${thCls} text-center`}>%age</th>
-              <th className={`${thCls} text-center`}>Actions</th>
-            </tr></thead>
-            <tbody className="divide-y divide-gray-100">
-              {depts.loading ? <TableSkeleton cols={5} /> :
-               depts.rows.length === 0 ? <EmptyRow cols={5} /> :
-               depts.rows.map((r, i) => (
-                <tr key={r.id} className={trCls(i)}>
-                  <td className={tdCls}>{r.department}</td>
-                  <td className={tdNum}>{fmt(r.amount_achieved)}</td>
-                  <td className={tdNum}>{fmt(r.target_amount)}</td>
-                  <td className={tdNum}><PctBar value={r.amount_achieved} denominator={r.target_amount} /></td>
-                  <RowActions onEdit={() => openEditDept(r)} onDelete={() => depts.remove(r.id)} />
-                </tr>
-              ))}
-              {depts.rows.length > 1 && (
-                <TotalRow>
-                  <td className="px-3 py-2 text-xs text-[#2E3093]">Total</td>
-                  <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{fmt(deptTotals.achieved)}</td>
-                  <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{fmt(deptTotals.target)}</td>
-                  <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{pct(deptTotals.achieved, deptTotals.target)}</td>
-                  <td />
-                </TotalRow>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Loans */}
-      <div>
-        <TableHeader title="Outstanding Loans" onAdd={openAddLoan} />
-        <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full border-collapse">
-            <thead><tr className="bg-[#2E3093]">
-              <th className={thCls}>Bank Name</th>
-              <th className={`${thCls} text-center`}>Outstanding Amount (₹)</th>
-              <th className={`${thCls} text-center`}>Paid Amount (₹)</th>
-              <th className={`${thCls} text-center`}>%age Paid</th>
-              <th className={`${thCls} text-center`}>Actions</th>
-            </tr></thead>
-            <tbody className="divide-y divide-gray-100">
-              {loans.loading ? <TableSkeleton cols={5} /> :
-               loans.rows.length === 0 ? <EmptyRow cols={5} /> :
-               loans.rows.map((r, i) => {
-                const paidFromDebtPlan = paidByBankFromDebtPlans.get((r.bank_name || '').trim().toLowerCase()) || 0;
-                return (
-                  <tr key={r.id} className={trCls(i)}>
-                    <td className={tdCls}>{r.bank_name}</td>
-                    <td className={tdNum}>{fmt(r.outstanding)}</td>
-                    <td className={tdNum}>{fmt(paidFromDebtPlan)}</td>
-                    <td className={tdNum}><PctBar value={paidFromDebtPlan} denominator={r.outstanding} /></td>
-                    <RowActions onEdit={() => openEditLoan(r)} onDelete={() => loans.remove(r.id)} />
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
       {/* Cashflow Summary - Department-wise Breakdown */}
       <div className="space-y-3">
         <SectionTitle>Cashflow Summary - Department-wise Breakdown</SectionTitle>
@@ -337,6 +267,79 @@ export default function OverviewTab() {
                   </td>
                 </TotalRow>
               )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Dept Performance */}
+      <div>
+        <TableHeader title={`Department Performance — ${monthLabel}`} onAdd={openAddDept} />
+        <div className="overflow-x-auto rounded-xl border border-gray-200">
+          <table className="w-full border-collapse">
+            <thead><tr className="bg-[#2E3093]">
+              <th className={thCls}>Department</th>
+              <th className={`${thCls} text-center`}>Amount Achieved (₹)</th>
+              <th className={`${thCls} text-center`}>Target Amount (₹)</th>
+              <th className={`${thCls} text-center`}>%age</th>
+              <th className={`${thCls} text-center`}>Actions</th>
+            </tr></thead>
+            <tbody className="divide-y divide-gray-100">
+              {depts.loading ? <TableSkeleton cols={5} /> :
+               depts.rows.length === 0 ? <EmptyRow cols={5} /> :
+               depts.rows.map((r, i) => (
+                <tr key={r.id} className={trCls(i)}>
+                  <td className={tdCls}>{r.department}</td>
+                  <td className={tdNum}>{fmt(r.amount_achieved)}</td>
+                  <td className={tdNum}>{fmt(r.target_amount)}</td>
+                  <td className={tdNum}><PctBar value={r.amount_achieved} denominator={r.target_amount} /></td>
+                  <RowActions onEdit={() => openEditDept(r)} onDelete={() => depts.remove(r.id)} />
+                </tr>
+              ))}
+              {depts.rows.length > 1 && (
+                <TotalRow>
+                  <td className="px-3 py-2 text-xs text-[#2E3093]">Total</td>
+                  <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{fmt(deptTotals.achieved)}</td>
+                  <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{fmt(deptTotals.target)}</td>
+                  <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{pct(deptTotals.achieved, deptTotals.target)}</td>
+                  <td />
+                </TotalRow>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Loans */}
+      <div>
+        <TableHeader title="Outstanding Loans" onAdd={openAddLoan} />
+        <div className="overflow-x-auto rounded-xl border border-gray-200">
+          <table className="w-full border-collapse">
+            <thead><tr className="bg-[#2E3093]">
+              <th className={thCls}>Bank Name</th>
+              <th className={`${thCls} text-center`}>Outstanding Amount (₹)</th>
+              <th className={`${thCls} text-center`}>Paid Amount (₹)</th>
+              <th className={`${thCls} text-center`}>%age Paid</th>
+              <th className={`${thCls} text-center`}>Actions</th>
+            </tr></thead>
+            <tbody className="divide-y divide-gray-100">
+              {loans.loading ? <TableSkeleton cols={5} /> :
+               loans.rows.length === 0 ? <EmptyRow cols={5} /> :
+               [...loans.rows].sort((a, b) => Number(b.outstanding) - Number(a.outstanding)).map((r, i) => {
+                const paidFromDebtPlan = paidByBankFromDebtPlans.get((r.bank_name || '').trim().toLowerCase()) || 0;
+                return (
+                  <tr key={r.id} className={trCls(i)}>
+                    <td className={tdCls}>
+                      <span className="font-medium">{r.bank_name}</span>
+                      <span className="ml-2 text-[11px] text-gray-400">({fmt(r.outstanding)})</span>
+                    </td>
+                    <td className={tdNum}>{fmt(r.outstanding)}</td>
+                    <td className={tdNum}>{fmt(paidFromDebtPlan)}</td>
+                    <td className={tdNum}><PctBar value={paidFromDebtPlan} denominator={r.outstanding} /></td>
+                    <RowActions onEdit={() => openEditLoan(r)} onDelete={() => loans.remove(r.id)} />
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

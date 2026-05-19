@@ -2,174 +2,238 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useFinanceResource } from '../shared/useFinanceResource';
-import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, TotalRow, SectionTitle, thCls, tdCls, tdNum, inpCls, lblCls, trCls, downloadCsv } from '../shared/primitives';
+import { Modal, TableHeader, TableSkeleton, EmptyRow, TotalRow, SectionTitle, thCls, tdCls, tdNum, inpCls, lblCls, trCls, downloadCsv } from '../shared/primitives';
 import { fmt, todayISO } from '../shared/format';
-import type { CashflowTxn, CashflowType, CashflowEntity } from '../shared/types';
+import type { CashflowTxn, CashflowType } from '../shared/types';
 import CashflowCategoryBars from '../charts/CashflowCategoryBars';
 import { detectCashflowAnomalies, categoryMoMGrowth } from '../shared/predictions';
 
 const CF_TYPES: CashflowType[]     = ['Payment', 'Receipt'];
-const CF_ENTITIES: CashflowEntity[] = ['Suvidya', 'SIT Alumni', 'Accent', 'ATS'];
 
 const SIT_CATS = [
-  'OD Interest / Loan EMI',
-  'Management Car Expenses',
-  'Management Salary',
-  'Employee Salary',
-  'Trainers Payment',
-  'Food',
-  'Utility',
-  'Marketing - SIT',
-  'Travelling Expense - Staff (Marketing)',
-  'Software',
-  'Stationary',
-  'Infrastructure',
-  'Taxes',
+  'OD Interest / Loan EMI','Management Car Expenses','Management Salary','Employee Salary',
+  'Trainers Payment','Food','Utility','Marketing - SIT',
+  'Travelling Expense - Staff (Marketing)','Software','Stationary','Infrastructure','Taxes',
 ];
-
 const ACCENT_CATS = [
-  'OD Interest / Loan EMI',
-  'Management Car Expenses',
-  'Management Salary',
-  'Employee Salary',
-  'Trainers Payment',
-  'Food',
-  'Utility',
-  'Marketing - Accent',
-  'Travelling Expense - Staff (Marketing)',
-  'Software',
-  'Stationary',
-  'Infrastructure',
-  'Taxes',
+  'OD Interest / Loan EMI','Management Car Expenses','Management Salary','Employee Salary',
+  'Trainers Payment','Food','Utility','Marketing - Accent',
+  'Travelling Expense - Staff (Marketing)','Software','Stationary','Infrastructure','Taxes',
 ];
-
 const ALL_CATS = Array.from(new Set([...SIT_CATS, ...ACCENT_CATS]));
 
-function catsFor(entity: CashflowEntity | ''): string[] {
-  if (entity === 'Accent') return ACCENT_CATS;
-  if (entity === 'SIT' || entity === 'Suvidya' || entity === 'SIT Alumni' || entity === 'ATS') return SIT_CATS;
+function catsFor(): string[] {
   return ALL_CATS;
+}
+
+const cellInp = 'w-full text-xs border border-[#2E3093]/30 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/40 bg-white';
+
+type EditForm = {
+  date: string; type: CashflowType;
+  category: string; description: string; payment: string; receipt: string; ref_no: string;
+};
+
+type SortColumn = 'date' | 'description' | 'category' | 'amount';
+type SortDir = 'asc' | 'desc';
+type SortState = { col: SortColumn | null; dir: SortDir };
+
+function emptyForm(): EditForm {
+  return { date: todayISO(), type: 'Payment', category: SIT_CATS[0], description: '', payment: '', receipt: '', ref_no: '' };
+}
+
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-');
+  return `${d}-${m}-${y}`;
+}
+
+function sortCashRows(rows: CashflowTxn[], sort: SortState, amountField: 'payment' | 'receipt'): CashflowTxn[] {
+  if (!sort.col) return rows;
+  const mult = sort.dir === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    if (sort.col === 'date') return ((a.date ?? '').localeCompare(b.date ?? '')) * mult;
+    if (sort.col === 'description') return ((a.description ?? '').localeCompare(b.description ?? '')) * mult;
+    if (sort.col === 'category') return ((a.category ?? '').localeCompare(b.category ?? '')) * mult;
+    return (Number(a[amountField] || 0) - Number(b[amountField] || 0)) * mult;
+  });
+}
+
+function HeaderSort({
+  label,
+  col,
+  sort,
+  onSort,
+}: {
+  label: string;
+  col: SortColumn;
+  sort: SortState;
+  onSort: (next: SortState) => void;
+}) {
+  const isActive = sort.col === col;
+  return (
+    <div className="flex items-center justify-center gap-2">
+      <span>{label}</span>
+      <div className="inline-flex items-center rounded-md border border-white/25 bg-white/10 p-0.5 shadow-sm">
+        <button
+          type="button"
+          aria-label={`Sort ${label} ascending`}
+          title={`Sort ${label} ascending`}
+          onClick={() => onSort({ col, dir: 'asc' })}
+          className={`inline-flex h-5 w-5 items-center justify-center rounded transition-colors focus:outline-none focus:ring-1 focus:ring-white/70 ${isActive && sort.dir === 'asc' ? 'bg-white text-[#2E3093]' : 'text-white/80 hover:bg-white/15 hover:text-white'}`}
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10 15V5" />
+            <path d="M6.8 8.2L10 5l3.2 3.2" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          aria-label={`Sort ${label} descending`}
+          title={`Sort ${label} descending`}
+          onClick={() => onSort({ col, dir: 'desc' })}
+          className={`inline-flex h-5 w-5 items-center justify-center rounded transition-colors focus:outline-none focus:ring-1 focus:ring-white/70 ${isActive && sort.dir === 'desc' ? 'bg-white text-[#2E3093]' : 'text-white/80 hover:bg-white/15 hover:text-white'}`}
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10 5v10" />
+            <path d="M6.8 11.8L10 15l3.2-3.2" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          aria-label={`Reset ${label} sorting`}
+          title={`Reset ${label} sorting`}
+          onClick={() => onSort({ col: null, dir: 'asc' })}
+          className={`inline-flex h-5 w-5 items-center justify-center rounded transition-colors focus:outline-none focus:ring-1 focus:ring-white/70 ${!isActive ? 'bg-white text-[#2E3093]' : 'text-white/80 hover:bg-white/15 hover:text-white'}`}
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M16 10a6 6 0 1 1-2-4.47" />
+            <path d="M16 4v4h-4" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function CashflowTab() {
   const [search, setSearch] = useState('');
-  const [entity, setEntity] = useState<'' | CashflowEntity>('');
   const [type, setType]     = useState<'' | CashflowType>('');
   const [category, setCat]  = useState('');
+  const [month, setMonth]   = useState('');
   const [dateFrom, setFrom] = useState('');
   const [dateTo, setTo]     = useState('');
+  const [paySort, setPaySort] = useState<SortState>({ col: null, dir: 'asc' });
+  const [receiptSort, setReceiptSort] = useState<SortState>({ col: null, dir: 'asc' });
 
-  // Build query string for server-side filtering — only applies if backend supports it,
-  // otherwise the client-side filter below catches it too.
   const query = useMemo(() => {
     const p = new URLSearchParams();
     if (search)   p.set('q', search);
-    if (entity)   p.set('entity', entity);
     if (type)     p.set('type', type);
     if (category) p.set('category', category);
     if (dateFrom) p.set('dateFrom', dateFrom);
     if (dateTo)   p.set('dateTo', dateTo);
     return p.toString();
-  }, [search, entity, type, category, dateFrom, dateTo]);
+  }, [search, type, category, dateFrom, dateTo]);
 
   const cash = useFinanceResource<CashflowTxn>('/api/finance/cashflow', { query: query || undefined });
 
-  /* ── modal ──────────────────────────────────────── */
-  const [modal, setModal] = useState<{ open: boolean; editing: CashflowTxn | null }>({ open: false, editing: null });
-  const [form, setForm]   = useState({ date: '', entity: 'Suvidya' as CashflowEntity, type: 'Payment' as CashflowType, category: SIT_CATS[0], description: '', payment: '', receipt: '', ref_no: '' });
-  const [saving, setSaving] = useState(false);
+  /* ── inline edit ────────────────────────────────── */
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm]   = useState<EditForm>(emptyForm());
+  const [saving, setSaving]       = useState(false);
 
-  const openAdd = useCallback(() => {
-    setForm({ date: todayISO(), entity: 'Suvidya', type: 'Payment', category: SIT_CATS[0], description: '', payment: '', receipt: '', ref_no: '' });
-    setModal({ open: true, editing: null });
-  }, []);
-  const openEdit = useCallback((r: CashflowTxn) => {
-    setForm({
-      date: r.date ?? '',
-      entity: r.entity ?? 'SIT',
-      type: r.type,
-      category: r.category,
-      description: r.description ?? '',
-      payment: String(r.payment),
-      receipt: String(r.receipt),
-      ref_no: r.ref_no ?? '',
+  const startEdit = useCallback((r: CashflowTxn) => {
+    setEditForm({
+      date: r.date ?? '', type: r.type,
+      category: r.category, description: r.description ?? '',
+      payment: String(r.payment ?? 0), receipt: String(r.receipt ?? 0), ref_no: r.ref_no ?? '',
     });
-    setModal({ open: true, editing: r });
+    setEditingId(r.id);
   }, []);
-  const save = useCallback(async () => {
+
+  const cancelEdit = useCallback(() => setEditingId(null), []);
+
+  const saveEdit = useCallback(async (r: CashflowTxn) => {
     setSaving(true);
     try {
       await cash.save({
-        date: form.date,
-        entity: form.entity,
-        type: form.type,
-        category: form.category,
-        description: form.description.trim(),
-        payment: Number(form.payment),
-        receipt: Number(form.receipt),
-        ref_no: form.ref_no.trim(),
-      } as Partial<CashflowTxn>, modal.editing);
-      setModal({ open: false, editing: null });
+        date: editForm.date, type: editForm.type,
+        category: editForm.category, description: editForm.description.trim(),
+        payment: Number(editForm.payment), receipt: Number(editForm.receipt),
+        ref_no: editForm.ref_no.trim(),
+      } as Partial<CashflowTxn>, r);
+      setEditingId(null);
     } catch { /* toast */ }
     setSaving(false);
-  }, [cash, form, modal.editing]);
+  }, [cash, editForm]);
 
-  /* ── client-side filtering (defensive — works whether or not API filters) */
+  /* ── add modal ──────────────────────────────────── */
+  const [addModal, setAddModal]   = useState(false);
+  const [addForm, setAddForm]     = useState<EditForm>(emptyForm());
+  const [addSaving, setAddSaving] = useState(false);
+
+  const openAdd = useCallback(() => { setAddForm(emptyForm()); setAddModal(true); }, []);
+  const saveAdd = useCallback(async () => {
+    setAddSaving(true);
+    try {
+      await cash.save({
+        date: addForm.date, type: addForm.type,
+        category: addForm.category, description: addForm.description.trim(),
+        payment: Number(addForm.payment), receipt: Number(addForm.receipt),
+        ref_no: addForm.ref_no.trim(),
+      } as Partial<CashflowTxn>, null);
+      setAddModal(false);
+    } catch { /* toast */ }
+    setAddSaving(false);
+  }, [cash, addForm]);
+
+  /* ── client-side filtering ──────────────────────── */
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return cash.rows.filter(r => {
       if (q && !`${r.description ?? ''} ${r.ref_no ?? ''} ${r.category}`.toLowerCase().includes(q)) return false;
-      if (entity   && (r.entity ?? 'SIT') !== entity) return false;
       if (type     && r.type     !== type)             return false;
       if (category && r.category !== category)         return false;
+      if (month    && !(r.date ?? '').startsWith(month)) return false;
       if (dateFrom && (r.date ?? '') < dateFrom)       return false;
       if (dateTo   && (r.date ?? '') > dateTo)         return false;
       return true;
     });
-  }, [cash.rows, search, entity, type, category, dateFrom, dateTo]);
+  }, [cash.rows, search, type, category, month, dateFrom, dateTo]);
 
-  /* ── memoised aggregates ────────────────────────── */
+  const payRows = useMemo(() => {
+    const base = filteredRows.filter(r => r.type === 'Payment');
+    return sortCashRows(base, paySort, 'payment');
+  }, [filteredRows, paySort]);
+
+  const receiptRows = useMemo(() => {
+    const base = filteredRows.filter(r => r.type === 'Receipt');
+    return sortCashRows(base, receiptSort, 'receipt');
+  }, [filteredRows, receiptSort]);
+
   const totals = useMemo(() => ({
-    payment: filteredRows.reduce((s, r) => s + Number(r.payment || 0), 0),
-    receipt: filteredRows.reduce((s, r) => s + Number(r.receipt || 0), 0),
-  }), [filteredRows]);
+    payment: payRows.reduce((s, r) => s + Number(r.payment || 0), 0),
+    receipt: receiptRows.reduce((s, r) => s + Number(r.receipt || 0), 0),
+  }), [payRows, receiptRows]);
 
-
-  /* ── CSV export ─────────────────────────────────── */
   const handleExport = useCallback(() => {
     downloadCsv(`cashflow-${todayISO()}.csv`, filteredRows.map(r => ({
-      Date: r.date ?? '',
-      Company: r.entity ?? '',
-      Type: r.type,
-      Category: r.category,
-      Description: r.description ?? '',
-      Payment: r.payment,
-      Receipt: r.receipt,
-      Ref: r.ref_no ?? '',
+      Date: r.date ?? '', Type: r.type, Category: r.category,
+      Description: r.description ?? '', Payment: r.payment, Receipt: r.receipt, Ref: r.ref_no ?? '',
     })));
   }, [filteredRows]);
 
   const companySummary = useMemo(() => {
-    const map = new Map<string, { entity: string; payment: number; receipt: number }>();
-    for (const r of filteredRows) {
-      const e = r.entity ?? 'Suvidya';
-      const cur = map.get(e) ?? { entity: e, payment: 0, receipt: 0 };
-      cur.payment += Number(r.payment || 0);
-      cur.receipt += Number(r.receipt || 0);
-      map.set(e, cur);
-    }
-    return Array.from(map.values()).sort((a, b) => a.entity.localeCompare(b.entity));
-  }, [filteredRows]);
-
-  const handleClear = useCallback(() => {
-    setSearch(''); setEntity(''); setType(''); setCat(''); setFrom(''); setTo('');
+    return [];
   }, []);
 
-  // Anomaly detection runs on ALL rows (not filtered) to maintain statistical validity
+  const handleClear = useCallback(() => {
+    setSearch(''); setType(''); setCat(''); setMonth(''); setFrom(''); setTo('');
+  }, []);
+
   const anomalies = useMemo(() => detectCashflowAnomalies(cash.rows), [cash.rows]);
   const momGrowth = useMemo(() => categoryMoMGrowth(cash.rows), [cash.rows]);
 
-  // Map anomaly transaction ids for O(1) lookup in the table
   const anomalySet = useMemo(() => {
     const s = new Set<number>();
     for (const a of anomalies) {
@@ -202,14 +266,6 @@ export default function CashflowTab() {
                 className="w-full text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]" />
             </div>
             <div>
-              <label className="block text-[10px] text-gray-400 mb-0.5">Company</label>
-              <select value={entity} onChange={e => setEntity((e.target.value || '') as '' | CashflowEntity)}
-                className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-32 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
-                <option value="">All companies</option>
-                {CF_ENTITIES.map(e => <option key={e} value={e}>{e}</option>)}
-              </select>
-            </div>
-            <div>
               <label className="block text-[10px] text-gray-400 mb-0.5">Type</label>
               <select value={type} onChange={e => setType((e.target.value || '') as '' | CashflowType)}
                 className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-28 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
@@ -222,7 +278,7 @@ export default function CashflowTab() {
               <select value={category} onChange={e => setCat(e.target.value)}
                 className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-44 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
                 <option value="">All categories</option>
-                {catsFor(entity).map(c => <option key={c} value={c}>{c}</option>)}
+                {catsFor().map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
@@ -238,53 +294,143 @@ export default function CashflowTab() {
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-[#2E3093]">
-                <th rowSpan={2} className={thCls}>Date</th>
-                <th rowSpan={2} className={thCls}>Description</th>
-                <th rowSpan={2} className={thCls}>Category</th>
-                <th rowSpan={2} className={thCls}>Company</th>
-                <th colSpan={2} className={`${thCls} border-b border-white/20`} style={{ textAlign: 'center' }}>Payment / Receipt (₹)</th>
-                <th rowSpan={2} className={`${thCls} text-center`}>Actions</th>
-              </tr>
-              <tr className="bg-[#2E3093]">
-                <th className="px-3 py-1 text-[9px] font-semibold text-red-200 uppercase tracking-wider text-center">Payment</th>
-                <th className="px-3 py-1 text-[9px] font-semibold text-emerald-200 uppercase tracking-wider text-center">Receipt</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {cash.loading ? <TableSkeleton cols={7} /> :
-               filteredRows.length === 0 ? <EmptyRow cols={7} message={cash.rows.length === 0 ? undefined : 'No matches for current filter'} /> :
-               filteredRows.map((r, i) => (
-                <tr key={r.id} className={anomalySet.has(r.id) ? 'bg-orange-50/70 hover:bg-orange-50 transition-colors' : trCls(i)}>
-                  <td className={tdCls}>{r.date}</td>
-                  <td className={tdCls}>{r.description}</td>
-                  <td className={tdCls}>
-                    <span>{r.category}</span>
-                    {anomalySet.has(r.id) && (
-                      <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-100 text-orange-700 ring-1 ring-orange-200">⚠ Spike</span>
-                    )}
-                  </td>
-                  <td className={tdCls}>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#2E3093]/10 text-[#2E3093]">{r.entity ?? 'Suvidya'}</span>
-                  </td>
-                  <td className={`${tdNum} text-red-600`}>{r.payment ? fmt(r.payment) : '—'}</td>
-                  <td className={`${tdNum} text-emerald-700`}>{r.receipt ? fmt(r.receipt) : '—'}</td>
-                  <RowActions onEdit={() => openEdit(r)} onDelete={() => cash.remove(r.id)} />
-                </tr>
-              ))}
-              {filteredRows.length > 0 && (
-                <TotalRow>
-                  <td colSpan={4} className="px-3 py-2 text-xs text-[#2E3093]">Total ({filteredRows.length})</td>
-                  <td className="px-3 py-2 text-xs text-center text-red-600">{fmt(totals.payment)}</td>
-                  <td className="px-3 py-2 text-xs text-center text-emerald-700">{fmt(totals.receipt)}</td>
-                  <td />
-                </TotalRow>
-              )}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* ── Payments ── */}
+          <div className="flex h-[620px] min-h-[620px] flex-col">
+            <p className="text-[11px] font-semibold text-red-500 uppercase tracking-wider mb-2 pl-1">Payments</p>
+            <div className="flex-1 overflow-hidden rounded-xl border border-gray-200">
+              <div className="h-full overflow-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-[#2E3093]">
+                    <th className={`${thCls} sticky top-0 z-10 bg-[#2E3093]`}><HeaderSort label="Date" col="date" sort={paySort} onSort={setPaySort} /></th>
+                    <th className={`${thCls} sticky top-0 z-10 bg-[#2E3093]`}><HeaderSort label="Description" col="description" sort={paySort} onSort={setPaySort} /></th>
+                    <th className={`${thCls} sticky top-0 z-10 bg-[#2E3093]`}><HeaderSort label="Category" col="category" sort={paySort} onSort={setPaySort} /></th>
+                    <th className={`${thCls} sticky top-0 z-10 bg-[#2E3093] text-center`}><HeaderSort label="Amount (₹)" col="amount" sort={paySort} onSort={setPaySort} /></th>
+                    <th className={`${thCls} sticky top-0 z-10 bg-[#2E3093] text-center`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {cash.loading ? <TableSkeleton cols={5} /> :
+                   payRows.length === 0 ? <EmptyRow cols={5} message={cash.rows.length === 0 ? undefined : 'No payments'} /> :
+                   payRows.map((r, i) => {
+                     if (editingId === r.id) {
+                       return (
+                         <tr key={r.id} className="bg-blue-50/60">
+                           <td className="px-2 py-1.5"><input type="date" className={cellInp} value={editForm.date} onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))} /></td>
+                           <td className="px-2 py-1.5"><input className={cellInp} placeholder="Description" value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} /></td>
+                           <td className="px-2 py-1.5">
+                             <select className={cellInp} value={editForm.category} onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}>
+                               {catsFor().map(c => <option key={c}>{c}</option>)}
+                             </select>
+                           </td>
+                           <td className="px-2 py-1.5"><input type="number" min="0" className={cellInp} value={editForm.payment} onChange={e => setEditForm(f => ({ ...f, payment: e.target.value }))} /></td>
+                           <td className="px-2 py-1.5 text-center whitespace-nowrap">
+                             <button onClick={() => saveEdit(r)} disabled={saving} className="px-2.5 py-1 text-[10px] font-semibold rounded bg-[#2E3093] text-white hover:bg-[#252880] disabled:opacity-50 mr-1">{saving ? '…' : 'Save'}</button>
+                             <button onClick={cancelEdit} className="px-2.5 py-1 text-[10px] font-semibold rounded border border-gray-300 text-gray-600 hover:bg-gray-50">Cancel</button>
+                           </td>
+                         </tr>
+                       );
+                     }
+                     return (
+                       <tr key={r.id} className={anomalySet.has(r.id) ? 'bg-orange-50/70 hover:bg-orange-50 transition-colors' : trCls(i)}>
+                         <td className={tdCls}>{fmtDate(r.date)}</td>
+                         <td className={tdCls}>{r.description}</td>
+                         <td className={tdCls}>
+                           <span>{r.category}</span>
+                           {anomalySet.has(r.id) && <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-100 text-orange-700 ring-1 ring-orange-200">⚠ Spike</span>}
+                         </td>
+                         <td className={`${tdNum} text-red-600`}>{r.payment ? fmt(r.payment) : '—'}</td>
+                         <td className="px-3 py-2 text-center whitespace-nowrap">
+                           <button onClick={() => startEdit(r)} className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-[#2E3093]/10 text-[#2E3093] transition-colors mr-1">
+                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                           </button>
+                           <button onClick={() => cash.remove(r.id)} className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-red-100 text-red-500 transition-colors">
+                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                           </button>
+                         </td>
+                       </tr>
+                     );
+                   })}
+                  {payRows.length > 0 && (
+                    <TotalRow>
+                      <td colSpan={3} className="px-3 py-2 text-xs text-[#2E3093]">Total ({payRows.length})</td>
+                      <td className="px-3 py-2 text-xs text-center text-red-600">{fmt(totals.payment)}</td>
+                      <td />
+                    </TotalRow>
+                  )}
+                </tbody>
+              </table>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Receipts ── */}
+          <div className="flex h-[620px] min-h-[620px] flex-col">
+            <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider mb-2 pl-1">Receipts</p>
+            <div className="flex-1 overflow-hidden rounded-xl border border-gray-200">
+              <div className="h-full overflow-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-[#2E3093]">
+                    <th className={`${thCls} sticky top-0 z-10 bg-[#2E3093]`}><HeaderSort label="Date" col="date" sort={receiptSort} onSort={setReceiptSort} /></th>
+                    <th className={`${thCls} sticky top-0 z-10 bg-[#2E3093]`}><HeaderSort label="Description" col="description" sort={receiptSort} onSort={setReceiptSort} /></th>
+                    <th className={`${thCls} sticky top-0 z-10 bg-[#2E3093]`}><HeaderSort label="Category" col="category" sort={receiptSort} onSort={setReceiptSort} /></th>
+                    <th className={`${thCls} sticky top-0 z-10 bg-[#2E3093] text-center`}><HeaderSort label="Amount (₹)" col="amount" sort={receiptSort} onSort={setReceiptSort} /></th>
+                    <th className={`${thCls} sticky top-0 z-10 bg-[#2E3093] text-center`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {cash.loading ? <TableSkeleton cols={5} /> :
+                   receiptRows.length === 0 ? <EmptyRow cols={5} message={cash.rows.length === 0 ? undefined : 'No receipts'} /> :
+                   receiptRows.map((r, i) => {
+                     if (editingId === r.id) {
+                       return (
+                         <tr key={r.id} className="bg-blue-50/60">
+                           <td className="px-2 py-1.5"><input type="date" className={cellInp} value={editForm.date} onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))} /></td>
+                           <td className="px-2 py-1.5"><input className={cellInp} placeholder="Description" value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} /></td>
+                           <td className="px-2 py-1.5">
+                             <select className={cellInp} value={editForm.category} onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}>
+                               {catsFor().map(c => <option key={c}>{c}</option>)}
+                             </select>
+                           </td>
+                           <td className="px-2 py-1.5"><input type="number" min="0" className={cellInp} value={editForm.receipt} onChange={e => setEditForm(f => ({ ...f, receipt: e.target.value }))} /></td>
+                           <td className="px-2 py-1.5 text-center whitespace-nowrap">
+                             <button onClick={() => saveEdit(r)} disabled={saving} className="px-2.5 py-1 text-[10px] font-semibold rounded bg-[#2E3093] text-white hover:bg-[#252880] disabled:opacity-50 mr-1">{saving ? '…' : 'Save'}</button>
+                             <button onClick={cancelEdit} className="px-2.5 py-1 text-[10px] font-semibold rounded border border-gray-300 text-gray-600 hover:bg-gray-50">Cancel</button>
+                           </td>
+                         </tr>
+                       );
+                     }
+                     return (
+                       <tr key={r.id} className={trCls(i)}>
+                         <td className={tdCls}>{fmtDate(r.date)}</td>
+                         <td className={tdCls}>{r.description}</td>
+                         <td className={tdCls}>{r.category}</td>
+                         <td className={`${tdNum} text-emerald-700`}>{r.receipt ? fmt(r.receipt) : '—'}</td>
+                         <td className="px-3 py-2 text-center whitespace-nowrap">
+                           <button onClick={() => startEdit(r)} className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-[#2E3093]/10 text-[#2E3093] transition-colors mr-1">
+                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                           </button>
+                           <button onClick={() => cash.remove(r.id)} className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-red-100 text-red-500 transition-colors">
+                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                           </button>
+                         </td>
+                       </tr>
+                     );
+                   })}
+                  {receiptRows.length > 0 && (
+                    <TotalRow>
+                      <td colSpan={3} className="px-3 py-2 text-xs text-[#2E3093]">Total ({receiptRows.length})</td>
+                      <td className="px-3 py-2 text-xs text-center text-emerald-700">{fmt(totals.receipt)}</td>
+                      <td />
+                    </TotalRow>
+                  )}
+                </tbody>
+              </table>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -305,9 +451,7 @@ export default function CashflowTab() {
                   const net = r.receipt - r.payment;
                   return (
                     <tr key={r.entity} className={net < 0 ? 'bg-red-50/30 hover:bg-red-50/50 transition-colors' : trCls(i)}>
-                      <td className={tdCls}>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#2E3093]/10 text-[#2E3093]">{r.entity}</span>
-                      </td>
+                      <td className={tdCls}><span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#2E3093]/10 text-[#2E3093]">{r.entity}</span></td>
                       <td className={`${tdNum} text-red-600`}>{fmt(r.payment)}</td>
                       <td className={`${tdNum} text-emerald-700`}>{fmt(r.receipt)}</td>
                       <td className={`${tdNum} font-semibold ${net < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(net)}</td>
@@ -387,39 +531,27 @@ export default function CashflowTab() {
         </div>
       )}
 
-      <Modal
-        open={modal.open}
-        title={modal.editing ? 'Edit Transaction' : 'Add Transaction'}
-        saving={saving}
-        onClose={() => setModal({ open: false, editing: null })}
-        onSave={save}
-      >
+      {/* ── Add modal ────────────────────────────────── */}
+      <Modal open={addModal} title="Add Transaction" saving={addSaving} onClose={() => setAddModal(false)} onSave={saveAdd}>
         <div className="grid grid-cols-2 gap-3">
-          <div><label className={lblCls}>Date</label><input type="date" className={inpCls} value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} /></div>
-          <div><label className={lblCls}>Company</label>
-            <select className={inpCls} value={form.entity} onChange={e => setForm(f => ({ ...f, entity: e.target.value as CashflowEntity, category: catsFor(e.target.value as CashflowEntity)[0] }))}>
-              {CF_ENTITIES.map(en => <option key={en} value={en}>{en}</option>)}
-            </select>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
+          <div><label className={lblCls}>Date</label><input type="date" className={inpCls} value={addForm.date} onChange={e => setAddForm(f => ({ ...f, date: e.target.value }))} /></div>
           <div><label className={lblCls}>Type</label>
-            <select className={inpCls} value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as CashflowType }))}>
+            <select className={inpCls} value={addForm.type} onChange={e => setAddForm(f => ({ ...f, type: e.target.value as CashflowType }))}>
               {CF_TYPES.map(t => <option key={t}>{t}</option>)}
             </select>
           </div>
-          <div><label className={lblCls}>Category</label>
-            <select className={inpCls} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-              {catsFor(form.entity).map(c => <option key={c}>{c}</option>)}
-            </select>
-          </div>
         </div>
-        <div><label className={lblCls}>Description</label><input className={inpCls} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
+        <div><label className={lblCls}>Category</label>
+          <select className={inpCls} value={addForm.category} onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))}>
+            {catsFor().map(c => <option key={c}>{c}</option>)}
+          </select>
+        </div>
+        <div><label className={lblCls}>Description</label><input className={inpCls} value={addForm.description} onChange={e => setAddForm(f => ({ ...f, description: e.target.value }))} /></div>
         <div className="grid grid-cols-2 gap-3">
-          <div><label className={lblCls}>Payment (₹)</label><input type="number" min="0" className={inpCls} value={form.payment} onChange={e => setForm(f => ({ ...f, payment: e.target.value }))} /></div>
-          <div><label className={lblCls}>Receipt (₹)</label><input type="number" min="0" className={inpCls} value={form.receipt} onChange={e => setForm(f => ({ ...f, receipt: e.target.value }))} /></div>
+          <div><label className={lblCls}>Payment (₹)</label><input type="number" min="0" className={inpCls} value={addForm.payment} onChange={e => setAddForm(f => ({ ...f, payment: e.target.value }))} /></div>
+          <div><label className={lblCls}>Receipt (₹)</label><input type="number" min="0" className={inpCls} value={addForm.receipt} onChange={e => setAddForm(f => ({ ...f, receipt: e.target.value }))} /></div>
         </div>
-        <div><label className={lblCls}>Ref / Voucher No.</label><input className={inpCls} value={form.ref_no} onChange={e => setForm(f => ({ ...f, ref_no: e.target.value }))} /></div>
+        <div><label className={lblCls}>Ref / Voucher No.</label><input className={inpCls} value={addForm.ref_no} onChange={e => setAddForm(f => ({ ...f, ref_no: e.target.value }))} /></div>
       </Modal>
     </div>
   );
