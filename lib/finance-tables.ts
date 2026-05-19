@@ -10,7 +10,7 @@ import type { ResourceConfig } from './finance-resource';
 
 const STATUS_VALUES    = ['Pending', 'Paid', 'Overdue'] as const;
 const CASHFLOW_TYPES   = ['Payment', 'Receipt'] as const;
-const CASHFLOW_ENTITIES = ['SIT', 'Accent'] as const;
+const CASHFLOW_ENTITIES = ['Suvidya', 'SIT Alumni', 'Accent', 'ATS'] as const;
 
 export const FINANCE_LOANS: ResourceConfig = {
   table: 'finance_loans',
@@ -135,23 +135,71 @@ export const FINANCE_CT_PERFORMANCE: ResourceConfig = {
   table: 'finance_ct_performance',
   ddl: `
     CREATE TABLE IF NOT EXISTS finance_ct_performance (
-      id            INT AUTO_INCREMENT PRIMARY KEY,
-      month         CHAR(7) NULL,
-      training_name VARCHAR(200) NOT NULL DEFAULT '',
-      \`count\`     INT NOT NULL DEFAULT 0,
-      cost          DECIMAL(14,2) NOT NULL DEFAULT 0,
-      target        DECIMAL(14,2) NOT NULL DEFAULT 0,
-      created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      id                   INT AUTO_INCREMENT PRIMARY KEY,
+      month_year           CHAR(7) NOT NULL DEFAULT '',
+      training_name        VARCHAR(200) NOT NULL DEFAULT '',
+      company              VARCHAR(200) NOT NULL DEFAULT '',
+      cost_from_company    DECIMAL(14,2) NOT NULL DEFAULT 0,
+      trainer_cost         DECIMAL(14,2) NOT NULL DEFAULT 0,
+      travelling_expenses  DECIMAL(14,2) NOT NULL DEFAULT 0,
+      created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_month_year (month_year)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `,
-  defaultOrder: 'month DESC, id DESC',
-  validate: (b) => [
-    { col: 'month',         val: nullableMonth(b.month) ?? safeString(b.month, 20) },
-    { col: 'training_name', val: safeString(b.training_name, 200) },
-    { col: 'count',         val: Math.trunc(nonNegNum(b.count)) },
-    { col: 'cost',          val: nonNegNum(b.cost) },
-    { col: 'target',        val: nonNegNum(b.target) },
-  ],
+  migrations: `
+    ALTER TABLE finance_ct_performance
+      ADD COLUMN IF NOT EXISTS month_year          CHAR(7) NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS company             VARCHAR(200) NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS cost_from_company   DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS trainer_cost        DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS travelling_expenses DECIMAL(14,2) NOT NULL DEFAULT 0
+  `,
+  defaultOrder: 'month_year DESC, id DESC',
+  validate: (b) => {
+    const my = nullableMonth(b.month_year);
+    if (!my) throw new Error('month_year must be YYYY-MM');
+    const training = safeString(b.training_name, 200);
+    if (!training) throw new Error('training_name required');
+    return [
+      { col: 'month_year',          val: my },
+      { col: 'training_name',       val: training },
+      { col: 'company',             val: safeString(b.company, 200) },
+      { col: 'cost_from_company',   val: nonNegNum(b.cost_from_company) },
+      { col: 'trainer_cost',        val: nonNegNum(b.trainer_cost) },
+      { col: 'travelling_expenses', val: nonNegNum(b.travelling_expenses) },
+    ];
+  },
+};
+
+export const FINANCE_CT_YEARLY: ResourceConfig = {
+  table: 'finance_ct_yearly',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS finance_ct_yearly (
+      id                       INT AUTO_INCREMENT PRIMARY KEY,
+      training_name            VARCHAR(200) NOT NULL,
+      duration_of_program      VARCHAR(100) NULL,
+      frequency_conducted      INT NOT NULL DEFAULT 0,
+      target_frequency_batches INT NOT NULL DEFAULT 0,
+      min_students_per_batch   INT NOT NULL DEFAULT 0,
+      students_admitted_yearly INT NOT NULL DEFAULT 0,
+      yearly_students_target   INT NOT NULL DEFAULT 0,
+      created_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `,
+  defaultOrder: 'id DESC',
+  validate: (b) => {
+    const training = safeString(b.training_name, 200);
+    if (!training) throw new Error('training_name required');
+    return [
+      { col: 'training_name',            val: training },
+      { col: 'duration_of_program',      val: nullableString(b.duration_of_program, 100) },
+      { col: 'frequency_conducted',      val: Math.trunc(nonNegNum(b.frequency_conducted)) },
+      { col: 'target_frequency_batches', val: Math.trunc(nonNegNum(b.target_frequency_batches)) },
+      { col: 'min_students_per_batch',   val: Math.trunc(nonNegNum(b.min_students_per_batch)) },
+      { col: 'students_admitted_yearly', val: Math.trunc(nonNegNum(b.students_admitted_yearly)) },
+      { col: 'yearly_students_target',   val: Math.trunc(nonNegNum(b.yearly_students_target)) },
+    ];
+  },
 };
 
 export const FINANCE_DEPUTATION: ResourceConfig = {
@@ -237,7 +285,7 @@ export const FINANCE_CASHFLOW: ResourceConfig = {
     CREATE TABLE IF NOT EXISTS finance_cashflow (
       id          INT AUTO_INCREMENT PRIMARY KEY,
       date        DATE NULL,
-      entity      ENUM('SIT','Accent') NOT NULL DEFAULT 'SIT',
+      entity      ENUM('SIT','Suvidya','SIT Alumni','Accent','ATS') NOT NULL DEFAULT 'Suvidya',
       type        ENUM('Payment','Receipt') NOT NULL DEFAULT 'Payment',
       category    VARCHAR(100) NOT NULL DEFAULT 'Miscellaneous',
       description VARCHAR(500) NULL,
@@ -252,7 +300,7 @@ export const FINANCE_CASHFLOW: ResourceConfig = {
   `,
   migrations: `
     ALTER TABLE finance_cashflow
-      ADD COLUMN IF NOT EXISTS entity ENUM('SIT','Accent') NOT NULL DEFAULT 'SIT'
+      MODIFY COLUMN entity ENUM('SIT','Suvidya','SIT Alumni','Accent','ATS') NOT NULL DEFAULT 'Suvidya'
   `,
   defaultOrder: 'date DESC, id DESC',
   filters: [

@@ -33,8 +33,7 @@ export default function CashflowCategoryBars({ rows }: { rows: CashflowTxn[] }) 
       <p className="text-[11px] font-semibold text-[#2E3093] uppercase tracking-wider mb-2">
         Payment vs Receipt by Category
       </p>
-      <div style={{ width: '100%', height: 280 }}>
-        <ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={280}>
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis dataKey="category" fontSize={10} angle={-12} textAnchor="end" height={50} />
@@ -45,7 +44,6 @@ export default function CashflowCategoryBars({ rows }: { rows: CashflowTxn[] }) 
             <Bar dataKey="receipt" fill="#10B981" name="Receipt" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
-      </div>
     </div>
   );
 }

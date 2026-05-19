@@ -88,8 +88,7 @@ export default function RevenueByDeptChart({ year }: { year: number }) {
       {loading ? (
         <div className="h-72 flex items-center justify-center text-xs text-gray-400">Loading…</div>
       ) : (
-        <div style={{ width: '100%', height: 280 }}>
-          <ResponsiveContainer>
+        <ResponsiveContainer width="100%" height={280}>
             {mode === 'bar' ? (
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -112,7 +111,6 @@ export default function RevenueByDeptChart({ year }: { year: number }) {
               </LineChart>
             )}
           </ResponsiveContainer>
-        </div>
       )}
     </div>
   );

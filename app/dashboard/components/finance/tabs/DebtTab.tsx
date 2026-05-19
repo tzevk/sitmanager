@@ -16,6 +16,18 @@ export default function DebtTab() {
   const plans       = useFinanceResource<DebtPlan>('/api/finance/debt-plan');
   const projections = useFinanceResource<CashflowProjection>('/api/finance/cashflow-projection');
   const loans       = useFinanceResource<Loan>('/api/finance/loans');
+  const fyMeta = useMemo(() => {
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const fyStart = month >= 4 ? now.getFullYear() : now.getFullYear() - 1;
+    return {
+      fyStart,
+      fyEnd: fyStart + 1,
+      fyStartDate: `${fyStart}-04-01`,
+      fyEndDate: `${fyStart + 1}-03-31`,
+      fyLabel: `FY ${fyStart}-${String(fyStart + 1).slice(2)}`,
+    };
+  }, []);
 
   /* ── Plan modal ─────────────────────────────────── */
   const [planModal, setPlanModal] = useState<{ open: boolean; editing: DebtPlan | null }>({ open: false, editing: null });
@@ -101,10 +113,39 @@ export default function DebtTab() {
     const remaining = plans.rows
       .reduce((s, r) => s + Math.max(0, Number(r.emi_amount || 0) - Number(r.actual_paid || 0)), 0);
 
-    const paidAllTime = plans.rows.reduce((s, r) => s + Number(r.actual_paid || 0), 0);
+    const paidCurrentFy = plans.rows
+      .filter(r => {
+        const paidOn = r.actual_date ?? r.planned_date;
+        return !!paidOn && paidOn >= fyMeta.fyStartDate && paidOn <= fyMeta.fyEndDate;
+      })
+      .reduce((s, r) => s + Number(r.actual_paid || 0), 0);
 
-    return { upcoming30, remaining, paidAllTime };
-  }, [plans.rows, today, in30]);
+    return { upcoming30, remaining, paidCurrentFy };
+  }, [plans.rows, today, in30, fyMeta.fyEndDate, fyMeta.fyStartDate]);
+
+  const debtRemainingByBank = useMemo(() => {
+    return loans.rows
+      .map(r => {
+        const outstanding = Number(r.outstanding || 0);
+        const paid = Number(r.paid || 0);
+        const remaining = Math.max(0, outstanding - paid);
+        return {
+          id: r.id,
+          bank_name: r.bank_name,
+          outstanding,
+          paid,
+          remaining,
+          share: 0,
+        };
+      })
+      .filter(r => r.outstanding > 0 || r.paid > 0)
+      .sort((a, b) => b.remaining - a.remaining);
+  }, [loans.rows]);
+
+  const debtRemainingTotal = useMemo(
+    () => debtRemainingByBank.reduce((s, r) => s + r.remaining, 0),
+    [debtRemainingByBank]
+  );
 
   const sortedPlans = useMemo(() =>
     [...plans.rows].sort((a, b) => (b.planned_date ?? '').localeCompare(a.planned_date ?? '')),
@@ -148,13 +189,62 @@ export default function DebtTab() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <StatCard label="Upcoming Payment (30 days)" value={fmt(widgets.upcoming30)} accent="text-amber-700" />
         <StatCard label="Total Debt Remaining"        value={fmt(widgets.remaining)}  accent="text-red-600" />
-        <StatCard label="Total Paid (all time)"       value={fmt(widgets.paidAllTime)} accent="text-emerald-700" />
+        <StatCard label={`Total Paid (${fyMeta.fyLabel})`} value={fmt(widgets.paidCurrentFy)} accent="text-emerald-700" />
       </div>
+
+      {/* ── Financial Year Badge ─────────────────────── */}
+      {(() => {
+        return (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#2E3093]/10 border border-[#2E3093]/20 text-[11px] font-semibold text-[#2E3093]">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {fyMeta.fyLabel}
+            </span>
+            <span className="text-[10px] text-gray-400">Apr {fyMeta.fyStart} - Mar {fyMeta.fyEnd}</span>
+          </div>
+        );
+      })()}
 
       {/* ── Charts side-by-side ──────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <DebtByBankPie loans={loans.rows} />
         <DebtPlanBarChart plans={sortedPlans} />
+      </div>
+
+      {/* ── Debt Remaining by Bank ──────────────────── */}
+      <div>
+        <TableHeader title="Debt Remaining by Bank" />
+        <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-gradient-to-r from-[#2E3093] to-[#3d40a8]">
+                <th className={thCls}>Bank Name</th>
+                <th className={`${thCls} text-right`}>Outstanding (₹)</th>
+                <th className={`${thCls} text-right`}>Paid (₹)</th>
+                <th className={`${thCls} text-right`}>Debt Remaining (₹)</th>
+                <th className={`${thCls} text-right`}>Share %</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loans.loading ? <TableSkeleton cols={5} /> :
+               debtRemainingByBank.length === 0 ? <EmptyRow cols={5} message="No bank debt records found." /> :
+               debtRemainingByBank.map((r, i) => {
+                 const share = debtRemainingTotal > 0 ? (r.remaining / debtRemainingTotal) * 100 : 0;
+                 return (
+                   <tr key={r.id} className={trCls(i)}>
+                     <td className={tdCls}>{r.bank_name}</td>
+                     <td className={`${tdNum} text-[#2E3093]`}>{fmt(r.outstanding)}</td>
+                     <td className={`${tdNum} text-emerald-700`}>{fmt(r.paid)}</td>
+                     <td className={`${tdNum} font-semibold ${r.remaining > 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(r.remaining)}</td>
+                     <td className={tdNum}>{share.toFixed(1)}%</td>
+                   </tr>
+                 );
+               })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* ── Loan Payoff Predictions ───────────────────── */}

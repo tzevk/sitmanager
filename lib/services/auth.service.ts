@@ -5,7 +5,7 @@ import { getPool } from '@/lib/db';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface LoginInput {
-  email: string;
+  username: string;
   password: string;
   department?: string;
 }
@@ -61,10 +61,11 @@ function inferDepartmentFromRole(roleId: number, roleTitle: unknown): string {
  * Throws with a `status` property on auth failures so the route can map to HTTP codes.
  */
 export async function validateLogin(input: LoginInput): Promise<LoginResult> {
-  const { email, password, department } = input;
+  const { username, password, department } = input;
   const pool = getPool();
 
-  // TODO: migrate to bcrypt/argon2 — MD5 matches current DB format
+  // Backward-compat auth: some records are stored as plain text in legacy data,
+  // while others are MD5-hashed.
   const hashedPassword = crypto.createHash('md5').update(password).digest('hex');
 
   const [rows] = await pool.execute(
@@ -72,13 +73,13 @@ export async function validateLogin(input: LoginInput): Promise<LoginResult> {
             r.title AS role_title, r.dashboard_department
      FROM awt_adminuser u
      LEFT JOIN role r ON r.id = u.role
-     WHERE (u.username = ? OR u.email = ?) AND u.password = ? AND u.deleted = 0`,
-    [email, email, hashedPassword]
+     WHERE u.username = ? AND (u.password = ? OR u.password = ?) AND u.deleted = 0`,
+    [username, hashedPassword, password]
   );
 
   const users = rows as AuthUser[];
   if (users.length === 0) {
-    throw Object.assign(new Error('Invalid email or password.'), { status: 401 });
+    throw Object.assign(new Error('Invalid username or password.'), { status: 401 });
   }
 
   const user = users[0];

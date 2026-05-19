@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     await ensureOnce(getPool(), FINANCE_CASHFLOW.table, FINANCE_CASHFLOW.ddl);
     const url = new URL(req.url);
     const q        = (url.searchParams.get('q') ?? '').trim();
+    const entity   = url.searchParams.get('entity');
     const type     = url.searchParams.get('type');
     const category = url.searchParams.get('category');
     const dateFrom = nullableDate(url.searchParams.get('dateFrom'));
@@ -26,6 +27,7 @@ export async function GET(req: NextRequest) {
 
     const where: string[] = [];
     const params: unknown[] = [];
+    if (entity)   { where.push('`entity` = ?');   params.push(entity); }
     if (type)     { where.push('`type` = ?');     params.push(type); }
     if (category) { where.push('`category` = ?'); params.push(category); }
     if (dateFrom) { where.push('`date` >= ?');    params.push(dateFrom); }

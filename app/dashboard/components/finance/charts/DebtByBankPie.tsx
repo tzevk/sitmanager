@@ -31,17 +31,15 @@ export default function DebtByBankPie({ loans }: { loans: Loan[] }) {
       <p className="text-[11px] font-semibold text-[#2E3093] uppercase tracking-wider mb-2">
         Debt Remaining by Bank — Total {fmt(total)}
       </p>
-      <div style={{ width: '100%', height: 280 }}>
-        <ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={280}>
           <PieChart>
             <Pie data={data} dataKey="value" nameKey="name" innerRadius={50} outerRadius={95} paddingAngle={2}>
               {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
             </Pie>
             <Tooltip formatter={(v) => fmt(Number(v))} contentStyle={{ fontSize: 11 }} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 11 }} />
           </PieChart>
         </ResponsiveContainer>
-      </div>
     </div>
   );
 }

@@ -45,11 +45,12 @@ export interface PendingFee {
 
 export interface CtRow {
   id: number;
-  month: string;
+  month_year: string;
   training_name: string;
-  count: number;
-  cost: number;
-  target: number;
+  company: string;
+  cost_from_company: number;
+  trainer_cost: number;
+  travelling_expenses: number;
 }
 
 export interface MonthlyRow {
@@ -80,7 +81,7 @@ export interface CashflowProjection {
 }
 
 export type CashflowType   = 'Payment' | 'Receipt';
-export type CashflowEntity = 'SIT' | 'Accent';
+export type CashflowEntity = 'SIT' | 'Suvidya' | 'SIT Alumni' | 'Accent' | 'ATS';
 
 
 export interface CashflowTxn {

@@ -10,22 +10,22 @@ export async function POST(request: NextRequest) {
     if (rateLimited) return rateLimited;
 
     const body = await request.json();
-    const email = sanitizeString(body.email);
+    const username = sanitizeString(body.username);
     const password = typeof body.password === 'string' ? body.password : '';
     const department = sanitizeString(body.department);
     const rememberMe = body?.rememberMe === true;
 
-    if (!isNonEmpty(email) || !password) {
+    if (!isNonEmpty(username) || !password) {
       return NextResponse.json(
-        { success: false, message: 'Email and password are required.' },
+        { success: false, message: 'Username and password are required.' },
         { status: 400 }
       );
     }
-    if (email.length > 254 || password.length > 128 || department.length > 100) {
+    if (username.length > 100 || password.length > 128 || department.length > 100) {
       return NextResponse.json({ success: false, message: 'Invalid input.' }, { status: 400 });
     }
 
-    const { user, finalDepartment } = await validateLogin({ email, password, department: department || undefined });
+    const { user, finalDepartment } = await validateLogin({ username, password, department: department || undefined });
 
     const sessionMaxAge = rememberMe ? REMEMBER_ME_DURATION : undefined;
     const sessionToken = await createSession(

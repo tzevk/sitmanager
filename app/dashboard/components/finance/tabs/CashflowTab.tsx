@@ -9,7 +9,7 @@ import CashflowCategoryBars from '../charts/CashflowCategoryBars';
 import { detectCashflowAnomalies, categoryMoMGrowth } from '../shared/predictions';
 
 const CF_TYPES: CashflowType[]     = ['Payment', 'Receipt'];
-const CF_ENTITIES: CashflowEntity[] = ['SIT', 'Accent'];
+const CF_ENTITIES: CashflowEntity[] = ['Suvidya', 'SIT Alumni', 'Accent', 'ATS'];
 
 const SIT_CATS = [
   'OD Interest / Loan EMI',
@@ -47,7 +47,7 @@ const ALL_CATS = Array.from(new Set([...SIT_CATS, ...ACCENT_CATS]));
 
 function catsFor(entity: CashflowEntity | ''): string[] {
   if (entity === 'Accent') return ACCENT_CATS;
-  if (entity === 'SIT')    return SIT_CATS;
+  if (entity === 'SIT' || entity === 'Suvidya' || entity === 'SIT Alumni' || entity === 'ATS') return SIT_CATS;
   return ALL_CATS;
 }
 
@@ -76,11 +76,11 @@ export default function CashflowTab() {
 
   /* ── modal ──────────────────────────────────────── */
   const [modal, setModal] = useState<{ open: boolean; editing: CashflowTxn | null }>({ open: false, editing: null });
-  const [form, setForm]   = useState({ date: '', entity: 'SIT' as CashflowEntity, type: 'Payment' as CashflowType, category: SIT_CATS[0], description: '', payment: '', receipt: '', ref_no: '' });
+  const [form, setForm]   = useState({ date: '', entity: 'Suvidya' as CashflowEntity, type: 'Payment' as CashflowType, category: SIT_CATS[0], description: '', payment: '', receipt: '', ref_no: '' });
   const [saving, setSaving] = useState(false);
 
   const openAdd = useCallback(() => {
-    setForm({ date: todayISO(), entity: 'SIT', type: 'Payment', category: SIT_CATS[0], description: '', payment: '', receipt: '', ref_no: '' });
+    setForm({ date: todayISO(), entity: 'Suvidya', type: 'Payment', category: SIT_CATS[0], description: '', payment: '', receipt: '', ref_no: '' });
     setModal({ open: true, editing: null });
   }, []);
   const openEdit = useCallback((r: CashflowTxn) => {
@@ -134,25 +134,12 @@ export default function CashflowTab() {
     receipt: filteredRows.reduce((s, r) => s + Number(r.receipt || 0), 0),
   }), [filteredRows]);
 
-  const monthSummary = useMemo(() => {
-    const map = new Map<string, { month: string; sortKey: string; payment: number; receipt: number; loanRepayment: number }>();
-    for (const r of filteredRows) {
-      const dt = r.date ? new Date(r.date) : null;
-      const sortKey = dt ? `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}` : '0000-00';
-      const month   = dt ? dt.toLocaleString('en-GB', { month: 'short', year: 'numeric' }) : 'Unknown';
-      const cur = map.get(sortKey) ?? { month, sortKey, payment: 0, receipt: 0, loanRepayment: 0 };
-      cur.payment += Number(r.payment || 0);
-      cur.receipt += Number(r.receipt || 0);
-      if (r.category === 'Loan EMI') cur.loanRepayment += Number(r.payment || 0);
-      map.set(sortKey, cur);
-    }
-    return Array.from(map.values()).sort((a, b) => b.sortKey.localeCompare(a.sortKey));
-  }, [filteredRows]);
 
   /* ── CSV export ─────────────────────────────────── */
   const handleExport = useCallback(() => {
     downloadCsv(`cashflow-${todayISO()}.csv`, filteredRows.map(r => ({
       Date: r.date ?? '',
+      Company: r.entity ?? '',
       Type: r.type,
       Category: r.category,
       Description: r.description ?? '',
@@ -162,8 +149,20 @@ export default function CashflowTab() {
     })));
   }, [filteredRows]);
 
+  const companySummary = useMemo(() => {
+    const map = new Map<string, { entity: string; payment: number; receipt: number }>();
+    for (const r of filteredRows) {
+      const e = r.entity ?? 'Suvidya';
+      const cur = map.get(e) ?? { entity: e, payment: 0, receipt: 0 };
+      cur.payment += Number(r.payment || 0);
+      cur.receipt += Number(r.receipt || 0);
+      map.set(e, cur);
+    }
+    return Array.from(map.values()).sort((a, b) => a.entity.localeCompare(b.entity));
+  }, [filteredRows]);
+
   const handleClear = useCallback(() => {
-    setSearch(''); setType(''); setCat(''); setFrom(''); setTo('');
+    setSearch(''); setEntity(''); setType(''); setCat(''); setFrom(''); setTo('');
   }, []);
 
   // Anomaly detection runs on ALL rows (not filtered) to maintain statistical validity
@@ -203,9 +202,17 @@ export default function CashflowTab() {
                 className="w-full text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]" />
             </div>
             <div>
+              <label className="block text-[10px] text-gray-400 mb-0.5">Company</label>
+              <select value={entity} onChange={e => setEntity((e.target.value || '') as '' | CashflowEntity)}
+                className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-32 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
+                <option value="">All companies</option>
+                {CF_ENTITIES.map(e => <option key={e} value={e}>{e}</option>)}
+              </select>
+            </div>
+            <div>
               <label className="block text-[10px] text-gray-400 mb-0.5">Type</label>
               <select value={type} onChange={e => setType((e.target.value || '') as '' | CashflowType)}
-                className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-32 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
+                className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-28 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
                 <option value="">All types</option>
                 {CF_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
@@ -213,7 +220,7 @@ export default function CashflowTab() {
             <div>
               <label className="block text-[10px] text-gray-400 mb-0.5">Category</label>
               <select value={category} onChange={e => setCat(e.target.value)}
-                className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-40 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
+                className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-44 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
                 <option value="">All categories</option>
                 {catsFor(entity).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -233,35 +240,38 @@ export default function CashflowTab() {
 
         <div className="overflow-x-auto rounded-xl border border-gray-200">
           <table className="w-full border-collapse">
-            <thead><tr className="bg-[#2E3093]">
-              <th className={thCls}>Date</th>
-              <th className={thCls}>Type</th>
-              <th className={thCls}>Category</th>
-              <th className={thCls}>Description</th>
-              <th className={`${thCls} text-center`}>Payment (₹)</th>
-              <th className={`${thCls} text-center`}>Receipt (₹)</th>
-              <th className={thCls}>Ref / Voucher</th>
-              <th className={`${thCls} text-center`}>Actions</th>
-            </tr></thead>
+            <thead>
+              <tr className="bg-[#2E3093]">
+                <th rowSpan={2} className={thCls}>Date</th>
+                <th rowSpan={2} className={thCls}>Description</th>
+                <th rowSpan={2} className={thCls}>Category</th>
+                <th rowSpan={2} className={thCls}>Company</th>
+                <th colSpan={2} className={`${thCls} border-b border-white/20`} style={{ textAlign: 'center' }}>Payment / Receipt (₹)</th>
+                <th rowSpan={2} className={`${thCls} text-center`}>Actions</th>
+              </tr>
+              <tr className="bg-[#2E3093]">
+                <th className="px-3 py-1 text-[9px] font-semibold text-red-200 uppercase tracking-wider text-center">Payment</th>
+                <th className="px-3 py-1 text-[9px] font-semibold text-emerald-200 uppercase tracking-wider text-center">Receipt</th>
+              </tr>
+            </thead>
             <tbody className="divide-y divide-gray-100">
-              {cash.loading ? <TableSkeleton cols={8} /> :
-               filteredRows.length === 0 ? <EmptyRow cols={8} message={cash.rows.length === 0 ? undefined : 'No matches for current filter'} /> :
+              {cash.loading ? <TableSkeleton cols={7} /> :
+               filteredRows.length === 0 ? <EmptyRow cols={7} message={cash.rows.length === 0 ? undefined : 'No matches for current filter'} /> :
                filteredRows.map((r, i) => (
                 <tr key={r.id} className={anomalySet.has(r.id) ? 'bg-orange-50/70 hover:bg-orange-50 transition-colors' : trCls(i)}>
                   <td className={tdCls}>{r.date}</td>
-                  <td className={tdCls}>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${r.type === 'Receipt' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{r.type}</span>
-                  </td>
+                  <td className={tdCls}>{r.description}</td>
                   <td className={tdCls}>
                     <span>{r.category}</span>
                     {anomalySet.has(r.id) && (
                       <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-100 text-orange-700 ring-1 ring-orange-200">⚠ Spike</span>
                     )}
                   </td>
-                  <td className={tdCls}>{r.description}</td>
+                  <td className={tdCls}>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#2E3093]/10 text-[#2E3093]">{r.entity ?? 'Suvidya'}</span>
+                  </td>
                   <td className={`${tdNum} text-red-600`}>{r.payment ? fmt(r.payment) : '—'}</td>
                   <td className={`${tdNum} text-emerald-700`}>{r.receipt ? fmt(r.receipt) : '—'}</td>
-                  <td className={tdCls}>{r.ref_no || '—'}</td>
                   <RowActions onEdit={() => openEdit(r)} onDelete={() => cash.remove(r.id)} />
                 </tr>
               ))}
@@ -270,13 +280,53 @@ export default function CashflowTab() {
                   <td colSpan={4} className="px-3 py-2 text-xs text-[#2E3093]">Total ({filteredRows.length})</td>
                   <td className="px-3 py-2 text-xs text-center text-red-600">{fmt(totals.payment)}</td>
                   <td className="px-3 py-2 text-xs text-center text-emerald-700">{fmt(totals.receipt)}</td>
-                  <td colSpan={2} />
+                  <td />
                 </TotalRow>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* ── Company-wise Summary ────────────────────── */}
+      {companySummary.length > 0 && (
+        <div>
+          <SectionTitle>Company-wise Summary</SectionTitle>
+          <div className="overflow-x-auto rounded-xl border border-gray-200">
+            <table className="w-full border-collapse">
+              <thead><tr className="bg-[#2E3093]">
+                <th className={thCls}>Company</th>
+                <th className={`${thCls} text-center`}>Total Payment (₹)</th>
+                <th className={`${thCls} text-center`}>Total Receipt (₹)</th>
+                <th className={`${thCls} text-center`}>Net (₹)</th>
+              </tr></thead>
+              <tbody className="divide-y divide-gray-100">
+                {companySummary.map((r, i) => {
+                  const net = r.receipt - r.payment;
+                  return (
+                    <tr key={r.entity} className={net < 0 ? 'bg-red-50/30 hover:bg-red-50/50 transition-colors' : trCls(i)}>
+                      <td className={tdCls}>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#2E3093]/10 text-[#2E3093]">{r.entity}</span>
+                      </td>
+                      <td className={`${tdNum} text-red-600`}>{fmt(r.payment)}</td>
+                      <td className={`${tdNum} text-emerald-700`}>{fmt(r.receipt)}</td>
+                      <td className={`${tdNum} font-semibold ${net < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(net)}</td>
+                    </tr>
+                  );
+                })}
+                <TotalRow>
+                  <td className="px-3 py-2 text-xs text-[#2E3093]">Grand Total</td>
+                  <td className="px-3 py-2 text-xs text-center text-red-600">{fmt(totals.payment)}</td>
+                  <td className="px-3 py-2 text-xs text-center text-emerald-700">{fmt(totals.receipt)}</td>
+                  <td className={`px-3 py-2 text-xs text-center font-semibold ${totals.receipt - totals.payment < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                    {fmt(totals.receipt - totals.payment)}
+                  </td>
+                </TotalRow>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <CashflowCategoryBars rows={filteredRows} />
 
@@ -337,37 +387,6 @@ export default function CashflowTab() {
         </div>
       )}
 
-      <div>
-        <SectionTitle>Month-wise Summary (auto-computed)</SectionTitle>
-        <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full border-collapse">
-            <thead><tr className="bg-[#2E3093]">
-              <th className={thCls}>Month</th>
-              <th className={`${thCls} text-center`}>Payment (₹)</th>
-              <th className={`${thCls} text-center`}>Receipt (₹)</th>
-              <th className={`${thCls} text-center`}>Loan Repayment (₹)</th>
-              <th className={`${thCls} text-center`}>Profit (₹)</th>
-            </tr></thead>
-            <tbody className="divide-y divide-gray-100">
-              {monthSummary.length === 0 ? (
-                <tr><td colSpan={5} className="py-6 text-center text-xs text-gray-400 italic">Auto-computed from transactions above</td></tr>
-              ) : monthSummary.map((r, i) => {
-                const profit = r.receipt - r.payment;
-                return (
-                  <tr key={r.sortKey} className={profit < 0 ? 'bg-red-50/30 hover:bg-red-50/50 transition-colors' : trCls(i)}>
-                    <td className={tdCls}>{r.month}</td>
-                    <td className={`${tdNum} text-red-600`}>{fmt(r.payment)}</td>
-                    <td className={`${tdNum} text-emerald-700`}>{fmt(r.receipt)}</td>
-                    <td className={tdNum}>{fmt(r.loanRepayment)}</td>
-                    <td className={`${tdNum} ${profit < 0 ? 'text-red-600' : 'text-emerald-700'} font-semibold`}>{fmt(profit)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
       <Modal
         open={modal.open}
         title={modal.editing ? 'Edit Transaction' : 'Add Transaction'}
@@ -377,16 +396,23 @@ export default function CashflowTab() {
       >
         <div className="grid grid-cols-2 gap-3">
           <div><label className={lblCls}>Date</label><input type="date" className={inpCls} value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} /></div>
+          <div><label className={lblCls}>Company</label>
+            <select className={inpCls} value={form.entity} onChange={e => setForm(f => ({ ...f, entity: e.target.value as CashflowEntity, category: catsFor(e.target.value as CashflowEntity)[0] }))}>
+              {CF_ENTITIES.map(en => <option key={en} value={en}>{en}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
           <div><label className={lblCls}>Type</label>
             <select className={inpCls} value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as CashflowType }))}>
               {CF_TYPES.map(t => <option key={t}>{t}</option>)}
             </select>
           </div>
-        </div>
-        <div><label className={lblCls}>Category</label>
-          <select className={inpCls} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-            {catsFor(form.entity).map(c => <option key={c}>{c}</option>)}
-          </select>
+          <div><label className={lblCls}>Category</label>
+            <select className={inpCls} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+              {catsFor(form.entity).map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
         </div>
         <div><label className={lblCls}>Description</label><input className={inpCls} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
         <div className="grid grid-cols-2 gap-3">

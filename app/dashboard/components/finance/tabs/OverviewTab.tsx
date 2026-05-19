@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { useFinanceResource, useFinanceSingleton } from '../shared/useFinanceResource';
-import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, TotalRow, StatCard, SectionTitle, thCls, tdCls, tdNum, inpCls, lblCls, trCls, PctBar } from '../shared/primitives';
-import { fmt, pct, MONTHS_FULL } from '../shared/format';
-import type { Loan, DeptPerf, SalaryCashflow } from '../shared/types';
+import { useFinanceResource } from '../shared/useFinanceResource';
+import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, TotalRow, SectionTitle, thCls, tdCls, tdNum, inpCls, lblCls, trCls, PctBar } from '../shared/primitives';
+import { fmt, pct, MONTHS_FULL, parseMonth } from '../shared/format';
+import type { Loan, DeptPerf, DebtPlan, CtRow, MonthlyRow } from '../shared/types';
 
 export default function OverviewTab() {
   const now = new Date();
@@ -15,8 +15,10 @@ export default function OverviewTab() {
 
   const depts  = useFinanceResource<DeptPerf>('/api/finance/dept-performance', { query: `month_year=${monthYear}` });
   const loans  = useFinanceResource<Loan>('/api/finance/loans');
-  const salary = useFinanceSingleton<SalaryCashflow>('/api/finance/salary-cashflow', `month_year=${monthYear}`);
-
+  const debtPlans = useFinanceResource<DebtPlan>('/api/finance/debt-plan');
+  const ctPerf = useFinanceResource<CtRow>('/api/finance/ct-performance');
+  const deputation = useFinanceResource<MonthlyRow>('/api/finance/deputation');
+  const projects = useFinanceResource<MonthlyRow>('/api/finance/projects');
   /* ── modals ─────────────────────────────────────────────── */
   const [deptModal, setDeptModal] = useState<{ open: boolean; editing: DeptPerf | null }>({ open: false, editing: null });
   const [deptForm, setDeptForm]   = useState({ department: '', amount_achieved: '', target_amount: '' });
@@ -69,41 +71,121 @@ export default function OverviewTab() {
     setSavingL(false);
   }, [loans, loanForm, loanModal.editing]);
 
-  const [salaryModal, setSalaryModal] = useState(false);
-  const [salaryForm, setSalaryForm] = useState({ total_payable: '', salary_paid: '', salary_pending: '', next_payout: '' });
-  const [savingS, setSavingS] = useState(false);
-
-  const openSalary = useCallback(() => {
-    setSalaryForm({
-      total_payable: salary.row?.total_payable != null ? String(salary.row.total_payable) : '',
-      salary_paid:   salary.row?.salary_paid   != null ? String(salary.row.salary_paid)   : '',
-      salary_pending: salary.row?.salary_pending != null ? String(salary.row.salary_pending) : '',
-      next_payout:   salary.row?.next_payout ?? '',
-    });
-    setSalaryModal(true);
-  }, [salary.row]);
-
-  const saveSalary = useCallback(async () => {
-    setSavingS(true);
-    try {
-      await salary.save({
-        month_year: monthYear,
-        total_payable:  Number(salaryForm.total_payable),
-        salary_paid:    Number(salaryForm.salary_paid),
-        salary_pending: Number(salaryForm.salary_pending),
-        next_payout:    salaryForm.next_payout || null,
-      });
-      setSalaryModal(false);
-    } catch { /* toast */ }
-    setSavingS(false);
-  }, [salary, monthYear, salaryForm]);
-
   /* ── memoised totals ────────────────────────────────────── */
   const deptTotals = useMemo(() => {
     const a = depts.rows.reduce((s, r) => s + Number(r.amount_achieved || 0), 0);
     const t = depts.rows.reduce((s, r) => s + Number(r.target_amount || 0), 0);
     return { achieved: a, target: t };
   }, [depts.rows]);
+
+  const paidByBankFromDebtPlans = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const row of debtPlans.rows) {
+      const bank = (row.bank_name || '').trim().toLowerCase();
+      if (!bank) continue;
+      totals.set(bank, (totals.get(bank) || 0) + Number(row.actual_paid || 0));
+    }
+    return totals;
+  }, [debtPlans.rows]);
+
+  const deptBreakdown = useMemo(() => {
+    const base = {
+      cbd: { key: 'cbd', label: 'CBD', turnoverActual: 0, turnoverTarget: 0, expenseActual: 0, expenseTarget: 0 },
+      deputation: { key: 'deputation', label: 'Deputation', turnoverActual: 0, turnoverTarget: 0, expenseActual: 0, expenseTarget: 0 },
+      corporate: { key: 'corporate', label: 'Corporate Training', turnoverActual: 0, turnoverTarget: 0, expenseActual: 0, expenseTarget: 0 },
+      accentProjects: { key: 'accentProjects', label: 'Accent Projects', turnoverActual: 0, turnoverTarget: 0, expenseActual: 0, expenseTarget: 0 },
+      other: { key: 'other', label: 'Other Departments', turnoverActual: 0, turnoverTarget: 0, expenseActual: 0, expenseTarget: 0 },
+    };
+
+    for (const r of depts.rows) {
+      const dept = (r.department || '').toLowerCase();
+      const amountActual = Number(r.amount_achieved || 0);
+      const amountTarget = Number(r.target_amount || 0);
+      const expenseActual = Number(r.expense_actual || 0);
+      const expenseTarget = Number(r.expense_target || 0);
+
+      if (dept.includes('cbd') || dept.includes('inhouse')) {
+        base.cbd.turnoverActual += amountActual;
+        base.cbd.turnoverTarget += amountTarget;
+        base.cbd.expenseActual += expenseActual;
+        base.cbd.expenseTarget += expenseTarget;
+      } else if (dept.includes('deputation')) {
+        base.deputation.turnoverActual += amountActual;
+        base.deputation.turnoverTarget += amountTarget;
+        base.deputation.expenseActual += expenseActual;
+        base.deputation.expenseTarget += expenseTarget;
+      } else if (dept.includes('corporate') || dept.includes('training') || dept === 'ct') {
+        base.corporate.turnoverActual += amountActual;
+        base.corporate.turnoverTarget += amountTarget;
+        base.corporate.expenseActual += expenseActual;
+        base.corporate.expenseTarget += expenseTarget;
+      } else if (dept.includes('accent') && dept.includes('project')) {
+        base.accentProjects.turnoverActual += amountActual;
+        base.accentProjects.turnoverTarget += amountTarget;
+        base.accentProjects.expenseActual += expenseActual;
+        base.accentProjects.expenseTarget += expenseTarget;
+      } else {
+        base.other.expenseActual += expenseActual;
+        base.other.expenseTarget += expenseTarget;
+      }
+    }
+
+    const ctMonthRows = ctPerf.rows.filter(r => parseMonth(r.month_year) === monthYear);
+    const ctTurnover = ctMonthRows.reduce((s, r) => s + Number(r.cost_from_company || 0), 0);
+    const ctExpense = ctMonthRows.reduce((s, r) => s + Number(r.trainer_cost || 0) + Number(r.travelling_expenses || 0), 0);
+    if (ctTurnover > 0 || ctExpense > 0) {
+      base.corporate.turnoverActual += ctTurnover;
+      base.corporate.expenseActual += ctExpense;
+    }
+
+    const depMonthRows = deputation.rows.filter(r => parseMonth(r.month) === monthYear);
+    const depActual = depMonthRows.reduce((s, r) => s + Number(r.actual_cost || 0), 0);
+    const depTarget = depMonthRows.reduce((s, r) => s + Number(r.target_cost || 0), 0);
+    if (base.deputation.turnoverActual === 0 && depActual > 0) base.deputation.turnoverActual = depActual;
+    if (base.deputation.turnoverTarget === 0 && depTarget > 0) base.deputation.turnoverTarget = depTarget;
+
+    const projMonthRows = projects.rows.filter(r => parseMonth(r.month) === monthYear);
+    const projActual = projMonthRows.reduce((s, r) => s + Number(r.actual_cost || 0), 0);
+    const projTarget = projMonthRows.reduce((s, r) => s + Number(r.target_cost || 0), 0);
+    if (base.accentProjects.turnoverActual === 0 && projActual > 0) base.accentProjects.turnoverActual = projActual;
+    if (base.accentProjects.turnoverTarget === 0 && projTarget > 0) base.accentProjects.turnoverTarget = projTarget;
+
+    return [base.cbd, base.deputation, base.corporate, base.accentProjects, base.other].map(item => {
+      const profitActual = item.turnoverActual - item.expenseActual;
+      const profitTarget = item.turnoverTarget - item.expenseTarget;
+      const profitPctActual = item.turnoverActual > 0 ? (profitActual / item.turnoverActual) * 100 : null;
+      const profitPctTarget = item.turnoverTarget > 0 ? (profitTarget / item.turnoverTarget) * 100 : null;
+      return {
+        ...item,
+        profitActual,
+        profitTarget,
+        profitPctActual,
+        profitPctTarget,
+      };
+    });
+  }, [ctPerf.rows, depts.rows, deputation.rows, projects.rows, monthYear]);
+
+  const summaryTotals = useMemo(() => {
+    return deptBreakdown.reduce(
+      (acc, row) => {
+        acc.turnoverActual += Number(row.turnoverActual || 0);
+        acc.turnoverTarget += Number(row.turnoverTarget || 0);
+        acc.expenseActual += Number(row.expenseActual || 0);
+        acc.expenseTarget += Number(row.expenseTarget || 0);
+        acc.profitActual += Number(row.profitActual || 0);
+        acc.profitTarget += Number(row.profitTarget || 0);
+        return acc;
+      },
+      { turnoverActual: 0, turnoverTarget: 0, expenseActual: 0, expenseTarget: 0, profitActual: 0, profitTarget: 0 }
+    );
+  }, [deptBreakdown]);
+
+  const summaryProfitPctActual = summaryTotals.turnoverActual > 0
+    ? (summaryTotals.profitActual / summaryTotals.turnoverActual) * 100
+    : null;
+  const summaryProfitPctTarget = summaryTotals.turnoverTarget > 0
+    ? (summaryTotals.profitTarget / summaryTotals.turnoverTarget) * 100
+    : null;
 
   return (
     <div className="space-y-6">
@@ -172,34 +254,91 @@ export default function OverviewTab() {
             <tbody className="divide-y divide-gray-100">
               {loans.loading ? <TableSkeleton cols={5} /> :
                loans.rows.length === 0 ? <EmptyRow cols={5} /> :
-               loans.rows.map((r, i) => (
-                <tr key={r.id} className={trCls(i)}>
-                  <td className={tdCls}>{r.bank_name}</td>
-                  <td className={tdNum}>{fmt(r.outstanding)}</td>
-                  <td className={tdNum}>{fmt(r.paid)}</td>
-                  <td className={tdNum}><PctBar value={r.paid} denominator={r.outstanding} /></td>
-                  <RowActions onEdit={() => openEditLoan(r)} onDelete={() => loans.remove(r.id)} />
-                </tr>
-              ))}
+               loans.rows.map((r, i) => {
+                const paidFromDebtPlan = paidByBankFromDebtPlans.get((r.bank_name || '').trim().toLowerCase()) || 0;
+                return (
+                  <tr key={r.id} className={trCls(i)}>
+                    <td className={tdCls}>{r.bank_name}</td>
+                    <td className={tdNum}>{fmt(r.outstanding)}</td>
+                    <td className={tdNum}>{fmt(paidFromDebtPlan)}</td>
+                    <td className={tdNum}><PctBar value={paidFromDebtPlan} denominator={r.outstanding} /></td>
+                    <RowActions onEdit={() => openEditLoan(r)} onDelete={() => loans.remove(r.id)} />
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Salary Cashflow */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <SectionTitle>Salary Cashflow — {monthLabel}</SectionTitle>
-          <button onClick={openSalary} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg border border-[#2E3093] text-[#2E3093] hover:bg-[#2E3093]/5 transition-colors">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-            Edit
-          </button>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Total Salary Payable" value={fmt(salary.row?.total_payable)} />
-          <StatCard label="Salary Paid"          value={fmt(salary.row?.salary_paid)} />
-          <StatCard label="Salary Pending"       value={fmt(salary.row?.salary_pending)} accent="text-red-600" />
-          <StatCard label="Next Payout Date"     value={salary.row?.next_payout || '—'} />
+      {/* Cashflow Summary - Department-wise Breakdown */}
+      <div className="space-y-3">
+        <SectionTitle>Cashflow Summary - Department-wise Breakdown</SectionTitle>
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+          <table className="w-full border-separate border-spacing-0">
+            <thead>
+              <tr className="bg-[#2E3093]">
+                <th rowSpan={2} style={{ textAlign: 'center' }} className={`${thCls} border border-white/20 !text-center`}>Department</th>
+                <th colSpan={2} style={{ textAlign: 'center' }} className={`${thCls} border border-white/20 !text-center`}>Turnover (1 Income)</th>
+                <th colSpan={2} style={{ textAlign: 'center' }} className={`${thCls} border border-white/20 !text-center`}>Expense (2)</th>
+                <th colSpan={2} style={{ textAlign: 'center' }} className={`${thCls} border border-white/20 !text-center`}>Profit (3)</th>
+                <th colSpan={2} style={{ textAlign: 'center' }} className={`${thCls} border border-white/20 !text-center`}>Profit %</th>
+              </tr>
+              <tr className="bg-[#2E3093]">
+                <th style={{ textAlign: 'center' }} className={`${thCls} border border-white/20 !text-center`}>Actual</th>
+                <th style={{ textAlign: 'center' }} className={`${thCls} border border-white/20 !text-center`}>Target</th>
+                <th style={{ textAlign: 'center' }} className={`${thCls} border border-white/20 !text-center`}>Actual</th>
+                <th style={{ textAlign: 'center' }} className={`${thCls} border border-white/20 !text-center`}>Target</th>
+                <th style={{ textAlign: 'center' }} className={`${thCls} border border-white/20 !text-center`}>Actual</th>
+                <th style={{ textAlign: 'center' }} className={`${thCls} border border-white/20 !text-center`}>Target</th>
+                <th style={{ textAlign: 'center' }} className={`${thCls} border border-white/20 !text-center`}>Actual</th>
+                <th style={{ textAlign: 'center' }} className={`${thCls} border border-white/20 !text-center`}>Target</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ctPerf.loading || deputation.loading || projects.loading ? (
+                <tr><td colSpan={9} className="py-6 text-center text-xs text-gray-400">Loading summary...</td></tr>
+              ) : deptBreakdown.length === 0 ? (
+                <tr><td colSpan={9} className="py-6 text-center text-xs text-gray-400">No summary rows for selected month.</td></tr>
+              ) : deptBreakdown.map((row, i) => {
+                const showTurnover = row.key !== 'other';
+                return (
+                  <tr key={row.key} className={trCls(i)}>
+                    <td className={`${tdCls} font-semibold text-[#2E3093] border border-gray-200 bg-[#f8f9ff]`}>{row.label}</td>
+                    <td className={`${tdNum} border border-gray-200 ${showTurnover ? 'text-[#2E3093]' : 'text-gray-400'}`}>{showTurnover ? fmt(row.turnoverActual) : '—'}</td>
+                    <td className={`${tdNum} border border-gray-200 ${showTurnover ? 'text-gray-700' : 'text-gray-400'}`}>{showTurnover ? fmt(row.turnoverTarget) : '—'}</td>
+                    <td className={`${tdNum} border border-gray-200 text-red-600`}>{fmt(row.expenseActual)}</td>
+                    <td className={`${tdNum} border border-gray-200 text-gray-700`}>{fmt(row.expenseTarget)}</td>
+                    <td className={`${tdNum} border border-gray-200 font-semibold ${row.profitActual < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{showTurnover ? fmt(row.profitActual) : '—'}</td>
+                    <td className={`${tdNum} border border-gray-200 font-semibold ${row.profitTarget < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{showTurnover ? fmt(row.profitTarget) : '—'}</td>
+                    <td className={`${tdNum} border border-gray-200 font-semibold ${(row.profitPctActual ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                      {showTurnover && row.profitPctActual != null ? `${row.profitPctActual.toFixed(1)}%` : '—'}
+                    </td>
+                    <td className={`${tdNum} border border-gray-200 font-semibold ${(row.profitPctTarget ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                      {showTurnover && row.profitPctTarget != null ? `${row.profitPctTarget.toFixed(1)}%` : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+              {deptBreakdown.length > 0 && (
+                <TotalRow>
+                  <td className="px-3 py-2 text-xs border border-gray-200 text-[#2E3093] text-center">Total</td>
+                  <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{fmt(summaryTotals.turnoverActual)}</td>
+                  <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{fmt(summaryTotals.turnoverTarget)}</td>
+                  <td className="px-3 py-2 text-xs text-center border border-gray-200 text-red-600">{fmt(summaryTotals.expenseActual)}</td>
+                  <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{fmt(summaryTotals.expenseTarget)}</td>
+                  <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${summaryTotals.profitActual < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(summaryTotals.profitActual)}</td>
+                  <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${summaryTotals.profitTarget < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(summaryTotals.profitTarget)}</td>
+                  <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${(summaryProfitPctActual ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                    {summaryProfitPctActual != null ? `${summaryProfitPctActual.toFixed(1)}%` : '—'}
+                  </td>
+                  <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${(summaryProfitPctTarget ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                    {summaryProfitPctTarget != null ? `${summaryProfitPctTarget.toFixed(1)}%` : '—'}
+                  </td>
+                </TotalRow>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -230,12 +369,6 @@ export default function OverviewTab() {
         <div><label className={lblCls}>Paid Amount (₹)</label><input type="number" min="0" className={inpCls} value={loanForm.paid} onChange={e => setLoanForm(f => ({ ...f, paid: e.target.value }))} /></div>
       </Modal>
 
-      <Modal open={salaryModal} title="Edit Salary Cashflow" saving={savingS} onClose={() => setSalaryModal(false)} onSave={saveSalary}>
-        <div><label className={lblCls}>Total Salary Payable (₹)</label><input type="number" min="0" className={inpCls} value={salaryForm.total_payable} onChange={e => setSalaryForm(f => ({ ...f, total_payable: e.target.value }))} /></div>
-        <div><label className={lblCls}>Salary Paid (₹)</label><input type="number" min="0" className={inpCls} value={salaryForm.salary_paid} onChange={e => setSalaryForm(f => ({ ...f, salary_paid: e.target.value }))} /></div>
-        <div><label className={lblCls}>Salary Pending (₹)</label><input type="number" min="0" className={inpCls} value={salaryForm.salary_pending} onChange={e => setSalaryForm(f => ({ ...f, salary_pending: e.target.value }))} /></div>
-        <div><label className={lblCls}>Next Payout Date</label><input type="date" className={inpCls} value={salaryForm.next_payout} onChange={e => setSalaryForm(f => ({ ...f, next_payout: e.target.value }))} /></div>
-      </Modal>
     </div>
   );
 }

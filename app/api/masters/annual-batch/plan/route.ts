@@ -49,7 +49,13 @@ export async function GET(req: NextRequest) {
     }
 
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT * FROM annual_batch_plan ${where} ORDER BY Training_Program_Name ASC`,
+      `SELECT p.*,
+        COALESCE(
+          (SELECT b.INR_Basic FROM batch_mst b
+           WHERE b.Course_Id = p.Course_Id AND b.INR_Basic > 0
+           ORDER BY b.Batch_Id DESC LIMIT 1),
+        0) AS Fees
+       FROM annual_batch_plan p ${where} ORDER BY Training_Program_Name ASC`,
       params
     );
 

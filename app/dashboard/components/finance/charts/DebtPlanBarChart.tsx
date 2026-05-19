@@ -40,8 +40,7 @@ export default function DebtPlanBarChart({ plans }: { plans: DebtPlan[] }) {
         EMI Planned vs Actual Paid — by Bank
       </p>
       <p className="text-[10px] text-gray-400 mb-3">Grouped by lender across all entries</p>
-      <div style={{ width: '100%', height: 240 }}>
-        <ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={240}>
           <BarChart data={data} barGap={3} barCategoryGap="30%">
             <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
             <XAxis dataKey="bank" fontSize={10} tick={{ fill: '#6b7280' }} axisLine={false} tickLine={false} />
@@ -59,7 +58,6 @@ export default function DebtPlanBarChart({ plans }: { plans: DebtPlan[] }) {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
-      </div>
     </div>
   );
 }

@@ -82,8 +82,7 @@ export default function CashflowProjectionChart({ projections, forecast = [] }: 
           </span>
         )}
       </div>
-      <div style={{ width: '100%', height: 300 }}>
-        <ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={300}>
           <ComposedChart data={data} barGap={2} barCategoryGap="28%">
             <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
             <XAxis dataKey="month" fontSize={10} tick={{ fill: '#6b7280' }} axisLine={false} tickLine={false} />
@@ -148,7 +147,6 @@ export default function CashflowProjectionChart({ projections, forecast = [] }: 
             />
           </ComposedChart>
         </ResponsiveContainer>
-      </div>
     </div>
   );
 }

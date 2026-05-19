@@ -3,10 +3,14 @@
     "allow": [
       "Bash(npx eslint *)",
       "Bash(mkdir -p /Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar/\\\\[id\\\\])",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(mkdir -p /Users/tanvikadam/Desktop/SIT/sitmanager/app/api/finance/ct-yearly/\\\\[id\\\\])",
+      "Bash(\n# CashflowCategoryBars — height 280\nsed -i '' \\\\\n  's|<div style={{ width: .100%., height: 280 }}>||' \\\\\n  's|<ResponsiveContainer width=\"100%\" height=\"100%\">|<ResponsiveContainer width=\"100%\" height={280}>|' \\\\\n  /Users/tanvikadam/Desktop/SIT/sitmanager/app/dashboard/components/finance/charts/CashflowCategoryBars.tsx\n# This approach won't work well with multiline. Let me try a different approach.\necho \"done\")"
     ],
     "additionalDirectories": [
-      "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar"
+      "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
+      "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/finance/ct-yearly",
+      "/Users/tanvikadam/Desktop/SIT/sitmanager"
     ]
   }
 }
