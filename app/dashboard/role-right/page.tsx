@@ -337,7 +337,11 @@ function ManageAccounts() {
 
   // Modal
   const [editUser, setEditUser] = useState<any | null>(null);
+  const [activeModalTab, setActiveModalTab] = useState<'role' | 'credentials'>('role');
   const [newRoleId, setNewRoleId] = useState<number>(0);
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -364,6 +368,10 @@ function ManageAccounts() {
   const openEdit = (user: any) => {
     setEditUser(user);
     setNewRoleId(user.role_id || 0);
+    setNewUsername(user.username || '');
+    setNewPassword('');
+    setShowPassword(false);
+    setActiveModalTab('role');
     setError('');
     setSuccess('');
   };
@@ -388,6 +396,34 @@ function ManageAccounts() {
       }
     } catch {
       setError('Failed to update role');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateCredentials = async () => {
+    if (!newUsername.trim() && !newPassword) { setError('Enter a new username or password'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      const body: Record<string, string | number> = { userId: editUser.id };
+      if (newUsername.trim()) body.username = newUsername.trim();
+      if (newPassword) body.password = newPassword;
+      const res = await fetch('/api/roles/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSuccess('Credentials updated successfully');
+        fetchUsers(pagination.page, search);
+        setTimeout(() => setEditUser(null), 1200);
+      } else {
+        setError(data.error || 'Failed to update credentials');
+      }
+    } catch {
+      setError('Failed to update credentials');
     } finally {
       setSaving(false);
     }
@@ -503,13 +539,29 @@ function ManageAccounts() {
                   <FaKey className="w-5 h-5 text-[#2E3093]" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-gray-800">Update Account Role</h3>
+                  <h3 className="text-base font-bold text-gray-800">Edit Account</h3>
                   <p className="text-xs text-gray-400">{[editUser.firstname, editUser.lastname].filter(Boolean).join(' ') || editUser.username}</p>
                 </div>
               </div>
               <button onClick={() => !saving && setEditUser(null)}
                 className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
                 <FaTimes className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Tabs */}
+            <div className="flex border-b border-gray-200 px-6">
+              <button
+                onClick={() => { setActiveModalTab('role'); setError(''); setSuccess(''); }}
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeModalTab === 'role' ? 'border-[#2E3093] text-[#2E3093]' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              >
+                <FaShieldAlt className="w-3.5 h-3.5" /> Change Role
+              </button>
+              <button
+                onClick={() => { setActiveModalTab('credentials'); setError(''); setSuccess(''); }}
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeModalTab === 'credentials' ? 'border-[#2E3093] text-[#2E3093]' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              >
+                <FaKey className="w-3.5 h-3.5" /> Username & Password
               </button>
             </div>
 
@@ -523,41 +575,109 @@ function ManageAccounts() {
                 <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
               )}
 
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Current Role</label>
-                <div className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
-                  {editUser.role_name || <span className="text-gray-400 italic">None</span>}
-                </div>
-              </div>
+              {activeModalTab === 'role' ? (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Current Role</label>
+                    <div className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
+                      {editUser.role_name || <span className="text-gray-400 italic">None</span>}
+                    </div>
+                  </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Assign New Role <span className="text-red-500">*</span></label>
-                <select
-                  value={newRoleId}
-                  onChange={e => setNewRoleId(parseInt(e.target.value))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] bg-white"
-                >
-                  <option value={0}>Select a role…</option>
-                  {roles.map(r => (
-                    <option key={r.id} value={r.id}>{r.title}</option>
-                  ))}
-                </select>
-              </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Assign New Role <span className="text-red-500">*</span></label>
+                    <select
+                      value={newRoleId}
+                      onChange={e => setNewRoleId(parseInt(e.target.value))}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] bg-white"
+                    >
+                      <option value={0}>Select a role…</option>
+                      {roles.map(r => (
+                        <option key={r.id} value={r.id}>{r.title}</option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div className="flex gap-3 pt-1">
-                <button onClick={() => setEditUser(null)} disabled={saving}
-                  className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm font-medium text-gray-600 transition-colors">
-                  Cancel
-                </button>
-                <button onClick={handleUpdateRole} disabled={saving || newRoleId === 0}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#2E3093] hover:bg-[#252780] text-white text-sm font-semibold transition-colors disabled:opacity-60">
-                  {saving ? (
-                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving…</>
-                  ) : (
-                    <><FaShieldAlt className="w-4 h-4" /> Update Role</>
-                  )}
-                </button>
-              </div>
+                  <div className="flex gap-3 pt-1">
+                    <button onClick={() => setEditUser(null)} disabled={saving}
+                      className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm font-medium text-gray-600 transition-colors">
+                      Cancel
+                    </button>
+                    <button onClick={handleUpdateRole} disabled={saving || newRoleId === 0}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#2E3093] hover:bg-[#252780] text-white text-sm font-semibold transition-colors disabled:opacity-60">
+                      {saving ? (
+                        <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving…</>
+                      ) : (
+                        <><FaShieldAlt className="w-4 h-4" /> Update Role</>
+                      )}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Current Password Hash</label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 text-xs font-mono text-gray-500 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200 truncate select-all">
+                        {editUser.password || '—'}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(editUser.password || '')}
+                        className="p-2 text-gray-400 hover:text-[#2E3093] hover:bg-gray-100 rounded-lg transition-colors"
+                        title="Copy hash"
+                      >
+                        <FaCopy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">Stored as MD5 hash — cannot be reversed.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">New Username</label>
+                    <input
+                      type="text"
+                      value={newUsername}
+                      onChange={e => setNewUsername(e.target.value)}
+                      placeholder="Enter new username"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">New Password</label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        placeholder="Enter new password"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] bg-white"
+                      />
+                      <button type="button" onClick={() => setShowPassword(p => !p)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        {showPassword ? <FaEyeSlash className="w-4 h-4" /> : <FaEye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">Leave blank to keep existing password.</p>
+                  </div>
+
+                  <div className="flex gap-3 pt-1">
+                    <button onClick={() => setEditUser(null)} disabled={saving}
+                      className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm font-medium text-gray-600 transition-colors">
+                      Cancel
+                    </button>
+                    <button onClick={handleUpdateCredentials} disabled={saving || (!newUsername.trim() && !newPassword)}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#2E3093] hover:bg-[#252780] text-white text-sm font-semibold transition-colors disabled:opacity-60">
+                      {saving ? (
+                        <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving…</>
+                      ) : (
+                        <><FaKey className="w-4 h-4" /> Update Credentials</>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

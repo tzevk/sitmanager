@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
     // Get users with role info
     const [users] = await pool.execute(
       `SELECT u.id, u.firstname, u.lastname, u.email, u.username, u.mobile,
+              u.password,
               u.role as role_id, r.title as role_name, u.created_date, u.updated_date
        FROM awt_adminuser u
        LEFT JOIN role r ON u.role = r.id
@@ -70,6 +71,78 @@ export async function GET(request: NextRequest) {
       { success: false, error: 'Failed to fetch users' },
       { status: 500 }
     );
+  }
+}
+
+// PATCH: Update user's username and/or password
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await getSession(request);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const pool = getPool();
+    const body = await request.json();
+    const { userId, username, password } = body;
+
+    if (!userId) {
+      return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
+    }
+
+    const updates: string[] = [];
+    const params: any[] = [];
+
+    if (username !== undefined) {
+      const trimmed = String(username).trim();
+      if (!trimmed) {
+        return NextResponse.json({ success: false, error: 'Username cannot be empty' }, { status: 400 });
+      }
+      // Check uniqueness (exclude self)
+      const [existing] = await pool.execute(
+        `SELECT id FROM awt_adminuser WHERE username = ? AND id != ? AND deleted = 0`,
+        [trimmed, userId]
+      );
+      if ((existing as any[]).length > 0) {
+        return NextResponse.json({ success: false, error: 'Username is already taken' }, { status: 409 });
+      }
+      updates.push('username = ?');
+      params.push(trimmed);
+    }
+
+    if (password !== undefined) {
+      if (String(password).length < 3) {
+        return NextResponse.json({ success: false, error: 'Password must be at least 3 characters' }, { status: 400 });
+      }
+      const { createHash } = await import('crypto');
+      const hashed = createHash('md5').update(String(password)).digest('hex');
+      updates.push('password = ?');
+      params.push(hashed);
+    }
+
+    if (updates.length === 0) {
+      return NextResponse.json({ success: false, error: 'Nothing to update' }, { status: 400 });
+    }
+
+    updates.push('updated_date = NOW()');
+    params.push(userId);
+
+    await pool.execute(
+      `UPDATE awt_adminuser SET ${updates.join(', ')} WHERE id = ? AND deleted = 0`,
+      params
+    );
+
+    await logTableActivity(request, {
+      tableName: 'awt_adminuser',
+      action: 'UPDATE',
+      recordId: userId,
+      details: { fields: updates.filter(u => !u.startsWith('updated')) },
+    });
+
+    return NextResponse.json({ success: true, message: 'Credentials updated successfully' });
+  } catch (error) {
+    console.error('Error updating credentials:', error);
+    return NextResponse.json({ success: false, error: 'Failed to update credentials' }, { status: 500 });
   }
 }
 

@@ -140,6 +140,7 @@ export default function SignIn() {
                 <label 
                   htmlFor="username" 
                   className="block text-sm font-semibold text-gray-700 mb-0"
+                  suppressHydrationWarning
                 >
                   Username
                 </label>
