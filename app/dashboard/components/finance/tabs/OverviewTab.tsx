@@ -210,7 +210,6 @@ export default function OverviewTab() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <span className="text-xs font-semibold text-[#2E3093] uppercase tracking-wider">Cashflow Summary Filter</span>
         <label className="text-xs font-medium text-gray-600">Month:</label>
         <select
           value={monthIdx}
