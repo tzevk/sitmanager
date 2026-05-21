@@ -22,10 +22,10 @@ export function getPool(): mysql.Pool {
       user: env.DB_USER,
       password: env.DB_PASSWORD,
       waitForConnections: true,
-      // Balanced defaults: avoid connection exhaustion while supporting parallel dashboard queries.
-      connectionLimit: isServerless ? 4 : 12,
-      maxIdle: isServerless ? 2 : 6,
-      idleTimeout: isServerless ? 10000 : 60000, // 10s for serverless
+      // Keep well under the server's max_user_connections limit for sitadmin.
+      connectionLimit: isServerless ? 4 : 5,
+      maxIdle: isServerless ? 2 : 3,
+      idleTimeout: isServerless ? 10000 : 30000, // 30s for dev, 10s for serverless
       // Do not reject queued requests under load; allow waiting for free connection.
       queueLimit: 0,
       enableKeepAlive: !isServerless, // Disable keep-alive in serverless

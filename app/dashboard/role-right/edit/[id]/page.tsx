@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useState, use } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useState } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -67,13 +67,9 @@ interface Role {
   dashboard_department?: string | null;
 }
 
-interface PageProps {
-  params: Promise<{ id: string }>;
-}
-
-export default function EditRolePage({ params }: PageProps) {
-  const resolvedParams = use(params);
-  const roleId = parseInt(resolvedParams.id, 10);
+export default function EditRolePage() {
+  const params = useParams<{ id: string }>();
+  const roleId = parseInt(params?.id ?? '0', 10);
   const router = useRouter();
   const { canUpdate, loading: permLoading } = useResourcePermissions('role');
 
@@ -307,6 +303,7 @@ export default function EditRolePage({ params }: PageProps) {
           </div>
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => router.back()}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm font-medium"
             >
@@ -314,6 +311,7 @@ export default function EditRolePage({ params }: PageProps) {
             </button>
             {!role.isSystemRole && (
               <button
+                type="button"
                 onClick={handleSave}
                 disabled={saving || !title.trim()}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#2E3093] hover:bg-[#252780] text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
@@ -410,12 +408,14 @@ export default function EditRolePage({ params }: PageProps) {
                 <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Quick Actions</h4>
                 <div className="flex flex-wrap gap-1.5">
                   <button
+                    type="button"
                     onClick={selectAll}
                     className="px-2.5 py-1 text-xs bg-[#2E3093]/10 text-[#2E3093] rounded-lg hover:bg-[#2E3093]/20"
                   >
                     Select All
                   </button>
                   <button
+                    type="button"
                     onClick={deselectAll}
                     className="px-2.5 py-1 text-xs bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
                   >
@@ -425,24 +425,28 @@ export default function EditRolePage({ params }: PageProps) {
                 <h4 className="text-xs font-medium text-gray-500 uppercase mt-3 mb-2">Add by Type</h4>
                 <div className="flex flex-wrap gap-1.5">
                   <button
+                    type="button"
                     onClick={() => selectByAction('view')}
                     className="px-2.5 py-1 text-xs bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"
                   >
                     + All View
                   </button>
                   <button
+                    type="button"
                     onClick={() => selectByAction('create')}
                     className="px-2.5 py-1 text-xs bg-green-50 text-green-600 rounded-lg hover:bg-green-100"
                   >
                     + All Create
                   </button>
                   <button
+                    type="button"
                     onClick={() => selectByAction('update')}
                     className="px-2.5 py-1 text-xs bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100"
                   >
                     + All Update
                   </button>
                   <button
+                    type="button"
                     onClick={() => selectByAction('delete')}
                     className="px-2.5 py-1 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
                   >
@@ -545,6 +549,7 @@ export default function EditRolePage({ params }: PageProps) {
                         >
                           {/* Group Checkbox */}
                           <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               if (!role.isSystemRole) toggleGroupAll(group);
