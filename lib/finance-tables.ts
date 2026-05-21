@@ -329,7 +329,7 @@ export const FINANCE_CASHFLOW: ResourceConfig = {
       ADD COLUMN IF NOT EXISTS company    VARCHAR(100) NULL,
       ADD COLUMN IF NOT EXISTS department VARCHAR(100) NULL
   `,
-  defaultOrder: 'date DESC, id DESC',
+  defaultOrder: 'date ASC, id ASC',
   filters: [
     { param: 'type',       column: 'type' },
     { param: 'category',   column: 'category' },

@@ -427,7 +427,14 @@ export default function DebtTab() {
         onClose={() => setPlanModal({ open: false, editing: null })}
         onSave={savePlan}
       >
-        <div><label className={lblCls}>Bank Name</label><input className={inpCls} placeholder="e.g. SBI, HDFC Bank…" value={planForm.bank_name} onChange={e => setPlanForm(f => ({ ...f, bank_name: e.target.value }))} /></div>
+        <div><label className={lblCls}>Bank Name</label>
+          <select className={inpCls} value={planForm.bank_name} onChange={e => setPlanForm(f => ({ ...f, bank_name: e.target.value }))}>
+            <option value="">— Select bank —</option>
+            {loans.rows.map(l => (
+              <option key={l.id} value={l.bank_name}>{l.bank_name}</option>
+            ))}
+          </select>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <div><label className={lblCls}>EMI Amount (₹)</label><input type="number" min="0" className={inpCls} value={planForm.emi_amount} onChange={e => setPlanForm(f => ({ ...f, emi_amount: e.target.value }))} /></div>
           <div><label className={lblCls}>Planned Date</label><input type="date" className={inpCls} value={planForm.planned_date} onChange={e => setPlanForm(f => ({ ...f, planned_date: e.target.value }))} /></div>

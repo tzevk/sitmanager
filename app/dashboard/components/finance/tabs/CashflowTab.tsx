@@ -127,7 +127,7 @@ export default function CashflowTab() {
   const [department, setDepartment] = useState('');
   const [company, setCompany]         = useState('');
   const [month, setMonth]   = useState('');
-  const [year, setYear]     = useState('');
+  const [year, setYear]     = useState(String(currentYear));
   const [dateFrom, setFrom] = useState('');
   const [dateTo, setTo]     = useState('');
   const [paySort, setPaySort] = useState<SortState>({ col: null, dir: 'asc' });
