@@ -18,22 +18,26 @@ export async function GET(req: NextRequest) {
   try {
     await ensureOnce(getPool(), FINANCE_CASHFLOW.table, FINANCE_CASHFLOW.ddl);
     const url = new URL(req.url);
-    const q        = (url.searchParams.get('q') ?? '').trim();
-    const type     = url.searchParams.get('type');
-    const category = url.searchParams.get('category');
-    const dateFrom = nullableDate(url.searchParams.get('dateFrom'));
-    const dateTo   = nullableDate(url.searchParams.get('dateTo'));
+    const q          = (url.searchParams.get('q') ?? '').trim();
+    const type       = url.searchParams.get('type');
+    const category   = url.searchParams.get('category');
+    const department = url.searchParams.get('department');
+    const company    = url.searchParams.get('company');
+    const dateFrom   = nullableDate(url.searchParams.get('dateFrom'));
+    const dateTo     = nullableDate(url.searchParams.get('dateTo'));
 
     const where: string[] = [];
     const params: unknown[] = [];
-    if (type)     { where.push('`type` = ?');     params.push(type); }
-    if (category) { where.push('`category` = ?'); params.push(category); }
-    if (dateFrom) { where.push('`date` >= ?');    params.push(dateFrom); }
-    if (dateTo)   { where.push('`date` <= ?');    params.push(dateTo); }
+    if (type)       { where.push('`type` = ?');         params.push(type); }
+    if (category)   { where.push('`category` = ?');     params.push(category); }
+    if (department) { where.push('`department` = ?');   params.push(department); }
+    if (company)    { where.push('`company` = ?');      params.push(company); }
+    if (dateFrom)   { where.push('`date` >= ?');        params.push(dateFrom); }
+    if (dateTo)     { where.push('`date` <= ?');        params.push(dateTo); }
     if (q) {
-      where.push('(`description` LIKE ? OR `ref_no` LIKE ? OR `category` LIKE ?)');
+      where.push('(`description` LIKE ? OR `ref_no` LIKE ? OR `category` LIKE ? OR `company` LIKE ? OR `department` LIKE ?)');
       const like = `%${q}%`;
-      params.push(like, like, like);
+      params.push(like, like, like, like, like);
     }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const [rows] = await getPool().query<any[]>(

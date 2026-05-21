@@ -202,6 +202,25 @@ export const FINANCE_CT_YEARLY: ResourceConfig = {
   },
 };
 
+export const FINANCE_CT_MONTHLY: ResourceConfig = {
+  table: 'finance_ct_monthly',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS finance_ct_monthly (
+      id          INT AUTO_INCREMENT PRIMARY KEY,
+      month       CHAR(7) NULL,
+      actual_cost DECIMAL(14,2) NOT NULL DEFAULT 0,
+      target_cost DECIMAL(14,2) NOT NULL DEFAULT 0,
+      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `,
+  defaultOrder: 'month ASC, id ASC',
+  validate: (b) => [
+    { col: 'month',       val: nullableMonth(b.month) ?? safeString(b.month, 20) },
+    { col: 'actual_cost', val: nonNegNum(b.actual_cost) },
+    { col: 'target_cost', val: nonNegNum(b.target_cost) },
+  ],
+};
+
 export const FINANCE_DEPUTATION: ResourceConfig = {
   table: 'finance_deputation',
   ddl: `

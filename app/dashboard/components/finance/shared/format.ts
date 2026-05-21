@@ -52,6 +52,20 @@ export function todayISO(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
+/**
+ * Format an ISO date string (YYYY-MM-DD) as DD-Mon-YY (e.g. 21-May-26).
+ * Returns '—' for null/undefined/empty.
+ */
+export function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '\u2014';
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return String(iso);
+  const day = m[3].replace(/^0/, '');
+  const mon = MONTH_NAMES_SHORT[Number(m[2]) - 1] ?? m[2];
+  const yr  = m[1].slice(2);
+  return `${day.padStart(2, '0')}-${mon}-${yr}`;
+}
+
 /** Add `n` days to today and return ISO YYYY-MM-DD. */
 export function isoOffsetDays(n: number): string {
   const d = new Date();

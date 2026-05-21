@@ -4,22 +4,42 @@ import { useCallback, useMemo, useState } from 'react';
 import { useFinanceResource } from '../shared/useFinanceResource';
 import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, TotalRow, SectionTitle, thCls, tdCls, tdNum, inpCls, lblCls, trCls, PctBar } from '../shared/primitives';
 import { fmt, pct, MONTHS_FULL, parseMonth } from '../shared/format';
-import type { Loan, DeptPerf, DebtPlan, CtRow, MonthlyRow } from '../shared/types';
+import type { Loan, DeptPerf, DebtPlan, CtRow, MonthlyRow, CashflowTxn } from '../shared/types';
 
 export default function OverviewTab() {
   const now = new Date();
   const [monthIdx, setMonthIdx] = useState(now.getMonth());
-  const year = now.getFullYear();
+  const [year, setYear] = useState(now.getFullYear());
+  const yearOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
   const monthYear = `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
-  const monthLabel = MONTHS_FULL[monthIdx];
-  
+
+  // Separate filter for Department Performance table
+  const [deptPerfMonthIdx, setDeptPerfMonthIdx] = useState(now.getMonth());
+  const [deptPerfYear, setDeptPerfYear] = useState(now.getFullYear());
+  const deptPerfMonthYear = `${deptPerfYear}-${String(deptPerfMonthIdx + 1).padStart(2, '0')}`;
+  const deptPerfLabel = `${MONTHS_FULL[deptPerfMonthIdx]} ${deptPerfYear}`;
+  const deptPerfYearOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
 
   const depts  = useFinanceResource<DeptPerf>('/api/finance/dept-performance', { query: `month_year=${monthYear}` });
+  const deptsPerf = useFinanceResource<DeptPerf>('/api/finance/dept-performance', { query: `month_year=${deptPerfMonthYear}` });
   const loans  = useFinanceResource<Loan>('/api/finance/loans');
   const debtPlans = useFinanceResource<DebtPlan>('/api/finance/debt-plan');
   const ctPerf = useFinanceResource<CtRow>('/api/finance/ct-performance');
   const deputation = useFinanceResource<MonthlyRow>('/api/finance/deputation');
   const projects = useFinanceResource<MonthlyRow>('/api/finance/projects');
+  const cashflow = useFinanceResource<CashflowTxn>('/api/finance/cashflow');
+
+  /** Cashflow payments per department per month (YYYY-MM). */
+  const cashflowActualByDeptMonth = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const txn of cashflow.rows) {
+      if (txn.type !== 'Payment') continue;
+      if (!txn.date || !txn.department) continue;
+      const key = `${(txn.department).toUpperCase()}::${txn.date.substring(0, 7)}`;
+      map.set(key, (map.get(key) || 0) + Number(txn.payment || 0));
+    }
+    return map;
+  }, [cashflow.rows]);
   const [deptModal, setDeptModal] = useState<{ open: boolean; editing: DeptPerf | null }>({ open: false, editing: null });
   const [deptForm, setDeptForm]   = useState({ department: '', amount_achieved: '', target_amount: '' });
   const [savingD, setSavingD]     = useState(false);
@@ -35,8 +55,8 @@ export default function OverviewTab() {
   const saveDept = useCallback(async () => {
     setSavingD(true);
     try {
-      await depts.save({
-        month_year: monthYear,
+      await deptsPerf.save({
+        month_year: deptPerfMonthYear,
         department: deptForm.department.trim(),
         amount_achieved: Number(deptForm.amount_achieved),
         target_amount: Number(deptForm.target_amount),
@@ -44,7 +64,7 @@ export default function OverviewTab() {
       setDeptModal({ open: false, editing: null });
     } catch { /* toast already shown */ }
     setSavingD(false);
-  }, [depts, monthYear, deptForm, deptModal.editing]);
+  }, [deptsPerf, deptPerfMonthYear, deptForm, deptModal.editing]);
 
   const [loanModal, setLoanModal] = useState<{ open: boolean; editing: Loan | null }>({ open: false, editing: null });
   const [loanForm, setLoanForm]   = useState({ bank_name: '', outstanding: '', paid: '' });
@@ -73,10 +93,10 @@ export default function OverviewTab() {
 
   /* ── memoised totals ────────────────────────────────────── */
   const deptTotals = useMemo(() => {
-    const a = depts.rows.reduce((s, r) => s + Number(r.amount_achieved || 0), 0);
-    const t = depts.rows.reduce((s, r) => s + Number(r.target_amount || 0), 0);
+    const a = deptsPerf.rows.reduce((s, r) => s + Number(r.amount_achieved || 0), 0);
+    const t = deptsPerf.rows.reduce((s, r) => s + Number(r.target_amount || 0), 0);
     return { achieved: a, target: t };
-  }, [depts.rows]);
+  }, [deptsPerf.rows]);
 
   const paidByBankFromDebtPlans = useMemo(() => {
     const totals = new Map<string, number>();
@@ -139,13 +159,13 @@ export default function OverviewTab() {
     }
 
     const depMonthRows = deputation.rows.filter(r => parseMonth(r.month) === monthYear);
-    const depActual = depMonthRows.reduce((s, r) => s + Number(r.actual_cost || 0), 0);
+    const depActual = cashflowActualByDeptMonth.get(`DEPUTATION ACCENT::${monthYear}`) || depMonthRows.reduce((s, r) => s + Number(r.actual_cost || 0), 0);
     const depTarget = depMonthRows.reduce((s, r) => s + Number(r.target_cost || 0), 0);
     if (base.deputation.turnoverActual === 0 && depActual > 0) base.deputation.turnoverActual = depActual;
     if (base.deputation.turnoverTarget === 0 && depTarget > 0) base.deputation.turnoverTarget = depTarget;
 
     const projMonthRows = projects.rows.filter(r => parseMonth(r.month) === monthYear);
-    const projActual = projMonthRows.reduce((s, r) => s + Number(r.actual_cost || 0), 0);
+    const projActual = cashflowActualByDeptMonth.get(`PROJECT ACCENT::${monthYear}`) || projMonthRows.reduce((s, r) => s + Number(r.actual_cost || 0), 0);
     const projTarget = projMonthRows.reduce((s, r) => s + Number(r.target_cost || 0), 0);
     if (base.accentProjects.turnoverActual === 0 && projActual > 0) base.accentProjects.turnoverActual = projActual;
     if (base.accentProjects.turnoverTarget === 0 && projTarget > 0) base.accentProjects.turnoverTarget = projTarget;
@@ -163,7 +183,7 @@ export default function OverviewTab() {
         profitPctTarget,
       };
     });
-  }, [ctPerf.rows, depts.rows, deputation.rows, projects.rows, monthYear]);
+  }, [ctPerf.rows, depts.rows, deputation.rows, projects.rows, monthYear, cashflowActualByDeptMonth]);
 
   const summaryTotals = useMemo(() => {
     return deptBreakdown.reduce(
@@ -190,6 +210,7 @@ export default function OverviewTab() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
+        <span className="text-xs font-semibold text-[#2E3093] uppercase tracking-wider">Cashflow Summary Filter</span>
         <label className="text-xs font-medium text-gray-600">Month:</label>
         <select
           value={monthIdx}
@@ -198,7 +219,14 @@ export default function OverviewTab() {
         >
           {MONTHS_FULL.map((m, i) => <option key={i} value={i}>{m}</option>)}
         </select>
-        <span className="text-xs text-gray-400">FY {year}–{String(year + 1).slice(-2)}</span>
+        <label className="text-xs font-medium text-gray-600">Year:</label>
+        <select
+          value={year}
+          onChange={e => setYear(Number(e.target.value))}
+          className="text-xs rounded-lg border border-gray-200 bg-white px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+        >
+          {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
       </div>
 
       {/* Cashflow Summary - Department-wise Breakdown */}
@@ -274,7 +302,27 @@ export default function OverviewTab() {
 
       {/* Dept Performance */}
       <div>
-        <TableHeader title={`Department Performance — ${monthLabel}`} onAdd={openAddDept} />
+        <div className="flex items-center justify-between mb-2">
+          <TableHeader title={`Department Performance — ${deptPerfLabel}`} onAdd={openAddDept} />
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-gray-500">Month:</label>
+            <select
+              value={deptPerfMonthIdx}
+              onChange={e => setDeptPerfMonthIdx(Number(e.target.value))}
+              className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+            >
+              {MONTHS_FULL.map((m, i) => <option key={i} value={i}>{m}</option>)}
+            </select>
+            <label className="text-xs font-medium text-gray-500">Year:</label>
+            <select
+              value={deptPerfYear}
+              onChange={e => setDeptPerfYear(Number(e.target.value))}
+              className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+            >
+              {deptPerfYearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        </div>
         <div className="overflow-x-auto rounded-xl border border-gray-200">
           <table className="w-full border-separate border-spacing-0">
             <thead><tr className="bg-[#2E3093]">
@@ -285,18 +333,18 @@ export default function OverviewTab() {
               <th className={`${thCls} text-center`}>Actions</th>
             </tr></thead>
             <tbody>
-              {depts.loading ? <TableSkeleton cols={5} /> :
-               depts.rows.length === 0 ? <EmptyRow cols={5} /> :
-               depts.rows.map((r, i) => (
+              {deptsPerf.loading ? <TableSkeleton cols={5} /> :
+               deptsPerf.rows.length === 0 ? <EmptyRow cols={5} /> :
+               deptsPerf.rows.map((r, i) => (
                 <tr key={r.id} className={trCls(i)}>
                   <td className={tdCls}>{r.department}</td>
                   <td className={tdNum}>{fmt(r.amount_achieved)}</td>
                   <td className={tdNum}>{fmt(r.target_amount)}</td>
                   <td className={tdNum}><PctBar value={r.amount_achieved} denominator={r.target_amount} /></td>
-                  <RowActions onEdit={() => openEditDept(r)} onDelete={() => depts.remove(r.id)} />
+                  <RowActions onEdit={() => openEditDept(r)} onDelete={() => deptsPerf.remove(r.id)} />
                 </tr>
               ))}
-              {depts.rows.length > 1 && (
+              {deptsPerf.rows.length > 1 && (
                 <TotalRow>
                   <td className="px-3 py-2 text-xs text-[#2E3093]">Total</td>
                   <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{fmt(deptTotals.achieved)}</td>

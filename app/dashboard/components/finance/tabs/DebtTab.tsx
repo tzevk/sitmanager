@@ -3,12 +3,12 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useFinanceResource } from '../shared/useFinanceResource';
 import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, StatCard, thCls, tdCls, tdNum, inpCls, lblCls, trCls } from '../shared/primitives';
-import { fmt, monthLabel, parseMonth, todayISO, isoOffsetDays } from '../shared/format';
+import { fmt, monthLabel, parseMonth, todayISO, isoOffsetDays, fmtDate } from '../shared/format';
 import type { DebtPlan, CashflowProjection, Loan, DebtPlanStatus } from '../shared/types';
 import DebtByBankPie from '../charts/DebtByBankPie';
 import DebtPlanBarChart from '../charts/DebtPlanBarChart';
 import CashflowProjectionChart from '../charts/CashflowProjectionChart';
-import { loanPayoffEstimates, forecastCashflow, confidenceLabel, confidenceColor } from '../shared/predictions';
+import { loanPayoffEstimates, forecastCashflow } from '../shared/predictions';
 
 const STATUS_OPTIONS: DebtPlanStatus[] = ['Pending', 'Paid', 'Overdue'];
 
@@ -328,9 +328,9 @@ export default function DebtTab() {
                        <span className="font-medium text-gray-800">{r.bank_name}</span>
                      </td>
                      <td className="px-3 py-2.5 text-xs text-right font-medium text-gray-700">{fmt(r.emi_amount)}</td>
-                     <td className={`${tdNum} text-gray-500`}>{r.planned_date || '—'}</td>
+                     <td className={`${tdNum} text-gray-500`}>{fmtDate(r.planned_date)}</td>
                      <td className="px-3 py-2.5 text-xs text-right font-medium text-gray-700">{fmt(r.actual_paid)}</td>
-                     <td className={`${tdNum} text-gray-500`}>{r.actual_date || '—'}</td>
+                     <td className={`${tdNum} text-gray-500`}>{fmtDate(r.actual_date)}</td>
                      <td className={`px-3 py-2.5 text-xs text-right font-semibold ${
                        variance == null ? 'text-gray-400'
                        : variance < 0 ? 'text-red-600'

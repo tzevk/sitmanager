@@ -2,8 +2,8 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useFinanceResource } from '../shared/useFinanceResource';
-import { Modal, TableHeader, TableSkeleton, EmptyRow, TotalRow, SectionTitle, thCls, tdCls, tdNum, inpCls, lblCls, trCls, downloadCsv } from '../shared/primitives';
-import { fmt, todayISO } from '../shared/format';
+import { Modal, TableHeader, TableSkeleton, EmptyRow, TotalRow, inpCls, lblCls, trCls, downloadCsv } from '../shared/primitives';
+import { fmt, todayISO, fmtDate } from '../shared/format';
 import type { CashflowTxn, CashflowType } from '../shared/types';
 import CashflowCategoryBars from '../charts/CashflowCategoryBars';
 import { detectCashflowAnomalies, categoryMoMGrowth } from '../shared/predictions';
@@ -29,6 +29,9 @@ function catsFor(): string[] {
 }
 
 const cellInp = 'w-full text-xs border border-[#2E3093]/30 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/40 bg-white';
+const thT = 'px-2 py-2 text-left text-[10px] font-semibold text-white uppercase tracking-wide whitespace-nowrap border border-white/20';
+const tdT = 'px-2 py-1.5 text-xs text-gray-700 border border-gray-200 bg-white overflow-hidden whitespace-nowrap max-w-0';
+const tdNT = 'px-2 py-1.5 text-xs text-center text-gray-700 border border-gray-200 bg-white';
 
 type EditForm = {
   date: string; type: CashflowType;
@@ -41,12 +44,6 @@ type SortState = { col: SortColumn | null; dir: SortDir };
 
 function emptyForm(): EditForm {
   return { date: todayISO(), type: 'Payment', category: SIT_CATS[0], department: '', company: '', description: '', payment: '', receipt: '' };
-}
-
-function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const [y, m, d] = iso.split('-');
-  return `${d}-${m}-${y}`;
 }
 
 function sortCashRows(rows: CashflowTxn[], sort: SortState, amountField: 'payment' | 'receipt'): CashflowTxn[] {
@@ -75,17 +72,17 @@ function HeaderSort({
 }) {
   const isActive = sort.col === col;
   return (
-    <div className="flex items-center justify-center gap-2">
+    <div className="flex flex-col items-center gap-0.5">
       <span className={labelClassName}>{label}</span>
-      <div className="inline-flex items-center rounded-md border border-white/25 bg-white/10 p-0.5 shadow-sm">
+      <div className="inline-flex items-center rounded border border-white/25 bg-white/10 p-px shadow-sm">
         <button
           type="button"
           aria-label={`Sort ${label} ascending`}
           title={`Sort ${label} ascending`}
           onClick={() => onSort({ col, dir: 'asc' })}
-          className={`inline-flex h-5 w-5 items-center justify-center rounded transition-colors focus:outline-none focus:ring-1 focus:ring-white/70 ${isActive && sort.dir === 'asc' ? 'bg-white text-[#2E3093]' : 'text-white/80 hover:bg-white/15 hover:text-white'}`}
+          className={`inline-flex h-4 w-4 items-center justify-center rounded transition-colors focus:outline-none focus:ring-1 focus:ring-white/70 ${isActive && sort.dir === 'asc' ? 'bg-white text-[#2E3093]' : 'text-white/80 hover:bg-white/15 hover:text-white'}`}
         >
-          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="h-3 w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 5v10" />
             <path d="M6.8 11.8L10 15l3.2-3.2" />
           </svg>
@@ -95,9 +92,9 @@ function HeaderSort({
           aria-label={`Sort ${label} descending`}
           title={`Sort ${label} descending`}
           onClick={() => onSort({ col, dir: 'desc' })}
-          className={`inline-flex h-5 w-5 items-center justify-center rounded transition-colors focus:outline-none focus:ring-1 focus:ring-white/70 ${isActive && sort.dir === 'desc' ? 'bg-white text-[#2E3093]' : 'text-white/80 hover:bg-white/15 hover:text-white'}`}
+          className={`inline-flex h-4 w-4 items-center justify-center rounded transition-colors focus:outline-none focus:ring-1 focus:ring-white/70 ${isActive && sort.dir === 'desc' ? 'bg-white text-[#2E3093]' : 'text-white/80 hover:bg-white/15 hover:text-white'}`}
         >
-          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="h-3 w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 15V5" />
             <path d="M6.8 8.2L10 5l3.2 3.2" />
           </svg>
@@ -107,9 +104,9 @@ function HeaderSort({
           aria-label={`Reset ${label} sorting`}
           title={`Reset ${label} sorting`}
           onClick={() => onSort({ col: null, dir: 'asc' })}
-          className={`inline-flex h-5 w-5 items-center justify-center rounded transition-colors focus:outline-none focus:ring-1 focus:ring-white/70 ${!isActive ? 'bg-white text-[#2E3093]' : 'text-white/80 hover:bg-white/15 hover:text-white'}`}
+          className={`inline-flex h-4 w-4 items-center justify-center rounded transition-colors focus:outline-none focus:ring-1 focus:ring-white/70 ${!isActive ? 'bg-white text-[#2E3093]' : 'text-white/80 hover:bg-white/15 hover:text-white'}`}
         >
-          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="h-3 w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M16 10a6 6 0 1 1-2-4.47" />
             <path d="M16 4v4h-4" />
           </svg>
@@ -120,12 +117,17 @@ function HeaderSort({
 }
 
 export default function CashflowTab() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+
   const [search, setSearch] = useState('');
   const [type, setType]     = useState<'' | CashflowType>('');
   const [category, setCat]  = useState('');
   const [department, setDepartment] = useState('');
   const [company, setCompany]         = useState('');
   const [month, setMonth]   = useState('');
+  const [year, setYear]     = useState('');
   const [dateFrom, setFrom] = useState('');
   const [dateTo, setTo]     = useState('');
   const [paySort, setPaySort] = useState<SortState>({ col: null, dir: 'asc' });
@@ -133,13 +135,18 @@ export default function CashflowTab() {
 
   const query = useMemo(() => {
     const p = new URLSearchParams();
-    if (search)   p.set('q', search);
-    if (type)     p.set('type', type);
-    if (category) p.set('category', category);
-    if (dateFrom) p.set('dateFrom', dateFrom);
-    if (dateTo)   p.set('dateTo', dateTo);
+    if (search)     p.set('q', search);
+    if (type)       p.set('type', type);
+    if (category)   p.set('category', category);
+    if (department) p.set('department', department);
+    if (company)    p.set('company', company);
+    // year expands into a date range so the server can apply it
+    const effectiveDateFrom = year && !dateFrom ? `${year}-01-01` : dateFrom;
+    const effectiveDateTo   = year && !dateTo   ? `${year}-12-31` : dateTo;
+    if (effectiveDateFrom) p.set('dateFrom', effectiveDateFrom);
+    if (effectiveDateTo)   p.set('dateTo',   effectiveDateTo);
     return p.toString();
-  }, [search, type, category, dateFrom, dateTo]);
+  }, [search, type, category, department, company, year, dateFrom, dateTo]);
 
   const cash = useFinanceResource<CashflowTxn>('/api/finance/cashflow', { query: query || undefined });
 
@@ -204,12 +211,13 @@ export default function CashflowTab() {
       if (category   && r.category !== category)         return false;
       if (department && (r.department ?? '') !== department) return false;
       if (company    && (r.company ?? '')    !== company)    return false;
+      if (year       && !(r.date ?? '').startsWith(year))   return false;
       if (month      && !(r.date ?? '').startsWith(month)) return false;
       if (dateFrom   && (r.date ?? '') < dateFrom)       return false;
       if (dateTo     && (r.date ?? '') > dateTo)         return false;
       return true;
     });
-  }, [cash.rows, search, type, category, department, month, dateFrom, dateTo]);
+  }, [cash.rows, search, type, category, company, department, year, month, dateFrom, dateTo]);
 
   const payRows = useMemo(() => {
     const base = filteredRows.filter(r => r.type === 'Payment');
@@ -236,7 +244,7 @@ export default function CashflowTab() {
   }, [filteredRows]);
 
   const handleClear = useCallback(() => {
-    setSearch(''); setType(''); setCat(''); setDepartment(''); setCompany(''); setMonth(''); setFrom(''); setTo('');
+    setSearch(''); setType(''); setCat(''); setDepartment(''); setCompany(''); setYear(''); setMonth(''); setFrom(''); setTo('');
   }, []);
 
   const anomalies = useMemo(() => detectCashflowAnomalies(cash.rows), [cash.rows]);
@@ -254,6 +262,11 @@ export default function CashflowTab() {
 
   return (
     <div className="space-y-6">
+      {/* Payment vs Receipt by Department */}
+      <div>
+        <CashflowCategoryBars rows={filteredRows} view="dept" />
+      </div>
+
       <div>
         <TableHeader title="Payments & Receipts" onAdd={openAdd} />
 
@@ -306,6 +319,14 @@ export default function CashflowTab() {
               </select>
             </div>
             <div>
+              <label className="block text-[10px] text-gray-400 mb-0.5">Year</label>
+              <select value={year} onChange={e => setYear(e.target.value)}
+                className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-24 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
+                <option value="">All years</option>
+                {yearOptions.map(y => <option key={y} value={String(y)}>{y}</option>)}
+              </select>
+            </div>
+            <div>
               <label className="block text-[10px] text-gray-400 mb-0.5">Date From</label>
               <input type="date" value={dateFrom} onChange={e => setFrom(e.target.value)}
                 className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-36 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]" />
@@ -318,22 +339,26 @@ export default function CashflowTab() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
           {/* ── Payments ── */}
           <div className="flex h-[620px] min-h-[620px] flex-col">
             <p className="text-[11px] font-semibold text-red-600 uppercase tracking-wider mb-2 pl-1">Payments</p>
             <div className="flex-1 overflow-hidden rounded-xl border border-red-200">
               <div className="h-full overflow-auto">
-              <table className="w-full border-separate border-spacing-0">
+              <table className="table-fixed w-full border-separate border-spacing-0">
+                <colgroup>
+                  <col style={{width:'11%'}} /><col style={{width:'20%'}} /><col style={{width:'17%'}} />
+                  <col style={{width:'14%'}} /><col style={{width:'11%'}} /><col style={{width:'15%'}} /><col style={{width:'12%'}} />
+                </colgroup>
                 <thead>
                   <tr className="bg-red-600">
-                    <th className={`${thCls} sticky top-0 z-10 bg-red-600`}><HeaderSort label="Date" col="date" sort={paySort} onSort={setPaySort} /></th>
-                    <th className={`${thCls} sticky top-0 z-10 bg-red-600`}><HeaderSort label="Description" col="description" sort={paySort} onSort={setPaySort} /></th>
-                    <th className={`${thCls} sticky top-0 z-10 bg-red-600`}><HeaderSort label="Category" col="category" sort={paySort} onSort={setPaySort} /></th>
-                    <th className={`${thCls} sticky top-0 z-10 bg-red-600`}>Department</th>
-                    <th className={`${thCls} sticky top-0 z-10 bg-red-600`}>Company</th>
-                    <th className={`${thCls} sticky top-0 z-10 bg-red-600 text-center`}><HeaderSort label="Amount (₹)" col="amount" sort={paySort} onSort={setPaySort} /></th>
-                    <th className={`${thCls} sticky top-0 z-10 bg-red-600 text-center`}>Actions</th>
+                    <th className={`${thT} sticky top-0 z-10 bg-red-600`}><HeaderSort label="Date" col="date" sort={paySort} onSort={setPaySort} /></th>
+                    <th className={`${thT} sticky top-0 z-10 bg-red-600`}><HeaderSort label="Description" col="description" sort={paySort} onSort={setPaySort} /></th>
+                    <th className={`${thT} sticky top-0 z-10 bg-red-600`}><HeaderSort label="Category" col="category" sort={paySort} onSort={setPaySort} /></th>
+                    <th className={`${thT} sticky top-0 z-10 bg-red-600`}>Department</th>
+                    <th className={`${thT} sticky top-0 z-10 bg-red-600`}>Company</th>
+                    <th className={`${thT} sticky top-0 z-10 bg-red-600 text-center`}><HeaderSort label="Amount (₹)" col="amount" sort={paySort} onSort={setPaySort} /></th>
+                    <th className={`${thT} sticky top-0 z-10 bg-red-600 text-center`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -341,8 +366,8 @@ export default function CashflowTab() {
                    payRows.length === 0 ? <EmptyRow cols={6} message={cash.rows.length === 0 ? undefined : 'No payments'} /> :
                    <>
                    <TotalRow>
-                     <td colSpan={5} className="px-3 py-2 text-xs text-[#2E3093]">Total ({payRows.length})</td>
-                     <td className="px-3 py-2 text-xs text-center text-red-600">{fmt(totals.payment)}</td>
+                     <td colSpan={5} className="px-2 py-1.5 text-xs text-[#2E3093]">Total ({payRows.length})</td>
+                     <td className="px-2 py-1.5 text-xs text-center text-red-600">{fmt(totals.payment)}</td>
                      <td />
                    </TotalRow>
                    {payRows.map((r, i) => {
@@ -378,16 +403,16 @@ export default function CashflowTab() {
                      }
                      return (
                        <tr key={r.id} className={anomalySet.has(r.id) ? 'bg-orange-50/70 hover:bg-orange-50 transition-colors' : trCls(i)}>
-                         <td className={tdCls}>{fmtDate(r.date)}</td>
-                         <td className={tdCls}>{r.description}</td>
-                         <td className={tdCls}>
+                         <td className={tdT}>{fmtDate(r.date)}</td>
+                         <td className={tdT} title={r.description ?? ''}>{r.description}</td>
+                         <td className={tdT} title={r.category}>
                            <span>{r.category}</span>
-                           {anomalySet.has(r.id) && <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-100 text-orange-700 ring-1 ring-orange-200">⚠ Spike</span>}
+                           {anomalySet.has(r.id) && <span className="ml-1 inline-flex items-center px-1 py-px rounded text-[9px] font-bold bg-orange-100 text-orange-700 ring-1 ring-orange-200">⚠</span>}
                          </td>
-                         <td className={tdCls}>{r.department || '—'}</td>
-                         <td className={tdCls}>{r.company || '—'}</td>
-                         <td className={`${tdNum} text-red-600`}>{r.payment ? fmt(r.payment) : '—'}</td>
-                         <td className="px-3 py-2 text-center whitespace-nowrap">
+                         <td className={tdT} title={r.department ?? ''}>{r.department || '—'}</td>
+                         <td className={tdT} title={r.company ?? ''}>{r.company || '—'}</td>
+                         <td className={`${tdNT} text-red-600`}>{r.payment ? fmt(r.payment) : '—'}</td>
+                         <td className="px-1 py-1.5 text-center whitespace-nowrap">
                            <button onClick={() => startEdit(r)} className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-[#2E3093]/10 text-[#2E3093] transition-colors mr-1">
                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                            </button>
@@ -411,16 +436,20 @@ export default function CashflowTab() {
             <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider mb-2 pl-1">Receipts</p>
             <div className="flex-1 overflow-hidden rounded-xl border border-emerald-200">
               <div className="h-full overflow-auto">
-              <table className="w-full border-separate border-spacing-0">
+              <table className="table-fixed w-full border-separate border-spacing-0">
+                <colgroup>
+                  <col style={{width:'11%'}} /><col style={{width:'20%'}} /><col style={{width:'17%'}} />
+                  <col style={{width:'14%'}} /><col style={{width:'11%'}} /><col style={{width:'15%'}} /><col style={{width:'12%'}} />
+                </colgroup>
                 <thead>
                   <tr className="bg-emerald-600">
-                    <th className={`${thCls} sticky top-0 z-10 bg-emerald-600`}><HeaderSort label="Date" col="date" sort={receiptSort} onSort={setReceiptSort} /></th>
-                    <th className={`${thCls} sticky top-0 z-10 bg-emerald-600`}><HeaderSort label="Description" col="description" sort={receiptSort} onSort={setReceiptSort} /></th>
-                    <th className={`${thCls} sticky top-0 z-10 bg-emerald-600`}><HeaderSort label="Category" col="category" sort={receiptSort} onSort={setReceiptSort} /></th>
-                    <th className={`${thCls} sticky top-0 z-10 bg-emerald-600`}>Department</th>
-                    <th className={`${thCls} sticky top-0 z-10 bg-emerald-600`}>Company</th>
-                    <th className={`${thCls} sticky top-0 z-10 bg-emerald-600 text-center`}><HeaderSort label="Amount (₹)" col="amount" sort={receiptSort} onSort={setReceiptSort} /></th>
-                    <th className={`${thCls} sticky top-0 z-10 bg-emerald-600 text-center`}>Actions</th>
+                    <th className={`${thT} sticky top-0 z-10 bg-emerald-600`}><HeaderSort label="Date" col="date" sort={receiptSort} onSort={setReceiptSort} /></th>
+                    <th className={`${thT} sticky top-0 z-10 bg-emerald-600`}><HeaderSort label="Description" col="description" sort={receiptSort} onSort={setReceiptSort} /></th>
+                    <th className={`${thT} sticky top-0 z-10 bg-emerald-600`}><HeaderSort label="Category" col="category" sort={receiptSort} onSort={setReceiptSort} /></th>
+                    <th className={`${thT} sticky top-0 z-10 bg-emerald-600`}>Department</th>
+                    <th className={`${thT} sticky top-0 z-10 bg-emerald-600`}>Company</th>
+                    <th className={`${thT} sticky top-0 z-10 bg-emerald-600 text-center`}><HeaderSort label="Amount (₹)" col="amount" sort={receiptSort} onSort={setReceiptSort} /></th>
+                    <th className={`${thT} sticky top-0 z-10 bg-emerald-600 text-center`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -428,8 +457,8 @@ export default function CashflowTab() {
                    receiptRows.length === 0 ? <EmptyRow cols={6} message={cash.rows.length === 0 ? undefined : 'No receipts'} /> :
                    <>
                    <TotalRow>
-                     <td colSpan={5} className="px-3 py-2 text-xs text-[#2E3093]">Total ({receiptRows.length})</td>
-                     <td className="px-3 py-2 text-xs text-center text-green-600">{fmt(totals.receipt)}</td>
+                     <td colSpan={5} className="px-2 py-1.5 text-xs text-[#2E3093]">Total ({receiptRows.length})</td>
+                     <td className="px-2 py-1.5 text-xs text-center text-green-600">{fmt(totals.receipt)}</td>
                      <td />
                    </TotalRow>
                    {receiptRows.map((r, i) => {
@@ -465,13 +494,13 @@ export default function CashflowTab() {
                      }
                      return (
                        <tr key={r.id} className={trCls(i)}>
-                         <td className={tdCls}>{fmtDate(r.date)}</td>
-                         <td className={tdCls}>{r.description}</td>
-                         <td className={tdCls}>{r.category}</td>
-                         <td className={tdCls}>{r.department || '—'}</td>
-                         <td className={tdCls}>{r.company || '—'}</td>
-                         <td className={`${tdNum} text-green-600`}>{r.receipt ? fmt(r.receipt) : '—'}</td>
-                         <td className="px-3 py-2 text-center whitespace-nowrap">
+                         <td className={tdT}>{fmtDate(r.date)}</td>
+                         <td className={tdT} title={r.description ?? ''}>{r.description}</td>
+                         <td className={tdT} title={r.category}>{r.category}</td>
+                         <td className={tdT} title={r.department ?? ''}>{r.department || '—'}</td>
+                         <td className={tdT} title={r.company ?? ''}>{r.company || '—'}</td>
+                         <td className={`${tdNT} text-green-600`}>{r.receipt ? fmt(r.receipt) : '—'}</td>
+                         <td className="px-1 py-1.5 text-center whitespace-nowrap">
                            <button onClick={() => startEdit(r)} className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-[#2E3093]/10 text-[#2E3093] transition-colors mr-1">
                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                            </button>
@@ -492,9 +521,9 @@ export default function CashflowTab() {
         </div>
       </div>
 
-      {/* Payment vs Receipt by Category */}
+      {/* Charts: Profit summary + Payment vs Receipt by Category */}
       <div>
-        <CashflowCategoryBars rows={filteredRows} />
+        <CashflowCategoryBars rows={filteredRows} view="summary-and-category" />
       </div>
 
       {/* ── AI Insights: Anomaly Spikes ─────────────── */}
