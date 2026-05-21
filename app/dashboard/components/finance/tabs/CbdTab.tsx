@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { TableHeader, TableSkeleton, EmptyRow, TotalRow, SectionTitle, thCls, tdCls, tdNum, trCls, PctBar, downloadCsv } from '../shared/primitives';
-import { fmt, todayISO } from '../shared/format';
-import type { PendingFee } from '../shared/types';
+import { TableHeader, TableSkeleton, EmptyRow, TotalRow, SectionTitle, thCls, tdCls, tdNum, trCls, PctBar, downloadCsv, Modal, RowActions, inpCls, lblCls } from '../shared/primitives';
+import { fmt, todayISO, monthLabel, parseMonth } from '../shared/format';
+import type { PendingFee, MonthlyRow, CashflowTxn } from '../shared/types';
+import { useFinanceResource } from '../shared/useFinanceResource';
 import { feeRecoveryPriority } from '../shared/predictions';
 
 interface PlanRow {
@@ -73,6 +74,48 @@ export default function CbdTab() {
   }, [feeSearch, loadFees]);
 
   const today = todayISO();
+
+  /* ── Monthly Performance ── */
+  const monthly  = useFinanceResource<MonthlyRow>('/api/finance/cbd-monthly');
+  const cashflow = useFinanceResource<CashflowTxn>('/api/finance/cashflow');
+
+  const cfActualByMonth = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const txn of cashflow.rows) {
+      if ((txn.department ?? '').toUpperCase() !== 'CBD') continue;
+      if (txn.type !== 'Payment') continue;
+      if (!txn.date) continue;
+      const m = txn.date.substring(0, 7);
+      map.set(m, (map.get(m) || 0) + Number(txn.payment || 0));
+    }
+    return map;
+  }, [cashflow.rows]);
+
+  const [monthlyModal, setMonthlyModal] = useState<{ open: boolean; editing: MonthlyRow | null }>({ open: false, editing: null });
+  const [monthlyForm, setMonthlyForm]   = useState({ month: '', target_cost: '' });
+  const [monthlySaving, setMonthlySaving] = useState(false);
+
+  const openAddMonthly = useCallback(() => {
+    setMonthlyForm({ month: '', target_cost: '' });
+    setMonthlyModal({ open: true, editing: null });
+  }, []);
+
+  const openEditMonthly = useCallback((r: MonthlyRow) => {
+    setMonthlyForm({ month: r.month ?? '', target_cost: String(r.target_cost ?? 0) });
+    setMonthlyModal({ open: true, editing: r });
+  }, []);
+
+  const saveMonthly = useCallback(async () => {
+    setMonthlySaving(true);
+    try {
+      await monthly.save(
+        { month: monthlyForm.month.trim(), target_cost: Number(monthlyForm.target_cost) } as Partial<MonthlyRow>,
+        monthlyModal.editing,
+      );
+      setMonthlyModal({ open: false, editing: null });
+    } catch { /* swallow */ }
+    setMonthlySaving(false);
+  }, [monthly, monthlyForm, monthlyModal.editing]);
 
   const exportFees = useCallback(() => {
     downloadCsv(`pending-fees-${today}.csv`, feeRows.map(r => ({
@@ -179,6 +222,70 @@ export default function CbdTab() {
           </table>
         </div>
       </div>
+
+      {/* ── Monthly Performance ──────────────────────── */}
+      <div>
+        <TableHeader title="CBD / Inhouse — Monthly Performance" onAdd={openAddMonthly} />
+        <div className="overflow-x-auto rounded-xl border border-gray-200">
+          <table className="w-full border-separate border-spacing-0">
+            <thead><tr className="bg-[#2E3093]">
+              <th className={thCls}>Month</th>
+              <th className={`${thCls} text-right`}>Actual Cost (₹)</th>
+              <th className={`${thCls} text-right`}>Targeted Cost (₹)</th>
+              <th className={`${thCls} text-center`}>%age</th>
+              <th className={`${thCls} text-center`}>Actions</th>
+            </tr></thead>
+            <tbody>
+              {monthly.loading ? <TableSkeleton cols={5} /> :
+               monthly.rows.length === 0 ? <EmptyRow cols={5} /> :
+               monthly.rows.map((r, i) => {
+                 const actualCost = cfActualByMonth.get((r.month ?? '').substring(0, 7)) || 0;
+                 const pct = Number(r.target_cost || 0) > 0 ? (actualCost / Number(r.target_cost)) * 100 : 0;
+                 const over = pct > 100;
+                 return (
+                   <tr key={r.id} className={trCls(i)}>
+                     <td className={tdCls}>{monthLabel(parseMonth(r.month ?? ''))}</td>
+                     <td className={tdNum}>{fmt(actualCost)}</td>
+                     <td className={tdNum}>{fmt(r.target_cost)}</td>
+                     <td className={`${tdNum} ${over ? 'text-red-600 font-semibold' : 'text-emerald-700'}`}>
+                       {Number(r.target_cost || 0) > 0 ? `${pct.toFixed(1)}%` : '—'}
+                     </td>
+                     <RowActions onEdit={() => openEditMonthly(r)} onDelete={() => monthly.remove(r.id)} />
+                   </tr>
+                 );
+               })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <Modal
+        open={monthlyModal.open}
+        title={monthlyModal.editing ? 'Edit Monthly Performance' : 'Add Monthly Performance'}
+        saving={monthlySaving}
+        onClose={() => setMonthlyModal({ open: false, editing: null })}
+        onSave={saveMonthly}
+      >
+        <div>
+          <label className={lblCls}>Month (YYYY-MM)</label>
+          <input
+            type="month"
+            className={inpCls}
+            value={monthlyForm.month}
+            onChange={e => setMonthlyForm(f => ({ ...f, month: e.target.value }))}
+          />
+        </div>
+        <div>
+          <label className={lblCls}>Targeted Cost (₹)</label>
+          <input
+            type="number"
+            min="0"
+            className={inpCls}
+            value={monthlyForm.target_cost}
+            onChange={e => setMonthlyForm(f => ({ ...f, target_cost: e.target.value }))}
+          />
+        </div>
+      </Modal>
 
       {/* ── Pending Fees ──────────────────────────────── */}
       <div>

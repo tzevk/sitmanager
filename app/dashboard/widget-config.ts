@@ -4,6 +4,7 @@ export type DashboardDepartment =
   | 'placement'
   | 'training_and_development'
   | 'accounts'
+  | 'finance'
   | 'administration'
   | 'unknown';
 
@@ -36,6 +37,7 @@ const DEPARTMENT_WIDGET_CONFIG: Record<DashboardDepartment, DashboardWidgetConfi
   placement: { ...ALL_WIDGETS_ENABLED },
   training_and_development: { ...ALL_WIDGETS_ENABLED },
   accounts: { ...ALL_WIDGETS_ENABLED },
+  finance: { ...ALL_WIDGETS_ENABLED },
   administration: { ...ALL_WIDGETS_ENABLED },
   unknown: { ...ALL_WIDGETS_ENABLED },
 };
@@ -56,7 +58,7 @@ export function resolveDashboardDepartment(
 
   // Use the dashboard_department assigned to the role if available
   if (dashboardDepartment) {
-    const valid: DashboardDepartment[] = ['cbd', 'corporate_training', 'placement', 'training_and_development', 'accounts', 'administration'];
+    const valid: DashboardDepartment[] = ['cbd', 'corporate_training', 'placement', 'training_and_development', 'accounts', 'finance', 'administration'];
     if (valid.includes(dashboardDepartment as DashboardDepartment)) {
       return dashboardDepartment as DashboardDepartment;
     }

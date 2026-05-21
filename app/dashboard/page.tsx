@@ -311,6 +311,7 @@ export default function DashboardPage() {
             <option value="placement">Placement Department</option>
             <option value="training_and_development">Training and Development</option>
             <option value="accounts">Finance / Accounts</option>
+            <option value="finance">Finance Dashboard</option>
           </select>
         )}
       </div>
@@ -455,6 +456,7 @@ export default function DashboardPage() {
                   <option value="placement">Placement Department</option>
                   <option value="training_and_development">Training and Development</option>
                   <option value="accounts">Finance / Accounts</option>
+                  <option value="finance">Finance Dashboard</option>
                 </select>
               )}
             </div>
@@ -535,7 +537,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (activeDepartment === 'accounts') {
+  if (activeDepartment === 'accounts' || activeDepartment === 'finance') {
     return (
       <div className="space-y-4">
         {profileHeader}

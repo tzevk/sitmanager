@@ -6,6 +6,17 @@ import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, TotalRow, Sect
 import { fmt, pct, MONTHS_FULL, parseMonth } from '../shared/format';
 import type { Loan, DeptPerf, DebtPlan, CtRow, MonthlyRow, CashflowTxn } from '../shared/types';
 
+const TARGET_EXPENSE_PCT: Record<string, number> = {
+  cbd: 0.50,
+  deputation: 0.80,
+  corporate: 0.50,
+  accentProjects: 0.80,
+};
+
+// Hardcoded CBD income targets
+const CBD_MONTHLY_INCOME = 5_600_000;   // ₹56,00,000
+const CBD_YEARLY_INCOME  = 67_460_000;  // ₹6,74,60,000
+
 export default function OverviewTab() {
   const now = new Date();
   const [monthIdx, setMonthIdx] = useState(now.getMonth());
@@ -170,13 +181,19 @@ export default function OverviewTab() {
     if (base.accentProjects.turnoverActual === 0 && projActual > 0) base.accentProjects.turnoverActual = projActual;
     if (base.accentProjects.turnoverTarget === 0 && projTarget > 0) base.accentProjects.turnoverTarget = projTarget;
 
+    // Hardcode CBD monthly income target
+    base.cbd.turnoverTarget = CBD_MONTHLY_INCOME;
+
     return [base.cbd, base.deputation, base.corporate, base.accentProjects, base.other].map(item => {
+      const targetPct = TARGET_EXPENSE_PCT[item.key];
+      const expenseTarget = targetPct != null ? item.turnoverActual * targetPct : item.expenseTarget;
       const profitActual = item.turnoverActual - item.expenseActual;
-      const profitTarget = item.turnoverTarget - item.expenseTarget;
+      const profitTarget = item.turnoverTarget - expenseTarget;
       const profitPctActual = item.turnoverActual > 0 ? (profitActual / item.turnoverActual) * 100 : null;
       const profitPctTarget = item.turnoverTarget > 0 ? (profitTarget / item.turnoverTarget) * 100 : null;
       return {
         ...item,
+        expenseTarget,
         profitActual,
         profitTarget,
         profitPctActual,
@@ -209,28 +226,35 @@ export default function OverviewTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <label className="text-xs font-medium text-gray-600">Month:</label>
-        <select
-          value={monthIdx}
-          onChange={e => setMonthIdx(Number(e.target.value))}
-          className="text-xs rounded-lg border border-gray-200 bg-white px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
-        >
-          {MONTHS_FULL.map((m, i) => <option key={i} value={i}>{m}</option>)}
-        </select>
-        <label className="text-xs font-medium text-gray-600">Year:</label>
-        <select
-          value={year}
-          onChange={e => setYear(Number(e.target.value))}
-          className="text-xs rounded-lg border border-gray-200 bg-white px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
-        >
-          {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
-        </select>
-      </div>
-
       {/* Cashflow Summary - Department-wise Breakdown */}
       <div className="space-y-3">
-        <SectionTitle>Cashflow Summary - Department-wise Breakdown</SectionTitle>
+        <div className="flex items-center justify-between">
+          <SectionTitle>Cashflow Summary - Department-wise Breakdown</SectionTitle>
+            <span className="text-[11px] font-medium text-gray-500">
+              CBD Annual Income Target:&nbsp;
+              <span className="font-bold text-[#2E3093]">₹{CBD_YEARLY_INCOME.toLocaleString('en-IN')}</span>
+              &nbsp;·&nbsp;Monthly Target:&nbsp;
+              <span className="font-bold text-[#2E3093]">₹{CBD_MONTHLY_INCOME.toLocaleString('en-IN')}</span>
+            </span>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-gray-500">Month:</label>
+            <select
+              value={monthIdx}
+              onChange={e => setMonthIdx(Number(e.target.value))}
+              className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+            >
+              {MONTHS_FULL.map((m, i) => <option key={i} value={i}>{m}</option>)}
+            </select>
+            <label className="text-xs font-medium text-gray-500">Year:</label>
+            <select
+              value={year}
+              onChange={e => setYear(Number(e.target.value))}
+              className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+            >
+              {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        </div>
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="w-full border-separate border-spacing-0">
             <thead>

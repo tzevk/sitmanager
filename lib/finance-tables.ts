@@ -221,6 +221,12 @@ export const FINANCE_CT_MONTHLY: ResourceConfig = {
   ],
 };
 
+export const FINANCE_CBD_MONTHLY: ResourceConfig = {
+  ...FINANCE_CT_MONTHLY,
+  table: 'finance_cbd_monthly',
+  ddl: FINANCE_CT_MONTHLY.ddl!.replace('finance_ct_monthly', 'finance_cbd_monthly'),
+};
+
 export const FINANCE_DEPUTATION: ResourceConfig = {
   table: 'finance_deputation',
   ddl: `

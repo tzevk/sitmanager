@@ -657,6 +657,7 @@ export default function EditRolePage() {
                     <option value="placement">Placement</option>
                     <option value="training_and_development">Training &amp; Development</option>
                     <option value="accounts">Accounts</option>
+                    <option value="finance">Finance Dashboard</option>
                     <option value="administration">Administration</option>
                   </select>
                   <p className="text-[11px] text-gray-500">
