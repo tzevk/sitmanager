@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { PermissionGate } from '@/components/ui/PermissionGate';
 
@@ -21,6 +21,16 @@ interface UnitTest {
   UT_Duration: string | null;
   Test_Dt: string | null;
   studentCount: number;
+}
+
+interface StudentMark {
+  row_num: number;
+  Admission_Id: number;
+  Student_Id: number;
+  Student_Code: string | null;
+  Student_Name: string;
+  Roll_No: string | null;
+  marks_obtained: number | null;
 }
 
 interface FilterOption { Course_Id?: number; Course_Name?: string; Batch_Id?: number; Batch_code?: string; }
@@ -56,6 +66,11 @@ function UnitTestTakenContent({ canCreate, canUpdate, canDelete }: { canView: bo
   const [showFilters, setShowFilters] = useState(false);
   const [filterCourses, setFilterCourses] = useState<FilterOption[]>([]);
   const [filterBatches, setFilterBatches] = useState<FilterOption[]>([]);
+
+  /* ---- Students panel ---- */
+  const [expandedTakeId, setExpandedTakeId] = useState<number | null>(null);
+  const [studentsMap, setStudentsMap] = useState<Record<number, StudentMark[]>>({});
+  const [studentsLoading, setStudentsLoading] = useState<number | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const [fetchTrigger, setFetchTrigger] = useState(0);
@@ -94,6 +109,26 @@ function UnitTestTakenContent({ canCreate, canUpdate, canDelete }: { canView: bo
     setSearch(''); setCourseId(''); setBatchId('');
     setDateFrom(''); setDateTo('');
     setPage(1); setFetchTrigger(t => t + 1);
+  };
+
+  const handleViewStudents = async (row: UnitTest) => {
+    const { Take_Id, Batch_Id } = row;
+    if (expandedTakeId === Take_Id) { setExpandedTakeId(null); return; }
+    setExpandedTakeId(Take_Id);
+    if (studentsMap[Take_Id]) return; // already fetched
+    if (!Batch_Id) { setStudentsMap(m => ({ ...m, [Take_Id]: [] })); return; }
+    setStudentsLoading(Take_Id);
+    try {
+      const res = await fetch(
+        `/api/daily-activities/unit-test-taken?options=students&batchId=${Batch_Id}&takeId=${Take_Id}`
+      );
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setStudentsMap(m => ({ ...m, [Take_Id]: data.students ?? [] }));
+    } catch {
+      setStudentsMap(m => ({ ...m, [Take_Id]: [] }));
+    }
+    setStudentsLoading(null);
   };
 
   const handleDelete = async (id: number) => {
@@ -263,13 +298,14 @@ function UnitTestTakenContent({ canCreate, canUpdate, canDelete }: { canView: bo
                 <th className="py-3 px-4 border-b border-gray-200">Test Name</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-28">Date</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-20 text-center">Marks</th>
+                <th className="py-3 px-4 border-b border-gray-200 w-24 text-center">Students</th>
                 <th className="py-3 px-4 border-b border-gray-200 w-28 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center">
+                  <td colSpan={8} className="py-12 text-center">
                     <div className="flex justify-center items-center gap-2 text-gray-400">
                       <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                       Loading unit tests...
@@ -278,7 +314,7 @@ function UnitTestTakenContent({ canCreate, canUpdate, canDelete }: { canView: bo
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center">
+                  <td colSpan={8} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center">
                         <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
@@ -291,74 +327,169 @@ function UnitTestTakenContent({ canCreate, canUpdate, canDelete }: { canView: bo
                 </tr>
               ) : (
                 rows.map((r) => (
-                  <tr key={r.Take_Id} className="border-b border-gray-50 hover:bg-blue-50/30 transition-colors">
-                    <td className="py-2.5 px-4">
-                      <span className="inline-flex items-center px-2 py-0.5 text-xs font-mono font-semibold bg-[#2E3093]/8 text-[#2E3093] rounded">
-                        {r.Take_Id}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-4">
-                      <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 rounded">
-                        {r.Batch_code || '—'}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-4 font-medium text-gray-800 text-sm">
-                      {r.Course_Name || '—'}
-                    </td>
-                    <td className="py-2.5 px-4">
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-gray-800 text-sm">
-                          {r.TestName || `Test #${r.Test_No || '—'}`}
+                  <React.Fragment key={r.Take_Id}>
+                    <tr className={`border-b border-gray-50 hover:bg-blue-50/30 transition-colors ${expandedTakeId === r.Take_Id ? 'bg-blue-50/40' : ''}`}>
+                      <td className="py-2.5 px-4">
+                        <span className="inline-flex items-center px-2 py-0.5 text-xs font-mono font-semibold bg-[#2E3093]/8 text-[#2E3093] rounded">
+                          {r.Take_Id}
                         </span>
-                        {r.UT_Duration && (
-                          <span className="text-[11px] text-gray-400 mt-0.5">Duration: {r.UT_Duration}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-4 text-gray-600 text-xs font-medium">
-                      {formatDate(r.Test_Dt)}
-                    </td>
-                    <td className="py-2.5 px-4 text-center">
-                      {r.Marks != null ? (
-                        <span className="inline-flex items-center justify-center min-w-[2rem] h-6 text-xs font-bold bg-amber-50 text-amber-700 rounded-full px-1.5">
-                          {r.Marks}
+                      </td>
+                      <td className="py-2.5 px-4">
+                        <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 rounded">
+                          {r.Batch_code || '—'}
                         </span>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        {canUpdate && (
-                        <button
-                          onClick={() => router.push(`/dashboard/daily-activities/unit-test-taken/add?id=${r.Take_Id}`)}
-                          className="p-1.5 rounded-lg text-[#2A6BB5] hover:bg-[#2A6BB5]/10 transition-colors"
-                          title="Edit"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
+                      </td>
+                      <td className="py-2.5 px-4 font-medium text-gray-800 text-sm">
+                        {r.Course_Name || '—'}
+                      </td>
+                      <td className="py-2.5 px-4">
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-gray-800 text-sm">
+                            {r.TestName || `Test #${r.Test_No || '—'}`}
+                          </span>
+                          {r.UT_Duration && (
+                            <span className="text-[11px] text-gray-400 mt-0.5">Duration: {r.UT_Duration}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-4 text-gray-600 text-xs font-medium">
+                        {formatDate(r.Test_Dt)}
+                      </td>
+                      <td className="py-2.5 px-4 text-center">
+                        {r.Marks != null ? (
+                          <span className="inline-flex items-center justify-center min-w-[2rem] h-6 text-xs font-bold bg-amber-50 text-amber-700 rounded-full px-1.5">
+                            {r.Marks}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300">—</span>
                         )}
-                        {canDelete && (
+                      </td>
+                      <td className="py-2.5 px-4 text-center">
                         <button
-                          onClick={() => handleDelete(r.Take_Id)}
-                          disabled={deleting === r.Take_Id}
-                          className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
-                          title="Delete"
+                          onClick={() => handleViewStudents(r)}
+                          className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg transition-colors ${
+                            expandedTakeId === r.Take_Id
+                              ? 'bg-[#2E3093] text-white'
+                              : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
+                          }`}
+                          title="View student marks"
                         >
-                          {deleting === r.Take_Id ? (
-                            <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                          {studentsLoading === r.Take_Id ? (
+                            <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
                           ) : (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                           )}
+                          {r.studentCount > 0 ? r.studentCount : 'View'}
                         </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="py-2.5 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          {canUpdate && (
+                          <button
+                            onClick={() => router.push(`/dashboard/daily-activities/unit-test-taken/add?id=${r.Take_Id}`)}
+                            className="p-1.5 rounded-lg text-[#2A6BB5] hover:bg-[#2A6BB5]/10 transition-colors"
+                            title="Edit"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          )}
+                          {canDelete && (
+                          <button
+                            onClick={() => handleDelete(r.Take_Id)}
+                            disabled={deleting === r.Take_Id}
+                            className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                            title="Delete"
+                          >
+                            {deleting === r.Take_Id ? (
+                              <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            )}
+                          </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {expandedTakeId === r.Take_Id && (
+                      <tr key={`students-${r.Take_Id}`}>
+                        <td colSpan={8} className="p-0 bg-slate-50/70 border-b border-blue-100">
+                          <div className="px-6 py-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <svg className="w-4 h-4 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                              <span className="text-xs font-semibold text-[#2E3093]">
+                                Students — {r.Batch_code} &nbsp;·&nbsp; {r.TestName || `Test #${r.Test_No}`} &nbsp;·&nbsp; Max Marks: {r.Marks ?? '—'}
+                              </span>
+                            </div>
+
+                            {studentsLoading === r.Take_Id ? (
+                              <div className="flex items-center gap-2 py-4 text-gray-400 text-xs">
+                                <div className="w-4 h-4 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                                Loading students...
+                              </div>
+                            ) : (studentsMap[r.Take_Id] ?? []).length === 0 ? (
+                              <p className="text-xs text-gray-400 py-2">No students found for this batch.</p>
+                            ) : (
+                              <div className="overflow-x-auto rounded-lg border border-gray-200">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="bg-gray-100 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                                      <th className="py-2 px-3 text-left w-10">#</th>
+                                      <th className="py-2 px-3 text-left">Student Code</th>
+                                      <th className="py-2 px-3 text-left">Student Name</th>
+                                      <th className="py-2 px-3 text-center w-28">Marks Obtained</th>
+                                      <th className="py-2 px-3 text-center w-24">Max Marks</th>
+                                      <th className="py-2 px-3 text-center w-20">%</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100 bg-white">
+                                    {(studentsMap[r.Take_Id] ?? []).map((s) => {
+                                      const pct = s.marks_obtained != null && r.Marks
+                                        ? Math.round((s.marks_obtained / r.Marks) * 100)
+                                        : null;
+                                      return (
+                                        <tr key={s.Student_Id} className="hover:bg-blue-50/20 transition-colors">
+                                          <td className="py-1.5 px-3 text-gray-400 font-mono">{s.row_num}</td>
+                                          <td className="py-1.5 px-3 text-gray-500">{s.Student_Code || '—'}</td>
+                                          <td className="py-1.5 px-3 font-medium text-gray-800">{s.Student_Name}</td>
+                                          <td className="py-1.5 px-3 text-center">
+                                            {s.marks_obtained != null ? (
+                                              <span className="inline-flex items-center justify-center min-w-[2rem] h-5 px-1.5 text-xs font-bold bg-green-50 text-green-700 rounded-full">
+                                                {s.marks_obtained}
+                                              </span>
+                                            ) : (
+                                              <span className="text-gray-300">—</span>
+                                            )}
+                                          </td>
+                                          <td className="py-1.5 px-3 text-center text-gray-500">{r.Marks ?? '—'}</td>
+                                          <td className="py-1.5 px-3 text-center">
+                                            {pct != null ? (
+                                              <span className={`text-xs font-semibold ${pct >= 75 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
+                                                {pct}%
+                                              </span>
+                                            ) : (
+                                              <span className="text-gray-300">—</span>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))
               )}
             </tbody>

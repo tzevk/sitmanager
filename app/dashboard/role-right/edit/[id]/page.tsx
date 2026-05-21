@@ -76,7 +76,16 @@ export default function EditRolePage({ params }: PageProps) {
   const roleId = parseInt(resolvedParams.id, 10);
   const router = useRouter();
   const { canUpdate, loading: permLoading } = useResourcePermissions('role');
-  
+
+  // Lock in the initial permission check so background session refreshes
+  // cannot unmount this page after the user has already been granted access.
+  const [permGranted, setPermGranted] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!permLoading && permGranted === null) {
+      setPermGranted(canUpdate);
+    }
+  }, [permLoading, canUpdate, permGranted]);
+
   const [role, setRole] = useState<Role | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -241,8 +250,8 @@ export default function EditRolePage({ params }: PageProps) {
 
   const filteredGroups = getFilteredGroups();
 
-  if (permLoading) return <PermissionLoading />;
-  if (!canUpdate) return <AccessDenied message="You do not have permission to edit roles." />;
+  if (permGranted === null) return <PermissionLoading />;
+  if (!permGranted) return <AccessDenied message="You do not have permission to edit roles." />;
 
   if (loading) {
     return (

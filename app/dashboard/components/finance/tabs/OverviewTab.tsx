@@ -12,6 +12,7 @@ export default function OverviewTab() {
   const year = now.getFullYear();
   const monthYear = `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
   const monthLabel = MONTHS_FULL[monthIdx];
+  
 
   const depts  = useFinanceResource<DeptPerf>('/api/finance/dept-performance', { query: `month_year=${monthYear}` });
   const loans  = useFinanceResource<Loan>('/api/finance/loans');
@@ -19,7 +20,6 @@ export default function OverviewTab() {
   const ctPerf = useFinanceResource<CtRow>('/api/finance/ct-performance');
   const deputation = useFinanceResource<MonthlyRow>('/api/finance/deputation');
   const projects = useFinanceResource<MonthlyRow>('/api/finance/projects');
-  /* ── modals ─────────────────────────────────────────────── */
   const [deptModal, setDeptModal] = useState<{ open: boolean; editing: DeptPerf | null }>({ open: false, editing: null });
   const [deptForm, setDeptForm]   = useState({ department: '', amount_achieved: '', target_amount: '' });
   const [savingD, setSavingD]     = useState(false);

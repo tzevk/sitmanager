@@ -203,6 +203,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       ...createPermissions('report_payment_collection', 'Payment Collection Report', ['view', 'export']),
       ...createPermissions('report_faculty_salary', 'Faculty Salary Report', ['view', 'export']),
       ...createPermissions('report_faculty_statement', 'Faculty Statement Report', ['view', 'export']),
+      ...createPermissions('report_placement', 'Placement Report', ['view', 'export']),
     ],
   },
 

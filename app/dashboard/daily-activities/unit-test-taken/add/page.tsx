@@ -11,6 +11,17 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 interface Course { Course_Id: number; Course_Name: string; }
 interface Batch { Batch_Id: number; Batch_code: string; Category: string | null; Timings: string | null; }
 interface TestDef { id: number; subject: string; marks: string | null; duration: string | null; utdate: string | null; }
+interface StudentMark {
+  row_num: number;
+  Admission_Id: number;
+  Student_Id: number;
+  Student_Code: string | null;
+  Student_Name: string;
+  Roll_No: string | null;
+  marks_obtained: number | null;
+  status: string | null;
+  child_id: number | null;
+}
 
 interface FormData {
   Course_Id: string;
@@ -46,6 +57,16 @@ export default function AddUnitTestTakenPage() {
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  /* ── Students ── */
+  const [students, setStudents] = useState<StudentMark[]>([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+
+  type MarkEdit = { marks: string; status: string; child_id: number | null; Student_Name: string };
+  const [markEdits, setMarkEdits] = useState<Record<number, MarkEdit>>({});
+
+  const setStudentMark = (studentId: number, field: 'marks' | 'status', value: string) =>
+    setMarkEdits(prev => ({ ...prev, [studentId]: { ...prev[studentId], [field]: value } }));
 
   /* ── Load courses on mount ── */
   useEffect(() => {
@@ -94,6 +115,33 @@ export default function AddUnitTestTakenPage() {
     })();
   }, [form.Course_Id]);
 
+  /* ── Load students in edit mode when batch is known ── */
+  useEffect(() => {
+    if (!isEdit || !editId || !form.Batch_Id) { setStudents([]); setMarkEdits({}); return; }
+    setStudentsLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/daily-activities/unit-test-taken?options=students&batchId=${form.Batch_Id}&takeId=${editId}`
+        );
+        const data = await res.json();
+        const list: StudentMark[] = data.students ?? [];
+        setStudents(list);
+        const edits: Record<number, MarkEdit> = {};
+        for (const s of list) {
+          edits[s.Student_Id] = {
+            marks: s.marks_obtained != null ? String(s.marks_obtained) : '',
+            status: s.status || 'Present',
+            child_id: s.child_id ?? null,
+            Student_Name: s.Student_Name,
+          };
+        }
+        setMarkEdits(edits);
+      } catch { setStudents([]); setMarkEdits({}); }
+      setStudentsLoading(false);
+    })();
+  }, [isEdit, editId, form.Batch_Id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /* ── Load test definitions when batch changes ── */
   useEffect(() => {
     if (!form.Batch_Id) { setTestDefs([]); return; }
@@ -139,6 +187,16 @@ export default function AddUnitTestTakenPage() {
         Test_Dt: form.Test_Dt || null,
       };
       if (isEdit) payload.Take_Id = parseInt(editId!);
+
+      if (isEdit && Object.keys(markEdits).length > 0) {
+        payload.studentMarks = Object.entries(markEdits).map(([studentId, edit]) => ({
+          Student_Id: parseInt(studentId),
+          Student_Name: edit.Student_Name,
+          marks_obtained: edit.marks !== '' ? parseInt(edit.marks) : null,
+          status: edit.status || null,
+          child_id: edit.child_id,
+        }));
+      }
 
       const res = await fetch('/api/daily-activities/unit-test-taken', {
         method: isEdit ? 'PUT' : 'POST',
@@ -280,6 +338,98 @@ export default function AddUnitTestTakenPage() {
               </div>
             </div>
           </div>
+
+          {/* ── Students (edit mode only) ── */}
+          {isEdit && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <svg className="w-4 h-4 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <h3 className="text-sm font-bold text-[#2E3093] uppercase tracking-wider">Students</h3>
+                {students.length > 0 && (
+                  <span className="ml-1 text-xs text-gray-400">({students.length})</span>
+                )}
+              </div>
+
+              {studentsLoading ? (
+                <div className="flex items-center gap-2 py-4 text-gray-400 text-xs">
+                  <div className="w-4 h-4 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                  Loading students...
+                </div>
+              ) : !form.Batch_Id ? (
+                <p className="text-xs text-gray-400 py-2">Select a batch to view students.</p>
+              ) : students.length === 0 ? (
+                <p className="text-xs text-gray-400 py-2">No students found for this batch.</p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-gray-200">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-gray-100 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                        <th className="py-2 px-3 text-left w-10">#</th>
+                        <th className="py-2 px-3 text-left">Student Code</th>
+                        <th className="py-2 px-3 text-left">Student Name</th>
+                        <th className="py-2 px-3 text-center w-28">Marks Obtained</th>
+                        <th className="py-2 px-3 text-center w-24">Max Marks</th>
+                        <th className="py-2 px-3 text-center w-20">%</th>
+                        <th className="py-2 px-3 text-center w-28">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 bg-white">
+                      {students.map((s) => {
+                        const edit = markEdits[s.Student_Id];
+                        const maxMarks = form.Marks ? parseInt(form.Marks) : null;
+                        const marksVal = edit?.marks ?? '';
+                        const pct = marksVal !== '' && maxMarks
+                          ? Math.round((parseInt(marksVal) / maxMarks) * 100)
+                          : null;
+                        return (
+                          <tr key={s.Student_Id} className="hover:bg-blue-50/20 transition-colors">
+                            <td className="py-1.5 px-3 text-gray-400 font-mono">{s.row_num}</td>
+                            <td className="py-1.5 px-3 text-gray-500">{s.Student_Code || '—'}</td>
+                            <td className="py-1.5 px-3 font-medium text-gray-800">{s.Student_Name}</td>
+                            <td className="py-1.5 px-3 text-center">
+                              <input
+                                type="number"
+                                min={0}
+                                max={maxMarks ?? undefined}
+                                value={marksVal}
+                                onChange={(e) => setStudentMark(s.Student_Id, 'marks', e.target.value)}
+                                placeholder="—"
+                                className="w-20 h-7 rounded border border-gray-300 px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white"
+                              />
+                            </td>
+                            <td className="py-1.5 px-3 text-center text-gray-500">{maxMarks ?? '—'}</td>
+                            <td className="py-1.5 px-3 text-center">
+                              {pct != null ? (
+                                <span className={`text-xs font-semibold ${
+                                  pct >= 75 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'
+                                }`}>
+                                  {pct}%
+                                </span>
+                              ) : (
+                                <span className="text-gray-300">—</span>
+                              )}
+                            </td>
+                            <td className="py-1.5 px-3 text-center">
+                              <select
+                                value={edit?.status ?? 'Present'}
+                                onChange={(e) => setStudentMark(s.Student_Id, 'status', e.target.value)}
+                                className="h-7 rounded border border-gray-300 px-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white"
+                              >
+                                <option value="Present">Present</option>
+                                <option value="Absent">Absent</option>
+                              </select>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Submit ── */}
           <div className="flex items-center gap-3">

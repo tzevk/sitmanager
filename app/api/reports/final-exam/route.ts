@@ -393,7 +393,46 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    /* ── 10 & 11. Attendance via shared helper (dedup + 3-late = 1-absent rule) ── */
+    /* ── 10. Viva/MOC marks for this batch ── */
+    const [vivaMocRows] = await pool.query(
+      `SELECT id AS viva_id, vivamocname, marks AS max_marks, date
+       FROM awt_vivamoctaken
+       WHERE batchcode = ? AND (deleted = 0 OR deleted IS NULL)
+       ORDER BY id`,
+      [String(batchId)]
+    );
+    const vivaMocs = vivaMocRows as any[];
+
+    const vivaMarksMap: Record<number, Record<number, number>> = {};
+    const disciplineMarksMap: Record<number, Record<number, number>> = {};
+
+    if (vivaMocs.length > 0) {
+      try {
+        const vivaIds = vivaMocs.map((v: any) => v.viva_id);
+        const [vivaChildRows] = await pool.query(
+          `SELECT viva_id, Student_Id,
+                  IFNULL(Marks, 0) AS Marks,
+                  IFNULL(Discipline_Marks, 0) AS Discipline_Marks
+           FROM viva_moc_child
+           WHERE viva_id IN (${vivaIds.map(() => '?').join(',')})
+             AND (IsDelete = 0 OR IsDelete IS NULL)`,
+          vivaIds
+        );
+        for (const r of vivaChildRows as any[]) {
+          const sid = resolveStudentId(Number(r.Student_Id));
+          if (!vivaMarksMap[sid]) vivaMarksMap[sid] = {};
+          if (!disciplineMarksMap[sid]) disciplineMarksMap[sid] = {};
+          vivaMarksMap[sid][r.viva_id] = Number(r.Marks) || 0;
+          disciplineMarksMap[sid][r.viva_id] = Number(r.Discipline_Marks) || 0;
+        }
+      } catch (e) {
+        console.warn('viva_moc_child query failed:', (e as any).message);
+      }
+    }
+
+    const vivaTotalMax = vivaMocs.reduce((s: number, v: any) => s + Number(v.max_marks || 0), 0);
+
+    /* ── 11. Attendance via shared helper (dedup + 3-late = 1-absent rule) ── */
     const attSummary = await getAttendanceSummary(pool, batchId);
     const totalLectures = attSummary.totalLectures;
 
@@ -401,6 +440,7 @@ export async function GET(req: NextRequest) {
     const utTotalMax = unitTests.reduce((s: number, u: any) => s + Number(u.Max_Marks), 0);
     const asTotalMax = assignments.reduce((s: number, a: any) => s + Number(a.Max_Marks), 0);
     const feTotalMax = finalExams.reduce((s: number, f: any) => s + Number(f.Max_Marks), 0);
+    // vivaTotalMax already computed above
 
     const utWtg = Number(batch.UnitTestWtg) || 35;
     const asWtg = Number(batch.AssignWtg)   || 15;
@@ -440,8 +480,14 @@ export async function GET(req: NextRequest) {
       const attendPct    = baseLectures > 0 ? roundH((presentCount / baseLectures) * 100) : 0;
       const absentPct    = baseLectures > 0 ? roundH((absentDays  / baseLectures) * 100) : 0;
 
-      /* Final Total % = UT weighted + AS weighted + FE weighted */
-      const totalScore = roundH(utAvg + asAvg + feAvg);
+      /* viva/moc marks */
+      const vivaMarks: Record<number, number> = vivaMarksMap[sid] || {};
+      const vivaObtained = vivaMocs.reduce((sum: number, v: any) => sum + (vivaMarks[v.viva_id] || 0), 0);
+      const disciplineMarks: Record<number, number> = disciplineMarksMap[sid] || {};
+      const disciplineObtained = vivaMocs.reduce((sum: number, v: any) => sum + (disciplineMarks[v.viva_id] || 0), 0);
+
+      /* Final Total % = UT weighted + AS weighted + FE weighted − discipline deduction */
+      const totalScore = roundH(utAvg + asAvg + feAvg - disciplineObtained);
 
       return {
         srNo:         idx + 1,
@@ -452,15 +498,19 @@ export async function GET(req: NextRequest) {
         unitTestMarks:   utMarks,
         assignmentMarks: asMarks,
         finalExamMarks:  feMarks,
+        vivaMarks,
+        disciplineMarks,
         utObtained, utTotalMax, utAvg,
         asObtained, asTotalMax, asAvg,
         feObtained, feTotalMax, feAvg,
+        vivaObtained, vivaTotalMax,
+        disciplineObtained,
         totalLectures: baseLectures,
         presentCount,
         absentDays,
         attendPct,
         absentPct,
-        disciplineScore: 0,
+        disciplineScore: disciplineObtained,
         totalScore,
         classObtained: hasExamMarks ? getClassFromBoundaries(totalScore, classBoundaries) : 'NA',
       };
@@ -471,6 +521,7 @@ export async function GET(req: NextRequest) {
       unitTests,
       assignments,
       finalExams,
+      vivaMocs,
       students: resultStudents,
       totalLectures,
     });

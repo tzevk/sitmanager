@@ -2,10 +2,58 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { dashboardRateLimiter } from '@/lib/rate-limit';
+
+/* ── Schema discovery for test_taken_child ─────────────────────────────────── */
+async function getTestChildSchema(pool: any): Promise<{
+  studentCol: string;
+  marksCol: string;
+  statusCol: string;
+  idCol: string;
+  deleteClause: string;
+}> {
+  try {
+    const [rows] = await pool.query(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'test_taken_child'`
+    );
+    const cols = new Set((rows as any[]).map((r: any) => String(r.COLUMN_NAME)));
+
+    let studentCol = 'Student_Id';
+    let marksCol = 'Marks';
+    let statusCol = 'Status';
+    let idCol = 'ID';
+    for (const col of cols) {
+      const lc = col.toLowerCase();
+      if (studentCol === 'Student_Id' && ['student_id', 'admission_id', 'studentid'].some(c => lc.includes(c))) {
+        studentCol = col;
+      }
+      if (marksCol === 'Marks' && ['mark', 'score', 'obtain'].some(c => lc.includes(c))) {
+        marksCol = col;
+      }
+      if (lc === 'status') statusCol = col;
+      if (lc === 'id') idCol = col;
+    }
+
+    const hasDelete = cols.has('IsDelete') || cols.has('isdelete');
+    return {
+      studentCol,
+      marksCol,
+      statusCol,
+      idCol,
+      deleteClause: hasDelete ? 'AND (ttc.IsDelete = 0 OR ttc.IsDelete IS NULL)' : '',
+    };
+  } catch {
+    return { studentCol: 'Student_Id', marksCol: 'Marks', statusCol: 'Status', idCol: 'ID', deleteClause: '' };
+  }
+}
 
 /* ---------- GET — List unit tests OR single OR dropdown options ---------- */
 export async function GET(req: NextRequest) {
   try {
+    const rateLimited = await dashboardRateLimiter(req);
+    if (rateLimited) return rateLimited;
+
     const auth = await requirePermission(req, 'unit_test.view');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
@@ -75,6 +123,61 @@ export async function GET(req: NextRequest) {
         [batchId]
       );
       return NextResponse.json({ tests });
+    }
+
+    /* --- Students for a batch with their marks for a given test --- */
+    if (fetchOptions === 'students') {
+      const batchId = searchParams.get('batchId');
+      const takeId = searchParams.get('takeId');
+      if (!batchId) return NextResponse.json({ students: [] });
+
+      const [students] = await pool.query(
+        `SELECT a.Admission_Id, a.Student_Id, a.Student_Code, s.Student_Name, a.Roll_No
+         FROM admission_master a
+         JOIN student_master s ON a.Student_Id = s.Student_Id
+         WHERE a.Batch_Id = ?
+           AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
+           AND (a.Cancel = 0 OR a.Cancel IS NULL)
+         ORDER BY CAST(COALESCE(a.Roll_No, '0') AS UNSIGNED), s.Student_Name`,
+        [parseInt(batchId)]
+      );
+
+      const marksMap: Record<string, number | null> = {};
+      const statusMap: Record<string, string | null> = {};
+      const childIdMap: Record<string, number | null> = {};
+      if (takeId && parseInt(takeId) > 0) {
+        try {
+          const { studentCol, marksCol, statusCol, idCol, deleteClause } = await getTestChildSchema(pool);
+          const [childRows] = await pool.query(
+            `SELECT ttc.\`${studentCol}\` AS raw_sid,
+                    IFNULL(ttc.\`${marksCol}\`, NULL) AS marks_obtained,
+                    ttc.\`${statusCol}\` AS status,
+                    ttc.\`${idCol}\` AS child_id
+             FROM test_taken_child ttc
+             WHERE ttc.Take_Id = ? ${deleteClause}`,
+            [parseInt(takeId)]
+          );
+          for (const row of childRows as any[]) {
+            marksMap[String(row.raw_sid)] = row.marks_obtained ?? null;
+            statusMap[String(row.raw_sid)] = row.status ?? null;
+            childIdMap[String(row.raw_sid)] = row.child_id ?? null;
+          }
+        } catch { /* schema may differ — marks stay null */ }
+      }
+
+      const result = (students as any[]).map((s: any, idx: number) => ({
+        row_num: idx + 1,
+        Admission_Id: s.Admission_Id,
+        Student_Id: s.Student_Id,
+        Student_Code: s.Student_Code,
+        Student_Name: s.Student_Name,
+        Roll_No: s.Roll_No,
+        marks_obtained: marksMap[String(s.Student_Id)] ?? marksMap[String(s.Admission_Id)] ?? null,
+        status: statusMap[String(s.Student_Id)] ?? statusMap[String(s.Admission_Id)] ?? null,
+        child_id: childIdMap[String(s.Student_Id)] ?? childIdMap[String(s.Admission_Id)] ?? null,
+      }));
+
+      return NextResponse.json({ students: result });
     }
 
     /* --- List with pagination --- */
@@ -173,6 +276,9 @@ export async function GET(req: NextRequest) {
 /* ---------- POST — Create new unit test taken ---------- */
 export async function POST(req: NextRequest) {
   try {
+    const rateLimited = await dashboardRateLimiter(req);
+    if (rateLimited) return rateLimited;
+
     const auth = await requirePermission(req, 'unit_test.create');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
@@ -209,6 +315,9 @@ export async function POST(req: NextRequest) {
 /* ---------- PUT — Update unit test taken ---------- */
 export async function PUT(req: NextRequest) {
   try {
+    const rateLimited = await dashboardRateLimiter(req);
+    if (rateLimited) return rateLimited;
+
     const auth = await requirePermission(req, 'unit_test.update');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
@@ -232,6 +341,33 @@ export async function PUT(req: NextRequest) {
       ]
     );
 
+    /* ── Save student marks if provided ── */
+    if (body.studentMarks && Array.isArray(body.studentMarks) && body.studentMarks.length > 0) {
+      const { studentCol, marksCol, statusCol, idCol } = await getTestChildSchema(pool);
+      for (const sm of body.studentMarks) {
+        if (sm.child_id) {
+          await pool.query(
+            `UPDATE test_taken_child SET \`${marksCol}\` = ?, \`${statusCol}\` = ?
+             WHERE \`${idCol}\` = ? AND Take_Id = ?`,
+            [sm.marks_obtained ?? null, sm.status ?? null, sm.child_id, Take_Id]
+          );
+        } else {
+          await pool.query(
+            `INSERT INTO test_taken_child
+               (Take_Id, Test_Id, \`${studentCol}\`, Student_Name, \`${marksCol}\`, Marks_from, \`${statusCol}\`, IsActive, IsDelete)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+            [
+              Take_Id, body.Test_Id || null,
+              sm.Student_Id, sm.Student_Name || '',
+              sm.marks_obtained ?? null,
+              body.Marks || null,
+              sm.status ?? null,
+            ]
+          );
+        }
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Unit test taken PUT error:', error);
@@ -245,6 +381,9 @@ export async function PUT(req: NextRequest) {
 /* ---------- DELETE — Soft delete ---------- */
 export async function DELETE(req: NextRequest) {
   try {
+    const rateLimited = await dashboardRateLimiter(req);
+    if (rateLimited) return rateLimited;
+
     const auth = await requirePermission(req, 'unit_test.delete');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();

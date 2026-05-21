@@ -154,6 +154,8 @@ export async function PUT(
       Login_Password, Refered_By,
       // Admission date
       Admission_Dt,
+      // Placement
+      SitPerformance, PlacementRemark,
     } = body;
 
     const fullName = Student_Name ||
@@ -200,7 +202,9 @@ export async function PUT(
          Status_id = ?,
          Status_date = ?,
          Login_Password = ?,
-         Refered_By = ?
+         Refered_By = ?,
+         SitPerformance = ?,
+         PlacementRemark = ?
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
       [
         fullName,
@@ -243,6 +247,8 @@ export async function PUT(
         Status_date || null,
         Login_Password || null,
         Refered_By || null,
+        SitPerformance ? parseFloat(SitPerformance) : null,
+        PlacementRemark || null,
         id,
       ]
     );

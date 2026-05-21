@@ -141,6 +141,8 @@ export default function EditStudentPage() {
     Admission_Dt: '',
     /* Student portal / referral */
     Login_Password: '', Refered_By: '',
+    /* Placement */
+    SitPerformance: '', PlacementRemark: '',
   });
 
   const set = (field: string, value: string) =>
@@ -201,6 +203,8 @@ export default function EditStudentPage() {
           Admission_Dt:     s.Admission_Dt ? String(s.Admission_Dt).slice(0, 10) : '',
           Login_Password:   s.Login_Password   || '',
           Refered_By:       s.Refered_By       || '',
+          SitPerformance:   s.SitPerformance != null && String(s.SitPerformance) !== 'NULL' ? String(s.SitPerformance) : '',
+          PlacementRemark:  s.PlacementRemark && s.PlacementRemark !== 'NULL' ? s.PlacementRemark : '',
         });
 
         setBatchStartDate(s.Batch_StartDate ? String(s.Batch_StartDate).slice(0, 10) : '');
@@ -966,6 +970,41 @@ export default function EditStudentPage() {
           {/* ==== PLACEMENT ==== */}
           {activeTab === 'placement' && (
             <div className="space-y-3">
+              <SectionCard
+                title="Placement Details"
+                icon={
+                  <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                }
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>SIT Performance (%)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={form.SitPerformance}
+                      onChange={(e) => set('SitPerformance', e.target.value)}
+                      className={inputCls}
+                      placeholder="e.g. 85.50"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Placement Remark</label>
+                    <textarea
+                      value={form.PlacementRemark}
+                      onChange={(e) => set('PlacementRemark', e.target.value)}
+                      rows={3}
+                      className={textareaCls}
+                      placeholder="Placement status, notes…"
+                    />
+                  </div>
+                </div>
+              </SectionCard>
+
               <SectionCard
                 title="Placement History"
                 icon={

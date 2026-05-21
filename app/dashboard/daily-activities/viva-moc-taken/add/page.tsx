@@ -10,22 +10,33 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 /* ------------------------------------------------------------------ */
 interface Course { Course_Id: number; Course_Name: string; }
 interface Batch { Batch_Id: number; Batch_code: string; Category: string | null; Timings: string | null; }
-interface MocDef { id: number; subject: string; marks: string | null; date: string | null; }
+
+interface StudentMark {
+  row_num: number;
+  Student_Id: number;
+  Admission_Id: number;
+  Student_Code: string | null;
+  Student_Name: string;
+  Roll_No: string | null;
+  marks_obtained: number | null;
+  discipline_marks: number | null;
+  status: string | null;
+}
+
+interface StudentEdit {
+  marks: string;
+  discipline_marks: string;
+  status: string;
+}
 
 interface FormData {
   Course_Id: string;
   Batch_Id: string;
-  Moc_Id: string;
-  vivamocname: string;
-  marks: string;
-  date: string;
 }
 
 const emptyForm: FormData = {
-  Course_Id: '', Batch_Id: '', Moc_Id: '',
-  vivamocname: '',
-  marks: '',
-  date: new Date().toISOString().slice(0, 10),
+  Course_Id: '',
+  Batch_Id: '',
 };
 
 /* ------------------------------------------------------------------ */
@@ -42,11 +53,15 @@ export default function AddVivaMocTakenPage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   const [courses, setCourses] = useState<Course[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
-  const [mocDefs, setMocDefs] = useState<MocDef[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  /* ── Students panel ── */
+  const [students, setStudents] = useState<StudentMark[]>([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentEdits, setStudentEdits] = useState<Record<number, StudentEdit>>({});
 
   /* ── Load courses on mount ── */
   useEffect(() => {
@@ -72,10 +87,6 @@ export default function AddVivaMocTakenPage() {
           setForm({
             Course_Id: String(a.Course_Id || ''),
             Batch_Id: String(a.Batch_Id || a.batchcode || ''),
-            Moc_Id: '',
-            vivamocname: a.vivamocname || '',
-            marks: String(a.marks || ''),
-            date: a.date ? a.date.slice(0, 10) : '',
           });
         }
       } catch { /* ignore */ }
@@ -95,35 +106,38 @@ export default function AddVivaMocTakenPage() {
     })();
   }, [form.Course_Id]);
 
-  /* ── Load moc definitions when batch changes ── */
+  /* ── Load students when batch (or editId) changes ── */
   useEffect(() => {
-    if (!form.Batch_Id) { setMocDefs([]); return; }
+    if (!form.Batch_Id) { setStudents([]); setStudentEdits({}); return; }
+    setStudentsLoading(true);
     (async () => {
       try {
-        const res = await fetch(`/api/daily-activities/viva-moc-taken?options=mocs&batchId=${form.Batch_Id}`);
+        const url = editId
+          ? `/api/daily-activities/viva-moc-taken?options=students&batchId=${form.Batch_Id}&vivaId=${editId}`
+          : `/api/daily-activities/viva-moc-taken?options=students&batchId=${form.Batch_Id}`;
+        const res = await fetch(url);
         const data = await res.json();
-        setMocDefs(data.mocs || []);
-      } catch { /* ignore */ }
+        const fetched: StudentMark[] = data.students || [];
+        setStudents(fetched);
+        const edits: Record<number, StudentEdit> = {};
+        for (const s of fetched) {
+          edits[s.Student_Id] = {
+            marks: s.marks_obtained != null ? String(s.marks_obtained) : '',
+            discipline_marks: s.discipline_marks != null ? String(s.discipline_marks) : '',
+            status: s.status ?? 'Present',
+          };
+        }
+        setStudentEdits(edits);
+      } catch { setStudents([]); setStudentEdits({}); }
+      setStudentsLoading(false);
     })();
-  }, [form.Batch_Id]);
-
-  /* ── Auto-fill from selected moc definition ── */
-  const handleMocSelect = (mocId: string) => {
-    setForm(prev => ({ ...prev, Moc_Id: mocId }));
-    const def = mocDefs.find(t => String(t.id) === mocId);
-    if (def) {
-      setForm(prev => ({
-        ...prev,
-        Moc_Id: mocId,
-        vivamocname: def.subject || prev.vivamocname,
-        marks: def.marks || prev.marks,
-        date: def.date ? def.date.slice(0, 10) : prev.date,
-      }));
-    }
-  };
+  }, [form.Batch_Id, editId]);
 
   const set = (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [field]: e.target.value }));
+
+  const setStudentField = (studentId: number, field: keyof StudentEdit, value: string) =>
+    setStudentEdits(prev => ({ ...prev, [studentId]: { ...prev[studentId], [field]: value } }));
 
   /* ── Submit ── */
   const handleSubmit = async (e: React.FormEvent) => {
@@ -134,9 +148,13 @@ export default function AddVivaMocTakenPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const payload: any = {
         batchcode: form.Batch_Id || null,
-        vivamocname: form.vivamocname || null,
-        marks: form.marks || null,
-        date: form.date || null,
+        students: students.map(s => ({
+          Student_Id: s.Student_Id,
+          Admission_Id: s.Admission_Id,
+          marks: studentEdits[s.Student_Id]?.marks || null,
+          discipline_marks: studentEdits[s.Student_Id]?.discipline_marks || null,
+          status: studentEdits[s.Student_Id]?.status || 'Present',
+        })),
       };
       if (isEdit) payload.id = parseInt(editId!);
 
@@ -244,35 +262,99 @@ export default function AddVivaMocTakenPage() {
                 </select>
               </div>
 
-              {/* Viva/Moc Name */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Viva/Moc Name <span className="text-red-400">*</span></label>
-                <select value={form.Moc_Id} onChange={(e) => handleMocSelect(e.target.value)} required disabled={!form.Batch_Id}
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white disabled:opacity-50">
-                  <option value="">--Select--</option>
-                  {mocDefs.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {m.subject}{m.marks ? ` (${m.marks} marks)` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Max Marks */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Max Marks</label>
-                <input type="text" value={form.marks} onChange={set('marks')} placeholder="Max Marks"
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
-              </div>
-
-              {/* Date */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Date <span className="text-red-400">*</span></label>
-                <input type="date" value={form.date} onChange={set('date')} required
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
-              </div>
             </div>
           </div>
+
+          {/* ── Students Panel ── */}
+          {form.Batch_Id && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <svg className="w-4 h-4 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <h3 className="text-sm font-bold text-[#2E3093] uppercase tracking-wider">
+                  Batch Students
+                  {students.length > 0 && (
+                    <span className="ml-2 text-xs font-semibold text-gray-400 normal-case">({students.length} students)</span>
+                  )}
+                </h3>
+              </div>
+
+              {studentsLoading ? (
+                <div className="flex items-center gap-2 py-6 text-gray-400 text-sm">
+                  <div className="w-4 h-4 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                  Loading students...
+                </div>
+              ) : students.length === 0 ? (
+                <p className="text-sm text-gray-400 py-4">No students found for this batch.</p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-gray-200">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-gray-50 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                        <th className="py-2.5 px-3 text-left w-10">#</th>
+                        <th className="py-2.5 px-3 text-left">Student Code</th>
+                        <th className="py-2.5 px-3 text-left">Student Name</th>
+                        <th className="py-2.5 px-3 text-center w-36">Status</th>
+                        <th className="py-2.5 px-3 text-center w-28">Viva Marks</th>
+                        <th className="py-2.5 px-3 text-center w-28">Discipline Marks</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {students.map((s) => {
+                        const edit = studentEdits[s.Student_Id] ?? { marks: '', discipline_marks: '', status: 'Present' };
+                        const isAbsent = edit.status === 'Absent';
+                        return (
+                          <tr key={s.Student_Id} className={`transition-colors ${isAbsent ? 'bg-red-50/40' : 'hover:bg-blue-50/20'}`}>
+                            <td className="py-2 px-3 text-gray-400 font-mono">{s.row_num}</td>
+                            <td className="py-2 px-3 text-gray-500">{s.Student_Code || '—'}</td>
+                            <td className="py-2 px-3 font-medium text-gray-800">{s.Student_Name}</td>
+                            <td className="py-2 px-3 text-center">
+                              <select
+                                value={edit.status}
+                                onChange={(e) => setStudentField(s.Student_Id, 'status', e.target.value)}
+                                className={`h-7 w-28 rounded-md border px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#2A6BB5]/40 ${
+                                  isAbsent
+                                    ? 'border-red-300 bg-red-50 text-red-700'
+                                    : 'border-green-300 bg-green-50 text-green-700'
+                                }`}
+                              >
+                                <option value="Present">Present</option>
+                                <option value="Absent">Absent</option>
+                              </select>
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                value={edit.marks}
+                                onChange={(e) => setStudentField(s.Student_Id, 'marks', e.target.value)}
+                                disabled={isAbsent}
+                                placeholder="—"
+                                className="h-7 w-20 rounded-md border border-gray-300 px-2 text-xs text-center focus:outline-none focus:ring-1 focus:ring-[#2A6BB5]/40 disabled:opacity-40 disabled:bg-gray-50"
+                              />
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={edit.discipline_marks}
+                                onChange={(e) => setStudentField(s.Student_Id, 'discipline_marks', e.target.value)}
+                                disabled={isAbsent}
+                                placeholder="—"
+                                className="h-7 w-20 rounded-md border border-purple-300 px-2 text-xs text-center focus:outline-none focus:ring-1 focus:ring-purple-400/40 disabled:opacity-40 disabled:bg-gray-50"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Submit / Cancel ── */}
           <div className="flex items-center gap-3">
