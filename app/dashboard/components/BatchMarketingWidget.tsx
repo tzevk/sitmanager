@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 
 type BMStatus   = 'Pending' | 'In Progress' | 'Done';
 type StatusField = 'flyer_status' | 'announcement_status' | 'meta_ads_status';
@@ -40,6 +40,10 @@ interface LocalStatus {
   announcement_status: BMStatus;
   meta_ads_status: BMStatus;
   is_locked: boolean;
+  platforms: string[];
+  ct_planned: number;
+  ct_target: number;
+  ct_completed: number;
 }
 
 const DEFAULT_STATUS: Omit<LocalStatus, 'id'> = {
@@ -47,7 +51,57 @@ const DEFAULT_STATUS: Omit<LocalStatus, 'id'> = {
   announcement_status: 'Pending',
   meta_ads_status: 'Pending',
   is_locked: false,
+  platforms: [],
+  ct_planned: 0,
+  ct_target: 0,
+  ct_completed: 0,
 };
+
+const BATCH_PLATFORMS = ['Instagram', 'Facebook', 'WhatsApp', 'Email', 'LinkedIn', 'YouTube', 'Website', 'Google Ads', 'Phone Call'];
+
+function PlatformMultiSelect({ value, onChange, disabled }: { value: string[]; onChange: (v: string[]) => void; disabled: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const toggle = (p: string) =>
+    onChange(value.includes(p) ? value.filter(x => x !== p) : [...value, p]);
+
+  const label = value.length === 0 ? 'Select…' : value.length === 1 ? value[0] : `${value.length} platforms`;
+
+  return (
+    <div className="relative min-w-[110px]" ref={ref}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => !disabled && setOpen(o => !o)}
+        className={`w-full text-left text-[10px] border border-gray-200 rounded-md px-2 py-1.5 bg-white flex items-center justify-between gap-1 hover:border-gray-300 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      >
+        <span className="truncate text-gray-700">{label}</span>
+        <svg className={`w-3 h-3 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[150px]">
+          {BATCH_PLATFORMS.map(p => (
+            <label key={p} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs text-gray-700">
+              <input type="checkbox" checked={value.includes(p)} onChange={() => toggle(p)} className="rounded accent-[#2E3093]" />
+              {p}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function subtractMonths(dateStr: string, months: number): string {
@@ -178,14 +232,13 @@ export default function BatchMarketingWidget() {
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const startOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      const toDate = endOfMonth(addMonths(startOfCurrentMonth, 5));
-      const fromDateStr = toDateStr(startOfCurrentMonth.toISOString());
+      const toDate = endOfMonth(addMonths(today, 3));
+      const fromDateStr = toDateStr(today.toISOString());
       const toDateStrVal = toDateStr(toDate.toISOString());
 
       const [batchRes, marketingRes] = await Promise.all([
-        // Use Annual Batch master source and constrain to upcoming 6 months.
-        fetch(`/api/masters/annual-batch?page=1&limit=500&fromDate=${fromDateStr}&toDate=${toDateStrVal}`),
+        // Use CBD-accessible upcoming batches endpoint (no annual_batch.view permission required).
+        fetch(`/api/cbd-batch-marketing/upcoming-batches?fromDate=${fromDateStr}&toDate=${toDateStrVal}`),
         fetch('/api/cbd-batch-marketing', { cache: 'no-store' }),
       ]);
       const batchData = batchRes.ok ? await batchRes.json() : { data: [] };
@@ -204,11 +257,7 @@ export default function BatchMarketingWidget() {
         });
       }
       setBatches(
-        allBatches.sort((a, b) => {
-          const c = (a.Course_Name ?? '').localeCompare(b.Course_Name ?? '');
-          if (c !== 0) return c;
-          return toDateStr(a.SDate).localeCompare(toDateStr(b.SDate));
-        })
+        allBatches.sort((a, b) => toDateStr(a.SDate).localeCompare(toDateStr(b.SDate)))
       );
 
       const map = new Map<string, LocalStatus>();
@@ -219,6 +268,10 @@ export default function BatchMarketingWidget() {
           announcement_status: r.announcement_status,
           meta_ads_status:     r.meta_ads_status,
           is_locked:           r.is_locked === 1,
+          platforms:           [],
+          ct_planned:          0,
+          ct_target:           0,
+          ct_completed:        0,
         });
       }
       setStatuses(map);
@@ -336,6 +389,16 @@ export default function BatchMarketingWidget() {
     }
   }, [statuses]);
 
+  const handleLocalUpdate = useCallback((batch: BatchOption, update: Partial<Pick<LocalStatus, 'platforms' | 'ct_planned' | 'ct_target' | 'ct_completed'>>) => {
+    const key = batchIdentity(batch);
+    setStatuses(prev => {
+      const m = new Map(prev);
+      const current = m.get(key) ?? m.get(batch.Batch_code) ?? { ...DEFAULT_STATUS };
+      m.set(key, { ...current, ...update });
+      return m;
+    });
+  }, []);
+
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -349,7 +412,7 @@ export default function BatchMarketingWidget() {
         <span className="font-bold text-gray-800 text-sm flex-1">Batch Marketing Tracker</span>
         {!loading && (
           <span className="text-[11px] font-semibold text-gray-400 tabular-nums">
-            {batches.length} {batches.length === 1 ? 'batch' : 'batches'} · next 6 months
+            {batches.length} {batches.length === 1 ? 'batch' : 'batches'} · next 3 months
           </span>
         )}
       </div>
@@ -385,6 +448,10 @@ export default function BatchMarketingWidget() {
                 <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center whitespace-nowrap">Meta Status</th>
                 <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center whitespace-nowrap">Flyer Date</th>
                 <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center whitespace-nowrap">Flyer Status</th>
+                <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-left whitespace-nowrap">Platform</th>
+                <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center whitespace-nowrap">Planned</th>
+                <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-[#2E3093] text-center whitespace-nowrap">Target</th>
+                <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-emerald-600 text-center whitespace-nowrap">Done</th>
                 <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center w-20 sticky right-0 z-20 bg-gray-50 whitespace-nowrap shadow-[-1px_0_0_rgba(229,231,235,1)]">Actions</th>
               </tr>
             </thead>
@@ -392,7 +459,7 @@ export default function BatchMarketingWidget() {
               {loading ? (
                 Array.from({length: 5}).map((_, i) => (
                   <tr key={i} className="border-t border-gray-200">
-                    {Array.from({length: 10}).map((_, j) => (
+                    {Array.from({length: 14}).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-3 bg-gray-100 rounded animate-pulse" style={{ width: j === 0 ? '70%' : '50%' }} />
                       </td>
@@ -401,7 +468,7 @@ export default function BatchMarketingWidget() {
                 ))
               ) : batches.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-5 py-12 text-center text-sm text-gray-400">
+                  <td colSpan={14} className="px-5 py-12 text-center text-sm text-gray-400">
                     No upcoming batches in the next 6 months
                   </td>
                 </tr>
@@ -452,6 +519,47 @@ export default function BatchMarketingWidget() {
 
                       {/* Flyer */}
                       <TaskCells status={status?.flyer_status ?? 'Pending'} field="flyer_status" batch={b} dueDate={flyDate} onUpdate={handleStatusChange} disabled={locked || isSaving} />
+
+                      {/* Platform */}
+                      <td className="px-3 py-2">
+                        <PlatformMultiSelect
+                          value={status?.platforms ?? []}
+                          onChange={v => handleLocalUpdate(b, { platforms: v })}
+                          disabled={locked || isSaving}
+                        />
+                      </td>
+
+                      {/* Content tracking */}
+                      <td className="px-2 py-2 text-center">
+                        <input
+                          type="number" min="0"
+                          value={status?.ct_planned || ''}
+                          onChange={e => handleLocalUpdate(b, { ct_planned: Number(e.target.value) })}
+                          disabled={locked || isSaving}
+                          placeholder="0"
+                          className="w-12 text-[10px] border border-gray-200 rounded-md px-1.5 py-1 bg-white text-center tabular-nums disabled:opacity-50"
+                        />
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <input
+                          type="number" min="0"
+                          value={status?.ct_target || ''}
+                          onChange={e => handleLocalUpdate(b, { ct_target: Number(e.target.value) })}
+                          disabled={locked || isSaving}
+                          placeholder="0"
+                          className="w-12 text-[10px] border border-[#2E3093]/30 rounded-md px-1.5 py-1 bg-indigo-50/60 text-center font-semibold tabular-nums text-[#2E3093] disabled:opacity-50"
+                        />
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <input
+                          type="number" min="0"
+                          value={status?.ct_completed || ''}
+                          onChange={e => handleLocalUpdate(b, { ct_completed: Number(e.target.value) })}
+                          disabled={locked || isSaving}
+                          placeholder="0"
+                          className="w-12 text-[10px] border border-emerald-200 rounded-md px-1.5 py-1 bg-emerald-50/60 text-center tabular-nums text-emerald-700 disabled:opacity-50"
+                        />
+                      </td>
 
                       {/* Actions */}
                       <td className="px-3 py-2.5 sticky right-0 z-10 bg-white shadow-[-1px_0_0_rgba(229,231,235,1)]">

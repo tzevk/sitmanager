@@ -1,10 +1,20 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type ContentStatus = 'Not Started' | 'Planned' | 'Shot' | 'Edited' | 'Approved' | 'Posted';
 type ViewMode = 'calendar' | 'planner';
+
+interface ContentPlanRow {
+  id: number;
+  content_type: string;
+  description: string | null;
+  frequency: string;
+  target_per_month: number;
+  responsible_person: string;
+  sort_order: number;
+}
 
 interface ContentItem {
   id: number;
@@ -22,14 +32,14 @@ type FormItem = Partial<ContentItem>;
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const TYPE_CONFIG = [
-  { name: 'Reel',      short: 'RL', color: '#7C3AED', bg: '#F3E8FF' },
-  { name: 'Story',     short: 'ST', color: '#2563EB', bg: '#DBEAFE' },
-  { name: 'Post',      short: 'PO', color: '#059669', bg: '#D1FAE5' },
-  { name: 'Video',     short: 'VD', color: '#EA580C', bg: '#FFEDD5' },
-  { name: 'Carousel',  short: 'CR', color: '#DB2777', bg: '#FCE7F3' },
-  { name: 'Blog',      short: 'BL', color: '#0F766E', bg: '#CCFBF1' },
-  { name: 'Campaign',  short: 'CP', color: '#D97706', bg: '#FEF3C7' },
-  { name: 'Other',     short: 'OT', color: '#4B5563', bg: '#F3F4F6' },
+  { name: 'Reel',      short: 'RL', color: '#4C1D95', bg: '#C4B5FD' },
+  { name: 'Story',     short: 'ST', color: '#1E3A8A', bg: '#93C5FD' },
+  { name: 'Post',      short: 'PO', color: '#064E3B', bg: '#6EE7B7' },
+  { name: 'Video',     short: 'VD', color: '#7C2D12', bg: '#FDBA74' },
+  { name: 'Carousel',  short: 'CR', color: '#831843', bg: '#F9A8D4' },
+  { name: 'Blog',      short: 'BL', color: '#042F2E', bg: '#5EEAD4' },
+  { name: 'Campaign',  short: 'CP', color: '#451A03', bg: '#FCD34D' },
+  { name: 'Other',     short: 'OT', color: '#1F2937', bg: '#D1D5DB' },
 ] as const;
 
 const PLATFORMS  = ['Instagram', 'Facebook', 'YouTube', 'LinkedIn', 'Twitter/X', 'WhatsApp', 'Website', 'Email', 'Other'];
@@ -260,6 +270,8 @@ export default function ContentCalendarWidget() {
   const [loading, setLoading]     = useState(true);
   const [modal, setModal]         = useState<FormItem | null>(null);
   const [saving, setSaving]       = useState(false);
+  const [plan, setPlan]           = useState<ContentPlanRow[]>([]);
+  const planLoaded                = useRef(false);
 
   const load = useCallback(async (y: number, m: number) => {
     setLoading(true);
@@ -272,6 +284,15 @@ export default function ContentCalendarWidget() {
   }, []);
 
   useEffect(() => { load(year, month); }, [load, year, month]);
+
+  useEffect(() => {
+    if (planLoaded.current) return;
+    planLoaded.current = true;
+    fetch('/api/cbd-content-plan', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : { rows: [] })
+      .then(d => setPlan(d.rows ?? []))
+      .catch(() => {});
+  }, []);
 
   const prevMonth = () => { if (month === 1) { setYear(y => y-1); setMonth(12); } else setMonth(m => m-1); };
   const nextMonth = () => { if (month === 12) { setYear(y => y+1); setMonth(1); } else setMonth(m => m+1); };
@@ -354,55 +375,162 @@ export default function ContentCalendarWidget() {
 
   const calDays = useMemo(() => buildCalDays(year, month), [year, month]);
 
+  const frequencyStats = useMemo(() => {
+    const countByType = new Map<string, { planned: number; completed: number }>();
+    for (const item of items) {
+      const key = (item.content_type ?? '').trim().toLowerCase();
+      const prev = countByType.get(key) ?? { planned: 0, completed: 0 };
+      prev.planned += 1;
+      if (COMPLETED.has(item.status)) prev.completed += 1;
+      countByType.set(key, prev);
+    }
+    return plan.map(row => {
+      const key = row.content_type.trim().toLowerCase();
+      const counts = countByType.get(key) ?? { planned: 0, completed: 0 };
+      return { ...row, planned: counts.planned, completed: counts.completed };
+    });
+  }, [plan, items]);
+
+  const [sidebarTab, setSidebarTab] = useState<'types' | 'tracker'>('types');
+
   // ── Sidebar ──────────────────────────────────────────────────────────────────
   const Sidebar = () => (
-    <aside className="w-56 shrink-0 border-r border-gray-100 bg-gray-50/60 flex flex-col self-stretch">
-      <div className="px-3 pt-4 pb-2 h-full overflow-y-auto">
-        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-3">Content Types</p>
+    <aside className="absolute inset-y-0 left-0 w-[420px] flex flex-col border-r border-gray-200 bg-gray-50/60 overflow-hidden z-10">
+      {/* Tab toggle */}
+      <div className="flex border-b border-gray-100 px-2 pt-2 gap-1">
+        <button
+          onClick={() => setSidebarTab('types')}
+          className={`flex-1 text-[10px] font-semibold py-1 rounded-t-md transition-colors ${sidebarTab === 'types' ? 'bg-white text-[#2E3093] shadow-sm border border-b-white border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+        >
+          Types
+        </button>
+        <button
+          onClick={() => setSidebarTab('tracker')}
+          className={`flex-1 text-[10px] font-semibold py-1 rounded-t-md transition-colors ${sidebarTab === 'tracker' ? 'bg-white text-[#2E3093] shadow-sm border border-b-white border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+        >
+          Tracker
+        </button>
+      </div>
 
-        {/* Column labels */}
-        <div className="flex items-center gap-1 px-1 mb-1">
-          <span className="flex-1 text-[9px] text-gray-400">Type</span>
-          <span className="w-7 text-center text-[9px] text-gray-400">Plan</span>
-          <span className="w-7 text-center text-[9px] text-emerald-500">Done</span>
-          <span className="w-7 text-center text-[9px] text-amber-500">Pend</span>
-        </div>
+      <div className={`flex-1 min-h-0 overflow-y-auto ${sidebarTab === 'types' ? 'px-2 pt-2 pb-2' : ''}`}>
+        {sidebarTab === 'types' ? (
+          <>
+            {/* Column labels */}
+            <div className="flex items-center gap-1 px-2 mb-1.5">
+              <span className="flex-1 text-[9px] font-semibold text-gray-400 uppercase tracking-wide">Type</span>
+              <span className="w-8 text-center text-[9px] font-semibold text-gray-400 uppercase tracking-wide">Plan</span>
+              <span className="w-8 text-center text-[9px] font-semibold text-emerald-500 uppercase tracking-wide">Done</span>
+              <span className="w-8 text-center text-[9px] font-semibold text-amber-500 uppercase tracking-wide">Left</span>
+            </div>
 
-        {loading
-          ? Array.from({length: 5}).map((_, i) => (
-              <div key={i} className="h-7 bg-gray-100 rounded-lg animate-pulse mb-1" />
-            ))
-          : typeStats.map(s => {
-              return (
-                <div key={s.name.toLowerCase()} className="flex items-center gap-1.5 px-1 py-1.5 rounded-lg hover:bg-white transition-colors">
-                  <span
-                    className="w-7 h-5 rounded-md text-[9px] font-bold tracking-wide inline-flex items-center justify-center shrink-0"
-                    style={{ background: s.bg, color: s.color }}
-                    title={s.name}
+            {loading
+              ? Array.from({length: 5}).map((_, i) => (
+                  <div key={i} className="h-9 bg-gray-100 rounded-xl animate-pulse mb-1.5" />
+                ))
+              : typeStats.map(s => (
+                  <div
+                    key={s.name.toLowerCase()}
+                    className="flex items-center gap-2 px-2 py-2 rounded-xl bg-white border border-gray-200 mb-1.5 shadow-sm hover:border-gray-300 hover:shadow transition-all"
                   >
-                    {s.short}
-                  </span>
-                  <span className="flex-1 text-[11px] font-medium text-gray-700 truncate" title={s.name}>{s.name}</span>
-                  <span className="w-7 text-center text-[10px] tabular-nums text-gray-500">{s.planned || '—'}</span>
-                  <span className="w-7 text-center text-[10px] tabular-nums text-emerald-600 font-semibold">{s.done || '—'}</span>
-                  <span className="w-7 text-center text-[10px] tabular-nums text-amber-600 font-semibold">{s.pending || '—'}</span>
-                </div>
-              );
-            })
-        }
+                    <span
+                      className="w-8 h-6 rounded-lg text-[9px] font-bold tracking-wide inline-flex items-center justify-center shrink-0"
+                      style={{ background: s.bg, color: s.color }}
+                      title={s.name}
+                    >
+                      {s.short}
+                    </span>
+                    <span className="flex-1 text-[11px] font-medium text-gray-700 leading-snug">{s.name}</span>
+                    <span className="w-8 text-center text-[11px] tabular-nums font-semibold text-gray-500">{s.planned || '—'}</span>
+                    <span className="w-8 text-center text-[11px] tabular-nums font-semibold text-emerald-600">{s.done || '—'}</span>
+                    <span className="w-8 text-center text-[11px] tabular-nums font-semibold text-amber-600">{s.pending || '—'}</span>
+                  </div>
+                ))
+            }
 
-        {/* Total */}
-        {!loading && (
-          <div className="mt-2 pt-2 border-t border-gray-200 flex items-center gap-1 px-1">
-            <span className="flex-1 text-[10px] font-bold text-gray-600">Total</span>
-            <span className="w-7 text-center text-[10px] tabular-nums font-bold text-gray-700">{items.length || '—'}</span>
-            <span className="w-7 text-center text-[10px] tabular-nums font-bold text-emerald-600">
-              {items.filter(i => COMPLETED.has(i.status)).length || '—'}
-            </span>
-            <span className="w-7 text-center text-[10px] tabular-nums font-bold text-amber-600">
-              {items.filter(i => !COMPLETED.has(i.status)).length || '—'}
-            </span>
-          </div>
+            {!loading && items.length > 0 && (
+              <div className="mt-1 pt-2 border-t border-gray-200 flex items-center gap-1 px-2">
+                <span className="flex-1 text-[10px] font-bold text-gray-600">Total</span>
+                <span className="w-8 text-center text-[11px] tabular-nums font-bold text-gray-700">{items.length}</span>
+                <span className="w-8 text-center text-[11px] tabular-nums font-bold text-emerald-600">
+                  {items.filter(i => COMPLETED.has(i.status)).length}
+                </span>
+                <span className="w-8 text-center text-[11px] tabular-nums font-bold text-amber-600">
+                  {items.filter(i => !COMPLETED.has(i.status)).length}
+                </span>
+              </div>
+            )}
+          </>
+        ) : (
+          <table className="w-full text-[10px] border-collapse">
+            <thead className="sticky top-0 z-10">
+              {frequencyStats.length > 0 && (
+                <tr className="bg-gray-100 border-b-2 border-gray-300">
+                  <td className="px-2 py-1.5 text-[11px] font-bold text-gray-700 border-r border-gray-200">Total</td>
+                  <td className="px-2 py-1.5 border-r border-gray-200" />
+                  <td className="px-2 py-1.5 border-r border-gray-200" />
+                  <td className="px-1 py-1.5 text-center tabular-nums font-bold text-gray-600 border-r border-gray-200">
+                    {frequencyStats.reduce((s, r) => s + r.target_per_month, 0) || '—'}
+                  </td>
+                  <td className="px-1 py-1.5 text-center tabular-nums font-bold text-blue-700 border-r border-gray-200">
+                    {items.length || '—'}
+                  </td>
+                  <td className="px-1 py-1.5 text-center tabular-nums font-bold text-emerald-700">
+                    {items.filter(i => COMPLETED.has(i.status)).length || '—'}
+                  </td>
+                </tr>
+              )}
+              <tr className="bg-[#2E3093]">
+                <th className="text-left px-2 py-2 font-semibold text-white uppercase tracking-wide border-r border-white/20 leading-tight">Content Type</th>
+                <th className="text-left px-2 py-2 font-semibold text-white/80 uppercase tracking-wide border-r border-white/20 w-[90px] leading-tight">Frequency</th>
+                <th className="text-left px-2 py-2 font-semibold text-white/80 uppercase tracking-wide border-r border-white/20 w-[72px] leading-tight">Responsible</th>
+                <th className="text-center px-1 py-2 font-semibold text-white/80 uppercase tracking-wide border-r border-white/20 w-8 leading-tight">Tgt</th>
+                <th className="text-center px-1 py-2 font-semibold text-blue-200 uppercase tracking-wide border-r border-white/20 w-8 leading-tight">Pln</th>
+                <th className="text-center px-1 py-2 font-semibold text-emerald-300 uppercase tracking-wide w-9 leading-tight">Done</th>
+              </tr>
+            </thead>
+            <tbody>
+              {frequencyStats.length === 0
+                ? Array.from({length: 5}).map((_, i) => (
+                    <tr key={i} className="border-b border-gray-100">
+                      {Array.from({length: 6}).map((_, j) => (
+                        <td key={j} className="px-2 py-2 border-r border-gray-100 last:border-r-0">
+                          <div className="h-3 bg-gray-100 rounded animate-pulse" />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                : frequencyStats.map((row, i) => {
+                    const hasTarget = row.target_per_month > 0;
+                    const met = hasTarget && row.completed >= row.target_per_month;
+                    return (
+                      <tr
+                        key={row.id}
+                        className={`border-b border-gray-200 hover:bg-blue-50/40 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}`}
+                      >
+                        <td className="px-2 py-1.5 text-[11px] font-semibold text-gray-800 leading-snug border-r border-gray-200">
+                          {row.content_type}
+                        </td>
+                        <td className="px-2 py-1.5 text-gray-500 border-r border-gray-200 max-w-[90px]">
+                          <span className="block truncate" title={row.frequency}>{row.frequency}</span>
+                        </td>
+                        <td className="px-2 py-1.5 text-gray-500 border-r border-gray-200 max-w-[72px]">
+                          <span className="block truncate" title={row.responsible_person}>{row.responsible_person || '—'}</span>
+                        </td>
+                        <td className="px-1 py-1.5 text-center tabular-nums text-gray-500 border-r border-gray-200">
+                          {hasTarget ? row.target_per_month : '—'}
+                        </td>
+                        <td className="px-1 py-1.5 text-center tabular-nums text-blue-600 font-semibold border-r border-gray-200">
+                          {row.planned || '—'}
+                        </td>
+                        <td className={`px-1 py-1.5 text-center tabular-nums font-semibold ${met ? 'text-emerald-700' : row.completed > 0 ? 'text-emerald-600' : 'text-gray-300'}`}>
+                          {row.completed || '—'}{met ? ' ✓' : ''}
+                        </td>
+                      </tr>
+                    );
+                  })
+              }
+            </tbody>
+          </table>
         )}
       </div>
     </aside>
@@ -461,12 +589,12 @@ export default function ContentCalendarWidget() {
                     setModal({ planned_date: iso, status: 'Not Started', content_type: 'Post' });
                   }}
                   className={[
-                    'min-h-[106px] rounded-2xl border p-1.5 text-left transition-all',
+                    'min-h-[72px] rounded-xl border p-1.5 text-left transition-all',
                     isCurMo
                       ? dayItems.length > 0
-                        ? 'hover:shadow-sm'
-                        : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                      : 'bg-gray-50/70 border-gray-100',
+                        ? 'hover:shadow-md'
+                        : 'bg-white border-gray-300 hover:border-gray-400 hover:shadow-sm'
+                      : 'bg-gray-100 border-gray-300',
                     isToday ? 'ring-2 ring-[#2E3093]/15 border-[#2E3093]/35' : '',
                   ].join(' ')}
                   style={
@@ -493,7 +621,7 @@ export default function ContentCalendarWidget() {
                   </div>
 
                   {dayItems.length === 0 ? (
-                    <div className="h-[56px] rounded-xl border border-dashed border-gray-200 flex items-center justify-center text-[10px] text-gray-300">
+                    <div className="h-[36px] rounded-lg border border-dashed border-gray-200 flex items-center justify-center text-[10px] text-gray-300">
                       {isCurMo ? 'No posts' : '—'}
                     </div>
                   ) : (
@@ -674,9 +802,11 @@ export default function ContentCalendarWidget() {
       </div>
 
       {/* ── Body ── */}
-      <div className="flex">
+      <div className="relative">
         <Sidebar />
-        {view === 'calendar' ? <CalendarView /> : <PlannerView />}
+        <div className="ml-[420px]">
+          {view === 'calendar' ? <CalendarView /> : <PlannerView />}
+        </div>
       </div>
 
       {/* ── Modal ── */}

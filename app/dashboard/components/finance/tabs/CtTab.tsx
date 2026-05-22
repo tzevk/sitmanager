@@ -5,6 +5,7 @@ import { useFinanceResource } from '../shared/useFinanceResource';
 import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, TotalRow, SectionTitle, thCls, tdCls, tdNum, inpCls, lblCls, trCls, PctBar } from '../shared/primitives';
 import { fmt } from '../shared/format';
 import type { CtRow, MonthlyRow, CashflowTxn } from '../shared/types';
+import { PendingInvoicesSection } from './MonthlyTab';
 
 export default function CtTab() {
   /* ── Monthly table ── */
@@ -263,6 +264,9 @@ export default function CtTab() {
           <input type="number" min="0" className={inpCls} value={monthlyForm.target_cost} onChange={e => setMonthlyForm(f => ({ ...f, target_cost: e.target.value }))} />
         </div>
       </Modal>
+
+      {/* ── Pending Invoices ── */}
+      <PendingInvoicesSection department="Corporate Training" />
     </div>
   );
 }

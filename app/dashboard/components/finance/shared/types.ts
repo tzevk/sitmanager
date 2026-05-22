@@ -91,6 +91,7 @@ export interface PendingInvoice {
   due_date: string | null;
   status: InvoiceStatus;
   description: string | null;
+  department: string;
 }
 
 export type CashflowType   = 'Payment' | 'Receipt';

@@ -40,6 +40,8 @@ export interface InquiryListParams {
   statusId?: string;
   dateFrom?: string;
   dateTo?: string;
+  /** When true, only return rows whose latest discussion has nextdate <= CURDATE() */
+  followUpDue?: boolean;
 }
 
 export interface InquiryRow {
@@ -244,6 +246,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   const {
     page, limit, search = '', discipline = '', inquiryType = '',
     location = '', training = '', statusId = '', dateFrom = '', dateTo = '',
+    followUpDue = false,
   } = params;
   const offset = (page - 1) * limit;
 
@@ -300,6 +303,22 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   if (training) {
     conditions.push('c.Course_Name = ?');
     queryParams.push(training);
+  }
+  if (followUpDue) {
+    conditions.push(
+      `EXISTS (
+         SELECT 1 FROM awt_inquirydiscussion d
+         WHERE d.deleted = 0
+           AND (d.Inquiry_id = si.Inquiry_Id OR d.Inquiry_id = si.Student_Id)
+           AND d.nextdate IS NOT NULL
+           AND d.nextdate <= CURDATE()
+           AND d.id = (
+             SELECT MAX(d2.id) FROM awt_inquirydiscussion d2
+             WHERE d2.deleted = 0
+               AND (d2.Inquiry_id = si.Inquiry_Id OR d2.Inquiry_id = si.Student_Id)
+           )
+       )`
+    );
   }
 
   const whereClause = `WHERE (${conditions.join(') AND (')})`;

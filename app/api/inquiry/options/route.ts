@@ -93,33 +93,25 @@ export async function GET() {
       const genders = ['Male', 'Female'];
 
       const inquiryModes = [
-        'Phone',
-        'Mail',
-        'Personal',
-        'Website',
-        'Reference',
-        'Exhibition',
-        'College Visit',
-        'Emagister',
-        'Shiksha.com',
-        'Online Mail',
+        'Call',
+        'WhatsApp',
+        'Website Enquiry Form',
+        'Walk-In',
+        'Social Media DM',
+        'Email',
+        'Seminar / Event',
+        'Portals e.g. IndiaMart',
       ];
 
       const inquiryTypes = [
-        'Advertisement',
         'Reference',
-        'Website',
-        'Google',
-        'Facebook',
+        'Meta Ads',
+        'Google Ads',
+        'College Seminar',
         'Exhibition',
-        'Ex-Student',
-        'Emagister',
-        'India Mart',
-        'News Paper',
-        'Seminar',
-        'Shiksha',
-        'TV Interview',
-        'Import',
+        'Website / Google Search',
+        'Social Media Posts (Not ads)',
+        'Newspaper / Poster',
       ];
 
       return {

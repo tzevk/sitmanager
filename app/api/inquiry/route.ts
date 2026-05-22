@@ -59,6 +59,7 @@ export async function GET(req: NextRequest) {
       statusId: url.searchParams.get('status') || '',
       dateFrom: url.searchParams.get('dateFrom') || '',
       dateTo: url.searchParams.get('dateTo') || '',
+      followUpDue: url.searchParams.get('followUpDue') === '1',
     });
 
     return NextResponse.json(result);

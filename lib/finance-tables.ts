@@ -360,16 +360,24 @@ export const FINANCE_PENDING_INVOICES: ResourceConfig = {
       due_date     DATE NULL,
       status       ENUM('Pending','Paid','Overdue') NOT NULL DEFAULT 'Pending',
       description  VARCHAR(500) NULL,
+      department   VARCHAR(100) NOT NULL DEFAULT 'Projects',
       created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       KEY idx_status (status),
-      KEY idx_due_date (due_date)
+      KEY idx_due_date (due_date),
+      KEY idx_department (department)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `,
+  migrations: `
+    ALTER TABLE finance_pending_invoices
+      ADD COLUMN IF NOT EXISTS department VARCHAR(100) NOT NULL DEFAULT 'Projects'
+  `,
   defaultOrder: "COALESCE(due_date, '9999-12-31') ASC, id DESC",
+  filters: [{ param: 'department', column: 'department' }],
   validate: (b) => {
     const client = safeString(b.client_name, 200);
     if (!client) throw new Error('client_name required');
+    const dept = safeString(b.department, 100) || 'Projects';
     return [
       { col: 'client_name',  val: client },
       { col: 'invoice_no',   val: nullableString(b.invoice_no, 100) },
@@ -378,6 +386,7 @@ export const FINANCE_PENDING_INVOICES: ResourceConfig = {
       { col: 'due_date',     val: nullableDate(b.due_date) },
       { col: 'status',       val: oneOf(b.status, STATUS_VALUES, 'Pending') },
       { col: 'description',  val: nullableString(b.description, 500) },
+      { col: 'department',   val: dept },
     ];
   },
 };

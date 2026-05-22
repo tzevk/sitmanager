@@ -9,8 +9,8 @@ import { targetAttainmentTrend } from '../shared/predictions';
 
 const INVOICE_STATUSES: InvoiceStatus[] = ['Pending', 'Paid', 'Overdue'];
 
-function PendingInvoicesSection() {
-  const invoices = useFinanceResource<PendingInvoice>('/api/finance/pending-invoices');
+export function PendingInvoicesSection({ department = 'Projects' }: { department?: string }) {
+  const invoices = useFinanceResource<PendingInvoice>('/api/finance/pending-invoices', { query: `department=${encodeURIComponent(department)}` });
 
   const [modal, setModal] = useState<{ open: boolean; editing: PendingInvoice | null }>({ open: false, editing: null });
   const [form, setForm] = useState({ client_name: '', invoice_no: '', amount: '', invoice_date: '', due_date: '', status: 'Pending' as InvoiceStatus, description: '' });
@@ -26,7 +26,7 @@ function PendingInvoicesSection() {
   const save = useCallback(async () => {
     setSaving(true);
     try {
-      await invoices.save({ client_name: form.client_name.trim(), invoice_no: form.invoice_no.trim() || null, amount: Number(form.amount), invoice_date: form.invoice_date || null, due_date: form.due_date || null, status: form.status, description: form.description.trim() || null } as Partial<PendingInvoice>, modal.editing);
+      await invoices.save({ client_name: form.client_name.trim(), invoice_no: form.invoice_no.trim() || null, amount: Number(form.amount), invoice_date: form.invoice_date || null, due_date: form.due_date || null, status: form.status, description: form.description.trim() || null, department } as Partial<PendingInvoice>, modal.editing);
       setModal({ open: false, editing: null });
     } catch { /* toast */ }
     setSaving(false);
@@ -268,14 +268,19 @@ export default function MonthlyTab({ apiPath, title, cashflowDepartment }: Props
 }
 
 export function DeputationTab() {
-  return <MonthlyTab apiPath="/api/finance/deputation" title="Accent Deputation — Monthly Performance" cashflowDepartment="DEPUTATION ACCENT" />;
+  return (
+    <div className="space-y-6">
+      <MonthlyTab apiPath="/api/finance/deputation" title="Accent Deputation — Monthly Performance" cashflowDepartment="DEPUTATION ACCENT" />
+      <PendingInvoicesSection department="Deputation" />
+    </div>
+  );
 }
 
 export function ProjectsTab() {
   return (
     <div className="space-y-6">
       <MonthlyTab apiPath="/api/finance/projects" title="Accent Projects — Monthly Performance" cashflowDepartment="PROJECT ACCENT" />
-      <PendingInvoicesSection />
+      <PendingInvoicesSection department="Projects" />
     </div>
   );
 }

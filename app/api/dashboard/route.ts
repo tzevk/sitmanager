@@ -56,7 +56,8 @@ async function fetchDashboardData(dept?: string) {
   const needsLeadFunnel = isCbd || isAdmin;
   const needsSeminars = isCbd;
   const needsExhibitions = isCbd;
-  const needsFollowups = isCbd || isAdmin;
+  const needsFollowups = isAdmin;
+  const needsCbdFollowups = isCbd;
   const needsDailyActivity = isCbd;
   const needsPendingFees = isCbd;
   const needsAlumni = isCbd;
@@ -101,6 +102,7 @@ async function fetchDashboardData(dept?: string) {
     seminarTargetsFallbackRows,
     exhibitionTargetsRows,
     pendingFollowupsRows,
+    cbdFollowupsRows,
     dailyActivityRows,
     pendingFeesRows,
     alumniProgressRows,
@@ -195,7 +197,8 @@ async function fetchDashboardData(dept?: string) {
         q.Enquiries_Received,
         q.Enquiries_Contacted,
         q.Interested_Students,
-        q.Confirmed_Admissions
+        q.Confirmed_Admissions,
+        COALESCE(am.Enrolled, 0) AS Enrolled
       FROM (
         SELECT
           b.Batch_Id,
@@ -257,6 +260,13 @@ async function fetchDashboardData(dept?: string) {
         LEFT JOIN course_mst c_batch ON b.Course_Id = c_batch.Course_Id
         LEFT JOIN course_mst c_si ON si.Course_Id = c_si.Course_Id
       ) q
+      LEFT JOIN (
+        SELECT Batch_Id, COUNT(*) AS Enrolled
+        FROM admission_master
+        WHERE (IsDelete = 0 OR IsDelete IS NULL)
+          AND (Cancel = 0 OR Cancel IS NULL)
+        GROUP BY Batch_Id
+      ) am ON q.Batch_Id = am.Batch_Id
       WHERE q.ParsedSDate >= CURDATE()
         AND q.ParsedSDate <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
       ORDER BY q.ParsedSDate ASC, q.Enquiries_Received DESC
@@ -665,7 +675,7 @@ async function fetchDashboardData(dept?: string) {
         )
     `, [{ planned: 0, completed: 0, achievement_pct: 0 }]) : Promise.resolve([{ planned: 0, completed: 0, achievement_pct: 0 }]),
 
-    // 5. Pending followups (college follow records with next date due)
+    // 5. Pending followups (college follow records with next date due) — admin only
     needsFollowups ? safeQuery(pool, `
       SELECT
         Follow_id AS id,
@@ -680,6 +690,28 @@ async function fetchDashboardData(dept?: string) {
           OR NULLIF(TRIM(IFNULL(Tdate, '')), '') IS NOT NULL
         )
       ORDER BY Follow_id DESC
+      LIMIT 30
+    `, []) : Promise.resolve([]),
+
+    // 5b. CBD-specific pending followups from student inquiry (overdue NextFollowUpDate)
+    needsCbdFollowups ? safeQuery(pool, `
+      SELECT
+        si.Inquiry_Id AS id,
+        si.Student_Name AS name,
+        d.nextdate AS next_followup_date,
+        COALESCE(NULLIF(TRIM(d.discussion), ''), 'Follow-up') AS purpose
+      FROM Student_Inquiry si
+      INNER JOIN (
+        SELECT Inquiry_id, MAX(id) AS max_id
+        FROM awt_inquirydiscussion
+        WHERE deleted = 0
+        GROUP BY Inquiry_id
+      ) dm ON dm.Inquiry_id = si.Inquiry_Id
+      INNER JOIN awt_inquirydiscussion d ON d.id = dm.max_id
+        AND d.nextdate IS NOT NULL
+        AND d.nextdate <= CURDATE()
+      WHERE (si.IsDelete = 0 OR si.IsDelete IS NULL)
+      ORDER BY d.nextdate ASC
       LIMIT 30
     `, []) : Promise.resolve([]),
 
@@ -1055,29 +1087,56 @@ async function fetchDashboardData(dept?: string) {
   const esRow = (enquirySummaryRows as Record<string, number>[])[0] ?? {};
 
   // If the optimized upcoming-batches query fails (safeQuery => []),
-  // fall back to a simpler batches-only query so the widget still loads.
+  // fall back to a direct batch_mst query enriched with inquiry counts via LEFT JOIN.
   const upcomingBatchesFinal = (needsUpcomingBatches && (upcomingBatches as any[]).length === 0)
     ? await safeQuery(pool, `
       SELECT
         b.Batch_Id,
         b.Batch_code,
-        b.SDate,
-        b.EDate,
+        DATE_FORMAT(b.SDate, '%Y-%m-%d') AS SDate,
+        DATE_FORMAT(b.EDate, '%Y-%m-%d') AS EDate,
         b.Category,
         b.Duration,
         b.Timings,
         b.Training_Coordinator,
         b.INR_Basic,
-        b.Admission_Date,
+        DATE_FORMAT(b.Admission_Date, '%Y-%m-%d') AS Admission_Date,
         b.Max_Students,
         b.NoStudent,
         c.Course_Name AS CourseName,
-        0 AS Enquiries_Received,
-        0 AS Enquiries_Contacted,
-        0 AS Interested_Students,
-        0 AS Confirmed_Admissions
+        COALESCE(si.Enquiries_Received, 0)    AS Enquiries_Received,
+        COALESCE(si.Enquiries_Contacted, 0)   AS Enquiries_Contacted,
+        COALESCE(si.Interested_Students, 0)   AS Interested_Students,
+        COALESCE(si.Confirmed_Admissions, 0)  AS Confirmed_Admissions,
+        COALESCE(am.Enrolled, 0)              AS Enrolled
       FROM batch_mst b
       LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
+      LEFT JOIN (
+        SELECT Batch_Id, COUNT(*) AS Enrolled
+        FROM admission_master
+        WHERE (IsDelete = 0 OR IsDelete IS NULL)
+          AND (Cancel = 0 OR Cancel IS NULL)
+        GROUP BY Batch_Id
+      ) am ON b.Batch_Id = am.Batch_Id
+      LEFT JOIN (
+        SELECT
+          Course_Id,
+          COUNT(*) AS Enquiries_Received,
+          SUM(CASE WHEN TRIM(IFNULL(Discussion, '')) <> '' THEN 1 ELSE 0 END) AS Enquiries_Contacted,
+          SUM(CASE
+            WHEN LOWER(IFNULL(Inquiry, '')) IN ('yes', 'y', 'interested')
+              OR LOWER(IFNULL(JobRequired, '')) IN ('yes', 'y')
+              OR LOWER(IFNULL(Discussion, '')) LIKE '%interested%'
+            THEN 1 ELSE 0 END) AS Interested_Students,
+          SUM(CASE
+            WHEN LOWER(IFNULL(Admission, '')) IN ('yes', 'y', '1', 'true')
+              OR IFNULL(admission_done, 0) = 1
+            THEN 1 ELSE 0 END) AS Confirmed_Admissions
+        FROM student_inquiry
+        WHERE (IsDelete = 0 OR IsDelete IS NULL)
+          AND Inquiry_Dt >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
+        GROUP BY Course_Id
+      ) si ON b.Course_Id = si.Course_Id
       WHERE b.SDate >= CURDATE()
         AND b.SDate <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
         AND (b.IsDelete IS NULL OR b.IsDelete = 0)
@@ -1175,7 +1234,7 @@ async function fetchDashboardData(dept?: string) {
     leadFunnel,
     seminarTargets: (seminarTargetsRows as any[]).length > 0 ? seminarTargetsRows : seminarTargetsFallbackRows,
     exhibitionTargets: (exhibitionTargetsRows as any[])[0] || { planned: 0, completed: 0, achievement_pct: 0 },
-    pendingFollowups: pendingFollowupsRows,
+    pendingFollowups: isCbd ? cbdFollowupsRows : pendingFollowupsRows,
     dailyActivity: dailyActivityRows,
     pendingFees: pendingFeesRows,
     alumniRegistration: alumniProgressRows,

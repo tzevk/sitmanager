@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFinanceResource } from '../shared/useFinanceResource';
-import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, TotalRow, SectionTitle, thCls, tdCls, tdNum, inpCls, lblCls, trCls, PctBar } from '../shared/primitives';
-import { fmt, pct, MONTHS_FULL, parseMonth } from '../shared/format';
-import type { Loan, DeptPerf, DebtPlan, CtRow, MonthlyRow, CashflowTxn } from '../shared/types';
+import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, TotalRow, SectionTitle, StatCard, thCls, tdCls, tdNum, inpCls, lblCls, trCls, PctBar } from '../shared/primitives';
+import { fmt, pct, MONTHS_FULL, parseMonth, fmtDate, todayISO } from '../shared/format';
+import type { Loan, DeptPerf, DebtPlan, CtRow, MonthlyRow, CashflowTxn, PendingInvoice, SalaryCashflow } from '../shared/types';
 
 const TARGET_EXPENSE_PCT: Record<string, number> = {
   cbd: 0.50,
@@ -39,6 +39,34 @@ export default function OverviewTab() {
   const deputation = useFinanceResource<MonthlyRow>('/api/finance/deputation');
   const projects = useFinanceResource<MonthlyRow>('/api/finance/projects');
   const cashflow = useFinanceResource<CashflowTxn>('/api/finance/cashflow');
+  const pendingInvoices = useFinanceResource<PendingInvoice>('/api/finance/pending-invoices');
+
+  const [salaryData, setSalaryData] = useState<SalaryCashflow | null>(null);
+  useEffect(() => {
+    const my = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    fetch(`/api/finance/salary-cashflow?month_year=${my}`)
+      .then(r => r.json())
+      .then(d => setSalaryData(d.row ?? null))
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const kpis = useMemo(() => {
+    const totalReceipts = cashflow.rows.reduce((s, r) => s + Number(r.receipt || 0), 0);
+    const totalPayments = cashflow.rows.reduce((s, r) => s + Number(r.payment || 0), 0);
+    const totalCash = totalReceipts - totalPayments;
+
+    const today = todayISO();
+    const upcomingEmi = [...debtPlans.rows]
+      .filter(r => r.status === 'Pending' && !!r.planned_date && r.planned_date >= today)
+      .sort((a, b) => (a.planned_date ?? '').localeCompare(b.planned_date ?? ''))[0] ?? null;
+
+    const totalReceivables = pendingInvoices.rows
+      .filter(r => r.status !== 'Paid')
+      .reduce((s, r) => s + Number(r.amount || 0), 0);
+
+    return { totalCash, upcomingEmi, totalReceivables };
+  }, [cashflow.rows, debtPlans.rows, pendingInvoices.rows]);
 
   /** Cashflow payments per department per month (YYYY-MM). */
   const cashflowActualByDeptMonth = useMemo(() => {
@@ -226,6 +254,42 @@ export default function OverviewTab() {
 
   return (
     <div className="space-y-6">
+      {/* ── KPI Summary ─────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard
+          label="Total Cash Available"
+          value={fmt(kpis.totalCash)}
+          accent={kpis.totalCash < 0 ? 'text-red-600' : 'text-emerald-700'}
+        />
+        <StatCard
+          label="Upcoming EMI"
+          accent="text-amber-700"
+          value={kpis.upcomingEmi ? (
+            <span className="flex flex-col gap-0.5">
+              <span>{fmt(kpis.upcomingEmi.emi_amount)}</span>
+              <span className="text-[11px] font-medium text-gray-500">{fmtDate(kpis.upcomingEmi.planned_date)} · {kpis.upcomingEmi.bank_name}</span>
+            </span>
+          ) : '—'}
+        />
+        <StatCard
+          label="Upcoming Salary"
+          accent="text-[#2E3093]"
+          value={salaryData ? (
+            <span className="flex flex-col gap-0.5">
+              <span>{fmt(salaryData.total_payable ?? 0)}</span>
+              {salaryData.next_payout && (
+                <span className="text-[11px] font-medium text-gray-500">{fmtDate(salaryData.next_payout)}</span>
+              )}
+            </span>
+          ) : '—'}
+        />
+        <StatCard
+          label="Total Receivables"
+          value={fmt(kpis.totalReceivables)}
+          accent="text-violet-700"
+        />
+      </div>
+
       {/* Cashflow Summary - Department-wise Breakdown */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">

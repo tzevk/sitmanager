@@ -582,7 +582,7 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
                   </div>
                   {/* Mode of Inquiry */}
                   <div>
-                    <label className={labelCls}>Mode of Inquiry</label>
+                    <label className={labelCls}>Contact Source (How they contacted Suvidya)</label>
                     <select value={inquiryMode} onChange={(e) => setInquiryMode(e.target.value)} className={selectCls}>
                       <option value="">— Select —</option>
                       {opts?.inquiryModes.map((m) => (
@@ -592,7 +592,7 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
                   </div>
                   {/* How they know */}
                   <div>
-                    <label className={labelCls}>How they know about SIT</label>
+                    <label className={labelCls}>Lead Source (How they got to know about Suvidya)</label>
                     <select value={inquiryType} onChange={(e) => setInquiryType(e.target.value)} className={selectCls}>
                       <option value="">— Select —</option>
                       {opts?.inquiryTypes.map((t) => (

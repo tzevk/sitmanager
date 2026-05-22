@@ -1,10 +1,18 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import BatchMarketingWidget from './BatchMarketingWidget';
 import AnnualTargetsWidget from './AnnualTargetsWidget';
 import ContentCalendarWidget from './ContentCalendarWidget';
 import { toBatchNumber } from '@/lib/batch-display';
+
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function buildYearOptions(currentYear: number): number[] {
+  const years: number[] = [];
+  for (let y = currentYear + 1; y >= currentYear - 5; y--) years.push(y);
+  return years;
+}
 
 /* ── Utilities ────────────────────────────────────────────────────── */
 function fmtPct(v: number) {
@@ -23,9 +31,8 @@ function tone(v: number) {
 
 const TABLE_CLS = 'w-full text-sm [&_th]:border-r [&_th]:border-gray-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-gray-200 [&_td:last-child]:border-r-0';
 
-type SeminarStatus = 'Planned' | 'Scheduled' | 'Completed' | 'Cancelled';
-
-type ExhibitionStatus = 'Planned' | 'Booked' | 'Completed' | 'Cancelled';
+type SeminarStatus = 'Not Started' | 'Confirmed' | 'Completed' | 'Cancelled' | 'Under Discussion';
+type ExhibitionStatus = 'Not Started' | 'Confirmed' | 'Completed' | 'Cancelled' | 'Under Discussion';
 
 interface SeminarPlannerRow {
   id: string;
@@ -34,6 +41,11 @@ interface SeminarPlannerRow {
   college: string;
   topic: string;
   speaker: string;
+  platforms: string[];
+  content_type: string;
+  ct_planned: number;
+  ct_target: number;
+  ct_completed: number;
   status: SeminarStatus;
 }
 
@@ -45,21 +57,67 @@ interface ExhibitionPlannerRow {
   status: ExhibitionStatus;
 }
 
-const SEMINAR_STATUSES: SeminarStatus[] = ['Planned', 'Scheduled', 'Completed', 'Cancelled'];
-const EXHIBITION_STATUSES: ExhibitionStatus[] = ['Planned', 'Booked', 'Completed', 'Cancelled'];
+const SEMINAR_STATUSES: SeminarStatus[] = ['Not Started', 'Confirmed', 'Completed', 'Cancelled', 'Under Discussion'];
+const EXHIBITION_STATUSES: ExhibitionStatus[] = ['Not Started', 'Confirmed', 'Completed', 'Cancelled', 'Under Discussion'];
+const SEMINAR_PLATFORMS = ['Instagram', 'Facebook', 'WhatsApp', 'Email', 'Phone Call', 'LinkedIn', 'YouTube', 'Website', 'Google Ads'];
 
 function seminarStatusCls(status: SeminarStatus) {
-  if (status === 'Completed') return 'bg-emerald-100 text-emerald-700 ring-emerald-200';
-  if (status === 'Scheduled') return 'bg-blue-100 text-blue-700 ring-blue-200';
-  if (status === 'Cancelled') return 'bg-rose-100 text-rose-700 ring-rose-200';
-  return 'bg-amber-100 text-amber-700 ring-amber-200';
+  if (status === 'Completed')        return 'bg-emerald-100 text-emerald-700 ring-emerald-200';
+  if (status === 'Confirmed')        return 'bg-blue-100 text-blue-700 ring-blue-200';
+  if (status === 'Cancelled')        return 'bg-rose-100 text-rose-700 ring-rose-200';
+  if (status === 'Under Discussion') return 'bg-violet-100 text-violet-700 ring-violet-200';
+  return 'bg-gray-100 text-gray-600 ring-gray-200';
 }
 
 function exhibitionStatusCls(status: ExhibitionStatus) {
-  if (status === 'Completed') return 'bg-emerald-100 text-emerald-700 ring-emerald-200';
-  if (status === 'Booked') return 'bg-blue-100 text-blue-700 ring-blue-200';
-  if (status === 'Cancelled') return 'bg-rose-100 text-rose-700 ring-rose-200';
-  return 'bg-amber-100 text-amber-700 ring-amber-200';
+  if (status === 'Completed')        return 'bg-emerald-100 text-emerald-700 ring-emerald-200';
+  if (status === 'Confirmed')        return 'bg-blue-100 text-blue-700 ring-blue-200';
+  if (status === 'Cancelled')        return 'bg-rose-100 text-rose-700 ring-rose-200';
+  if (status === 'Under Discussion') return 'bg-violet-100 text-violet-700 ring-violet-200';
+  return 'bg-gray-100 text-gray-600 ring-gray-200';
+}
+
+function PlatformMultiSelect({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const toggle = (p: string) =>
+    onChange(value.includes(p) ? value.filter(x => x !== p) : [...value, p]);
+
+  const label = value.length === 0 ? 'Select…' : value.length === 1 ? value[0] : `${value.length} platforms`;
+
+  return (
+    <div className="relative min-w-[120px]" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full text-left text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white flex items-center justify-between gap-1 hover:border-gray-300"
+      >
+        <span className="truncate text-gray-700">{label}</span>
+        <svg className={`w-3 h-3 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[160px]">
+          {SEMINAR_PLATFORMS.map(p => (
+            <label key={p} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs text-gray-700">
+              <input type="checkbox" checked={value.includes(p)} onChange={() => toggle(p)} className="rounded accent-[#2E3093]" />
+              {p}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ── Shared primitives ────────────────────────────────────────────── */
@@ -176,6 +234,40 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
   const alumniProgress  = data?.alumniRegistration ?? [];
   const sourceRows      = data?.sourcePerformance ?? [];
 
+  // ── Lead funnel filter state ────────────────────────────────────
+  const nowYear  = new Date().getFullYear();
+  const nowMonth = new Date().getMonth() + 1; // 1-12
+  const [filterMode,  setFilterMode]  = React.useState<'year' | 'month'>('month');
+  const [filterYear,  setFilterYear]  = React.useState(nowYear);
+  const [filterMonth, setFilterMonth] = React.useState(nowMonth);
+  const [localFunnel, setLocalFunnel] = React.useState<{ total: number; contacted: number; interested: number; converted: number } | null>(null);
+  const [funnelLoading, setFunnelLoading] = React.useState(false);
+  const fetchAbortRef = useRef<AbortController | null>(null);
+
+  const fetchFunnel = useCallback(async (mode: 'year' | 'month', year: number, month: number) => {
+    if (fetchAbortRef.current) fetchAbortRef.current.abort();
+    const ctrl = new AbortController();
+    fetchAbortRef.current = ctrl;
+    setFunnelLoading(true);
+    try {
+      const params = new URLSearchParams({ year: String(year) });
+      if (mode === 'month') params.set('month', String(month));
+      const res = await fetch(`/api/dashboard/cbd-lead-funnel?${params}`, { signal: ctrl.signal });
+      if (!res.ok) return;
+      const json = await res.json();
+      setLocalFunnel(json);
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') console.error('funnel fetch error', e);
+    } finally {
+      setFunnelLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFunnel(filterMode, filterYear, filterMonth);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterMode, filterYear, filterMonth]);
+
   const initialSeminarPlan = React.useMemo<SeminarPlannerRow[]>(() => {
     return (seminarTargets as any[]).map((row: any, i: number) => ({
       id: String(row.id ?? `seminar-${i}`),
@@ -184,7 +276,12 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
       college: String(row.college_name ?? ''),
       topic: String(row.topic ?? ''),
       speaker: String(row.speaker ?? ''),
-      status: 'Planned',
+      platforms: [],
+      content_type: '',
+      ct_planned: 0,
+      ct_target: 0,
+      ct_completed: 0,
+      status: 'Not Started' as SeminarStatus,
     }));
   }, [seminarTargets]);
 
@@ -201,7 +298,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
         location: String(row.location ?? row.city ?? ''),
         status: EXHIBITION_STATUSES.includes(String(row.status) as ExhibitionStatus)
           ? (String(row.status) as ExhibitionStatus)
-          : 'Planned',
+          : 'Not Started',
       }));
     }
 
@@ -212,7 +309,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
       title: '',
       date: '',
       location: '',
-      status: 'Planned' as ExhibitionStatus,
+      status: 'Not Started' as ExhibitionStatus,
     }));
   }, [data?.exhibitionTargets]);
 
@@ -248,15 +345,15 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
     lastExhibitionSeedRef.current = exhibitionSeedSignature;
   }, [initialExhibitionPlan, exhibitionSeedSignature]);
 
-  const setSeminarField = (id: string, key: keyof SeminarPlannerRow, value: string) => {
-    setSeminarPlan(prev => prev.map(r => (r.id === id ? { ...r, [key]: value } : r)));
+  const updateSeminarRow = (id: string, update: Partial<SeminarPlannerRow>) => {
+    setSeminarPlan(prev => prev.map(r => (r.id === id ? { ...r, ...update } : r)));
   };
 
   const addSeminarRow = () => {
     const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setSeminarPlan(prev => ([
       ...prev,
-      { id: uid, month: '', date: '', college: '', topic: '', speaker: '', status: 'Planned' },
+      { id: uid, month: '', date: '', college: '', topic: '', speaker: '', platforms: [], content_type: '', ct_planned: 0, ct_target: 0, ct_completed: 0, status: 'Not Started' as SeminarStatus },
     ]));
   };
 
@@ -272,7 +369,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
     const uid = `exhibition-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setExhibitionPlan(prev => ([
       ...prev,
-      { id: uid, title: '', date: '', location: '', status: 'Planned' },
+      { id: uid, title: '', date: '', location: '', status: 'Not Started' as ExhibitionStatus },
     ]));
   };
 
@@ -285,19 +382,19 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
     (b: any) => !!(b?.Batch_code || b?.batchCode)
   );
 
-  const leadSummary = data?.enquiryReport?.summary ?? {};
-  const funnel = {
-    total:     Number(leadSummary.total_enquiries        || 0),
-    contacted: Number(data?.leadFunnel?.contacted        || 0),
-    interested:Number(data?.leadFunnel?.interested       || 0),
-    converted: Number(data?.leadFunnel?.converted        || 0),
+  // Use locally filtered funnel data; fall back to prop data only on initial load
+  const activeFunnel = localFunnel ?? {
+    total:     Number(data?.leadFunnel?.total     || 0),
+    contacted: Number(data?.leadFunnel?.contacted || 0),
+    interested:Number(data?.leadFunnel?.interested|| 0),
+    converted: Number(data?.leadFunnel?.converted || 0),
   };
 
   const funnelSteps = [
-    { label: 'Total Enquiries', value: funnel.total,      pct: null,                                                         color: '#2E3093', bg: 'bg-indigo-50/70' },
-    { label: 'Contacted',       value: funnel.contacted,  pct: funnel.total ? funnel.contacted  / funnel.total * 100 : null, color: '#2A6BB5', bg: 'bg-blue-50/70'   },
-    { label: 'Interested',      value: funnel.interested, pct: funnel.total ? funnel.interested / funnel.total * 100 : null, color: '#059669', bg: 'bg-emerald-50/70' },
-    { label: 'Converted',       value: funnel.converted,  pct: funnel.total ? funnel.converted  / funnel.total * 100 : null, color: '#D97706', bg: 'bg-amber-50/70'   },
+    { label: 'Total Enquiries', value: activeFunnel.total,      pct: null,                                                                            color: '#2E3093', bg: 'bg-indigo-50/70' },
+    { label: 'Contacted',       value: activeFunnel.contacted,  pct: activeFunnel.total ? activeFunnel.contacted  / activeFunnel.total * 100 : null,  color: '#2A6BB5', bg: 'bg-blue-50/70'   },
+    { label: 'Interested',      value: activeFunnel.interested, pct: activeFunnel.total ? activeFunnel.interested / activeFunnel.total * 100 : null,  color: '#059669', bg: 'bg-emerald-50/70' },
+    { label: 'Converted',       value: activeFunnel.converted,  pct: activeFunnel.total ? activeFunnel.converted  / activeFunnel.total * 100 : null,  color: '#D97706', bg: 'bg-amber-50/70'   },
   ];
 
   return (
@@ -306,6 +403,59 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
       {/* ①  Total Lead Funnel Summary */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <CardHeader title="Total Lead Funnel Summary" accent="#2E3093" icon={Icons.funnel} />
+
+        {/* Filter bar */}
+        <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60 flex flex-wrap items-center gap-3">
+          {/* Mode toggle */}
+          <div className="flex rounded-lg overflow-hidden border border-gray-200 text-[11px] font-bold">
+            <button
+              onClick={() => setFilterMode('month')}
+              className={`px-3 py-1.5 transition-colors ${filterMode === 'month' ? 'bg-[#2E3093] text-white' : 'text-gray-500 hover:bg-gray-100'}`}
+            >
+              By Month
+            </button>
+            <button
+              onClick={() => setFilterMode('year')}
+              className={`px-3 py-1.5 transition-colors ${filterMode === 'year' ? 'bg-[#2E3093] text-white' : 'text-gray-500 hover:bg-gray-100'}`}
+            >
+              By Year
+            </button>
+          </div>
+
+          {/* Year selector */}
+          <select
+            value={filterYear}
+            onChange={e => setFilterYear(Number(e.target.value))}
+            className="text-[11px] font-semibold border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20"
+          >
+            {buildYearOptions(nowYear).map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+
+          {/* Month selector (only in month mode) */}
+          {filterMode === 'month' && (
+            <select
+              value={filterMonth}
+              onChange={e => setFilterMonth(Number(e.target.value))}
+              className="text-[11px] font-semibold border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20"
+            >
+              {MONTH_NAMES.map((name, idx) => (
+                <option key={idx + 1} value={idx + 1}>{name}</option>
+              ))}
+            </select>
+          )}
+
+          <span className="ml-auto text-[10px] font-semibold text-gray-400">
+            {filterMode === 'month'
+              ? `${MONTH_NAMES[filterMonth - 1]} ${filterYear}`
+              : `Full Year ${filterYear}`}
+          </span>
+          {funnelLoading && (
+            <div className="w-3.5 h-3.5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+          )}
+        </div>
+
         {loading ? (
           <div className="p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[...Array(4)].map((_, i) => (
@@ -313,7 +463,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100">
+          <div className={`grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 transition-opacity ${funnelLoading ? 'opacity-50' : ''}`}>
             {funnelSteps.map((step, i) => (
               <div key={step.label} className={`flex flex-col items-center justify-center py-4 px-4 text-center relative ${step.bg}`}>
                 {i > 0 && i < 4 && (
@@ -336,234 +486,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
         )}
       </div>
 
-      {/* ①½  Batch Marketing Tracker */}
-      <BatchMarketingWidget />
-
-      {/* ①¾  Content Calendar */}
-      <ContentCalendarWidget />
-
-      {/* ②  Annual Targets — data loaded from uploaded Excel */}
-      <AnnualTargetsWidget />
-
-      {/* ③  Seminar Targets + Exhibition Targets */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-
-        {/* Seminar Schedule Planner */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden lg:col-span-2">
-          <CardHeader
-            title="Seminar Schedule Planner"
-            accent="#2A6BB5"
-            icon={Icons.calendar}
-            count={loading ? undefined : seminarPlan.length}
-          />
-          <div className="px-4 py-2 border-b border-gray-200 bg-sky-50/40 flex items-center justify-between">
-            <p className="text-[11px] text-slate-600 font-medium">Manage upcoming seminar slots in one planner.</p>
-            <button
-              onClick={addSeminarRow}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold text-white bg-[#2A6BB5] hover:bg-[#235894] transition-colors"
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              Add Slot
-            </button>
-          </div>
-          <div className="overflow-x-auto">
-            <div className="max-h-72 overflow-y-auto">
-              <table className={TABLE_CLS}>
-                <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
-                  <tr>
-                    <Th center>Date</Th>
-                    <Th>Month</Th>
-                    <Th>College</Th>
-                    <Th>Topic</Th>
-                    <Th>Speaker</Th>
-                    <Th>Status</Th>
-                    <Th center>Actions</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <PulseRows cols={7} />
-                  ) : seminarPlan.length === 0 ? (
-                    <tr><td colSpan={7}><Empty text="No seminar schedule rows available" /></td></tr>
-                  ) : (
-                    seminarPlan.map((row) => (
-                      <tr key={row.id} className="border-t border-gray-100 hover:bg-gray-50/50">
-                        <td className="px-3 py-2.5">
-                          <input
-                            type="date"
-                            value={row.date}
-                            onChange={e => setSeminarField(row.id, 'date', e.target.value)}
-                            className="w-full min-w-[125px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
-                          />
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <input
-                            type="text"
-                            value={row.month}
-                            onChange={e => setSeminarField(row.id, 'month', e.target.value)}
-                            placeholder="Month"
-                            className="w-full min-w-[88px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
-                          />
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <input
-                            type="text"
-                            value={row.college}
-                            onChange={e => setSeminarField(row.id, 'college', e.target.value)}
-                            placeholder="College"
-                            className="w-full min-w-[150px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
-                          />
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <input
-                            type="text"
-                            value={row.topic}
-                            onChange={e => setSeminarField(row.id, 'topic', e.target.value)}
-                            placeholder="Topic"
-                            className="w-full min-w-[140px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
-                          />
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <input
-                            type="text"
-                            value={row.speaker}
-                            onChange={e => setSeminarField(row.id, 'speaker', e.target.value)}
-                            placeholder="Speaker"
-                            className="w-full min-w-[120px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
-                          />
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <select
-                            value={row.status}
-                            onChange={e => setSeminarField(row.id, 'status', e.target.value as SeminarStatus)}
-                            className={`w-full min-w-[105px] text-[11px] font-semibold rounded-full px-2 py-1 border-0 ring-1 ${seminarStatusCls(row.status)}`}
-                          >
-                            {SEMINAR_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <button
-                            onClick={() => removeSeminarRow(row.id)}
-                            className="inline-flex items-center justify-center p-1.5 rounded-md text-rose-500 hover:bg-rose-50 transition-colors"
-                            title="Remove row"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        {/* Exhibition Targets */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <CardHeader
-            title="Exhibition Planner"
-            accent="#2E3093"
-            icon={Icons.star}
-            count={loading ? undefined : exhibitionPlan.length}
-          />
-          {loading ? (
-            <div className="p-5 space-y-3">
-              {[...Array(3)].map((_, i) => <div key={i} className="h-16 rounded-lg bg-gray-100 animate-pulse" />)}
-            </div>
-          ) : (
-            <div>
-              <div className="px-3 py-2 border-b border-gray-200 bg-indigo-50/50 flex items-center justify-between">
-                <p className="text-[11px] text-slate-600 font-medium">Small planner for upcoming exhibitions.</p>
-                <button
-                  onClick={addExhibitionRow}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold text-white bg-[#2E3093] hover:bg-[#25267d] transition-colors"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add
-                </button>
-              </div>
-              <div className="max-h-64 overflow-auto">
-                <table className={TABLE_CLS}>
-                  <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
-                    <tr>
-                      <Th>Exhibition</Th>
-                      <Th center>Date</Th>
-                      <Th>Location</Th>
-                      <Th>Status</Th>
-                      <Th center>Action</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {exhibitionPlan.length === 0 ? (
-                      <tr><td colSpan={5}><Empty text="No exhibition slots planned" /></td></tr>
-                    ) : (
-                      exhibitionPlan.map((row) => (
-                        <tr key={row.id} className="border-t border-gray-100 hover:bg-gray-50/50">
-                          <td className="px-3 py-2">
-                            <input
-                              type="text"
-                              value={row.title}
-                              onChange={e => setExhibitionField(row.id, 'title', e.target.value)}
-                              placeholder="Exhibition name"
-                              className="w-full min-w-[130px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="date"
-                              value={row.date}
-                              onChange={e => setExhibitionField(row.id, 'date', e.target.value)}
-                              className="w-full min-w-[120px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="text"
-                              value={row.location}
-                              onChange={e => setExhibitionField(row.id, 'location', e.target.value)}
-                              placeholder="Location"
-                              className="w-full min-w-[110px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white"
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <select
-                              value={row.status}
-                              onChange={e => setExhibitionField(row.id, 'status', e.target.value as ExhibitionStatus)}
-                              className={`w-full min-w-[96px] text-[11px] font-semibold rounded-full px-2 py-1 border-0 ring-1 ${exhibitionStatusCls(row.status)}`}
-                            >
-                              {EXHIBITION_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                          </td>
-                          <td className="px-3 py-2 text-center">
-                            <button
-                              onClick={() => removeExhibitionRow(row.id)}
-                              className="inline-flex items-center justify-center p-1.5 rounded-md text-rose-500 hover:bg-rose-50 transition-colors"
-                              title="Remove row"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ④  Upcoming Batches (next 3 months) */}
+      {/* ②  Upcoming Batches (next 3 months) */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <CardHeader
           title="Upcoming Batches (next 3 months)"
@@ -592,9 +515,9 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                   <tr><td colSpan={7}><Empty text="No upcoming batches for the next 3 months" /></td></tr>
                 ) : (
                   upcomingBatches.map((b: any, i: number) => {
-                    const confirmed = Number(b.Confirmed_Admissions ?? b.NoStudent ?? 0);
+                    const enrolled  = Number(b.Enrolled ?? b.NoStudent ?? 0);
                     const max       = Number(b.Max_Students || 0);
-                    const fillPct   = max > 0 ? (confirmed / max) * 100 : 0;
+                    const fillPct   = max > 0 ? (enrolled / max) * 100 : 0;
                     return (
                       <tr key={`${b.Batch_Id || i}`} className="border-t border-gray-100 hover:bg-gray-50/50 transition-colors">
                         <td className="px-4 py-2.5">
@@ -604,7 +527,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                         <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Enquiries_Received ?? 0}</td>
                         <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Enquiries_Contacted ?? 0}</td>
                         <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Interested_Students ?? 0}</td>
-                        <td className="px-4 py-2.5 text-center tabular-nums font-semibold text-gray-800">{confirmed}</td>
+                        <td className="px-4 py-2.5 text-center tabular-nums font-semibold text-gray-800">{Number(b.Confirmed_Admissions ?? 0)}</td>
                         <td className="px-4 py-2.5 w-40"><Bar value={fillPct} /></td>
                       </tr>
                     );
@@ -614,6 +537,169 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
             </table>
           </div>
         </div>
+      </div>
+
+      {/* ②½  Batch Marketing Tracker */}
+      <BatchMarketingWidget />
+
+      {/* ①¾  Content Calendar */}
+      <ContentCalendarWidget />
+
+      {/* ②  Annual Targets — data loaded from uploaded Excel */}
+      <AnnualTargetsWidget />
+
+      {/* ③  Seminar Schedule Planner */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <CardHeader
+          title="Seminar Schedule Planner"
+          accent="#2A6BB5"
+          icon={Icons.calendar}
+          count={loading ? undefined : seminarPlan.length}
+        />
+        <div className="px-4 py-2 border-b border-gray-200 bg-sky-50/40 flex items-center justify-between">
+          <p className="text-[11px] text-slate-600 font-medium">Manage upcoming seminar slots in one planner.</p>
+          <button
+            onClick={addSeminarRow}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold text-white bg-[#2A6BB5] hover:bg-[#235894] transition-colors"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Add Slot
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <div className="max-h-72 overflow-y-auto">
+            <table className={TABLE_CLS}>
+              <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
+                <tr>
+                  <Th center>Date</Th>
+                  <Th>Month</Th>
+                  <Th>College</Th>
+                  <Th>Topic</Th>
+                  <Th>Speaker</Th>
+                  <Th>Status</Th>
+                  <Th center>Actions</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <PulseRows cols={7} />
+                ) : seminarPlan.length === 0 ? (
+                  <tr><td colSpan={7}><Empty text="No seminar schedule rows available" /></td></tr>
+                ) : (
+                  seminarPlan.map((row) => (
+                    <tr key={row.id} className="border-t border-gray-100 hover:bg-gray-50/50">
+                      <td className="px-3 py-2.5">
+                        <input type="date" value={row.date} onChange={e => updateSeminarRow(row.id, { date: e.target.value })} className="w-full min-w-[125px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white" />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <input type="text" value={row.month} onChange={e => updateSeminarRow(row.id, { month: e.target.value })} placeholder="Month" className="w-full min-w-[80px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white" />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <input type="text" value={row.college} onChange={e => updateSeminarRow(row.id, { college: e.target.value })} placeholder="College" className="w-full min-w-[150px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white" />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <input type="text" value={row.topic} onChange={e => updateSeminarRow(row.id, { topic: e.target.value })} placeholder="Topic" className="w-full min-w-[130px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white" />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <input type="text" value={row.speaker} onChange={e => updateSeminarRow(row.id, { speaker: e.target.value })} placeholder="Speaker" className="w-full min-w-[110px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white" />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <select value={row.status} onChange={e => updateSeminarRow(row.id, { status: e.target.value as SeminarStatus })} className={`w-full min-w-[140px] text-[11px] font-semibold rounded-full px-2 py-1 border-0 ring-1 ${seminarStatusCls(row.status)}`}>
+                          {SEMINAR_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <button onClick={() => removeSeminarRow(row.id)} className="inline-flex items-center justify-center p-1.5 rounded-md text-rose-500 hover:bg-rose-50 transition-colors" title="Remove row">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Exhibition Planner */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <CardHeader
+          title="Exhibition Planner"
+          accent="#2E3093"
+          icon={Icons.star}
+          count={loading ? undefined : exhibitionPlan.length}
+        />
+        {loading ? (
+          <div className="p-5 space-y-3">
+            {[...Array(3)].map((_, i) => <div key={i} className="h-16 rounded-lg bg-gray-100 animate-pulse" />)}
+          </div>
+        ) : (
+          <div>
+            <div className="px-4 py-2 border-b border-gray-200 bg-indigo-50/50 flex items-center justify-between">
+              <p className="text-[11px] text-slate-600 font-medium">Manage upcoming exhibition slots.</p>
+              <button
+                onClick={addExhibitionRow}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold text-white bg-[#2E3093] hover:bg-[#25267d] transition-colors"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Add Slot
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <div className="max-h-64 overflow-y-auto">
+                <table className={TABLE_CLS}>
+                  <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
+                    <tr>
+                      <Th>Exhibition</Th>
+                      <Th center>Date</Th>
+                      <Th>Location</Th>
+                      <Th>Status</Th>
+                      <Th center>Action</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {exhibitionPlan.length === 0 ? (
+                      <tr><td colSpan={5}><Empty text="No exhibition slots planned" /></td></tr>
+                    ) : (
+                      exhibitionPlan.map((row) => (
+                        <tr key={row.id} className="border-t border-gray-100 hover:bg-gray-50/50">
+                          <td className="px-3 py-2">
+                            <input type="text" value={row.title} onChange={e => setExhibitionField(row.id, 'title', e.target.value)} placeholder="Exhibition name" className="w-full min-w-[180px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white" />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input type="date" value={row.date} onChange={e => setExhibitionField(row.id, 'date', e.target.value)} className="w-full min-w-[125px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white" />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input type="text" value={row.location} onChange={e => setExhibitionField(row.id, 'location', e.target.value)} placeholder="Location" className="w-full min-w-[140px] text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white" />
+                          </td>
+                          <td className="px-3 py-2">
+                            <select value={row.status} onChange={e => setExhibitionField(row.id, 'status', e.target.value as ExhibitionStatus)} className={`w-full min-w-[140px] text-[11px] font-semibold rounded-full px-2 py-1 border-0 ring-1 ${exhibitionStatusCls(row.status)}`}>
+                              {EXHIBITION_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <button onClick={() => removeExhibitionRow(row.id)} className="inline-flex items-center justify-center p-1.5 rounded-md text-rose-500 hover:bg-rose-50 transition-colors" title="Remove row">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ⑤  Pending Followups · Daily Activity Tracker · Source Wise Performance */}
