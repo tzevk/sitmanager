@@ -1,10 +1,12 @@
 import type { NextConfig } from "next";
 
+const isVercelBuild = process.env.VERCEL === '1';
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
 
-  // Standalone output — smaller serverless bundles on Vercel
-  output: 'standalone',
+  // Vercel handles its own output packaging; keep standalone for non-Vercel self-hosting only.
+  ...(isVercelBuild ? {} : { output: 'standalone' as const }),
 
   // Optimize images
   images: {
