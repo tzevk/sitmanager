@@ -1,9 +1,12 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const isVercelBuild = process.env.VERCEL === '1';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+
+  ...(isVercelBuild ? { adapterPath: path.join(process.cwd(), 'vercel.adapter.cjs') } : {}),
 
   // Vercel handles its own output packaging; keep standalone for non-Vercel self-hosting only.
   ...(isVercelBuild ? {} : { output: 'standalone' as const }),
