@@ -28,7 +28,7 @@ interface ContentItem {
   description: string;
 }
 
-type FormItem = Partial<ContentItem>;
+type FormItem = Partial<ContentItem> & { platforms?: string[] };
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const TYPE_CONFIG = [
@@ -120,6 +120,54 @@ function Spinner() {
 // ── Shared modal primitives (defined at module level to avoid remount on re-render) ──
 const MODAL_INPUT_CLS = 'w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]/40 bg-white';
 
+function PlatformCheckboxSelect({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const toggle = (p: string) =>
+    onChange(value.includes(p) ? value.filter(x => x !== p) : [...value, p]);
+
+  const label = value.length === 0 ? '— Select —' : value.length === 1 ? value[0] : `${value.length} platforms`;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={`${MODAL_INPUT_CLS} flex items-center justify-between gap-2 text-left`}
+      >
+        <span className={value.length === 0 ? 'text-gray-400' : 'text-gray-800'}>{label}</span>
+        <svg className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-48 overflow-y-auto">
+          {PLATFORMS.map(p => (
+            <label key={p} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={value.includes(p)}
+                onChange={() => toggle(p)}
+                className="rounded accent-[#2E3093] w-3.5 h-3.5"
+              />
+              {p}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ModalField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -141,7 +189,10 @@ function ItemModal({
   onSave: (f: FormItem) => void;
   onClose: () => void;
 }) {
-  const [form, setForm] = useState<FormItem>(initial);
+  const [form, setForm] = useState<FormItem>({
+    ...initial,
+    platforms: (initial.platform ?? '').split(',').map(s => s.trim()).filter(Boolean),
+  });
   const set = <K extends keyof FormItem>(k: K, v: FormItem[K]) =>
     setForm(p => ({ ...p, [k]: v }));
   const typeMeta = getType((form.content_type ?? '').trim() || 'Other');
@@ -218,10 +269,10 @@ function ItemModal({
             </ModalField>
 
             <ModalField label="Platform">
-              <select value={form.platform ?? ''} onChange={e => set('platform', e.target.value)} className={MODAL_INPUT_CLS}>
-                <option value="">— Select —</option>
-                {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
+              <PlatformCheckboxSelect
+                value={form.platforms ?? []}
+                onChange={v => set('platforms', v)}
+              />
             </ModalField>
           </div>
 
@@ -246,7 +297,7 @@ function ItemModal({
             Cancel
           </button>
           <button
-            onClick={() => onSave(form)}
+            onClick={() => onSave({ ...form, platform: (form.platforms ?? []).join(', ') })}
             disabled={saving}
             className="px-5 py-2 text-sm font-semibold text-white bg-[#2E3093] rounded-lg hover:bg-[#252870] transition-colors disabled:opacity-50"
           >
@@ -272,6 +323,7 @@ export default function ContentCalendarWidget() {
   const [saving, setSaving]       = useState(false);
   const [plan, setPlan]           = useState<ContentPlanRow[]>([]);
   const planLoaded                = useRef(false);
+  const [trackerSort, setTrackerSort] = useState<{ col: string; dir: 'asc' | 'desc' } | null>(null);
 
   const load = useCallback(async (y: number, m: number) => {
     setLoading(true);
@@ -331,36 +383,6 @@ export default function ContentCalendarWidget() {
     });
   };
 
-  // Sidebar: per-type stats derived from current planner data (supports manual types)
-  const typeStats = useMemo(() => {
-    const map = new Map<string, { name: string; short: string; color: string; bg: string; planned: number; done: number; pending: number }>();
-
-    for (const item of items) {
-      const rawName = (item.content_type ?? '').trim() || 'Other';
-      const key = rawName.toLowerCase();
-      const type = getType(rawName);
-      const prev = map.get(key);
-
-      if (!prev) {
-        map.set(key, {
-          name: rawName,
-          short: type.short,
-          color: type.color,
-          bg: type.bg,
-          planned: 1,
-          done: COMPLETED.has(item.status) ? 1 : 0,
-          pending: COMPLETED.has(item.status) ? 0 : 1,
-        });
-      } else {
-        prev.planned += 1;
-        if (COMPLETED.has(item.status)) prev.done += 1;
-        else prev.pending += 1;
-      }
-    }
-
-    return Array.from(map.values()).sort((a, b) => b.planned - a.planned || a.name.localeCompare(b.name));
-  }, [items]);
-
   // Calendar: group items by planned_date
   const byDate = useMemo(() => {
     const map = new Map<string, ContentItem[]>();
@@ -391,76 +413,73 @@ export default function ContentCalendarWidget() {
     });
   }, [plan, items]);
 
-  const [sidebarTab, setSidebarTab] = useState<'types' | 'tracker'>('types');
+  const sortedFrequencyStats = useMemo(() => {
+    if (!trackerSort) return frequencyStats;
+    return [...frequencyStats].sort((a, b) => {
+      let va: string | number, vb: string | number;
+      switch (trackerSort.col) {
+        case 'content_type':  va = a.content_type.toLowerCase();               vb = b.content_type.toLowerCase();               break;
+        case 'frequency':     va = (a.frequency ?? '').toLowerCase();          vb = (b.frequency ?? '').toLowerCase();          break;
+        case 'responsible':   va = (a.responsible_person ?? '').toLowerCase(); vb = (b.responsible_person ?? '').toLowerCase(); break;
+        case 'target':        va = a.target_per_month;                         vb = b.target_per_month;                         break;
+        case 'planned':       va = a.planned;                                  vb = b.planned;                                  break;
+        case 'completed':     va = a.completed;                                vb = b.completed;                                break;
+        default:              return 0;
+      }
+      if (va < vb) return trackerSort.dir === 'asc' ? -1 : 1;
+      if (va > vb) return trackerSort.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [frequencyStats, trackerSort]);
+
+  const cycleSort = (col: string) => {
+    setTrackerSort(prev => {
+      if (!prev || prev.col !== col) return { col, dir: 'asc' };
+      if (prev.dir === 'asc') return { col, dir: 'desc' };
+      return null;
+    });
+  };
 
   // ── Sidebar ──────────────────────────────────────────────────────────────────
-  const Sidebar = () => (
-    <aside className="absolute inset-y-0 left-0 w-[420px] flex flex-col border-r border-gray-200 bg-gray-50/60 overflow-hidden z-10">
-      {/* Tab toggle */}
-      <div className="flex border-b border-gray-100 px-2 pt-2 gap-1">
-        <button
-          onClick={() => setSidebarTab('types')}
-          className={`flex-1 text-[10px] font-semibold py-1 rounded-t-md transition-colors ${sidebarTab === 'types' ? 'bg-white text-[#2E3093] shadow-sm border border-b-white border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+  const Sidebar = () => {
+    const SortBtn = ({ col, label, cls = '' }: { col: string; label: React.ReactNode; cls?: string }) => {
+      const active = trackerSort?.col === col;
+      const dir    = active ? trackerSort!.dir : null;
+      return (
+        <th
+          onClick={() => cycleSort(col)}
+          className={`cursor-pointer select-none group ${cls}`}
+          title={`Sort by ${col}`}
         >
-          Types
-        </button>
-        <button
-          onClick={() => setSidebarTab('tracker')}
-          className={`flex-1 text-[10px] font-semibold py-1 rounded-t-md transition-colors ${sidebarTab === 'tracker' ? 'bg-white text-[#2E3093] shadow-sm border border-b-white border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-        >
-          Tracker
-        </button>
-      </div>
+          <span className="inline-flex items-center gap-0.5">
+            {label}
+            <span className="inline-flex flex-col gap-[1px] ml-0.5">
+              <svg className={`w-2 h-2 ${active && dir === 'asc' ? 'text-white' : 'text-white/30 group-hover:text-white/60'}`} fill="currentColor" viewBox="0 0 8 4"><path d="M4 0L8 4H0z"/></svg>
+              <svg className={`w-2 h-2 ${active && dir === 'desc' ? 'text-white' : 'text-white/30 group-hover:text-white/60'}`} fill="currentColor" viewBox="0 0 8 4"><path d="M4 4L0 0H8z"/></svg>
+            </span>
+          </span>
+        </th>
+      );
+    };
 
-      <div className={`flex-1 min-h-0 overflow-y-auto ${sidebarTab === 'types' ? 'px-2 pt-2 pb-2' : ''}`}>
-        {sidebarTab === 'types' ? (
-          <>
-            {/* Column labels */}
-            <div className="flex items-center gap-1 px-2 mb-1.5">
-              <span className="flex-1 text-[9px] font-semibold text-gray-400 uppercase tracking-wide">Type</span>
-              <span className="w-8 text-center text-[9px] font-semibold text-gray-400 uppercase tracking-wide">Plan</span>
-              <span className="w-8 text-center text-[9px] font-semibold text-emerald-500 uppercase tracking-wide">Done</span>
-              <span className="w-8 text-center text-[9px] font-semibold text-amber-500 uppercase tracking-wide">Left</span>
-            </div>
+    return (
+      <aside className="absolute inset-y-0 left-0 w-[420px] flex flex-col border-r border-gray-200 bg-gray-50/60 overflow-hidden z-10">
+        {/* Tracker header row with refresh button */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-[#2E3093]/5">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[#2E3093]">Content Tracker</span>
+          <button
+            onClick={() => setTrackerSort(null)}
+            title="Reset sort"
+            className="flex items-center gap-1 text-[10px] font-semibold text-gray-500 hover:text-[#2E3093] transition-colors px-1.5 py-0.5 rounded hover:bg-white"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Reset
+          </button>
+        </div>
 
-            {loading
-              ? Array.from({length: 5}).map((_, i) => (
-                  <div key={i} className="h-9 bg-gray-100 rounded-xl animate-pulse mb-1.5" />
-                ))
-              : typeStats.map(s => (
-                  <div
-                    key={s.name.toLowerCase()}
-                    className="flex items-center gap-2 px-2 py-2 rounded-xl bg-white border border-gray-200 mb-1.5 shadow-sm hover:border-gray-300 hover:shadow transition-all"
-                  >
-                    <span
-                      className="w-8 h-6 rounded-lg text-[9px] font-bold tracking-wide inline-flex items-center justify-center shrink-0"
-                      style={{ background: s.bg, color: s.color }}
-                      title={s.name}
-                    >
-                      {s.short}
-                    </span>
-                    <span className="flex-1 text-[11px] font-medium text-gray-700 leading-snug">{s.name}</span>
-                    <span className="w-8 text-center text-[11px] tabular-nums font-semibold text-gray-500">{s.planned || '—'}</span>
-                    <span className="w-8 text-center text-[11px] tabular-nums font-semibold text-emerald-600">{s.done || '—'}</span>
-                    <span className="w-8 text-center text-[11px] tabular-nums font-semibold text-amber-600">{s.pending || '—'}</span>
-                  </div>
-                ))
-            }
-
-            {!loading && items.length > 0 && (
-              <div className="mt-1 pt-2 border-t border-gray-200 flex items-center gap-1 px-2">
-                <span className="flex-1 text-[10px] font-bold text-gray-600">Total</span>
-                <span className="w-8 text-center text-[11px] tabular-nums font-bold text-gray-700">{items.length}</span>
-                <span className="w-8 text-center text-[11px] tabular-nums font-bold text-emerald-600">
-                  {items.filter(i => COMPLETED.has(i.status)).length}
-                </span>
-                <span className="w-8 text-center text-[11px] tabular-nums font-bold text-amber-600">
-                  {items.filter(i => !COMPLETED.has(i.status)).length}
-                </span>
-              </div>
-            )}
-          </>
-        ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto">
           <table className="w-full text-[10px] border-collapse">
             <thead className="sticky top-0 z-10">
               {frequencyStats.length > 0 && (
@@ -480,12 +499,12 @@ export default function ContentCalendarWidget() {
                 </tr>
               )}
               <tr className="bg-[#2E3093]">
-                <th className="text-left px-2 py-2 font-semibold text-white uppercase tracking-wide border-r border-white/20 leading-tight">Content Type</th>
-                <th className="text-left px-2 py-2 font-semibold text-white/80 uppercase tracking-wide border-r border-white/20 w-[90px] leading-tight">Frequency</th>
-                <th className="text-left px-2 py-2 font-semibold text-white/80 uppercase tracking-wide border-r border-white/20 w-[72px] leading-tight">Responsible</th>
-                <th className="text-center px-1 py-2 font-semibold text-white/80 uppercase tracking-wide border-r border-white/20 w-8 leading-tight">Tgt</th>
-                <th className="text-center px-1 py-2 font-semibold text-blue-200 uppercase tracking-wide border-r border-white/20 w-8 leading-tight">Pln</th>
-                <th className="text-center px-1 py-2 font-semibold text-emerald-300 uppercase tracking-wide w-9 leading-tight">Done</th>
+                <SortBtn col="content_type" label="Content Type"   cls="text-left px-2 py-2 font-semibold text-white uppercase tracking-wide border-r border-white/20 leading-tight" />
+                <SortBtn col="frequency"    label="Frequency"      cls="text-left px-2 py-2 font-semibold text-white/80 uppercase tracking-wide border-r border-white/20 w-[90px] leading-tight" />
+                <SortBtn col="responsible"  label="Responsible"    cls="text-left px-2 py-2 font-semibold text-white/80 uppercase tracking-wide border-r border-white/20 w-[72px] leading-tight" />
+                <SortBtn col="target"       label="Tgt"            cls="text-center px-1 py-2 font-semibold text-white/80 uppercase tracking-wide border-r border-white/20 w-8 leading-tight" />
+                <SortBtn col="planned"      label="Pln"            cls="text-center px-1 py-2 font-semibold text-blue-200 uppercase tracking-wide border-r border-white/20 w-8 leading-tight" />
+                <SortBtn col="completed"    label="Done"           cls="text-center px-1 py-2 font-semibold text-emerald-300 uppercase tracking-wide w-9 leading-tight" />
               </tr>
             </thead>
             <tbody>
@@ -499,7 +518,7 @@ export default function ContentCalendarWidget() {
                       ))}
                     </tr>
                   ))
-                : frequencyStats.map((row, i) => {
+                : sortedFrequencyStats.map((row, i) => {
                     const hasTarget = row.target_per_month > 0;
                     const met = hasTarget && row.completed >= row.target_per_month;
                     return (
@@ -531,10 +550,10 @@ export default function ContentCalendarWidget() {
               }
             </tbody>
           </table>
-        )}
-      </div>
-    </aside>
-  );
+        </div>
+      </aside>
+    );
+  };
 
   // ── Calendar View ────────────────────────────────────────────────────────────
   const CalendarView = () => {

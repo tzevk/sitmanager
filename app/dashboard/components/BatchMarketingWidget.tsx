@@ -41,9 +41,6 @@ interface LocalStatus {
   meta_ads_status: BMStatus;
   is_locked: boolean;
   platforms: string[];
-  ct_planned: number;
-  ct_target: number;
-  ct_completed: number;
 }
 
 const DEFAULT_STATUS: Omit<LocalStatus, 'id'> = {
@@ -52,9 +49,6 @@ const DEFAULT_STATUS: Omit<LocalStatus, 'id'> = {
   meta_ads_status: 'Pending',
   is_locked: false,
   platforms: [],
-  ct_planned: 0,
-  ct_target: 0,
-  ct_completed: 0,
 };
 
 const BATCH_PLATFORMS = ['Instagram', 'Facebook', 'WhatsApp', 'Email', 'LinkedIn', 'YouTube', 'Website', 'Google Ads', 'Phone Call'];
@@ -232,7 +226,7 @@ export default function BatchMarketingWidget() {
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const toDate = endOfMonth(addMonths(today, 3));
+      const toDate = endOfMonth(addMonths(today, 6));
       const fromDateStr = toDateStr(today.toISOString());
       const toDateStrVal = toDateStr(toDate.toISOString());
 
@@ -269,9 +263,6 @@ export default function BatchMarketingWidget() {
           meta_ads_status:     r.meta_ads_status,
           is_locked:           r.is_locked === 1,
           platforms:           [],
-          ct_planned:          0,
-          ct_target:           0,
-          ct_completed:        0,
         });
       }
       setStatuses(map);
@@ -389,7 +380,7 @@ export default function BatchMarketingWidget() {
     }
   }, [statuses]);
 
-  const handleLocalUpdate = useCallback((batch: BatchOption, update: Partial<Pick<LocalStatus, 'platforms' | 'ct_planned' | 'ct_target' | 'ct_completed'>>) => {
+  const handleLocalUpdate = useCallback((batch: BatchOption, update: Partial<Pick<LocalStatus, 'platforms'>>) => {
     const key = batchIdentity(batch);
     setStatuses(prev => {
       const m = new Map(prev);
@@ -412,7 +403,7 @@ export default function BatchMarketingWidget() {
         <span className="font-bold text-gray-800 text-sm flex-1">Batch Marketing Tracker</span>
         {!loading && (
           <span className="text-[11px] font-semibold text-gray-400 tabular-nums">
-            {batches.length} {batches.length === 1 ? 'batch' : 'batches'} · next 3 months
+            {batches.length} {batches.length === 1 ? 'batch' : 'batches'} · next 6 months
           </span>
         )}
       </div>
@@ -449,9 +440,6 @@ export default function BatchMarketingWidget() {
                 <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center whitespace-nowrap">Flyer Date</th>
                 <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center whitespace-nowrap">Flyer Status</th>
                 <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-left whitespace-nowrap">Platform</th>
-                <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center whitespace-nowrap">Planned</th>
-                <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-[#2E3093] text-center whitespace-nowrap">Target</th>
-                <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-emerald-600 text-center whitespace-nowrap">Done</th>
                 <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center w-20 sticky right-0 z-20 bg-gray-50 whitespace-nowrap shadow-[-1px_0_0_rgba(229,231,235,1)]">Actions</th>
               </tr>
             </thead>
@@ -459,7 +447,7 @@ export default function BatchMarketingWidget() {
               {loading ? (
                 Array.from({length: 5}).map((_, i) => (
                   <tr key={i} className="border-t border-gray-200">
-                    {Array.from({length: 14}).map((_, j) => (
+                    {Array.from({length: 11}).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-3 bg-gray-100 rounded animate-pulse" style={{ width: j === 0 ? '70%' : '50%' }} />
                       </td>
@@ -468,7 +456,7 @@ export default function BatchMarketingWidget() {
                 ))
               ) : batches.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="px-5 py-12 text-center text-sm text-gray-400">
+                  <td colSpan={11} className="px-5 py-12 text-center text-sm text-gray-400">
                     No upcoming batches in the next 6 months
                   </td>
                 </tr>
@@ -526,38 +514,6 @@ export default function BatchMarketingWidget() {
                           value={status?.platforms ?? []}
                           onChange={v => handleLocalUpdate(b, { platforms: v })}
                           disabled={locked || isSaving}
-                        />
-                      </td>
-
-                      {/* Content tracking */}
-                      <td className="px-2 py-2 text-center">
-                        <input
-                          type="number" min="0"
-                          value={status?.ct_planned || ''}
-                          onChange={e => handleLocalUpdate(b, { ct_planned: Number(e.target.value) })}
-                          disabled={locked || isSaving}
-                          placeholder="0"
-                          className="w-12 text-[10px] border border-gray-200 rounded-md px-1.5 py-1 bg-white text-center tabular-nums disabled:opacity-50"
-                        />
-                      </td>
-                      <td className="px-2 py-2 text-center">
-                        <input
-                          type="number" min="0"
-                          value={status?.ct_target || ''}
-                          onChange={e => handleLocalUpdate(b, { ct_target: Number(e.target.value) })}
-                          disabled={locked || isSaving}
-                          placeholder="0"
-                          className="w-12 text-[10px] border border-[#2E3093]/30 rounded-md px-1.5 py-1 bg-indigo-50/60 text-center font-semibold tabular-nums text-[#2E3093] disabled:opacity-50"
-                        />
-                      </td>
-                      <td className="px-2 py-2 text-center">
-                        <input
-                          type="number" min="0"
-                          value={status?.ct_completed || ''}
-                          onChange={e => handleLocalUpdate(b, { ct_completed: Number(e.target.value) })}
-                          disabled={locked || isSaving}
-                          placeholder="0"
-                          className="w-12 text-[10px] border border-emerald-200 rounded-md px-1.5 py-1 bg-emerald-50/60 text-center tabular-nums text-emerald-700 disabled:opacity-50"
                         />
                       </td>
 

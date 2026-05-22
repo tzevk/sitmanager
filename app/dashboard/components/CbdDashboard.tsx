@@ -501,6 +501,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                 <tr>
                   <Th>Batch number</Th>
                   <Th>Training Program Name</Th>
+                  <Th center>Start Date</Th>
                   <Th center>Enquiries Received</Th>
                   <Th center>Enquiries Contacted</Th>
                   <Th center>Interested Students</Th>
@@ -510,20 +511,23 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
               </thead>
               <tbody>
                 {loading ? (
-                  <PulseRows cols={7} rows={5} />
+                  <PulseRows cols={8} rows={5} />
                 ) : upcomingBatches.length === 0 ? (
-                  <tr><td colSpan={7}><Empty text="No upcoming batches for the next 3 months" /></td></tr>
+                  <tr><td colSpan={8}><Empty text="No upcoming batches for the next 3 months" /></td></tr>
                 ) : (
                   upcomingBatches.map((b: any, i: number) => {
                     const enrolled  = Number(b.Enrolled ?? b.NoStudent ?? 0);
                     const max       = Number(b.Max_Students || 0);
                     const fillPct   = max > 0 ? (enrolled / max) * 100 : 0;
+                    const sDate     = b.SDate ? String(b.SDate).slice(0, 10) : null;
+                    const fmtStart  = sDate ? `${sDate.slice(8)}/${sDate.slice(5,7)}/${sDate.slice(0,4)}` : '—';
                     return (
                       <tr key={`${b.Batch_Id || i}`} className="border-t border-gray-100 hover:bg-gray-50/50 transition-colors">
                         <td className="px-4 py-2.5">
                           <span className="font-mono font-semibold text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md border border-indigo-100">{toBatchNumber(b.Batch_code)}</span>
                         </td>
                         <td className="px-4 py-2.5 text-gray-700 font-medium">{b.CourseName || '—'}</td>
+                        <td className="px-4 py-2.5 text-center tabular-nums text-[11px] font-medium text-gray-600 whitespace-nowrap">{fmtStart}</td>
                         <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Enquiries_Received ?? 0}</td>
                         <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Enquiries_Contacted ?? 0}</td>
                         <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Interested_Students ?? 0}</td>
