@@ -6,12 +6,13 @@ import { createReadStream, statSync } from 'fs';
 import { join, basename } from 'path';
 import { Readable } from 'stream';
 
-// Derive the uploads root: appp.js stores at __dirname/../uploads/student_document/
-// In development/production, process.cwd() = sitmanager project root
-// So ../uploads resolves to the sibling uploads folder
-const UPLOADS_ROOT =
-  process.env.UPLOADS_DIR ||
-  join(process.cwd(), '..', 'uploads', 'student_document');
+function getUploadsRoot(): string {
+  const configuredDir = process.env.UPLOADS_DIR?.trim();
+  if (configuredDir) return configuredDir;
+
+  // Resolve this at request time and keep Turbopack from tracing cwd as a file graph input.
+  return join(/* turbopackIgnore: true */ process.cwd(), '..', 'uploads', 'student_document');
+}
 
 function mimeType(filename: string): string {
   const ext = filename.split('.').pop()?.toLowerCase() ?? '';
@@ -58,7 +59,7 @@ export async function GET(
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
-    const filePath = join(UPLOADS_ROOT, safeStudentId, safeFile);
+    const filePath = join(getUploadsRoot(), safeStudentId, safeFile);
 
     let stat;
     try {
