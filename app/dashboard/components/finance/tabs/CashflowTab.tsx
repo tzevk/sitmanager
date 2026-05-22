@@ -9,22 +9,30 @@ import CashflowCategoryBars from '../charts/CashflowCategoryBars';
 import { detectCashflowAnomalies, categoryMoMGrowth } from '../shared/predictions';
 
 const CF_TYPES: CashflowType[] = ['Payment', 'Receipt'];
-const CF_DEPARTMENTS = ['CBD','CORPORATE TRAINING','DEPUTATION ACCENT','PROJECT ACCENT','T&D','ADMIN ACCOUNTS','HELPING STAFF','GENERAL','MANAGEMENT'] as const;
+const CF_DEPARTMENTS = ['CBD','CORPORATE TRAINING','DEPUTATION ACCENT','PROJECT ACCENT','T&D','ADMIN ACCOUNTS','HELPING STAFF','GENERAL','MANAGEMENT','TRAINERS'] as const;
 const CF_COMPANIES   = ['Suvidya','SIT Alumni','ATS','Accent'] as const;
 
 const SIT_CATS = [
   'OD Interest / Loan EMI','Management Car Expenses','Management Salary','Employee Salary',
   'Trainers Payment','Food','Utility','Marketing - SIT',
   'Travelling Expense - Staff (Marketing)','Software','Stationary','Infrastructure','Taxes',
+  'Internal Transfer',
 ];
 const ACCENT_CATS = [
   'OD Interest / Loan EMI','Management Car Expenses','Management Salary','Employee Salary',
   'Trainers Payment','Food','Utility','Marketing - Accent',
   'Travelling Expense - Staff (Marketing)','Software','Stationary','Infrastructure','Taxes',
+  'Internal Transfer',
 ];
-const ALL_CATS = Array.from(new Set([...SIT_CATS, ...ACCENT_CATS]));
+const RECEIPT_CATS = [
+  'Tution Fees','Corporate Training','Deputation','Projects','Internal Transfer',
+];
+const PAYMENT_CATS = Array.from(new Set([...SIT_CATS, ...ACCENT_CATS]));
+const ALL_CATS = Array.from(new Set([...PAYMENT_CATS, ...RECEIPT_CATS]));
 
-function catsFor(): string[] {
+function catsFor(type?: string): string[] {
+  if (type === 'Receipt') return RECEIPT_CATS;
+  if (type === 'Payment') return PAYMENT_CATS;
   return ALL_CATS;
 }
 
@@ -378,7 +386,7 @@ export default function CashflowTab() {
                            <td className="px-2 py-1.5"><input className={cellInp} placeholder="Description" value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} /></td>
                            <td className="px-2 py-1.5">
                              <select className={cellInp} value={editForm.category} onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}>
-                               {catsFor().map(c => <option key={c}>{c}</option>)}
+                               {catsFor('Payment').map(c => <option key={c}>{c}</option>)}
                              </select>
                            </td>
                            <td className="px-2 py-1.5">
@@ -469,7 +477,7 @@ export default function CashflowTab() {
                            <td className="px-2 py-1.5"><input className={cellInp} placeholder="Description" value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} /></td>
                            <td className="px-2 py-1.5">
                              <select className={cellInp} value={editForm.category} onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}>
-                               {catsFor().map(c => <option key={c}>{c}</option>)}
+                               {catsFor('Receipt').map(c => <option key={c}>{c}</option>)}
                              </select>
                            </td>
                            <td className="px-2 py-1.5">
@@ -595,7 +603,7 @@ export default function CashflowTab() {
         </div>
         <div><label className={lblCls}>Category</label>
           <select className={inpCls} value={addForm.category} onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))}>
-            {catsFor().map(c => <option key={c}>{c}</option>)}
+            {catsFor(addForm.type).map(c => <option key={c}>{c}</option>)}
           </select>
         </div>
         <div><label className={lblCls}>Department</label>

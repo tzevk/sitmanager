@@ -10,12 +10,14 @@
       "Bash(node -e \"const p=require\\('/Users/tanvikadam/Desktop/SIT/sitmanager/package.json'\\); console.log\\(p.dependencies?.next || p.devDependencies?.next\\)\")",
       "Bash(cat ~/.claude/settings.json 2>/dev/null || echo \"NOT_FOUND\")",
       "Read(//Users/tanvikadam/.claude/**)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(mkdir -p /Users/tanvikadam/Desktop/SIT/sitmanager/app/api/finance/pending-invoices/\\\\[id\\\\])"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/finance/ct-yearly",
-      "/Users/tanvikadam/Desktop/SIT/sitmanager"
+      "/Users/tanvikadam/Desktop/SIT/sitmanager",
+      "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/finance/pending-invoices"
     ]
   }
 }

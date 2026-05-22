@@ -348,5 +348,39 @@ export const FINANCE_CASHFLOW: ResourceConfig = {
   ],
 };
 
+export const FINANCE_PENDING_INVOICES: ResourceConfig = {
+  table: 'finance_pending_invoices',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS finance_pending_invoices (
+      id           INT AUTO_INCREMENT PRIMARY KEY,
+      client_name  VARCHAR(200) NOT NULL,
+      invoice_no   VARCHAR(100) NULL,
+      amount       DECIMAL(14,2) NOT NULL DEFAULT 0,
+      invoice_date DATE NULL,
+      due_date     DATE NULL,
+      status       ENUM('Pending','Paid','Overdue') NOT NULL DEFAULT 'Pending',
+      description  VARCHAR(500) NULL,
+      created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      KEY idx_status (status),
+      KEY idx_due_date (due_date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `,
+  defaultOrder: "COALESCE(due_date, '9999-12-31') ASC, id DESC",
+  validate: (b) => {
+    const client = safeString(b.client_name, 200);
+    if (!client) throw new Error('client_name required');
+    return [
+      { col: 'client_name',  val: client },
+      { col: 'invoice_no',   val: nullableString(b.invoice_no, 100) },
+      { col: 'amount',       val: nonNegNum(b.amount) },
+      { col: 'invoice_date', val: nullableDate(b.invoice_date) },
+      { col: 'due_date',     val: nullableDate(b.due_date) },
+      { col: 'status',       val: oneOf(b.status, STATUS_VALUES, 'Pending') },
+      { col: 'description',  val: nullableString(b.description, 500) },
+    ];
+  },
+};
+
 /* Utility wrappers used directly by salary-cashflow's bespoke route. */
 export { numOrZero, nonNegNum, nullableString, safeString, nullableMonth, nullableDate, oneOf };

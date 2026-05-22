@@ -80,6 +80,19 @@ export interface CashflowProjection {
   loan_repayment: number;
 }
 
+export type InvoiceStatus = 'Pending' | 'Paid' | 'Overdue';
+
+export interface PendingInvoice {
+  id: number;
+  client_name: string;
+  invoice_no: string | null;
+  amount: number;
+  invoice_date: string | null;
+  due_date: string | null;
+  status: InvoiceStatus;
+  description: string | null;
+}
+
 export type CashflowType   = 'Payment' | 'Receipt';
 
 export interface CashflowTxn {
