@@ -10,8 +10,12 @@ function getUploadsRoot(): string {
   const configuredDir = process.env.UPLOADS_DIR?.trim();
   if (configuredDir) return configuredDir;
 
-  // Resolve this at request time and keep Turbopack from tracing cwd as a file graph input.
-  return join(/* turbopackIgnore: true */ process.cwd(), '..', 'uploads', 'student_document');
+  // Fallback for local dev only.
+  // IMPORTANT: On Vercel or any production server, set UPLOADS_DIR to the absolute path
+  // of the student documents directory (e.g. /var/uploads/student_document).
+  // Do NOT use '..' here — Turbopack's NFT tracer cannot follow paths that exit the
+  // project root and will crash the Vercel build with ERR_INVALID_ARG_TYPE.
+  return join(process.cwd(), 'uploads', 'student_document');
 }
 
 function mimeType(filename: string): string {
