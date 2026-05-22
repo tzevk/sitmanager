@@ -13,7 +13,8 @@
       "Bash(node -e ' *)",
       "Bash(mkdir -p /Users/tanvikadam/Desktop/SIT/sitmanager/app/api/finance/pending-invoices/\\\\[id\\\\])",
       "Bash(awk '{print $NF}')",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(next build *)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

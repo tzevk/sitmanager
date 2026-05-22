@@ -24,9 +24,9 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['mysql2'],
 
   experimental: {
-    // optimizeCss uses `critters` (fs.readFile) which triggers a Turbopack NFT whole-project
-    // trace warning. Only enable it for production webpack builds, not Turbopack / dev.
-    optimizeCss: process.env.NODE_ENV === 'production' && process.env.TURBOPACK !== '1',
+    // optimizeCss (critters) does fs.readFile calls that break Turbopack's NFT tracer on Vercel.
+    // Disabled — the CSS savings are marginal and the build crash is not worth it.
+    optimizeCss: false,
     optimizePackageImports: ['react-icons', 'jose', 'lucide-react', '@tiptap/react', '@tiptap/starter-kit'],
     staleTimes: {
       dynamic: 30,
