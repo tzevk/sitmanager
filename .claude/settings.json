@@ -11,7 +11,8 @@
       "Bash(cat ~/.claude/settings.json 2>/dev/null || echo \"NOT_FOUND\")",
       "Read(//Users/tanvikadam/.claude/**)",
       "Bash(node -e ' *)",
-      "Bash(mkdir -p /Users/tanvikadam/Desktop/SIT/sitmanager/app/api/finance/pending-invoices/\\\\[id\\\\])"
+      "Bash(mkdir -p /Users/tanvikadam/Desktop/SIT/sitmanager/app/api/finance/pending-invoices/\\\\[id\\\\])",
+      "Bash(awk '{print $NF}')"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
