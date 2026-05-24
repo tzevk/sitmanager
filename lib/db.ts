@@ -12,6 +12,12 @@ let pool: mysql.Pool | null = global.__sitDbPool ?? null;
 // Detect if running on Vercel (serverless)
 const isServerless = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
 
+// Serverless: 1 connection per function instance — each invocation is short-lived,
+// pooling multiple connections per instance just exhausts max_user_connections
+// when several cron/api functions run concurrently on Vercel.
+// Dev: 2 — leaves room for concurrent dev restarts before wait_timeout expires.
+const CONNECTION_LIMIT = isServerless ? 1 : 2;
+
 export function getPool(): mysql.Pool {
   if (!pool) {
     const env = getDbEnv(); // validates DB vars only, not JWT_SECRET
@@ -22,13 +28,11 @@ export function getPool(): mysql.Pool {
       user: env.DB_USER,
       password: env.DB_PASSWORD,
       waitForConnections: true,
-      // Keep well under the server's max_user_connections limit for sitadmin.
-      connectionLimit: isServerless ? 4 : 5,
-      maxIdle: isServerless ? 2 : 3,
-      idleTimeout: isServerless ? 10000 : 30000, // 30s for dev, 10s for serverless
-      // Do not reject queued requests under load; allow waiting for free connection.
+      connectionLimit: CONNECTION_LIMIT,
+      maxIdle: isServerless ? 2 : 1,
+      idleTimeout: isServerless ? 10000 : 10000, // 10s everywhere — release idle connections fast
       queueLimit: 0,
-      enableKeepAlive: !isServerless, // Disable keep-alive in serverless
+      enableKeepAlive: !isServerless,
       keepAliveInitialDelay: 30000,
       connectTimeout: isServerless ? 20000 : 60000,
       namedPlaceholders: true,
@@ -46,13 +50,21 @@ export function getPool(): mysql.Pool {
       connection.on('error', (err) => {
         console.error('DB connection error:', err.code);
         if (err.code === 'PROTOCOL_CONNECTION_LOST' || err.code === 'ECONNRESET') {
-          // Connection will be removed from pool automatically
           console.warn('Database connection lost. Pool will create a new one.');
         }
       });
     });
 
     global.__sitDbPool = pool;
+
+    // Close all connections when the process exits so MySQL's max_user_connections
+    // isn't consumed by stale connections from a previous dev-server run.
+    if (!isServerless) {
+      const cleanup = () => { destroyPool().catch(() => {}); };
+      process.once('SIGINT', cleanup);
+      process.once('SIGTERM', cleanup);
+      process.once('beforeExit', cleanup);
+    }
   }
   return pool;
 }

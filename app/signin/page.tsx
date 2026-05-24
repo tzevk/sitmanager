@@ -15,6 +15,7 @@ const quotes = [
 ];
 export default function SignIn() {
   const router = useRouter();
+  const [isHydrated, setIsHydrated] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -23,6 +24,10 @@ export default function SignIn() {
   const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -134,13 +139,29 @@ export default function SignIn() {
               </div>
             )}
 
+            {!isHydrated ? (
+              <div className="space-y-3" aria-hidden="true">
+                <div>
+                  <div className="h-4 w-24 rounded bg-gray-200" />
+                  <div className="mt-1 h-[50px] w-full rounded-xl bg-gray-100 border-2 border-gray-200" />
+                </div>
+                <div>
+                  <div className="h-4 w-20 rounded bg-gray-200" />
+                  <div className="mt-1 h-[50px] w-full rounded-xl bg-gray-100 border-2 border-gray-200" />
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <div className="h-5 w-28 rounded bg-gray-100" />
+                  <div className="h-4 w-24 rounded bg-gray-100" />
+                </div>
+                <div className="h-[50px] w-full rounded-xl bg-gradient-to-r from-[#2E3093]/80 to-[#2A6BB5]/80" />
+              </div>
+            ) : (
             <form onSubmit={handleSubmit} className="space-y-3">
               {/* Username Field */}
               <div className="group">
                 <label 
                   htmlFor="username" 
                   className="block text-sm font-semibold text-gray-700 mb-0"
-                  suppressHydrationWarning
                 >
                   Username
                 </label>
@@ -253,6 +274,7 @@ export default function SignIn() {
 
 
             </form>
+            )}
           </div>
 
           {/* Footer */}

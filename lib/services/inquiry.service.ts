@@ -35,9 +35,11 @@ export interface InquiryListParams {
   search?: string;
   discipline?: string;
   inquiryType?: string;
+  leadTag?: string;
   location?: string;
   training?: string;
   statusId?: string;
+  duplicatesOnly?: boolean;
   dateFrom?: string;
   dateTo?: string;
   /** When true, only return rows whose latest discussion has nextdate <= CURDATE() */
@@ -61,6 +63,10 @@ export interface InquiryRow {
   DiscussionDate: string | null;
   NextFollowUpDate: string | null;
   FollowUpBy: string | null;
+  MetaCampaignName?: string | null;
+  MetaFormName?: string | null;
+  LeadTags?: string[];
+  IsDuplicateLead?: boolean;
 }
 
 export interface StatusOption { id: number; label: string }
@@ -121,6 +127,53 @@ async function ensureInquirySchema(pool: ReturnType<typeof getPool>): Promise<vo
         .filter((ix) => !existing.has(`${ix.table}.${ix.name}`))
         .map((ix) => pool.query(`ALTER TABLE \`${ix.table}\` ADD INDEX \`${ix.name}\` (${ix.cols})`))
     );
+
+    return true;
+  });
+}
+
+async function ensureMetaLeadSchema(pool: ReturnType<typeof getPool>): Promise<void> {
+  await cached('schema:meta_ads_lead_sync', 60 * 60 * 1000, async () => {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS meta_ads_lead_sync (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        meta_lead_id VARCHAR(191) NOT NULL,
+        inquiry_id INT NULL,
+        duplicate_of_inquiry_id INT NULL,
+        source_label VARCHAR(100) NOT NULL DEFAULT 'Meta Ads',
+        contact_source VARCHAR(100) NOT NULL DEFAULT 'Meta Instant Form',
+        page_id VARCHAR(191) NULL,
+        page_name VARCHAR(255) NULL,
+        form_id VARCHAR(191) NULL,
+        form_name VARCHAR(255) NULL,
+        campaign_id VARCHAR(191) NULL,
+        campaign_name VARCHAR(255) NULL,
+        adset_id VARCHAR(191) NULL,
+        adset_name VARCHAR(255) NULL,
+        ad_id VARCHAR(191) NULL,
+        ad_name VARCHAR(255) NULL,
+        lead_created_time VARCHAR(100) NULL,
+        student_name VARCHAR(255) NULL,
+        mobile VARCHAR(30) NULL,
+        email VARCHAR(191) NULL,
+        course_name VARCHAR(255) NULL,
+        utm_json LONGTEXT NULL,
+        tags_json LONGTEXT NULL,
+        fields_json LONGTEXT NULL,
+        payload_json LONGTEXT NULL,
+        duplicate_reason VARCHAR(255) NULL,
+        last_error TEXT NULL,
+        notifications_sent_at TIMESTAMP NULL,
+        synced_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_meta_ads_lead_id (meta_lead_id),
+        KEY idx_meta_ads_inquiry_id (inquiry_id),
+        KEY idx_meta_ads_duplicate_inquiry_id (duplicate_of_inquiry_id),
+        KEY idx_meta_ads_campaign_id (campaign_id),
+        KEY idx_meta_ads_form_id (form_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
 
     return true;
   });
@@ -243,9 +296,10 @@ export async function getInquiryById(id: number): Promise<any | null> {
 export async function listInquiries(params: InquiryListParams): Promise<InquiryListResult> {
   const pool = getPool();
   try { await ensureInquirySchema(pool); } catch { /* best-effort schema migration */ }
+  try { await ensureMetaLeadSchema(pool); } catch { /* best-effort schema migration */ }
   const {
-    page, limit, search = '', discipline = '', inquiryType = '',
-    location = '', training = '', statusId = '', dateFrom = '', dateTo = '',
+    page, limit, search = '', discipline = '', inquiryType = '', leadTag = '',
+    location = '', training = '', statusId = '', duplicatesOnly = false, dateFrom = '', dateTo = '',
     followUpDue = false,
   } = params;
   const offset = (page - 1) * limit;
@@ -278,6 +332,21 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     conditions.push('si.Inquiry_Type = ?');
     queryParams.push(inquiryType);
   }
+  if (leadTag) {
+    conditions.push(
+      `EXISTS (
+         SELECT 1 FROM meta_ads_lead_sync meta_filter
+         WHERE meta_filter.inquiry_id = si.Inquiry_Id
+           AND (
+             LOWER(COALESCE(meta_filter.campaign_name,'')) LIKE ?
+             OR LOWER(COALESCE(meta_filter.form_name,'')) LIKE ?
+             OR LOWER(COALESCE(meta_filter.tags_json,'')) LIKE ?
+           )
+       )`
+    );
+    const leadSearch = `%${leadTag.toLowerCase()}%`;
+    queryParams.push(leadSearch, leadSearch, leadSearch);
+  }
   if (normalizedLocation && locationColumn) {
     conditions.push(`LOWER(TRIM(si.${locationColumn})) LIKE ?`);
     queryParams.push(`%${normalizedLocation}%`);
@@ -303,6 +372,15 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   if (training) {
     conditions.push('c.Course_Name = ?');
     queryParams.push(training);
+  }
+  if (duplicatesOnly) {
+    conditions.push(
+      `EXISTS (
+         SELECT 1 FROM meta_ads_lead_sync meta_dup
+         WHERE meta_dup.inquiry_id = si.Inquiry_Id
+           AND meta_dup.duplicate_of_inquiry_id IS NOT NULL
+       )`
+    );
   }
   if (followUpDue) {
     conditions.push(
@@ -370,6 +448,10 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
          si.OnlineState as OnlineStateRaw,
          CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) as Status_id,
          si.Discussion as InlineDiscussion,
+         meta_latest.campaign_name as MetaCampaignName,
+         meta_latest.form_name as MetaFormName,
+         meta_latest.tags_json as MetaTagsJson,
+         meta_latest.duplicate_of_inquiry_id as MetaDuplicateOfInquiryId,
          ld.discussion as LatestDiscussion, ld.date as LatestDiscDate,
          ld.nextdate as NextFollowUpDate, ld.created_by as LatestDiscussionById,
          COALESCE(
@@ -380,6 +462,16 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
        FROM Student_Inquiry si
        LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
        LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)
+      LEFT JOIN (
+        SELECT meta1.*
+        FROM meta_ads_lead_sync meta1
+        INNER JOIN (
+          SELECT inquiry_id, MAX(id) AS max_id
+          FROM meta_ads_lead_sync
+          WHERE inquiry_id IS NOT NULL
+          GROUP BY inquiry_id
+        ) meta2 ON meta2.max_id = meta1.id
+      ) meta_latest ON meta_latest.inquiry_id = si.Inquiry_Id
        LEFT JOIN (
          SELECT si_map.Inquiry_Id as InquiryId, MAX(d.id) as max_id
          FROM Student_Inquiry si_map
@@ -458,6 +550,17 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       DiscussionDate: r.LatestDiscDate ?? null,
       NextFollowUpDate: r.NextFollowUpDate ?? null,
       FollowUpBy: r.LatestDiscussionByName || (r.LatestDiscussionById != null ? `User ${r.LatestDiscussionById}` : null),
+      MetaCampaignName: r.MetaCampaignName ?? null,
+      MetaFormName: r.MetaFormName ?? null,
+      LeadTags: (() => {
+        try {
+          const parsed = JSON.parse(r.MetaTagsJson || '[]');
+          return Array.isArray(parsed) ? parsed.map((tag) => String(tag)).filter(Boolean) : [];
+        } catch {
+          return [];
+        }
+      })(),
+      IsDuplicateLead: r.MetaDuplicateOfInquiryId != null,
     };
   });
 

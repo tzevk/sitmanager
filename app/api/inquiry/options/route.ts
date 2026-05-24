@@ -95,6 +95,7 @@ export async function GET() {
       const inquiryModes = [
         'Call',
         'WhatsApp',
+        'Meta Instant Form',
         'Website Enquiry Form',
         'Walk-In',
         'Social Media DM',
