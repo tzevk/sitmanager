@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
 import { fetchMetaCampaignPerformance } from '@/lib/services/meta-ads.service';
 
+interface CampaignTotals {
+  reach: number;
+  impressions: number;
+  clicks: number;
+  leads: number;
+  spend: number;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await requirePermission(req, ['inquiry.view', 'report_inquiry.view']);
@@ -12,7 +20,7 @@ export async function GET(req: NextRequest) {
     const dateTo = url.searchParams.get('dateTo');
     const campaigns = await fetchMetaCampaignPerformance({ dateFrom, dateTo });
 
-    const totals = campaigns.reduce(
+    const totals = campaigns.reduce<CampaignTotals>(
       (acc, row) => ({
         reach: acc.reach + Number(row.reach || 0),
         impressions: acc.impressions + Number(row.impressions || 0),
