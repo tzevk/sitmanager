@@ -10,6 +10,14 @@ interface CampaignTotals {
   spend: number;
 }
 
+interface CampaignRow {
+  reach?: number | null;
+  impressions?: number | null;
+  clicks?: number | null;
+  leads?: number | null;
+  spend?: number | null;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await requirePermission(req, ['inquiry.view', 'report_inquiry.view']);
@@ -18,10 +26,10 @@ export async function GET(req: NextRequest) {
     const url = req.nextUrl;
     const dateFrom = url.searchParams.get('dateFrom');
     const dateTo = url.searchParams.get('dateTo');
-    const campaigns = await fetchMetaCampaignPerformance({ dateFrom, dateTo });
+    const campaigns = await fetchMetaCampaignPerformance({ dateFrom, dateTo }) as CampaignRow[];
 
-    const totals = campaigns.reduce<CampaignTotals>(
-      (acc, row) => ({
+    const totals = campaigns.reduce(
+      (acc: CampaignTotals, row: CampaignRow): CampaignTotals => ({
         reach: acc.reach + Number(row.reach || 0),
         impressions: acc.impressions + Number(row.impressions || 0),
         clicks: acc.clicks + Number(row.clicks || 0),
