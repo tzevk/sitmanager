@@ -12,8 +12,7 @@ export async function GET(req: NextRequest) {
     const dateTo = url.searchParams.get('dateTo');
     const campaigns = await fetchMetaCampaignPerformance({ dateFrom, dateTo });
 
-    type Totals = { reach: number; impressions: number; clicks: number; leads: number; spend: number };
-    const totals = (campaigns as Totals[]).reduce(
+    const totals = campaigns.reduce(
       (acc, row) => ({
         reach: acc.reach + Number(row.reach || 0),
         impressions: acc.impressions + Number(row.impressions || 0),
@@ -21,7 +20,7 @@ export async function GET(req: NextRequest) {
         leads: acc.leads + Number(row.leads || 0),
         spend: acc.spend + Number(row.spend || 0),
       }),
-      { reach: 0, impressions: 0, clicks: 0, leads: 0, spend: 0 } as Totals
+      { reach: 0, impressions: 0, clicks: 0, leads: 0, spend: 0 }
     );
 
     return NextResponse.json({
