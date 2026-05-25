@@ -16,6 +16,7 @@ interface RateLimitEntry {
 interface RateLimiterOptions {
   maxRequests: number;
   windowSeconds: number;
+  scope?: string;
 }
 
 // ── In-memory fallback ────────────────────────────────────────────────────────
@@ -105,13 +106,15 @@ async function redisCheck(
 // ── Factory ───────────────────────────────────────────────────────────────────
 
 export function createRateLimiter(options: RateLimiterOptions) {
-  const { maxRequests, windowSeconds } = options;
-  const storeKey = `${maxRequests}:${windowSeconds}`;
+  const { maxRequests, windowSeconds, scope } = options;
+  const baseStoreKey = `${scope || 'default'}:${maxRequests}:${windowSeconds}`;
 
   return async function checkRateLimit(request: NextRequest): Promise<NextResponse | null> {
     const ip = getClientIp(request);
+    const pathKey = normalizeRateLimitPath(request.nextUrl.pathname);
+    const storeKey = `${baseStoreKey}:${pathKey}`;
 
-    const { allowed, remaining, resetAt } = redis
+    const { allowed, resetAt } = redis
       ? await redisCheck(ip, storeKey, maxRequests, windowSeconds)
       : memCheck(ip, storeKey, maxRequests, windowSeconds);
 
@@ -138,6 +141,14 @@ export function createRateLimiter(options: RateLimiterOptions) {
   };
 }
 
+function normalizeRateLimitPath(pathname: string): string {
+  return pathname
+    .toLowerCase()
+    .replace(/\/+/g, '/')
+    .replace(/[^a-z0-9/_-]/g, '')
+    .replace(/\//g, ':') || 'root';
+}
+
 function getClientIp(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
   if (forwarded) return forwarded.split(',')[0].trim();
@@ -148,7 +159,9 @@ function getClientIp(request: NextRequest): string {
 
 // ── Pre-configured limiters ───────────────────────────────────────────────────
 
-export const loginRateLimiter = createRateLimiter({ maxRequests: 5, windowSeconds: 60 });
-export const apiRateLimiter = createRateLimiter({ maxRequests: 100, windowSeconds: 60 });
-export const dashboardRateLimiter = createRateLimiter({ maxRequests: 60, windowSeconds: 60 });
-export const healthRateLimiter = createRateLimiter({ maxRequests: 10, windowSeconds: 60 });
+export const loginRateLimiter = createRateLimiter({ maxRequests: 5, windowSeconds: 60, scope: 'login' });
+export const apiRateLimiter = createRateLimiter({ maxRequests: 100, windowSeconds: 60, scope: 'api' });
+export const dashboardRateLimiter = createRateLimiter({ maxRequests: 60, windowSeconds: 60, scope: 'dashboard' });
+export const healthRateLimiter = createRateLimiter({ maxRequests: 10, windowSeconds: 60, scope: 'health' });
+export const publicFormRateLimiter = createRateLimiter({ maxRequests: 10, windowSeconds: 60, scope: 'public-form' });
+export const webhookRateLimiter = createRateLimiter({ maxRequests: 300, windowSeconds: 60, scope: 'webhook' });

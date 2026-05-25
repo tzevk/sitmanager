@@ -2,6 +2,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requireAuth } from '@/lib/api-auth';
+import { dashboardRateLimiter } from '@/lib/rate-limit';
+import { cache, cacheTTL } from '@/lib/cache';
+
+const DASHBOARD_CACHE_TTL = cacheTTL.short;
 
 // ── helper: safe query that never throws ──
 async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallback: T): Promise<T> {
@@ -15,16 +19,32 @@ async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallb
 
 export async function GET(request: NextRequest) {
   try {
+    const rateLimited = await dashboardRateLimiter(request);
+    if (rateLimited) return rateLimited;
+
     // SECURITY: Dashboard data requires authentication
     const auth = await requireAuth(request);
     if (auth instanceof NextResponse) return auth;
     const { searchParams } = new URL(request.url);
     const dept = searchParams.get('dept') || 'unknown';
+    const cacheKey = `dashboard:data:${dept}`;
+    const cachedResult = await cache.get<any>(cacheKey);
+    if (cachedResult) {
+      return NextResponse.json(cachedResult, {
+        headers: {
+          'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
+          'X-Cache': 'HIT',
+        },
+      });
+    }
+
     const result = await fetchDashboardData(dept);
+    await cache.set(cacheKey, result, DASHBOARD_CACHE_TTL);
 
     return NextResponse.json(result, {
       headers: {
-        'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
+        'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
+        'X-Cache': 'MISS',
       },
     });
   } catch (error: unknown) {

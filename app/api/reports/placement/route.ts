@@ -2,9 +2,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requireAuth, requirePermission } from '@/lib/api-auth';
+import { cache, cacheTTL } from '@/lib/cache';
+import { logReportCacheTiming } from '@/lib/report-timing';
 
 export async function GET(req: NextRequest) {
   try {
+    const startedAt = Date.now();
     const pool = getPool();
     const url = req.nextUrl;
     const options = url.searchParams.get('options');
@@ -16,19 +19,42 @@ export async function GET(req: NextRequest) {
 
     /* ── Dropdown: courses ─────────────────────────────────────────── */
     if (options === 'courses') {
+      const cacheKey = 'report:placement:options:courses';
+      const cachedData = await cache.get<{ courses: unknown }>(cacheKey);
+      if (cachedData) {
+        logReportCacheTiming('placement.options.courses', startedAt, 'HIT');
+        return NextResponse.json(cachedData, {
+          headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'HIT' },
+        });
+      }
+
       const [rows] = await pool.query(
         `SELECT Course_Id AS id, Course_Name AS name
          FROM course_mst
          WHERE (IsDelete = 0 OR IsDelete IS NULL)
          ORDER BY Course_Name`
       );
-      return NextResponse.json({ courses: rows });
+      const responseData = { courses: rows };
+      await cache.set(cacheKey, responseData, cacheTTL.medium);
+      logReportCacheTiming('placement.options.courses', startedAt, 'MISS', { total: (rows as any[]).length });
+      return NextResponse.json(responseData, {
+        headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'MISS' },
+      });
     }
 
     /* ── Dropdown: batches (filtered by course) ────────────────────── */
     if (options === 'batches') {
       const courseId = url.searchParams.get('courseId');
       if (!courseId) return NextResponse.json({ batches: [] });
+      const cacheKey = `report:placement:options:batches:${courseId}`;
+      const cachedData = await cache.get<{ batches: unknown }>(cacheKey);
+      if (cachedData) {
+        logReportCacheTiming('placement.options.batches', startedAt, 'HIT', { courseId });
+        return NextResponse.json(cachedData, {
+          headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'HIT' },
+        });
+      }
+
       const [rows] = await pool.query(
         `SELECT Batch_Id AS id, Batch_code AS name
          FROM batch_mst
@@ -36,40 +62,87 @@ export async function GET(req: NextRequest) {
          ORDER BY Batch_Id DESC`,
         [parseInt(courseId)]
       );
-      return NextResponse.json({ batches: rows });
+      const responseData = { batches: rows };
+      await cache.set(cacheKey, responseData, cacheTTL.medium);
+      logReportCacheTiming('placement.options.batches', startedAt, 'MISS', { courseId, total: (rows as any[]).length });
+      return NextResponse.json(responseData, {
+        headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'MISS' },
+      });
     }
 
     /* ── Dropdown: years (distinct start-year from batch_mst) ──────── */
     if (options === 'years') {
+      const cacheKey = 'report:placement:options:years';
+      const cachedData = await cache.get<{ years: unknown }>(cacheKey);
+      if (cachedData) {
+        logReportCacheTiming('placement.options.years', startedAt, 'HIT');
+        return NextResponse.json(cachedData, {
+          headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'HIT' },
+        });
+      }
+
       const [rows] = await pool.query(
         `SELECT DISTINCT YEAR(SDate) AS yr
          FROM batch_mst
          WHERE SDate IS NOT NULL AND (IsDelete = 0 OR IsDelete IS NULL)
          ORDER BY yr DESC`
       );
-      return NextResponse.json({ years: (rows as any[]).map((r) => r.yr).filter(Boolean) });
+      const responseData = { years: (rows as any[]).map((r) => r.yr).filter(Boolean) };
+      await cache.set(cacheKey, responseData, cacheTTL.medium);
+      logReportCacheTiming('placement.options.years', startedAt, 'MISS', { total: responseData.years.length });
+      return NextResponse.json(responseData, {
+        headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'MISS' },
+      });
     }
 
     /* ── Dropdown: disciplines ─────────────────────────────────────── */
     if (options === 'disciplines') {
+      const cacheKey = 'report:placement:options:disciplines';
+      const cachedData = await cache.get<{ disciplines: unknown }>(cacheKey);
+      if (cachedData) {
+        logReportCacheTiming('placement.options.disciplines', startedAt, 'HIT');
+        return NextResponse.json(cachedData, {
+          headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'HIT' },
+        });
+      }
+
       const [rows] = await pool.query(
         `SELECT Id AS id, Deciplin AS name
          FROM MST_Deciplin
          WHERE IsDelete = 0 OR IsDelete IS NULL
          ORDER BY Deciplin`
       );
-      return NextResponse.json({ disciplines: rows });
+      const responseData = { disciplines: rows };
+      await cache.set(cacheKey, responseData, cacheTTL.medium);
+      logReportCacheTiming('placement.options.disciplines', startedAt, 'MISS', { total: (rows as any[]).length });
+      return NextResponse.json(responseData, {
+        headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'MISS' },
+      });
     }
 
     /* ── Dropdown: qualifications (distinct from student_master) ───── */
     if (options === 'qualifications') {
+      const cacheKey = 'report:placement:options:qualifications';
+      const cachedData = await cache.get<{ qualifications: unknown }>(cacheKey);
+      if (cachedData) {
+        logReportCacheTiming('placement.options.qualifications', startedAt, 'HIT');
+        return NextResponse.json(cachedData, {
+          headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'HIT' },
+        });
+      }
+
       const [rows] = await pool.query(
         `SELECT DISTINCT TRIM(Qualification) AS q
          FROM student_master
          WHERE Qualification IS NOT NULL AND TRIM(Qualification) != '' AND TRIM(Qualification) != 'NULL'
          ORDER BY q`
       );
-      return NextResponse.json({ qualifications: (rows as any[]).map((r) => r.q) });
+      const responseData = { qualifications: (rows as any[]).map((r) => r.q) };
+      await cache.set(cacheKey, responseData, cacheTTL.medium);
+      logReportCacheTiming('placement.options.qualifications', startedAt, 'MISS', { total: responseData.qualifications.length });
+      return NextResponse.json(responseData, {
+        headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'MISS' },
+      });
     }
 
     // Unknown options value
@@ -116,6 +189,14 @@ export async function GET(req: NextRequest) {
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const cacheKey = `report:placement:data:${courseId || ''}:${batchId || ''}:${year || ''}:${qualification || ''}:${discipline || ''}`;
+    const cachedData = await cache.get<{ rows: unknown }>(cacheKey);
+    if (cachedData) {
+      logReportCacheTiming('placement.report', startedAt, 'HIT', { courseId, batchId, year, qualification, discipline });
+      return NextResponse.json(cachedData, {
+        headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60', 'X-Cache': 'HIT' },
+      });
+    }
 
     const [rows] = await pool.query(
       `SELECT
@@ -164,7 +245,12 @@ export async function GET(req: NextRequest) {
       params
     );
 
-    return NextResponse.json({ rows });
+    const responseData = { rows };
+    await cache.set(cacheKey, responseData, cacheTTL.short);
+    logReportCacheTiming('placement.report', startedAt, 'MISS', { courseId, batchId, year, qualification, discipline, total: (rows as any[]).length });
+    return NextResponse.json(responseData, {
+      headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60', 'X-Cache': 'MISS' },
+    });
   } catch (err: unknown) {
     console.error('[Placement Report] GET error:', err);
     return NextResponse.json(

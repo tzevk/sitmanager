@@ -45,36 +45,6 @@ interface InquiryRow {
   Status_id: number | null;
   StatusLabel: string;
   FollowUpBy?: string | null;
-  MetaCampaignName?: string | null;
-  MetaFormName?: string | null;
-  LeadTags?: string[];
-  IsDuplicateLead?: boolean;
-}
-
-interface MetaPerformanceRow {
-  campaignId: string | null;
-  campaignName: string | null;
-  reach: number;
-  impressions: number;
-  clicks: number;
-  ctr: number;
-  spend: number;
-  cpc: number;
-  leads: number;
-  costPerLead: number | null;
-}
-
-interface MetaPerformanceSummary {
-  campaigns: MetaPerformanceRow[];
-  totals: {
-    reach: number;
-    impressions: number;
-    clicks: number;
-    leads: number;
-    spend: number;
-    ctr: number;
-    cpl: number | null;
-  };
 }
 
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
@@ -158,12 +128,10 @@ export default function InquiryPage() {
   const [search, setSearch] = useState(() => getInitParam('search'));
   const [discipline, setDiscipline] = useState(() => getInitParam('discipline'));
   const [inquiryType, setInquiryType] = useState(() => getInitParam('inquiryType'));
-  const [leadTag, setLeadTag] = useState(() => getInitParam('leadTag'));
   const [status, setStatus] = useState(() => getInitParam('status'));
   const [dateFrom, setDateFrom] = useState(() => getInitParam('dateFrom'));
   const [dateTo, setDateTo] = useState(() => getInitParam('dateTo'));
   const [training, setTraining] = useState(() => getInitParam('training'));
-  const [duplicatesOnly, setDuplicatesOnly] = useState(() => getInitParam('duplicatesOnly') === '1');
   const [page, setPage] = useState(() => {
     const urlPage = parseInt(searchParams.get('page') || '0');
     if (urlPage > 0) return urlPage;
@@ -176,9 +144,6 @@ export default function InquiryPage() {
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [metaPerf, setMetaPerf] = useState<MetaPerformanceSummary | null>(null);
-  const [metaPerfError, setMetaPerfError] = useState('');
-
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -186,12 +151,10 @@ export default function InquiryPage() {
       if (search) p.set('search', search);
       if (discipline) p.set('discipline', discipline);
       if (inquiryType) p.set('inquiryType', inquiryType);
-      if (leadTag) p.set('leadTag', leadTag);
       if (status) p.set('status', status);
       if (dateFrom) p.set('dateFrom', dateFrom);
       if (dateTo) p.set('dateTo', dateTo);
       if (training) p.set('training', training);
-      if (duplicatesOnly) p.set('duplicatesOnly', '1');
       const res = await fetch(`/api/inquiry?${p}`);
       const ct = res.headers.get('content-type') || '';
       const data = ct.includes('application/json') ? await res.json() : {};
@@ -201,7 +164,7 @@ export default function InquiryPage() {
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, fetchTrigger, search, discipline, inquiryType, leadTag, status, dateFrom, dateTo, training, duplicatesOnly]);
+  }, [page, fetchTrigger, search, discipline, inquiryType, status, dateFrom, dateTo, training]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -231,12 +194,10 @@ export default function InquiryPage() {
       search,
       discipline,
       inquiryType,
-      leadTag,
       status,
       dateFrom,
       dateTo,
       training,
-      duplicatesOnly: duplicatesOnly ? '1' : '',
     };
     const p = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => { if (v) p.set(k, v); });
@@ -249,7 +210,7 @@ export default function InquiryPage() {
     router.replace(pathname, { scroll: false });
     sessionStorage.removeItem(INQUIRY_FILTERS_STORAGE_KEY);
     setSearch(''); setDiscipline(''); setInquiryType('');
-    setLeadTag(''); setStatus(''); setDateFrom(''); setDateTo(''); setTraining(''); setDuplicatesOnly(false);
+    setStatus(''); setDateFrom(''); setDateTo(''); setTraining('');
     setPage(1); setFetchTrigger(t => t + 1);
   };
 
@@ -258,30 +219,26 @@ export default function InquiryPage() {
     if (search) p.set('search', search);
     if (discipline) p.set('discipline', discipline);
     if (inquiryType) p.set('inquiryType', inquiryType);
-    if (leadTag) p.set('leadTag', leadTag);
     if (status) p.set('status', status);
     if (dateFrom) p.set('dateFrom', dateFrom);
     if (dateTo) p.set('dateTo', dateTo);
     if (training) p.set('training', training);
-    if (duplicatesOnly) p.set('duplicatesOnly', '1');
     if (page > 1) p.set('page', String(page));
     // Only persist when at least one filter is active — doClear() owns the removal.
     if (p.toString()) {
       sessionStorage.setItem(INQUIRY_FILTERS_STORAGE_KEY, `${pathname}?${p.toString()}`);
     }
-  }, [search, discipline, inquiryType, leadTag, status, dateFrom, dateTo, training, duplicatesOnly, page, pathname]);
+  }, [search, discipline, inquiryType, status, dateFrom, dateTo, training, page, pathname]);
 
   const buildReturnTo = () => {
     const p = new URLSearchParams();
     if (search) p.set('search', search);
     if (discipline) p.set('discipline', discipline);
     if (inquiryType) p.set('inquiryType', inquiryType);
-    if (leadTag) p.set('leadTag', leadTag);
     if (status) p.set('status', status);
     if (dateFrom) p.set('dateFrom', dateFrom);
     if (dateTo) p.set('dateTo', dateTo);
     if (training) p.set('training', training);
-    if (duplicatesOnly) p.set('duplicatesOnly', '1');
     if (page > 1) p.set('page', String(page));
     const qs = p.toString();
     return qs ? `${pathname}?${qs}` : pathname;
@@ -336,36 +293,12 @@ export default function InquiryPage() {
   const [overdueLoading, setOverdueLoading] = useState(true);
   const [overdueExpanded, setOverdueExpanded] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function fetchMetaPerformance() {
-      setMetaPerfError('');
-      try {
-        const params = new URLSearchParams();
-        if (dateFrom) params.set('dateFrom', dateFrom);
-        if (dateTo) params.set('dateTo', dateTo);
-        const res = await fetch(`/api/meta-ads/performance?${params.toString()}`);
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data?.error || 'Failed to load Meta campaign performance');
-        if (!cancelled) setMetaPerf(data);
-      } catch (error: unknown) {
-        if (!cancelled) {
-          setMetaPerf(null);
-          setMetaPerfError(error instanceof Error ? error.message : 'Failed to load Meta campaign performance');
-        }
-      }
-    }
-
-    fetchMetaPerformance();
-    return () => { cancelled = true; };
-  }, [dateFrom, dateTo]);
-
   const exportCsv = () => {
     if (rows.length === 0) return;
     const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
     const headers = [
-      'Name', 'Training', 'Mobile', 'Email', 'Lead Source', 'Meta Campaign', 'Meta Form',
-      'Tags', 'Status', 'Inquiry Date', 'Last Discussion', 'Duplicate Lead'
+      'Name', 'Training', 'Mobile', 'Email', 'Lead Source',
+      'Status', 'Inquiry Date', 'Last Discussion'
     ];
     const csv = [headers.join(',')].concat(
       rows.map((row) => [
@@ -374,13 +307,9 @@ export default function InquiryPage() {
         row.Present_Mobile,
         row.Email,
         row.Inquiry_Type || row.Inquiry_From,
-        row.MetaCampaignName,
-        row.MetaFormName,
-        row.LeadTags?.join(' | '),
         row.StatusLabel,
         row.Inquiry_Dt,
         row.Discussion,
-        row.IsDuplicateLead ? 'Yes' : 'No',
       ].map(escape).join(','))
     ).join('\n');
 
@@ -432,6 +361,12 @@ export default function InquiryPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 12l-4-4m4 4l4-4M4 20h16" />
             </svg>
             Export
+          </GhostBtn>
+          <GhostBtn href="/dashboard/meta-leads">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 5l7 7-7 7" />
+            </svg>
+            Meta Leads
           </GhostBtn>
           {canCreate && (
             <PrimaryBtn onClick={() => router.push('/dashboard/inquiry/add')}>
@@ -533,83 +468,6 @@ export default function InquiryPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_2fr] gap-4">
-        <div className="rounded-xl border border-[#2E3093]/10 bg-white p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#2A6BB5]/70">Meta Ads</p>
-              <h3 className="text-sm font-bold text-slate-800">Campaign Performance</h3>
-            </div>
-            <span className="text-[11px] text-slate-400">{dateFrom || 'Any'} to {dateTo || 'Today'}</span>
-          </div>
-          {metaPerfError ? (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{metaPerfError}</p>
-          ) : !metaPerf ? (
-            <div className="h-24 rounded-lg bg-slate-50 animate-pulse" />
-          ) : (
-            <>
-              <div className="grid grid-cols-2 xl:grid-cols-5 gap-2">
-                {[
-                  { label: 'Reach', value: metaPerf.totals.reach.toLocaleString() },
-                  { label: 'Impressions', value: metaPerf.totals.impressions.toLocaleString() },
-                  { label: 'Clicks', value: metaPerf.totals.clicks.toLocaleString() },
-                  { label: 'Leads', value: metaPerf.totals.leads.toLocaleString() },
-                  { label: 'Spend', value: `Rs ${metaPerf.totals.spend.toFixed(0)}` },
-                ].map((item) => (
-                  <div key={item.label} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                    <div className="text-[10px] uppercase tracking-wide text-slate-400 font-bold">{item.label}</div>
-                    <div className="text-sm font-bold text-slate-800">{item.value}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="text-[11px] text-slate-500 flex gap-4">
-                <span>CTR {metaPerf.totals.ctr.toFixed(2)}%</span>
-                <span>CPL {metaPerf.totals.cpl == null ? '—' : `Rs ${metaPerf.totals.cpl.toFixed(0)}`}</span>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="rounded-xl border border-[#2E3093]/10 bg-white overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#2A6BB5]/70">Top Campaigns</p>
-              <h3 className="text-sm font-bold text-slate-800">Lead and reach summary</h3>
-            </div>
-            <span className="text-[11px] text-slate-400">Top 5 by leads</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
-                  <th className="text-left px-4 py-2 font-bold">Campaign</th>
-                  <th className="text-right px-4 py-2 font-bold">Reach</th>
-                  <th className="text-right px-4 py-2 font-bold">Clicks</th>
-                  <th className="text-right px-4 py-2 font-bold">Leads</th>
-                  <th className="text-right px-4 py-2 font-bold">Spend</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(metaPerf?.campaigns || []).slice().sort((a, b) => b.leads - a.leads).slice(0, 5).map((campaign, index) => (
-                  <tr key={`${campaign.campaignId || campaign.campaignName || index}`} className="border-t border-slate-100">
-                    <td className="px-4 py-2 font-semibold text-slate-700">{campaign.campaignName || campaign.campaignId || '—'}</td>
-                    <td className="px-4 py-2 text-right text-slate-500">{campaign.reach.toLocaleString()}</td>
-                    <td className="px-4 py-2 text-right text-slate-500">{campaign.clicks.toLocaleString()}</td>
-                    <td className="px-4 py-2 text-right font-bold text-[#2E3093]">{campaign.leads.toLocaleString()}</td>
-                    <td className="px-4 py-2 text-right text-slate-500">Rs {campaign.spend.toFixed(0)}</td>
-                  </tr>
-                ))}
-                {!metaPerfError && metaPerf && metaPerf.campaigns.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-slate-400">No campaign performance returned for this date range</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
       <FilterBar>
         <input
           type="text" value={search} placeholder="Search name, mobile, email…"
@@ -625,14 +483,6 @@ export default function InquiryPage() {
           <option value="">Type</option>
           {filters.inquiryTypes.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-        <input
-          type="text"
-          value={leadTag}
-          placeholder="Meta tag / campaign"
-          onChange={e => setLeadTag(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && doSearch()}
-          className={`${ctrl} w-[150px]`}
-        />
         <select value={status} onChange={e => setStatus(e.target.value)} className={`${ctrl} w-[130px]`}>
           <option value="">Status</option>
           {filters.statusOptions.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -643,10 +493,6 @@ export default function InquiryPage() {
           <option value="">Training</option>
           {filters.trainings.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-        <label className="flex items-center gap-1.5 text-xs text-slate-600 font-medium px-2 py-1.5 border border-slate-200 rounded-lg bg-white">
-          <input type="checkbox" checked={duplicatesOnly} onChange={e => setDuplicatesOnly(e.target.checked)} />
-          Duplicate leads only
-        </label>
         <button onClick={doSearch} className="flex items-center gap-1 bg-[#2E3093] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-[#252880] transition-colors">
           <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -714,29 +560,7 @@ export default function InquiryPage() {
                       {r.Discipline && r.Discipline !== 'NULL' && r.Discipline !== 'Select' ? r.Discipline : '—'}
                     </td>
                     <td className="py-1.5 px-3 min-w-[220px]">
-                      <div className="flex flex-col gap-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-medium whitespace-nowrap">{r.Inquiry_Type || r.Inquiry_From || '—'}</span>
-                          {r.IsDuplicateLead && (
-                            <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">Duplicate</span>
-                          )}
-                        </div>
-                        {(r.MetaCampaignName || r.MetaFormName) && (
-                          <div className="text-[10px] text-slate-500">
-                            {[r.MetaCampaignName, r.MetaFormName].filter(Boolean).join(' • ')}
-                          </div>
-                        )}
-                        {!!r.LeadTags?.length && (
-                          <div className="flex flex-wrap gap-1">
-                            {r.LeadTags.slice(0, 3).map((tag) => (
-                              <span key={tag} className="px-1.5 py-0.5 rounded-full bg-[#EEF3FF] text-[#2E3093] text-[10px] font-semibold">{tag}</span>
-                            ))}
-                            {r.LeadTags.length > 3 && (
-                              <span className="text-[10px] text-slate-400">+{r.LeadTags.length - 3}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      <span className="font-medium whitespace-nowrap">{r.Inquiry_Type || r.Inquiry_From || '—'}</span>
                     </td>
                     <td className="py-1.5 px-3 whitespace-nowrap">{formatDate(r.Inquiry_Dt)}</td>
                     <td className="py-1.5 px-3 max-w-[220px]">

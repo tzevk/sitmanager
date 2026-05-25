@@ -1,13 +1,22 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createHmac, timingSafeEqual } from 'crypto';
 import { getPool } from '@/lib/db';
+import { getEnv } from '@/lib/env';
 import { createInquiry, updateInquiry, type CreateInquiryInput } from '@/lib/services/inquiry.service';
 import { sendAdmissionFormEmail } from '@/lib/mailer';
 
 const META_LEADS_TABLE = 'meta_ads_lead_sync';
+const META_SETTINGS_TABLE = 'meta_ads_settings';
 const META_GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v22.0';
 const META_SOURCE_LABEL = 'Meta Ads';
 const META_CONTACT_SOURCE = 'Meta Instant Form';
+const META_OAUTH_SCOPES = [
+  'ads_read',
+  'business_management',
+  'leads_retrieval',
+  'pages_read_engagement',
+  'pages_show_list',
+];
 
 let metaTablesReady = false;
 
@@ -66,6 +75,31 @@ export interface MetaLeadSyncResult {
   duplicate: boolean;
   created: boolean;
   tags: string[];
+}
+
+interface MetaStoredTokenConfig {
+  accessToken: string;
+  tokenType: string;
+  expiresAt: string | null;
+  userId: string | null;
+  userName: string | null;
+  grantedScopes: string[];
+  pages: Array<{ id: string; name: string | null; tasks: string[] }>;
+  updatedAt: string;
+}
+
+interface MetaOAuthStatePayload {
+  ts: number;
+  redirectTo: string;
+}
+
+interface MetaOAuthExchangeResult {
+  accessToken: string;
+  expiresAt: string | null;
+  userId: string | null;
+  userName: string | null;
+  grantedScopes: string[];
+  pages: Array<{ id: string; name: string | null; tasks: string[] }>;
 }
 
 function normalizeText(value: unknown): string | null {
@@ -161,21 +195,113 @@ async function ensureMetaLeadTables() {
       KEY idx_meta_ads_email (email)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ${META_SETTINGS_TABLE} (
+      setting_key VARCHAR(100) NOT NULL,
+      setting_value LONGTEXT NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (setting_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
   metaTablesReady = true;
 }
 
-function getMetaAccessToken(): string {
+function base64UrlEncode(value: string): string {
+  return Buffer.from(value, 'utf8').toString('base64url');
+}
+
+function base64UrlDecode(value: string): string {
+  return Buffer.from(value, 'base64url').toString('utf8');
+}
+
+function getMetaAppId(): string {
+  const appId = process.env.META_APP_ID?.trim() || process.env.NEXT_PUBLIC_META_APP_ID?.trim();
+  if (!appId) {
+    throw new Error('META_APP_ID or NEXT_PUBLIC_META_APP_ID is not configured');
+  }
+  return appId;
+}
+
+function getMetaAppSecretRequired(): string {
+  const appSecret = process.env.META_APP_SECRET?.trim();
+  if (!appSecret) {
+    throw new Error('META_APP_SECRET is not configured');
+  }
+  return appSecret;
+}
+
+async function getMetaSetting(settingKey: string): Promise<string | null> {
+  await ensureMetaLeadTables();
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT setting_value FROM ${META_SETTINGS_TABLE} WHERE setting_key = ? LIMIT 1`,
+    [settingKey]
+  );
+  const value = String((rows as any[])[0]?.setting_value ?? '').trim();
+  return value || null;
+}
+
+async function setMetaSetting(settingKey: string, value: string): Promise<void> {
+  await ensureMetaLeadTables();
+  const pool = getPool();
+  await pool.query(
+    `INSERT INTO ${META_SETTINGS_TABLE} (setting_key, setting_value)
+     VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+    [settingKey, value]
+  );
+}
+
+async function getStoredMetaTokenConfig(): Promise<MetaStoredTokenConfig | null> {
+  const raw = await getMetaSetting('oauth_token_config');
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<MetaStoredTokenConfig>;
+    if (!parsed?.accessToken) return null;
+    return {
+      accessToken: String(parsed.accessToken),
+      tokenType: String(parsed.tokenType || 'oauth-user'),
+      expiresAt: normalizeText(parsed.expiresAt),
+      userId: normalizeText(parsed.userId),
+      userName: normalizeText(parsed.userName),
+      grantedScopes: Array.isArray(parsed.grantedScopes) ? parsed.grantedScopes.map((item) => String(item)) : [],
+      pages: Array.isArray(parsed.pages)
+        ? parsed.pages.map((page) => ({
+            id: String((page as { id?: unknown }).id || ''),
+            name: normalizeText((page as { name?: unknown }).name),
+            tasks: Array.isArray((page as { tasks?: unknown }).tasks)
+              ? ((page as { tasks?: unknown[] }).tasks || []).map((task) => String(task))
+              : [],
+          })).filter((page) => page.id)
+        : [],
+      updatedAt: normalizeText(parsed.updatedAt) || new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function saveMetaTokenConfig(config: MetaStoredTokenConfig): Promise<void> {
+  await setMetaSetting('oauth_token_config', JSON.stringify(config));
+}
+
+async function getMetaAccessToken(): Promise<string> {
+  const stored = await getStoredMetaTokenConfig();
+  if (stored?.accessToken) {
+    return stored.accessToken;
+  }
+
   const token = process.env.META_ACCESS_TOKEN?.trim();
   if (!token) {
-    throw new Error('META_ACCESS_TOKEN is not configured');
+    throw new Error('META access token is not configured. Set META_ACCESS_TOKEN or connect Meta OAuth.');
   }
   return token;
 }
 
-function buildGraphUrl(path: string, fields?: string[]): URL {
+async function buildGraphUrl(path: string, fields?: string[]): Promise<URL> {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}${cleanPath}`);
-  url.searchParams.set('access_token', getMetaAccessToken());
+  url.searchParams.set('access_token', await getMetaAccessToken());
   if (fields?.length) {
     url.searchParams.set('fields', fields.join(','));
   }
@@ -183,7 +309,8 @@ function buildGraphUrl(path: string, fields?: string[]): URL {
 }
 
 async function fetchGraphJson<T>(path: string, fields?: string[]): Promise<T> {
-  const res = await fetch(buildGraphUrl(path, fields).toString(), {
+  const graphUrl = await buildGraphUrl(path, fields);
+  const res = await fetch(graphUrl.toString(), {
     headers: { Accept: 'application/json' },
     cache: 'no-store',
   });
@@ -193,6 +320,146 @@ async function fetchGraphJson<T>(path: string, fields?: string[]): Promise<T> {
     throw new Error(data?.error?.message || `Meta Graph API failed with ${res.status}`);
   }
   return data as T;
+}
+
+async function fetchGraphJsonWithToken<T>(token: string, path: string, fields?: string[]): Promise<T> {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}${cleanPath}`);
+  url.searchParams.set('access_token', token);
+  if (fields?.length) {
+    url.searchParams.set('fields', fields.join(','));
+  }
+
+  const res = await fetch(url.toString(), {
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!res.ok) {
+    throw new Error(data?.error?.message || `Meta Graph API failed with ${res.status}`);
+  }
+  return data as T;
+}
+
+export function buildMetaOAuthAuthorizeUrl(redirectUri: string, redirectTo = '/dashboard/meta-leads'): string {
+  const payload: MetaOAuthStatePayload = {
+    ts: Date.now(),
+    redirectTo: redirectTo.startsWith('/') ? redirectTo : '/dashboard/meta-leads',
+  };
+  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+  const signature = createHmac('sha256', getEnv().JWT_SECRET).update(encodedPayload).digest('base64url');
+
+  const url = new URL(`https://www.facebook.com/${META_GRAPH_VERSION}/dialog/oauth`);
+  url.searchParams.set('client_id', getMetaAppId());
+  url.searchParams.set('redirect_uri', redirectUri);
+  url.searchParams.set('state', `${encodedPayload}.${signature}`);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('scope', META_OAUTH_SCOPES.join(','));
+  return url.toString();
+}
+
+export function verifyMetaOAuthState(state: string | null): { ok: boolean; redirectTo: string } {
+  if (!state || !state.includes('.')) {
+    return { ok: false, redirectTo: '/dashboard/meta-leads' };
+  }
+
+  const [encodedPayload, signature] = state.split('.', 2);
+  const expected = createHmac('sha256', getEnv().JWT_SECRET).update(encodedPayload).digest('base64url');
+  if (signature !== expected) {
+    return { ok: false, redirectTo: '/dashboard/meta-leads' };
+  }
+
+  try {
+    const payload = JSON.parse(base64UrlDecode(encodedPayload)) as MetaOAuthStatePayload;
+    const redirectTo = String(payload?.redirectTo || '/dashboard/meta-leads');
+    const withinWindow = Date.now() - Number(payload?.ts || 0) <= 15 * 60 * 1000;
+    return {
+      ok: withinWindow,
+      redirectTo: redirectTo.startsWith('/') ? redirectTo : '/dashboard/meta-leads',
+    };
+  } catch {
+    return { ok: false, redirectTo: '/dashboard/meta-leads' };
+  }
+}
+
+export async function exchangeMetaOAuthCode(code: string, redirectUri: string): Promise<MetaOAuthExchangeResult> {
+  const appId = getMetaAppId();
+  const appSecret = getMetaAppSecretRequired();
+
+  const tokenUrl = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/oauth/access_token`);
+  tokenUrl.searchParams.set('client_id', appId);
+  tokenUrl.searchParams.set('client_secret', appSecret);
+  tokenUrl.searchParams.set('redirect_uri', redirectUri);
+  tokenUrl.searchParams.set('code', code);
+
+  const shortRes = await fetch(tokenUrl.toString(), { cache: 'no-store' });
+  const shortData = await shortRes.json().catch(() => ({}));
+  if (!shortRes.ok || !shortData?.access_token) {
+    throw new Error(shortData?.error?.message || 'Meta OAuth code exchange failed');
+  }
+
+  let accessToken = String(shortData.access_token);
+  let expiresIn = Number(shortData.expires_in || 0);
+
+  const exchangeUrl = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/oauth/access_token`);
+  exchangeUrl.searchParams.set('grant_type', 'fb_exchange_token');
+  exchangeUrl.searchParams.set('client_id', appId);
+  exchangeUrl.searchParams.set('client_secret', appSecret);
+  exchangeUrl.searchParams.set('fb_exchange_token', accessToken);
+
+  const longRes = await fetch(exchangeUrl.toString(), { cache: 'no-store' });
+  const longData = await longRes.json().catch(() => null);
+  if (longRes.ok && longData?.access_token) {
+    accessToken = String(longData.access_token);
+    expiresIn = Number(longData.expires_in || expiresIn || 0);
+  }
+
+  const me = await fetchGraphJsonWithToken<{ id?: string; name?: string }>(accessToken, '/me', ['id', 'name']);
+  const permissions = await fetchGraphJsonWithToken<{ data?: Array<{ permission?: string; status?: string }> }>(accessToken, '/me/permissions');
+  const pagesData = await fetchGraphJsonWithToken<{ data?: Array<{ id?: string; name?: string; tasks?: string[] }> }>(
+    accessToken,
+    '/me/accounts',
+    ['id', 'name', 'tasks']
+  );
+
+  const grantedScopes = Array.isArray(permissions?.data)
+    ? permissions.data
+        .filter((item) => String(item?.status || '').toLowerCase() === 'granted')
+        .map((item) => String(item?.permission || '').trim())
+        .filter(Boolean)
+    : [];
+
+  const pages = Array.isArray(pagesData?.data)
+    ? pagesData.data
+        .map((page) => ({
+          id: String(page?.id || '').trim(),
+          name: normalizeText(page?.name),
+          tasks: Array.isArray(page?.tasks) ? page.tasks.map((task) => String(task)) : [],
+        }))
+        .filter((page) => page.id)
+    : [];
+
+  const expiresAt = expiresIn > 0 ? new Date(Date.now() + expiresIn * 1000).toISOString() : null;
+  await saveMetaTokenConfig({
+    accessToken,
+    tokenType: 'oauth-user',
+    expiresAt,
+    userId: normalizeText(me?.id),
+    userName: normalizeText(me?.name),
+    grantedScopes,
+    pages,
+    updatedAt: new Date().toISOString(),
+  });
+
+  return {
+    accessToken,
+    expiresAt,
+    userId: normalizeText(me?.id),
+    userName: normalizeText(me?.name),
+    grantedScopes,
+    pages,
+  };
 }
 
 async function fetchLeadDetails(leadId: string): Promise<MetaLeadDetails> {
@@ -664,7 +931,7 @@ export async function fetchMetaCampaignPerformance(params: { dateFrom?: string |
     throw new Error('META_AD_ACCOUNT_ID is not configured');
   }
 
-  const url = buildGraphUrl(`/act_${accountId}/insights`, [
+  const url = await buildGraphUrl(`/act_${accountId}/insights`, [
     'campaign_id',
     'campaign_name',
     'reach',

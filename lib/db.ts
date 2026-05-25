@@ -1,5 +1,6 @@
 import mysql from 'mysql2/promise';
 import { getDbEnv } from '@/lib/env';
+import { cache as sharedCache } from '@/lib/cache';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -88,14 +89,8 @@ export async function queryOne<T>(
   return rows[0] || null;
 }
 
-// ── In-memory cache with TTL ──────────────────────────────────────────────────
+// ── Shared cache helpers (Redis-backed when REDIS_URL is configured) ────────
 
-interface CacheEntry<T> {
-  data: T;
-  expiry: number;
-}
-
-const cache = new Map<string, CacheEntry<unknown>>();
 const inFlight = new Map<string, Promise<unknown>>();
 
 export async function cached<T>(
@@ -103,16 +98,15 @@ export async function cached<T>(
   ttl: number,
   fetcher: () => Promise<T>,
 ): Promise<T> {
-  const now = Date.now();
-  const hit = cache.get(key) as CacheEntry<T> | undefined;
-  if (hit && hit.expiry > now) return hit.data;
+  const hit = await sharedCache.get<T>(key);
+  if (hit !== null) return hit;
 
   const running = inFlight.get(key) as Promise<T> | undefined;
   if (running) return running;
 
   const p = (async () => {
     const data = await fetcher();
-    cache.set(key, { data, expiry: Date.now() + ttl });
+    await sharedCache.set(key, data, ttl);
     return data;
   })();
 
@@ -124,15 +118,43 @@ export async function cached<T>(
   }
 }
 
+export async function cachedWithMeta<T>(
+  key: string,
+  ttl: number,
+  fetcher: () => Promise<T>,
+): Promise<{ data: T; cacheStatus: 'HIT' | 'MISS' }> {
+  const hit = await sharedCache.get<T>(key);
+  if (hit !== null) {
+    return { data: hit, cacheStatus: 'HIT' };
+  }
+
+  const running = inFlight.get(key) as Promise<T> | undefined;
+  if (running) {
+    return { data: await running, cacheStatus: 'MISS' };
+  }
+
+  const p = (async () => {
+    const data = await fetcher();
+    await sharedCache.set(key, data, ttl);
+    return data;
+  })();
+
+  inFlight.set(key, p);
+  try {
+    return { data: await p, cacheStatus: 'MISS' };
+  } finally {
+    inFlight.delete(key);
+  }
+}
+
 export function invalidateCache(keyOrPrefix?: string) {
   if (!keyOrPrefix) {
-    cache.clear();
+    void sharedCache.clear();
     inFlight.clear();
     return;
   }
-  for (const k of cache.keys()) {
-    if (k === keyOrPrefix || k.startsWith(keyOrPrefix + ':')) cache.delete(k);
-  }
+  void sharedCache.delete(keyOrPrefix);
+  void sharedCache.deleteByPrefix(keyOrPrefix);
   for (const k of inFlight.keys()) {
     if (k === keyOrPrefix || k.startsWith(keyOrPrefix + ':')) inFlight.delete(k);
   }

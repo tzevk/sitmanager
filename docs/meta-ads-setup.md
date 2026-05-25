@@ -2,6 +2,34 @@
 
 This workspace now supports Meta lead ingestion into the inquiry module through a public webhook and a protected campaign performance API.
 
+## Lead architecture
+
+The lead capture path is structured like this:
+
+```mermaid
+flowchart TD
+	A[Meta Ads Lead Form]
+	B[Facebook Webhook]
+	C[Your Backend API]
+	D[MariaDB / CRM Database]
+	E[Dashboard Display]
+
+	A --> B
+	B --> C
+	C --> D
+	D --> E
+```
+
+Applied to this codebase:
+
+- `Meta Ads Lead Form` => Meta instant form on Facebook / Instagram
+- `Facebook Webhook` => Meta sends `leadgen` events to `/api/public/meta-ads/webhook`
+- `Your Backend API` => the Next.js route handler verifies the webhook, fetches lead details from Graph, dedupes, and maps the lead into CRM fields
+- `MariaDB / CRM Database` => inquiry data is written to `Student_Inquiry` and Meta metadata is written to `meta_ads_lead_sync`
+- `Dashboard Display` => the dashboard reads stored lead data back through `/api/inquiry` and shows it on the Meta Leads page
+
+The Graph API fetch happens inside the backend API stage. It is part of the server-side enrichment step, not a separate client-side dependency.
+
 ## What it does
 
 - Verifies the Meta webhook challenge.
@@ -14,7 +42,7 @@ This workspace now supports Meta lead ingestion into the inquiry module through 
 
 ## Environment variables
 
-Required for webhook ingestion:
+Required for webhook ingestion when using a static server token:
 
 ```env
 META_WEBHOOK_VERIFY_TOKEN=your-random-verify-token
@@ -36,9 +64,36 @@ META_AD_ACCOUNT_ID=123456789012345
 Optional:
 
 ```env
+META_APP_ID=your-meta-app-id
 META_GRAPH_VERSION=v22.0
 META_LEAD_NOTIFY_EMAILS=admissions@example.com,counsellor@example.com
 ```
+
+## OAuth connect flow
+
+The app now also supports a server-side Meta OAuth connect flow.
+
+Use this when you want to connect a Meta user interactively instead of pasting `META_ACCESS_TOKEN` by hand.
+
+Required for OAuth:
+
+```env
+META_APP_SECRET=your-meta-app-secret
+NEXT_PUBLIC_META_APP_ID=your-meta-app-id
+```
+
+Flow:
+
+1. Open the Meta Leads page.
+2. Click `Connect Meta`.
+3. Sign in to Meta and grant the requested permissions.
+4. The callback stores the long-lived user token in the app's `meta_ads_settings` table.
+
+Notes:
+
+- The existing lead sync and campaign performance APIs will use the stored OAuth token first, then fall back to `META_ACCESS_TOKEN`.
+- For production CRM integrations, a system user token is still the most stable option.
+- OAuth is mainly useful when you need an interactive connect flow during setup or troubleshooting.
 
 ## Meta App configuration
 

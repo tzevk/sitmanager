@@ -5,6 +5,10 @@ import {
   verifyMetaWebhookChallenge,
   type MetaWebhookLeadEvent,
 } from '@/lib/services/meta-ads.service';
+import { webhookRateLimiter } from '@/lib/rate-limit';
+
+// Lead flow ownership:
+// Meta Ads Lead Form -> Facebook Webhook -> this Backend API -> MariaDB / CRM -> Dashboard Display
 
 function extractLeadEvents(payload: unknown): MetaWebhookLeadEvent[] {
   const root = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
@@ -28,6 +32,9 @@ function extractLeadEvents(payload: unknown): MetaWebhookLeadEvent[] {
 }
 
 export async function GET(req: NextRequest) {
+  const rateLimited = await webhookRateLimiter(req);
+  if (rateLimited) return rateLimited;
+
   const result = verifyMetaWebhookChallenge(req.nextUrl.searchParams);
   return new NextResponse(result.body, {
     status: result.status,
@@ -37,6 +44,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const rateLimited = await webhookRateLimiter(req);
+    if (rateLimited) return rateLimited;
+
     const rawBody = await req.text();
     if (!verifyMetaSignature(rawBody, req.headers.get('x-hub-signature-256'))) {
       return NextResponse.json({ error: 'Invalid Meta signature' }, { status: 401 });

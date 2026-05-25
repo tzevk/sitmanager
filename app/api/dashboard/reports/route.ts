@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { getPool, cached } from '@/lib/db';
+import { getPool, cachedWithMeta } from '@/lib/db';
 import { requireAuth } from '@/lib/api-auth';
 import { dashboardRateLimiter } from '@/lib/rate-limit';
+import { logReportCacheTiming } from '@/lib/report-timing';
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 min
 
@@ -17,6 +18,7 @@ async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallb
 
 export async function GET(request: NextRequest) {
   try {
+    const startedAt = Date.now();
     const rateLimited = await dashboardRateLimiter(request);
     if (rateLimited) return rateLimited;
 
@@ -29,7 +31,7 @@ export async function GET(request: NextRequest) {
       .replace(/\s+/g, '_');
     const cacheKey = `dashboard:reports:role:${roleKey}:dept:${deptKey}`;
 
-    const result = await cached(cacheKey, CACHE_TTL, async () => {
+    const { data: result, cacheStatus } = await cachedWithMeta(cacheKey, CACHE_TTL, async () => {
       const pool = getPool();
 
       const [
@@ -185,8 +187,10 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    logReportCacheTiming('dashboard.reports', startedAt, cacheStatus, { role: roleKey, department: deptKey });
+
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' },
+      headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120', 'X-Cache': cacheStatus },
     });
   } catch (error: unknown) {
     console.error('Dashboard reports error:', error);

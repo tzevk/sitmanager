@@ -1,9 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { cache, cacheTTL } from '@/lib/cache';
+import { logReportCacheTiming } from '@/lib/report-timing';
 
 export async function GET() {
   try {
+    const startedAt = Date.now();
+    const cacheKey = 'report:inquiry:options';
+    const cachedData = await cache.get<any>(cacheKey);
+    if (cachedData) {
+      logReportCacheTiming('inquiry.options', startedAt, 'HIT');
+      return NextResponse.json(cachedData, {
+        headers: { 'Cache-Control': 'public, max-age=120, stale-while-revalidate=300', 'X-Cache': 'HIT' },
+      });
+    }
+
     const pool = getPool();
 
     const [coursesRes, typesRes, fromRes, categoriesRes] = await Promise.all([
@@ -39,11 +51,22 @@ export async function GET() {
       ),
     ]);
 
-    return NextResponse.json({
+    const responseData = {
       courses:      (coursesRes[0]    as any[]).map((r) => ({ id: r.id, name: r.name })),
       inquiryTypes: (typesRes[0]      as any[]).map((r) => r.Inquiry_Type),
       inquiryModes: (fromRes[0]       as any[]).map((r) => r.Inquiry_From),
       categories:   (categoriesRes[0] as any[]).map((r) => r.Category),
+    };
+
+    await cache.set(cacheKey, responseData, cacheTTL.medium);
+    logReportCacheTiming('inquiry.options', startedAt, 'MISS', {
+      courses: responseData.courses.length,
+      inquiryTypes: responseData.inquiryTypes.length,
+      inquiryModes: responseData.inquiryModes.length,
+      categories: responseData.categories.length,
+    });
+    return NextResponse.json(responseData, {
+      headers: { 'Cache-Control': 'public, max-age=120, stale-while-revalidate=300', 'X-Cache': 'MISS' },
     });
   } catch (error: any) {
     console.error('Report inquiry options error:', error);

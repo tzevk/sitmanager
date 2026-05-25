@@ -15,7 +15,6 @@ const quotes = [
 ];
 export default function SignIn() {
   const router = useRouter();
-  const [isHydrated, setIsHydrated] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -24,10 +23,6 @@ export default function SignIn() {
   const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -59,7 +54,7 @@ export default function SignIn() {
       } else {
         setError(data.message);
       }
-    } catch (err) {
+    } catch {
       setError('Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
@@ -89,7 +84,7 @@ export default function SignIn() {
         <div className="relative z-10 flex flex-col items-center justify-center w-full p-12">
           <div className="text-white/80 text-lg text-center max-w-md leading-relaxed min-h-[16rem] flex items-center justify-center">
             <div key={currentQuoteIndex} className="animate-fade-in-out">
-              <p className="text-3xl font-bold" style={{color: '#FAE452'}}>"{quotes[currentQuoteIndex].text}"</p>
+              <p className="text-3xl font-bold" style={{color: '#FAE452'}}>&quot;{quotes[currentQuoteIndex].text}&quot;</p>
               <p className="text-right text-lg mt-4 text-white/70">- {quotes[currentQuoteIndex].author}</p>
             </div>
           </div>
@@ -139,23 +134,6 @@ export default function SignIn() {
               </div>
             )}
 
-            {!isHydrated ? (
-              <div className="space-y-3" aria-hidden="true">
-                <div>
-                  <div className="h-4 w-24 rounded bg-gray-200" />
-                  <div className="mt-1 h-[50px] w-full rounded-xl bg-gray-100 border-2 border-gray-200" />
-                </div>
-                <div>
-                  <div className="h-4 w-20 rounded bg-gray-200" />
-                  <div className="mt-1 h-[50px] w-full rounded-xl bg-gray-100 border-2 border-gray-200" />
-                </div>
-                <div className="flex items-center justify-between pt-1">
-                  <div className="h-5 w-28 rounded bg-gray-100" />
-                  <div className="h-4 w-24 rounded bg-gray-100" />
-                </div>
-                <div className="h-[50px] w-full rounded-xl bg-gradient-to-r from-[#2E3093]/80 to-[#2A6BB5]/80" />
-              </div>
-            ) : (
             <form onSubmit={handleSubmit} className="space-y-3">
               {/* Username Field */}
               <div className="group">
@@ -274,7 +252,6 @@ export default function SignIn() {
 
 
             </form>
-            )}
           </div>
 
           {/* Footer */}

@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { cache, cacheTTL } from '@/lib/cache';
+import { logReportCacheTiming } from '@/lib/report-timing';
 
 /* Status map (same as online-admission) */
 const statusMap: Record<number, string> = {
@@ -46,6 +48,7 @@ const statusMap: Record<number, string> = {
  */
 export async function GET(req: NextRequest) {
   try {
+    const startedAt = Date.now();
     const auth = await requirePermission(req, 'online_admission.view');
     if (auth instanceof NextResponse) return auth;
 
@@ -62,6 +65,15 @@ export async function GET(req: NextRequest) {
         { error: 'Course, Admission Status, From Date and To Date are all required' },
         { status: 400 },
       );
+    }
+
+    const cacheKey = `report:online-student:data:${courseId}:${statusId}:${dateFrom}:${dateTo}`;
+    const cachedData = await cache.get<any>(cacheKey);
+    if (cachedData) {
+      logReportCacheTiming('online-student.report', startedAt, 'HIT', { courseId, statusId, dateFrom, dateTo });
+      return NextResponse.json(cachedData, {
+        headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60', 'X-Cache': 'HIT' },
+      });
     }
 
     /* ---- Build WHERE ---- */
@@ -146,13 +158,19 @@ export async function GET(req: NextRequest) {
       label,
     }));
 
-    return NextResponse.json({
+    const responseData = {
       rows: enriched,
       total: enriched.length,
       statusSummary,
       courses,
       statusOptions,
       filters: { courseId, statusId, dateFrom, dateTo },
+    };
+
+    await cache.set(cacheKey, responseData, cacheTTL.short);
+  logReportCacheTiming('online-student.report', startedAt, 'MISS', { courseId, statusId, dateFrom, dateTo, total: enriched.length });
+    return NextResponse.json(responseData, {
+      headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60', 'X-Cache': 'MISS' },
     });
   } catch (error: any) {
     console.error('Online student report API error:', error);

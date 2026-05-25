@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { sendPublicInquirySubmissionEmail } from '@/lib/mailer';
+import { publicFormRateLimiter } from '@/lib/rate-limit';
 
 /**
  * Public endpoint — no auth required.
@@ -10,6 +11,9 @@ import { sendPublicInquirySubmissionEmail } from '@/lib/mailer';
  */
 export async function GET(req: NextRequest) {
   try {
+    const rateLimited = await publicFormRateLimiter(req);
+    if (rateLimited) return rateLimited;
+
     const pool = getPool();
     const inquiryId = req.nextUrl.searchParams.get('id');
 
@@ -118,6 +122,9 @@ function parsePositiveInt(value: unknown): number | null {
 
 export async function POST(req: NextRequest) {
   try {
+    const rateLimited = await publicFormRateLimiter(req);
+    if (rateLimited) return rateLimited;
+
     const pool = getPool();
     const body = await req.json().catch(() => ({}));
 

@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Public_Sans, Geist_Mono, Libre_Franklin } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
+
+const metaAppId = process.env.NEXT_PUBLIC_META_APP_ID?.trim();
+const metaApiVersion = process.env.NEXT_PUBLIC_META_API_VERSION?.trim() || "v23.0";
 
 const publicSans = Public_Sans({
   variable: "--font-public-sans",
@@ -61,6 +65,33 @@ export default function RootLayout({
         className={`${publicSans.variable} ${geistMono.variable} ${libreFranklin.variable} antialiased h-full`}
         suppressHydrationWarning
       >
+        {metaAppId ? (
+          <>
+            <Script
+              id="facebook-sdk-init"
+              strategy="afterInteractive"
+              dangerouslySetInnerHTML={{
+                __html: `
+                  window.fbAsyncInit = function() {
+                    FB.init({
+                      appId: '${metaAppId}',
+                      cookie: true,
+                      xfbml: true,
+                      version: '${metaApiVersion}'
+                    });
+
+                    FB.AppEvents.logPageView();
+                  };
+                `,
+              }}
+            />
+            <Script
+              id="facebook-jssdk"
+              src="https://connect.facebook.net/en_US/sdk.js"
+              strategy="afterInteractive"
+            />
+          </>
+        ) : null}
         {children}
       </body>
     </html>

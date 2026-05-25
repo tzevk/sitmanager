@@ -2,9 +2,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { cache, cacheTTL } from '@/lib/cache';
+import { logReportCacheTiming } from '@/lib/report-timing';
 
 export async function GET(req: NextRequest) {
   try {
+    const startedAt = Date.now();
     const auth = await requirePermission(req, 'inquiry.view');
     if (auth instanceof NextResponse) return auth;
 
@@ -21,6 +24,15 @@ export async function GET(req: NextRequest) {
 
     if (!dateFrom || !dateTo) {
       return NextResponse.json({ error: 'From Date and To Date are required' }, { status: 400 });
+    }
+
+    const cacheKey = `report:inquiry:data:${dateFrom}:${dateTo}:${courseId}:${batchType}:${batchId}:${inquiryType}:${inquiryFrom}`;
+    const cachedData = await cache.get<any>(cacheKey);
+    if (cachedData) {
+      logReportCacheTiming('inquiry.report', startedAt, 'HIT', { dateFrom, dateTo, courseId, batchType, batchId, inquiryType, inquiryFrom });
+      return NextResponse.json(cachedData, {
+        headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60', 'X-Cache': 'HIT' },
+      });
     }
 
     // Student_Inquiry.Inquiry_Dt is a VARCHAR stored in mixed formats — parse to DATE.
@@ -84,9 +96,14 @@ export async function GET(req: NextRequest) {
     ) as any;
 
     if (totalCount === 0) {
-      return NextResponse.json({
+      const responseData = {
         rows: [], total: 0, statusSummary: {},
         filters: { dateFrom, dateTo, courseId, batchType, batchId, inquiryType, inquiryFrom },
+      };
+      await cache.set(cacheKey, responseData, cacheTTL.short);
+      logReportCacheTiming('inquiry.report', startedAt, 'MISS', { dateFrom, dateTo, courseId, batchType, batchId, inquiryType, inquiryFrom, total: 0 });
+      return NextResponse.json(responseData, {
+        headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60', 'X-Cache': 'MISS' },
       });
     }
 
@@ -190,11 +207,16 @@ export async function GET(req: NextRequest) {
       statusSummary[row.Status] = (statusSummary[row.Status] || 0) + 1;
     }
 
-    return NextResponse.json({
+    const responseData = {
       rows: enriched,
       total: enriched.length,
       statusSummary,
       filters: { dateFrom, dateTo, courseId, batchType, batchId, inquiryType, inquiryFrom },
+    };
+    await cache.set(cacheKey, responseData, cacheTTL.short);
+    logReportCacheTiming('inquiry.report', startedAt, 'MISS', { dateFrom, dateTo, courseId, batchType, batchId, inquiryType, inquiryFrom, total: enriched.length });
+    return NextResponse.json(responseData, {
+      headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60', 'X-Cache': 'MISS' },
     });
   } catch (error: any) {
     console.error('Inquiry report API error:', error);

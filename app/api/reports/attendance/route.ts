@@ -3,10 +3,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { getAttendanceSummary } from '@/lib/attendance-summary';
+import { cache, cacheTTL } from '@/lib/cache';
+import { logReportCacheTiming } from '@/lib/report-timing';
 
 /* ---------- GET — Full Attendance Report ---------- */
 export async function GET(req: NextRequest) {
   try {
+    const startedAt = Date.now();
     const auth = await requirePermission(req, 'report_attendance.view');
     if (auth instanceof NextResponse) return auth;
 
@@ -17,18 +20,41 @@ export async function GET(req: NextRequest) {
     const fetchOptions = url.searchParams.get('options');
 
     if (fetchOptions === 'courses') {
+      const cacheKey = 'report:attendance:options:courses';
+      const cachedData = await cache.get<{ courses: unknown }>(cacheKey);
+      if (cachedData) {
+        logReportCacheTiming('attendance.options.courses', startedAt, 'HIT');
+        return NextResponse.json(cachedData, {
+          headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'HIT' },
+        });
+      }
+
       const [courses] = await pool.query(
         `SELECT Course_Id AS id, Course_Name AS name
          FROM course_mst
          WHERE (IsDelete = 0 OR IsDelete IS NULL) AND IsActive = 1
          ORDER BY Course_Name`
       );
-      return NextResponse.json({ courses });
+      const responseData = { courses };
+      await cache.set(cacheKey, responseData, cacheTTL.medium);
+      logReportCacheTiming('attendance.options.courses', startedAt, 'MISS');
+      return NextResponse.json(responseData, {
+        headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'MISS' },
+      });
     }
 
     if (fetchOptions === 'batches') {
       const courseId = url.searchParams.get('courseId');
       if (!courseId) return NextResponse.json({ batches: [] });
+      const cacheKey = `report:attendance:options:batches:${courseId}`;
+      const cachedData = await cache.get<{ batches: unknown }>(cacheKey);
+      if (cachedData) {
+        logReportCacheTiming('attendance.options.batches', startedAt, 'HIT', { courseId });
+        return NextResponse.json(cachedData, {
+          headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'HIT' },
+        });
+      }
+
       const [batches] = await pool.query(
         `SELECT Batch_Id AS id, Batch_code AS name, Category AS category
          FROM batch_mst
@@ -38,7 +64,12 @@ export async function GET(req: NextRequest) {
          ORDER BY Batch_Id DESC`,
         [parseInt(courseId)]
       );
-      return NextResponse.json({ batches });
+      const responseData = { batches };
+      await cache.set(cacheKey, responseData, cacheTTL.medium);
+      logReportCacheTiming('attendance.options.batches', startedAt, 'MISS', { courseId, total: (batches as any[]).length });
+      return NextResponse.json(responseData, {
+        headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'MISS' },
+      });
     }
 
     /* --- Report data --- */
@@ -50,6 +81,15 @@ export async function GET(req: NextRequest) {
         { error: 'courseId and batchId are required' },
         { status: 400 }
       );
+    }
+
+    const cacheKey = `report:attendance:data:${courseId}:${batchId}`;
+    const cachedData = await cache.get<any>(cacheKey);
+    if (cachedData) {
+      logReportCacheTiming('attendance.report', startedAt, 'HIT', { courseId, batchId });
+      return NextResponse.json(cachedData, {
+        headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60', 'X-Cache': 'HIT' },
+      });
     }
 
     const batchIdInt = parseInt(batchId);
@@ -100,7 +140,7 @@ export async function GET(req: NextRequest) {
     const students = enrolledRows as any[];
 
     if (lectureRows.length === 0) {
-      return NextResponse.json({
+      const responseData = {
         batch,
         lectures: [],
         students,
@@ -108,6 +148,11 @@ export async function GET(req: NextRequest) {
         studentSummary: {},
         summary: { totalStudents: students.length, totalLectures: 0 },
         filters: { courseId, batchId },
+      };
+      await cache.set(cacheKey, responseData, cacheTTL.short);
+      logReportCacheTiming('attendance.report', startedAt, 'MISS', { courseId, batchId, totalStudents: students.length, totalLectures: 0 });
+      return NextResponse.json(responseData, {
+        headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60', 'X-Cache': 'MISS' },
       });
     }
 
@@ -148,7 +193,7 @@ export async function GET(req: NextRequest) {
       };
     }
 
-    return NextResponse.json({
+    const responseData = {
       batch,
       lectures: lectureRows,
       students,
@@ -156,6 +201,11 @@ export async function GET(req: NextRequest) {
       studentSummary,
       summary: { totalStudents: students.length, totalLectures },
       filters: { courseId, batchId },
+    };
+    await cache.set(cacheKey, responseData, cacheTTL.short);
+    logReportCacheTiming('attendance.report', startedAt, 'MISS', { courseId, batchId, totalStudents: students.length, totalLectures });
+    return NextResponse.json(responseData, {
+      headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60', 'X-Cache': 'MISS' },
     });
   } catch (err: any) {
     console.error('Attendance report error:', err);

@@ -37,6 +37,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Admin/Accounts > Assets': '/dashboard/account-master/assets',
   'Admin/Accounts > Asset Category': '/dashboard/account-master/asset-category',
   'Admission Activity > Inquiry': '/dashboard/inquiry',
+  'Admission Activity > Meta Leads': '/dashboard/meta-leads',
   'Admission Activity > Online Admission': '/dashboard/online-admission',
   'Admission Activity > Student': '/dashboard/student',
   'Corporate Training > Corporate Inquiry': '/dashboard/corporate-inquiry',
@@ -107,6 +108,7 @@ const SUB_MENUS: Record<string, string[]> = {
   ],
   'Admission Activity': [
     'Inquiry',
+    'Meta Leads',
     'Online Admission',
     'Student',
   ],
@@ -230,6 +232,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Admin/Accounts > Assets': ['assets.view'],
   'Admin/Accounts > Asset Category': ['asset_category.view'],
   'Admission Activity > Inquiry': ['inquiry.view'],
+  'Admission Activity > Meta Leads': ['inquiry.view'],
   'Admission Activity > Online Admission': ['online_admission.view'],
   'Admission Activity > Student': ['student.view'],
   'Corporate Training > Corporate Inquiry': ['corporate_inquiry.view'],
@@ -398,7 +401,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     if (path.startsWith('/dashboard/portal-accounts')) return 'Role Right';
     if (path.startsWith('/dashboard/corporate-inquiry')) return 'Corporate Training';
     if (path.startsWith('/dashboard/utility')) return 'Utility';
-    if (path.startsWith('/dashboard/inquiry') || path.startsWith('/dashboard/online-admission') || path.startsWith('/dashboard/student')) return 'Admission Activity';
+    if (path.startsWith('/dashboard/inquiry') || path.startsWith('/dashboard/meta-leads') || path.startsWith('/dashboard/online-admission') || path.startsWith('/dashboard/student')) return 'Admission Activity';
     if (path.startsWith('/dashboard/placement') || path.startsWith('/dashboard/cv-shortlisted')) return 'Placement';
     return 'Dashboard';
   };

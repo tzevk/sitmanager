@@ -8,6 +8,10 @@ dotenv.config({ path: path.join(process.cwd(), '.env.local') });
 
 const app = express();
 const PORT = Number(process.env.LEGACY_BACKEND_PORT || 30001);
+const configuredConnectionLimit = Number.parseInt(process.env.LEGACY_BACKEND_DB_CONNECTION_LIMIT || '', 10);
+const connectionLimit = Number.isFinite(configuredConnectionLimit) && configuredConnectionLimit > 0
+  ? configuredConnectionLimit
+  : 1;
 
 const requiredEnv = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'];
 for (const key of requiredEnv) {
@@ -23,9 +27,23 @@ const pool = mysql.createPool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit,
+  maxIdle: 0,
+  idleTimeout: 10000,
   queueLimit: 0,
 });
+
+async function cleanupPool() {
+  try {
+    await pool.end();
+  } catch {
+    // ignore shutdown cleanup failures
+  }
+}
+
+process.once('SIGINT', cleanupPool);
+process.once('SIGTERM', cleanupPool);
+process.once('beforeExit', cleanupPool);
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '2mb' }));
