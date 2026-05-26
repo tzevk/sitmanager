@@ -412,12 +412,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   const disciplineExpr = disciplineTable
     ? DISCIPLINE_NAME_EXPR
     : `NULLIF(TRIM(si.Discipline),'')`;
-  const listNeedsCourseJoin = Boolean(search || training);
-  const listNeedsDisciplineJoin = Boolean(discipline && disciplineTable);
-  const listCourseJoin = listNeedsCourseJoin ? 'LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id' : '';
-  const listDisciplineJoin = listNeedsDisciplineJoin ? disciplineJoin : '';
   try { await ensureInquirySchema(pool, inquiryTable); } catch { /* best-effort schema migration */ }
-  try { await ensureMetaLeadSchema(pool); } catch { /* best-effort schema migration */ }
   const FOLLOW_UP_DUE_SUBQUERY = `
     SELECT latest.Inquiry_id
     FROM awt_inquirydiscussion latest
@@ -436,6 +431,39 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     location = '', training = '', statusId = '', duplicatesOnly = false, dateFrom = '', dateTo = '',
     followUpDue = false,
   } = params;
+  const usesMetaAds = inquiryType.trim().toLowerCase() === 'meta ads';
+  const needsMetaData = usesMetaAds || Boolean(leadTag) || duplicatesOnly;
+  const listNeedsCourseJoin = Boolean(search || training);
+  const listNeedsDisciplineJoin = Boolean(discipline && disciplineTable);
+  const listCourseJoin = listNeedsCourseJoin ? 'LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id' : '';
+  const listDisciplineJoin = listNeedsDisciplineJoin ? disciplineJoin : '';
+  const metaSelect = needsMetaData
+    ? `
+         meta_latest.campaign_name as MetaCampaignName,
+         meta_latest.form_name as MetaFormName,
+         meta_latest.tags_json as MetaTagsJson,
+         meta_latest.duplicate_of_inquiry_id as MetaDuplicateOfInquiryId,`
+    : `
+         NULL as MetaCampaignName,
+         NULL as MetaFormName,
+         NULL as MetaTagsJson,
+         NULL as MetaDuplicateOfInquiryId,`;
+  const metaJoin = needsMetaData
+    ? `
+      LEFT JOIN (
+        SELECT meta1.*
+        FROM meta_ads_lead_sync meta1
+        INNER JOIN (
+          SELECT inquiry_id, MAX(id) AS max_id
+          FROM meta_ads_lead_sync
+          WHERE inquiry_id IS NOT NULL
+          GROUP BY inquiry_id
+        ) meta2 ON meta2.max_id = meta1.id
+      ) meta_latest ON meta_latest.inquiry_id = si.Inquiry_Id`
+    : '';
+  if (needsMetaData) {
+    try { await ensureMetaLeadSchema(pool); } catch { /* best-effort schema migration */ }
+  }
   const offset = (page - 1) * limit;
 
   const ALLOWED_LOCATIONS = new Set(['pune', 'mumbai']);
@@ -576,10 +604,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
          si.OnlineState as OnlineStateRaw,
          CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) as Status_id,
          si.Discussion as InlineDiscussion,
-         meta_latest.campaign_name as MetaCampaignName,
-         meta_latest.form_name as MetaFormName,
-         meta_latest.tags_json as MetaTagsJson,
-         meta_latest.duplicate_of_inquiry_id as MetaDuplicateOfInquiryId,
+         ${metaSelect}
          ld.discussion as LatestDiscussion, ld.date as LatestDiscDate,
          ld.nextdate as NextFollowUpDate, ld.created_by as LatestDiscussionById,
          COALESCE(
@@ -590,16 +615,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       FROM \`${inquiryTable}\` si
        LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
       ${disciplineJoin}
-      LEFT JOIN (
-        SELECT meta1.*
-        FROM meta_ads_lead_sync meta1
-        INNER JOIN (
-          SELECT inquiry_id, MAX(id) AS max_id
-          FROM meta_ads_lead_sync
-          WHERE inquiry_id IS NOT NULL
-          GROUP BY inquiry_id
-        ) meta2 ON meta2.max_id = meta1.id
-      ) meta_latest ON meta_latest.inquiry_id = si.Inquiry_Id
+      ${metaJoin}
        LEFT JOIN (
          SELECT si_map.Inquiry_Id as InquiryId, MAX(d.id) as max_id
          FROM \`${inquiryTable}\` si_map
