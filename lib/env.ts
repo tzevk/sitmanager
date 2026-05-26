@@ -10,13 +10,6 @@ const DB_REQUIRED_ENV = [
   'DB_PASSWORD',
 ] as const;
 
-const OLD_DB_REQUIRED_ENV = [
-  'OLD_DB_HOST',
-  'OLD_DB_NAME',
-  'OLD_DB_USER',
-  'OLD_DB_PASSWORD',
-] as const;
-
 const AUTH_REQUIRED_ENV = [
   'JWT_SECRET',
 ] as const;
@@ -42,14 +35,6 @@ interface DbEnvConfig {
   DB_PASSWORD: string;
 }
 
-export interface OldDbEnvConfig {
-  OLD_DB_HOST: string;
-  OLD_DB_PORT: number;
-  OLD_DB_NAME: string;
-  OLD_DB_USER: string;
-  OLD_DB_PASSWORD: string;
-}
-
 interface EnvConfig extends DbEnvConfig {
   JWT_SECRET: string;
   NODE_ENV: string;
@@ -59,7 +44,6 @@ interface EnvConfig extends DbEnvConfig {
 
 let _dbValidated: DbEnvConfig | null = null;
 let _validated: EnvConfig | null = null;
-let _oldDbValidated: OldDbEnvConfig | null = null;
 
 /**
  * Validate and return only DB-related environment config.
@@ -87,32 +71,6 @@ export function getDbEnv(): DbEnvConfig {
   };
 
   return _dbValidated;
-}
-
-/**
- * Validate and return OLD (legacy) DB-related environment config.
- * Only required for sync/cron jobs that read from the old database.
- */
-export function getOldDbEnv(): OldDbEnvConfig {
-  if (_oldDbValidated) return _oldDbValidated;
-
-  const missing = OLD_DB_REQUIRED_ENV.filter((key) => !process.env[key]);
-  if (missing.length > 0) {
-    throw new Error(
-      `Missing required OLD database environment variables:\n  ${missing.join('\n  ')}\n\n` +
-      `Set them in .env.local (or Vercel Dashboard → Environment Variables).`
-    );
-  }
-
-  _oldDbValidated = {
-    OLD_DB_HOST: process.env.OLD_DB_HOST!,
-    OLD_DB_PORT: parseInt(process.env.OLD_DB_PORT || '3306', 10),
-    OLD_DB_NAME: process.env.OLD_DB_NAME!,
-    OLD_DB_USER: process.env.OLD_DB_USER!,
-    OLD_DB_PASSWORD: process.env.OLD_DB_PASSWORD!,
-  };
-
-  return _oldDbValidated;
 }
 
 /**

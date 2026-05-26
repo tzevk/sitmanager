@@ -252,16 +252,6 @@ Generated: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'lo
 ### Redis / Cache
 - REDIS_URL — Redis connection URL (falls back to in-memory cache if absent)
 
-### Cron Jobs
-- CRON_SECRET — Bearer token required by all /api/cron/* endpoints
-
-### Old Database (Legacy read-only sync source)
-- OLD_DB_HOST — Legacy MySQL host
-- OLD_DB_PORT — Legacy MySQL port
-- OLD_DB_NAME — Legacy database name
-- OLD_DB_USER — Legacy MySQL username
-- OLD_DB_PASSWORD — Legacy MySQL password
-
 ### Email — Admission Flow (SMTP)
 - ADMISSION_SMTP_HOST — SMTP server host
 - ADMISSION_SMTP_PORT — SMTP port (e.g. 587)
@@ -482,39 +472,9 @@ Each handler automatically:
 
 ---
 
-## 9. Background Jobs & Cron
+## 9. Background Jobs
 
-### Endpoint Security
-
-All cron routes live at \`/api/cron/<job-name>\` and require:
-\`\`\`
-Authorization: Bearer <CRON_SECRET>
-\`\`\`
-Requests without a valid bearer token receive 401.
-
-### Registered Cron Jobs
-
-| Job | Endpoint | What it syncs |
-|-----|----------|---------------|
-| sync-courses | /api/cron/sync-courses | Course master from legacy DB |
-| sync-batch | /api/cron/sync-batch | Batch records from legacy DB |
-| sync-inquiry | /api/cron/sync-inquiry | Inquiry/lead records from legacy DB |
-| sync-alumni-jobs | /api/cron/sync-alumni-jobs | Alumni job postings from legacy DB |
-| sync-consultancy | /api/cron/sync-consultancy | Consultancy/deputation records |
-| sync-all | /api/cron/sync-all | Chains all sync jobs |
-| migrate-roll-numbers | /api/cron/migrate-roll-numbers | Roll number assignment migration |
-
-### Incremental Sync
-
-Each sync job tracks the last-synced primary key (stored in a state table or env var). On each run it fetches only rows with \`id > lastSyncedId\`, updates records in the new DB, then saves the new high-water mark. This keeps sync jobs fast even on large tables.
-
-### Running Locally
-
-\`\`\`bash
-npm run cron:sync-courses
-npm run cron:sync-batch
-npm run cron:sync-all
-\`\`\`
+No scheduled cron jobs are configured in this project.
 
 ---
 
@@ -614,15 +574,13 @@ DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, JWT_SECRET
 
 ### Recommended Additional Variables
 
-REDIS_URL, CRON_SECRET, OLD_DB_HOST, OLD_DB_NAME, OLD_DB_USER, OLD_DB_PASSWORD,
-ADMISSION_SMTP_HOST, ADMISSION_SMTP_PORT, ADMISSION_SMTP_USER, ADMISSION_SMTP_PASS
+REDIS_URL, ADMISSION_SMTP_HOST, ADMISSION_SMTP_PORT, ADMISSION_SMTP_USER, ADMISSION_SMTP_PASS
 
 ### Vercel Deployment
 
 1. Connect the GitHub repo to a Vercel project
 2. Set all required environment variables in Vercel project settings
-3. Configure cron jobs in vercel.json or via Vercel Cron (call /api/cron/* with CRON_SECRET header)
-4. Set NODE_ENV=production
+3. Set NODE_ENV=production
 
 ### Self-Hosted (PM2 / Docker)
 
@@ -1267,18 +1225,6 @@ export default function ManualPage() {
               <EnvRow name="REDIS_URL" description="Redis connection URL (e.g. redis://localhost:6379). Falls back to in-memory cache if absent." />
             </EnvGroup>
 
-            <EnvGroup title="Cron Security">
-              <EnvRow name="CRON_SECRET" description="Bearer token required by all /api/cron/* endpoints. Set in the external cron scheduler." />
-            </EnvGroup>
-
-            <EnvGroup title="Legacy Database (Sync Source — Read-Only)">
-              <EnvRow name="OLD_DB_HOST" description="Legacy MySQL hostname" />
-              <EnvRow name="OLD_DB_PORT" description="Legacy MySQL port" />
-              <EnvRow name="OLD_DB_NAME" description="Legacy database name" />
-              <EnvRow name="OLD_DB_USER" description="Legacy MySQL username" />
-              <EnvRow name="OLD_DB_PASSWORD" description="Legacy MySQL password" />
-            </EnvGroup>
-
             <EnvGroup title="Email — SMTP (Primary)">
               <EnvRow name="ADMISSION_SMTP_HOST" description="SMTP server hostname" />
               <EnvRow name="ADMISSION_SMTP_PORT" description="SMTP port (typically 587 for STARTTLS)" />
@@ -1490,28 +1436,10 @@ export const { GET, PUT, DELETE } = idHandlers(config);`}</CodeBlock>
 
           <Divider />
 
-          {/* ── 9. Cron ── */}
+          {/* ── 9. Background Jobs ── */}
           <section className="bg-white rounded-2xl border border-gray-200 shadow-sm px-8 py-8">
-            <TechHeading id="tech-cron" title="Background Jobs & Cron" />
-            <H3>Security</H3>
-            <P>All cron routes are at <code className="font-mono text-[12px] bg-gray-100 px-1 py-0.5 rounded">/api/cron/*</code> and require a valid bearer token:</P>
-            <CodeBlock>{`Authorization: Bearer <CRON_SECRET>`}</CodeBlock>
-
-            <H3>Registered Jobs</H3>
-            <Table
-              headers={['Job', 'npm script', 'Syncs from legacy DB']}
-              rows={[
-                ['sync-courses', 'cron:sync-courses', 'Course master (course_mst)'],
-                ['sync-batch', 'cron:sync-batch', 'Batch records (batch_mst)'],
-                ['sync-inquiry', 'cron:sync-inquiry', 'Inquiry / lead records'],
-                ['sync-alumni-jobs', 'cron:sync-alumni-jobs', 'Alumni job postings'],
-                ['sync-consultancy', 'cron:sync-consultancy', 'Consultancy / deputation records'],
-                ['sync-all', 'cron:sync-all', 'Chains all five sync jobs'],
-                ['migrate-roll-numbers', '(DB script)', 'Roll number assignment migration'],
-              ]}
-            />
-
-            <H3>Incremental Sync</H3>
+            <TechHeading id="tech-cron" title="Background Jobs" />
+            <P>No scheduled cron jobs are configured in this project.</P>
             <P>Each sync job tracks the last-synced primary key (stored in a state table). On each run it fetches only rows where <code className="font-mono text-[12px] bg-gray-100 px-1 py-0.5 rounded">id &gt; lastSyncedId</code>, upserts them into the new DB, then saves the new high-water mark. This keeps sync jobs fast on large tables.</P>
 
             <Note>The legacy DB connection is enforced as read-only — any write attempt to it will throw an error at the application layer.</Note>
@@ -1619,7 +1547,6 @@ npm run backend:appp-lite`}</CodeBlock>
             <Steps items={[
               'Connect the GitHub repository to a Vercel project',
               'Add all required environment variables under Project → Settings → Environment Variables',
-              'Configure cron jobs in Vercel to call <code class="font-mono text-[12px] bg-gray-100 px-1 rounded">/api/cron/sync-all</code> on schedule with the <code class="font-mono text-[12px] bg-gray-100 px-1 rounded">Authorization: Bearer CRON_SECRET</code> header',
               'Deploy — Vercel builds with <code class="font-mono text-[12px] bg-gray-100 px-1 rounded">next build</code> automatically',
             ]} />
 

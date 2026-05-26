@@ -55,7 +55,6 @@ const PUBLIC_PREFIXES = [
   '/company',
   '/api/public',
   '/api/sms/realtime-delivery',
-  '/api/cron',
   '/api/student-portal',
   '/trainer-portal',
   '/api/trainer-portal',

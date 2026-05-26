@@ -1,5 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { cached, getPool } from '@/lib/db';
+import { cached, getPool, invalidateCache } from '@/lib/db';
+
+let inquiryTableNameCache: string | null = null;
+let disciplineTableNameCache: string | null | undefined;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -82,19 +85,67 @@ export interface InquiryListResult {
   };
 }
 
+interface InquiryFilterOptions {
+  disciplines: string[];
+  inquiryTypes: string[];
+  trainings: string[];
+  statusOptions: StatusOption[];
+}
+
 // ── Schema helpers ────────────────────────────────────────────────────────────
 
-async function ensureInquirySchema(pool: ReturnType<typeof getPool>): Promise<void> {
+async function resolveInquiryTableName(pool: ReturnType<typeof getPool>): Promise<string> {
+  if (inquiryTableNameCache) return inquiryTableNameCache;
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT TABLE_NAME
+       FROM INFORMATION_SCHEMA.TABLES
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND LOWER(TABLE_NAME) = 'student_inquiry'
+       ORDER BY CASE WHEN TABLE_NAME = 'Student_Inquiry' THEN 0 ELSE 1 END
+       LIMIT 1`
+    );
+    inquiryTableNameCache = String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
+  } catch {
+    inquiryTableNameCache = 'Student_Inquiry';
+  }
+
+  return inquiryTableNameCache;
+}
+
+async function resolveDisciplineTableName(pool: ReturnType<typeof getPool>): Promise<string | null> {
+  if (disciplineTableNameCache !== undefined) return disciplineTableNameCache;
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT TABLE_NAME
+       FROM INFORMATION_SCHEMA.TABLES
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND LOWER(TABLE_NAME) = 'mst_deciplin'
+       ORDER BY CASE WHEN TABLE_NAME = 'MST_Deciplin' THEN 0 ELSE 1 END
+       LIMIT 1`
+    );
+    disciplineTableNameCache = String((rows as any[])[0]?.TABLE_NAME || '').trim() || null;
+  } catch {
+    disciplineTableNameCache = null;
+  }
+
+  return disciplineTableNameCache;
+}
+
+async function ensureInquirySchema(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<void> {
   await cached('schema:inquiry_indexes', 60 * 60 * 1000, async () => {
     // Add virtual generated column so _inquiry_date can be indexed
     const [colRows] = await pool.query(
       `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Student_Inquiry'
-         AND COLUMN_NAME = '_inquiry_date'`
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+         AND COLUMN_NAME = '_inquiry_date'`,
+      [inquiryTable]
     );
     if ((colRows as any[]).length === 0) {
       await pool.query(
-        `ALTER TABLE Student_Inquiry ADD COLUMN _inquiry_date DATE GENERATED ALWAYS AS (` +
+        `ALTER TABLE \`${inquiryTable}\` ADD COLUMN _inquiry_date DATE GENERATED ALWAYS AS (` +
         `COALESCE(` +
         `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),19),'%Y-%m-%d %H:%i:%s'),` +
         `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),10),'%Y-%m-%d'),` +
@@ -105,18 +156,20 @@ async function ensureInquirySchema(pool: ReturnType<typeof getPool>): Promise<vo
     }
 
     const indexes: Array<{ table: string; name: string; cols: string }> = [
-      { table: 'Student_Inquiry',       name: 'idx_si_list',     cols: 'IsDelete, _inquiry_date, Inquiry_Id' },
-      { table: 'Student_Inquiry',       name: 'idx_si_status',   cols: 'IsDelete, OnlineState, Inquiry_Id' },
-      { table: 'Student_Inquiry',       name: 'idx_si_type',     cols: 'IsDelete, Inquiry_Type, Inquiry_Id' },
-      { table: 'Student_Inquiry',       name: 'idx_si_course',   cols: 'IsDelete, Course_Id, Inquiry_Id' },
+      { table: inquiryTable,            name: 'idx_si_list',     cols: 'IsDelete, _inquiry_date, Inquiry_Id' },
+      { table: inquiryTable,            name: 'idx_si_status',   cols: 'IsDelete, OnlineState, Inquiry_Id' },
+      { table: inquiryTable,            name: 'idx_si_type',     cols: 'IsDelete, Inquiry_Type, Inquiry_Id' },
+      { table: inquiryTable,            name: 'idx_si_course',   cols: 'IsDelete, Course_Id, Inquiry_Id' },
       { table: 'awt_inquirydiscussion', name: 'idx_disc_lookup', cols: 'Inquiry_id, deleted, id' },
+      { table: 'awt_inquirydiscussion', name: 'idx_disc_due',    cols: 'deleted, nextdate, Inquiry_id, id' },
     ];
 
     const [existingRows] = await pool.query(
       `SELECT INDEX_NAME, TABLE_NAME FROM INFORMATION_SCHEMA.STATISTICS
        WHERE TABLE_SCHEMA = DATABASE()
-         AND TABLE_NAME IN ('Student_Inquiry','awt_inquirydiscussion')
-       GROUP BY TABLE_NAME, INDEX_NAME`
+         AND TABLE_NAME IN (?, 'awt_inquirydiscussion')
+       GROUP BY TABLE_NAME, INDEX_NAME`,
+      [inquiryTable]
     );
     const existing = new Set(
       (existingRows as any[]).map((r: any) => `${r.TABLE_NAME}.${r.INDEX_NAME}`)
@@ -193,12 +246,13 @@ const FALLBACK_STATUSES: Record<number, string> = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Detect which column on Student_Inquiry stores the branch/city. */
-async function resolveLocationColumn(pool: ReturnType<typeof getPool>): Promise<string | null> {
+/** Detect which column on the inquiry table stores the branch/city. */
+async function resolveLocationColumn(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<string | null> {
   try {
     const [rows] = await pool.query(
       `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Student_Inquiry'`
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+      [inquiryTable]
     );
     const cols = new Set((rows as any[]).map((r: any) => String(r.COLUMN_NAME)));
     for (const candidate of ['Branch', 'Location', 'Present_City', 'City']) {
@@ -222,14 +276,59 @@ async function loadStatusOptions(pool: ReturnType<typeof getPool>): Promise<Stat
   return Object.entries(FALLBACK_STATUSES).map(([id, label]) => ({ id: +id, label }));
 }
 
+async function loadInquiryFilterOptions(
+  pool: ReturnType<typeof getPool>,
+  inquiryTable: string,
+  disciplineJoin: string,
+  disciplineExpr: string,
+): Promise<InquiryFilterOptions> {
+  return cached(
+    `inquiry:filters:${inquiryTable}:${disciplineJoin ? 'with-discipline' : 'without-discipline'}`,
+    5 * 60 * 1000,
+    async () => {
+      const [disciplinesResult, typesResult, trainingsResult, statusOptions] = await Promise.all([
+        pool.query(
+          `SELECT DISTINCT ${disciplineExpr} as Discipline
+           FROM \`${inquiryTable}\` si
+           ${disciplineJoin}
+           WHERE ${disciplineExpr} IS NOT NULL
+             AND ${disciplineExpr} NOT IN ('NULL','Select')
+             AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
+           ORDER BY Discipline`
+        ),
+        pool.query(
+          `SELECT DISTINCT Inquiry_Type FROM \`${inquiryTable}\`
+           WHERE Inquiry_Type IS NOT NULL AND Inquiry_Type != ''
+             AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Inquiry_Type`
+        ),
+        pool.query(
+          `SELECT DISTINCT c.Course_Name FROM \`${inquiryTable}\` si
+           LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
+           WHERE c.Course_Name IS NOT NULL AND c.Course_Name != ''
+             AND (si.IsDelete = 0 OR si.IsDelete IS NULL) ORDER BY c.Course_Name`
+        ),
+        loadStatusOptions(pool),
+      ]);
+
+      return {
+        disciplines: (disciplinesResult[0] as any[]).map((d: any) => String(d.Discipline).trim()),
+        inquiryTypes: (typesResult[0] as any[]).map((t: any) => String(t.Inquiry_Type).trim()),
+        trainings: (trainingsResult[0] as any[]).map((r: any) => String(r.Course_Name).trim()),
+        statusOptions,
+      };
+    }
+  );
+}
+
 // ── Public service functions ──────────────────────────────────────────────────
 
 export async function createInquiry(data: CreateInquiryInput): Promise<number> {
   if (!data.Student_Name?.trim()) throw new Error('Name is required');
 
   const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
   const [result] = await pool.query(
-    `INSERT INTO Student_Inquiry (
+    `INSERT INTO \`${inquiryTable}\` (
        Student_Name, Sex, DOB, Present_Mobile, Present_Mobile2,
        Email, Nationality, Present_Country, Discussion,
        OnlineState, Inquiry_Dt, Inquiry_From, Inquiry_Type,
@@ -269,11 +368,21 @@ export async function createInquiry(data: CreateInquiryInput): Promise<number> {
     );
   }
 
+  invalidateCache('inquiry:filters');
+
   return insertId;
 }
 
 export async function getInquiryById(id: number): Promise<any | null> {
   const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
+  const disciplineTable = await resolveDisciplineTableName(pool);
+  const disciplineJoin = disciplineTable
+    ? `LEFT JOIN \`${disciplineTable}\` md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)`
+    : '';
+  const disciplineExpr = disciplineTable
+    ? DISCIPLINE_NAME_EXPR
+    : `NULLIF(TRIM(si.Discipline),'')`;
   const [rows] = await pool.query(
     `SELECT
        si.Inquiry_Id as Student_Id, si.Student_Name, si.Sex, si.DOB,
@@ -282,11 +391,11 @@ export async function getInquiryById(id: number): Promise<any | null> {
        CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) as Status_id,
        si.Inquiry_Dt, si.Inquiry_From, si.Inquiry_Type,
        si.Course_Id, si.Batch_Category_id, si.Batch_Code,
-       si.Qualification, si.Discipline, ${DISCIPLINE_NAME_EXPR} as DisciplineName, si.Percentage,
+       si.Qualification, si.Discipline, ${disciplineExpr} as DisciplineName, si.Percentage,
        c.Course_Name as CourseName
-     FROM Student_Inquiry si
+    FROM \`${inquiryTable}\` si
      LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
-     LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)
+     ${disciplineJoin}
      WHERE si.Inquiry_Id = ? AND (si.IsDelete = 0 OR si.IsDelete IS NULL)`,
     [id]
   );
@@ -295,8 +404,33 @@ export async function getInquiryById(id: number): Promise<any | null> {
 
 export async function listInquiries(params: InquiryListParams): Promise<InquiryListResult> {
   const pool = getPool();
-  try { await ensureInquirySchema(pool); } catch { /* best-effort schema migration */ }
+  const inquiryTable = await resolveInquiryTableName(pool);
+  const disciplineTable = await resolveDisciplineTableName(pool);
+  const disciplineJoin = disciplineTable
+    ? `LEFT JOIN \`${disciplineTable}\` md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)`
+    : '';
+  const disciplineExpr = disciplineTable
+    ? DISCIPLINE_NAME_EXPR
+    : `NULLIF(TRIM(si.Discipline),'')`;
+  const listNeedsCourseJoin = Boolean(search || training);
+  const listNeedsDisciplineJoin = Boolean(discipline && disciplineTable);
+  const listCourseJoin = listNeedsCourseJoin ? 'LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id' : '';
+  const listDisciplineJoin = listNeedsDisciplineJoin ? disciplineJoin : '';
+  try { await ensureInquirySchema(pool, inquiryTable); } catch { /* best-effort schema migration */ }
   try { await ensureMetaLeadSchema(pool); } catch { /* best-effort schema migration */ }
+  const FOLLOW_UP_DUE_SUBQUERY = `
+    SELECT latest.Inquiry_id
+    FROM awt_inquirydiscussion latest
+    INNER JOIN (
+      SELECT Inquiry_id, MAX(id) AS max_id
+      FROM awt_inquirydiscussion
+      WHERE deleted = 0
+      GROUP BY Inquiry_id
+    ) latest_ids ON latest_ids.Inquiry_id = latest.Inquiry_id AND latest_ids.max_id = latest.id
+    WHERE latest.deleted = 0
+      AND latest.nextdate IS NOT NULL
+      AND latest.nextdate <= CURDATE()
+  `;
   const {
     page, limit, search = '', discipline = '', inquiryType = '', leadTag = '',
     location = '', training = '', statusId = '', duplicatesOnly = false, dateFrom = '', dateTo = '',
@@ -310,7 +444,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     throw Object.assign(new Error('Invalid location filter'), { status: 400 });
   }
 
-  const locationColumn = await resolveLocationColumn(pool);
+  const locationColumn = await resolveLocationColumn(pool, inquiryTable);
 
   // Build WHERE
   const conditions: string[] = ['(si.IsDelete = 0 OR si.IsDelete IS NULL)'];
@@ -325,7 +459,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     queryParams.push(s, s, s, s, s);
   }
   if (discipline) {
-    conditions.push(`${DISCIPLINE_NAME_EXPR} = ?`);
+    conditions.push(`${disciplineExpr} = ?`);
     queryParams.push(discipline);
   }
   if (inquiryType) {
@@ -385,16 +519,10 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   if (followUpDue) {
     conditions.push(
       `EXISTS (
-         SELECT 1 FROM awt_inquirydiscussion d
-         WHERE d.deleted = 0
-           AND (d.Inquiry_id = si.Inquiry_Id OR d.Inquiry_id = si.Student_Id)
-           AND d.nextdate IS NOT NULL
-           AND d.nextdate <= CURDATE()
-           AND d.id = (
-             SELECT MAX(d2.id) FROM awt_inquirydiscussion d2
-             WHERE d2.deleted = 0
-               AND (d2.Inquiry_id = si.Inquiry_Id OR d2.Inquiry_id = si.Student_Id)
-           )
+         SELECT 1 FROM (
+           ${FOLLOW_UP_DUE_SUBQUERY}
+         ) due_followups
+         WHERE due_followups.Inquiry_id IN (si.Inquiry_Id, si.Student_Id)
        )`
     );
   }
@@ -407,9 +535,9 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
 
   const [countResult] = await pool.query(
     `SELECT COUNT(*) as total
-     FROM Student_Inquiry si
-     LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
-     LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)
+     FROM \`${inquiryTable}\` si
+     ${listCourseJoin}
+     ${listDisciplineJoin}
      ${whereClause}`,
     queryParams
   );
@@ -417,9 +545,9 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
 
   const [sortedIds] = await pool.query(
     `SELECT si.Inquiry_Id
-     FROM Student_Inquiry si
-     LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
-     LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)
+     FROM \`${inquiryTable}\` si
+     ${listCourseJoin}
+     ${listDisciplineJoin}
      ${whereClause}
      ORDER BY COALESCE(
        STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),19),'%Y-%m-%d %H:%i:%s'),
@@ -443,7 +571,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
          si.Inquiry_Id as Student_Id, si.Student_Id as SourceStudentId,
          si.Student_Name, c.Course_Name as CourseName, si.Inquiry_Dt,
          si.Present_Mobile, si.Email, ${locationSelect}
-         si.Discipline, ${DISCIPLINE_NAME_EXPR} as DisciplineName,
+        si.Discipline, ${disciplineExpr} as DisciplineName,
          si.Inquiry_From, si.Inquiry_Type,
          si.OnlineState as OnlineStateRaw,
          CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) as Status_id,
@@ -459,9 +587,9 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
            NULLIF(TRIM(au.username),''), NULLIF(TRIM(au.email),''),
            NULLIF(TRIM(oe.Employee_Name),'')
          ) as LatestDiscussionByName
-       FROM Student_Inquiry si
+      FROM \`${inquiryTable}\` si
        LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
-       LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)
+      ${disciplineJoin}
       LEFT JOIN (
         SELECT meta1.*
         FROM meta_ads_lead_sync meta1
@@ -474,7 +602,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       ) meta_latest ON meta_latest.inquiry_id = si.Inquiry_Id
        LEFT JOIN (
          SELECT si_map.Inquiry_Id as InquiryId, MAX(d.id) as max_id
-         FROM Student_Inquiry si_map
+         FROM \`${inquiryTable}\` si_map
          INNER JOIN awt_inquirydiscussion d ON d.deleted = 0 AND (
            d.Inquiry_id = si_map.Inquiry_Id OR d.Inquiry_id = si_map.Student_Id
          )
@@ -493,29 +621,12 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   }
 
   // Filter option queries (run in parallel)
-  const [disciplinesResult, typesResult, trainingsResult, statusOptions] = await Promise.all([
-    pool.query(
-      `SELECT DISTINCT ${DISCIPLINE_NAME_EXPR} as Discipline
-       FROM Student_Inquiry si
-       LEFT JOIN MST_Deciplin md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)
-       WHERE ${DISCIPLINE_NAME_EXPR} IS NOT NULL
-         AND ${DISCIPLINE_NAME_EXPR} NOT IN ('NULL','Select')
-         AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
-       ORDER BY Discipline`
-    ),
-    pool.query(
-      `SELECT DISTINCT Inquiry_Type FROM Student_Inquiry
-       WHERE Inquiry_Type IS NOT NULL AND Inquiry_Type != ''
-         AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Inquiry_Type`
-    ),
-    pool.query(
-      `SELECT DISTINCT c.Course_Name FROM Student_Inquiry si
-       LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
-       WHERE c.Course_Name IS NOT NULL AND c.Course_Name != ''
-         AND (si.IsDelete = 0 OR si.IsDelete IS NULL) ORDER BY c.Course_Name`
-    ),
-    loadStatusOptions(pool),
-  ]);
+  const { disciplines, inquiryTypes, trainings, statusOptions } = await loadInquiryFilterOptions(
+    pool,
+    inquiryTable,
+    disciplineJoin,
+    disciplineExpr,
+  );
 
   const statusMap = Object.fromEntries(statusOptions.map((s) => [s.id, s.label]));
 
@@ -568,9 +679,9 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     rows,
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     filters: {
-      disciplines: (disciplinesResult[0] as any[]).map((d: any) => d.Discipline),
-      inquiryTypes: (typesResult[0] as any[]).map((t: any) => t.Inquiry_Type),
-      trainings: (trainingsResult[0] as any[]).map((r: any) => r.Course_Name),
+      disciplines,
+      inquiryTypes,
+      trainings,
       statusOptions,
     },
   };
@@ -580,8 +691,9 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput): Promi
   if (!data.Student_Name?.trim()) throw new Error('Name is required');
 
   const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
   await pool.query(
-    `UPDATE Student_Inquiry SET
+    `UPDATE \`${inquiryTable}\` SET
        Student_Name=?, Sex=?, DOB=?,
        Present_Mobile=?, Present_Mobile2=?,
        Email=?, Nationality=?, Present_Country=?,
@@ -621,4 +733,6 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput): Promi
       [id, data.Discussion.trim()]
     );
   }
+
+  invalidateCache('inquiry:filters');
 }

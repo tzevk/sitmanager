@@ -6,7 +6,7 @@ import crypto from 'crypto';
 export const runtime = 'nodejs';
 
 function isAuthorized(req: NextRequest): boolean {
-  const secret = process.env.SEED_SECRET || process.env.CRON_SECRET;
+  const secret = process.env.SEED_SECRET;
 
   // Convenience for local/dev testing.
   if (process.env.NODE_ENV !== 'production' && !secret) return true;
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
           success: false,
           error: 'Unauthorized',
           message:
-            'Seed endpoint is disabled. Set SEED_SECRET (or CRON_SECRET) and call with Authorization: Bearer <secret>.',
+            'Seed endpoint is disabled. Set SEED_SECRET and call with Authorization: Bearer <secret>.',
         },
         { status: 401 }
       );
