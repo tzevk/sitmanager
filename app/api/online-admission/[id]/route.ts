@@ -3,10 +3,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { apiRateLimiter } from '@/lib/rate-limit';
+import { resolveInquiryTableName } from '@/lib/services/inquiry.service';
 
 const ONLINE_ADMISSION_PAYLOAD_TABLE = 'online_admission_payload';
 
 let payloadTableReady = false;
+
+let statusTableCache: string | null | undefined;
+async function resolveStatusTableName(pool: any): Promise<string | null> {
+  if (statusTableCache !== undefined) return statusTableCache;
+  try {
+    const [rows] = await pool.query(
+      `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+       WHERE TABLE_SCHEMA = DATABASE() AND LOWER(TABLE_NAME) = 'status_master' LIMIT 1`
+    ) as [any[], any];
+    statusTableCache = (rows as any[])[0]?.TABLE_NAME ?? null;
+  } catch {
+    statusTableCache = null;
+  }
+  return statusTableCache ?? null;
+}
 
 const toStr = (value: unknown): string => (value == null ? '' : String(value));
 
@@ -98,7 +114,16 @@ export async function GET(
     const { id } = await params;
     const inquiryId = Number(id);
 
+    const [inquiryTable, statusTable] = await Promise.all([
+      resolveInquiryTableName(pool),
+      resolveStatusTableName(pool),
+    ]);
+
     // Load inquiry record
+    const statusJoin = statusTable
+      ? `LEFT JOIN \`${statusTable}\` stm ON stm.Id = si.OnlineState`
+      : '';
+    const statusCol = statusTable ? `COALESCE(stm.Status, '')` : `''`;
     const [siRows] = await pool.query(
       `SELECT
          si.Inquiry_Id,
@@ -110,13 +135,13 @@ export async function GET(
          si.DOB,
          COALESCE(si.Nationality, 'Indian') as Nationality,
          si.OnlineState as Status_id,
-         COALESCE(stm.Status, '') as StatusText,
+         ${statusCol} as StatusText,
          COALESCE(si.Batch_Code, '') as Batch_Code,
          COALESCE(si.Course_Id, 0) as Course_Id,
          COALESCE(si.Qualification, '') as Qualification,
          COALESCE(si.Discipline, '') as Discipline
-       FROM Student_Inquiry si
-       LEFT JOIN Status_Master stm ON stm.Id = si.OnlineState
+       FROM \`${inquiryTable}\` si
+       ${statusJoin}
        WHERE si.Inquiry_Id = ? AND (si.IsDelete = 0 OR si.IsDelete IS NULL)`,
       [inquiryId]
     ) as [any[], any];
@@ -292,9 +317,11 @@ export async function PUT(
     const inquiryId = Number(id);
     const body = await req.json();
 
+    const inquiryTable = await resolveInquiryTableName(pool);
+
     // Verify inquiry exists
     const [siRows] = await pool.query(
-      `SELECT Inquiry_Id FROM Student_Inquiry WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+      `SELECT Inquiry_Id FROM \`${inquiryTable}\` WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
       [inquiryId]
     ) as [any[], any];
     if (!(siRows as any[]).length) {
@@ -311,7 +338,7 @@ export async function PUT(
     // Resolve batch code from form
     const batchCode = String(body.batchCode || '').trim() || null;
 
-    // Update Student_Inquiry
+    // Update inquiry record
     const setClauses: string[] = [];
     const setVals: any[] = [];
 
@@ -325,7 +352,7 @@ export async function PUT(
 
     if (setClauses.length) {
       await pool.query(
-        `UPDATE Student_Inquiry SET ${setClauses.join(', ')} WHERE Inquiry_Id = ?`,
+        `UPDATE \`${inquiryTable}\` SET ${setClauses.join(', ')} WHERE Inquiry_Id = ?`,
         [...setVals, inquiryId]
       );
     }
@@ -364,6 +391,8 @@ export async function DELETE(
     const { id } = await params;
     const inquiryId = Number(id);
 
+    const inquiryTable = await resolveInquiryTableName(pool);
+
     await ensurePayloadTable(pool);
 
     // Remove the payload record (the inquiry itself stays intact)
@@ -374,7 +403,7 @@ export async function DELETE(
 
     // Reset inquiry status back to its prior state (undo the "Document Pending" flag)
     await pool.query(
-      `UPDATE Student_Inquiry SET OnlineState = 1 WHERE Inquiry_Id = ? AND OnlineState IN (23, 8, 7)`,
+      `UPDATE \`${inquiryTable}\` SET OnlineState = 1 WHERE Inquiry_Id = ? AND OnlineState IN (23, 8, 7)`,
       [inquiryId]
     );
 
