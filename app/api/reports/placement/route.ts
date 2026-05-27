@@ -29,10 +29,16 @@ export async function GET(req: NextRequest) {
       }
 
       const [rows] = await pool.query(
-        `SELECT Course_Id AS id, Course_Name AS name
-         FROM course_mst
-         WHERE (IsDelete = 0 OR IsDelete IS NULL)
-         ORDER BY Course_Name`
+        `SELECT DISTINCT c.Course_Id AS id, c.Course_Name AS name
+         FROM admission_master am
+         INNER JOIN student_master s
+           ON s.Student_Id = am.Student_Id
+          AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
+         INNER JOIN course_mst c
+           ON c.Course_Id = s.Course_Id
+          AND (c.IsDelete = 0 OR c.IsDelete IS NULL)
+         WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
+         ORDER BY c.Course_Name`
       );
       const responseData = { courses: rows };
       await cache.set(cacheKey, responseData, cacheTTL.medium);
@@ -45,26 +51,43 @@ export async function GET(req: NextRequest) {
     /* ── Dropdown: batches (filtered by course) ────────────────────── */
     if (options === 'batches') {
       const courseId = url.searchParams.get('courseId');
-      if (!courseId) return NextResponse.json({ batches: [] });
-      const cacheKey = `report:placement:options:batches:${courseId}`;
+      const normalizedCourseId = (courseId || '').trim().toLowerCase();
+      const cacheKey = `report:placement:options:batches:${normalizedCourseId || 'all'}`;
       const cachedData = await cache.get<{ batches: unknown }>(cacheKey);
       if (cachedData) {
-        logReportCacheTiming('placement.options.batches', startedAt, 'HIT', { courseId });
+        logReportCacheTiming('placement.options.batches', startedAt, 'HIT', { courseId: normalizedCourseId || 'all' });
         return NextResponse.json(cachedData, {
           headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'HIT' },
         });
       }
 
-      const [rows] = await pool.query(
-        `SELECT Batch_Id AS id, Batch_code AS name
-         FROM batch_mst
-         WHERE Course_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
-         ORDER BY Batch_Id DESC`,
-        [parseInt(courseId)]
-      );
+      const [rows] = normalizedCourseId && normalizedCourseId !== 'all'
+        ? await pool.query(
+            `SELECT DISTINCT b.Batch_Id AS id, b.Batch_code AS name
+             FROM admission_master am
+             INNER JOIN student_master s
+               ON s.Student_Id = am.Student_Id
+              AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
+             INNER JOIN batch_mst b
+               ON b.Batch_Id = am.Batch_Id
+              AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
+             WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
+               AND s.Course_Id = ?
+             ORDER BY b.Batch_Id DESC`,
+            [parseInt(normalizedCourseId, 10)]
+          )
+        : await pool.query(
+            `SELECT DISTINCT b.Batch_Id AS id, b.Batch_code AS name
+             FROM admission_master am
+             INNER JOIN batch_mst b
+               ON b.Batch_Id = am.Batch_Id
+              AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
+             WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
+             ORDER BY b.Batch_Id DESC`
+          );
       const responseData = { batches: rows };
       await cache.set(cacheKey, responseData, cacheTTL.medium);
-      logReportCacheTiming('placement.options.batches', startedAt, 'MISS', { courseId, total: (rows as any[]).length });
+      logReportCacheTiming('placement.options.batches', startedAt, 'MISS', { courseId: normalizedCourseId || 'all', total: (rows as any[]).length });
       return NextResponse.json(responseData, {
         headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'MISS' },
       });
@@ -83,8 +106,12 @@ export async function GET(req: NextRequest) {
 
       const [rows] = await pool.query(
         `SELECT DISTINCT YEAR(SDate) AS yr
-         FROM batch_mst
-         WHERE SDate IS NOT NULL AND (IsDelete = 0 OR IsDelete IS NULL)
+         FROM admission_master am
+         INNER JOIN batch_mst b
+           ON b.Batch_Id = am.Batch_Id
+          AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
+         WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
+           AND b.SDate IS NOT NULL
          ORDER BY yr DESC`
       );
       const responseData = { years: (rows as any[]).map((r) => r.yr).filter(Boolean) };
