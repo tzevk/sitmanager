@@ -43,6 +43,13 @@ export async function GET(req: NextRequest) {
     const recent = ['1', 'true', 'yes'].includes((searchParams.get('recent') || '').trim().toLowerCase());
     const limitRaw = Number(searchParams.get('limit') || 8);
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(25, Math.floor(limitRaw))) : 8;
+    const followupDateExpr = `COALESCE(NULLIF(TRIM(f.Tdate), ''), NULLIF(TRIM(f.nextdate), ''))`;
+    const followupDateSortExpr = `COALESCE(
+      STR_TO_DATE(${followupDateExpr}, '%Y-%m-%d'),
+      STR_TO_DATE(${followupDateExpr}, '%d-%m-%Y'),
+      STR_TO_DATE(${followupDateExpr}, '%d/%m/%Y'),
+      STR_TO_DATE(${followupDateExpr}, '%m/%d/%Y')
+    )`;
 
     // Ensure table
     await pool.query(`
@@ -89,7 +96,7 @@ export async function GET(req: NextRequest) {
            f.ID AS Followup_Id,
            CAST(NULLIF(TRIM(f.Consultant_Id), '') AS UNSIGNED) AS Const_Id,
            COALESCE(cm.Comp_Name, '') AS Company_Name,
-           COALESCE(NULLIF(TRIM(f.Tdate), ''), NULLIF(TRIM(f.nextdate), '')) AS Followup_Date,
+           ${followupDateExpr} AS Followup_Date,
            COALESCE(f.CName, '') AS Contact_Person,
            COALESCE(f.Designation, '') AS Designation,
            COALESCE(f.Phone, '') AS Mobile,
@@ -115,7 +122,7 @@ export async function GET(req: NextRequest) {
          LEFT JOIN office_employee_mst oe
            ON oe.Emp_Id = CAST(NULLIF(TRIM(f.CreatedBy), '') AS UNSIGNED)
          WHERE (f.IsDelete = 0 OR f.IsDelete IS NULL OR f.IsDelete = '' OR f.IsDelete = '0' OR f.IsDelete = 'N' OR f.IsDelete = 'No')
-         ORDER BY f.ID DESC
+         ORDER BY ${followupDateSortExpr} DESC, f.ID DESC
          LIMIT ?`,
         [limit]
       );
@@ -173,7 +180,7 @@ export async function GET(req: NextRequest) {
       `SELECT
          f.ID AS Followup_Id,
          CAST(NULLIF(TRIM(f.Consultant_Id), '') AS UNSIGNED) AS Const_Id,
-         COALESCE(NULLIF(TRIM(f.Tdate), ''), NULLIF(TRIM(f.nextdate), '')) AS Followup_Date,
+         ${followupDateExpr} AS Followup_Date,
          COALESCE(f.CName, '') AS Contact_Person,
          COALESCE(f.Designation, '') AS Designation,
          COALESCE(f.Phone, '') AS Mobile,
@@ -198,7 +205,7 @@ export async function GET(req: NextRequest) {
        LEFT JOIN office_employee_mst oe
          ON oe.Emp_Id = CAST(NULLIF(TRIM(f.CreatedBy), '') AS UNSIGNED)
        WHERE ${where}
-       ORDER BY f.ID DESC`,
+       ORDER BY ${followupDateSortExpr} DESC, f.ID DESC`,
       params
     );
     await logTableActivity(req, {

@@ -53,6 +53,9 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(100, Math.max(10, Number(searchParams.get('limit')) || 25));
     const offset = (page - 1) * limit;
     const search = searchParams.get('search')?.trim() || '';
+    const companyType = searchParams.get('companyType')?.trim() || '';
+    const city = searchParams.get('city')?.trim() || '';
+    const industry = searchParams.get('industry')?.trim() || '';
 
     const companyTypeExpr = `COALESCE(
       ${hasCompanyType ? "NULLIF(TRIM(cm.Company_Type), '')" : 'NULL'},
@@ -80,8 +83,40 @@ export async function GET(req: NextRequest) {
     const params: (string | number)[] = [];
 
     if (search) {
-      conditions.push(`(cm.Comp_Name LIKE ? OR cm.Contact_Person LIKE ? OR cm.Designation LIKE ? OR cm.City LIKE ? OR cm.EMail LIKE ? OR cm.Address LIKE ? OR cm.Tel LIKE ? OR cm.Mobile LIKE ? OR cm.Purpose LIKE ? OR ${companyTypeExpr} LIKE ?)`);
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      conditions.push(`(
+        cm.Comp_Name LIKE ?
+        OR cm.Contact_Person LIKE ?
+        OR cm.Designation LIKE ?
+        OR cm.City LIKE ?
+        OR cm.State LIKE ?
+        OR cm.EMail LIKE ?
+        OR cm.Address LIKE ?
+        OR cm.Tel LIKE ?
+        OR cm.Mobile LIKE ?
+        OR cm.Purpose LIKE ?
+        OR cm.Country LIKE ?
+        OR cm.Industry LIKE ?
+        OR cm.Website LIKE ?
+        OR cm.Company_Status LIKE ?
+        OR ${companyTypeExpr} LIKE ?
+      )`);
+      params.push(
+        `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`,
+        `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`,
+        `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`
+      );
+    }
+    if (companyType) {
+      conditions.push(`${companyTypeExpr} = ?`);
+      params.push(companyType);
+    }
+    if (city) {
+      conditions.push(`cm.City = ?`);
+      params.push(city);
+    }
+    if (industry) {
+      conditions.push(`cm.Industry = ?`);
+      params.push(industry);
     }
 
     const where = conditions.join(' AND ');
@@ -101,9 +136,43 @@ export async function GET(req: NextRequest) {
       [...params, limit, offset]
     );
 
+    const [companyTypeRows, cityRows, industryRows] = await Promise.all([
+      pool.query<any[]>(
+        `SELECT DISTINCT ${companyTypeExpr} AS value
+         FROM consultant_mst cm
+         WHERE (cm.IsDelete = 0 OR cm.IsDelete IS NULL)
+           AND ${companyTypeExpr} IS NOT NULL
+           AND TRIM(${companyTypeExpr}) <> ''
+         ORDER BY value`
+      ),
+      pool.query<any[]>(
+        `SELECT DISTINCT cm.City AS value
+         FROM consultant_mst cm
+         WHERE (cm.IsDelete = 0 OR cm.IsDelete IS NULL)
+           AND cm.City IS NOT NULL
+           AND TRIM(cm.City) <> ''
+         ORDER BY cm.City
+         LIMIT 500`
+      ),
+      pool.query<any[]>(
+        `SELECT DISTINCT cm.Industry AS value
+         FROM consultant_mst cm
+         WHERE (cm.IsDelete = 0 OR cm.IsDelete IS NULL)
+           AND cm.Industry IS NOT NULL
+           AND TRIM(cm.Industry) <> ''
+         ORDER BY cm.Industry
+         LIMIT 300`
+      ),
+    ]);
+
     return NextResponse.json({
       rows,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      filters: {
+        companyTypes: (companyTypeRows[0] as any[]).map((row: any) => String(row.value).trim()).filter(Boolean),
+        cities: (cityRows[0] as any[]).map((row: any) => String(row.value).trim()).filter(Boolean),
+        industries: (industryRows[0] as any[]).map((row: any) => String(row.value).trim()).filter(Boolean),
+      },
     });
   } catch (err: unknown) {
     console.error('Consultancy GET error:', err);

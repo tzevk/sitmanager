@@ -17,7 +17,9 @@
       "Bash(next build *)",
       "mcp__claude_ai_Vercel__list_deployments",
       "mcp__claude_ai_Vercel__get_deployment_build_logs",
-      "Bash(node scripts/db/kill-stale-connections.mjs)"
+      "Bash(node scripts/db/kill-stale-connections.mjs)",
+      "Bash(node scripts/db/migrate-from-legacy.mjs --dry-run)",
+      "Bash(node scripts/db/migrate-from-legacy.mjs)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

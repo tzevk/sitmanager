@@ -13,8 +13,26 @@ interface Consultancy {
   Designation: string | null;
   Address: string | null;
   City: string | null;
+  State?: string | null;
+  Pin?: string | null;
   Tel: string | null;
+  Fax?: string | null;
+  Mobile?: string | null;
   EMail: string | null;
+  Date_Added?: string | null;
+  Industry?: string | null;
+  Remark?: string | null;
+  Country?: string | null;
+  Purpose?: string | null;
+  Website?: string | null;
+  Company_Status?: string | null;
+  Course_Id1?: number | string | null;
+  Course_Id2?: number | string | null;
+  Course_Id3?: number | string | null;
+  Course_Id4?: number | string | null;
+  Course_Id5?: number | string | null;
+  Course_Id6?: number | string | null;
+  IsActive?: number | string | null;
 }
 
 interface Pagination {
@@ -29,6 +47,12 @@ interface CourseOption {
   Course_Name: string;
 }
 
+interface Filters {
+  companyTypes: string[];
+  cities: string[];
+  industries: string[];
+}
+
 export default function ConsultancyPage() {
   const router = useRouter();
   const { canView, canCreate, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('consultancy');
@@ -37,6 +61,10 @@ export default function ConsultancyPage() {
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [companyType, setCompanyType] = useState('');
+  const [city, setCity] = useState('');
+  const [industry, setIndustry] = useState('');
+  const [filters, setFilters] = useState<Filters>({ companyTypes: [], cities: [], industries: [] });
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -49,6 +77,9 @@ export default function ConsultancyPage() {
   const [exportDateTo, setExportDateTo] = useState('');
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState('');
+  const [viewRow, setViewRow] = useState<Consultancy | null>(null);
+  const [viewLoading, setViewLoading] = useState(false);
+  const [viewError, setViewError] = useState('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -57,15 +88,19 @@ export default function ConsultancyPage() {
       params.set('page', String(page));
       params.set('limit', '25');
       if (search) params.set('search', search);
+      if (companyType) params.set('companyType', companyType);
+      if (city) params.set('city', city);
+      if (industry) params.set('industry', industry);
       const res = await fetch(`/api/masters/consultancy?${params.toString()}`);
       const data = await res.json();
       setRows(data.rows ?? []);
       setPagination(data.pagination ?? { page: 1, limit: 25, total: 0, totalPages: 0 });
+      setFilters(data.filters ?? { companyTypes: [], cities: [], industries: [] });
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, search, fetchTrigger]);
+  }, [page, search, companyType, city, industry, fetchTrigger]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -153,8 +188,57 @@ export default function ConsultancyPage() {
     URL.revokeObjectURL(url);
   };
 
+  const formatDate = (value: string | null | undefined) => {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString('en-GB');
+  };
+
+  const viewValue = (value: string | number | null | undefined) => {
+    if (value == null) return '-';
+    const text = String(value).trim();
+    return text ? text : '-';
+  };
+
+  const courseLabel = (value: string | number | null | undefined) => {
+    if (value == null || String(value).trim() === '') return '-';
+    const course = courseOptions.find((item) => String(item.Course_Id) === String(value));
+    return course ? course.Course_Name : String(value);
+  };
+
+  const handleView = async (row: Consultancy) => {
+    setViewLoading(true);
+    setViewError('');
+    setViewRow(row);
+    try {
+      const res = await fetch(`/api/masters/consultancy/${row.Const_Id}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to load consultancy details');
+      setViewRow(data.row ?? row);
+    } catch (error: unknown) {
+      setViewError(error instanceof Error ? error.message : 'Failed to load consultancy details');
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') { setPage(1); setFetchTrigger(t => t + 1); }
+  };
+
+  const handleApplyFilters = () => {
+    setPage(1);
+    setFetchTrigger((t) => t + 1);
+  };
+
+  const handleClearFilters = () => {
+    setSearch('');
+    setCompanyType('');
+    setCity('');
+    setIndustry('');
+    setPage(1);
+    setFetchTrigger((t) => t + 1);
   };
 
   if (permLoading) return <PermissionLoading />;
@@ -224,8 +308,51 @@ export default function ConsultancyPage() {
           {showFilters && (
             <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200 flex-shrink-0">
               <div className="flex flex-wrap items-end gap-3">
-                <button onClick={() => { setSearch(''); setPage(1); setFetchTrigger(t => t + 1); }}
-                  className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100">Clear</button>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Company Type</label>
+                  <select
+                    value={companyType}
+                    onChange={(e) => setCompanyType(e.target.value)}
+                    className="min-w-[140px] px-3 py-1.5 text-xs border border-gray-300 rounded-lg bg-white"
+                  >
+                    <option value="">All types</option>
+                    {filters.companyTypes.map((value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">City</label>
+                  <select
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    className="min-w-[140px] px-3 py-1.5 text-xs border border-gray-300 rounded-lg bg-white"
+                  >
+                    <option value="">All cities</option>
+                    {filters.cities.map((value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-500 mb-1">Industry</label>
+                  <select
+                    value={industry}
+                    onChange={(e) => setIndustry(e.target.value)}
+                    className="min-w-[160px] px-3 py-1.5 text-xs border border-gray-300 rounded-lg bg-white"
+                  >
+                    <option value="">All industries</option>
+                    {filters.industries.map((value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
+                </div>
+                <button
+                  onClick={handleApplyFilters}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#2E3093] text-white hover:bg-[#252880]"
+                >
+                  Apply
+                </button>
+                <button
+                  onClick={handleClearFilters}
+                  className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100"
+                >
+                  Clear
+                </button>
               </div>
             </div>
           )}
@@ -266,6 +393,10 @@ export default function ConsultancyPage() {
                       <td className="px-3 py-2.5 text-gray-700 truncate max-w-[150px]" title={row.EMail || ''}>{row.EMail || '-'}</td>
                       <td className="px-3 py-2.5 text-center">
                         <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => handleView(row)}
+                            className="p-1.5 text-sky-600 hover:bg-sky-50 rounded-lg transition-colors" title="View">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12s3.75-7.5 9.75-7.5 9.75 7.5 9.75 7.5-3.75 7.5-9.75 7.5S2.25 12 2.25 12z" /><circle cx="12" cy="12" r="3" /></svg>
+                          </button>
                           {canUpdate && (
                             <button onClick={() => router.push(`/dashboard/masters/consultancy/edit/${row.Const_Id}`)}
                               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
@@ -358,6 +489,89 @@ export default function ConsultancyPage() {
                   >
                     {exportBusy ? 'Generating…' : 'Download Excel'}
                   </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {viewRow && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+              <div className="w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-xl bg-white shadow-xl">
+                <div className="flex items-center justify-between px-5 py-3 border-b bg-gradient-to-r from-[#2E3093] to-[#2A6BB5]">
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Consultancy Details</h3>
+                    <p className="text-[11px] text-white/80">Read-only view of the consultancy master record</p>
+                  </div>
+                  <button
+                    onClick={() => { setViewRow(null); setViewError(''); }}
+                    className="text-white/80 hover:text-white"
+                    aria-label="Close"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                <div className="max-h-[calc(90vh-64px)] overflow-y-auto p-5 space-y-5">
+                  {viewLoading && (
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <div className="w-4 h-4 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                      Loading consultancy details...
+                    </div>
+                  )}
+                  {viewError && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{viewError}</div>
+                  )}
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                    <div className="rounded-lg border border-gray-200 overflow-hidden">
+                      <div className="px-4 py-2.5 bg-gray-50 border-b">
+                        <h4 className="text-sm font-semibold text-[#2E3093]">Company Information</h4>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3 p-4 text-sm">
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Consultancy</span><span className="text-gray-900">{viewValue(viewRow.Comp_Name)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Company Type</span><span className="text-gray-900">{viewValue(viewRow.Company_Type)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Contact Person</span><span className="text-gray-900">{viewValue(viewRow.Contact_Person)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Designation</span><span className="text-gray-900">{viewValue(viewRow.Designation)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Date Added</span><span className="text-gray-900">{formatDate(viewRow.Date_Added)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Industry</span><span className="text-gray-900">{viewValue(viewRow.Industry)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Purpose</span><span className="text-gray-900">{viewValue(viewRow.Purpose)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Status</span><span className="text-gray-900">{viewValue(viewRow.Company_Status)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Country</span><span className="text-gray-900">{viewValue(viewRow.Country)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Active</span><span className="text-gray-900">{String(viewRow.IsActive) === '1' ? 'Yes' : String(viewRow.IsActive) === '0' ? 'No' : viewValue(viewRow.IsActive)}</span></div>
+                        <div className="md:col-span-2"><span className="block text-[11px] font-semibold text-gray-500 mb-1">Comment</span><span className="text-gray-900 whitespace-pre-wrap">{viewValue(viewRow.Remark)}</span></div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-gray-200 overflow-hidden">
+                      <div className="px-4 py-2.5 bg-gray-50 border-b">
+                        <h4 className="text-sm font-semibold text-[#2E3093]">Contact Details</h4>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3 p-4 text-sm">
+                        <div className="md:col-span-2"><span className="block text-[11px] font-semibold text-gray-500 mb-1">Address</span><span className="text-gray-900 whitespace-pre-wrap">{viewValue(viewRow.Address)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">City</span><span className="text-gray-900">{viewValue(viewRow.City)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">State</span><span className="text-gray-900">{viewValue(viewRow.State)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Pin Code</span><span className="text-gray-900">{viewValue(viewRow.Pin)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Telephone</span><span className="text-gray-900">{viewValue(viewRow.Tel)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Mobile</span><span className="text-gray-900">{viewValue(viewRow.Mobile)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Fax</span><span className="text-gray-900">{viewValue(viewRow.Fax)}</span></div>
+                        <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Email</span><span className="text-gray-900 break-all">{viewValue(viewRow.EMail)}</span></div>
+                        <div className="md:col-span-2"><span className="block text-[11px] font-semibold text-gray-500 mb-1">Website</span><span className="text-gray-900 break-all">{viewValue(viewRow.Website)}</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-gray-200 overflow-hidden">
+                    <div className="px-4 py-2.5 bg-gray-50 border-b">
+                      <h4 className="text-sm font-semibold text-[#2E3093]">Assigned Courses</h4>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-4 gap-y-3 p-4 text-sm">
+                      <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Course 1</span><span className="text-gray-900">{courseLabel(viewRow.Course_Id1)}</span></div>
+                      <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Course 2</span><span className="text-gray-900">{courseLabel(viewRow.Course_Id2)}</span></div>
+                      <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Course 3</span><span className="text-gray-900">{courseLabel(viewRow.Course_Id3)}</span></div>
+                      <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Course 4</span><span className="text-gray-900">{courseLabel(viewRow.Course_Id4)}</span></div>
+                      <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Course 5</span><span className="text-gray-900">{courseLabel(viewRow.Course_Id5)}</span></div>
+                      <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Course 6</span><span className="text-gray-900">{courseLabel(viewRow.Course_Id6)}</span></div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
