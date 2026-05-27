@@ -22,11 +22,38 @@ interface ReportRow {
   Batch_End: string | null;
   SIT_Performance: string | null;
   Placement_Remark: string | null;
+  Shortlist_Status: 'Placed' | 'Interview Call' | '';
   Company: string | null;
   Designation: string | null;
 }
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
+
+function getRowTone(row: ReportRow): { rowClass: string; badgeClass: string; label: string | null } {
+  const status = String(row.Shortlist_Status || '').trim();
+
+  if (status === 'Placed') {
+    return {
+      rowClass: 'bg-emerald-50/70 hover:bg-emerald-100/70',
+      badgeClass: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+      label: 'Placed',
+    };
+  }
+
+  if (status === 'Interview Call') {
+    return {
+      rowClass: 'bg-pink-50/70 hover:bg-pink-100/70',
+      badgeClass: 'bg-pink-100 text-pink-700 border border-pink-200',
+      label: 'Interview Call',
+    };
+  }
+
+  return {
+    rowClass: 'hover:bg-gray-50',
+    badgeClass: '',
+    label: null,
+  };
+}
 
 function fmtDate(d: string | null | undefined): string {
   if (!d) return '—';
@@ -37,7 +64,7 @@ function fmtDate(d: string | null | undefined): string {
 }
 
 export default function StudentInterviewReportPage() {
-  const { canView, loading: permLoading } = useResourcePermissions('report_student_interview');
+  const { canView, canExport, loading: permLoading } = useResourcePermissions('report_student_interview');
   const [courseId, setCourseId] = useState('all');
   const [batchId, setBatchId] = useState('');
   const [year, setYear] = useState('');
@@ -95,6 +122,40 @@ export default function StudentInterviewReportPage() {
     }
   }, [courseId, batchId, year]);
 
+  const handleExport = useCallback(async () => {
+    if (!batchId) {
+      setError('Batch is required.');
+      return;
+    }
+
+    setError('');
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ courseId, batchId, export: 'excel' });
+      if (year) params.set('year', year);
+      const res = await fetch(`/api/reports/student-interview?${params.toString()}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? 'Failed to export report');
+      }
+
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const fileNameMatch = disposition.match(/filename="?([^";]+)"?/i);
+      const fileName = fileNameMatch?.[1] || `Student_Search_For_Interview_${Date.now()}.xlsx`;
+      const downloadUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = downloadUrl;
+      anchor.download = fileName;
+      anchor.click();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to export report');
+    } finally {
+      setLoading(false);
+    }
+  }, [courseId, batchId, year]);
+
   if (permLoading) return <PermissionLoading />;
   if (!canView) return <AccessDenied message="You do not have permission to view the Student Search For Interview report." />;
 
@@ -104,6 +165,19 @@ export default function StudentInterviewReportPage() {
         title="Student Search For Interview Report"
         breadcrumbs={[{ label: 'Reports' }, { label: 'Student Search For Interview' }]}
         meta={triggered ? `${rows.length} records` : 'Apply filters'}
+        action={
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={!canExport || loading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2E3093] text-white text-xs font-semibold hover:bg-[#24267A] transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#2E3093]"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 12l-4-4m4 4l4-4M4 20h16" />
+            </svg>
+            Excel
+          </button>
+        }
       />
 
       <FilterBar>
@@ -135,6 +209,16 @@ export default function StudentInterviewReportPage() {
 
       {triggered && !error && (
         <div className="bg-white rounded-xl border border-[#2E3093]/10 overflow-hidden">
+          <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-zinc-200 bg-zinc-50 text-[11px] font-medium text-slate-600">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-100 px-2.5 py-1 text-emerald-700">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              Placed students
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-pink-200 bg-pink-100 px-2.5 py-1 text-pink-700">
+              <span className="h-2 w-2 rounded-full bg-pink-500" />
+              Interview calls
+            </span>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[1100px]">
               <thead>
@@ -154,15 +238,22 @@ export default function StudentInterviewReportPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={12} className="px-4 py-10 text-center text-gray-400">No records found</td>
-                  </tr>
-                ) : rows.map((r, i) => (
-                  <tr key={r.Student_Id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                {rows.map((r, i) => {
+                  const tone = getRowTone(r);
+                  return (
+                  <tr key={r.Student_Id} className={`border-b border-gray-100 transition-colors ${tone.rowClass}`}>
                     <td className="py-2.5 px-3 text-center text-gray-500">{i + 1}</td>
                     <td className="py-2.5 px-3">{r.Student_Code || '—'}</td>
-                    <td className="py-2.5 px-3 font-medium text-gray-900">{r.Student_Name}</td>
+                    <td className="py-2.5 px-3 font-medium text-gray-900">
+                      <div className="flex items-center gap-2">
+                        <span>{r.Student_Name}</span>
+                        {tone.label && (
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${tone.badgeClass}`}>
+                            {tone.label}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-2.5 px-3">{r.Present_Mobile || '—'}</td>
                     <td className="py-2.5 px-3">{r.Email || '—'}</td>
                     <td className="py-2.5 px-3">{r.Qualification || '—'}</td>
@@ -173,7 +264,7 @@ export default function StudentInterviewReportPage() {
                     <td className="py-2.5 px-3">{r.Company || '—'}</td>
                     <td className="py-2.5 px-3">{r.Designation || '—'}</td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           </div>

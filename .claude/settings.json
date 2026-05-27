@@ -19,7 +19,9 @@
       "mcp__claude_ai_Vercel__get_deployment_build_logs",
       "Bash(node scripts/db/kill-stale-connections.mjs)",
       "Bash(node scripts/db/migrate-from-legacy.mjs --dry-run)",
-      "Bash(node scripts/db/migrate-from-legacy.mjs)"
+      "Bash(node scripts/db/migrate-from-legacy.mjs)",
+      "Bash(curl -s -X POST http://localhost:3001/api/public/inquiry -H 'Content-Type: application/json' -d '{\"Student_Name\":\"Test User\",\"Qualification\":\"B.E.\",\"Discipline\":\"Mechanical\",\"Percentage\":60,\"Present_Mobile\":\"9999999999\",\"Email\":\"test@test.com\",\"Inquiry_Type\":\"Online Inquiry\"}')",
+      "Bash(curl -s -X POST http://localhost:3000/api/public/inquiry -H 'Content-Type: application/json' -d '{\"Student_Name\":\"Test User\",\"Qualification\":\"B.E.\",\"Discipline\":\"Mechanical\",\"Percentage\":60,\"Present_Mobile\":\"9999999999\",\"Email\":\"test@test.com\",\"Inquiry_Type\":\"Online Inquiry\"}')"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

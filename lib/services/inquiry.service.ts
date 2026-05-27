@@ -167,7 +167,7 @@ interface InquiryFilterOptions {
 
 // ── Schema helpers ────────────────────────────────────────────────────────────
 
-async function resolveInquiryTableName(pool: ReturnType<typeof getPool>): Promise<string> {
+export async function resolveInquiryTableName(pool: ReturnType<typeof getPool>): Promise<string> {
   if (inquiryTableNameCache) return inquiryTableNameCache;
 
   try {

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { sendPublicInquirySubmissionEmail } from '@/lib/mailer';
 import { publicFormRateLimiter } from '@/lib/rate-limit';
+import { resolveInquiryTableName } from '@/lib/services/inquiry.service';
 
 /**
  * Public endpoint — no auth required.
@@ -26,6 +27,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
     }
 
+    const inquiryTable = await resolveInquiryTableName(pool);
     const [rows] = await pool.query(
       `SELECT
          si.Inquiry_Id   AS Student_Id,
@@ -43,7 +45,7 @@ export async function GET(req: NextRequest) {
          si.Qualification,
          si.Discipline,
          si.Percentage
-       FROM Student_Inquiry si
+       FROM \`${inquiryTable}\` si
        LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
        WHERE si.Inquiry_Id = ?
          AND (si.IsDelete = 0 OR si.IsDelete IS NULL)`,
@@ -175,8 +177,9 @@ export async function POST(req: NextRequest) {
       courseId = parsePositiveInt((courseRows as any[])[0]?.Course_Id);
     }
 
+    const inquiryTable = await resolveInquiryTableName(pool);
     const [result] = await pool.query(
-      `INSERT INTO Student_Inquiry (
+      `INSERT INTO \`${inquiryTable}\` (
         Student_Name, Sex, DOB, Present_Mobile, Email,
         Nationality, Discussion, OnlineState, Inquiry_Dt, Inquiry_From, Inquiry_Type,
         Course_Id, Qualification, Discipline, Percentage,

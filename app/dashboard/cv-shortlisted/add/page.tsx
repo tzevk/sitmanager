@@ -69,6 +69,8 @@ interface StudentRow {
   Remark: string;
 }
 
+type RemarkField = 'BlockReason_Remark' | 'Remark';
+
 const emptyStudentRow = (): StudentRow => ({
   _key: Math.random().toString(36).slice(2),
   Batch_Id: null,
@@ -113,6 +115,11 @@ export default function AddCVShortlistedPage() {
   });
 
   const [studentRows, setStudentRows] = useState<StudentRow[]>([]);
+  const [remarkModal, setRemarkModal] = useState<{
+    rowKey: string;
+    field: RemarkField;
+    label: string;
+  } | null>(null);
 
   // Fetch dropdown options
   useEffect(() => {
@@ -290,6 +297,14 @@ export default function AddCVShortlistedPage() {
   const handleRemoveStudent = (key: string) => {
     setStudentRows((prev) => prev.filter((r) => r._key !== key));
   };
+
+  const openRemarkModal = (rowKey: string, field: RemarkField, label: string) => {
+    setRemarkModal({ rowKey, field, label });
+  };
+
+  const activeRemarkValue = remarkModal
+    ? studentRows.find((row) => row._key === remarkModal.rowKey)?.[remarkModal.field] || ''
+    : '';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -539,10 +554,24 @@ export default function AddCVShortlistedPage() {
                           <input type="text" value={row.Placement_BlockReason} onChange={(e) => handleStudentRowChange(row._key, 'Placement_BlockReason', e.target.value)} className={tblInputCls} placeholder="Reason" />
                         </td>
                         <td className="px-3 py-1.5">
-                          <input type="text" value={row.BlockReason_Remark} onChange={(e) => handleStudentRowChange(row._key, 'BlockReason_Remark', e.target.value)} className={tblInputCls} placeholder="Reason Remark" />
+                          <button
+                            type="button"
+                            onClick={() => openRemarkModal(row._key, 'BlockReason_Remark', 'Reason Remark')}
+                            className="w-full min-w-[120px] rounded-md border border-gray-300 bg-white px-2 py-1 text-left text-xs text-gray-700 hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                            title={row.BlockReason_Remark || 'View reason remark'}
+                          >
+                            <span className="block truncate">{row.BlockReason_Remark || 'View reason remark'}</span>
+                          </button>
                         </td>
                         <td className="px-3 py-1.5">
-                          <input type="text" value={row.Remark} onChange={(e) => handleStudentRowChange(row._key, 'Remark', e.target.value)} className={tblInputCls} placeholder="Remark" />
+                          <button
+                            type="button"
+                            onClick={() => openRemarkModal(row._key, 'Remark', 'Remark')}
+                            className="w-full min-w-[120px] rounded-md border border-gray-300 bg-white px-2 py-1 text-left text-xs text-gray-700 hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                            title={row.Remark || 'View remark'}
+                          >
+                            <span className="block truncate">{row.Remark || 'View remark'}</span>
+                          </button>
                         </td>
                         <td className="px-3 py-1.5 text-center">
                           <button type="button" onClick={() => handleRemoveStudent(row._key)}
@@ -685,6 +714,46 @@ export default function AddCVShortlistedPage() {
                 className="px-4 py-2 rounded-lg bg-[#2E3093] hover:bg-[#252780] text-white text-xs font-semibold transition-colors"
               >
                 Add Selected
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {remarkModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6">
+          <div className="fixed inset-0 bg-black/50" onClick={() => setRemarkModal(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-5 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-gray-800">{remarkModal.label}</h3>
+                <p className="text-xs text-gray-400">View or update the full text.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRemarkModal(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                aria-label="Close"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="px-5 py-4">
+              <textarea
+                value={activeRemarkValue}
+                onChange={(e) => remarkModal && handleStudentRowChange(remarkModal.rowKey, remarkModal.field, e.target.value)}
+                rows={8}
+                className={`${inputCls} min-h-[180px] resize-y`}
+                placeholder={`Enter ${remarkModal.label.toLowerCase()}`}
+              />
+            </div>
+            <div className="px-5 py-4 border-t border-gray-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setRemarkModal(null)}
+                className="px-4 py-2 rounded-lg bg-[#2E3093] text-white text-xs font-semibold hover:bg-[#24267A] transition-colors"
+              >
+                Done
               </button>
             </div>
           </div>
