@@ -38,7 +38,7 @@ async function buildWorkbook(params: {
     views: [{ state: 'frozen', ySplit: 3 }],
   });
 
-  const headers = ['Code', 'Student Name', 'Mobile', 'Email', 'Qualification', 'Discipline', 'Course', 'Batch', 'Batch Start', 'Final Grade', 'Status', 'Interview Date', 'Company', 'CV Sent', 'Interviewed', 'Placed', 'Remark'];
+  const headers = ['Code', 'Student Name', 'Final Grade', 'Mobile', 'Email', 'Qualification', 'Discipline', 'Course', 'Batch', 'Batch Start', 'Status', 'Interview Date', 'Company', 'CV Sent', 'Interviewed', 'Placed', 'Remark'];
   const thin: ExcelJS.Border = { style: 'thin', color: { argb: 'FFB0B0B0' } };
   const allBorders: Partial<ExcelJS.Borders> = { top: thin, bottom: thin, left: thin, right: thin };
 
@@ -76,6 +76,7 @@ async function buildWorkbook(params: {
     const values = [
       repeatedStudent ? '' : (row.Student_Code || ''),
       repeatedStudent ? '' : (row.Student_Name || ''),
+      repeatedStudent ? '' : (row.Final_Grade || ''),
       repeatedStudent ? '' : (row.Present_Mobile || ''),
       repeatedStudent ? '' : (row.Email || ''),
       repeatedStudent ? '' : (row.Qualification || ''),
@@ -83,7 +84,6 @@ async function buildWorkbook(params: {
       repeatedStudent ? '' : (row.Course_Name || ''),
       repeatedStudent ? '' : (row.Batch_code || ''),
       repeatedStudent ? '' : formatDisplayDate(row.Batch_Start),
-      repeatedStudent ? '' : (row.Final_Grade || ''),
       row.Shortlist_Status || '',
       formatDisplayDate(row.Shortlist_Date),
       row.Company || '',
@@ -116,7 +116,7 @@ async function buildWorkbook(params: {
     }
   });
 
-  [16, 28, 16, 28, 24, 24, 24, 14, 14, 12, 16, 14, 28, 12, 12, 12, 34].forEach((width, index) => {
+  [16, 28, 12, 16, 28, 24, 24, 24, 14, 14, 16, 14, 28, 12, 12, 12, 34].forEach((width, index) => {
     worksheet.getColumn(index + 1).width = width;
   });
 

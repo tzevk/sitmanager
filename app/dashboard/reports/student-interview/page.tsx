@@ -254,6 +254,7 @@ export default function StudentInterviewReportPage() {
                   <th className="py-3 px-3 text-center w-10">#</th>
                   <th className="py-3 px-3 text-left w-24">Code</th>
                   <th className="py-3 px-3 text-left">Student Name</th>
+                  <th className="py-3 px-3 text-left w-24">Final Grade</th>
                   <th className="py-3 px-3 text-left w-28">Mobile</th>
                   <th className="py-3 px-3 text-left">Email</th>
                   <th className="py-3 px-3 text-left w-28">Qualification</th>
@@ -261,7 +262,6 @@ export default function StudentInterviewReportPage() {
                   <th className="py-3 px-3 text-left">Course</th>
                   <th className="py-3 px-3 text-left w-24">Batch</th>
                   <th className="py-3 px-3 text-left w-24">Batch Start</th>
-                  <th className="py-3 px-3 text-left w-24">Final Grade</th>
                   <th className="py-3 px-3 text-left w-24">Interview Date</th>
                   <th className="py-3 px-3 text-left w-28">Status</th>
                   <th className="py-3 px-3 text-center w-20">CV Sent</th>
@@ -281,6 +281,7 @@ export default function StudentInterviewReportPage() {
                         <td rowSpan={r.rowSpan} className="py-2.5 px-3 text-center text-gray-500 align-top">{i + 1}</td>
                         <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Student_Code || '—'}</td>
                         <td rowSpan={r.rowSpan} className="py-2.5 px-3 font-medium text-gray-900 align-top">{r.Student_Name}</td>
+                        <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Final_Grade || '—'}</td>
                         <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Present_Mobile || '—'}</td>
                         <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Email || '—'}</td>
                         <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Qualification || '—'}</td>
@@ -288,7 +289,6 @@ export default function StudentInterviewReportPage() {
                         <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Course_Name || '—'}</td>
                         <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Batch_code || '—'}</td>
                         <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{fmtDate(r.Batch_Start)}</td>
-                        <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Final_Grade || '—'}</td>
                       </>
                     )}
                     <td className="py-2.5 px-3">{fmtDate(r.Shortlist_Date)}</td>
