@@ -198,7 +198,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       ...createPermissions('report_service_tax', 'Service Tax Report', ['view', 'export']),
       ...createPermissions('report_lecture', 'Lecture Report', ['view', 'export']),
       ...createPermissions('report_feedback_analysis', 'Feedback Analysis Report', ['view', 'export']),
-      ...createPermissions('report_student_interview', 'Student Interview Report', ['view', 'export']),
+      ...createPermissions('report_student_interview', 'Student Search for Interview Report', ['view', 'export']),
       ...createPermissions('report_batch_analysis', 'Batch Analysis Report', ['view', 'export']),
       ...createPermissions('report_payment_collection', 'Payment Collection Report', ['view', 'export']),
       ...createPermissions('report_faculty_salary', 'Faculty Salary Report', ['view', 'export']),
