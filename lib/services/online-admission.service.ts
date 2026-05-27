@@ -4,6 +4,7 @@ import { sendOnlineAdmissionSubmissionEmail } from '@/lib/mailer';
 
 let inquiryTableNameCache: string | null = null;
 let statusTableNameCache: string | null | undefined;
+let studentMasterTableNameCache: string | null | undefined;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -111,6 +112,26 @@ async function resolveStatusTableName(pool: ReturnType<typeof getPool>): Promise
   return statusTableNameCache;
 }
 
+async function resolveStudentMasterTableName(pool: ReturnType<typeof getPool>): Promise<string | null> {
+  if (studentMasterTableNameCache !== undefined) return studentMasterTableNameCache;
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT TABLE_NAME
+       FROM INFORMATION_SCHEMA.TABLES
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND LOWER(TABLE_NAME) = 'student_master'
+       ORDER BY CASE WHEN TABLE_NAME = 'student_master' THEN 0 ELSE 1 END
+       LIMIT 1`
+    );
+    studentMasterTableNameCache = String((rows as any[])[0]?.TABLE_NAME || '').trim() || null;
+  } catch {
+    studentMasterTableNameCache = null;
+  }
+
+  return studentMasterTableNameCache;
+}
+
 async function ensurePayloadTable(pool: ReturnType<typeof getPool>): Promise<void> {
   if (payloadTableReady) return;
   try {
@@ -174,19 +195,45 @@ export async function listOnlineAdmissions(
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
   const statusTable = await resolveStatusTableName(pool);
+  const studentMasterTable = await resolveStudentMasterTableName(pool);
   const { page, limit, search = '', statusCategory = '', dateFrom = '', dateTo = '' } = params;
   const offset = (page - 1) * limit;
   const fetchCap = Math.min(2000, offset + limit * 4);
-  const newStatusTextExpr = statusTable
-    ? `COALESCE(stm_sm.Status, stm_si.Status, '')`
-    : `''`;
-  const newStatusJoins = statusTable
-    ? `
-     LEFT JOIN \`${statusTable}\` stm_sm ON stm_sm.Id = sm.Status_id
-     LEFT JOIN \`${statusTable}\` stm_si ON stm_si.Id = si.OnlineState`
-    : '';
+
+  const buildNewQuery = (withStatus: boolean) => {
+    const effectiveStatusTable = withStatus ? statusTable : null;
+    const smJoin = studentMasterTable
+      ? `LEFT JOIN \`${studentMasterTable}\` sm ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)`
+      : '';
+    const statusTextExpr = effectiveStatusTable
+      ? `COALESCE(stm_sm.Status, stm_si.Status, '')`
+      : `''`;
+    const statusJoins = effectiveStatusTable && studentMasterTable
+      ? `LEFT JOIN \`${effectiveStatusTable}\` stm_sm ON stm_sm.Id = sm.Status_id
+         LEFT JOIN \`${effectiveStatusTable}\` stm_si ON stm_si.Id = si.OnlineState`
+      : effectiveStatusTable
+        ? `LEFT JOIN \`${effectiveStatusTable}\` stm_si ON stm_si.Id = si.OnlineState`
+        : '';
+    const smBatchCode = studentMasterTable ? `COALESCE(sm.Batch_Code, si.Batch_Code, '')` : `COALESCE(si.Batch_Code, '')`;
+    const smAdmissionDt = studentMasterTable ? `COALESCE(sm.Admission_Dt, oap.Created_At)` : `oap.Created_At`;
+    const smStatusId = studentMasterTable ? `COALESCE(sm.Status_id, si.OnlineState)` : `si.OnlineState`;
+    return `SELECT
+       si.Inquiry_Id AS Inquiry_Id,
+       ${studentMasterTable ? `COALESCE(si.Student_Name, sm.Student_Name, '')` : `COALESCE(si.Student_Name, '')`} AS Student_Name,
+       ${studentMasterTable ? `COALESCE(si.Email, sm.Email, '')` : `COALESCE(si.Email, '')`} AS Email,
+       ${studentMasterTable ? `COALESCE(si.Present_Mobile, sm.Present_Mobile, '')` : `COALESCE(si.Present_Mobile, '')`} AS Present_Mobile,
+       ${smBatchCode} AS Batch_code,
+       ${smAdmissionDt} AS Admission_Date,
+       ${smStatusId} AS Status_id,
+       ${statusTextExpr} AS StatusText
+     FROM ${PAYLOAD_TABLE} oap
+       JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = oap.Inquiry_Id
+     ${smJoin}
+     ${statusJoins}`;
+  };
+
   const legacyStatusTextExpr = statusTable ? `COALESCE(stm.Status, '')` : `''`;
-  const legacyStatusJoin = statusTable
+  const legacyStatusJoin = statusTable && studentMasterTable
     ? `LEFT JOIN \`${statusTable}\` stm ON stm.Id = sm.Status_id`
     : '';
 
@@ -205,28 +252,29 @@ export async function listOnlineAdmissions(
   if (dateFrom) { newConds.push('oap.Created_At >= ?'); newParams.push(dateFrom); }
   if (dateTo)   { newConds.push('oap.Created_At <= ?'); newParams.push(dateTo); }
 
-  const [newRows] = await pool.query<any[]>(
-    `SELECT
-       si.Inquiry_Id AS Inquiry_Id,
-       COALESCE(si.Student_Name, sm.Student_Name, '') AS Student_Name,
-       COALESCE(si.Email, sm.Email, '') AS Email,
-       COALESCE(si.Present_Mobile, sm.Present_Mobile, '') AS Present_Mobile,
-       COALESCE(sm.Batch_Code, si.Batch_Code, '') AS Batch_code,
-       COALESCE(sm.Admission_Dt, oap.Created_At) AS Admission_Date,
-       COALESCE(sm.Status_id, si.OnlineState) AS Status_id,
-       ${newStatusTextExpr} AS StatusText
-     FROM ${PAYLOAD_TABLE} oap
-       JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = oap.Inquiry_Id
-     LEFT JOIN student_master sm ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-     ${newStatusJoins}
-     WHERE ${newConds.join(' AND ')}
-     ORDER BY oap.Created_At DESC LIMIT ?`,
-    [...newParams, fetchCap]
-  );
+  let newRows: any[] = [];
+  try {
+    [newRows] = await pool.query<any[]>(
+      `${buildNewQuery(true)} WHERE ${newConds.join(' AND ')} ORDER BY oap.Created_At DESC LIMIT ?`,
+      [...newParams, fetchCap]
+    );
+  } catch (e: any) {
+    console.warn('[OnlineAdmission] new query with status joins failed, retrying without:', e?.message);
+    try {
+      [newRows] = await pool.query<any[]>(
+        `${buildNewQuery(false)} WHERE ${newConds.join(' AND ')} ORDER BY oap.Created_At DESC LIMIT ?`,
+        [...newParams, fetchCap]
+      );
+    } catch (e2: any) {
+      console.warn('[OnlineAdmission] new query skipped:', e2?.message);
+    }
+  }
 
-  // Legacy link-sent entries
+  // Legacy link-sent entries (requires student_master)
   let oldRows: any[] = [];
   try {
+    if (!studentMasterTable) throw new Error('student_master table not found');
+
     const oldConds: string[] = [
       'si.admission_done = 2',
       'si.Student_Id IS NOT NULL',
@@ -255,7 +303,7 @@ export async function listOnlineAdmissions(
          sm.Status_id AS Status_id,
          ${legacyStatusTextExpr} AS StatusText, 1 AS IsLegacy
        FROM \`${inquiryTable}\` si
-       JOIN student_master sm ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+       JOIN \`${studentMasterTable}\` sm ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
        ${legacyStatusJoin}
        WHERE ${oldConds.join(' AND ')}
        ORDER BY si.Inquiry_Id DESC LIMIT ?`,
@@ -275,11 +323,11 @@ export async function listOnlineAdmissions(
     seen.add(id);
   };
   try {
-    if (statusTable) {
+    if (statusTable && studentMasterTable) {
       const [dbStatuses] = await pool.query<any[]>(
         `SELECT DISTINCT sm.Status_id as id, COALESCE(MAX(stm.Status),'') as label
          FROM \`${inquiryTable}\` si
-         JOIN student_master sm ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+         JOIN \`${studentMasterTable}\` sm ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
          LEFT JOIN \`${statusTable}\` stm ON stm.Id = sm.Status_id
          WHERE si.admission_done = 2 AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
          GROUP BY sm.Status_id ORDER BY sm.Status_id`

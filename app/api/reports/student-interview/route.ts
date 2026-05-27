@@ -38,7 +38,7 @@ async function buildWorkbook(params: {
     views: [{ state: 'frozen', ySplit: 3 }],
   });
 
-  const headers = ['Code', 'Student Name', 'Mobile', 'Email', 'Qualification', 'Discipline', 'Course', 'Batch', 'Batch Start', 'SIT Grade', 'Status', 'Company', 'Designation'];
+  const headers = ['Code', 'Student Name', 'Mobile', 'Email', 'Qualification', 'Discipline', 'Course', 'Batch', 'Batch Start', 'SIT Grade', 'Status', 'Interview Date', 'Company', 'CV Sent', 'Interviewed', 'Placed', 'Remark'];
   const thin: ExcelJS.Border = { style: 'thin', color: { argb: 'FFB0B0B0' } };
   const allBorders: Partial<ExcelJS.Borders> = { top: thin, bottom: thin, left: thin, right: thin };
 
@@ -71,20 +71,26 @@ async function buildWorkbook(params: {
 
   rows.forEach((row, index) => {
     const excelRow = worksheet.getRow(index + 4);
+    const previousRow = index > 0 ? rows[index - 1] : null;
+    const repeatedStudent = previousRow && previousRow.Student_Id === row.Student_Id;
     const values = [
-      row.Student_Code || '',
-      row.Student_Name || '',
-      row.Present_Mobile || '',
-      row.Email || '',
-      row.Qualification || '',
-      row.Discipline_Name || '',
-      row.Course_Name || '',
-      row.Batch_code || '',
-      formatDisplayDate(row.Batch_Start),
-      row.SIT_Performance || '',
+      repeatedStudent ? '' : (row.Student_Code || ''),
+      repeatedStudent ? '' : (row.Student_Name || ''),
+      repeatedStudent ? '' : (row.Present_Mobile || ''),
+      repeatedStudent ? '' : (row.Email || ''),
+      repeatedStudent ? '' : (row.Qualification || ''),
+      repeatedStudent ? '' : (row.Discipline_Name || ''),
+      repeatedStudent ? '' : (row.Course_Name || ''),
+      repeatedStudent ? '' : (row.Batch_code || ''),
+      repeatedStudent ? '' : formatDisplayDate(row.Batch_Start),
+      repeatedStudent ? '' : (row.SIT_Performance || ''),
       row.Shortlist_Status || '',
+      formatDisplayDate(row.Shortlist_Date),
       row.Company || '',
-      row.Designation || '',
+      row.CV_Sent || '',
+      row.Interviewed || '',
+      row.Placed || '',
+      row.Shortlist_Remark || '',
     ];
 
     values.forEach((value, valueIndex) => {
@@ -96,7 +102,7 @@ async function buildWorkbook(params: {
 
     const status = String(row.Shortlist_Status || '').trim();
     const fill = status === 'Placed'
-      ? { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFE8F8EE' } }
+      ? { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFFEDD5' } }
       : status === 'Interview Call'
         ? { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFDE7F3' } }
         : index % 2 === 1
@@ -110,7 +116,7 @@ async function buildWorkbook(params: {
     }
   });
 
-  [16, 28, 16, 28, 24, 24, 24, 14, 14, 12, 16, 28, 24].forEach((width, index) => {
+  [16, 28, 16, 28, 24, 24, 24, 14, 14, 12, 16, 14, 28, 12, 12, 12, 34].forEach((width, index) => {
     worksheet.getColumn(index + 1).width = width;
   });
 
@@ -152,7 +158,6 @@ async function buildExportResponse(params: {
 
 let educationTableNameCache: string | null | undefined;
 let disciplineTableNameCache: string | null | undefined;
-let companyInfoTableNameCache: string | null | undefined;
 
 async function resolveOptionalTableName(
   pool: ReturnType<typeof getPool>,
@@ -185,12 +190,6 @@ async function resolveDisciplineTableName(pool: ReturnType<typeof getPool>): Pro
   if (disciplineTableNameCache !== undefined) return disciplineTableNameCache;
   disciplineTableNameCache = await resolveOptionalTableName(pool, 'mst_deciplin', 'MST_Deciplin');
   return disciplineTableNameCache;
-}
-
-async function resolveCompanyInfoTableName(pool: ReturnType<typeof getPool>): Promise<string | null> {
-  if (companyInfoTableNameCache !== undefined) return companyInfoTableNameCache;
-  companyInfoTableNameCache = await resolveOptionalTableName(pool, 'company_info', 'Company_info');
-  return companyInfoTableNameCache;
 }
 
 export async function GET(req: NextRequest) {
@@ -362,10 +361,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(cachedData, { headers: { 'X-Cache': 'HIT' } });
     }
 
-    const [educationTableName, disciplineTableName, companyInfoTableName] = await Promise.all([
+    const [educationTableName, disciplineTableName] = await Promise.all([
       resolveEducationTableName(pool),
       resolveDisciplineTableName(pool),
-      resolveCompanyInfoTableName(pool),
     ]);
     const qualificationExpr = educationTableName
       ? 'COALESCE(me.Education, s.Qualification)'
@@ -379,20 +377,9 @@ export async function GET(req: NextRequest) {
     const disciplineJoin = disciplineTableName
       ? `LEFT JOIN \`${disciplineTableName}\` md ON md.Id = COALESCE(aq.Discipline, CAST(NULLIF(TRIM(s.Discipline), '') AS UNSIGNED))`
       : '';
-    const companyInfoJoin = companyInfoTableName
-      ? `LEFT JOIN (
-           SELECT ci2.student_id, ci2.Company, ci2.Designation, ci2.BussinessNature, ci2.Duration
-           FROM \`${companyInfoTableName}\` ci2
-           INNER JOIN (
-             SELECT MAX(id) AS id FROM \`${companyInfoTableName}\` GROUP BY student_id
-           ) latest ON latest.id = ci2.id
-         ) ci ON ci.student_id = s.Student_Id`
-      : `LEFT JOIN (
-           SELECT NULL AS student_id, NULL AS Company, NULL AS Designation, NULL AS BussinessNature, NULL AS Duration
-         ) ci ON 1 = 0`;
-
     const [rows] = await pool.query(
       `SELECT
+         CONCAT(s.Student_Id, '-', COALESCE(shortlist.CV_Child_Id, 0), '-', COALESCE(shortlist.CV_Id, 0)) AS Row_Key,
          s.Student_Id,
          am.Student_Code,
          s.Student_Name,
@@ -406,15 +393,18 @@ export async function GET(req: NextRequest) {
          b.EDate AS Batch_End,
          s.SitPerformance AS SIT_Performance,
          s.PlacementRemark AS Placement_Remark,
+         shortlist.Shortlist_Date,
+         shortlist.CV_Sent,
+         shortlist.Interviewed,
+         shortlist.Placed,
+         shortlist.Shortlist_Remark,
          CASE
            WHEN COALESCE(shortlist.StatusRank, 0) >= 2 THEN 'Placed'
            WHEN COALESCE(shortlist.StatusRank, 0) = 1 THEN 'Interview Call'
            ELSE ''
          END AS Shortlist_Status,
-         ci.Company,
-         ci.Designation,
-         ci.BussinessNature,
-         ci.Duration
+         shortlist.Company,
+         '' AS Designation
        FROM student_master s
        INNER JOIN admission_master am ON am.Student_Id = s.Student_Id
        LEFT JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
@@ -428,25 +418,36 @@ export async function GET(req: NextRequest) {
        ) aq ON aq.Student_id = s.Student_Id
        LEFT JOIN (
          SELECT
+           cc.Id AS CV_Child_Id,
+           cc.CV_Id,
            cc.Student_Id,
-           MAX(
-             CASE
-               WHEN LOWER(TRIM(COALESCE(cc.Placement, ''))) = 'yes' THEN 2
-               WHEN LOWER(TRIM(COALESCE(cc.Result, ''))) = 'yes'
-                 OR LOWER(TRIM(COALESCE(cc.Sended, ''))) = 'yes' THEN 1
-               ELSE 0
-             END
-           ) AS StatusRank
+           cv.TDate AS Shortlist_Date,
+           COALESCE(NULLIF(TRIM(cv.CompanyName), ''), cm.Comp_Name, '') AS Company,
+           TRIM(COALESCE(cc.Sended, '')) AS CV_Sent,
+           TRIM(COALESCE(cc.Result, '')) AS Interviewed,
+           TRIM(COALESCE(cc.Placement, '')) AS Placed,
+           COALESCE(cc.Remark, '') AS Shortlist_Remark,
+           CASE
+             WHEN LOWER(TRIM(COALESCE(cc.Placement, ''))) = 'yes' THEN 2
+             WHEN LOWER(TRIM(COALESCE(cc.Result, ''))) = 'yes'
+               OR LOWER(TRIM(COALESCE(cc.Sended, ''))) = 'yes' THEN 1
+             ELSE 0
+           END AS StatusRank
          FROM cvchild cc
          INNER JOIN cv_shortlisted cv
            ON cv.id = cc.CV_Id
           AND (cv.IsDelete = 0 OR cv.IsDelete IS NULL)
+         LEFT JOIN consultant_mst cm
+           ON cm.Const_Id = cv.Company_Id
          WHERE (cc.IsDelete = 0 OR cc.IsDelete IS NULL)
-         GROUP BY cc.Student_Id
+           AND (
+             LOWER(TRIM(COALESCE(cc.Sended, ''))) = 'yes'
+             OR LOWER(TRIM(COALESCE(cc.Result, ''))) = 'yes'
+             OR LOWER(TRIM(COALESCE(cc.Placement, ''))) = 'yes'
+           )
        ) shortlist ON shortlist.Student_Id = s.Student_Id
        ${educationJoin}
        ${disciplineJoin}
-       ${companyInfoJoin}
        ${where}
        ORDER BY
          CASE
@@ -454,8 +455,11 @@ export async function GET(req: NextRequest) {
            THEN CAST(TRIM(s.SitPerformance) AS DECIMAL(10,2))
            ELSE NULL
          END DESC,
+         s.Student_Name,
+         shortlist.Shortlist_Date DESC,
+         shortlist.Company,
          b.Batch_code,
-         s.Student_Name`,
+         s.Student_Id`,
       params
     );
 

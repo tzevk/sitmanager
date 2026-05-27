@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 import { FilterBar, PageHeader, PrimaryBtn } from '@/components/ui/PageHeader';
 import { useResourcePermissions } from '@/lib/permissions-context';
@@ -9,6 +9,7 @@ interface Course { id: number; name: string }
 interface Batch { id: number; name: string }
 
 interface ReportRow {
+  Row_Key: string;
   Student_Id: number;
   Student_Code: string | null;
   Student_Name: string;
@@ -23,6 +24,11 @@ interface ReportRow {
   SIT_Performance: string | null;
   Placement_Remark: string | null;
   Shortlist_Status: 'Placed' | 'Interview Call' | '';
+  Shortlist_Date: string | null;
+  CV_Sent: string | null;
+  Interviewed: string | null;
+  Placed: string | null;
+  Shortlist_Remark: string | null;
   Company: string | null;
   Designation: string | null;
 }
@@ -34,16 +40,16 @@ function getRowTone(row: ReportRow): { rowClass: string; badgeClass: string; lab
 
   if (status === 'Placed') {
     return {
-      rowClass: 'bg-emerald-50/70 hover:bg-emerald-100/70',
-      badgeClass: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+      rowClass: 'bg-orange-100/70 hover:bg-orange-200/70',
+      badgeClass: 'bg-orange-200 text-orange-900 border border-orange-300',
       label: 'Placed',
     };
   }
 
   if (status === 'Interview Call') {
     return {
-      rowClass: 'bg-pink-50/70 hover:bg-pink-100/70',
-      badgeClass: 'bg-pink-100 text-pink-700 border border-pink-200',
+      rowClass: 'bg-pink-100/80 hover:bg-pink-200/80',
+      badgeClass: 'bg-pink-200 text-pink-900 border border-pink-300',
       label: 'Interview Call',
     };
   }
@@ -77,6 +83,27 @@ export default function StudentInterviewReportPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [triggered, setTriggered] = useState(false);
+
+  const groupedRows = useMemo(() => {
+    return rows.map((row, index) => {
+      const previous = rows[index - 1];
+      const showStudent = !previous || previous.Student_Id !== row.Student_Id;
+      let rowSpan = 0;
+
+      if (showStudent) {
+        rowSpan = 1;
+        while (index + rowSpan < rows.length && rows[index + rowSpan].Student_Id === row.Student_Id) {
+          rowSpan += 1;
+        }
+      }
+
+      return {
+        ...row,
+        showStudent,
+        rowSpan,
+      };
+    });
+  }, [rows]);
 
   useEffect(() => {
     (async () => {
@@ -210,17 +237,17 @@ export default function StudentInterviewReportPage() {
       {triggered && !error && (
         <div className="bg-white rounded-xl border border-[#2E3093]/10 overflow-hidden">
           <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-zinc-200 bg-zinc-50 text-[11px] font-medium text-slate-600">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-100 px-2.5 py-1 text-emerald-700">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-300 bg-orange-200 px-2.5 py-1 text-orange-900">
+              <span className="h-2 w-2 rounded-full bg-orange-700" />
               Placed students
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-pink-200 bg-pink-100 px-2.5 py-1 text-pink-700">
-              <span className="h-2 w-2 rounded-full bg-pink-500" />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-pink-300 bg-pink-200 px-2.5 py-1 text-pink-900">
+              <span className="h-2 w-2 rounded-full bg-pink-700" />
               Interview calls
             </span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs min-w-[1100px]">
+            <table className="w-full text-xs min-w-[1450px]">
               <thead>
                 <tr className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">
                   <th className="py-3 px-3 text-center w-10">#</th>
@@ -233,36 +260,47 @@ export default function StudentInterviewReportPage() {
                   <th className="py-3 px-3 text-left">Course</th>
                   <th className="py-3 px-3 text-left w-24">Batch</th>
                   <th className="py-3 px-3 text-left w-24">Batch Start</th>
+                  <th className="py-3 px-3 text-left w-24">Interview Date</th>
+                  <th className="py-3 px-3 text-left w-28">Status</th>
+                  <th className="py-3 px-3 text-center w-20">CV Sent</th>
+                  <th className="py-3 px-3 text-center w-24">Interviewed</th>
+                  <th className="py-3 px-3 text-center w-20">Placed</th>
                   <th className="py-3 px-3 text-left">Company</th>
-                  <th className="py-3 px-3 text-left">Designation</th>
+                  <th className="py-3 px-3 text-left min-w-[220px]">Remark</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r, i) => {
+                {groupedRows.map((r, i) => {
                   const tone = getRowTone(r);
                   return (
-                  <tr key={r.Student_Id} className={`border-b border-gray-100 transition-colors ${tone.rowClass}`}>
-                    <td className="py-2.5 px-3 text-center text-gray-500">{i + 1}</td>
-                    <td className="py-2.5 px-3">{r.Student_Code || '—'}</td>
-                    <td className="py-2.5 px-3 font-medium text-gray-900">
-                      <div className="flex items-center gap-2">
-                        <span>{r.Student_Name}</span>
-                        {tone.label && (
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${tone.badgeClass}`}>
-                            {tone.label}
-                          </span>
-                        )}
-                      </div>
+                  <tr key={r.Row_Key || `${r.Student_Id}-${i}`} className={`border-b border-gray-100 transition-colors ${tone.rowClass}`}>
+                    {r.showStudent && (
+                      <>
+                        <td rowSpan={r.rowSpan} className="py-2.5 px-3 text-center text-gray-500 align-top">{i + 1}</td>
+                        <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Student_Code || '—'}</td>
+                        <td rowSpan={r.rowSpan} className="py-2.5 px-3 font-medium text-gray-900 align-top">{r.Student_Name}</td>
+                        <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Present_Mobile || '—'}</td>
+                        <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Email || '—'}</td>
+                        <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Qualification || '—'}</td>
+                        <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Discipline_Name || '—'}</td>
+                        <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Course_Name || '—'}</td>
+                        <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Batch_code || '—'}</td>
+                        <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{fmtDate(r.Batch_Start)}</td>
+                      </>
+                    )}
+                    <td className="py-2.5 px-3">{fmtDate(r.Shortlist_Date)}</td>
+                    <td className="py-2.5 px-3">
+                      {tone.label ? (
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${tone.badgeClass}`}>
+                          {tone.label}
+                        </span>
+                      ) : '—'}
                     </td>
-                    <td className="py-2.5 px-3">{r.Present_Mobile || '—'}</td>
-                    <td className="py-2.5 px-3">{r.Email || '—'}</td>
-                    <td className="py-2.5 px-3">{r.Qualification || '—'}</td>
-                    <td className="py-2.5 px-3">{r.Discipline_Name || '—'}</td>
-                    <td className="py-2.5 px-3">{r.Course_Name || '—'}</td>
-                    <td className="py-2.5 px-3">{r.Batch_code || '—'}</td>
-                    <td className="py-2.5 px-3">{fmtDate(r.Batch_Start)}</td>
+                    <td className="py-2.5 px-3 text-center">{r.CV_Sent || '—'}</td>
+                    <td className="py-2.5 px-3 text-center">{r.Interviewed || '—'}</td>
+                    <td className="py-2.5 px-3 text-center">{r.Placed || '—'}</td>
                     <td className="py-2.5 px-3">{r.Company || '—'}</td>
-                    <td className="py-2.5 px-3">{r.Designation || '—'}</td>
+                    <td className="py-2.5 px-3 whitespace-pre-wrap break-words">{r.Shortlist_Remark || '—'}</td>
                   </tr>
                 )})}
               </tbody>
