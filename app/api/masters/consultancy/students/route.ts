@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
          YEAR(NULLIF(b.EDate, '')) AS YearOfPassing,
          s.Present_Mobile AS Mobile,
          s.Email AS Email,
-         COALESCE(NULLIF(TRIM(md.Deciplin), ''), NULLIF(TRIM(s.Discipline), '')) AS Discipline,
+         NULLIF(TRIM(s.Discipline), '') AS Discipline,
          CASE WHEN TRIM(cc.Placement) = 'Yes' THEN cv.TDate ELSE NULL END AS PlacedDate,
          COALESCE(NULLIF(TRIM(cc.Placement), ''), NULLIF(TRIM(cc.Result), '')) AS Status
        FROM cv_shortlisted cv
@@ -54,8 +54,6 @@ export async function GET(req: NextRequest) {
          ON cv.Course_id = cvCourse.Course_Id
        LEFT JOIN batch_mst b
          ON cc.Batch_id = b.Batch_Id
-        LEFT JOIN MST_Deciplin md
-          ON md.Id = CAST(NULLIF(TRIM(s.Discipline), '') AS UNSIGNED)
         WHERE cv.Company_Id = ?
           AND TRIM(COALESCE(cc.Placement, '')) = 'Yes'
           AND (cv.IsDelete = 0 OR cv.IsDelete IS NULL)
