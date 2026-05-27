@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createHmac, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { getPool } from '@/lib/db';
 import { getEnv } from '@/lib/env';
 import { createInquiry, updateInquiry, type CreateInquiryInput } from '@/lib/services/inquiry.service';
@@ -77,6 +77,61 @@ export interface MetaLeadSyncResult {
   tags: string[];
 }
 
+export interface StatusOption {
+  id: number;
+  label: string;
+}
+
+const FALLBACK_STATUSES: Record<number, string> = {
+  0: 'New Inquiry', 1: 'Follow Up', 2: 'Interested', 3: 'Confirmed',
+  4: 'Not Interested', 5: 'Batch Started', 6: 'Batch Completed',
+  7: 'Cancelled', 8: 'Admitted', 9: 'Left', 10: 'On Hold',
+  12: 'Prospective', 13: 'Walk In', 15: 'Re-inquiry', 16: 'Demo Attended',
+  17: 'Demo Scheduled', 19: 'Online Inquiry', 23: 'Document Pending',
+  24: 'Fees Pending', 25: 'Transfer', 26: 'Need Based Training',
+  27: 'Duplicate', 29: 'Corporate', 34: 'Assessment Done',
+  35: 'Refund', 40: 'Counselling Done',
+};
+
+export interface MetaLeadListParams {
+  page: number;
+  limit: number;
+  search?: string;
+  leadTag?: string;
+  statusId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  training?: string;
+  duplicatesOnly?: boolean;
+}
+
+export interface MetaLeadListRow {
+  Student_Id: number;
+  Student_Name: string;
+  CourseName: string | null;
+  Inquiry_Dt: string | null;
+  Present_Mobile: string | null;
+  Email: string | null;
+  Inquiry_From: string | null;
+  Inquiry_Type: string | null;
+  Status_id: number | null;
+  StatusLabel: string;
+  Discussion: string | null;
+  MetaCampaignName: string | null;
+  MetaFormName: string | null;
+  LeadTags: string[];
+  IsDuplicateLead: boolean;
+}
+
+export interface MetaLeadListResult {
+  rows: MetaLeadListRow[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+  filters: {
+    trainings: string[];
+    statusOptions: StatusOption[];
+  };
+}
+
 interface MetaStoredTokenConfig {
   accessToken: string;
   tokenType: string;
@@ -100,6 +155,34 @@ interface MetaOAuthExchangeResult {
   userName: string | null;
   grantedScopes: string[];
   pages: Array<{ id: string; name: string | null; tasks: string[] }>;
+}
+
+interface MetaConversionsEventInput {
+  event_name: string;
+  event_time?: number;
+  action_source?: string;
+  event_id?: string;
+  event_source_url?: string;
+  user_data?: Record<string, unknown>;
+  custom_data?: Record<string, unknown>;
+}
+
+interface MetaConversionsApiResponse {
+  events_received?: number;
+  fbtrace_id?: string;
+  messages?: string[];
+}
+
+let inquiryTableNameCache: string | null = null;
+
+interface MetaGraphErrorPayload {
+  error?: {
+    message?: string;
+    type?: string;
+    code?: number;
+    error_subcode?: number;
+    fbtrace_id?: string;
+  };
 }
 
 function normalizeText(value: unknown): string | null {
@@ -148,6 +231,78 @@ function firstValue(values: Record<string, string | null>, keys: string[]): stri
 
 function sanitizeLabel(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
+}
+
+async function resolveInquiryTableName(pool: ReturnType<typeof getPool>): Promise<string> {
+  if (inquiryTableNameCache) return inquiryTableNameCache;
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT TABLE_NAME
+       FROM INFORMATION_SCHEMA.TABLES
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND LOWER(TABLE_NAME) = 'student_inquiry'
+       ORDER BY CASE WHEN TABLE_NAME = 'Student_Inquiry' THEN 0 ELSE 1 END
+       LIMIT 1`
+    );
+    inquiryTableNameCache = String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
+  } catch {
+    inquiryTableNameCache = 'Student_Inquiry';
+  }
+
+  return inquiryTableNameCache;
+}
+
+function normalizeMetaGraphError(payload: unknown, fallback: string): string {
+  const error = (payload as MetaGraphErrorPayload | null)?.error;
+  const message = normalizeText(error?.message) || fallback;
+  const lowered = message.toLowerCase();
+
+  if (lowered.includes('api access deactivated')) {
+    return 'Meta API access is deactivated for this app. Reactivate it in the Meta app dashboard, then retry the OAuth connection.';
+  }
+
+  return message;
+}
+
+function sha256Hex(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function getMetaConversionsAccessToken(): string | null {
+  const token = process.env.META_CONVERSIONS_ACCESS_TOKEN?.trim() || process.env.META_ACCESS_TOKEN?.trim() || null;
+  return token || null;
+}
+
+function getMetaPixelId(): string | null {
+  const pixelId = process.env.META_PIXEL_ID?.trim() || '';
+  return pixelId || null;
+}
+
+function normalizeMetaAdAccountId(value: string): string {
+  return value.trim().replace(/^act_/i, '');
+}
+
+function extractWebhookSourceLabel(rawPayload: unknown): string | null {
+  if (!rawPayload || typeof rawPayload !== 'object') return null;
+  const objectName = normalizeText((rawPayload as { object?: unknown }).object);
+  return objectName ? sanitizeLabel(objectName) : null;
+}
+
+function buildMetaEventUserData(params: {
+  email: string | null;
+  mobile: string | null;
+  inquiryId: number;
+  leadId: string;
+}): Record<string, unknown> {
+  const userData: Record<string, unknown> = {
+    external_id: [String(params.inquiryId), params.leadId].map(sha256Hex),
+  };
+
+  if (params.email) userData.em = [sha256Hex(params.email.trim().toLowerCase())];
+  if (params.mobile) userData.ph = [sha256Hex(params.mobile)];
+
+  return userData;
 }
 
 async function ensureMetaLeadTables() {
@@ -317,9 +472,39 @@ async function fetchGraphJson<T>(path: string, fields?: string[]): Promise<T> {
   const text = await res.text();
   const data = text ? JSON.parse(text) : {};
   if (!res.ok) {
-    throw new Error(data?.error?.message || `Meta Graph API failed with ${res.status}`);
+    throw new Error(normalizeMetaGraphError(data, `Meta Graph API failed with ${res.status}`));
   }
   return data as T;
+}
+
+async function postGraphJson<T>(path: string, body: Record<string, unknown>, accessToken?: string): Promise<T> {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}${cleanPath}`);
+  url.searchParams.set('access_token', accessToken || await getMetaAccessToken());
+
+  const res = await fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!res.ok) {
+    throw new Error(normalizeMetaGraphError(data, `Meta Graph API POST failed with ${res.status}`));
+  }
+  return data as T;
+}
+
+export async function sendMetaConversionEvents(events: MetaConversionsEventInput[]): Promise<MetaConversionsApiResponse | null> {
+  const pixelId = getMetaPixelId();
+  const accessToken = getMetaConversionsAccessToken();
+  if (!pixelId || !accessToken || !events.length) return null;
+
+  return postGraphJson<MetaConversionsApiResponse>(`/${pixelId}/events`, { data: events }, accessToken);
 }
 
 async function fetchGraphJsonWithToken<T>(token: string, path: string, fields?: string[]): Promise<T> {
@@ -337,7 +522,7 @@ async function fetchGraphJsonWithToken<T>(token: string, path: string, fields?: 
   const text = await res.text();
   const data = text ? JSON.parse(text) : {};
   if (!res.ok) {
-    throw new Error(data?.error?.message || `Meta Graph API failed with ${res.status}`);
+    throw new Error(normalizeMetaGraphError(data, `Meta Graph API failed with ${res.status}`));
   }
   return data as T;
 }
@@ -396,7 +581,7 @@ export async function exchangeMetaOAuthCode(code: string, redirectUri: string): 
   const shortRes = await fetch(tokenUrl.toString(), { cache: 'no-store' });
   const shortData = await shortRes.json().catch(() => ({}));
   if (!shortRes.ok || !shortData?.access_token) {
-    throw new Error(shortData?.error?.message || 'Meta OAuth code exchange failed');
+    throw new Error(normalizeMetaGraphError(shortData, 'Meta OAuth code exchange failed'));
   }
 
   let accessToken = String(shortData.access_token);
@@ -868,6 +1053,37 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
     console.error('Meta lead notification error:', error);
   }
 
+  try {
+    await sendMetaConversionEvents([
+      {
+        event_name: 'Lead',
+        event_time: Math.floor(new Date(lead.created_time || event.created_time || Date.now()).getTime() / 1000),
+        action_source: 'system_generated',
+        event_id: `meta-lead-${leadId}`,
+        user_data: buildMetaEventUserData({
+          email,
+          mobile,
+          inquiryId,
+          leadId,
+        }),
+        custom_data: {
+          source_label: META_SOURCE_LABEL,
+          contact_source: META_CONTACT_SOURCE,
+          inquiry_id: inquiryId,
+          lead_id: leadId,
+          course_name: courseName,
+          duplicate: Boolean(duplicate),
+          created,
+          campaign_name: ctx.campaignName,
+          form_name: ctx.formName,
+          webhook_source: extractWebhookSourceLabel(rawPayload),
+        },
+      },
+    ]);
+  } catch (error) {
+    console.error('Meta conversions event error:', error);
+  }
+
   await upsertMetaLeadRow({
     leadId,
     inquiryId,
@@ -926,10 +1142,11 @@ export function verifyMetaSignature(rawBody: string, signatureHeader: string | n
 }
 
 export async function fetchMetaCampaignPerformance(params: { dateFrom?: string | null; dateTo?: string | null }) {
-  const accountId = process.env.META_AD_ACCOUNT_ID?.trim();
-  if (!accountId) {
+  const rawAccountId = process.env.META_AD_ACCOUNT_ID?.trim();
+  if (!rawAccountId) {
     throw new Error('META_AD_ACCOUNT_ID is not configured');
   }
+  const accountId = normalizeMetaAdAccountId(rawAccountId);
 
   const url = await buildGraphUrl(`/act_${accountId}/insights`, [
     'campaign_id',
@@ -977,4 +1194,148 @@ export async function fetchMetaCampaignPerformance(params: { dateFrom?: string |
       costPerLead: leads > 0 ? Number(row?.spend || 0) / leads : null,
     };
   });
+}
+
+export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLeadListResult> {
+  await ensureMetaLeadTables();
+  const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
+  const {
+    page,
+    limit,
+    search = '',
+    leadTag = '',
+    statusId = '',
+    dateFrom = '',
+    dateTo = '',
+    training = '',
+    duplicatesOnly = false,
+  } = params;
+
+  const conditions: string[] = ['1=1'];
+  const queryParams: any[] = [];
+
+  if (search) {
+    conditions.push(`(
+      LOWER(COALESCE(m.student_name,'')) LIKE ?
+      OR LOWER(COALESCE(m.mobile,'')) LIKE ?
+      OR LOWER(COALESCE(m.email,'')) LIKE ?
+      OR CAST(COALESCE(m.inquiry_id, 0) AS CHAR) LIKE ?
+    )`);
+    const like = `%${search.toLowerCase()}%`;
+    queryParams.push(like, like, like, like);
+  }
+  if (leadTag) {
+    conditions.push(`(
+      LOWER(COALESCE(m.tags_json,'')) LIKE ?
+      OR LOWER(COALESCE(m.campaign_name,'')) LIKE ?
+      OR LOWER(COALESCE(m.form_name,'')) LIKE ?
+    )`);
+    const like = `%${leadTag.toLowerCase()}%`;
+    queryParams.push(like, like, like);
+  }
+  if (statusId) {
+    conditions.push(`CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) = ?`);
+    queryParams.push(Number(statusId));
+  }
+  if (dateFrom) {
+    conditions.push(`DATE(COALESCE(NULLIF(m.lead_created_time,''), m.created_at)) >= ?`);
+    queryParams.push(dateFrom);
+  }
+  if (dateTo) {
+    conditions.push(`DATE(COALESCE(NULLIF(m.lead_created_time,''), m.created_at)) <= ?`);
+    queryParams.push(dateTo);
+  }
+  if (training) {
+    conditions.push(`LOWER(COALESCE(m.course_name,'')) = ?`);
+    queryParams.push(training.toLowerCase());
+  }
+  if (duplicatesOnly) {
+    conditions.push(`m.duplicate_of_inquiry_id IS NOT NULL`);
+  }
+
+  const whereClause = `WHERE ${conditions.join(' AND ')}`;
+  const offset = (page - 1) * limit;
+
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM ${META_LEADS_TABLE} m
+     LEFT JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
+     ${whereClause}`,
+    queryParams
+  );
+  const total = Number((countRows as any[])[0]?.total || 0);
+
+  const [rows] = await pool.query(
+    `SELECT
+       COALESCE(m.inquiry_id, 0) AS Student_Id,
+       COALESCE(NULLIF(TRIM(m.student_name),''), NULLIF(TRIM(si.Student_Name),''), 'Meta Lead') AS Student_Name,
+       NULLIF(TRIM(m.course_name),'') AS CourseName,
+       COALESCE(NULLIF(TRIM(m.lead_created_time),''), CAST(m.created_at AS CHAR)) AS Inquiry_Dt,
+       NULLIF(TRIM(m.mobile),'') AS Present_Mobile,
+       NULLIF(TRIM(m.email),'') AS Email,
+       m.contact_source AS Inquiry_From,
+       m.source_label AS Inquiry_Type,
+       CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) AS Status_id,
+       si.Discussion AS Discussion,
+       NULLIF(TRIM(m.campaign_name),'') AS MetaCampaignName,
+       NULLIF(TRIM(m.form_name),'') AS MetaFormName,
+       m.tags_json AS LeadTagsJson,
+       m.duplicate_of_inquiry_id IS NOT NULL AS IsDuplicateLead
+     FROM ${META_LEADS_TABLE} m
+     LEFT JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
+     ${whereClause}
+     ORDER BY COALESCE(NULLIF(m.lead_created_time,''), CAST(m.created_at AS CHAR)) DESC, m.id DESC
+     LIMIT ? OFFSET ?`,
+    [...queryParams, limit, offset]
+  );
+
+  const [trainingRows] = await pool.query(
+    `SELECT DISTINCT course_name
+     FROM ${META_LEADS_TABLE}
+     WHERE course_name IS NOT NULL AND TRIM(course_name) != ''
+     ORDER BY course_name`
+  );
+
+  const statusOptions = Object.entries(FALLBACK_STATUSES)
+    .map(([id, label]) => ({ id: Number(id), label }))
+    .sort((a, b) => a.id - b.id);
+
+  const mappedRows: MetaLeadListRow[] = (rows as any[]).map((row: any) => {
+    let tags: string[] = [];
+    try {
+      const parsed = JSON.parse(row.LeadTagsJson || '[]');
+      tags = Array.isArray(parsed) ? parsed.map((tag) => String(tag)).filter(Boolean) : [];
+    } catch {
+      tags = [];
+    }
+
+    const statusIdNum = row.Status_id == null ? null : Number(row.Status_id);
+    return {
+      Student_Id: Number(row.Student_Id || 0),
+      Student_Name: String(row.Student_Name || 'Meta Lead'),
+      CourseName: row.CourseName ?? null,
+      Inquiry_Dt: row.Inquiry_Dt ?? null,
+      Present_Mobile: row.Present_Mobile ?? null,
+      Email: row.Email ?? null,
+      Inquiry_From: row.Inquiry_From ?? null,
+      Inquiry_Type: row.Inquiry_Type ?? null,
+      Status_id: statusIdNum,
+      StatusLabel: statusIdNum != null ? (FALLBACK_STATUSES[statusIdNum] || `Status ${statusIdNum}`) : 'Open',
+      Discussion: row.Discussion ?? null,
+      MetaCampaignName: row.MetaCampaignName ?? null,
+      MetaFormName: row.MetaFormName ?? null,
+      LeadTags: tags,
+      IsDuplicateLead: Boolean(row.IsDuplicateLead),
+    };
+  });
+
+  return {
+    rows: mappedRows,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    filters: {
+      trainings: (trainingRows as any[]).map((row: any) => String(row.course_name).trim()).filter(Boolean),
+      statusOptions,
+    },
+  };
 }

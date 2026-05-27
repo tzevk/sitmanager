@@ -122,7 +122,7 @@ export default function MetaLeadsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({ page: String(page), limit: '25', inquiryType: 'Meta Ads' });
+      const p = new URLSearchParams({ page: String(page), limit: '25' });
       if (search) p.set('search', search);
       if (leadTag) p.set('leadTag', leadTag);
       if (status) p.set('status', status);
@@ -130,8 +130,9 @@ export default function MetaLeadsPage() {
       if (dateTo) p.set('dateTo', dateTo);
       if (training) p.set('training', training);
       if (duplicatesOnly) p.set('duplicatesOnly', '1');
-      const res = await fetch(`/api/inquiry?${p.toString()}`);
+      const res = await fetch(`/api/meta-ads/leads?${p.toString()}`);
       const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to load Meta leads');
       setRows(data.rows ?? []);
       setPagination(data.pagination ?? { page: 1, limit: 25, total: 0, totalPages: 0 });
       if (data.filters) {
@@ -142,12 +143,14 @@ export default function MetaLeadsPage() {
       }
     } catch (error) {
       console.error(error);
+      setRows([]);
+      setPagination({ page: 1, limit: 25, total: 0, totalPages: 0 });
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, duplicatesOnly, fetchTrigger, leadTag, page, search, status, training]);
+  }, [dateFrom, dateTo, duplicatesOnly, leadTag, page, search, status, training]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData, fetchTrigger]);
 
   useEffect(() => {
     let cancelled = false;
@@ -396,9 +399,9 @@ export default function MetaLeadsPage() {
                     <td className="py-1.5 px-3 text-center">
                       <button
                         title="Edit inquiry"
-                        onClick={() => router.push(`/dashboard/inquiry/add?editId=${row.Student_Id}`)}
-                        disabled={!canUpdate}
-                        className={canUpdate ? 'p-1 rounded hover:bg-emerald-50 text-slate-300 hover:text-emerald-600 transition-colors' : 'p-1 rounded text-slate-200 cursor-not-allowed'}
+                        onClick={() => row.Student_Id > 0 && router.push(`/dashboard/inquiry/add?editId=${row.Student_Id}`)}
+                        disabled={!canUpdate || row.Student_Id <= 0}
+                        className={canUpdate && row.Student_Id > 0 ? 'p-1 rounded hover:bg-emerald-50 text-slate-300 hover:text-emerald-600 transition-colors' : 'p-1 rounded text-slate-200 cursor-not-allowed'}
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />

@@ -3,6 +3,62 @@ import { cached, getPool, invalidateCache } from '@/lib/db';
 
 let inquiryTableNameCache: string | null = null;
 let disciplineTableNameCache: string | null | undefined;
+let inquirySchemaWarmupPromise: Promise<void> | null = null;
+let metaLeadSchemaWarmupPromise: Promise<void> | null = null;
+const inquiryDateColumnReadyTables = new Set<string>();
+
+function getInquiryDateColumnCacheKey(inquiryTable: string): string {
+  return `schema:inquiry-date-column:${inquiryTable}`;
+}
+
+async function hasInquiryDateColumn(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<boolean> {
+  if (inquiryDateColumnReadyTables.has(inquiryTable)) return true;
+
+  const exists = await cached(
+    getInquiryDateColumnCacheKey(inquiryTable),
+    60 * 60 * 1000,
+    async () => {
+      const [rows] = await pool.query(
+        `SELECT 1
+         FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+           AND COLUMN_NAME = '_inquiry_date'
+         LIMIT 1`,
+        [inquiryTable]
+      );
+      return (rows as any[]).length > 0;
+    }
+  );
+
+  if (exists) inquiryDateColumnReadyTables.add(inquiryTable);
+  return exists;
+}
+
+function warmInquirySchema(pool: ReturnType<typeof getPool>, inquiryTable: string): void {
+  if (inquirySchemaWarmupPromise) return;
+  inquirySchemaWarmupPromise = ensureInquirySchema(pool, inquiryTable)
+    .then(() => {
+      inquiryDateColumnReadyTables.add(inquiryTable);
+      invalidateCache(getInquiryDateColumnCacheKey(inquiryTable));
+    })
+    .catch(() => {
+      // Keep listing responsive even if best-effort schema maintenance fails.
+    })
+    .finally(() => {
+      inquirySchemaWarmupPromise = null;
+    });
+}
+
+function warmMetaLeadSchema(pool: ReturnType<typeof getPool>): void {
+  if (metaLeadSchemaWarmupPromise) return;
+  metaLeadSchemaWarmupPromise = ensureMetaLeadSchema(pool)
+    .catch(() => {
+      // Keep listing responsive even if best-effort schema maintenance fails.
+    })
+    .finally(() => {
+      metaLeadSchemaWarmupPromise = null;
+    });
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -83,6 +139,23 @@ export interface InquiryListResult {
     trainings: string[];
     statusOptions: StatusOption[];
   };
+}
+
+function getInquiryCountCacheKey(params: {
+  inquiryTable: string;
+  search: string;
+  discipline: string;
+  inquiryType: string;
+  leadTag: string;
+  location: string;
+  training: string;
+  statusId: string;
+  duplicatesOnly: boolean;
+  dateFrom: string;
+  dateTo: string;
+  followUpDue: boolean;
+}): string {
+  return `inquiry:list-count:${JSON.stringify(params)}`;
 }
 
 interface InquiryFilterOptions {
@@ -412,7 +485,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   const disciplineExpr = disciplineTable
     ? DISCIPLINE_NAME_EXPR
     : `NULLIF(TRIM(si.Discipline),'')`;
-  try { await ensureInquirySchema(pool, inquiryTable); } catch { /* best-effort schema migration */ }
+  warmInquirySchema(pool, inquiryTable);
   const FOLLOW_UP_DUE_SUBQUERY = `
     SELECT latest.Inquiry_id
     FROM awt_inquirydiscussion latest
@@ -462,7 +535,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       ) meta_latest ON meta_latest.inquiry_id = si.Inquiry_Id`
     : '';
   if (needsMetaData) {
-    try { await ensureMetaLeadSchema(pool); } catch { /* best-effort schema migration */ }
+    warmMetaLeadSchema(pool);
   }
   const offset = (page - 1) * limit;
 
@@ -473,6 +546,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   }
 
   const locationColumn = await resolveLocationColumn(pool, inquiryTable);
+  const inquiryDateColumnAvailable = await hasInquiryDateColumn(pool, inquiryTable);
 
   // Build WHERE
   const conditions: string[] = ['(si.IsDelete = 0 OR si.IsDelete IS NULL)'];
@@ -517,18 +591,19 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     conditions.push('si.OnlineState = ?');
     queryParams.push(parseInt(statusId));
   }
-  const INQUIRY_DATE_EXPR =
+  const FALLBACK_INQUIRY_DATE_EXPR =
     `COALESCE(` +
     `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),19),'%Y-%m-%d %H:%i:%s'),` +
     `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%Y-%m-%d'),` +
     `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%d-%m-%Y'),` +
     `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%d/%m/%Y'))`;
+  const inquiryDateExpr = inquiryDateColumnAvailable ? 'si._inquiry_date' : FALLBACK_INQUIRY_DATE_EXPR;
   if (dateFrom) {
-    conditions.push(`${INQUIRY_DATE_EXPR} >= ?`);
+    conditions.push(`${inquiryDateExpr} >= ?`);
     queryParams.push(dateFrom);
   }
   if (dateTo) {
-    conditions.push(`${INQUIRY_DATE_EXPR} <= ?`);
+    conditions.push(`${inquiryDateExpr} <= ?`);
     queryParams.push(dateTo);
   }
   if (training) {
@@ -557,19 +632,55 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
 
   const whereClause = `WHERE (${conditions.join(') AND (')})`;
 
+  const hasActiveFilters = Boolean(
+    search || discipline || inquiryType || leadTag || normalizedLocation || training ||
+    statusId || dateFrom || dateTo || duplicatesOnly || followUpDue
+  );
+
   let total = 0;
   let pageIds: number[] = [];
   let sortOrder = new Map<number, number>();
 
-  const [countResult] = await pool.query(
-    `SELECT COUNT(*) as total
-     FROM \`${inquiryTable}\` si
-     ${listCourseJoin}
-     ${listDisciplineJoin}
-     ${whereClause}`,
-    queryParams
-  );
-  total = (countResult as any[])[0]?.total || 0;
+  if (hasActiveFilters) {
+    total = await cached(
+      getInquiryCountCacheKey({
+        inquiryTable,
+        search,
+        discipline,
+        inquiryType,
+        leadTag,
+        location: normalizedLocation,
+        training,
+        statusId,
+        duplicatesOnly,
+        dateFrom,
+        dateTo,
+        followUpDue,
+      }),
+      30_000,
+      async () => {
+        const [countResult] = await pool.query(
+          `SELECT COUNT(*) as total
+           FROM \`${inquiryTable}\` si
+           ${listCourseJoin}
+           ${listDisciplineJoin}
+           ${whereClause}`,
+          queryParams
+        );
+        return (countResult as any[])[0]?.total || 0;
+      }
+    );
+  } else {
+    const [countResult] = await pool.query(
+      `SELECT COUNT(*) as total
+       FROM \`${inquiryTable}\` si
+       ${listCourseJoin}
+       ${listDisciplineJoin}
+       ${whereClause}`,
+      queryParams
+    );
+    total = (countResult as any[])[0]?.total || 0;
+  }
 
   const [sortedIds] = await pool.query(
     `SELECT si.Inquiry_Id
@@ -577,12 +688,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
      ${listCourseJoin}
      ${listDisciplineJoin}
      ${whereClause}
-     ORDER BY COALESCE(
-       STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),19),'%Y-%m-%d %H:%i:%s'),
-       STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%Y-%m-%d'),
-       STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%d-%m-%Y'),
-       STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%d/%m/%Y')
-     ) DESC, si.Inquiry_Id DESC
+     ORDER BY ${inquiryDateExpr} DESC, si.Inquiry_Id DESC
      LIMIT ? OFFSET ?`,
     [...queryParams, limit, offset]
   );
@@ -751,4 +857,6 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput): Promi
   }
 
   invalidateCache('inquiry:filters');
+  invalidateCache('inquiry:list-count');
+  invalidateCache('inquiry:list-count');
 }

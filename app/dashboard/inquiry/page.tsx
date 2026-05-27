@@ -101,7 +101,6 @@ function statusBar(id: number | null, label: string) {
 }
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
-const INQUIRY_FILTERS_STORAGE_KEY = 'dashboard.inquiry.list.url';
 
 export default function InquiryPage() {
   const router = useRouter();
@@ -112,18 +111,9 @@ export default function InquiryPage() {
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
   const [filters, setFilters] = useState<Filters>({ disciplines: [], inquiryTypes: [], trainings: [], statusOptions: [] });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  // Read filter value from URL params, falling back to sessionStorage so filters
-  // are correct on the very first render when returning from the edit page.
-  const getInitParam = (key: string) => {
-    const urlVal = searchParams.get(key);
-    if (urlVal !== null) return urlVal;
-    if (typeof window !== 'undefined') {
-      const saved = sessionStorage.getItem(INQUIRY_FILTERS_STORAGE_KEY);
-      if (saved) return new URLSearchParams(saved.split('?')[1] || '').get(key) || '';
-    }
-    return '';
-  };
+  const getInitParam = (key: string) => searchParams.get(key) || '';
 
   const [search, setSearch] = useState(() => getInitParam('search'));
   const [discipline, setDiscipline] = useState(() => getInitParam('discipline'));
@@ -132,21 +122,14 @@ export default function InquiryPage() {
   const [dateFrom, setDateFrom] = useState(() => getInitParam('dateFrom'));
   const [dateTo, setDateTo] = useState(() => getInitParam('dateTo'));
   const [training, setTraining] = useState(() => getInitParam('training'));
-  const [page, setPage] = useState(() => {
-    const urlPage = parseInt(searchParams.get('page') || '0');
-    if (urlPage > 0) return urlPage;
-    if (typeof window !== 'undefined') {
-      const saved = sessionStorage.getItem(INQUIRY_FILTERS_STORAGE_KEY);
-      if (saved) return Math.max(1, parseInt(new URLSearchParams(saved.split('?')[1] || '').get('page') || '1'));
-    }
-    return 1;
-  });
+  const [page, setPage] = useState(() => Math.max(1, parseInt(searchParams.get('page') || '1')));
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      setError('');
       const p = new URLSearchParams({ page: String(page), limit: '25' });
       if (search) p.set('search', search);
       if (discipline) p.set('discipline', discipline);
@@ -158,30 +141,26 @@ export default function InquiryPage() {
       const res = await fetch(`/api/inquiry?${p}`);
       const ct = res.headers.get('content-type') || '';
       const data = ct.includes('application/json') ? await res.json() : {};
+      if (!res.ok) throw new Error(data?.details || data?.error || 'Failed to fetch inquiries');
+      const nextPagination = data.pagination ?? { page: 1, limit: 25, total: 0, totalPages: 0 };
+      if (nextPagination.totalPages > 0 && page > nextPagination.totalPages) {
+        setPage(nextPagination.totalPages);
+        return;
+      }
       setRows(data.rows ?? []);
-      setPagination(data.pagination ?? { page: 1, limit: 25, total: 0, totalPages: 0 });
+      setPagination(nextPagination);
       if (data.filters) setFilters(data.filters);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      setRows([]);
+      setPagination({ page: 1, limit: 25, total: 0, totalPages: 0 });
+      setError(e instanceof Error ? e.message : 'Failed to load inquiries');
+    }
     finally { setLoading(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, fetchTrigger, search, discipline, inquiryType, status, dateFrom, dateTo, training]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-
-  // Sync the URL to match active filters (state is authoritative; URL is derived).
-  useEffect(() => {
-    const hasUrlFilters = searchParams.toString().length > 0;
-    if (hasUrlFilters) {
-      sessionStorage.setItem(INQUIRY_FILTERS_STORAGE_KEY, `${pathname}?${searchParams.toString()}`);
-      return;
-    }
-    // URL has no params — if we restored filters from sessionStorage, push them
-    // back into the URL so the address bar stays consistent.
-    const savedUrl = sessionStorage.getItem(INQUIRY_FILTERS_STORAGE_KEY);
-    if (savedUrl?.startsWith('/dashboard/inquiry') && savedUrl !== pathname) {
-      router.replace(savedUrl, { scroll: false });
-    }
-  }, [pathname, router, searchParams]);
 
   const syncUrl = (params: Record<string, string>) => {
     const p = new URLSearchParams();
@@ -199,36 +178,15 @@ export default function InquiryPage() {
       dateTo,
       training,
     };
-    const p = new URLSearchParams();
-    Object.entries(params).forEach(([k, v]) => { if (v) p.set(k, v); });
-    const nextUrl = p.toString() ? `${pathname}?${p.toString()}` : pathname;
-    sessionStorage.setItem(INQUIRY_FILTERS_STORAGE_KEY, nextUrl);
     syncUrl(params);
     setPage(1); setFetchTrigger(t => t + 1);
   };
   const doClear = () => {
     router.replace(pathname, { scroll: false });
-    sessionStorage.removeItem(INQUIRY_FILTERS_STORAGE_KEY);
     setSearch(''); setDiscipline(''); setInquiryType('');
     setStatus(''); setDateFrom(''); setDateTo(''); setTraining('');
     setPage(1); setFetchTrigger(t => t + 1);
   };
-
-  useEffect(() => {
-    const p = new URLSearchParams();
-    if (search) p.set('search', search);
-    if (discipline) p.set('discipline', discipline);
-    if (inquiryType) p.set('inquiryType', inquiryType);
-    if (status) p.set('status', status);
-    if (dateFrom) p.set('dateFrom', dateFrom);
-    if (dateTo) p.set('dateTo', dateTo);
-    if (training) p.set('training', training);
-    if (page > 1) p.set('page', String(page));
-    // Only persist when at least one filter is active — doClear() owns the removal.
-    if (p.toString()) {
-      sessionStorage.setItem(INQUIRY_FILTERS_STORAGE_KEY, `${pathname}?${p.toString()}`);
-    }
-  }, [search, discipline, inquiryType, status, dateFrom, dateTo, training, page, pathname]);
 
   const buildReturnTo = () => {
     const p = new URLSearchParams();
@@ -288,10 +246,11 @@ export default function InquiryPage() {
     }
   };
 
-  // Overdue / today scheduled follow-ups — fetched once on mount
+  // Overdue / today scheduled follow-ups — fetched only when expanded
   const [overdueFollowUps, setOverdueFollowUps] = useState<InquiryRow[]>([]);
-  const [overdueLoading, setOverdueLoading] = useState(true);
-  const [overdueExpanded, setOverdueExpanded] = useState(true);
+  const [overdueLoading, setOverdueLoading] = useState(false);
+  const [overdueExpanded, setOverdueExpanded] = useState(false);
+  const [overdueLoadedForTrigger, setOverdueLoadedForTrigger] = useState<number | null>(null);
 
   const exportCsv = () => {
     if (rows.length === 0) return;
@@ -323,6 +282,8 @@ export default function InquiryPage() {
   };
 
   useEffect(() => {
+    if (!overdueExpanded || overdueLoadedForTrigger === fetchTrigger) return;
+
     let cancelled = false;
     async function fetchOverdue() {
       setOverdueLoading(true);
@@ -330,13 +291,16 @@ export default function InquiryPage() {
         const res = await fetch('/api/inquiry?followUpDue=1&limit=100');
         const ct = res.headers.get('content-type') || '';
         const data = ct.includes('application/json') ? await res.json() : {};
-        if (!cancelled) setOverdueFollowUps(data.rows ?? []);
+        if (!cancelled) {
+          setOverdueFollowUps(data.rows ?? []);
+          setOverdueLoadedForTrigger(fetchTrigger);
+        }
       } catch { /* ignore */ }
       finally { if (!cancelled) setOverdueLoading(false); }
     }
     fetchOverdue();
     return () => { cancelled = true; };
-  }, [fetchTrigger]);
+  }, [fetchTrigger, overdueExpanded, overdueLoadedForTrigger]);
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const followUps = rows.filter(hasScheduledFollowUp);
@@ -380,7 +344,7 @@ export default function InquiryPage() {
       />
 
       {/* Scheduled Follow-ups Due Today & Overdue */}
-      {(overdueLoading || overdueFollowUps.length > 0) && (
+      {
         <div className="bg-amber-50 border border-amber-200 rounded-xl overflow-hidden">
           <button
             type="button"
@@ -393,7 +357,7 @@ export default function InquiryPage() {
             <span className="font-bold text-amber-800 text-sm flex-1">
               Scheduled Follow-ups Due Today &amp; Overdue
             </span>
-            {!overdueLoading && (
+            {overdueLoadedForTrigger === fetchTrigger && !overdueLoading && (
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-800 tabular-nums">
                 {overdueFollowUps.length}
               </span>
@@ -466,7 +430,7 @@ export default function InquiryPage() {
             </div>
           )}
         </div>
-      )}
+      }
 
       <FilterBar>
         <input
@@ -503,6 +467,12 @@ export default function InquiryPage() {
           Clear
         </button>
       </FilterBar>
+
+      {error && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {error}
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white rounded-xl border border-[#2E3093]/10 overflow-hidden">

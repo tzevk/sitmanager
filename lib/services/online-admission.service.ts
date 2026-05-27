@@ -2,6 +2,9 @@
 import { getPool } from '@/lib/db';
 import { sendOnlineAdmissionSubmissionEmail } from '@/lib/mailer';
 
+let inquiryTableNameCache: string | null = null;
+let statusTableNameCache: string | null | undefined;
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface OnlineAdmissionListParams {
@@ -68,6 +71,46 @@ const FALLBACK_STATUSES: Record<number, string> = {
 
 let payloadTableReady = false;
 
+async function resolveInquiryTableName(pool: ReturnType<typeof getPool>): Promise<string> {
+  if (inquiryTableNameCache) return inquiryTableNameCache;
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT TABLE_NAME
+       FROM INFORMATION_SCHEMA.TABLES
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND LOWER(TABLE_NAME) = 'student_inquiry'
+       ORDER BY CASE WHEN TABLE_NAME = 'Student_Inquiry' THEN 0 ELSE 1 END
+       LIMIT 1`
+    );
+    inquiryTableNameCache = String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
+  } catch {
+    inquiryTableNameCache = 'Student_Inquiry';
+  }
+
+  return inquiryTableNameCache;
+}
+
+async function resolveStatusTableName(pool: ReturnType<typeof getPool>): Promise<string | null> {
+  if (statusTableNameCache !== undefined) return statusTableNameCache;
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT TABLE_NAME
+       FROM INFORMATION_SCHEMA.TABLES
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND LOWER(TABLE_NAME) = 'status_master'
+       ORDER BY CASE WHEN TABLE_NAME = 'Status_Master' THEN 0 ELSE 1 END
+       LIMIT 1`
+    );
+    statusTableNameCache = String((rows as any[])[0]?.TABLE_NAME || '').trim() || null;
+  } catch {
+    statusTableNameCache = null;
+  }
+
+  return statusTableNameCache;
+}
+
 async function ensurePayloadTable(pool: ReturnType<typeof getPool>): Promise<void> {
   if (payloadTableReady) return;
   try {
@@ -129,9 +172,23 @@ export async function listOnlineAdmissions(
   params: OnlineAdmissionListParams
 ): Promise<OnlineAdmissionListResult> {
   const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
+  const statusTable = await resolveStatusTableName(pool);
   const { page, limit, search = '', statusCategory = '', dateFrom = '', dateTo = '' } = params;
   const offset = (page - 1) * limit;
   const fetchCap = Math.min(2000, offset + limit * 4);
+  const newStatusTextExpr = statusTable
+    ? `COALESCE(stm_sm.Status, stm_si.Status, '')`
+    : `''`;
+  const newStatusJoins = statusTable
+    ? `
+     LEFT JOIN \`${statusTable}\` stm_sm ON stm_sm.Id = sm.Status_id
+     LEFT JOIN \`${statusTable}\` stm_si ON stm_si.Id = si.OnlineState`
+    : '';
+  const legacyStatusTextExpr = statusTable ? `COALESCE(stm.Status, '')` : `''`;
+  const legacyStatusJoin = statusTable
+    ? `LEFT JOIN \`${statusTable}\` stm ON stm.Id = sm.Status_id`
+    : '';
 
   await ensurePayloadTable(pool);
 
@@ -157,12 +214,11 @@ export async function listOnlineAdmissions(
        COALESCE(sm.Batch_Code, si.Batch_Code, '') AS Batch_code,
        COALESCE(sm.Admission_Dt, oap.Created_At) AS Admission_Date,
        COALESCE(sm.Status_id, si.OnlineState) AS Status_id,
-       COALESCE(stm_sm.Status, stm_si.Status, '') AS StatusText
+       ${newStatusTextExpr} AS StatusText
      FROM ${PAYLOAD_TABLE} oap
-     JOIN Student_Inquiry si ON si.Inquiry_Id = oap.Inquiry_Id
+       JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = oap.Inquiry_Id
      LEFT JOIN student_master sm ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-     LEFT JOIN Status_Master stm_sm ON stm_sm.Id = sm.Status_id
-     LEFT JOIN Status_Master stm_si ON stm_si.Id = si.OnlineState
+     ${newStatusJoins}
      WHERE ${newConds.join(' AND ')}
      ORDER BY oap.Created_At DESC LIMIT ?`,
     [...newParams, fetchCap]
@@ -197,10 +253,10 @@ export async function listOnlineAdmissions(
          COALESCE(sm.Batch_Code, si.Batch_Code, '') AS Batch_code,
          sm.Admission_Dt AS Admission_Date,
          sm.Status_id AS Status_id,
-         COALESCE(stm.Status, '') AS StatusText, 1 AS IsLegacy
-       FROM Student_Inquiry si
+         ${legacyStatusTextExpr} AS StatusText, 1 AS IsLegacy
+       FROM \`${inquiryTable}\` si
        JOIN student_master sm ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-       LEFT JOIN Status_Master stm ON stm.Id = sm.Status_id
+       ${legacyStatusJoin}
        WHERE ${oldConds.join(' AND ')}
        ORDER BY si.Inquiry_Id DESC LIMIT ?`,
       [...oldParams, fetchCap]
@@ -219,15 +275,17 @@ export async function listOnlineAdmissions(
     seen.add(id);
   };
   try {
-    const [dbStatuses] = await pool.query<any[]>(
-      `SELECT DISTINCT sm.Status_id as id, COALESCE(MAX(stm.Status),'') as label
-       FROM Student_Inquiry si
-       JOIN student_master sm ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-       LEFT JOIN Status_Master stm ON stm.Id = sm.Status_id
-       WHERE si.admission_done = 2 AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
-       GROUP BY sm.Status_id ORDER BY sm.Status_id`
-    );
-    for (const r of dbStatuses) push(Number(r.id), r.label);
+    if (statusTable) {
+      const [dbStatuses] = await pool.query<any[]>(
+        `SELECT DISTINCT sm.Status_id as id, COALESCE(MAX(stm.Status),'') as label
+         FROM \`${inquiryTable}\` si
+         JOIN student_master sm ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+         LEFT JOIN \`${statusTable}\` stm ON stm.Id = sm.Status_id
+         WHERE si.admission_done = 2 AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
+         GROUP BY sm.Status_id ORDER BY sm.Status_id`
+      );
+      for (const r of dbStatuses) push(Number(r.id), r.label);
+    }
   } catch { /* ignore */ }
   for (const [id, label] of Object.entries(FALLBACK_STATUSES)) push(Number(id), label);
   statusOptions.sort((a, b) => a.id - b.id);
@@ -273,9 +331,10 @@ export async function submitOnlineAdmission(input: SubmitAdmissionInput): Promis
   if (!Number.isFinite(inquiryId) || inquiryId <= 0) throw new Error('Invalid Inquiry ID');
 
   const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
 
   const [siRows] = await pool.query<any[]>(
-    `SELECT Inquiry_Id, Student_Name, Email FROM Student_Inquiry
+    `SELECT Inquiry_Id, Student_Name, Email FROM \`${inquiryTable}\`
      WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
     [inquiryId]
   );
@@ -284,7 +343,13 @@ export async function submitOnlineAdmission(input: SubmitAdmissionInput): Promis
 
   // Strip File objects from KT arrays before persisting
   const stripFiles = (arr: any[]) =>
-    Array.isArray(arr) ? arr.map(({ marksheetFile: _f, ...r }: any) => r) : arr;
+    Array.isArray(arr)
+      ? arr.map((row: any) => {
+          const cleanRow = { ...row };
+          delete cleanRow.marksheetFile;
+          return cleanRow;
+        })
+      : arr;
 
   const cleanBody = {
     ...input,
@@ -305,7 +370,7 @@ export async function submitOnlineAdmission(input: SubmitAdmissionInput): Promis
   const fullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
   try {
     await pool.query(
-      `UPDATE Student_Inquiry
+      `UPDATE \`${inquiryTable}\`
        SET OnlineState=23,
            Student_Name=COALESCE(NULLIF(?,''), Student_Name),
            Email=COALESCE(NULLIF(?,''), Email),
