@@ -13,11 +13,17 @@ export async function GET(req: NextRequest) {
 
     // Lookup fees for a specific batch code
     if (batchCode) {
-      const [rows] = await pool.query<(RowDataPacket & { totalFees: number | null })[]>(
-        `SELECT INR_Total AS totalFees FROM batch_mst WHERE Batch_code = ? AND IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+      const [rows] = await pool.query<(RowDataPacket & { totalFees: number | null; feesFullPayment: number | null; feesInstallment: number | null })[]>(
+        `SELECT INR_Total AS totalFees, Fees_Full_Payment AS feesFullPayment, Fees_Installment_Payment AS feesInstallment
+         FROM batch_mst WHERE Batch_code = ? AND IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
         [batchCode]
       );
-      return NextResponse.json({ success: true, totalFees: rows[0]?.totalFees ?? null });
+      return NextResponse.json({
+        success: true,
+        totalFees: rows[0]?.totalFees ?? null,
+        feesFullPayment: rows[0]?.feesFullPayment ?? null,
+        feesInstallment: rows[0]?.feesInstallment ?? null,
+      });
     }
 
     if (!courseId) {
@@ -45,8 +51,9 @@ export async function GET(req: NextRequest) {
 
     // Return batch codes for this course + category (including total fees)
     // Only show batches where admission is still open or start date is upcoming
-    const [batches] = await pool.query<(RowDataPacket & { batchCode: string; timings: string | null; totalFees: number | null })[]>(
-      `SELECT Batch_code AS batchCode, Timings AS timings, INR_Total AS totalFees
+    const [batches] = await pool.query<(RowDataPacket & { batchCode: string; timings: string | null; totalFees: number | null; feesFullPayment: number | null; feesInstallment: number | null })[]>(
+      `SELECT Batch_code AS batchCode, Timings AS timings, INR_Total AS totalFees,
+              Fees_Full_Payment AS feesFullPayment, Fees_Installment_Payment AS feesInstallment
        FROM batch_mst
        WHERE Course_Id = ? AND Category = ? AND IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL)
          AND (Cancel IS NULL OR Cancel = 0)

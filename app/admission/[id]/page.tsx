@@ -74,8 +74,10 @@ export default function PublicAdmissionFormPage() {
   // Training programme cascade
   const [courses, setCourses] = useState<{ Course_Id: number; Course_Name: string }[]>([]);
   const [batchCategories, setBatchCategories] = useState<string[]>([]);
-  const [availableBatches, setAvailableBatches] = useState<{ batchCode: string; timings: string | null; totalFees: number | null }[]>([]);
+  const [availableBatches, setAvailableBatches] = useState<{ batchCode: string; timings: string | null; totalFees: number | null; feesFullPayment: number | null; feesInstallment: number | null }[]>([]);
   const [batchFees, setBatchFees] = useState<number | null>(null);
+  const [batchFeesFullPayment, setBatchFeesFullPayment] = useState<number | null>(null);
+  const [batchFeesInstallment, setBatchFeesInstallment] = useState<number | null>(null);
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [loadingBatches, setLoadingBatches] = useState(false);
@@ -283,20 +285,34 @@ export default function PublicAdmissionFormPage() {
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
   }, [formData, loading, submitted, saveDraft]);
 
-  // Sync batchFees whenever batch selection or available batches change
+  // Sync batch fees whenever batch selection or available batches change
   useEffect(() => {
-    if (!formData.batchCode) { setBatchFees(null); return; }
+    if (!formData.batchCode) {
+      setBatchFees(null);
+      setBatchFeesFullPayment(null);
+      setBatchFeesInstallment(null);
+      return;
+    }
     // Try from already-loaded batch list first
     if (availableBatches.length > 0) {
       const batch = availableBatches.find(b => b.batchCode === formData.batchCode);
-      if (batch?.totalFees) { setBatchFees(parseFloat(String(batch.totalFees))); return; }
+      if (batch) {
+        setBatchFees(batch.totalFees ? parseFloat(String(batch.totalFees)) : null);
+        setBatchFeesFullPayment(batch.feesFullPayment ? parseFloat(String(batch.feesFullPayment)) : null);
+        setBatchFeesInstallment(batch.feesInstallment ? parseFloat(String(batch.feesInstallment)) : null);
+        return;
+      }
     }
     // Otherwise fetch directly by batch code
     (async () => {
       try {
         const res = await fetch(`/api/public/batches?batchCode=${encodeURIComponent(formData.batchCode)}`);
         const data = await res.json();
-        if (data.success && data.totalFees) setBatchFees(parseFloat(String(data.totalFees)));
+        if (data.success) {
+          if (data.totalFees) setBatchFees(parseFloat(String(data.totalFees)));
+          setBatchFeesFullPayment(data.feesFullPayment ? parseFloat(String(data.feesFullPayment)) : null);
+          setBatchFeesInstallment(data.feesInstallment ? parseFloat(String(data.feesInstallment)) : null);
+        }
       } catch { /* non-fatal */ }
     })();
   }, [formData.batchCode, availableBatches]);
@@ -370,6 +386,8 @@ export default function PublicAdmissionFormPage() {
     setBatchCategories([]);
     setAvailableBatches([]);
     setBatchFees(null);
+    setBatchFeesFullPayment(null);
+    setBatchFeesInstallment(null);
     if (!courseId) return;
     setLoadingCategories(true);
     try {
@@ -387,6 +405,8 @@ export default function PublicAdmissionFormPage() {
     setFormData(prev => ({ ...prev, trainingCategory: category, batchCode: '' }));
     setAvailableBatches([]);
     setBatchFees(null);
+    setBatchFeesFullPayment(null);
+    setBatchFeesInstallment(null);
     if (!category || !formData.trainingProgrammeId) return;
     setLoadingBatches(true);
     try {
@@ -2129,6 +2149,8 @@ export default function PublicAdmissionFormPage() {
                                   handleChange('batchCode', e.target.value);
                                   const batch = availableBatches.find(b => b.batchCode === e.target.value);
                                   setBatchFees(batch?.totalFees ? parseFloat(String(batch.totalFees)) : null);
+                                  setBatchFeesFullPayment(batch?.feesFullPayment ? parseFloat(String(batch.feesFullPayment)) : null);
+                                  setBatchFeesInstallment(batch?.feesInstallment ? parseFloat(String(batch.feesInstallment)) : null);
                                 }}
                                 disabled={!formData.trainingCategory || loadingBatches}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-50"
@@ -2221,9 +2243,9 @@ export default function PublicAdmissionFormPage() {
                   {currentStep === 5 && (() => {
                     const baseFees = batchFees ?? 0;
                     const hasFees = baseFees > 0;
-                    const discount = Math.round(baseFees * 0.05);
-                    const fullPayAmount = baseFees - discount;
-                    const installmentAmount = Math.round(baseFees / 2);
+                    const fullPayAmount = batchFeesFullPayment ?? Math.round(baseFees * 0.95);
+                    const installmentAmount = batchFeesInstallment ?? Math.round(baseFees / 2);
+                    const discount = baseFees - fullPayAmount;
                     const fmt = (n: number) => n.toLocaleString('en-IN');
 
                     return (
@@ -2281,7 +2303,7 @@ export default function PublicAdmissionFormPage() {
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className={`text-sm font-bold ${isSelected ? 'text-emerald-800' : 'text-gray-800'}`}>Full Payment</span>
-                                    <span className="bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">5% OFF</span>
+                                    {discount > 0 && <span className="bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{baseFees > 0 ? Math.round((discount / baseFees) * 100) : 0}% OFF</span>}
                                   </div>
                                   <div className={`text-xs mt-0.5 ${isSelected ? 'text-emerald-600' : 'text-gray-500'}`}>
                                     Pay &#8377;{fmt(fullPayAmount)} in one go <span className="line-through text-gray-400">&#8377;{fmt(baseFees)}</span> — save &#8377;{fmt(discount)}
