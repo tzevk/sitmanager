@@ -38,7 +38,7 @@ async function buildWorkbook(params: {
     views: [{ state: 'frozen', ySplit: 3 }],
   });
 
-  const headers = ['Code', 'Student Name', 'Mobile', 'Email', 'Qualification', 'Discipline', 'Course', 'Batch', 'Batch Start', 'SIT Grade', 'Status', 'Interview Date', 'Company', 'CV Sent', 'Interviewed', 'Placed', 'Remark'];
+  const headers = ['Code', 'Student Name', 'Mobile', 'Email', 'Qualification', 'Discipline', 'Course', 'Batch', 'Batch Start', 'Final Grade', 'Status', 'Interview Date', 'Company', 'CV Sent', 'Interviewed', 'Placed', 'Remark'];
   const thin: ExcelJS.Border = { style: 'thin', color: { argb: 'FFB0B0B0' } };
   const allBorders: Partial<ExcelJS.Borders> = { top: thin, bottom: thin, left: thin, right: thin };
 
@@ -83,7 +83,7 @@ async function buildWorkbook(params: {
       repeatedStudent ? '' : (row.Course_Name || ''),
       repeatedStudent ? '' : (row.Batch_code || ''),
       repeatedStudent ? '' : formatDisplayDate(row.Batch_Start),
-      repeatedStudent ? '' : (row.SIT_Performance || ''),
+      repeatedStudent ? '' : (row.Final_Grade || ''),
       row.Shortlist_Status || '',
       formatDisplayDate(row.Shortlist_Date),
       row.Company || '',
@@ -391,7 +391,8 @@ export async function GET(req: NextRequest) {
          b.Batch_code,
          b.SDate AS Batch_Start,
          b.EDate AS Batch_End,
-         s.SitPerformance AS SIT_Performance,
+         final_result.Final_Result_Percent,
+         final_result.Grade AS Final_Grade,
          s.PlacementRemark AS Placement_Remark,
          shortlist.Shortlist_Date,
          shortlist.CV_Sent,
@@ -446,13 +447,34 @@ export async function GET(req: NextRequest) {
              OR LOWER(TRIM(COALESCE(cc.Placement, ''))) = 'yes'
            )
        ) shortlist ON shortlist.Student_Id = s.Student_Id
+       LEFT JOIN (
+         SELECT latest.Batch_Id, latest.Student_Code, latest.Final_Result_Percent, latest.Grade
+         FROM (
+           SELECT
+             gr.Batch_Id,
+             gc.Student_Code,
+             gc.Final_Result_Percent,
+             gc.Grade,
+             ROW_NUMBER() OVER (
+               PARTITION BY gr.Batch_Id, gc.Student_Code
+               ORDER BY gc.Gen_id DESC, gc.Id DESC
+             ) AS rn
+           FROM generate_final_result gr
+           INNER JOIN generate_final_child gc ON gc.Gen_id = gr.Id
+           WHERE COALESCE(gr.IsDelete, 0) = 0
+             AND COALESCE(gc.deleted, 0) = 0
+         ) latest
+         WHERE latest.rn = 1
+       ) final_result
+         ON final_result.Batch_Id = am.Batch_Id
+        AND final_result.Student_Code = am.Student_Code
        ${educationJoin}
        ${disciplineJoin}
        ${where}
        ORDER BY
          CASE
-           WHEN TRIM(COALESCE(s.SitPerformance, '')) REGEXP '^-?[0-9]+(\\.[0-9]+)?$'
-           THEN CAST(TRIM(s.SitPerformance) AS DECIMAL(10,2))
+           WHEN TRIM(COALESCE(final_result.Final_Result_Percent, '')) REGEXP '^-?[0-9]+(\\.[0-9]+)?$'
+           THEN CAST(TRIM(final_result.Final_Result_Percent) AS DECIMAL(10,2))
            ELSE NULL
          END DESC,
          s.Student_Name,

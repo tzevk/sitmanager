@@ -21,7 +21,8 @@ interface ReportRow {
   Batch_code: string | null;
   Batch_Start: string | null;
   Batch_End: string | null;
-  SIT_Performance: string | null;
+  Final_Result_Percent: string | null;
+  Final_Grade: string | null;
   Placement_Remark: string | null;
   Shortlist_Status: 'Placed' | 'Interview Call' | '';
   Shortlist_Date: string | null;
@@ -260,6 +261,7 @@ export default function StudentInterviewReportPage() {
                   <th className="py-3 px-3 text-left">Course</th>
                   <th className="py-3 px-3 text-left w-24">Batch</th>
                   <th className="py-3 px-3 text-left w-24">Batch Start</th>
+                  <th className="py-3 px-3 text-left w-24">Final Grade</th>
                   <th className="py-3 px-3 text-left w-24">Interview Date</th>
                   <th className="py-3 px-3 text-left w-28">Status</th>
                   <th className="py-3 px-3 text-center w-20">CV Sent</th>
@@ -286,6 +288,7 @@ export default function StudentInterviewReportPage() {
                         <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Course_Name || '—'}</td>
                         <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Batch_code || '—'}</td>
                         <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{fmtDate(r.Batch_Start)}</td>
+                        <td rowSpan={r.rowSpan} className="py-2.5 px-3 align-top">{r.Final_Grade || '—'}</td>
                       </>
                     )}
                     <td className="py-2.5 px-3">{fmtDate(r.Shortlist_Date)}</td>
