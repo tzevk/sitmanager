@@ -7,7 +7,6 @@ import { useResourcePermissions } from '@/lib/permissions-context';
 
 interface Course { id: number; name: string }
 interface Batch { id: number; name: string }
-interface Discipline { id: number; name: string }
 
 interface ReportRow {
   Student_Id: number;
@@ -39,17 +38,13 @@ function fmtDate(d: string | null | undefined): string {
 
 export default function StudentInterviewReportPage() {
   const { canView, loading: permLoading } = useResourcePermissions('report_student_interview');
-  const [courseId, setCourseId] = useState('');
+  const [courseId, setCourseId] = useState('all');
   const [batchId, setBatchId] = useState('');
   const [year, setYear] = useState('');
-  const [qualification, setQualification] = useState('');
-  const [discipline, setDiscipline] = useState('');
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [years, setYears] = useState<number[]>([]);
-  const [qualifications, setQualifications] = useState<string[]>([]);
-  const [disciplines, setDisciplines] = useState<Discipline[]>([]);
 
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -58,24 +53,19 @@ export default function StudentInterviewReportPage() {
 
   useEffect(() => {
     (async () => {
-      const [cRes, yRes, qRes, dRes] = await Promise.all([
+      const [cRes, yRes] = await Promise.all([
         fetch('/api/reports/student-interview?options=courses'),
         fetch('/api/reports/student-interview?options=years'),
-        fetch('/api/reports/student-interview?options=qualifications'),
-        fetch('/api/reports/student-interview?options=disciplines'),
       ]);
-      const [cd, yd, qd, dd] = await Promise.all([cRes.json(), yRes.json(), qRes.json(), dRes.json()]);
+      const [cd, yd] = await Promise.all([cRes.json(), yRes.json()]);
       setCourses(cd.courses ?? []);
       setYears(yd.years ?? []);
-      setQualifications(qd.qualifications ?? []);
-      setDisciplines(dd.disciplines ?? []);
     })();
   }, []);
 
   useEffect(() => {
     setBatchId('');
     setBatches([]);
-    if (!courseId) return;
     (async () => {
       const res = await fetch(`/api/reports/student-interview?options=batches&courseId=${courseId}`);
       const data = await res.json();
@@ -84,15 +74,16 @@ export default function StudentInterviewReportPage() {
   }, [courseId]);
 
   const fetchReport = useCallback(async () => {
-    if (!courseId || !batchId || !year || !qualification || !discipline) {
-      setError('Course, Batch, Year, Qualification, and Discipline are required.');
+    if (!batchId) {
+      setError('Batch is required.');
       return;
     }
     setError('');
     setLoading(true);
     setTriggered(true);
     try {
-      const params = new URLSearchParams({ courseId, batchId, year, qualification, discipline });
+      const params = new URLSearchParams({ courseId, batchId });
+      if (year) params.set('year', year);
       const res = await fetch(`/api/reports/student-interview?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed to fetch report');
@@ -102,7 +93,7 @@ export default function StudentInterviewReportPage() {
     } finally {
       setLoading(false);
     }
-  }, [courseId, batchId, year, qualification, discipline]);
+  }, [courseId, batchId, year]);
 
   if (permLoading) return <PermissionLoading />;
   if (!canView) return <AccessDenied message="You do not have permission to view the Student Search For Interview report." />;
@@ -112,12 +103,12 @@ export default function StudentInterviewReportPage() {
       <PageHeader
         title="Student Search For Interview Report"
         breadcrumbs={[{ label: 'Reports' }, { label: 'Student Search For Interview' }]}
-        meta={triggered ? `${rows.length} records` : 'Apply all filters'}
+        meta={triggered ? `${rows.length} records` : 'Apply filters'}
       />
 
       <FilterBar>
         <select className={`${ctrl} w-[170px]`} value={courseId} onChange={(e) => setCourseId(e.target.value)}>
-          <option value="">Course*</option>
+          <option value="all">All Courses</option>
           {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
 
@@ -127,18 +118,8 @@ export default function StudentInterviewReportPage() {
         </select>
 
         <select className={`${ctrl} w-[110px]`} value={year} onChange={(e) => setYear(e.target.value)}>
-          <option value="">Year*</option>
+          <option value="">All Years</option>
           {years.map((y) => <option key={y} value={y}>{y}</option>)}
-        </select>
-
-        <select className={`${ctrl} w-[170px]`} value={qualification} onChange={(e) => setQualification(e.target.value)}>
-          <option value="">Qualification*</option>
-          {qualifications.map((q) => <option key={q} value={q}>{q}</option>)}
-        </select>
-
-        <select className={`${ctrl} w-[160px]`} value={discipline} onChange={(e) => setDiscipline(e.target.value)}>
-          <option value="">Discipline*</option>
-          {disciplines.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
 
         <PrimaryBtn onClick={fetchReport}>

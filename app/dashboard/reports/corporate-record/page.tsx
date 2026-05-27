@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
-import { FilterBar, GhostBtn, PageHeader, PrimaryBtn } from '@/components/ui/PageHeader';
+import { FilterBar, GhostBtn, PageHeader } from '@/components/ui/PageHeader';
 
 interface Option {
   id: number;
@@ -51,7 +51,7 @@ export default function CorporateRecordReportPage() {
   const [companies, setCompanies] = useState<Option[]>([]);
   const [courses, setCourses] = useState<Option[]>([]);
   const [companyId, setCompanyId] = useState('');
-  const [courseId, setCourseId] = useState('');
+  const [courseId, setCourseId] = useState('all');
   const [periodMode, setPeriodMode] = useState<PeriodMode>('range');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -98,7 +98,7 @@ export default function CorporateRecordReportPage() {
     }
     if (periodMode === 'year' && !year) return 'Year is required for yearly reports';
     return '';
-  }, [companyId, courseId, status, periodMode, fromDate, toDate, month, year]);
+  }, [companyId, status, periodMode, fromDate, toDate, month, year]);
 
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -169,14 +169,19 @@ export default function CorporateRecordReportPage() {
             </svg>
             Back
           </GhostBtn>
-          <PrimaryBtn onClick={handleExport}>
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={!canExport || submitting}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2E3093] text-white text-xs font-semibold hover:bg-[#24267A] transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#2E3093]"
+          >
             {submitting ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : (
               <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 12l-4-4m4 4l4-4M4 20h16" />
               </svg>
             )}
             Excel
-          </PrimaryBtn>
+          </button>
         </>}
       />
 
@@ -216,7 +221,6 @@ export default function CorporateRecordReportPage() {
         )}
 
         <select value={courseId} onChange={(e) => setCourseId(e.target.value)} className={`${ctrl} w-[170px]`}>
-          <option value="">Select Course*</option>
           <option value="all">All Courses</option>
           {courses.map((course) => <option key={course.id} value={course.id}>{course.name}</option>)}
         </select>

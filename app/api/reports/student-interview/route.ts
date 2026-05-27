@@ -32,18 +32,25 @@ export async function GET(req: NextRequest) {
 
       if (options === 'batches') {
         const courseId = url.searchParams.get('courseId');
-        if (!courseId) return NextResponse.json({ batches: [] });
-        const cacheKey = `report:student-interview:options:batches:${courseId}`;
+        const normalizedCourseId = (courseId || '').trim().toLowerCase();
+        const cacheKey = `report:student-interview:options:batches:${normalizedCourseId || 'all'}`;
         const cachedData = await cache.get<{ batches: unknown }>(cacheKey);
         if (cachedData) return NextResponse.json(cachedData, { headers: { 'X-Cache': 'HIT' } });
 
-        const [rows] = await pool.query(
-          `SELECT Batch_Id AS id, Batch_code AS name
-           FROM batch_mst
-           WHERE Course_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
-           ORDER BY Batch_Id DESC`,
-          [parseInt(courseId, 10)]
-        );
+        const [rows] = normalizedCourseId && normalizedCourseId !== 'all'
+          ? await pool.query(
+              `SELECT Batch_Id AS id, Batch_code AS name
+               FROM batch_mst
+               WHERE Course_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+               ORDER BY Batch_Id DESC`,
+              [parseInt(normalizedCourseId, 10)]
+            )
+          : await pool.query(
+              `SELECT Batch_Id AS id, Batch_code AS name
+               FROM batch_mst
+               WHERE (IsDelete = 0 OR IsDelete IS NULL)
+               ORDER BY Batch_Id DESC`
+            );
         const responseData = { batches: rows };
         await cache.set(cacheKey, responseData, cacheTTL.medium);
         return NextResponse.json(responseData, { headers: { 'X-Cache': 'MISS' } });
@@ -103,32 +110,33 @@ export async function GET(req: NextRequest) {
     const auth = await requirePermission(req, 'report_student_interview.view');
     if (auth instanceof NextResponse) return auth;
 
-    const courseId = url.searchParams.get('courseId');
+    const courseId = (url.searchParams.get('courseId') || '').trim();
     const batchId = url.searchParams.get('batchId');
-    const year = url.searchParams.get('year');
-    const qualification = url.searchParams.get('qualification');
-    const discipline = url.searchParams.get('discipline');
+    const year = (url.searchParams.get('year') || '').trim();
 
-    if (!courseId || !batchId || !year || !qualification || !discipline) {
-      return NextResponse.json({ error: 'Course, Batch, Year, Qualification, and Discipline are required.' }, { status: 400 });
+    if (!batchId) {
+      return NextResponse.json({ error: 'Batch is required.' }, { status: 400 });
     }
 
     const conditions: string[] = ['(s.IsDelete = 0 OR s.IsDelete IS NULL)', '(am.IsDelete = 0 OR am.IsDelete IS NULL)'];
     const params: any[] = [];
+    const includeAllCourses = !courseId || courseId.toLowerCase() === 'all' || courseId === '0';
 
-    conditions.push('s.Course_Id = ?');
-    params.push(parseInt(courseId, 10));
     conditions.push('am.Batch_Id = ?');
     params.push(parseInt(batchId, 10));
-    conditions.push('YEAR(b.SDate) = ?');
-    params.push(parseInt(year, 10));
-    conditions.push('TRIM(s.Qualification) = ?');
-    params.push(qualification);
-    conditions.push('s.Discipline = ?');
-    params.push(parseInt(discipline, 10));
+
+    if (!includeAllCourses) {
+      conditions.push('s.Course_Id = ?');
+      params.push(parseInt(courseId, 10));
+    }
+
+    if (year) {
+      conditions.push('YEAR(b.SDate) = ?');
+      params.push(parseInt(year, 10));
+    }
 
     const where = `WHERE ${conditions.join(' AND ')}`;
-    const cacheKey = `report:student-interview:data:${courseId}:${batchId}:${year}:${qualification}:${discipline}`;
+    const cacheKey = `report:student-interview:data:${includeAllCourses ? 'all' : courseId}:${batchId}:${year || 'all'}`;
     const cachedData = await cache.get<{ rows: unknown }>(cacheKey);
     if (cachedData) return NextResponse.json(cachedData, { headers: { 'X-Cache': 'HIT' } });
 
