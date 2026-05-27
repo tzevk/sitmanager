@@ -228,9 +228,10 @@ export async function GET(req: NextRequest) {
 
     const companyId = Number(companyIdRaw);
     const courseId = Number(courseIdRaw);
+    const includeAllCompanies = !companyIdRaw || companyIdRaw === '0' || companyIdRaw.toLowerCase() === 'all';
     const includeAllCourses = !courseIdRaw || courseIdRaw === '0' || courseIdRaw.toLowerCase() === 'all';
     const { fromDate, toDate, label: periodLabel } = resolveDateRange(searchParams);
-    if (!Number.isFinite(companyId) || companyId <= 0) {
+    if (!includeAllCompanies && (!Number.isFinite(companyId) || companyId <= 0)) {
       return NextResponse.json({ error: 'Select Company is required' }, { status: 400 });
     }
     if (!includeAllCourses && (!Number.isFinite(courseId) || courseId <= 0)) {
@@ -241,13 +242,17 @@ export async function GET(req: NextRequest) {
     }
 
     const [[companyRows], [courseRows]] = await Promise.all([
-      pool.query<any[]>(`SELECT Const_Id, Comp_Name FROM consultant_mst WHERE Const_Id = ? LIMIT 1`, [companyId]),
+      includeAllCompanies
+        ? Promise.resolve([[]] as unknown as any)
+        : pool.query<any[]>(`SELECT Const_Id, Comp_Name FROM consultant_mst WHERE Const_Id = ? LIMIT 1`, [companyId]),
       includeAllCourses
         ? Promise.resolve([[]] as unknown as any)
         : pool.query<any[]>(`SELECT Course_Id, Course_Name FROM course_mst WHERE Course_Id = ? LIMIT 1`, [courseId]),
     ]);
 
-    const companyName = String(companyRows?.[0]?.Comp_Name || '').trim() || `Company ${companyId}`;
+    const companyName = includeAllCompanies
+      ? 'All Companies'
+      : String(companyRows?.[0]?.Comp_Name || '').trim() || `Company ${companyId}`;
     const courseName = includeAllCourses
       ? 'All Courses'
       : String(courseRows?.[0]?.Course_Name || '').trim() || `Course ${courseId}`;
@@ -283,7 +288,7 @@ export async function GET(req: NextRequest) {
            ON CAST(NULLIF(TRIM(f.Consultant_Id), '') AS UNSIGNED) = cm.Const_Id
          WHERE (f.IsDelete = 0 OR f.IsDelete IS NULL OR f.IsDelete = '' OR f.IsDelete = '0' OR f.IsDelete = 'N' OR f.IsDelete = 'No')
            AND (cm.IsDelete = 0 OR cm.IsDelete IS NULL)
-           AND cm.Const_Id = ?
+           AND (? = 1 OR cm.Const_Id = ?)
            AND ${followupDateSortExpr} IS NOT NULL
            AND DATE(${followupDateSortExpr}) BETWEEN ? AND ?
            AND (
@@ -294,7 +299,7 @@ export async function GET(req: NextRequest) {
              OR cm.Course_Id4 = ? OR cm.Course_Id5 = ? OR cm.Course_Id6 = ?
            )
          ORDER BY ${followupDateSortExpr} DESC, f.ID DESC`,
-        [courseName, companyId, fromDate, toDate, includeAllCourses ? 1 : 0, courseId, courseName, courseId, courseId, courseId, courseId, courseId, courseId]
+          [courseName, includeAllCompanies ? 1 : 0, companyId, fromDate, toDate, includeAllCourses ? 1 : 0, courseId, courseName, courseId, courseId, courseId, courseId, courseId, courseId]
       );
       rows = result;
     } else {
@@ -325,11 +330,11 @@ export async function GET(req: NextRequest) {
            ON b.Batch_Id = cv.Batch_Id
          WHERE (cv.IsDelete = 0 OR cv.IsDelete IS NULL)
            AND DATE(cv.TDate) BETWEEN ? AND ?
-           AND (cv.Company_Id = ? OR LOWER(TRIM(COALESCE(cv.CompanyName, ''))) = LOWER(?))
+           AND (? = 1 OR cv.Company_Id = ? OR LOWER(TRIM(COALESCE(cv.CompanyName, ''))) = LOWER(?))
            AND (? = 1 OR cv.Course_id = ?)
            AND ${statusCondition}
          ORDER BY cv.TDate DESC, cv.id DESC, cc.Id DESC`,
-        [companyName, fromDate, toDate, companyId, companyName, includeAllCourses ? 1 : 0, courseId]
+        [companyName, fromDate, toDate, includeAllCompanies ? 1 : 0, companyId, companyName, includeAllCourses ? 1 : 0, courseId]
       );
       rows = result;
     }

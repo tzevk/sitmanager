@@ -50,7 +50,7 @@ export default function CorporateRecordReportPage() {
 
   const [companies, setCompanies] = useState<Option[]>([]);
   const [courses, setCourses] = useState<Option[]>([]);
-  const [companyId, setCompanyId] = useState('');
+  const [companyId, setCompanyId] = useState('all');
   const [courseId, setCourseId] = useState('all');
   const [periodMode, setPeriodMode] = useState<PeriodMode>('range');
   const [fromDate, setFromDate] = useState('');
@@ -85,7 +85,6 @@ export default function CorporateRecordReportPage() {
   }, []);
 
   const validationError = useMemo(() => {
-    if (!companyId) return 'Select Company is required';
     if (!status) return 'Select a report type';
     if (periodMode === 'range') {
       if (!fromDate) return 'From Date is required';
@@ -98,7 +97,7 @@ export default function CorporateRecordReportPage() {
     }
     if (periodMode === 'year' && !year) return 'Year is required for yearly reports';
     return '';
-  }, [companyId, status, periodMode, fromDate, toDate, month, year]);
+  }, [status, periodMode, fromDate, toDate, month, year]);
 
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -187,7 +186,7 @@ export default function CorporateRecordReportPage() {
 
       <FilterBar>
         <select value={companyId} onChange={(e) => setCompanyId(e.target.value)} className={`${ctrl} w-[220px]`}>
-          <option value="">Select Company*</option>
+          <option value="all">All Companies</option>
           {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
         </select>
 
