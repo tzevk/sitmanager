@@ -228,7 +228,6 @@ export default function MetaLeadsPage() {
           breadcrumbs={[{ label: 'Admission Activity' }, { label: 'Meta Leads' }]}
           meta={`${pagination.total.toLocaleString()} records`}
           action={<>
-            <GhostBtn href="/api/meta-ads/oauth/start?redirectTo=/dashboard/meta-leads">Connect Meta</GhostBtn>
             <GhostBtn href="/dashboard/inquiry">Inquiry Listing</GhostBtn>
             <GhostBtn onClick={exportCsv}>Export</GhostBtn>
           </>}
