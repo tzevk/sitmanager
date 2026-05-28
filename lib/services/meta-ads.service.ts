@@ -106,6 +106,7 @@ export interface MetaLeadListParams {
 }
 
 export interface MetaLeadListRow {
+  MetaLead_Id: string;
   Student_Id: number;
   Student_Name: string;
   CourseName: string | null;
@@ -130,6 +131,63 @@ export interface MetaLeadListResult {
     trainings: string[];
     statusOptions: StatusOption[];
   };
+}
+
+export interface MetaLeadDetailResult {
+  MetaLead_Id: string;
+  Student_Id: number;
+  Student_Name: string;
+  CourseName: string | null;
+  Inquiry_Dt: string | null;
+  Present_Mobile: string | null;
+  Email: string | null;
+  Inquiry_From: string | null;
+  Inquiry_Type: string | null;
+  Status_id: number | null;
+  StatusLabel: string;
+  Discussion: string | null;
+  MetaCampaignName: string | null;
+  MetaCampaignId: string | null;
+  MetaFormName: string | null;
+  MetaFormId: string | null;
+  MetaPageName: string | null;
+  MetaPageId: string | null;
+  MetaAdName: string | null;
+  MetaAdId: string | null;
+  MetaAdsetName: string | null;
+  MetaAdsetId: string | null;
+  LeadTags: string[];
+  IsDuplicateLead: boolean;
+  DuplicateOfInquiryId: number | null;
+  LastError: string | null;
+  NotificationsSentAt: string | null;
+  SyncedAt: string | null;
+  CreatedAt: string | null;
+  UTM: Record<string, string | null>;
+  Fields: Record<string, string | null>;
+  Payload: unknown;
+}
+
+export interface MetaLeadUpdateInput {
+  studentName?: string | null;
+  courseName?: string | null;
+  mobile?: string | null;
+  email?: string | null;
+  fields?: Record<string, string | null>;
+  utm?: Record<string, string | null>;
+}
+
+export interface MetaLeadSyncOptions {
+  sinceHours?: number | null;
+  maxPagesPerForm?: number;
+}
+
+export interface MetaLeadSyncSummary {
+  pages: number;
+  forms: number;
+  leadsProcessed: number;
+  errors: number;
+  sinceHours: number | null;
 }
 
 interface MetaStoredTokenConfig {
@@ -171,6 +229,21 @@ interface MetaConversionsApiResponse {
   events_received?: number;
   fbtrace_id?: string;
   messages?: string[];
+}
+
+interface MetaGraphConnection<T> {
+  data?: T[];
+  paging?: { next?: string };
+}
+
+interface MetaPageRecord {
+  id?: string;
+  name?: string;
+}
+
+interface MetaLeadFormRecord {
+  id?: string;
+  name?: string;
 }
 
 let inquiryTableNameCache: string | null = null;
@@ -475,6 +548,75 @@ async function fetchGraphJson<T>(path: string, fields?: string[]): Promise<T> {
     throw new Error(normalizeMetaGraphError(data, `Meta Graph API failed with ${res.status}`));
   }
   return data as T;
+}
+
+async function fetchGraphJsonFromUrl<T>(url: string): Promise<T> {
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!res.ok) {
+    throw new Error(normalizeMetaGraphError(data, `Meta Graph API failed with ${res.status}`));
+  }
+  return data as T;
+}
+
+async function fetchGraphConnectionAll<T>(path: string, fields?: string[], limit = 100, maxPages = 20): Promise<T[]> {
+  const url = await buildGraphUrl(path, fields);
+  url.searchParams.set('limit', String(limit));
+
+  const rows: T[] = [];
+  let nextUrl: string | null = url.toString();
+  let pagesFetched = 0;
+
+  while (nextUrl && pagesFetched < maxPages) {
+    const page = await fetchGraphJsonFromUrl<MetaGraphConnection<T>>(nextUrl);
+    rows.push(...(Array.isArray(page?.data) ? page.data : []));
+    nextUrl = normalizeText(page?.paging?.next);
+    pagesFetched += 1;
+  }
+
+  return rows;
+}
+
+async function fetchRecentFormLeads(formId: string, options: MetaLeadSyncOptions): Promise<MetaLeadDetails[]> {
+  const url = await buildGraphUrl(`/${formId}/leads`, ['id', 'created_time', 'field_data', 'ad_id', 'form_id', 'campaign_id', 'is_organic']);
+  url.searchParams.set('limit', '100');
+
+  const rows: MetaLeadDetails[] = [];
+  const maxPagesPerForm = Math.max(1, Math.min(20, options.maxPagesPerForm ?? 3));
+  const cutoffMs = options.sinceHours == null
+    ? null
+    : Date.now() - Math.max(1, options.sinceHours) * 60 * 60 * 1000;
+
+  let nextUrl: string | null = url.toString();
+  let pagesFetched = 0;
+
+  while (nextUrl && pagesFetched < maxPagesPerForm) {
+    const page = await fetchGraphJsonFromUrl<MetaGraphConnection<MetaLeadDetails>>(nextUrl);
+    const pageRows = Array.isArray(page?.data) ? page.data : [];
+    let hitCutoff = false;
+
+    for (const lead of pageRows) {
+      if (cutoffMs != null) {
+        const createdMs = Date.parse(String(lead?.created_time || ''));
+        if (Number.isFinite(createdMs) && createdMs < cutoffMs) {
+          hitCutoff = true;
+          continue;
+        }
+      }
+      rows.push(lead);
+    }
+
+    if (hitCutoff) break;
+
+    nextUrl = normalizeText(page?.paging?.next);
+    pagesFetched += 1;
+  }
+
+  return rows;
 }
 
 async function postGraphJson<T>(path: string, body: Record<string, unknown>, accessToken?: string): Promise<T> {
@@ -816,6 +958,20 @@ function buildDiscussionNote(ctx: MetaLeadContext, tags: string[]): string {
   return parts.join(' | ');
 }
 
+function resolveMetaCourseName(fields: Record<string, string | null>, formName: string | null): string | null {
+  return firstValue(fields, [
+    'course',
+    'course_name',
+    'interested_course',
+    'training_programme',
+    'training_program',
+    'program',
+    'program_name',
+    'preferred_course',
+    'preferred_program',
+  ]) || formName;
+}
+
 function buildTags(fields: Record<string, string | null>, ctx: MetaLeadContext): string[] {
   const tags = new Set<string>(['meta', 'instant-lead']);
   if (ctx.campaignName) tags.add(`campaign:${sanitizeLabel(ctx.campaignName)}`);
@@ -879,7 +1035,7 @@ async function notifyRecipients(input: {
 
 async function upsertMetaLeadRow(params: {
   leadId: string;
-  inquiryId: number;
+  inquiryId: number | null;
   duplicateOfInquiryId: number | null;
   sourceLabel: string;
   contactSource: string;
@@ -910,8 +1066,8 @@ async function upsertMetaLeadRow(params: {
        duplicate_reason, last_error, notifications_sent_at
      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
      ON DUPLICATE KEY UPDATE
-       inquiry_id = VALUES(inquiry_id),
-       duplicate_of_inquiry_id = VALUES(duplicate_of_inquiry_id),
+       inquiry_id = COALESCE(VALUES(inquiry_id), inquiry_id),
+       duplicate_of_inquiry_id = COALESCE(VALUES(duplicate_of_inquiry_id), duplicate_of_inquiry_id),
        source_label = VALUES(source_label),
        contact_source = VALUES(contact_source),
        page_id = VALUES(page_id),
@@ -1196,6 +1352,116 @@ export async function fetchMetaCampaignPerformance(params: { dateFrom?: string |
   });
 }
 
+export async function syncLiveMetaLeadsToDb(options: MetaLeadSyncOptions = {}): Promise<MetaLeadSyncSummary> {
+  const pages = await getMetaLeadPages();
+  const summary: MetaLeadSyncSummary = {
+    pages: pages.length,
+    forms: 0,
+    leadsProcessed: 0,
+    errors: 0,
+    sinceHours: options.sinceHours ?? null,
+  };
+
+  const formsByPage = await Promise.all(
+    pages.map(async (page) => ({
+      page,
+      forms: await fetchGraphConnectionAll<MetaLeadFormRecord>(`/${page.id}/leadgen_forms`, ['id', 'name']),
+    }))
+  );
+
+  const leadSyncJobs = formsByPage.flatMap(({ page, forms }) =>
+    forms.map(async (form) => {
+      const formId = normalizeText(form.id);
+      if (!formId) return;
+      summary.forms += 1;
+
+      try {
+        const leads = await fetchRecentFormLeads(formId, options);
+
+        await Promise.all(leads.map(async (lead) => {
+          const leadId = normalizeText(lead.id);
+          if (!leadId) return;
+          summary.leadsProcessed += 1;
+
+          const fields = mapLeadFields(lead.field_data);
+          const fallbackFormName = normalizeText(form.name);
+          const ctx = await fetchLeadContext({
+            form_id: formId,
+            page_id: page.id,
+          }, lead);
+          ctx.formName = ctx.formName || fallbackFormName;
+          ctx.pageName = ctx.pageName || page.name;
+
+          await upsertMetaLeadRow({
+            leadId,
+            inquiryId: null,
+            duplicateOfInquiryId: null,
+            sourceLabel: META_SOURCE_LABEL,
+            contactSource: META_CONTACT_SOURCE,
+            studentName: firstValue(fields, ['full_name', 'full_name_1', 'name'])
+              || [firstValue(fields, ['first_name']), firstValue(fields, ['last_name'])].filter(Boolean).join(' ').trim()
+              || 'Meta Lead',
+            mobile: normalizeDigits(firstValue(fields, ['phone_number', 'phone', 'mobile', 'whatsapp_number', 'whatsapp'])),
+            email: normalizeEmail(firstValue(fields, ['email', 'email_address'])),
+            courseName: resolveMetaCourseName(fields, ctx.formName || fallbackFormName),
+            leadCreatedTime: normalizeText(lead.created_time),
+            ctx,
+            tags: buildTags(fields, ctx),
+            utm: Object.fromEntries(Object.entries(fields).filter(([key]) => key.startsWith('utm_'))),
+            fields,
+            payload: { lead, source: 'graph-fallback' },
+            duplicateReason: null,
+          });
+        }));
+      } catch (error) {
+        summary.errors += 1;
+        console.error('Meta live sync failed for form', {
+          pageId: page.id,
+          formId,
+          error: error instanceof Error ? error.message : error,
+        });
+      }
+    })
+  );
+
+  await Promise.all(leadSyncJobs);
+  return summary;
+}
+
+function getConfiguredMetaPageIds(): string[] {
+  return [process.env.META_PAGE_ID, process.env.META_PAGE_IDS]
+    .flatMap((value) => String(value || '').split(','))
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+async function getMetaLeadPages(): Promise<Array<{ id: string; name: string | null }>> {
+  const pages = new Map<string, string | null>();
+
+  for (const pageId of getConfiguredMetaPageIds()) {
+    pages.set(pageId, null);
+  }
+
+  const stored = await getStoredMetaTokenConfig();
+  for (const page of stored?.pages || []) {
+    if (page.id) {
+      pages.set(page.id, page.name || pages.get(page.id) || null);
+    }
+  }
+
+  if (pages.size === 0) {
+    const accountPages = await fetchGraphConnectionAll<MetaPageRecord>('/me/accounts', ['id', 'name']);
+    for (const page of accountPages) {
+      const id = normalizeText(page.id);
+      if (id) {
+        pages.set(id, normalizeText(page.name));
+      }
+    }
+  }
+
+  return Array.from(pages.entries()).map(([id, name]) => ({ id, name }));
+}
+
 export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLeadListResult> {
   await ensureMetaLeadTables();
   const pool = getPool();
@@ -1264,13 +1530,39 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
      ${whereClause}`,
     queryParams
   );
-  const total = Number((countRows as any[])[0]?.total || 0);
+  let total = Number((countRows as any[])[0]?.total || 0);
+
+  if (total > 0) {
+    const [incompleteRows] = await pool.query(
+      `SELECT COUNT(*) AS total
+       FROM ${META_LEADS_TABLE}
+       WHERE COALESCE(NULLIF(TRIM(campaign_name), ''), NULLIF(TRIM(course_name), '')) IS NULL`
+    );
+    const incompleteTotal = Number((incompleteRows as any[])[0]?.total || 0);
+    if (incompleteTotal > 0) {
+      await syncLiveMetaLeadsToDb();
+    }
+  }
+
+  if (total === 0) {
+    await syncLiveMetaLeadsToDb();
+
+    const [refreshedCountRows] = await pool.query(
+      `SELECT COUNT(*) AS total
+       FROM ${META_LEADS_TABLE} m
+       LEFT JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
+       ${whereClause}`,
+      queryParams
+    );
+    total = Number((refreshedCountRows as any[])[0]?.total || 0);
+  }
 
   const [rows] = await pool.query(
     `SELECT
+       m.meta_lead_id AS MetaLead_Id,
        COALESCE(m.inquiry_id, 0) AS Student_Id,
        COALESCE(NULLIF(TRIM(m.student_name),''), NULLIF(TRIM(si.Student_Name),''), 'Meta Lead') AS Student_Name,
-       NULLIF(TRIM(m.course_name),'') AS CourseName,
+       COALESCE(NULLIF(TRIM(m.course_name),''), NULLIF(TRIM(m.form_name),'')) AS CourseName,
        COALESCE(NULLIF(TRIM(m.lead_created_time),''), CAST(m.created_at AS CHAR)) AS Inquiry_Dt,
        NULLIF(TRIM(m.mobile),'') AS Present_Mobile,
        NULLIF(TRIM(m.email),'') AS Email,
@@ -1278,7 +1570,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
        m.source_label AS Inquiry_Type,
        CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) AS Status_id,
        si.Discussion AS Discussion,
-       NULLIF(TRIM(m.campaign_name),'') AS MetaCampaignName,
+       COALESCE(NULLIF(TRIM(m.campaign_name),''), NULLIF(TRIM(m.campaign_id),'')) AS MetaCampaignName,
        NULLIF(TRIM(m.form_name),'') AS MetaFormName,
        m.tags_json AS LeadTagsJson,
        m.duplicate_of_inquiry_id IS NOT NULL AS IsDuplicateLead
@@ -1312,6 +1604,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
 
     const statusIdNum = row.Status_id == null ? null : Number(row.Status_id);
     return {
+      MetaLead_Id: String(row.MetaLead_Id || ''),
       Student_Id: Number(row.Student_Id || 0),
       Student_Name: String(row.Student_Name || 'Meta Lead'),
       CourseName: row.CourseName ?? null,
@@ -1338,4 +1631,220 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
       statusOptions,
     },
   };
+}
+
+export async function getMetaLeadDetail(metaLeadId: string): Promise<MetaLeadDetailResult | null> {
+  await ensureMetaLeadTables();
+  const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
+
+  const [rows] = await pool.query(
+    `SELECT
+       m.meta_lead_id AS MetaLead_Id,
+       COALESCE(m.inquiry_id, 0) AS Student_Id,
+       COALESCE(NULLIF(TRIM(m.student_name),''), NULLIF(TRIM(si.Student_Name),''), 'Meta Lead') AS Student_Name,
+       COALESCE(NULLIF(TRIM(m.course_name),''), NULLIF(TRIM(m.form_name),'')) AS CourseName,
+       COALESCE(NULLIF(TRIM(m.lead_created_time),''), CAST(m.created_at AS CHAR)) AS Inquiry_Dt,
+       NULLIF(TRIM(m.mobile),'') AS Present_Mobile,
+       NULLIF(TRIM(m.email),'') AS Email,
+       m.contact_source AS Inquiry_From,
+       m.source_label AS Inquiry_Type,
+       CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) AS Status_id,
+       si.Discussion AS Discussion,
+       COALESCE(NULLIF(TRIM(m.campaign_name),''), NULLIF(TRIM(m.campaign_id),'')) AS MetaCampaignName,
+       NULLIF(TRIM(m.campaign_id),'') AS MetaCampaignId,
+       NULLIF(TRIM(m.form_name),'') AS MetaFormName,
+       NULLIF(TRIM(m.form_id),'') AS MetaFormId,
+       NULLIF(TRIM(m.page_name),'') AS MetaPageName,
+       NULLIF(TRIM(m.page_id),'') AS MetaPageId,
+       NULLIF(TRIM(m.ad_name),'') AS MetaAdName,
+       NULLIF(TRIM(m.ad_id),'') AS MetaAdId,
+       NULLIF(TRIM(m.adset_name),'') AS MetaAdsetName,
+       NULLIF(TRIM(m.adset_id),'') AS MetaAdsetId,
+       m.tags_json AS LeadTagsJson,
+       m.duplicate_of_inquiry_id AS DuplicateOfInquiryId,
+       m.duplicate_of_inquiry_id IS NOT NULL AS IsDuplicateLead,
+       m.last_error AS LastError,
+       CAST(m.notifications_sent_at AS CHAR) AS NotificationsSentAt,
+       CAST(m.synced_at AS CHAR) AS SyncedAt,
+       CAST(m.created_at AS CHAR) AS CreatedAt,
+       m.utm_json AS UTMJson,
+       m.fields_json AS FieldsJson,
+       m.payload_json AS PayloadJson
+     FROM ${META_LEADS_TABLE} m
+     LEFT JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
+     WHERE m.meta_lead_id = ?
+     LIMIT 1`,
+    [metaLeadId]
+  );
+
+  const row = (rows as any[])[0];
+  if (!row) return null;
+
+  let tags: string[] = [];
+  let utm: Record<string, string | null> = {};
+  let fields: Record<string, string | null> = {};
+  let payload: unknown = null;
+
+  try {
+    const parsed = JSON.parse(row.LeadTagsJson || '[]');
+    tags = Array.isArray(parsed) ? parsed.map((tag) => String(tag)).filter(Boolean) : [];
+  } catch {}
+
+  try {
+    const parsed = JSON.parse(row.UTMJson || '{}');
+    utm = parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {}
+
+  try {
+    const parsed = JSON.parse(row.FieldsJson || '{}');
+    fields = parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {}
+
+  try {
+    payload = row.PayloadJson ? JSON.parse(row.PayloadJson) : null;
+  } catch {
+    payload = row.PayloadJson || null;
+  }
+
+  const statusIdNum = row.Status_id == null ? null : Number(row.Status_id);
+  return {
+    MetaLead_Id: String(row.MetaLead_Id || ''),
+    Student_Id: Number(row.Student_Id || 0),
+    Student_Name: String(row.Student_Name || 'Meta Lead'),
+    CourseName: row.CourseName ?? null,
+    Inquiry_Dt: row.Inquiry_Dt ?? null,
+    Present_Mobile: row.Present_Mobile ?? null,
+    Email: row.Email ?? null,
+    Inquiry_From: row.Inquiry_From ?? null,
+    Inquiry_Type: row.Inquiry_Type ?? null,
+    Status_id: statusIdNum,
+    StatusLabel: statusIdNum != null ? (FALLBACK_STATUSES[statusIdNum] || `Status ${statusIdNum}`) : 'Open',
+    Discussion: row.Discussion ?? null,
+    MetaCampaignName: row.MetaCampaignName ?? null,
+    MetaCampaignId: row.MetaCampaignId ?? null,
+    MetaFormName: row.MetaFormName ?? null,
+    MetaFormId: row.MetaFormId ?? null,
+    MetaPageName: row.MetaPageName ?? null,
+    MetaPageId: row.MetaPageId ?? null,
+    MetaAdName: row.MetaAdName ?? null,
+    MetaAdId: row.MetaAdId ?? null,
+    MetaAdsetName: row.MetaAdsetName ?? null,
+    MetaAdsetId: row.MetaAdsetId ?? null,
+    LeadTags: tags,
+    IsDuplicateLead: Boolean(row.IsDuplicateLead),
+    DuplicateOfInquiryId: row.DuplicateOfInquiryId == null ? null : Number(row.DuplicateOfInquiryId),
+    LastError: row.LastError ?? null,
+    NotificationsSentAt: row.NotificationsSentAt ?? null,
+    SyncedAt: row.SyncedAt ?? null,
+    CreatedAt: row.CreatedAt ?? null,
+    UTM: utm,
+    Fields: fields,
+    Payload: payload,
+  };
+}
+
+export async function updateMetaLeadDetail(metaLeadId: string, input: MetaLeadUpdateInput): Promise<MetaLeadDetailResult | null> {
+  await ensureMetaLeadTables();
+  const pool = getPool();
+
+  const [rows] = await pool.query(
+    `SELECT
+       meta_lead_id,
+       student_name,
+       course_name,
+       mobile,
+       email,
+       form_id,
+       form_name,
+       page_id,
+       page_name,
+       ad_id,
+       ad_name,
+       adset_id,
+       adset_name,
+       campaign_id,
+       campaign_name,
+       fields_json,
+       utm_json
+     FROM ${META_LEADS_TABLE}
+     WHERE meta_lead_id = ?
+     LIMIT 1`,
+    [metaLeadId]
+  );
+
+  const row = (rows as any[])[0];
+  if (!row) return null;
+
+  let existingFields: Record<string, string | null> = {};
+  let existingUtm: Record<string, string | null> = {};
+
+  try {
+    const parsed = JSON.parse(row.fields_json || '{}');
+    existingFields = parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {}
+
+  try {
+    const parsed = JSON.parse(row.utm_json || '{}');
+    existingUtm = parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {}
+
+  const nextFields = input.fields ?? existingFields;
+  const nextUtm = input.utm ?? existingUtm;
+  const ctx: MetaLeadContext = {
+    formId: normalizeText(row.form_id),
+    formName: normalizeText(row.form_name),
+    pageId: normalizeText(row.page_id),
+    pageName: normalizeText(row.page_name),
+    adId: normalizeText(row.ad_id),
+    adName: normalizeText(row.ad_name),
+    adsetId: normalizeText(row.adset_id),
+    adsetName: normalizeText(row.adset_name),
+    campaignId: normalizeText(row.campaign_id),
+    campaignName: normalizeText(row.campaign_name),
+  };
+
+  const fallbackName = [firstValue(nextFields, ['first_name']), firstValue(nextFields, ['last_name'])]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  const studentName = normalizeText(input.studentName)
+    ?? normalizeText(row.student_name)
+    ?? firstValue(nextFields, ['full_name', 'full_name_1', 'name'])
+    ?? (fallbackName || null)
+    ?? 'Meta Lead';
+  const courseName = normalizeText(input.courseName)
+    ?? normalizeText(row.course_name)
+    ?? resolveMetaCourseName(nextFields, ctx.formName);
+  const mobile = normalizeDigits(input.mobile)
+    ?? normalizeText(row.mobile)
+    ?? normalizeDigits(firstValue(nextFields, ['phone_number', 'phone', 'mobile', 'whatsapp_number', 'whatsapp']));
+  const email = normalizeEmail(input.email)
+    ?? normalizeText(row.email)
+    ?? normalizeEmail(firstValue(nextFields, ['email', 'email_address']));
+  const tags = buildTags(nextFields, ctx);
+
+  await pool.query(
+    `UPDATE ${META_LEADS_TABLE}
+     SET student_name = ?,
+         course_name = ?,
+         mobile = ?,
+         email = ?,
+         fields_json = ?,
+         utm_json = ?,
+         tags_json = ?
+     WHERE meta_lead_id = ?`,
+    [
+      studentName,
+      courseName,
+      mobile,
+      email,
+      JSON.stringify(nextFields),
+      JSON.stringify(nextUtm),
+      JSON.stringify(tags),
+      metaLeadId,
+    ]
+  );
+
+  return getMetaLeadDetail(metaLeadId);
 }

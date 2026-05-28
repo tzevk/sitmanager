@@ -48,19 +48,56 @@ export async function POST(req: NextRequest) {
     if (rateLimited) return rateLimited;
 
     const rawBody = await req.text();
-    if (!verifyMetaSignature(rawBody, req.headers.get('x-hub-signature-256'))) {
+    const signatureHeader = req.headers.get('x-hub-signature-256');
+    console.info('Meta Ads webhook POST received', {
+      hasSignature: Boolean(signatureHeader),
+      contentLength: rawBody.length,
+      userAgent: req.headers.get('user-agent') || null,
+    });
+
+    if (!verifyMetaSignature(rawBody, signatureHeader)) {
+      console.error('Meta Ads webhook signature verification failed', {
+        hasSignature: Boolean(signatureHeader),
+      });
       return NextResponse.json({ error: 'Invalid Meta signature' }, { status: 401 });
     }
 
     const payload = rawBody ? JSON.parse(rawBody) : {};
+    const entries = Array.isArray((payload as { entry?: unknown }).entry)
+      ? (payload as { entry: unknown[] }).entry.length
+      : 0;
+    console.info('Meta Ads webhook payload parsed', {
+      object: (payload as { object?: unknown }).object ?? null,
+      entryCount: entries,
+    });
+
     const events = extractLeadEvents(payload);
+    console.info('Meta Ads webhook lead events extracted', {
+      eventCount: events.length,
+      leadIds: events.map((event) => event.leadgen_id || null),
+    });
+
     if (events.length === 0) {
       return NextResponse.json({ ok: true, received: 0 });
     }
 
     const results = [] as Array<{ leadId: string; inquiryId: number; duplicate: boolean; created: boolean }>;
     for (const event of events) {
+      console.info('Meta Ads webhook syncing lead', {
+        leadId: event.leadgen_id || null,
+        pageId: event.page_id || null,
+        formId: event.form_id || null,
+        createdTime: event.created_time || null,
+      });
+
       const result = await syncMetaLead(event, payload);
+      console.info('Meta Ads webhook lead synced', {
+        leadId: result.leadId,
+        inquiryId: result.inquiryId,
+        duplicate: result.duplicate,
+        created: result.created,
+      });
+
       results.push({
         leadId: result.leadId,
         inquiryId: result.inquiryId,

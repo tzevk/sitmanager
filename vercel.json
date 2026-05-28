@@ -5,6 +5,12 @@
   "installCommand": "npm install",
   "framework": "nextjs",
   "regions": ["bom1"],
+  "crons": [
+    {
+      "path": "/api/cron/meta-leads-refresh?sinceHours=6&maxPagesPerForm=3",
+      "schedule": "*/5 * * * *"
+    }
+  ],
   "functions": {
     "app/api/**/*.ts": {
       "maxDuration": 30
