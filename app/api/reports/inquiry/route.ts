@@ -5,6 +5,18 @@ import { requirePermission } from '@/lib/api-auth';
 import { cache, cacheTTL } from '@/lib/cache';
 import { logReportCacheTiming } from '@/lib/report-timing';
 
+async function resolveInquiryTableName(pool: any): Promise<string> {
+  const [rows] = await pool.query(
+    `SELECT TABLE_NAME
+     FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND LOWER(TABLE_NAME) = 'student_inquiry'
+     ORDER BY CASE WHEN TABLE_NAME = 'Student_Inquiry' THEN 0 ELSE 1 END
+     LIMIT 1`
+  );
+  return String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
+}
+
 export async function GET(req: NextRequest) {
   try {
     const startedAt = Date.now();
@@ -12,6 +24,7 @@ export async function GET(req: NextRequest) {
     if (auth instanceof NextResponse) return auth;
 
     const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
     const url = req.nextUrl;
 
     const dateFrom = url.searchParams.get('dateFrom') || '';
@@ -83,7 +96,7 @@ export async function GET(req: NextRequest) {
     const whereClause = `WHERE (${conditions.join(') AND (')})`;
 
     const baseSql = `
-      FROM Student_Inquiry si
+      FROM ${inquiryTable} si
       LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
       LEFT JOIN batch_mst b ON si.Batch_Code = b.Batch_Id
       ${whereClause}

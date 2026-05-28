@@ -3,6 +3,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
+async function resolveInquiryTableName(pool: any): Promise<string> {
+  const [rows] = await pool.query(
+    `SELECT TABLE_NAME
+     FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND LOWER(TABLE_NAME) = 'student_inquiry'
+     ORDER BY CASE WHEN TABLE_NAME = 'Student_Inquiry' THEN 0 ELSE 1 END
+     LIMIT 1`
+  );
+  return String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
+}
+
 // GET - fetch single student with all related data
 export async function GET(
   req: NextRequest,
@@ -13,6 +25,7 @@ export async function GET(
     if (auth instanceof NextResponse) return auth;
 
     const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
     const { id } = await params;
 
     // Student + admission + batch + course + online form date
@@ -34,7 +47,7 @@ export async function GET(
          ON b2.Batch_code = s.Batch_Code AND (b2.IsDelete = 0 OR b2.IsDelete IS NULL)
        LEFT JOIN course_mst c ON s.Course_Id = c.Course_Id
        LEFT JOIN status_master st ON s.Status_id = st.Id
-       LEFT JOIN Student_Inquiry si
+       LEFT JOIN ${inquiryTable} si
          ON si.Student_Id = s.Student_Id AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
        LEFT JOIN online_admission_payload oap ON oap.Inquiry_Id = si.Inquiry_Id
        WHERE s.Student_Id = ? AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
@@ -60,7 +73,7 @@ export async function GET(
 
     // Inquiry_Id for this student (needed for discussions)
     const [inqRows] = await pool.query<any[]>(
-      `SELECT Inquiry_Id FROM Student_Inquiry
+      `SELECT Inquiry_Id FROM ${inquiryTable}
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
        ORDER BY Inquiry_Id DESC LIMIT 1`,
       [id]

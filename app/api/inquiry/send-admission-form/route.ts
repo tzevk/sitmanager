@@ -3,6 +3,18 @@ import { requirePermission } from '@/lib/api-auth';
 import { buildAdmissionFormMailContent, sendAdmissionFormEmail } from '@/lib/mailer';
 import { getPool } from '@/lib/db';
 
+async function resolveInquiryTableName(pool: any): Promise<string> {
+  const [rows] = await pool.query(
+    `SELECT TABLE_NAME
+     FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND LOWER(TABLE_NAME) = 'student_inquiry'
+     ORDER BY CASE WHEN TABLE_NAME = 'Student_Inquiry' THEN 0 ELSE 1 END
+     LIMIT 1`
+  );
+  return String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
+}
+
 function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
@@ -12,8 +24,9 @@ async function resolveRecipientEmail(inquiryId: number, requestedToEmail: string
   if (direct && isValidEmail(direct)) return direct;
 
   const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
   const [rows] = await pool.query(
-    `SELECT Email FROM Student_Inquiry WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+    `SELECT Email FROM ${inquiryTable} WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
     [inquiryId],
   );
 

@@ -5,6 +5,18 @@ import { getPool } from '@/lib/db';
 import { buildAdmissionFormMailContent, sendAdmissionFormEmail } from '@/lib/mailer';
 import { isValidEmail, sanitizeStringMax } from '@/lib/validation';
 
+async function resolveInquiryTableName(pool: any): Promise<string> {
+  const [rows] = await pool.query(
+    `SELECT TABLE_NAME
+     FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND LOWER(TABLE_NAME) = 'student_inquiry'
+     ORDER BY CASE WHEN TABLE_NAME = 'Student_Inquiry' THEN 0 ELSE 1 END
+     LIMIT 1`
+  );
+  return String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
+}
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await requirePermission(req, 'inquiry.create');
@@ -21,10 +33,11 @@ export async function POST(req: NextRequest) {
     }
 
     const pool = getPool();
+    const inquiryTable = await resolveInquiryTableName(pool);
     const today = new Date().toISOString().slice(0, 10);
 
     const insertSql = `
-      INSERT INTO Student_Inquiry (
+      INSERT INTO ${inquiryTable} (
         Student_Name,
         Present_Mobile,
         Email,

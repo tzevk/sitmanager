@@ -3,6 +3,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
+async function resolveInquiryTableName(pool: any): Promise<string> {
+  const [rows] = await pool.query(
+    `SELECT TABLE_NAME
+     FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND LOWER(TABLE_NAME) = 'student_inquiry'
+     ORDER BY CASE WHEN TABLE_NAME = 'Student_Inquiry' THEN 0 ELSE 1 END
+     LIMIT 1`
+  );
+  return String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
+}
+
 // GET – fetch discussions for a student
 export async function GET(
   req: NextRequest,
@@ -13,11 +25,12 @@ export async function GET(
     if (auth instanceof NextResponse) return auth;
 
     const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
     const { id } = await params;
 
     // Look up the actual Inquiry_Id for this student
     const [inqRows] = await pool.query<any[]>(
-      `SELECT Inquiry_Id FROM Student_Inquiry
+      `SELECT Inquiry_Id FROM ${inquiryTable}
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
        ORDER BY Inquiry_Id DESC LIMIT 1`,
       [id]
@@ -50,6 +63,7 @@ export async function POST(
     if (auth instanceof NextResponse) return auth;
 
     const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
     const { id } = await params;
     const { discussion } = await req.json();
 
@@ -59,7 +73,7 @@ export async function POST(
 
     // Look up the actual Inquiry_Id for this student
     const [inqRows] = await pool.query<any[]>(
-      `SELECT Inquiry_Id FROM Student_Inquiry
+      `SELECT Inquiry_Id FROM ${inquiryTable}
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
        ORDER BY Inquiry_Id DESC LIMIT 1`,
       [id]

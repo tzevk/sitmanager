@@ -720,7 +720,7 @@ async function fetchDashboardData(dept?: string) {
         si.Student_Name AS name,
         d.nextdate AS next_followup_date,
         COALESCE(NULLIF(TRIM(d.discussion), ''), 'Follow-up') AS purpose
-      FROM Student_Inquiry si
+      FROM student_inquiry si
       INNER JOIN (
         SELECT Inquiry_id, MAX(id) AS max_id
         FROM awt_inquirydiscussion
