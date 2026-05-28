@@ -98,6 +98,7 @@ export interface MetaLeadListParams {
   limit: number;
   search?: string;
   leadTag?: string;
+  source?: string;
   statusId?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -129,6 +130,7 @@ export interface MetaLeadListResult {
   pagination: { page: number; limit: number; total: number; totalPages: number };
   filters: {
     trainings: string[];
+    sources: string[];
     statusOptions: StatusOption[];
   };
 }
@@ -175,6 +177,7 @@ export interface MetaLeadUpdateInput {
   email?: string | null;
   fields?: Record<string, string | null>;
   utm?: Record<string, string | null>;
+  statusId?: number | null;
 }
 
 export interface MetaLeadSyncOptions {
@@ -188,6 +191,12 @@ export interface MetaLeadSyncSummary {
   leadsProcessed: number;
   errors: number;
   sinceHours: number | null;
+}
+
+interface MetaLeadSourceInfo {
+  sourceLabel: string;
+  contactSource: string;
+  sourceTag: string;
 }
 
 interface MetaStoredTokenConfig {
@@ -947,9 +956,9 @@ async function addDiscussionNote(inquiryId: number, discussion: string) {
   );
 }
 
-function buildDiscussionNote(ctx: MetaLeadContext, tags: string[]): string {
+function buildDiscussionNote(sourceLabel: string, ctx: MetaLeadContext, tags: string[]): string {
   const parts = [
-    'Meta lead synced',
+    `${sourceLabel} synced`,
     ctx.campaignName ? `Campaign: ${ctx.campaignName}` : ctx.campaignId ? `Campaign ID: ${ctx.campaignId}` : null,
     ctx.adName ? `Ad: ${ctx.adName}` : ctx.adId ? `Ad ID: ${ctx.adId}` : null,
     ctx.formName ? `Form: ${ctx.formName}` : ctx.formId ? `Form ID: ${ctx.formId}` : null,
@@ -970,6 +979,66 @@ function resolveMetaCourseName(fields: Record<string, string | null>, formName: 
     'preferred_course',
     'preferred_program',
   ]) || formName;
+}
+
+function resolveMetaLeadSource(input: {
+  rawPayload?: unknown;
+  event?: Partial<MetaWebhookLeadEvent> | null;
+  fields: Record<string, string | null>;
+  ctx: MetaLeadContext;
+}): MetaLeadSourceInfo {
+  const candidates = [
+    normalizeText((input.rawPayload as { object?: unknown } | null)?.object),
+    normalizeText(input.event?.campaign_name),
+    normalizeText(input.event?.adgroup_name),
+    input.fields.utm_source,
+    input.fields.platform,
+    input.fields.source,
+    input.fields.placement,
+    input.ctx.campaignName,
+    input.ctx.formName,
+    input.ctx.pageName,
+    input.ctx.adName,
+  ]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+
+  const looksInstagram = candidates.some((value) =>
+    value.includes('instagram')
+    || value.includes('insta')
+    || value.includes('ig lead')
+    || value.includes('ig form')
+    || value === 'ig'
+  );
+
+  if (looksInstagram) {
+    return {
+      sourceLabel: 'Instagram Leads',
+      contactSource: 'Instagram Instant Form',
+      sourceTag: 'source:instagram',
+    };
+  }
+
+  const looksFacebook = candidates.some((value) =>
+    value.includes('facebook')
+    || value === 'fb'
+    || value.includes('fb lead')
+    || value.includes('fb form')
+  );
+
+  if (looksFacebook) {
+    return {
+      sourceLabel: 'Facebook Leads',
+      contactSource: 'Facebook Instant Form',
+      sourceTag: 'source:facebook',
+    };
+  }
+
+  return {
+    sourceLabel: META_SOURCE_LABEL,
+    contactSource: META_CONTACT_SOURCE,
+    sourceTag: 'source:meta',
+  };
 }
 
 function buildTags(fields: Record<string, string | null>, ctx: MetaLeadContext): string[] {
@@ -1031,6 +1100,102 @@ async function notifyRecipients(input: {
       })
     )
   );
+}
+
+function parseJsonObject(raw: unknown): Record<string, string | null> {
+  if (!raw) return {};
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>).map(([key, value]) => [key, value == null ? null : String(value)])
+    );
+  } catch {
+    return {};
+  }
+}
+
+function parseJsonArray(raw: unknown): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return Array.isArray(parsed) ? parsed.map((item) => String(item)).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function backfillStoredMetaLeadSources(): Promise<number> {
+  await ensureMetaLeadTables();
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT
+       meta_lead_id,
+       source_label,
+       contact_source,
+       campaign_id,
+       campaign_name,
+       form_id,
+       form_name,
+       page_id,
+       page_name,
+       ad_id,
+       ad_name,
+       adset_id,
+       adset_name,
+       fields_json,
+       tags_json
+     FROM ${META_LEADS_TABLE}
+     WHERE COALESCE(NULLIF(TRIM(source_label), ''), ?) = ?`,
+    [META_SOURCE_LABEL, META_SOURCE_LABEL]
+  );
+
+  let updated = 0;
+  for (const row of rows as any[]) {
+    const fields = parseJsonObject(row.fields_json);
+    const ctx: MetaLeadContext = {
+      formId: normalizeText(row.form_id),
+      formName: normalizeText(row.form_name),
+      pageId: normalizeText(row.page_id),
+      pageName: normalizeText(row.page_name),
+      adId: normalizeText(row.ad_id),
+      adName: normalizeText(row.ad_name),
+      adsetId: normalizeText(row.adset_id),
+      adsetName: normalizeText(row.adset_name),
+      campaignId: normalizeText(row.campaign_id),
+      campaignName: normalizeText(row.campaign_name),
+    };
+
+    const sourceInfo = resolveMetaLeadSource({ fields, ctx });
+    const existingTags = parseJsonArray(row.tags_json).filter((tag) => !/^source:/i.test(String(tag)));
+    const tags = Array.from(new Set<string>([...existingTags, sourceInfo.sourceTag])).sort();
+    const nextSourceLabel = sourceInfo.sourceLabel;
+    const nextContactSource = sourceInfo.contactSource;
+    const currentSourceLabel = normalizeText(row.source_label) ?? META_SOURCE_LABEL;
+    const currentContactSource = normalizeText(row.contact_source) ?? META_CONTACT_SOURCE;
+    const currentTagsJson = JSON.stringify(parseJsonArray(row.tags_json));
+    const nextTagsJson = JSON.stringify(tags);
+
+    if (
+      currentSourceLabel === nextSourceLabel
+      && currentContactSource === nextContactSource
+      && currentTagsJson === nextTagsJson
+    ) {
+      continue;
+    }
+
+    await pool.query(
+      `UPDATE ${META_LEADS_TABLE}
+       SET source_label = ?,
+           contact_source = ?,
+           tags_json = ?
+       WHERE meta_lead_id = ?`,
+      [nextSourceLabel, nextContactSource, nextTagsJson, row.meta_lead_id]
+    );
+    updated += 1;
+  }
+
+  return updated;
 }
 
 async function upsertMetaLeadRow(params: {
@@ -1143,9 +1308,10 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
   const percentage = parseNumber(firstValue(fields, ['percentage', 'marks_percentage']));
   const inquiryDate = normalizeDateOnly(lead.created_time || event.created_time) || new Date().toISOString().slice(0, 10);
   const courseId = await resolveCourseId(courseName);
-  const tags = buildTags(fields, ctx);
+  const sourceInfo = resolveMetaLeadSource({ rawPayload, event, fields, ctx });
+  const tags = Array.from(new Set([...buildTags(fields, ctx), sourceInfo.sourceTag])).sort();
   const utm = Object.fromEntries(Object.entries(fields).filter(([key]) => key.startsWith('utm_')));
-  const discussion = buildDiscussionNote(ctx, tags);
+  const discussion = buildDiscussionNote(sourceInfo.sourceLabel, ctx, tags);
 
   const duplicate = await findDuplicateInquiry(mobile, email);
 
@@ -1165,8 +1331,8 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
       Student_Name: duplicate.studentName || studentName,
       Present_Mobile: duplicate.presentMobile || mobile,
       Email: duplicate.email || email,
-      Inquiry_From: META_CONTACT_SOURCE,
-      Inquiry_Type: META_SOURCE_LABEL,
+      Inquiry_From: sourceInfo.contactSource,
+      Inquiry_Type: sourceInfo.sourceLabel,
       Course_Id: duplicate.courseId || courseId,
       Discussion: discussion,
     });
@@ -1176,8 +1342,8 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
       Present_Mobile: mobile,
       Email: email,
       Inquiry_Dt: inquiryDate,
-      Inquiry_From: META_CONTACT_SOURCE,
-      Inquiry_Type: META_SOURCE_LABEL,
+      Inquiry_From: sourceInfo.contactSource,
+      Inquiry_Type: sourceInfo.sourceLabel,
       Course_Id: courseId,
       Qualification: qualification,
       Discipline: discipline,
@@ -1223,8 +1389,8 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
           leadId,
         }),
         custom_data: {
-          source_label: META_SOURCE_LABEL,
-          contact_source: META_CONTACT_SOURCE,
+          source_label: sourceInfo.sourceLabel,
+          contact_source: sourceInfo.contactSource,
           inquiry_id: inquiryId,
           lead_id: leadId,
           course_name: courseName,
@@ -1244,8 +1410,8 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
     leadId,
     inquiryId,
     duplicateOfInquiryId: duplicate?.inquiryId ?? null,
-    sourceLabel: META_SOURCE_LABEL,
-    contactSource: META_CONTACT_SOURCE,
+    sourceLabel: sourceInfo.sourceLabel,
+    contactSource: sourceInfo.contactSource,
     studentName,
     mobile,
     email,
@@ -1391,13 +1557,14 @@ export async function syncLiveMetaLeadsToDb(options: MetaLeadSyncOptions = {}): 
           }, lead);
           ctx.formName = ctx.formName || fallbackFormName;
           ctx.pageName = ctx.pageName || page.name;
+          const sourceInfo = resolveMetaLeadSource({ fields, ctx });
 
           await upsertMetaLeadRow({
             leadId,
             inquiryId: null,
             duplicateOfInquiryId: null,
-            sourceLabel: META_SOURCE_LABEL,
-            contactSource: META_CONTACT_SOURCE,
+            sourceLabel: sourceInfo.sourceLabel,
+            contactSource: sourceInfo.contactSource,
             studentName: firstValue(fields, ['full_name', 'full_name_1', 'name'])
               || [firstValue(fields, ['first_name']), firstValue(fields, ['last_name'])].filter(Boolean).join(' ').trim()
               || 'Meta Lead',
@@ -1406,7 +1573,7 @@ export async function syncLiveMetaLeadsToDb(options: MetaLeadSyncOptions = {}): 
             courseName: resolveMetaCourseName(fields, ctx.formName || fallbackFormName),
             leadCreatedTime: normalizeText(lead.created_time),
             ctx,
-            tags: buildTags(fields, ctx),
+            tags: Array.from(new Set([...buildTags(fields, ctx), sourceInfo.sourceTag])).sort(),
             utm: Object.fromEntries(Object.entries(fields).filter(([key]) => key.startsWith('utm_'))),
             fields,
             payload: { lead, source: 'graph-fallback' },
@@ -1471,12 +1638,25 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
     limit,
     search = '',
     leadTag = '',
+    source = '',
     statusId = '',
     dateFrom = '',
     dateTo = '',
     training = '',
     duplicatesOnly = false,
   } = params;
+
+  const [sourceCoverageRows] = await pool.query(
+    `SELECT
+       COUNT(*) AS total,
+       SUM(CASE WHEN LOWER(COALESCE(NULLIF(TRIM(source_label), ''), ?)) <> LOWER(?) THEN 1 ELSE 0 END) AS classified
+     FROM ${META_LEADS_TABLE}`,
+    [META_SOURCE_LABEL, META_SOURCE_LABEL]
+  );
+  const sourceCoverage = (sourceCoverageRows as any[])[0] || {};
+  if (Number(sourceCoverage.total || 0) > 0 && Number(sourceCoverage.classified || 0) === 0) {
+    await backfillStoredMetaLeadSources();
+  }
 
   const conditions: string[] = ['1=1'];
   const queryParams: any[] = [];
@@ -1499,6 +1679,10 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
     )`);
     const like = `%${leadTag.toLowerCase()}%`;
     queryParams.push(like, like, like);
+  }
+  if (source) {
+    conditions.push(`LOWER(COALESCE(m.source_label,'')) = ?`);
+    queryParams.push(source.toLowerCase());
   }
   if (statusId) {
     conditions.push(`CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) = ?`);
@@ -1589,6 +1773,13 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
      ORDER BY course_name`
   );
 
+  const [sourceRows] = await pool.query(
+    `SELECT DISTINCT source_label
+     FROM ${META_LEADS_TABLE}
+     WHERE source_label IS NOT NULL AND TRIM(source_label) != ''
+     ORDER BY source_label`
+  );
+
   const statusOptions = Object.entries(FALLBACK_STATUSES)
     .map(([id, label]) => ({ id: Number(id), label }))
     .sort((a, b) => a.id - b.id);
@@ -1628,6 +1819,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     filters: {
       trainings: (trainingRows as any[]).map((row: any) => String(row.course_name).trim()).filter(Boolean),
+      sources: (sourceRows as any[]).map((row: any) => String(row.source_label).trim()).filter(Boolean),
       statusOptions,
     },
   };
@@ -1846,5 +2038,65 @@ export async function updateMetaLeadDetail(metaLeadId: string, input: MetaLeadUp
     ]
   );
 
+  if (input.statusId != null) {
+    const inquiryTable = await resolveInquiryTableName(pool);
+    await pool.query(
+      `UPDATE \`${inquiryTable}\` si
+       INNER JOIN ${META_LEADS_TABLE} m ON m.inquiry_id = si.Inquiry_Id
+       SET si.OnlineState = ?
+       WHERE m.meta_lead_id = ?`,
+      [String(input.statusId), metaLeadId]
+    );
+  }
+
   return getMetaLeadDetail(metaLeadId);
+}
+
+export interface DiscussionEntry {
+  id: number;
+  date: string | null;
+  nextDate: string | null;
+  note: string;
+  createdAt: string | null;
+}
+
+export async function getMetaLeadDiscussions(metaLeadId: string): Promise<DiscussionEntry[]> {
+  await ensureMetaLeadTables();
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT d.id, d.date, d.nextdate AS nextDate, d.discussion AS note, d.created_date AS createdAt
+     FROM awt_inquirydiscussion d
+     INNER JOIN ${META_LEADS_TABLE} m ON m.inquiry_id = d.Inquiry_id
+     WHERE m.meta_lead_id = ? AND d.deleted = 0
+     ORDER BY d.id DESC`,
+    [metaLeadId]
+  );
+  return (rows as any[]).map((r) => ({
+    id: Number(r.id),
+    date: r.date ? String(r.date).slice(0, 10) : null,
+    nextDate: r.nextDate ? String(r.nextDate).slice(0, 10) : null,
+    note: String(r.note || ''),
+    createdAt: r.createdAt ? String(r.createdAt) : null,
+  }));
+}
+
+export async function addMetaLeadDiscussionNote(
+  metaLeadId: string,
+  note: string,
+  nextDate: string | null
+): Promise<void> {
+  await ensureMetaLeadTables();
+  const pool = getPool();
+  const [leadRows] = await pool.query(
+    `SELECT inquiry_id FROM ${META_LEADS_TABLE} WHERE meta_lead_id = ? LIMIT 1`,
+    [metaLeadId]
+  );
+  const lead = (leadRows as any[])[0];
+  if (!lead?.inquiry_id) return;
+  const safeNext = nextDate && /^\d{4}-\d{2}-\d{2}$/.test(nextDate) ? nextDate : null;
+  await pool.query(
+    `INSERT INTO awt_inquirydiscussion (Inquiry_id, date, nextdate, discussion, deleted, created_by, created_date)
+     VALUES (?, CURDATE(), ?, ?, 0, 1, NOW())`,
+    [lead.inquiry_id, safeNext, note.trim()]
+  );
 }

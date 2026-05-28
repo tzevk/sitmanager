@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
       limit: Math.min(100, Math.max(10, parseInt(url.searchParams.get('limit') || '25'))),
       search: url.searchParams.get('search')?.trim() || '',
       leadTag: url.searchParams.get('leadTag')?.trim() || '',
+      source: url.searchParams.get('source')?.trim() || '',
       statusId: url.searchParams.get('status') || '',
       dateFrom: url.searchParams.get('dateFrom') || '',
       dateTo: url.searchParams.get('dateTo') || '',

@@ -41,6 +41,7 @@ export async function PATCH(
       email: typeof body?.email === 'string' ? body.email : null,
       fields: body?.fields && typeof body.fields === 'object' ? body.fields : undefined,
       utm: body?.utm && typeof body.utm === 'object' ? body.utm : undefined,
+      statusId: typeof body?.statusId === 'number' ? body.statusId : undefined,
     });
 
     if (!detail) {

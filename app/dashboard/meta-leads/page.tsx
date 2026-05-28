@@ -52,7 +52,7 @@ interface MetaPerformanceSummary {
 }
 
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
-interface Filters { trainings: string[]; statusOptions: { id: number; label: string }[]; }
+interface Filters { trainings: string[]; sources: string[]; statusOptions: { id: number; label: string }[]; }
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 
@@ -153,10 +153,11 @@ export default function MetaLeadsPage() {
   const { canView, canUpdate, loading: permLoading } = useResourcePermissions('inquiry');
   const [rows, setRows] = useState<InquiryRow[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
-  const [filters, setFilters] = useState<Filters>({ trainings: [], statusOptions: [] });
+  const [filters, setFilters] = useState<Filters>({ trainings: [], sources: [], statusOptions: [] });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [leadTag, setLeadTag] = useState('');
+  const [source, setSource] = useState('');
   const [status, setStatus] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -178,6 +179,7 @@ export default function MetaLeadsPage() {
       const p = new URLSearchParams({ page: String(page), limit: String(pageSize) });
       if (search) p.set('search', search);
       if (leadTag) p.set('leadTag', leadTag);
+      if (source) p.set('source', source);
       if (status) p.set('status', status);
       if (dateFrom) p.set('dateFrom', dateFrom);
       if (dateTo) p.set('dateTo', dateTo);
@@ -191,6 +193,7 @@ export default function MetaLeadsPage() {
       if (data.filters) {
         setFilters({
           trainings: data.filters.trainings ?? [],
+          sources: data.filters.sources ?? [],
           statusOptions: data.filters.statusOptions ?? [],
         });
       }
@@ -201,7 +204,7 @@ export default function MetaLeadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, duplicatesOnly, leadTag, page, pageSize, search, status, training]);
+  }, [dateFrom, dateTo, duplicatesOnly, leadTag, page, pageSize, search, source, status, training]);
 
   useEffect(() => { fetchData(); }, [fetchData, fetchTrigger]);
 
@@ -230,7 +233,7 @@ export default function MetaLeadsPage() {
 
   const doSearch = () => { setPage(1); setFetchTrigger((t) => t + 1); };
   const doClear = () => {
-    setSearch(''); setLeadTag(''); setStatus(''); setDateFrom(''); setDateTo('');
+    setSearch(''); setLeadTag(''); setSource(''); setStatus(''); setDateFrom(''); setDateTo('');
     setTraining(''); setDuplicatesOnly(false); setPage(1); setFetchTrigger((t) => t + 1);
   };
 
@@ -523,6 +526,10 @@ export default function MetaLeadsPage() {
               onKeyDown={(e) => e.key === 'Enter' && doSearch()}
               className={`${ctrl} flex-1 min-w-[180px]`}
             />
+            <select value={source} onChange={(e) => setSource(e.target.value)} className={`${ctrl} w-[150px]`}>
+              <option value="">All Sources</option>
+              {filters.sources.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
             <select value={status} onChange={(e) => setStatus(e.target.value)} className={`${ctrl} w-[130px]`}>
               <option value="">All Statuses</option>
               {filters.statusOptions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -538,35 +545,34 @@ export default function MetaLeadsPage() {
           </FilterBar>
 
           {/* Leads Table */}
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-xs border-collapse">
                 <thead>
-                  <tr className="text-[10px] uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-100">
-                    <th className="text-left py-3 px-3 font-bold w-8">#</th>
-                    <th className="text-left py-3 px-3 font-bold">Lead</th>
-                    <th className="text-left py-3 px-3 font-bold">Training</th>
-                    <th className="text-left py-3 px-3 font-bold">Campaign</th>
-                    <th className="text-left py-3 px-3 font-bold">Form</th>
-                    <th className="text-left py-3 px-3 font-bold">Tags</th>
-                    <th className="text-left py-3 px-3 font-bold">Contact</th>
-                    <th className="text-left py-3 px-3 font-bold">Date</th>
-                    <th className="text-center py-3 px-3 font-bold">Status</th>
-                    <th className="text-center py-3 px-3 font-bold w-10"></th>
+                  <tr className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">
+                    <th className="text-left py-2.5 px-3 font-bold border border-slate-200 w-8">#</th>
+                    <th className="text-left py-2.5 px-3 font-bold border border-slate-200">Lead</th>
+                    <th className="text-left py-2.5 px-3 font-bold border border-slate-200">Training</th>
+                    <th className="text-left py-2.5 px-3 font-bold border border-slate-200">Campaign</th>
+                    <th className="text-left py-2.5 px-3 font-bold border border-slate-200">Mobile</th>
+                    <th className="text-left py-2.5 px-3 font-bold border border-slate-200">Email</th>
+                    <th className="text-left py-2.5 px-3 font-bold border border-slate-200">Date</th>
+                    <th className="text-center py-2.5 px-3 font-bold border border-slate-200">Status</th>
+                    <th className="text-center py-2.5 px-3 font-bold border border-slate-200 w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     Array.from({ length: 6 }).map((_, i) => (
-                      <tr key={i} className="border-b border-slate-50">
-                        {Array.from({ length: 10 }).map((__, j) => (
-                          <td key={j} className="py-3 px-3"><div className="h-4 bg-slate-50 rounded animate-pulse" /></td>
+                      <tr key={i}>
+                        {Array.from({ length: 9 }).map((__, j) => (
+                          <td key={j} className="py-2.5 px-3 border border-slate-100"><div className="h-3.5 bg-slate-50 rounded animate-pulse" /></td>
                         ))}
                       </tr>
                     ))
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="py-16 text-center">
+                      <td colSpan={9} className="py-16 text-center border border-slate-100">
                         <div className="text-slate-300 text-2xl mb-2">○</div>
                         <div className="text-xs text-slate-400 font-medium">No Meta leads found</div>
                         <div className="text-xs text-slate-300 mt-1">Try adjusting your filters</div>
@@ -575,59 +581,43 @@ export default function MetaLeadsPage() {
                   ) : rows.map((row, index) => (
                     <tr
                       key={`${row.Student_Id}-${row.Email || row.Present_Mobile || row.Student_Name}-${row.Inquiry_Dt || index}-${index}`}
-                      className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors group"
+                      className="hover:bg-slate-50/70 transition-colors group"
                     >
-                      <td className="py-2.5 px-3 text-slate-300 font-mono tabular-nums text-[10px]">
+                      <td className="py-2 px-3 text-slate-400 font-mono tabular-nums text-[10px] border border-slate-100">
                         {(pagination.page - 1) * pagination.limit + index + 1}
                       </td>
-                      <td className="py-2.5 px-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${avatarColor(row.Student_Name)}`}>
+                      <td className="py-2 px-3 border border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${avatarColor(row.Student_Name)}`}>
                             {getInitials(row.Student_Name)}
                           </div>
-                          <span className="font-semibold text-slate-700">{formatName(row.Student_Name)}</span>
+                          <span className="font-semibold text-slate-700 whitespace-nowrap">{formatName(row.Student_Name)}</span>
                         </div>
                       </td>
-                      <td className="py-2.5 px-3 text-slate-500 max-w-[120px]">
+                      <td className="py-2 px-3 text-slate-500 border border-slate-100 max-w-[110px]">
                         <span className="truncate block" title={row.CourseName || undefined}>{row.CourseName || '—'}</span>
                       </td>
-                      <td className="py-2.5 px-3 max-w-[140px]">
+                      <td className="py-2 px-3 border border-slate-100 max-w-[130px]">
                         <span className="truncate block font-medium text-slate-700" title={row.MetaCampaignName || undefined}>{row.MetaCampaignName || '—'}</span>
                       </td>
-                      <td className="py-2.5 px-3 text-slate-400 max-w-[120px]">
-                        <span className="truncate block" title={row.MetaFormName || undefined}>{row.MetaFormName || '—'}</span>
+                      <td className="py-2 px-3 border border-slate-100 font-mono text-slate-700 text-[11px] whitespace-nowrap">
+                        {row.Present_Mobile || '—'}
                       </td>
-                      <td className="py-2.5 px-3">
-                        <div className="flex flex-wrap gap-1">
-                          {(row.LeadTags || []).slice(0, 2).map((tag) => (
-                            <span key={tag} className="px-1.5 py-0.5 rounded-md bg-[#EEF3FF] text-[#2E3093] text-[9px] font-bold border border-[#2E3093]/10">{tag}</span>
-                          ))}
-                          {(row.LeadTags || []).length > 2 && (
-                            <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[9px] font-bold">+{(row.LeadTags || []).length - 2}</span>
-                          )}
-                          {row.IsDuplicateLead && (
-                            <span className="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-600 text-[9px] font-bold border border-amber-200">Dup</span>
-                          )}
-                        </div>
+                      <td className="py-2 px-3 border border-slate-100 text-slate-500 text-[11px]">
+                        <span className="truncate block max-w-[160px]">{row.Email || '—'}</span>
                       </td>
-                      <td className="py-2.5 px-3">
-                        <div className="space-y-0.5">
-                          <div className="font-mono text-slate-700 text-[11px]">{row.Present_Mobile || '—'}</div>
-                          <div className="text-slate-400 text-[10px] truncate max-w-[140px]">{row.Email || ''}</div>
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">{formatDate(row.Inquiry_Dt)}</td>
-                      <td className="py-2.5 px-3 text-center">
+                      <td className="py-2 px-3 text-slate-500 whitespace-nowrap border border-slate-100">{formatDate(row.Inquiry_Dt)}</td>
+                      <td className="py-2 px-3 text-center border border-slate-100">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${statusPill(row.Status_id, row.StatusLabel)}`}>
                           {row.StatusLabel}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-center">
+                      <td className="py-2 px-3 text-center border border-slate-100">
                         <button
                           title="Open lead details"
                           onClick={() => row.MetaLead_Id && router.push(`/dashboard/meta-leads/${encodeURIComponent(row.MetaLead_Id)}`)}
                           disabled={!canView || !row.MetaLead_Id}
-                          className={`w-7 h-7 rounded-lg flex items-center justify-center mx-auto transition-all ${
+                          className={`w-6 h-6 rounded flex items-center justify-center mx-auto transition-all ${
                             canView && row.MetaLead_Id
                               ? 'text-slate-300 hover:text-[#2E3093] hover:bg-[#2E3093]/5 group-hover:text-slate-400'
                               : 'text-slate-200 cursor-not-allowed'
@@ -645,7 +635,7 @@ export default function MetaLeadsPage() {
             </div>
 
             {/* Pagination */}
-            <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-3">
+            <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 bg-slate-50">
               <div className="text-xs text-slate-400">
                 Showing <span className="font-semibold text-slate-600">{fromRow.toLocaleString()}–{toRow.toLocaleString()}</span> of <span className="font-semibold text-slate-600">{pagination.total.toLocaleString()}</span> leads
               </div>
@@ -656,8 +646,8 @@ export default function MetaLeadsPage() {
                   disabled={loading || pagination.page <= 1}
                   className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
                     pagination.page > 1
-                      ? 'border-slate-200 text-slate-700 hover:bg-slate-50'
-                      : 'border-slate-100 text-slate-300 cursor-not-allowed'
+                      ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      : 'border-slate-100 bg-white text-slate-300 cursor-not-allowed'
                   }`}
                 >
                   ← Prev
@@ -671,8 +661,8 @@ export default function MetaLeadsPage() {
                   disabled={loading || pagination.page >= pagination.totalPages}
                   className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
                     pagination.page < pagination.totalPages
-                      ? 'border-slate-200 text-slate-700 hover:bg-slate-50'
-                      : 'border-slate-100 text-slate-300 cursor-not-allowed'
+                      ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      : 'border-slate-100 bg-white text-slate-300 cursor-not-allowed'
                   }`}
                 >
                   Next →
