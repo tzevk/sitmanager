@@ -7,18 +7,13 @@
  *   node scripts/db/migrate-from-legacy.mjs --since 2026-05-20   # default
  *   node scripts/db/migrate-from-legacy.mjs --since 2026-01-01   # broader window
  *   node scripts/db/migrate-from-legacy.mjs --dry-run            # preview counts only
+ *   node scripts/db/migrate-from-legacy.mjs --since 2026-05-28 --inquiries-only
  *
  * What it migrates (in order):
  *   1. Student_Inquiry       — rows where Inquiry_Dt >= --since date
  *   2. awt_inquirydiscussion — rows tied to those inquiry IDs
- *   3. course_mst            — all rows (small master table, safe to upsert in full)
- *   4. batch_mst             — all rows
- *   5. mst_batchcategory     — all rows (if table exists in legacy DB)
- *   6. Consultant_Mst        — all rows
- *   7. consultant_branch     — all rows
- *   8. consultant_follows    — all rows
- *   9. CV_Shortlisted        — all rows
- *  10. CVChild               — all rows
+ *   3. every other common legacy table — all rows, matched to the new DB by
+ *      case-insensitive table name and upserted using shared columns only
  *
  * All writes use INSERT … ON DUPLICATE KEY UPDATE, so re-running is safe.
  *
@@ -40,6 +35,7 @@ const sinceIdx = args.indexOf('--since');
 const sinceArg = sinceIdx !== -1 ? args[sinceIdx + 1] : null;
 const SINCE_DATE = (sinceArg && !sinceArg.startsWith('--')) ? sinceArg : '2026-05-20';
 const DRY_RUN = args.includes('--dry-run');
+const INQUIRIES_ONLY = args.includes('--inquiries-only');
 const BATCH_SIZE = 500;
 
 // Legacy DB table name → New DB table name
@@ -80,6 +76,26 @@ async function getColumns(pool, table) {
     .map((r) => r.c);
 }
 
+async function getColumnMeta(pool, table) {
+  const [rows] = await pool.query(
+    `SELECT COLUMN_NAME AS columnName,
+            DATA_TYPE AS dataType,
+            CHARACTER_MAXIMUM_LENGTH AS maxLength,
+            EXTRA AS extra
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+     ORDER BY ORDINAL_POSITION`,
+    [table],
+  );
+  return rows
+    .filter((r) => !(r.extra ?? '').toLowerCase().includes('generated'))
+    .map((r) => ({
+      columnName: String(r.columnName),
+      dataType: String(r.dataType || '').toLowerCase(),
+      maxLength: r.maxLength == null ? null : Number(r.maxLength),
+    }));
+}
+
 async function tableExists(pool, table) {
   const [rows] = await pool.query(
     `SELECT 1 FROM information_schema.TABLES
@@ -87,6 +103,27 @@ async function tableExists(pool, table) {
     [table],
   );
   return rows.length > 0;
+}
+
+async function getCommonTablePairs(oldPool, newPool) {
+  const [oldRows] = await oldPool.query(
+    `SELECT TABLE_NAME
+     FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'
+     ORDER BY TABLE_NAME`
+  );
+  const [newRows] = await newPool.query(
+    `SELECT TABLE_NAME
+     FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'
+     ORDER BY TABLE_NAME`
+  );
+
+  const newByLower = new Map(newRows.map((row) => [String(row.TABLE_NAME).toLowerCase(), String(row.TABLE_NAME)]));
+  return oldRows
+    .map((row) => String(row.TABLE_NAME))
+    .filter((oldTable) => newByLower.has(oldTable.toLowerCase()))
+    .map((oldTable) => [oldTable, newByLower.get(oldTable.toLowerCase())]);
 }
 
 /** Intersect old columns with what actually exists in the target table to avoid
@@ -98,18 +135,46 @@ async function getSharedColumns(oldPool, newPool, oldTable, newTable) {
   return oldCols.filter((c) => newColsLower.has(c.toLowerCase()));
 }
 
+function normalizeValueForTarget(value, meta) {
+  if (value == null || !meta) return value ?? null;
+  if (typeof value !== 'string') return value;
+
+  if (meta.maxLength && meta.maxLength > 0 && value.length > meta.maxLength) {
+    return value.slice(0, meta.maxLength);
+  }
+
+  return value;
+}
+
 async function upsertBatched(newPool, targetTable, columns, rows, dryRun) {
   if (!rows.length) return 0;
   if (dryRun) return rows.length;
 
   const upsertSql = buildUpsert(targetTable, columns);
+  const columnMetaRows = await getColumnMeta(newPool, targetTable);
+  const columnMeta = new Map(columnMetaRows.map((row) => [row.columnName.toLowerCase(), row]));
   let written = 0;
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const chunk = rows.slice(i, i + BATCH_SIZE);
-    const values = chunk.map((r) => columns.map((c) => r[c] ?? null));
+    const values = chunk.map((r) => columns.map((c) => normalizeValueForTarget(r[c], columnMeta.get(c.toLowerCase()))));
     await newPool.query(upsertSql, [values]);
     written += chunk.length;
   }
+  return written;
+}
+
+async function syncWholeTable(oldPool, newPool, srcTable, dstTable, dryRun) {
+  const columns = await getSharedColumns(oldPool, newPool, srcTable, dstTable);
+  if (!columns.length) {
+    console.log('   No shared columns found, skipping.');
+    return 0;
+  }
+
+  const colsSql = columns.map((c) => `\`${c}\``).join(', ');
+  const [rows] = await oldPool.query(`SELECT ${colsSql} FROM \`${srcTable}\``);
+  console.log(`   Found ${rows.length} row(s)`);
+  const written = await upsertBatched(newPool, dstTable, columns, rows, dryRun);
+  console.log(`   ${dryRun ? '[dry-run] would write' : 'Upserted'} ${written} row(s)`);
   return written;
 }
 
@@ -118,6 +183,7 @@ async function main() {
   console.log(`=== Legacy → New DB migration ===`);
   console.log(`  Since date : ${SINCE_DATE}`);
   console.log(`  Dry run    : ${DRY_RUN}`);
+  console.log(`  Scope      : ${INQUIRIES_ONLY ? 'inquiries + discussions only' : 'full migration'}`);
   console.log('');
 
   const oldPool = await mysql.createPool({
@@ -143,12 +209,14 @@ async function main() {
   });
 
   let inquiryIds = [];
+  const processedTables = new Set();
 
   try {
     // 1. Student_Inquiry ────────────────────────────────────────────────────
     {
       const srcTable = 'Student_Inquiry';
       const dstTable = TABLE_MAP[srcTable];
+      processedTables.add(srcTable.toLowerCase());
       console.log(`[1/5] ${srcTable} → ${dstTable} — fetching rows since ${SINCE_DATE}…`);
 
       const columns = await getSharedColumns(oldPool, newPool, srcTable, dstTable);
@@ -182,6 +250,7 @@ async function main() {
     // 2. awt_inquirydiscussion ───────────────────────────────────────────────
     {
       const table = 'awt_inquirydiscussion'; // same name in both DBs
+      processedTables.add(table.toLowerCase());
       console.log(`\n[2/5] ${table} — fetching discussions for ${inquiryIds.length} inquiry IDs…`);
 
       if (!inquiryIds.length) {
@@ -209,35 +278,18 @@ async function main() {
       }
     }
 
-    // 3–8. Master tables (legacy PascalCase → new lowercase) ────────────────
-    const masterPairs = [
-      ['Course_Mst',        'course_mst'],
-      ['Batch_Mst',         'batch_mst'],
-      ['MST_BatchCategory', 'mst_batchcategory'],
-      ['Consultant_Mst',    'consultant_mst'],
-      ['consultant_branch', 'consultant_branch'],
-      ['consultant_follows','consultant_follows'],
-      ['CV_Shortlisted',    'cv_shortlisted'],
-      ['CVChild',           'cvchild'],
-    ];
+    if (!INQUIRIES_ONLY) {
+      const commonPairs = await getCommonTablePairs(oldPool, newPool);
+      const remainingPairs = commonPairs.filter(([srcTable]) => !processedTables.has(srcTable.toLowerCase()));
 
-    for (let idx = 0; idx < masterPairs.length; idx++) {
-      const [srcTable, dstTable] = masterPairs[idx];
-      const stepNum = idx + 3;
-      console.log(`\n[${stepNum}/10] ${srcTable}${srcTable !== dstTable ? ' → ' + dstTable : ''} — upserting all rows…`);
-
-      if (!(await tableExists(oldPool, srcTable))) {
-        console.log(`   Table not found in legacy DB, skipping.`);
-        continue;
+      for (let idx = 0; idx < remainingPairs.length; idx++) {
+        const [srcTable, dstTable] = remainingPairs[idx];
+        const stepNum = idx + 3;
+        console.log(`\n[${stepNum}/${remainingPairs.length + 2}] ${srcTable}${srcTable !== dstTable ? ' → ' + dstTable : ''} — upserting all rows…`);
+        await syncWholeTable(oldPool, newPool, srcTable, dstTable, DRY_RUN);
       }
-
-      const columns = await getSharedColumns(oldPool, newPool, srcTable, dstTable);
-      const colsSql = columns.map((c) => `\`${c}\``).join(', ');
-      const [rows] = await oldPool.query(`SELECT ${colsSql} FROM \`${srcTable}\``);
-
-      console.log(`   Found ${rows.length} row(s)`);
-      const written = await upsertBatched(newPool, dstTable, columns, rows, DRY_RUN);
-      console.log(`   ${DRY_RUN ? '[dry-run] would write' : 'Upserted'} ${written} row(s)`);
+    } else {
+      console.log('\n[3/3] Skipping full-table migration because --inquiries-only was provided.');
     }
 
     console.log('\n=== Migration complete ===');
