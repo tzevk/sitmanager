@@ -251,7 +251,7 @@ export default function AdministrationDashboard({
             <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold">Meetings</div>
             <div className="p-4 space-y-2 max-h-[260px] overflow-auto">
               {meetings.length === 0 ? <p className="text-sm text-gray-400">No meetings found</p> : meetings.map((m: any, i: number) => (
-                <div key={`${m.id || i}`} className="p-3 rounded-xl border border-gray-100 bg-gray-50/50 text-sm">
+                <div key={`${m.id}-${i}`} className="p-3 rounded-xl border border-gray-100 bg-gray-50/50 text-sm">
                   <p className="font-semibold text-gray-800">{m.title || '-'}</p>
                   <p className="text-xs text-gray-500 mt-1">{m.meeting_date || '-'} · {m.purpose || '-'}</p>
                 </div>
