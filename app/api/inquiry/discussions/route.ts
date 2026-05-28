@@ -2,6 +2,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 
+async function resolveInquiryTableName(pool: any): Promise<string> {
+  const [rows] = await pool.query(
+    `SELECT TABLE_NAME
+     FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND LOWER(TABLE_NAME) = 'student_inquiry'
+     ORDER BY CASE WHEN TABLE_NAME = 'Student_Inquiry' THEN 0 ELSE 1 END
+     LIMIT 1`
+  );
+  return String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
+}
+
 async function hasNextDateColumn(pool: any): Promise<boolean> {
   const [rows] = await pool.query(
     `SELECT COUNT(*) as cnt
@@ -19,6 +31,7 @@ export async function GET(req: NextRequest) {
     const pool = getPool();
     const url = req.nextUrl;
     const inquiryId = url.searchParams.get('inquiryId');
+    const inquiryTable = await resolveInquiryTableName(pool);
 
     if (!inquiryId) {
       return NextResponse.json({ error: 'inquiryId is required' }, { status: 400 });
@@ -34,7 +47,7 @@ export async function GET(req: NextRequest) {
     // canonical Inquiry_Id to avoid pulling discussions for other linked inquiries.
     const [mapRows] = await pool.query(
       `SELECT Inquiry_Id
-       FROM Student_Inquiry
+       FROM ${inquiryTable}
        WHERE Inquiry_Id = ? OR Student_Id = ?
        ORDER BY Inquiry_Id DESC
        LIMIT 1`,
@@ -67,6 +80,7 @@ export async function POST(req: NextRequest) {
   try {
     const pool = getPool();
     const body = await req.json();
+    const inquiryTable = await resolveInquiryTableName(pool);
 
     const { inquiryId, discussion, nextFollowUpDate } = body;
     if (!inquiryId || !discussion?.trim()) {
@@ -84,7 +98,7 @@ export async function POST(req: NextRequest) {
     // Canonicalize to Inquiry_Id when caller sends Student_Id.
     const [mapRows] = await pool.query(
       `SELECT Inquiry_Id
-       FROM Student_Inquiry
+       FROM ${inquiryTable}
        WHERE Inquiry_Id = ? OR Student_Id = ?
        ORDER BY Inquiry_Id DESC
        LIMIT 1`,
