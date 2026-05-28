@@ -38,6 +38,7 @@ const PUBLIC_ROUTES = [
   '/api/auth/logout',
   '/api/auth/session',
   '/api/health',
+  '/api/cron/meta-leads-refresh',
   '/api/student-portal/auth/login',
   '/api/student-portal/auth/session',
   '/api/student-portal/auth/logout',
