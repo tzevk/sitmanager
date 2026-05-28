@@ -7,7 +7,7 @@
   "regions": ["bom1"],
   "crons": [
     {
-      "path": "/api/cron/meta-leads-refresh?sinceHours=6&maxPagesPerForm=3",
+      "path": "/api/cron/meta-leads-refresh",
       "schedule": "*/5 * * * *"
     }
   ],
