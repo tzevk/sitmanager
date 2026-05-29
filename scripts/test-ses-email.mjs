@@ -120,13 +120,6 @@ const html = `
                       </div>
                     </td>
                   </tr>
-                  <tr>
-                    <td style="background:#0f274b;border-radius:18px;padding:22px 24px;color:#ffffff;">
-                      <p style="margin:0 0 12px;font-size:13px;letter-spacing:0.16em;text-transform:uppercase;color:rgba(255,255,255,0.7);font-weight:800;">Enquiry Summary</p>
-                      <p style="margin:0 0 10px;font-size:15px;line-height:1.7;color:rgba(255,255,255,0.92);"><strong>Interested Course:</strong> Data Science / Full Stack / Career Programs</p>
-                      <p style="margin:0;font-size:15px;line-height:1.7;color:rgba(255,255,255,0.92);">Your enquiry has been recorded successfully and is ready for admissions follow-up.</p>
-                    </td>
-                  </tr>
                 </table>
               </td>
             </tr>

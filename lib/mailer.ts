@@ -292,14 +292,6 @@ export function buildMetaLeadThankYouMailContent(params: {
                       <td style="vertical-align:middle;">
                         <div style="display:flex;align-items:center;column-gap:24px;row-gap:16px;flex-wrap:wrap;">
                           ${logoSrc ? `<div style="display:flex;align-items:center;justify-content:flex-start;padding:10px 14px;border-radius:18px;background:rgba(255,255,255,0.98);box-shadow:0 8px 20px rgba(2,6,23,0.12);"><img src="${logoSrc}" alt="SIT Logo" width="220" style="display:block;width:220px;max-width:100%;height:auto;" /></div>` : ''}
-                          <div>
-                            <p style="margin:0;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.74);font-weight:700;">Suvidya Institute of Technology</p>
-                            <h1 style="margin:10px 0 0;font-size:32px;line-height:1.15;color:#ffffff;font-weight:800;">Thank you for reaching out</h1>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  </table>
                 </td>
               </tr>
 
