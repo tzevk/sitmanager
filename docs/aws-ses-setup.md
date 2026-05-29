@@ -1,6 +1,6 @@
 # AWS SES Setup Guide for Admission Emails
 
-This guide helps you set up Amazon SES (Simple Email Service) for sending admission form emails.
+This guide helps you set up Amazon SES (Simple Email Service) for sending admission form emails and Meta lead thank-you emails.
 
 ## Prerequisites
 
@@ -113,6 +113,14 @@ Once configured, try sending an admission form from the dashboard:
 
 Check your email inbox for the admission form link.
 
+You can also send the Meta lead thank-you preview directly from the terminal:
+
+```bash
+node scripts/test-ses-email.mjs your-test-email@example.com
+```
+
+That preview uses the same SES or SMTP transport as production and renders the SIT-branded Meta lead thank-you design.
+
 ## AWS SES Regions
 
 Choose closest region for lower latency:
@@ -195,6 +203,7 @@ AWS SES pricing (as of 2024):
 ## Next Steps
 
 - Configure email templates for different scenarios (acceptance, rejection, etc.)
+- If you want Meta lead emails to land on a different page, set `META_LEAD_THANK_YOU_URL` in the environment.
 - Set up bounce/complaint handling
 - Monitor delivery in AWS CloudWatch
 - Consider adding DKIM/SPF records for domain verification

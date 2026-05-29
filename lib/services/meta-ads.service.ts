@@ -3,14 +3,16 @@ import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { getPool } from '@/lib/db';
 import { getEnv } from '@/lib/env';
 import { createInquiry, updateInquiry, type CreateInquiryInput } from '@/lib/services/inquiry.service';
-import { sendAdmissionFormEmail } from '@/lib/mailer';
+import { sendAdmissionFormEmail, sendMetaLeadThankYouEmail } from '@/lib/mailer';
 
 const META_LEADS_TABLE = 'meta_ads_lead_sync';
 const META_SETTINGS_TABLE = 'meta_ads_settings';
 const META_CAMPAIGN_PUBLISH_LOG_TABLE = 'meta_ads_campaign_publish_log';
+const META_LEAD_EMAIL_CLICK_LOG_TABLE = 'meta_ads_lead_email_click_log';
 const META_GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v22.0';
 const META_SOURCE_LABEL = 'Meta Ads';
 const META_CONTACT_SOURCE = 'Meta Instant Form';
+const DEFAULT_META_LEAD_THANK_YOU_URL = 'https://suvidya.ac.in/';
 const META_OAUTH_SCOPES = [
   'ads_read',
   'ads_management',
@@ -104,6 +106,11 @@ interface DuplicateMatch {
   courseId: number | null;
 }
 
+interface MetaLeadDeliveryState {
+  notificationsSentAt: string | null;
+  applicantEmailSentAt: string | null;
+}
+
 export interface MetaLeadSyncResult {
   leadId: string;
   inquiryId: number;
@@ -158,6 +165,7 @@ export interface MetaLeadListRow {
   MetaFormName: string | null;
   LeadTags: string[];
   IsDuplicateLead: boolean;
+  ApplicantEmailSentAt: string | null;
 }
 
 export interface MetaLeadListResult {
@@ -618,6 +626,8 @@ async function ensureMetaLeadTables() {
       duplicate_reason VARCHAR(255) NULL,
       last_error TEXT NULL,
       notifications_sent_at TIMESTAMP NULL,
+      applicant_email_sent_at TIMESTAMP NULL,
+      applicant_email_last_error TEXT NULL,
       synced_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (id),
@@ -657,6 +667,24 @@ async function ensureMetaLeadTables() {
       KEY idx_meta_campaign_publish_created_at (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ${META_LEAD_EMAIL_CLICK_LOG_TABLE} (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      meta_lead_id VARCHAR(191) NOT NULL,
+      inquiry_id INT NULL,
+      destination_url TEXT NOT NULL,
+      ip_address VARCHAR(100) NULL,
+      user_agent VARCHAR(512) NULL,
+      referer TEXT NULL,
+      clicked_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_meta_lead_email_click_lead_id (meta_lead_id),
+      KEY idx_meta_lead_email_click_inquiry_id (inquiry_id),
+      KEY idx_meta_lead_email_click_clicked_at (clicked_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  await pool.query(`ALTER TABLE ${META_LEADS_TABLE} ADD COLUMN IF NOT EXISTS applicant_email_sent_at TIMESTAMP NULL`);
+  await pool.query(`ALTER TABLE ${META_LEADS_TABLE} ADD COLUMN IF NOT EXISTS applicant_email_last_error TEXT NULL`);
   metaTablesReady = true;
 }
 
@@ -666,6 +694,74 @@ function base64UrlEncode(value: string): string {
 
 function base64UrlDecode(value: string): string {
   return Buffer.from(value, 'base64url').toString('utf8');
+}
+
+function getMetaLeadThankYouDestinationUrl(): string {
+  const rawUrl = process.env.META_LEAD_THANK_YOU_URL?.trim() || DEFAULT_META_LEAD_THANK_YOU_URL;
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new Error('META_LEAD_THANK_YOU_URL must be a valid absolute URL');
+  }
+
+  if (!url.searchParams.has('utm_source')) url.searchParams.set('utm_source', 'meta_lead_email');
+  if (!url.searchParams.has('utm_medium')) url.searchParams.set('utm_medium', 'email');
+  if (!url.searchParams.has('utm_campaign')) url.searchParams.set('utm_campaign', 'sit_meta_lead_thank_you');
+  return url.toString();
+}
+
+function createMetaLeadEmailClickToken(input: {
+  leadId: string;
+  inquiryId: number;
+  destinationUrl: string;
+}): string {
+  const payload = base64UrlEncode(JSON.stringify({
+    leadId: input.leadId,
+    inquiryId: input.inquiryId,
+    destinationUrl: input.destinationUrl,
+    issuedAt: Date.now(),
+  }));
+  const signature = createHmac('sha256', getEnv().JWT_SECRET).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function parseMetaLeadEmailClickToken(token: string): {
+  leadId: string;
+  inquiryId: number;
+  destinationUrl: string;
+} {
+  const [payload, signature] = token.split('.');
+  if (!payload || !signature) throw new Error('Invalid lead email click token');
+
+  const expectedSignature = createHmac('sha256', getEnv().JWT_SECRET).update(payload).digest();
+  const providedSignature = Buffer.from(signature, 'base64url');
+  if (expectedSignature.length !== providedSignature.length || !timingSafeEqual(expectedSignature, providedSignature)) {
+    throw new Error('Invalid lead email click signature');
+  }
+
+  const parsed = JSON.parse(base64UrlDecode(payload)) as {
+    leadId?: unknown;
+    inquiryId?: unknown;
+    destinationUrl?: unknown;
+  };
+  const leadId = normalizeText(parsed?.leadId);
+  const inquiryId = Number(parsed?.inquiryId || 0);
+  const destinationUrl = normalizeText(parsed?.destinationUrl);
+  if (!leadId || !Number.isFinite(inquiryId) || inquiryId <= 0 || !destinationUrl) {
+    throw new Error('Lead email click token is missing required data');
+  }
+
+  return { leadId, inquiryId, destinationUrl };
+}
+
+function buildMetaLeadThankYouTrackingUrl(input: {
+  leadId: string;
+  inquiryId: number;
+  destinationUrl: string;
+}): string {
+  const token = createMetaLeadEmailClickToken(input);
+  return `${getEnv().BASE_URL}/api/public/meta-ads/lead-email-click/${encodeURIComponent(token)}`;
 }
 
 function getMetaAppId(): string {
@@ -693,6 +789,25 @@ async function getMetaSetting(settingKey: string): Promise<string | null> {
   );
   const value = String((rows as any[])[0]?.setting_value ?? '').trim();
   return value || null;
+}
+
+async function getMetaLeadDeliveryState(leadId: string): Promise<MetaLeadDeliveryState> {
+  await ensureMetaLeadTables();
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT
+       CAST(notifications_sent_at AS CHAR) AS notifications_sent_at,
+       CAST(applicant_email_sent_at AS CHAR) AS applicant_email_sent_at
+     FROM ${META_LEADS_TABLE}
+     WHERE meta_lead_id = ?
+     LIMIT 1`,
+    [leadId]
+  );
+  const row = Array.isArray(rows) && rows.length > 0 ? rows[0] as Record<string, unknown> : null;
+  return {
+    notificationsSentAt: normalizeText(row?.notifications_sent_at),
+    applicantEmailSentAt: normalizeText(row?.applicant_email_sent_at),
+  };
 }
 
 async function setMetaSetting(settingKey: string, value: string): Promise<void> {
@@ -1995,6 +2110,8 @@ async function upsertMetaLeadRow(params: {
   duplicateReason: string | null;
   errorMessage?: string | null;
   markNotified?: boolean;
+  applicantEmailSentAt?: Date | null;
+  applicantEmailLastError?: string | null;
 }) {
   await ensureMetaLeadTables();
   const pool = getPool();
@@ -2006,8 +2123,9 @@ async function upsertMetaLeadRow(params: {
        campaign_id, campaign_name, adset_id, adset_name, ad_id, ad_name,
        lead_created_time, student_name, mobile, email, course_name,
        utm_json, tags_json, fields_json, payload_json,
-       duplicate_reason, last_error, notifications_sent_at
-     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       duplicate_reason, last_error, notifications_sent_at,
+       applicant_email_sent_at, applicant_email_last_error
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
      ON DUPLICATE KEY UPDATE
        inquiry_id = COALESCE(VALUES(inquiry_id), inquiry_id),
        duplicate_of_inquiry_id = COALESCE(VALUES(duplicate_of_inquiry_id), duplicate_of_inquiry_id),
@@ -2034,7 +2152,12 @@ async function upsertMetaLeadRow(params: {
        payload_json = VALUES(payload_json),
        duplicate_reason = VALUES(duplicate_reason),
        last_error = VALUES(last_error),
-       notifications_sent_at = VALUES(notifications_sent_at)`,
+       notifications_sent_at = COALESCE(VALUES(notifications_sent_at), notifications_sent_at),
+       applicant_email_sent_at = COALESCE(VALUES(applicant_email_sent_at), applicant_email_sent_at),
+       applicant_email_last_error = CASE
+         WHEN VALUES(applicant_email_sent_at) IS NOT NULL THEN NULL
+         ELSE COALESCE(VALUES(applicant_email_last_error), applicant_email_last_error)
+       END`,
     [
       params.leadId,
       params.inquiryId,
@@ -2063,8 +2186,44 @@ async function upsertMetaLeadRow(params: {
       params.duplicateReason,
       params.errorMessage ?? null,
       params.markNotified ? new Date() : null,
+      params.applicantEmailSentAt ?? null,
+      params.applicantEmailLastError ?? null,
     ]
   );
+}
+
+export async function logMetaLeadEmailClick(input: {
+  token: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  referer?: string | null;
+}): Promise<string> {
+  const parsed = parseMetaLeadEmailClickToken(input.token);
+  try {
+    await ensureMetaLeadTables();
+    const pool = getPool();
+    await pool.query(
+      `INSERT INTO ${META_LEAD_EMAIL_CLICK_LOG_TABLE} (
+         meta_lead_id,
+         inquiry_id,
+         destination_url,
+         ip_address,
+         user_agent,
+         referer
+       ) VALUES (?,?,?,?,?,?)`,
+      [
+        parsed.leadId,
+        parsed.inquiryId,
+        parsed.destinationUrl,
+        normalizeText(input.ipAddress),
+        normalizeText(input.userAgent),
+        normalizeText(input.referer),
+      ]
+    );
+  } catch (error) {
+    console.error('Meta lead email click logging error:', error);
+  }
+  return parsed.destinationUrl;
 }
 
 export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unknown): Promise<MetaLeadSyncResult> {
@@ -2137,20 +2296,51 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
     await addDiscussionNote(inquiryId, discussion);
   }
 
-  let notified = false;
-  try {
-    await notifyRecipients({
+  const deliveryState = await getMetaLeadDeliveryState(leadId);
+
+  let notified = Boolean(deliveryState.notificationsSentAt);
+  if (!notified) {
+    try {
+      await notifyRecipients({
+        inquiryId,
+        studentName,
+        mobile,
+        email,
+        tags,
+        ctx,
+        duplicate: Boolean(duplicate),
+      });
+      notified = true;
+    } catch (error) {
+      console.error('Meta lead notification error:', error);
+    }
+  }
+
+  let applicantEmailSentAt = deliveryState.applicantEmailSentAt ? new Date(deliveryState.applicantEmailSentAt) : null;
+  let applicantEmailLastError: string | null = null;
+  if (email && !applicantEmailSentAt) {
+    const destinationUrl = getMetaLeadThankYouDestinationUrl();
+    const trackingUrl = buildMetaLeadThankYouTrackingUrl({
+      leadId,
       inquiryId,
-      studentName,
-      mobile,
-      email,
-      tags,
-      ctx,
-      duplicate: Boolean(duplicate),
+      destinationUrl,
     });
-    notified = true;
-  } catch (error) {
-    console.error('Meta lead notification error:', error);
+
+    try {
+      await sendMetaLeadThankYouEmail({
+        toEmail: email,
+        studentName,
+        trackingUrl,
+        websiteUrl: destinationUrl,
+        logoUrl: `${getEnv().BASE_URL}/sit.png`,
+        courseName,
+        campaignName: ctx.campaignName,
+      });
+      applicantEmailSentAt = new Date();
+    } catch (error) {
+      applicantEmailLastError = error instanceof Error ? error.message : 'Failed to send Meta lead thank-you email';
+      console.error('Meta lead applicant email error:', error);
+    }
   }
 
   try {
@@ -2202,6 +2392,8 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
     payload: { event, lead },
     duplicateReason,
     markNotified: notified,
+    applicantEmailSentAt,
+    applicantEmailLastError,
   });
 
   return {
@@ -2535,7 +2727,8 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
        COALESCE(NULLIF(TRIM(m.campaign_name),''), NULLIF(TRIM(m.campaign_id),'')) AS MetaCampaignName,
        NULLIF(TRIM(m.form_name),'') AS MetaFormName,
        m.tags_json AS LeadTagsJson,
-       m.duplicate_of_inquiry_id IS NOT NULL AS IsDuplicateLead
+       m.duplicate_of_inquiry_id IS NOT NULL AS IsDuplicateLead,
+       CAST(m.applicant_email_sent_at AS CHAR) AS ApplicantEmailSentAt
      FROM ${META_LEADS_TABLE} m
      LEFT JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
      ${whereClause}
@@ -2589,6 +2782,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
       MetaFormName: row.MetaFormName ?? null,
       LeadTags: tags,
       IsDuplicateLead: Boolean(row.IsDuplicateLead),
+      ApplicantEmailSentAt: row.ApplicantEmailSentAt ?? null,
     };
   });
 

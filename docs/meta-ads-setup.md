@@ -39,6 +39,8 @@ The Graph API fetch happens inside the backend API stage. It is part of the serv
 - Fetches lead details from the Meta Graph API using the lead ID.
 - Creates a new inquiry or links the lead to an existing inquiry when the same mobile or email already exists.
 - Stores Meta-specific metadata in `meta_ads_lead_sync`.
+- Sends an applicant-facing thank-you email automatically when a Meta lead contains an email address.
+- Routes the email CTA through a tracked redirect and logs every click in `meta_ads_lead_email_click_log`.
 - Surfaces campaign, form, tags, duplicate flags, filtering, and export on the inquiry listing page.
 - Shows campaign reach/click/lead/spend summary on the inquiry listing page.
 - Lets authorized users create a Meta campaign shell from the Meta Leads page.
@@ -71,7 +73,13 @@ Optional:
 META_APP_ID=your-meta-app-id
 META_GRAPH_VERSION=v22.0
 META_LEAD_NOTIFY_EMAILS=admissions@example.com,counsellor@example.com
+META_LEAD_THANK_YOU_URL=https://suvidya.ac.in/
 ```
+
+Notes:
+
+- `META_LEAD_THANK_YOU_URL` is optional. When omitted, the applicant email button redirects to `https://suvidya.ac.in/`.
+- The redirect link automatically appends `utm_source=meta_lead_email`, `utm_medium=email`, and `utm_campaign=sit_meta_lead_thank_you` unless you already set those params in `META_LEAD_THANK_YOU_URL`.
 
 ## OAuth connect flow
 
@@ -164,3 +172,5 @@ For campaign publishing, the connected token also needs campaign write access, t
 - If `META_APP_SECRET` is configured, the webhook validates `x-hub-signature-256`.
 - If `META_AD_ACCOUNT_ID` is missing, the inquiry page still works, but the Meta campaign panel will show an error message.
 - Notification emails are optional. If `META_LEAD_NOTIFY_EMAILS` is unset, lead sync still works.
+- Applicant thank-you emails use the shared mailer in `lib/mailer.ts`, so the SES or SMTP configuration from the admission flow is reused for Meta leads.
+- Applicant emails are deduplicated per Meta lead ID, which prevents repeated sends on webhook retries for the same lead.

@@ -23,6 +23,7 @@ interface InquiryRow {
   MetaFormName?: string | null;
   LeadTags?: string[];
   IsDuplicateLead?: boolean;
+  ApplicantEmailSentAt?: string | null;
 }
 
 interface MetaPerformanceRow {
@@ -229,6 +230,10 @@ function rowBg(id: number | null, label: string) {
   return 'hover:bg-slate-50/70';
 }
 
+function emailSentRowBg(sentAt: string | null | undefined): string | null {
+  return sentAt ? 'bg-blue-50/80 hover:bg-blue-100/80' : null;
+}
+
 function leadAge(dateStr: string | null): { label: string; cls: string; hours: number } {
   if (!dateStr) return { label: '—', cls: 'text-slate-300', hours: Infinity };
   const d = new Date(dateStr);
@@ -311,6 +316,7 @@ export default function MetaLeadsPage() {
   const [training, setTraining] = useState('');
   const [duplicatesOnly, setDuplicatesOnly] = useState(false);
   const [untouchedExpanded, setUntouchedExpanded] = useState(false);
+  const [kpiExpanded, setKpiExpanded] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(100);
   const [fetchTrigger, setFetchTrigger] = useState(0);
@@ -624,20 +630,6 @@ export default function MetaLeadsPage() {
     }
   }, [buildMetaReturnTo, canCreate, router]);
 
-  const duplicatesInView = useMemo(() => rows.filter((r) => r.IsDuplicateLead).length, [rows]);
-  const statusBreakdown = useMemo(() => {
-    const map = new Map<string, { id: number | null; count: number }>();
-    for (const row of rows) {
-      const key = row.StatusLabel || 'Unknown';
-      const existing = map.get(key);
-      if (existing) existing.count++;
-      else map.set(key, { id: row.Status_id, count: 1 });
-    }
-    return Array.from(map.entries())
-      .map(([label, { id, count }]) => ({ label, id, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-  }, [rows]);
 
   const allCampaigns = useMemo(
     () => (metaPerf?.campaigns || []).slice().sort((a, b) => b.leads - a.leads),
@@ -687,277 +679,234 @@ export default function MetaLeadsPage() {
             </div>
           )}
 
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#2A6BB5]/60">Outbound</p>
-                  <h3 className="text-sm font-bold text-slate-800">Publish Meta Campaign</h3>
-                  <p className="mt-1 text-xs text-slate-500">Creates a campaign and, when configured below, can also attach a lead form, creative, ad set, and ad in one publish flow.</p>
+          {/* Outbound */}
+          <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+
+            {/* Left — Publish form */}
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-100">
+                <div className="flex items-center gap-2 min-w-0">
+                  <svg className="w-4 h-4 text-[#2E3093] shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"/>
+                  </svg>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Outbound</p>
+                    <h3 className="text-xs font-bold text-slate-800 leading-tight">Publish Meta Campaign</h3>
+                  </div>
                 </div>
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">Creates paused</span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 shrink-0">
+                  <span className="w-1 h-1 rounded-full bg-amber-400" />Paused
+                </span>
               </div>
 
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                <label className="block md:col-span-3">
-                  <span className="mb-1 block text-[11px] font-semibold text-slate-600">Campaign Name</span>
-                  <input
-                    value={publishName}
-                    onChange={(e) => setPublishName(e.target.value)}
-                    placeholder="Example: SIT July 2026 Lead Campaign"
-                    className={ctrl}
-                    disabled={!canUpdate || publishBusy}
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-[11px] font-semibold text-slate-600">Page ID</span>
-                  <input
-                    value={publishPageId}
-                    onChange={(e) => setPublishPageId(e.target.value)}
-                    placeholder="Facebook Page ID"
-                    className={ctrl}
-                    disabled={!canUpdate || publishBusy}
-                  />
-                </label>
-                <label className="block md:col-span-2">
-                  <span className="mb-1 block text-[11px] font-semibold text-slate-600">Website URL</span>
-                  <input
-                    value={publishWebsiteUrl}
-                    onChange={(e) => setPublishWebsiteUrl(e.target.value)}
-                    placeholder="https://sit.example.com/admissions"
-                    className={ctrl}
-                    disabled={!canUpdate || publishBusy}
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-[11px] font-semibold text-slate-600">Objective</span>
-                  <select
-                    value={publishObjective}
-                    onChange={(e) => setPublishObjective(e.target.value)}
-                    className={ctrl}
-                    disabled={!canUpdate || publishBusy}
-                  >
-                    {META_PUBLISH_OBJECTIVES.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-[11px] font-semibold text-slate-600">Special Ad Category</span>
-                  <select
-                    value={publishSpecialCategory}
-                    onChange={(e) => setPublishSpecialCategory(e.target.value)}
-                    className={ctrl}
-                    disabled={!canUpdate || publishBusy}
-                  >
-                    {META_SPECIAL_CATEGORY_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
-                <div className="flex items-end">
-                  <button
-                    type="button"
-                    onClick={submitCampaignPublish}
-                    disabled={!canUpdate || publishBusy}
-                    className="inline-flex w-full items-center justify-center rounded-lg bg-[#2E3093] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#25277a] disabled:cursor-not-allowed disabled:bg-slate-300"
-                  >
-                    {publishBusy ? 'Publishing…' : 'Publish Campaign'}
-                  </button>
-                </div>
-              </div>
+              <div className="px-4 py-3 space-y-2 flex-1">
 
-              <div className="mt-4 grid gap-2 md:grid-cols-4">
-                {[
-                  { checked: publishWithForm, setChecked: setPublishWithForm, label: 'Create Instant Form' },
-                  { checked: publishWithCreative, setChecked: setPublishWithCreative, label: 'Create Creative' },
-                  { checked: publishWithAdSet, setChecked: setPublishWithAdSet, label: 'Create Ad Set' },
-                  { checked: publishWithAd, setChecked: setPublishWithAd, label: 'Create Ad' },
-                ].map((item) => (
-                  <label key={item.label} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={item.checked}
-                      onChange={(e) => item.setChecked(e.target.checked)}
-                      disabled={!canUpdate || publishBusy}
-                    />
-                    <span>{item.label}</span>
+                {/* Row 1 — core fields inline */}
+                <div className="flex flex-wrap gap-2 items-end">
+                  <label className="flex-1 min-w-[180px]">
+                    <span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Campaign Name</span>
+                    <input value={publishName} onChange={(e) => setPublishName(e.target.value)} placeholder="e.g. SIT July 2026 Lead Campaign" className={ctrl} disabled={!canUpdate || publishBusy} />
                   </label>
-                ))}
+                  <label className="w-[120px] shrink-0">
+                    <span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Objective</span>
+                    <select value={publishObjective} onChange={(e) => setPublishObjective(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>
+                      {META_PUBLISH_OBJECTIVES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="w-[120px] shrink-0">
+                    <span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Category</span>
+                    <select value={publishSpecialCategory} onChange={(e) => setPublishSpecialCategory(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>
+                      {META_SPECIAL_CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="w-[110px] shrink-0">
+                    <span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Page ID</span>
+                    <input value={publishPageId} onChange={(e) => setPublishPageId(e.target.value)} placeholder="Page ID" className={ctrl} disabled={!canUpdate || publishBusy} />
+                  </label>
+                  <label className="flex-1 min-w-[160px]">
+                    <span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Website URL</span>
+                    <input value={publishWebsiteUrl} onChange={(e) => setPublishWebsiteUrl(e.target.value)} placeholder="https://…" className={ctrl} disabled={!canUpdate || publishBusy} />
+                  </label>
+                </div>
+
+                {/* Row 2 — optional toggles inline */}
+                <div className="flex flex-wrap gap-1.5 items-center pt-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide shrink-0">+ Add:</span>
+                  {[
+                    { label: 'Ad Set',   enabled: publishWithAdSet,    toggle: () => setPublishWithAdSet(v => !v),    on: 'border-violet-300 bg-violet-50 text-violet-700' },
+                    { label: 'Creative', enabled: publishWithCreative,  toggle: () => setPublishWithCreative(v => !v), on: 'border-blue-300 bg-blue-50 text-blue-700' },
+                    { label: 'Form',     enabled: publishWithForm,      toggle: () => setPublishWithForm(v => !v),     on: 'border-emerald-300 bg-emerald-50 text-emerald-700' },
+                    { label: 'Ad',       enabled: publishWithAd,        toggle: () => setPublishWithAd(v => !v),       on: 'border-orange-300 bg-orange-50 text-orange-700' },
+                  ].map(s => (
+                    <button key={s.label} type="button" onClick={s.toggle} disabled={!canUpdate || publishBusy}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-colors ${s.enabled ? s.on : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'}`}>
+                      {s.enabled
+                        ? <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+                        : <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>}
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Ad Set — compact inline row */}
+                {publishWithAdSet && (
+                  <div className="flex flex-wrap gap-2 items-end rounded-lg border border-violet-200 bg-violet-50/40 px-3 py-2.5">
+                    <span className="text-[10px] font-bold text-violet-600 uppercase tracking-wide self-end pb-1.5 shrink-0">Ad Set</span>
+                    <label className="flex-1 min-w-[120px]"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Name</span><input value={publishAdSetName} onChange={e => setPublishAdSetName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                    <label className="w-[90px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Budget (₹)</span><input type="number" min="1" value={publishAdSetBudget} onChange={e => setPublishAdSetBudget(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                    <label className="w-[70px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Countries</span><input value={publishAdSetCountries} onChange={e => setPublishAdSetCountries(e.target.value)} placeholder="IN" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                    <label className="w-[110px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Billing</span><select value={publishAdSetBillingEvent} onChange={e => setPublishAdSetBillingEvent(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>{META_BILLING_EVENT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
+                    <label className="w-[130px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Goal</span><select value={publishAdSetOptimizationGoal} onChange={e => setPublishAdSetOptimizationGoal(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>{META_OPTIMIZATION_GOAL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
+                    <label className="w-[120px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Destination</span><select value={publishAdSetDestinationType} onChange={e => setPublishAdSetDestinationType(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>{META_DESTINATION_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
+                    <label className="w-[160px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Start</span><input value={publishAdSetStartTime} onChange={e => setPublishAdSetStartTime(e.target.value)} placeholder="2026-06-10T09:00:00+0530" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                    <label className="w-[90px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">End</span><input value={publishAdSetEndTime} onChange={e => setPublishAdSetEndTime(e.target.value)} placeholder="Optional" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                  </div>
+                )}
+
+                {/* Creative — compact inline row */}
+                {publishWithCreative && (
+                  <div className="flex flex-wrap gap-2 items-end rounded-lg border border-blue-200 bg-blue-50/40 px-3 py-2.5">
+                    <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wide self-end pb-1.5 shrink-0">Creative</span>
+                    <label className="w-[130px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Name</span><input value={publishCreativeName} onChange={e => setPublishCreativeName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                    <label className="w-[110px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">CTA</span><select value={publishCreativeCta} onChange={e => setPublishCreativeCta(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>{META_CTA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
+                    <label className="flex-1 min-w-[180px]"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Primary Text</span><input value={publishCreativeMessage} onChange={e => setPublishCreativeMessage(e.target.value)} placeholder="Ad copy…" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                    <label className="w-[130px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Headline</span><input value={publishCreativeHeadline} onChange={e => setPublishCreativeHeadline(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                    <label className="w-[110px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Image Hash</span><input value={publishCreativeImageHash} onChange={e => setPublishCreativeImageHash(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                    <label className="flex-1 min-w-[160px]"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Image URL</span><input value={publishCreativeImageUrl} onChange={e => setPublishCreativeImageUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                  </div>
+                )}
+
+                {/* Form — compact inline row */}
+                {publishWithForm && (
+                  <div className="flex flex-wrap gap-2 items-end rounded-lg border border-emerald-200 bg-emerald-50/40 px-3 py-2.5">
+                    <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide self-end pb-1.5 shrink-0">Form</span>
+                    <label className="w-[130px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Form Name</span><input value={publishFormName} onChange={e => setPublishFormName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                    <label className="flex-1 min-w-[150px]"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Privacy URL</span><input value={publishFormPrivacyUrl} onChange={e => setPublishFormPrivacyUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                    <label className="flex-1 min-w-[150px]"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Follow-up URL</span><input value={publishFormFollowUpUrl} onChange={e => setPublishFormFollowUpUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                    <label className="w-[150px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Thank-you Title</span><input value={publishFormThankYouTitle} onChange={e => setPublishFormThankYouTitle(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                    <label className="flex-1 min-w-[160px]"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Questions</span><input value={publishFormQuestions} onChange={e => setPublishFormQuestions(e.target.value)} placeholder="FULL_NAME, EMAIL, PHONE" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                    <label className="flex-1 min-w-[160px]"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Thank-you Body</span><input value={publishFormThankYouBody} onChange={e => setPublishFormThankYouBody(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                  </div>
+                )}
+
+                {/* Ad — inline */}
+                {publishWithAd && (
+                  <div className="flex gap-2 items-end rounded-lg border border-orange-200 bg-orange-50/40 px-3 py-2.5">
+                    <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wide self-end pb-1.5 shrink-0">Ad</span>
+                    <label className="flex-1"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Ad Name</span><input value={publishAdName} onChange={e => setPublishAdName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                  </div>
+                )}
+
+                {!canUpdate && <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">View-only — creation requires update permission.</p>}
+                {publishError && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">{publishError}</p>}
+                {publishSuccess && <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-700">{publishSuccess}</p>}
               </div>
 
-              {publishWithForm && (
-                <div className="mt-4 rounded-xl border border-slate-200 p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Instant Form</p>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Form Name</span>
-                      <input value={publishFormName} onChange={(e) => setPublishFormName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Privacy Policy URL</span>
-                      <input value={publishFormPrivacyUrl} onChange={(e) => setPublishFormPrivacyUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
-                    </label>
-                    <label className="block md:col-span-2">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Follow-up Action URL</span>
-                      <input value={publishFormFollowUpUrl} onChange={(e) => setPublishFormFollowUpUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Thank-you Title</span>
-                      <input value={publishFormThankYouTitle} onChange={(e) => setPublishFormThankYouTitle(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Questions</span>
-                      <input value={publishFormQuestions} onChange={(e) => setPublishFormQuestions(e.target.value)} placeholder="FULL_NAME, EMAIL, PHONE" className={ctrl} disabled={!canUpdate || publishBusy} />
-                    </label>
-                    <label className="block md:col-span-2">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Thank-you Body</span>
-                      <textarea value={publishFormThankYouBody} onChange={(e) => setPublishFormThankYouBody(e.target.value)} rows={3} className={`${ctrl} min-h-[84px]`} disabled={!canUpdate || publishBusy} />
-                    </label>
-                  </div>
+              {/* Footer */}
+              <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-1 flex-wrap">
+                  {['Campaign', ...(publishWithAdSet ? ['Ad Set'] : []), ...(publishWithCreative ? ['Creative'] : []), ...(publishWithForm ? ['Form'] : []), ...(publishWithAd ? ['Ad'] : [])].map((l, i, arr) => (
+                    <span key={l} className="flex items-center gap-1 text-[10px] text-slate-500">
+                      <span className="font-semibold">{l}</span>
+                      {i < arr.length - 1 && <span className="text-slate-300">+</span>}
+                    </span>
+                  ))}
                 </div>
-              )}
-
-              {publishWithCreative && (
-                <div className="mt-4 rounded-xl border border-slate-200 p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Creative</p>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Creative Name</span>
-                      <input value={publishCreativeName} onChange={(e) => setPublishCreativeName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">CTA</span>
-                      <select value={publishCreativeCta} onChange={(e) => setPublishCreativeCta(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>
-                        {META_CTA_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
-                    </label>
-                    <label className="block md:col-span-2">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Primary Text</span>
-                      <textarea value={publishCreativeMessage} onChange={(e) => setPublishCreativeMessage(e.target.value)} rows={3} className={`${ctrl} min-h-[84px]`} disabled={!canUpdate || publishBusy} />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Headline</span>
-                      <input value={publishCreativeHeadline} onChange={(e) => setPublishCreativeHeadline(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Image Hash</span>
-                      <input value={publishCreativeImageHash} onChange={(e) => setPublishCreativeImageHash(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
-                    </label>
-                    <label className="block md:col-span-2">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Image URL</span>
-                      <input value={publishCreativeImageUrl} onChange={(e) => setPublishCreativeImageUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
-                    </label>
-                  </div>
-                </div>
-              )}
-
-              {publishWithAdSet && (
-                <div className="mt-4 rounded-xl border border-slate-200 p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Ad Set</p>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Ad Set Name</span>
-                      <input value={publishAdSetName} onChange={(e) => setPublishAdSetName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Daily Budget</span>
-                      <input type="number" min="1" value={publishAdSetBudget} onChange={(e) => setPublishAdSetBudget(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Countries</span>
-                      <input value={publishAdSetCountries} onChange={(e) => setPublishAdSetCountries(e.target.value)} placeholder="IN, AE" className={ctrl} disabled={!canUpdate || publishBusy} />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Billing Event</span>
-                      <select value={publishAdSetBillingEvent} onChange={(e) => setPublishAdSetBillingEvent(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>
-                        {META_BILLING_EVENT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Optimization Goal</span>
-                      <select value={publishAdSetOptimizationGoal} onChange={(e) => setPublishAdSetOptimizationGoal(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>
-                        {META_OPTIMIZATION_GOAL_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Destination Type</span>
-                      <select value={publishAdSetDestinationType} onChange={(e) => setPublishAdSetDestinationType(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>
-                        {META_DESTINATION_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Start Time</span>
-                      <input value={publishAdSetStartTime} onChange={(e) => setPublishAdSetStartTime(e.target.value)} placeholder="2026-06-10T09:00:00+0530" className={ctrl} disabled={!canUpdate || publishBusy} />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">End Time</span>
-                      <input value={publishAdSetEndTime} onChange={(e) => setPublishAdSetEndTime(e.target.value)} placeholder="Optional" className={ctrl} disabled={!canUpdate || publishBusy} />
-                    </label>
-                  </div>
-                </div>
-              )}
-
-              {publishWithAd && (
-                <div className="mt-4 rounded-xl border border-slate-200 p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Ad</p>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    <label className="block md:col-span-2">
-                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Ad Name</span>
-                      <input value={publishAdName} onChange={(e) => setPublishAdName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
-                    </label>
-                  </div>
-                </div>
-              )}
-
-              {!canUpdate && (
-                <p className="mt-3 text-xs text-amber-700">You can view campaign publish history, but campaign creation requires inquiry update permission.</p>
-              )}
-              {publishError && <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{publishError}</p>}
-              {publishSuccess && <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{publishSuccess}</p>}
+                <button type="button" onClick={submitCampaignPublish} disabled={!canUpdate || publishBusy || !publishName.trim()}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#2E3093] px-4 py-2 text-xs font-bold text-white hover:bg-[#25277a] disabled:cursor-not-allowed disabled:bg-slate-300 transition-colors shrink-0">
+                  {publishBusy ? <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Publishing...</> : <>
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"/></svg>
+                    Publish
+                  </>}
+                </button>
+              </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#2A6BB5]/60">Recent Activity</p>
-                  <h3 className="text-sm font-bold text-slate-800">Campaign Publish Log</h3>
-                </div>
+            {/* Right — Publish log */}
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
+              <div className="px-4 py-3 border-b border-slate-100">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Recent Activity</p>
+                <h3 className="text-xs font-bold text-slate-800 leading-tight mt-0.5">Campaign Publish Log</h3>
               </div>
-              <div className="mt-4 space-y-2">
+              <div className="flex-1 overflow-y-auto">
                 {publishHistoryLoading ? (
-                  [1, 2, 3].map((i) => <div key={i} className="h-14 rounded-lg bg-slate-50 animate-pulse" />)
+                  <div className="p-3 space-y-2">{[1,2,3].map(i => <div key={i} className="h-12 rounded-lg bg-slate-50 animate-pulse" />)}</div>
                 ) : publishHistory.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-slate-200 px-3 py-5 text-center text-xs text-slate-400">No published campaigns yet.</div>
-                ) : publishHistory.map((item) => (
-                  <div key={item.id} className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-semibold text-slate-800">{item.campaignName}</p>
-                        <p className="mt-0.5 text-[11px] text-slate-500">{item.objective} · {item.campaignId || 'pending id'}</p>
-                      </div>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${item.errorMessage ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                        {item.errorMessage ? 'Failed' : item.publishStatus}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] text-slate-400">{formatDate(item.createdAt)}</p>
-                    {item.errorMessage && <p className="mt-1 text-[11px] text-red-600">{item.errorMessage}</p>}
+                  <div className="py-10 text-center"><div className="text-slate-300 text-2xl mb-1">o</div><p className="text-xs text-slate-400">No campaigns yet</p></div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {publishHistory.map(item => {
+                      const ok = !item.errorMessage;
+                      return (
+                        <div key={item.id} className="flex items-start gap-2.5 px-4 py-3 hover:bg-slate-50/60 transition-colors">
+                          <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${ok ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                            {ok
+                              ? <svg className="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+                              : <svg className="w-3 h-3 text-red-500" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-1">
+                              <p className="text-xs font-semibold text-slate-800 truncate">{item.campaignName}</p>
+                              <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${ok ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                {ok ? item.publishStatus : 'Failed'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              <span className="text-[10px] text-slate-500">{item.objective}</span>
+                              {item.campaignId && <span className="font-mono text-[9px] text-slate-400">{item.campaignId}</span>}
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(item.createdAt)}</p>
+                            {item.errorMessage && <p className="mt-1 text-[10px] text-red-600 bg-red-50 rounded px-1.5 py-0.5 truncate">{item.errorMessage}</p>}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </div>
 
           {/* KPI Row */}
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-            <KpiCard label="Total Leads" value={pagination.total.toLocaleString()} accent="blue" />
-            <KpiCard label="API Leads" value={perfLoading ? '—' : (metaPerf?.totals.leads ?? 0).toLocaleString()} accent="violet" loading={perfLoading} />
-            <KpiCard label="Reach" value={perfLoading ? '—' : (metaPerf?.totals.reach ?? 0).toLocaleString()} accent="slate" loading={perfLoading} />
-            <KpiCard label="Spend" value={perfLoading ? '—' : `₹${(metaPerf?.totals.spend ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} accent="orange" loading={perfLoading} />
-            <KpiCard label="CTR" value={perfLoading ? '—' : `${(metaPerf?.totals.ctr ?? 0).toFixed(2)}%`} accent="emerald" loading={perfLoading} />
-            <KpiCard label="Cost / Lead" value={perfLoading ? '—' : (metaPerf?.totals.cpl == null ? '—' : `₹${metaPerf.totals.cpl.toFixed(0)}`)} accent="rose" loading={perfLoading} />
+          {/* KPI Bar — collapsible */}
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setKpiExpanded(v => !v)}
+              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/60 transition-colors text-left"
+            >
+              <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 shrink-0">Performance</span>
+              <div className="flex items-center gap-4 flex-1 flex-wrap min-w-0 overflow-hidden">
+                {[
+                  { dot: 'bg-blue-500',    label: 'Leads',     value: pagination.total.toLocaleString() },
+                  { dot: 'bg-violet-500',  label: 'API Leads', value: perfLoading ? '...' : (metaPerf?.totals.leads ?? 0).toLocaleString() },
+                  { dot: 'bg-slate-400',   label: 'Reach',     value: perfLoading ? '...' : (metaPerf?.totals.reach ?? 0).toLocaleString() },
+                  { dot: 'bg-orange-500',  label: 'Spend',     value: perfLoading ? '...' : `₹${(metaPerf?.totals.spend ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}` },
+                  { dot: 'bg-emerald-500', label: 'CTR',       value: perfLoading ? '...' : `${(metaPerf?.totals.ctr ?? 0).toFixed(2)}%` },
+                  { dot: 'bg-rose-500',    label: 'CPL',       value: perfLoading ? '...' : (metaPerf?.totals.cpl == null ? '—' : `₹${metaPerf.totals.cpl.toFixed(0)}`) },
+                ].map(({ dot, label, value }) => (
+                  <span key={label} className="inline-flex items-center gap-1.5 shrink-0">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
+                    <span className="text-xs font-bold text-slate-700 tabular-nums">{value}</span>
+                    <span className="text-[10px] text-slate-400">{label}</span>
+                  </span>
+                ))}
+              </div>
+              <svg className={`w-3.5 h-3.5 text-slate-400 transition-transform shrink-0 ${kpiExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {kpiExpanded && (
+              <div className="px-4 pb-3 pt-2 border-t border-slate-100 grid grid-cols-3 sm:grid-cols-6 gap-2">
+                <KpiCard label="Total Leads" value={pagination.total.toLocaleString()} accent="blue" />
+                <KpiCard label="API Leads" value={perfLoading ? '—' : (metaPerf?.totals.leads ?? 0).toLocaleString()} accent="violet" loading={perfLoading} />
+                <KpiCard label="Reach" value={perfLoading ? '—' : (metaPerf?.totals.reach ?? 0).toLocaleString()} accent="slate" loading={perfLoading} />
+                <KpiCard label="Spend" value={perfLoading ? '—' : `₹${(metaPerf?.totals.spend ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} accent="orange" loading={perfLoading} />
+                <KpiCard label="CTR" value={perfLoading ? '—' : `${(metaPerf?.totals.ctr ?? 0).toFixed(2)}%`} accent="emerald" loading={perfLoading} />
+                <KpiCard label="Cost / Lead" value={perfLoading ? '—' : (metaPerf?.totals.cpl == null ? '—' : `₹${metaPerf.totals.cpl.toFixed(0)}`)} accent="rose" loading={perfLoading} />
+              </div>
+            )}
           </div>
-
           {/* Campaign Analytics — full width */}
           <div className="rounded-xl border border-slate-100 bg-white shadow-sm overflow-hidden">
             <div className="px-4 pt-4 pb-3 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
@@ -1119,122 +1068,31 @@ export default function MetaLeadsPage() {
             </div>
           </div>
 
-          {/* Lead Status + Quality */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-            {/* Lead Status Breakdown */}
-            <div className="rounded-xl border border-slate-100 bg-white shadow-sm overflow-hidden">
-              <div className="px-4 pt-4 pb-3 border-b border-slate-100 flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#2A6BB5]/60">Current View</p>
-                  <h3 className="text-sm font-bold text-slate-800">Lead Status Breakdown</h3>
+          {/* Leads Section */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">Leads</h3>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <span className="text-[11px] text-slate-500 tabular-nums">{pagination.total.toLocaleString()} total</span>
+                  {!loading && untouchedRows.length > 0 && (
+                    <><span className="text-slate-300 text-[10px]">·</span>
+                    <span className="text-[11px] font-semibold text-red-500 tabular-nums">{untouchedRows.length} untouched</span></>
+                  )}
+                  {!loading && (rows.length - untouchedRows.length) > 0 && (
+                    <><span className="text-slate-300 text-[10px]">·</span>
+                    <span className="text-[11px] font-semibold text-emerald-600 tabular-nums">{(rows.length - untouchedRows.length)} touched</span></>
+                  )}
+                  {!loading && rows.filter(r => r.IsDuplicateLead).length > 0 && (
+                    <><span className="text-slate-300 text-[10px]">·</span>
+                    <span className="text-[11px] font-semibold text-amber-600 tabular-nums">{rows.filter(r => r.IsDuplicateLead).length} dupes</span></>
+                  )}
                 </div>
-                <span className="text-[10px] bg-slate-50 border border-slate-200 rounded-full px-2.5 py-1 text-slate-500 font-medium">
-                  {rows.length} shown
-                </span>
-              </div>
-              <div className="p-4 space-y-3">
-                {loading ? (
-                  [1,2,3,4,5].map((i) => <div key={i} className="h-7 bg-slate-50 rounded-lg animate-pulse" />)
-                ) : statusBreakdown.length === 0 ? (
-                  <div className="py-4 text-xs text-slate-400 text-center">No leads in current view</div>
-                ) : (
-                  statusBreakdown.map(({ label, id, count }) => {
-                    const pct = rows.length > 0 ? Math.round((count / rows.length) * 100) : 0;
-                    return (
-                      <div key={label} className="flex items-center gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${statusPill(id, label)}`}>{label}</span>
-                            <span className="text-[11px] font-bold text-slate-600 tabular-nums">{count}</span>
-                          </div>
-                          <div className="h-1.5 bg-slate-100 rounded-full">
-                            <div
-                              className="h-1.5 rounded-full bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] transition-all"
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </div>
-                        <span className="text-[10px] text-slate-400 tabular-nums w-8 text-right">{pct}%</span>
-                      </div>
-                    );
-                  })
-                )}
               </div>
             </div>
-
-            {/* Lead Quality Summary */}
-            <div className="rounded-xl border border-slate-100 bg-white shadow-sm overflow-hidden">
-              <div className="px-4 pt-4 pb-3 border-b border-slate-100">
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#2A6BB5]/60">Data Quality</p>
-                <h3 className="text-sm font-bold text-slate-800">Lead Quality Summary</h3>
-              </div>
-              <div className="p-4 space-y-4">
-                {/* Duplicate ratio */}
-                <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Duplicate Leads</span>
-                    {duplicatesInView > 0 ? (
-                      <span className="text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
-                        {rows.length > 0 ? `${Math.round((duplicatesInView / rows.length) * 100)}%` : '0%'}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">Clean</span>
-                    )}
-                  </div>
-                  <div className="flex items-end gap-1.5">
-                    <span className="text-2xl font-bold text-slate-800">{duplicatesInView}</span>
-                    <span className="text-xs text-slate-400 mb-1">of {rows.length} leads in view</span>
-                  </div>
-                  <div className="mt-2 h-1.5 bg-slate-200 rounded-full">
-                    <div
-                      className="h-1.5 rounded-full bg-amber-400 transition-all"
-                      style={{ width: rows.length > 0 ? `${Math.round((duplicatesInView / rows.length) * 100)}%` : '0%' }}
-                    />
-                  </div>
-                </div>
-
-                {/* Meta attribution */}
-                {metaPerf && (
-                  <div className="space-y-2.5">
-                    <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2.5 flex items-center justify-between">
-                      <div>
-                        <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Campaigns Active</div>
-                        <div className="text-base font-bold text-slate-800 mt-0.5">{metaPerf.campaigns.length}</div>
-                      </div>
-                      <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center">
-                        <div className="w-2 h-2 rounded-full bg-violet-500" />
-                      </div>
-                    </div>
-                    <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2.5 flex items-center justify-between">
-                      <div>
-                        <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Avg Cost / Click</div>
-                        <div className="text-base font-bold text-slate-800 mt-0.5">
-                          {metaPerf.totals.clicks > 0
-                            ? `₹${(metaPerf.totals.spend / metaPerf.totals.clicks).toFixed(0)}`
-                            : '—'}
-                        </div>
-                      </div>
-                      <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                        <div className="w-2 h-2 rounded-full bg-blue-500" />
-                      </div>
-                    </div>
-                    <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2.5 flex items-center justify-between">
-                      <div>
-                        <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Impressions / Lead</div>
-                        <div className="text-base font-bold text-slate-800 mt-0.5">
-                          {metaPerf.totals.leads > 0
-                            ? Math.round(metaPerf.totals.impressions / metaPerf.totals.leads).toLocaleString()
-                            : '—'}
-                        </div>
-                      </div>
-                      <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center">
-                        <div className="w-2 h-2 rounded-full bg-teal-500" />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+              <span className="tabular-nums">Page {pagination.page} of {Math.max(1, pagination.totalPages)}</span>
             </div>
           </div>
 
@@ -1401,10 +1259,12 @@ export default function MetaLeadsPage() {
                   ) : rows.map((row, index) => {
                     const attended = hasLatestFollowUp(row);
                     const textCls = isPendingFollowUp(row) ? '[&>td]:text-purple-700' : attended ? '[&>td]:text-slate-800' : '[&>td]:text-red-500';
+                    const sentEmail = Boolean(row.ApplicantEmailSentAt);
+                    const bgCls = emailSentRowBg(row.ApplicantEmailSentAt) || rowBg(row.Status_id, row.StatusLabel);
                     return (
                     <tr
                       key={`${row.Student_Id}-${row.Email || row.Present_Mobile || row.Student_Name}-${row.Inquiry_Dt || index}-${index}`}
-                      className={`transition-colors group ${rowBg(row.Status_id, row.StatusLabel)} ${textCls}`}
+                      className={`transition-colors group ${bgCls} ${textCls}`}
                     >
                       <td className="py-2 px-3 font-mono tabular-nums text-[10px] border border-slate-100 relative pl-5">
                         <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${statusBar(row.Status_id, row.StatusLabel)} rounded-r`} />
@@ -1412,10 +1272,19 @@ export default function MetaLeadsPage() {
                       </td>
                       <td className="py-2 px-3 border border-slate-100">
                         <div className="flex items-center gap-2">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${avatarColor(row.Student_Name)}`}>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${sentEmail ? 'bg-blue-100 text-blue-700' : avatarColor(row.Student_Name)}`}>
                             {getInitials(row.Student_Name)}
                           </div>
-                          <span className="font-semibold text-slate-700 whitespace-nowrap">{formatName(row.Student_Name)}</span>
+                          <div className="min-w-0">
+                            <span className={`font-semibold whitespace-nowrap ${sentEmail ? 'text-blue-700' : 'text-slate-700'}`}>{formatName(row.Student_Name)}</span>
+                            {sentEmail && (
+                              <div className="mt-0.5">
+                                <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-blue-700">
+                                  Auto emailed
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="py-2 px-3 text-slate-500 border border-slate-100 max-w-[110px]">

@@ -1,5 +1,8 @@
+import { readFile } from 'fs/promises';
+import path from 'path';
 import nodemailer from 'nodemailer';
-import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
+import MailComposer from 'nodemailer/lib/mail-composer';
+import { SESClient, SendEmailCommand, SendRawEmailCommand } from '@aws-sdk/client-ses';
 
 const MAIL_PROVIDER = (process.env.ADMISSION_MAIL_PROVIDER || 'smtp').trim().toLowerCase();
 
@@ -28,6 +31,15 @@ export function withEmailSignature(bodyHtml: string): string {
     </div>`;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // SMTP Configuration
 const SMTP_HOST = process.env.ADMISSION_SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.ADMISSION_SMTP_PORT || '587', 10);
@@ -43,6 +55,43 @@ const AWS_SES_ACCESS_KEY = process.env.ADMISSION_AWS_SES_ACCESS_KEY;
 const AWS_SES_SECRET_KEY = process.env.ADMISSION_AWS_SES_SECRET_KEY;
 const AWS_SES_FROM_EMAIL = process.env.ADMISSION_AWS_SES_FROM_EMAIL;
 const AWS_SES_REPLY_TO = process.env.ADMISSION_AWS_SES_REPLY_TO;
+
+interface MailAttachment {
+  filename: string;
+  content: Buffer;
+  cid?: string;
+  contentType?: string;
+  contentDisposition?: 'inline' | 'attachment';
+}
+
+function createSesClient() {
+  const hasStaticSesCreds = Boolean(AWS_SES_ACCESS_KEY && AWS_SES_SECRET_KEY);
+  return hasStaticSesCreds
+    ? new SESClient({
+        region: AWS_SES_REGION,
+        credentials: {
+          accessKeyId: AWS_SES_ACCESS_KEY!,
+          secretAccessKey: AWS_SES_SECRET_KEY!,
+        },
+      })
+    : new SESClient({ region: AWS_SES_REGION });
+}
+
+async function buildInlineSitLogoAttachment(): Promise<MailAttachment | null> {
+  try {
+    const logoPath = path.join(process.cwd(), 'public', 'sit.png');
+    const content = await readFile(logoPath);
+    return {
+      filename: 'sit.png',
+      content,
+      cid: 'sit-logo@suvidya',
+      contentType: 'image/png',
+      contentDisposition: 'inline',
+    };
+  } catch {
+    return null;
+  }
+}
 
 function normalizeMailerError(error: unknown, provider: 'ses' | 'smtp', region: string) {
   const message = error instanceof Error ? error.message : String(error || 'Unknown mail error');
@@ -182,6 +231,158 @@ export function buildPublicInquirySubmissionMailContent(params: {
   return { safeName, subject, text, html };
 }
 
+export function buildMetaLeadThankYouMailContent(params: {
+  studentName?: string;
+  trackingUrl: string;
+  websiteUrl?: string;
+  logoUrl?: string;
+  logoCid?: string;
+  courseName?: string | null;
+  campaignName?: string | null;
+}) {
+  const safeName = (params.studentName || '').trim() || 'Student';
+  const trackingUrl = params.trackingUrl.trim();
+  const logoUrl = (params.logoUrl || '').trim();
+  const courseName = (params.courseName || '').trim();
+  const campaignName = (params.campaignName || '').trim();
+  const subject = 'Thank You for Your Interest in SIT';
+  const text = [
+    `Dear ${safeName},`,
+    '',
+    'Thank you for contacting Suvidya Institute of Technology.',
+    courseName ? `Your enquiry regarding ${courseName} has been received successfully.` : 'Your enquiry has been received successfully.',
+    campaignName ? `Reference: ${campaignName}` : '',
+    '',
+    'You may review our programs, admissions process, and institute information here:',
+    trackingUrl,
+    '',
+    'If you would like immediate assistance, please contact us:',
+    '+91 9821569885',
+    'enquiry@suvidya.ac.in',
+    '',
+    'A member of our team will contact you shortly.',
+    '',
+    'Regards,',
+    'Suvidya Institute of Technology',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const sig = buildEmailSignature();
+  const safeTrackingUrl = escapeHtml(trackingUrl);
+  const safeCourseName = courseName ? escapeHtml(courseName) : '';
+  const safeCampaignName = campaignName ? escapeHtml(campaignName) : '';
+  const safeNameHtml = escapeHtml(safeName);
+  const safeLogoUrl = logoUrl ? escapeHtml(logoUrl) : '';
+  const safeLogoCid = params.logoCid ? escapeHtml(params.logoCid) : '';
+  const logoSrc = safeLogoCid ? `cid:${safeLogoCid}` : safeLogoUrl;
+  const phoneHref = 'https://suvidya.ac.in/#';
+  const emailHref = 'mailto:enquiry@suvidya.ac.in';
+
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;background:#edf4fb;margin:0;padding:24px 0;color:#1e293b;width:100%;">
+      <table role="presentation" style="width:100%;border-collapse:collapse;">
+        <tr>
+          <td align="center" style="padding:0 16px;">
+            <table role="presentation" style="width:100%;max-width:720px;border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe7f3;border-radius:24px;overflow:hidden;box-shadow:0 20px 44px rgba(15,23,42,0.08);">
+              <tr>
+                <td style="background:linear-gradient(135deg,#0d2d5c 0%,#1d5fa8 100%);padding:28px 32px;">
+                  <table role="presentation" style="width:100%;border-collapse:collapse;">
+                    <tr>
+                      <td style="vertical-align:middle;">
+                        <div style="display:flex;align-items:center;column-gap:24px;row-gap:16px;flex-wrap:wrap;">
+                          ${logoSrc ? `<div style="display:flex;align-items:center;justify-content:flex-start;padding:10px 14px;border-radius:18px;background:rgba(255,255,255,0.98);box-shadow:0 8px 20px rgba(2,6,23,0.12);"><img src="${logoSrc}" alt="SIT Logo" width="220" style="display:block;width:220px;max-width:100%;height:auto;" /></div>` : ''}
+                          <div>
+                            <p style="margin:0;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.74);font-weight:700;">Suvidya Institute of Technology</p>
+                            <h1 style="margin:10px 0 0;font-size:32px;line-height:1.15;color:#ffffff;font-weight:800;">Thank you for reaching out</h1>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+
+              <tr>
+                <td style="padding:32px 32px 18px;">
+                  <p style="margin:0 0 14px;font-size:16px;line-height:1.8;color:#334155;">Dear <strong>${safeNameHtml}</strong>,</p>
+                  <p style="margin:0 0 14px;font-size:16px;line-height:1.85;color:#475569;">Thank you for contacting Suvidya Institute of Technology. Your enquiry has been received and noted by our admissions team.</p>
+                  <p style="margin:0;font-size:16px;line-height:1.85;color:#475569;">We will review your requirements and connect with you shortly to discuss the most relevant program options and the admission process.</p>
+                </td>
+              </tr>
+
+              <tr>
+                <td style="padding:0 32px 20px;">
+                  <table role="presentation" style="width:100%;border-collapse:separate;border-spacing:0 14px;">
+                    <tr>
+                      <td style="background:#f8fbff;border:1px solid #d6e7f8;border-radius:18px;padding:22px 24px;">
+                        <p style="margin:0 0 12px;font-size:13px;letter-spacing:0.16em;text-transform:uppercase;color:#1d5fa8;font-weight:800;">Next Steps</p>
+                        <table role="presentation" style="width:100%;border-collapse:collapse;">
+                          <tr>
+                            <td style="width:28px;vertical-align:top;padding:0 0 12px;">
+                              <div style="width:20px;height:20px;border-radius:50%;background:#1d5fa8;color:#ffffff;font-size:12px;font-weight:700;line-height:20px;text-align:center;">1</div>
+                            </td>
+                            <td style="padding:0 0 12px;font-size:15px;line-height:1.75;color:#475569;">Browse our academic programs, institute information, and admissions details on the official website.</td>
+                          </tr>
+                          <tr>
+                            <td style="width:28px;vertical-align:top;padding:0 0 12px;">
+                              <div style="width:20px;height:20px;border-radius:50%;background:#1d5fa8;color:#ffffff;font-size:12px;font-weight:700;line-height:20px;text-align:center;">2</div>
+                            </td>
+                            <td style="padding:0 0 12px;font-size:15px;line-height:1.75;color:#475569;">Keep your preferred course or specialization details ready for the discussion with our team.</td>
+                          </tr>
+                          <tr>
+                            <td style="width:28px;vertical-align:top;">
+                              <div style="width:20px;height:20px;border-radius:50%;background:#1d5fa8;color:#ffffff;font-size:12px;font-weight:700;line-height:20px;text-align:center;">3</div>
+                            </td>
+                            <td style="font-size:15px;line-height:1.75;color:#475569;">Use the contact details below if you would prefer immediate assistance from the admissions desk.</td>
+                          </tr>
+                        </table>
+                        <div style="margin-top:20px;">
+                          <a href="${safeTrackingUrl}" style="display:inline-block;background:linear-gradient(135deg,#0d2d5c 0%,#1d5fa8 100%);color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;padding:14px 28px;border-radius:999px;">Visit Official Website</a>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="background:#0f274b;border-radius:18px;padding:22px 24px;color:#ffffff;">
+                        <p style="margin:0 0 12px;font-size:13px;letter-spacing:0.16em;text-transform:uppercase;color:rgba(255,255,255,0.7);font-weight:800;">Enquiry Summary</p>
+                        ${safeCourseName ? `<p style="margin:0 0 10px;font-size:15px;line-height:1.7;color:rgba(255,255,255,0.92);"><strong>Interested Course:</strong> ${safeCourseName}</p>` : ''}
+                        ${safeCampaignName ? `<p style="margin:0;font-size:15px;line-height:1.7;color:rgba(255,255,255,0.92);"><strong>Reference:</strong> ${safeCampaignName}</p>` : ''}
+                        ${!safeCourseName && !safeCampaignName ? `<p style="margin:0;font-size:15px;line-height:1.7;color:rgba(255,255,255,0.92);">Your enquiry has been recorded successfully and is ready for admissions follow-up.</p>` : ''}
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+
+              <tr>
+                <td style="padding:0 32px 28px;">
+                  <div style="background:#f8fafc;border:1px solid #dbe7f3;border-radius:18px;padding:22px 24px;">
+                    <p style="margin:0 0 14px;font-size:13px;letter-spacing:0.16em;text-transform:uppercase;color:#64748b;font-weight:800;">Contact Admissions</p>
+                    <p style="margin:0 0 10px;font-size:15px;line-height:1.75;color:#475569;">For immediate support, please use the details below:</p>
+                    <p style="margin:0 0 8px;font-size:15px;line-height:1.75;"><a href="${phoneHref}" style="color:#1d5fa8;text-decoration:none;font-weight:700;">+91 9821569885</a></p>
+                    <p style="margin:0;font-size:15px;line-height:1.75;"><a href="${emailHref}" style="color:#1d5fa8;text-decoration:none;font-weight:700;">enquiry@suvidya.ac.in</a></p>
+                  </div>
+                </td>
+              </tr>
+
+              <tr>
+                <td style="padding:0 32px 32px;">
+                  ${sig.html}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return { safeName, subject, text, html };
+}
+
 function assertMailerConfig() {
   if (MAIL_PROVIDER === 'ses') {
     if (!AWS_SES_FROM_EMAIL) {
@@ -207,6 +408,7 @@ export async function sendAdmissionFormEmail(params: {
   subject?: string;
   text?: string;
   html?: string;
+  attachments?: MailAttachment[];
 }) {
   assertMailerConfig();
 
@@ -222,20 +424,37 @@ export async function sendAdmissionFormEmail(params: {
       .split('\n')
       .map((line) => `<p>${line || '&nbsp;'}</p>`)
       .join('');
+  const attachments = params.attachments || [];
 
   if (MAIL_PROVIDER === 'ses') {
-    const hasStaticSesCreds = Boolean(AWS_SES_ACCESS_KEY && AWS_SES_SECRET_KEY);
-    const sesClient = hasStaticSesCreds
-      ? new SESClient({
-          region: AWS_SES_REGION,
-          credentials: {
-            accessKeyId: AWS_SES_ACCESS_KEY!,
-            secretAccessKey: AWS_SES_SECRET_KEY!,
-          },
-        })
-      : new SESClient({ region: AWS_SES_REGION });
+    const sesClient = createSesClient();
 
     const replyToAddresses = AWS_SES_REPLY_TO ? [AWS_SES_REPLY_TO] : undefined;
+
+    if (attachments.length > 0) {
+      const composer = new MailComposer({
+        from: AWS_SES_FROM_EMAIL,
+        to: params.toEmail,
+        ...(replyToAddresses ? { replyTo: replyToAddresses.join(', ') } : {}),
+        subject,
+        text,
+        html,
+        attachments,
+      });
+
+      try {
+        const rawMessage = await composer.compile().build();
+        await sesClient.send(new SendRawEmailCommand({
+          Source: AWS_SES_FROM_EMAIL,
+          RawMessage: {
+            Data: rawMessage,
+          },
+        }));
+      } catch (error: unknown) {
+        throw normalizeMailerError(error, 'ses', AWS_SES_REGION);
+      }
+      return;
+    }
 
     const command = new SendEmailCommand({
       Source: AWS_SES_FROM_EMAIL,
@@ -288,6 +507,7 @@ export async function sendAdmissionFormEmail(params: {
       subject,
       text,
       html,
+      ...(attachments.length ? { attachments } : {}),
     });
   } catch (error: unknown) {
     throw normalizeMailerError(error, 'smtp', AWS_SES_REGION);
@@ -408,5 +628,36 @@ export async function sendPublicInquirySubmissionEmail(params: {
     subject: built.subject,
     text: built.text,
     html: built.html,
+  });
+}
+
+export async function sendMetaLeadThankYouEmail(params: {
+  toEmail: string;
+  studentName?: string;
+  trackingUrl: string;
+  websiteUrl?: string;
+  logoUrl?: string;
+  courseName?: string | null;
+  campaignName?: string | null;
+}) {
+  const logoAttachment = await buildInlineSitLogoAttachment();
+  const built = buildMetaLeadThankYouMailContent({
+    studentName: params.studentName,
+    trackingUrl: params.trackingUrl,
+    websiteUrl: params.websiteUrl,
+    logoUrl: logoAttachment ? undefined : params.logoUrl,
+    logoCid: logoAttachment?.cid,
+    courseName: params.courseName,
+    campaignName: params.campaignName,
+  });
+
+  await sendAdmissionFormEmail({
+    toEmail: params.toEmail,
+    studentName: params.studentName,
+    admissionFormUrl: params.websiteUrl || 'https://suvidya.ac.in/',
+    subject: built.subject,
+    text: built.text,
+    html: built.html,
+    attachments: logoAttachment ? [logoAttachment] : undefined,
   });
 }

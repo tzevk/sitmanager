@@ -9,7 +9,7 @@ import CashflowCategoryBars from '../charts/CashflowCategoryBars';
 import { detectCashflowAnomalies, categoryMoMGrowth } from '../shared/predictions';
 
 const CF_TYPES: CashflowType[] = ['Payment', 'Receipt'];
-const CF_DEPARTMENTS = ['CBD','CORPORATE TRAINING','DEPUTATION ACCENT','PROJECT ACCENT','T&D','ADMIN ACCOUNTS','HELPING STAFF','GENERAL','MANAGEMENT','TRAINERS','LOAN REPAYMENT'] as const;
+const CF_DEPARTMENTS = ['CBD','CORPORATE TRAINING','DEPUTATION ACCENT','PROJECT ACCENT','T&D','ADMIN ACCOUNTS','HELPING STAFF','GENERAL','MANAGEMENT','TRAINERS','LOAN REPAYMENT','MARKETING - ACCENT','PUNE BRANCH'] as const;
 const CF_COMPANIES   = ['Suvidya','SIT Alumni','ATS','Accent','SIT Mumbai','SIT Pune'] as const;
 
 const SIT_CATS = [
