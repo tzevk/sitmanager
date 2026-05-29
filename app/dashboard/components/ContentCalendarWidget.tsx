@@ -761,6 +761,86 @@ export default function ContentCalendarWidget() {
             })}
           </div>
         )}
+
+        {/* Meta Attribution panel */}
+        {(() => {
+          const linked = items.filter(i => i.meta_campaign_id);
+          if (linked.length === 0) return null;
+          // Group by campaign
+          const byCampaign = new Map<string, { name: string; items: ContentItem[]; perf: MetaCampaignOption | undefined }>();
+          for (const item of linked) {
+            const cid = item.meta_campaign_id!;
+            if (!byCampaign.has(cid)) {
+              byCampaign.set(cid, { name: item.meta_campaign_name || cid, items: [], perf: campaigns.find(c => c.id === cid) });
+            }
+            byCampaign.get(cid)!.items.push(item);
+          }
+          return (
+            <div className="mt-4 mx-3 mb-3 rounded-xl border border-[#2E3093]/15 overflow-hidden">
+              <div className="px-4 py-2.5 bg-[#2E3093]/5 border-b border-[#2E3093]/10 flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"/>
+                </svg>
+                <span className="text-[11px] font-bold uppercase tracking-wide text-[#2E3093]">Meta Campaign Attribution</span>
+                <span className="ml-auto text-[10px] text-[#2E3093]/60">{linked.length} item{linked.length !== 1 ? 's' : ''} linked</span>
+              </div>
+              <div className="divide-y divide-[#2E3093]/8">
+                {Array.from(byCampaign.entries()).map(([cid, { name, items: citems, perf }]) => {
+                  const posted = citems.filter(i => COMPLETED.has(i.status)).length;
+                  return (
+                    <div key={cid} className="px-4 py-3 flex items-center gap-4 flex-wrap bg-white hover:bg-[#2E3093]/3 transition-colors">
+                      <div className="flex-1 min-w-[160px]">
+                        <p className="text-[11px] font-semibold text-slate-800 truncate max-w-[220px]" title={name}>{name}</p>
+                        <div className="flex gap-2 mt-1 flex-wrap">
+                          {citems.map(i => {
+                            const tc = getType(i.content_type);
+                            return (
+                              <span key={i.id}
+                                onClick={() => setModal({ ...i })}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer hover:opacity-80"
+                                style={{ background: tc.bg, color: tc.color }}
+                              >
+                                <span className={`w-1 h-1 rounded-full ${STATUS_DOT[i.status]}`} />
+                                {i.content_type}
+                                {i.planned_date && <span className="opacity-60">{fmtDate(i.planned_date)}</span>}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="flex gap-4 shrink-0 text-center">
+                        <div>
+                          <p className="text-[9px] font-bold uppercase text-gray-400">Content</p>
+                          <p className="text-sm font-bold text-slate-700">{citems.length}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold uppercase text-gray-400">Posted</p>
+                          <p className={`text-sm font-bold ${posted === citems.length ? 'text-emerald-600' : 'text-slate-700'}`}>{posted}</p>
+                        </div>
+                        {perf && (
+                          <>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">Leads</p>
+                              <p className="text-sm font-bold text-[#2E3093]">{perf.leads}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">Spend</p>
+                              <p className="text-sm font-bold text-slate-700">₹{perf.spend.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase text-gray-400">CPL</p>
+                              <p className="text-sm font-bold text-slate-700">{perf.cpl != null ? `₹${perf.cpl.toFixed(0)}` : '—'}</p>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   };
@@ -782,22 +862,23 @@ export default function ContentCalendarWidget() {
           {loading ? (
             Array.from({length: 5}).map((_, i) => (
               <tr key={i} className="border-t border-gray-100">
-                {Array.from({length: 10}).map((_, j) => (
+                {Array.from({length: 11}).map((_, j) => (
                   <td key={j} className="px-3 py-3">
-                    <div className="h-3 bg-gray-100 rounded animate-pulse" style={{ width: j === 8 ? '80%' : '55%' }} />
+                    <div className="h-3 bg-gray-100 rounded animate-pulse" style={{ width: j === 9 ? '80%' : '55%' }} />
                   </td>
                 ))}
               </tr>
             ))
           ) : items.length === 0 ? (
             <tr>
-              <td colSpan={10} className="px-5 py-14 text-center text-sm text-gray-400">
+              <td colSpan={11} className="px-5 py-14 text-center text-sm text-gray-400">
                 No content planned for {MONTH_NAMES[month-1]} {year}
               </td>
             </tr>
           ) : (
             items.map((item, idx) => {
               const tc = getType(item.content_type);
+              const perf = item.meta_campaign_id ? campaigns.find(c => c.id === item.meta_campaign_id) : null;
               return (
                 <tr key={item.id} className={`border-t border-gray-100 hover:bg-gray-50/60 transition-colors ${COMPLETED.has(item.status) ? 'opacity-70' : ''}`}>
                   <td className="px-3 py-2.5 text-center text-[11px] text-gray-400 tabular-nums">{idx + 1}</td>
@@ -821,6 +902,28 @@ export default function ContentCalendarWidget() {
                   <td className="px-3 py-2.5 text-xs tabular-nums text-gray-600 whitespace-nowrap">{fmtDate(item.upload_date)}</td>
                   <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{item.platform || '—'}</td>
                   <td className="px-3 py-2.5 text-xs text-gray-600 max-w-[96px] truncate">{item.responsible_person || '—'}</td>
+                  <td className="px-3 py-2.5 max-w-[150px]">
+                    {item.meta_campaign_id ? (
+                      <div>
+                        <div className="flex items-center gap-1">
+                          <svg className="w-3 h-3 text-[#2E3093] shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"/>
+                          </svg>
+                          <span className="text-[11px] font-semibold text-[#2E3093] truncate max-w-[110px]" title={item.meta_campaign_name ?? ''}>
+                            {item.meta_campaign_name || item.meta_campaign_id}
+                          </span>
+                        </div>
+                        {perf && (
+                          <div className="flex gap-2 mt-0.5">
+                            <span className="text-[9px] text-emerald-600 font-semibold">{perf.leads} leads</span>
+                            {perf.cpl != null && <span className="text-[9px] text-slate-400">₹{perf.cpl.toFixed(0)}/lead</span>}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-gray-300">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 text-xs text-gray-500 max-w-[160px] truncate">{item.description || '—'}</td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center justify-center gap-0.5">
