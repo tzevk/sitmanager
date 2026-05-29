@@ -30,6 +30,13 @@ let ensured = false;
 async function ensureTable() {
   if (ensured) return;
   await getPool().query(DDL);
+  try {
+    await getPool().query(
+      `ALTER TABLE ${TABLE}
+         ADD COLUMN meta_campaign_id   VARCHAR(191) NULL,
+         ADD COLUMN meta_campaign_name VARCHAR(255) NULL`
+    );
+  } catch { /* columns already exist */ }
   ensured = true;
 }
 
@@ -71,7 +78,8 @@ export async function GET(req: NextRequest) {
               DATE_FORMAT(planned_date,   '%Y-%m-%d') AS planned_date,
               DATE_FORMAT(execution_date, '%Y-%m-%d') AS execution_date,
               DATE_FORMAT(upload_date,    '%Y-%m-%d') AS upload_date,
-              status, platform, responsible_person, description
+              status, platform, responsible_person, description,
+              meta_campaign_id, meta_campaign_name
        FROM ${TABLE}
        WHERE ${conditions.join(' AND ')}
        ORDER BY planned_date ASC, id ASC`,
@@ -93,8 +101,9 @@ export async function POST(req: NextRequest) {
 
     const [result] = await getPool().query(
       `INSERT INTO ${TABLE}
-         (content_type, planned_date, execution_date, upload_date, status, platform, responsible_person, description)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (content_type, planned_date, execution_date, upload_date, status, platform, responsible_person, description,
+          meta_campaign_id, meta_campaign_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         safeStr(b.content_type || 'Post', 100),
         nullableDate(b.planned_date),
@@ -104,6 +113,8 @@ export async function POST(req: NextRequest) {
         safeStr(b.platform, 100),
         safeStr(b.responsible_person),
         safeStr(b.description, 2000),
+        b.meta_campaign_id ? safeStr(b.meta_campaign_id, 191) : null,
+        b.meta_campaign_name ? safeStr(b.meta_campaign_name, 255) : null,
       ]
     ) as any;
 

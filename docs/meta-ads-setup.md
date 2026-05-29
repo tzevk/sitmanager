@@ -42,6 +42,7 @@ The Graph API fetch happens inside the backend API stage. It is part of the serv
 - Surfaces campaign, form, tags, duplicate flags, filtering, and export on the inquiry listing page.
 - Shows campaign reach/click/lead/spend summary on the inquiry listing page.
 - Lets authorized users create a Meta campaign shell from the Meta Leads page.
+- Lets authorized users optionally create the lead form, creative, ad set, and ad in the same publish flow.
 
 ## Environment variables
 
@@ -98,33 +99,42 @@ Notes:
 - For production CRM integrations, a system user token is still the most stable option.
 - OAuth is mainly useful when you need an interactive connect flow during setup or troubleshooting.
 - Campaign publishing requires the Meta token to include `ads_management`. If you connected before this feature existed, reconnect Meta so the app can request the new scope.
+- Instant form creation also requires `pages_manage_ads` because the form is created on the Page, not just in the ad account.
 
 ## Campaign publishing
 
-The outbound path is intentionally narrow.
+The outbound path is still intentionally constrained, but it can now create a full lead-ad chain.
 
 - Open the Meta Leads page.
 - Use the `Publish Meta Campaign` card.
 - Enter a campaign name and objective.
-- The app creates the campaign in Meta as a container-level object.
+- Optionally configure the Page ID, website URL, instant form, creative, ad set, and ad.
+- The app creates the configured objects in order.
 
 What this creates:
 
 - Meta campaign
+- optional instant form
+- optional ad creative
+- optional ad set
+- optional ad
 
-What this does not create yet:
+Current implementation notes:
 
-- ad sets
-- creatives
-- ads
-- instant forms
+- The publish flow is sequential: campaign -> instant form -> creative -> ad set -> ad.
+- The instant form defaults to `FULL_NAME`, `EMAIL`, and `PHONE` questions unless overridden in the UI.
+- Creatives currently support link-style lead ads with a Page-backed `object_story_spec`.
+- Ad sets currently default to Facebook + Instagram feed/stream placements with country targeting.
+- If you leave a section unchecked in the UI, that object is not created.
 
 Runtime behavior:
 
 - Campaigns are created in the ad account from `META_AD_ACCOUNT_ID`.
 - The publish action currently sends campaigns in `PAUSED` status by default.
+- The publish action also sends instant forms, creatives, ad sets, and ads in `PAUSED` status by default when those sections are enabled.
 - Publish attempts are logged locally in `meta_ads_campaign_publish_log`.
 - If the connected OAuth token lacks `ads_management`, the publish request is rejected with a reconnect message.
+- If form creation is enabled and the connected OAuth token lacks `pages_manage_ads`, the publish request is rejected with a reconnect message.
 
 ## Meta App configuration
 

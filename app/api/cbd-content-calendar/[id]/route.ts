@@ -44,7 +44,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
          status             = ?,
          platform           = ?,
          responsible_person = ?,
-         description        = ?
+         description        = ?,
+         meta_campaign_id   = ?,
+         meta_campaign_name = ?
        WHERE id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
       [
         safeStr(b.content_type || 'Post', 100),
@@ -55,6 +57,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         safeStr(b.platform, 100),
         safeStr(b.responsible_person),
         safeStr(b.description, 2000),
+        b.meta_campaign_id ? safeStr(b.meta_campaign_id, 191) : null,
+        b.meta_campaign_name ? safeStr(b.meta_campaign_name, 255) : null,
         id,
       ]
     );

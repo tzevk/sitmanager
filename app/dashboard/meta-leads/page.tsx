@@ -82,6 +82,32 @@ const META_SPECIAL_CATEGORY_OPTIONS = [
   { value: 'ISSUES_ELECTIONS_POLITICS', label: 'Politics / Issues' },
 ] as const;
 
+const META_CTA_OPTIONS = [
+  { value: 'SIGN_UP', label: 'Sign Up' },
+  { value: 'LEARN_MORE', label: 'Learn More' },
+  { value: 'APPLY_NOW', label: 'Apply Now' },
+  { value: 'CONTACT_US', label: 'Contact Us' },
+  { value: 'GET_QUOTE', label: 'Get Quote' },
+  { value: 'BOOK_TRAVEL', label: 'Book Travel' },
+] as const;
+
+const META_BILLING_EVENT_OPTIONS = [
+  { value: 'IMPRESSIONS', label: 'Impressions' },
+  { value: 'LINK_CLICKS', label: 'Link Clicks' },
+] as const;
+
+const META_OPTIMIZATION_GOAL_OPTIONS = [
+  { value: 'QUALITY_LEAD', label: 'Quality Lead' },
+  { value: 'LEAD_GENERATION', label: 'Lead Generation' },
+  { value: 'LINK_CLICKS', label: 'Link Clicks' },
+  { value: 'LANDING_PAGE_VIEWS', label: 'Landing Page Views' },
+] as const;
+
+const META_DESTINATION_TYPE_OPTIONS = [
+  { value: 'ON_AD', label: 'On Ad' },
+  { value: 'WEBSITE', label: 'Website' },
+] as const;
+
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 
 function formatDate(dateStr: string | null): string {
@@ -203,6 +229,28 @@ function rowBg(id: number | null, label: string) {
   return 'hover:bg-slate-50/70';
 }
 
+function leadAge(dateStr: string | null): { label: string; cls: string; hours: number } {
+  if (!dateStr) return { label: '—', cls: 'text-slate-300', hours: Infinity };
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return { label: '—', cls: 'text-slate-300', hours: Infinity };
+  const hours = (Date.now() - d.getTime()) / 3600000;
+  if (hours < 1) return { label: `${Math.round(hours * 60)}m`, cls: 'bg-emerald-100 text-emerald-700', hours };
+  if (hours < 4) return { label: `${Math.round(hours)}h`, cls: 'bg-emerald-100 text-emerald-700', hours };
+  if (hours < 24) return { label: `${Math.round(hours)}h`, cls: 'bg-amber-100 text-amber-700', hours };
+  const days = Math.floor(hours / 24);
+  if (days < 7) return { label: `${days}d`, cls: 'bg-red-100 text-red-600', hours };
+  return { label: `${days}d`, cls: 'bg-red-200 text-red-700', hours };
+}
+
+function waLink(mobile: string | null, name: string | null, course: string | null): string {
+  if (!mobile) return '';
+  const digits = mobile.replace(/\D/g, '');
+  const phone = digits.length === 10 ? `91${digits}` : digits;
+  const firstName = name?.split(' ')[0] || 'there';
+  const msg = `Hi ${firstName}, thank you for your interest${course ? ` in ${course}` : ''} at SIT. Our counsellor will be in touch shortly to assist you!`;
+  return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+}
+
 function avatarColor(name: string | null | undefined): string {
   const colors = [
     'bg-violet-100 text-violet-700',
@@ -249,7 +297,7 @@ function KpiCard({ label, value, accent, loading }: {
 export default function MetaLeadsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { canView, canUpdate, loading: permLoading } = useResourcePermissions('inquiry');
+  const { canView, canCreate, canUpdate, loading: permLoading } = useResourcePermissions('inquiry');
   const [rows, setRows] = useState<InquiryRow[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
   const [filters, setFilters] = useState<Filters>({ trainings: [], sources: [], statusOptions: [] });
@@ -262,6 +310,7 @@ export default function MetaLeadsPage() {
   const [dateTo, setDateTo] = useState('');
   const [training, setTraining] = useState('');
   const [duplicatesOnly, setDuplicatesOnly] = useState(false);
+  const [untouchedExpanded, setUntouchedExpanded] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(100);
   const [fetchTrigger, setFetchTrigger] = useState(0);
@@ -270,11 +319,40 @@ export default function MetaLeadsPage() {
   const [publishName, setPublishName] = useState('');
   const [publishObjective, setPublishObjective] = useState<string>('OUTCOME_LEADS');
   const [publishSpecialCategory, setPublishSpecialCategory] = useState<string>('NONE');
+  const [publishPageId, setPublishPageId] = useState('');
+  const [publishWebsiteUrl, setPublishWebsiteUrl] = useState('');
+  const [publishWithForm, setPublishWithForm] = useState(false);
+  const [publishWithCreative, setPublishWithCreative] = useState(false);
+  const [publishWithAdSet, setPublishWithAdSet] = useState(false);
+  const [publishWithAd, setPublishWithAd] = useState(false);
+  const [publishFormName, setPublishFormName] = useState('');
+  const [publishFormPrivacyUrl, setPublishFormPrivacyUrl] = useState('');
+  const [publishFormFollowUpUrl, setPublishFormFollowUpUrl] = useState('');
+  const [publishFormThankYouTitle, setPublishFormThankYouTitle] = useState('Thanks for your interest');
+  const [publishFormThankYouBody, setPublishFormThankYouBody] = useState('We will contact you shortly.');
+  const [publishFormQuestions, setPublishFormQuestions] = useState('FULL_NAME, EMAIL, PHONE');
+  const [publishCreativeName, setPublishCreativeName] = useState('');
+  const [publishCreativeMessage, setPublishCreativeMessage] = useState('');
+  const [publishCreativeHeadline, setPublishCreativeHeadline] = useState('');
+  const [publishCreativeImageHash, setPublishCreativeImageHash] = useState('');
+  const [publishCreativeImageUrl, setPublishCreativeImageUrl] = useState('');
+  const [publishCreativeCta, setPublishCreativeCta] = useState<string>('SIGN_UP');
+  const [publishAdSetName, setPublishAdSetName] = useState('');
+  const [publishAdSetBudget, setPublishAdSetBudget] = useState('10000');
+  const [publishAdSetCountries, setPublishAdSetCountries] = useState('IN');
+  const [publishAdSetBillingEvent, setPublishAdSetBillingEvent] = useState<string>('IMPRESSIONS');
+  const [publishAdSetOptimizationGoal, setPublishAdSetOptimizationGoal] = useState<string>('QUALITY_LEAD');
+  const [publishAdSetDestinationType, setPublishAdSetDestinationType] = useState<string>('ON_AD');
+  const [publishAdSetStartTime, setPublishAdSetStartTime] = useState('');
+  const [publishAdSetEndTime, setPublishAdSetEndTime] = useState('');
+  const [publishAdName, setPublishAdName] = useState('');
   const [publishBusy, setPublishBusy] = useState(false);
   const [publishError, setPublishError] = useState('');
   const [publishSuccess, setPublishSuccess] = useState('');
   const [publishHistory, setPublishHistory] = useState<MetaCampaignPublishLogRow[]>([]);
   const [publishHistoryLoading, setPublishHistoryLoading] = useState(true);
+  const [convertingLeadId, setConvertingLeadId] = useState<string | null>(null);
+  const [convertError, setConvertError] = useState('');
   const oauthStatus = searchParams.get('metaOAuth');
   const oauthMessage = searchParams.get('metaOAuthMessage');
   const oauthPages = searchParams.get('metaOAuthPages');
@@ -372,6 +450,14 @@ export default function MetaLeadsPage() {
     setPublishSuccess('');
     try {
       const specialAdCategories = publishSpecialCategory === 'NONE' ? ['NONE'] : [publishSpecialCategory];
+      const questionKeys = publishFormQuestions
+        .split(',')
+        .map((item) => item.trim().toUpperCase())
+        .filter(Boolean);
+      const countries = publishAdSetCountries
+        .split(',')
+        .map((item) => item.trim().toUpperCase())
+        .filter(Boolean);
       const res = await fetch('/api/meta-ads/campaigns/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -380,17 +466,79 @@ export default function MetaLeadsPage() {
           objective: publishObjective,
           status: 'PAUSED',
           specialAdCategories,
+          pageId: publishPageId.trim() || null,
+          websiteUrl: publishWebsiteUrl.trim() || null,
+          instantForm: publishWithForm ? {
+            name: publishFormName.trim(),
+            privacyPolicyUrl: publishFormPrivacyUrl.trim(),
+            followUpActionUrl: publishFormFollowUpUrl.trim() || null,
+            thankYouTitle: publishFormThankYouTitle.trim() || null,
+            thankYouBody: publishFormThankYouBody.trim() || null,
+            questionKeys,
+          } : null,
+          creative: publishWithCreative ? {
+            name: publishCreativeName.trim(),
+            message: publishCreativeMessage.trim(),
+            headline: publishCreativeHeadline.trim() || null,
+            imageHash: publishCreativeImageHash.trim() || null,
+            imageUrl: publishCreativeImageUrl.trim() || null,
+            callToActionType: publishCreativeCta,
+            linkUrl: publishWebsiteUrl.trim() || null,
+          } : null,
+          adSet: publishWithAdSet ? {
+            name: publishAdSetName.trim(),
+            dailyBudget: Number(publishAdSetBudget || 0),
+            countries,
+            billingEvent: publishAdSetBillingEvent,
+            optimizationGoal: publishAdSetOptimizationGoal,
+            destinationType: publishAdSetDestinationType,
+            startTime: publishAdSetStartTime || null,
+            endTime: publishAdSetEndTime || null,
+            status: 'PAUSED',
+          } : null,
+          ad: publishWithAd ? {
+            name: publishAdName.trim(),
+            status: 'PAUSED',
+          } : null,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Failed to publish Meta campaign');
 
+      const message = String(data?.campaign?.message || '').trim();
       const campaignName = String(data?.campaign?.campaignName || publishName.trim());
       const campaignId = String(data?.campaign?.campaignId || '').trim();
-      setPublishSuccess(campaignId ? `${campaignName} created as ${campaignId}.` : `${campaignName} created.`);
+      setPublishSuccess(message || (campaignId ? `${campaignName} created as ${campaignId}.` : `${campaignName} created.`));
       setPublishName('');
       setPublishObjective('OUTCOME_LEADS');
       setPublishSpecialCategory('NONE');
+      setPublishPageId('');
+      setPublishWebsiteUrl('');
+      setPublishWithForm(false);
+      setPublishWithCreative(false);
+      setPublishWithAdSet(false);
+      setPublishWithAd(false);
+      setPublishFormName('');
+      setPublishFormPrivacyUrl('');
+      setPublishFormFollowUpUrl('');
+      setPublishFormThankYouTitle('Thanks for your interest');
+      setPublishFormThankYouBody('We will contact you shortly.');
+      setPublishFormQuestions('FULL_NAME, EMAIL, PHONE');
+      setPublishCreativeName('');
+      setPublishCreativeMessage('');
+      setPublishCreativeHeadline('');
+      setPublishCreativeImageHash('');
+      setPublishCreativeImageUrl('');
+      setPublishCreativeCta('SIGN_UP');
+      setPublishAdSetName('');
+      setPublishAdSetBudget('10000');
+      setPublishAdSetCountries('IN');
+      setPublishAdSetBillingEvent('IMPRESSIONS');
+      setPublishAdSetOptimizationGoal('QUALITY_LEAD');
+      setPublishAdSetDestinationType('ON_AD');
+      setPublishAdSetStartTime('');
+      setPublishAdSetEndTime('');
+      setPublishAdName('');
 
       const historyRes = await fetch('/api/meta-ads/campaigns/publish?limit=8');
       const historyData = await historyRes.json().catch(() => ({}));
@@ -402,7 +550,7 @@ export default function MetaLeadsPage() {
     } finally {
       setPublishBusy(false);
     }
-  }, [publishName, publishObjective, publishSpecialCategory]);
+  }, [publishAdName, publishAdSetBillingEvent, publishAdSetBudget, publishAdSetCountries, publishAdSetDestinationType, publishAdSetEndTime, publishAdSetName, publishAdSetOptimizationGoal, publishAdSetStartTime, publishCreativeCta, publishCreativeHeadline, publishCreativeImageHash, publishCreativeImageUrl, publishCreativeMessage, publishCreativeName, publishFormFollowUpUrl, publishFormName, publishFormPrivacyUrl, publishFormQuestions, publishFormThankYouBody, publishFormThankYouTitle, publishName, publishObjective, publishPageId, publishSpecialCategory, publishWebsiteUrl, publishWithAd, publishWithAdSet, publishWithCreative, publishWithForm]);
 
   const doSearch = () => { setPage(1); setFetchTrigger((t) => t + 1); };
   const doClear = () => {
@@ -435,6 +583,47 @@ export default function MetaLeadsPage() {
 
   const perfLoading = !metaPerf && !metaPerfError;
 
+  const buildMetaReturnTo = useCallback(() => {
+    const params = searchParams.toString();
+    return params ? `/dashboard/meta-leads?${params}` : '/dashboard/meta-leads';
+  }, [searchParams]);
+
+  const handleConvertLead = useCallback(async (row: InquiryRow) => {
+    if (!row.MetaLead_Id) return;
+
+    const returnTo = encodeURIComponent(buildMetaReturnTo());
+    if (row.Student_Id > 0) {
+      router.push(`/dashboard/inquiry/add?editId=${row.Student_Id}&returnTo=${returnTo}`);
+      return;
+    }
+
+    if (!canCreate) {
+      setConvertError('You do not have permission to create inquiries from Meta leads.');
+      return;
+    }
+
+    setConvertError('');
+    setConvertingLeadId(row.MetaLead_Id);
+    try {
+      const res = await fetch(`/api/meta-ads/leads/${encodeURIComponent(row.MetaLead_Id)}/convert`, {
+        method: 'POST',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to convert Meta lead');
+
+      const inquiryId = Number(data?.lead?.Student_Id || 0);
+      if (!inquiryId) {
+        throw new Error('Meta lead converted but no inquiry id was returned');
+      }
+
+      router.push(`/dashboard/inquiry/add?editId=${inquiryId}&returnTo=${returnTo}`);
+    } catch (error: unknown) {
+      setConvertError(error instanceof Error ? error.message : 'Failed to convert Meta lead');
+    } finally {
+      setConvertingLeadId(null);
+    }
+  }, [buildMetaReturnTo, canCreate, router]);
+
   const duplicatesInView = useMemo(() => rows.filter((r) => r.IsDuplicateLead).length, [rows]);
   const statusBreakdown = useMemo(() => {
     const map = new Map<string, { id: number | null; count: number }>();
@@ -463,6 +652,13 @@ export default function MetaLeadsPage() {
     const maxLeads = allCampaigns[0]?.leads || 1;
     return { avgCpl, maxLeads };
   }, [allCampaigns]);
+
+  const untouchedRows = useMemo(
+    () => rows
+      .filter(r => !hasLatestFollowUp(r))
+      .sort((a, b) => (a.Inquiry_Dt ?? '').localeCompare(b.Inquiry_Dt ?? '')),
+    [rows]
+  );
 
   return (
     <div className="space-y-5">
@@ -497,7 +693,7 @@ export default function MetaLeadsPage() {
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#2A6BB5]/60">Outbound</p>
                   <h3 className="text-sm font-bold text-slate-800">Publish Meta Campaign</h3>
-                  <p className="mt-1 text-xs text-slate-500">Creates the campaign shell in Meta Ads Manager. Ad sets, creatives, ads, and instant forms still need to be attached separately.</p>
+                  <p className="mt-1 text-xs text-slate-500">Creates a campaign and, when configured below, can also attach a lead form, creative, ad set, and ad in one publish flow.</p>
                 </div>
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">Creates paused</span>
               </div>
@@ -509,6 +705,26 @@ export default function MetaLeadsPage() {
                     value={publishName}
                     onChange={(e) => setPublishName(e.target.value)}
                     placeholder="Example: SIT July 2026 Lead Campaign"
+                    className={ctrl}
+                    disabled={!canUpdate || publishBusy}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-semibold text-slate-600">Page ID</span>
+                  <input
+                    value={publishPageId}
+                    onChange={(e) => setPublishPageId(e.target.value)}
+                    placeholder="Facebook Page ID"
+                    className={ctrl}
+                    disabled={!canUpdate || publishBusy}
+                  />
+                </label>
+                <label className="block md:col-span-2">
+                  <span className="mb-1 block text-[11px] font-semibold text-slate-600">Website URL</span>
+                  <input
+                    value={publishWebsiteUrl}
+                    onChange={(e) => setPublishWebsiteUrl(e.target.value)}
+                    placeholder="https://sit.example.com/admissions"
                     className={ctrl}
                     disabled={!canUpdate || publishBusy}
                   />
@@ -550,6 +766,149 @@ export default function MetaLeadsPage() {
                   </button>
                 </div>
               </div>
+
+              <div className="mt-4 grid gap-2 md:grid-cols-4">
+                {[
+                  { checked: publishWithForm, setChecked: setPublishWithForm, label: 'Create Instant Form' },
+                  { checked: publishWithCreative, setChecked: setPublishWithCreative, label: 'Create Creative' },
+                  { checked: publishWithAdSet, setChecked: setPublishWithAdSet, label: 'Create Ad Set' },
+                  { checked: publishWithAd, setChecked: setPublishWithAd, label: 'Create Ad' },
+                ].map((item) => (
+                  <label key={item.label} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={item.checked}
+                      onChange={(e) => item.setChecked(e.target.checked)}
+                      disabled={!canUpdate || publishBusy}
+                    />
+                    <span>{item.label}</span>
+                  </label>
+                ))}
+              </div>
+
+              {publishWithForm && (
+                <div className="mt-4 rounded-xl border border-slate-200 p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Instant Form</p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Form Name</span>
+                      <input value={publishFormName} onChange={(e) => setPublishFormName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Privacy Policy URL</span>
+                      <input value={publishFormPrivacyUrl} onChange={(e) => setPublishFormPrivacyUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <label className="block md:col-span-2">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Follow-up Action URL</span>
+                      <input value={publishFormFollowUpUrl} onChange={(e) => setPublishFormFollowUpUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Thank-you Title</span>
+                      <input value={publishFormThankYouTitle} onChange={(e) => setPublishFormThankYouTitle(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Questions</span>
+                      <input value={publishFormQuestions} onChange={(e) => setPublishFormQuestions(e.target.value)} placeholder="FULL_NAME, EMAIL, PHONE" className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <label className="block md:col-span-2">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Thank-you Body</span>
+                      <textarea value={publishFormThankYouBody} onChange={(e) => setPublishFormThankYouBody(e.target.value)} rows={3} className={`${ctrl} min-h-[84px]`} disabled={!canUpdate || publishBusy} />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {publishWithCreative && (
+                <div className="mt-4 rounded-xl border border-slate-200 p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Creative</p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Creative Name</span>
+                      <input value={publishCreativeName} onChange={(e) => setPublishCreativeName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">CTA</span>
+                      <select value={publishCreativeCta} onChange={(e) => setPublishCreativeCta(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>
+                        {META_CTA_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="block md:col-span-2">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Primary Text</span>
+                      <textarea value={publishCreativeMessage} onChange={(e) => setPublishCreativeMessage(e.target.value)} rows={3} className={`${ctrl} min-h-[84px]`} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Headline</span>
+                      <input value={publishCreativeHeadline} onChange={(e) => setPublishCreativeHeadline(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Image Hash</span>
+                      <input value={publishCreativeImageHash} onChange={(e) => setPublishCreativeImageHash(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <label className="block md:col-span-2">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Image URL</span>
+                      <input value={publishCreativeImageUrl} onChange={(e) => setPublishCreativeImageUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {publishWithAdSet && (
+                <div className="mt-4 rounded-xl border border-slate-200 p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Ad Set</p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Ad Set Name</span>
+                      <input value={publishAdSetName} onChange={(e) => setPublishAdSetName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Daily Budget</span>
+                      <input type="number" min="1" value={publishAdSetBudget} onChange={(e) => setPublishAdSetBudget(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Countries</span>
+                      <input value={publishAdSetCountries} onChange={(e) => setPublishAdSetCountries(e.target.value)} placeholder="IN, AE" className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Billing Event</span>
+                      <select value={publishAdSetBillingEvent} onChange={(e) => setPublishAdSetBillingEvent(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>
+                        {META_BILLING_EVENT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Optimization Goal</span>
+                      <select value={publishAdSetOptimizationGoal} onChange={(e) => setPublishAdSetOptimizationGoal(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>
+                        {META_OPTIMIZATION_GOAL_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Destination Type</span>
+                      <select value={publishAdSetDestinationType} onChange={(e) => setPublishAdSetDestinationType(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>
+                        {META_DESTINATION_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Start Time</span>
+                      <input value={publishAdSetStartTime} onChange={(e) => setPublishAdSetStartTime(e.target.value)} placeholder="2026-06-10T09:00:00+0530" className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">End Time</span>
+                      <input value={publishAdSetEndTime} onChange={(e) => setPublishAdSetEndTime(e.target.value)} placeholder="Optional" className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {publishWithAd && (
+                <div className="mt-4 rounded-xl border border-slate-200 p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Ad</p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <label className="block md:col-span-2">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Ad Name</span>
+                      <input value={publishAdName} onChange={(e) => setPublishAdName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                  </div>
+                </div>
+              )}
 
               {!canUpdate && (
                 <p className="mt-3 text-xs text-amber-700">You can view campaign publish history, but campaign creation requires inquiry update permission.</p>
@@ -907,8 +1266,106 @@ export default function MetaLeadsPage() {
             <button onClick={doClear} className="px-3 py-1.5 text-xs font-semibold text-slate-500 border border-zinc-200 rounded-lg hover:border-zinc-300 hover:bg-zinc-50 transition-colors shrink-0">Clear</button>
           </FilterBar>
 
+          {/* Untouched Leads Banner */}
+          {!loading && untouchedRows.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setUntouchedExpanded(v => !v)}
+                className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-red-100/60 transition-colors"
+              >
+                <svg className="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span className="font-bold text-red-800 text-sm flex-1">Untouched Leads — No Follow-Up Logged</span>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-200 text-red-800 tabular-nums">
+                  {untouchedRows.length} of {rows.length}
+                </span>
+                <svg className={`w-4 h-4 text-red-500 transition-transform ${untouchedExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {untouchedExpanded && (
+                <div className="overflow-x-auto border-t border-red-200">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-[10px] uppercase tracking-wider text-red-700 bg-red-100/60 border-b border-red-200">
+                        <th className="text-left py-1.5 px-3 font-bold">Name</th>
+                        <th className="text-left py-1.5 px-3 font-bold">Mobile</th>
+                        <th className="text-left py-1.5 px-3 font-bold">Course</th>
+                        <th className="text-left py-1.5 px-3 font-bold">Campaign</th>
+                        <th className="text-left py-1.5 px-3 font-bold">Status</th>
+                        <th className="text-center py-1.5 px-3 font-bold">Age</th>
+                        <th className="text-center py-1.5 px-3 font-bold">Reach Out</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {untouchedRows.map(row => {
+                        const age = leadAge(row.Inquiry_Dt);
+                        const wa = waLink(row.Present_Mobile, row.Student_Name, row.CourseName);
+                        return (
+                          <tr key={row.MetaLead_Id || row.Student_Id} className="border-b border-red-100 hover:bg-red-50/60 transition-colors">
+                            <td className="py-1.5 px-3 font-semibold text-slate-800">{formatName(row.Student_Name)}</td>
+                            <td className="py-1.5 px-3 font-mono text-slate-600">{row.Present_Mobile || '—'}</td>
+                            <td className="py-1.5 px-3 text-slate-500 max-w-[120px]"><span className="truncate block">{row.CourseName || '—'}</span></td>
+                            <td className="py-1.5 px-3 text-slate-500 max-w-[140px]"><span className="truncate block">{row.MetaCampaignName || '—'}</span></td>
+                            <td className="py-1.5 px-3">
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(row.Status_id, row.StatusLabel)}`}>
+                                {row.StatusLabel}
+                              </span>
+                            </td>
+                            <td className="py-1.5 px-3 text-center">
+                              {age.label !== '—' && (
+                                <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${age.cls}`}>{age.label}</span>
+                              )}
+                            </td>
+                            <td className="py-1.5 px-3 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                {wa && (
+                                  <a href={wa} target="_blank" rel="noopener noreferrer" title="WhatsApp"
+                                    className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-green-600 hover:bg-green-50 transition-colors">
+                                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                                    </svg>
+                                  </a>
+                                )}
+                                {row.Present_Mobile && (
+                                  <a href={`tel:${row.Present_Mobile}`} title="Call"
+                                    className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                    </svg>
+                                  </a>
+                                )}
+                                {row.MetaLead_Id && (
+                                  <button title="Log follow-up"
+                                    onClick={() => router.push(`/dashboard/meta-leads/${encodeURIComponent(row.MetaLead_Id)}#followups`)}
+                                    className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-[#2E3093] hover:bg-[#2E3093]/5 transition-colors">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Leads Table */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            {convertError && (
+              <div className="border-b border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700">
+                {convertError}
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full text-xs border-collapse">
                 <thead>
@@ -921,7 +1378,7 @@ export default function MetaLeadsPage() {
                     <th className="text-left py-2.5 px-3 font-bold border border-slate-200">Email</th>
                     <th className="text-left py-2.5 px-3 font-bold border border-slate-200">Date</th>
                     <th className="text-center py-2.5 px-3 font-bold border border-slate-200">Status</th>
-                    <th className="text-center py-2.5 px-3 font-bold border border-slate-200 w-10"></th>
+                    <th className="text-center py-2.5 px-3 font-bold border border-slate-200 min-w-[148px]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -973,27 +1430,70 @@ export default function MetaLeadsPage() {
                       <td className="py-2 px-3 border border-slate-100 text-slate-500 text-[11px]">
                         <span className="truncate block max-w-[160px]">{row.Email || '—'}</span>
                       </td>
-                      <td className="py-2 px-3 text-slate-500 whitespace-nowrap border border-slate-100">{formatDate(row.Inquiry_Dt)}</td>
+                      <td className="py-2 px-3 whitespace-nowrap border border-slate-100">
+                        <div className="text-slate-500 text-[11px]">{formatDate(row.Inquiry_Dt)}</div>
+                        {(() => { const a = leadAge(row.Inquiry_Dt); return a.label !== '—' ? <span className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold ${a.cls}`}>{a.label} ago</span> : null; })()}
+                      </td>
                       <td className="py-2 px-3 text-center border border-slate-100">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${statusPill(row.Status_id, row.StatusLabel)}`}>
                           {row.StatusLabel}
                         </span>
                       </td>
                       <td className="py-2 px-3 text-center border border-slate-100">
-                        <button
-                          title="Open lead details"
-                          onClick={() => row.MetaLead_Id && router.push(`/dashboard/meta-leads/${encodeURIComponent(row.MetaLead_Id)}`)}
-                          disabled={!canView || !row.MetaLead_Id}
-                          className={`w-6 h-6 rounded flex items-center justify-center mx-auto transition-all ${
-                            canView && row.MetaLead_Id
-                              ? 'text-slate-300 hover:text-[#2E3093] hover:bg-[#2E3093]/5 group-hover:text-slate-400'
-                              : 'text-slate-200 cursor-not-allowed'
-                          }`}
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          {/* WhatsApp */}
+                          {waLink(row.Present_Mobile, row.Student_Name, row.CourseName) && (
+                            <a
+                              href={waLink(row.Present_Mobile, row.Student_Name, row.CourseName)}
+                              target="_blank" rel="noopener noreferrer" title="WhatsApp"
+                              className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-green-600 hover:bg-green-50 transition-all"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                              </svg>
+                            </a>
+                          )}
+                          {/* Call */}
+                          {row.Present_Mobile && (
+                            <a href={`tel:${row.Present_Mobile}`} title="Call"
+                              className="w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-all">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                              </svg>
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            title={row.Student_Id > 0 ? 'Open linked inquiry' : 'Convert to inquiry'}
+                            onClick={() => void handleConvertLead(row)}
+                            disabled={
+                              !row.MetaLead_Id ||
+                              (row.Student_Id > 0 ? !canUpdate : !canCreate) ||
+                              convertingLeadId === row.MetaLead_Id
+                            }
+                            className={`inline-flex items-center rounded-md px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+                              row.MetaLead_Id && (row.Student_Id > 0 ? canUpdate : canCreate)
+                                ? 'border border-[#2E3093]/20 bg-[#2E3093]/5 text-[#2E3093] hover:bg-[#2E3093]/10'
+                                : 'border border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed'
+                            }`}
+                          >
+                            {convertingLeadId === row.MetaLead_Id ? 'Converting…' : row.Student_Id > 0 ? 'Open Inquiry' : 'Convert'}
+                          </button>
+                          <button
+                            title="Open lead details"
+                            onClick={() => row.MetaLead_Id && router.push(`/dashboard/meta-leads/${encodeURIComponent(row.MetaLead_Id)}`)}
+                            disabled={!canView || !row.MetaLead_Id}
+                            className={`w-6 h-6 rounded flex items-center justify-center transition-all ${
+                              canView && row.MetaLead_Id
+                                ? 'text-slate-300 hover:text-[#2E3093] hover:bg-[#2E3093]/5 group-hover:text-slate-400'
+                                : 'text-slate-200 cursor-not-allowed'
+                            }`}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

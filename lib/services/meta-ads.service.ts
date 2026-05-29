@@ -30,6 +30,20 @@ const META_CAMPAIGN_OBJECTIVES = [
 ] as const;
 
 const META_CAMPAIGN_STATUSES = ['PAUSED', 'ACTIVE'] as const;
+const META_DELIVERY_STATUSES = ['PAUSED', 'ACTIVE'] as const;
+
+const META_CALL_TO_ACTION_TYPES = [
+  'LEARN_MORE',
+  'SIGN_UP',
+  'APPLY_NOW',
+  'CONTACT_US',
+  'GET_QUOTE',
+  'BOOK_TRAVEL',
+] as const;
+
+const META_BILLING_EVENTS = ['IMPRESSIONS', 'LINK_CLICKS'] as const;
+const META_OPTIMIZATION_GOALS = ['QUALITY_LEAD', 'LEAD_GENERATION', 'LINK_CLICKS', 'LANDING_PAGE_VIEWS'] as const;
+const META_DESTINATION_TYPES = ['ON_AD', 'WEBSITE'] as const;
 
 const META_SPECIAL_AD_CATEGORIES = [
   'NONE',
@@ -219,6 +233,48 @@ export interface MetaCampaignPublishInput {
   objective: (typeof META_CAMPAIGN_OBJECTIVES)[number];
   status?: (typeof META_CAMPAIGN_STATUSES)[number] | null;
   specialAdCategories?: Array<(typeof META_SPECIAL_AD_CATEGORIES)[number]> | null;
+  pageId?: string | null;
+  websiteUrl?: string | null;
+  instantForm?: MetaInstantFormPublishInput | null;
+  creative?: MetaAdCreativePublishInput | null;
+  adSet?: MetaAdSetPublishInput | null;
+  ad?: MetaAdPublishInput | null;
+}
+
+export interface MetaInstantFormPublishInput {
+  name: string;
+  privacyPolicyUrl: string;
+  thankYouTitle?: string | null;
+  thankYouBody?: string | null;
+  followUpActionUrl?: string | null;
+  questionKeys?: string[] | null;
+}
+
+export interface MetaAdCreativePublishInput {
+  name: string;
+  message: string;
+  headline?: string | null;
+  linkUrl?: string | null;
+  imageHash?: string | null;
+  imageUrl?: string | null;
+  callToActionType?: (typeof META_CALL_TO_ACTION_TYPES)[number] | null;
+}
+
+export interface MetaAdSetPublishInput {
+  name: string;
+  dailyBudget: number;
+  countries: string[];
+  billingEvent?: (typeof META_BILLING_EVENTS)[number] | null;
+  optimizationGoal?: (typeof META_OPTIMIZATION_GOALS)[number] | null;
+  destinationType?: (typeof META_DESTINATION_TYPES)[number] | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  status?: (typeof META_DELIVERY_STATUSES)[number] | null;
+}
+
+export interface MetaAdPublishInput {
+  name: string;
+  status?: (typeof META_DELIVERY_STATUSES)[number] | null;
 }
 
 export interface MetaCampaignPublishResult {
@@ -229,6 +285,15 @@ export interface MetaCampaignPublishResult {
   effectiveStatus: string;
   specialAdCategories: string[];
   adAccountId: string;
+  pageId: string | null;
+  instantFormId: string | null;
+  instantFormName: string | null;
+  creativeId: string | null;
+  creativeName: string | null;
+  adSetId: string | null;
+  adSetName: string | null;
+  adId: string | null;
+  adName: string | null;
   message: string;
 }
 
@@ -248,6 +313,55 @@ interface NormalizedMetaCampaignPublishInput {
   objective: (typeof META_CAMPAIGN_OBJECTIVES)[number];
   status: (typeof META_CAMPAIGN_STATUSES)[number];
   specialAdCategories: Array<(typeof META_SPECIAL_AD_CATEGORIES)[number]>;
+  pageId: string | null;
+  websiteUrl: string | null;
+  instantForm: NormalizedMetaInstantFormPublishInput | null;
+  creative: NormalizedMetaAdCreativePublishInput | null;
+  adSet: NormalizedMetaAdSetPublishInput | null;
+  ad: NormalizedMetaAdPublishInput | null;
+}
+
+interface NormalizedMetaInstantFormPublishInput {
+  name: string;
+  privacyPolicyUrl: string;
+  thankYouTitle: string;
+  thankYouBody: string;
+  followUpActionUrl: string | null;
+  questionKeys: string[];
+}
+
+interface NormalizedMetaAdCreativePublishInput {
+  name: string;
+  message: string;
+  headline: string | null;
+  linkUrl: string | null;
+  imageHash: string | null;
+  imageUrl: string | null;
+  callToActionType: (typeof META_CALL_TO_ACTION_TYPES)[number];
+}
+
+interface NormalizedMetaAdSetPublishInput {
+  name: string;
+  dailyBudget: number;
+  countries: string[];
+  billingEvent: (typeof META_BILLING_EVENTS)[number];
+  optimizationGoal: (typeof META_OPTIMIZATION_GOALS)[number];
+  destinationType: (typeof META_DESTINATION_TYPES)[number];
+  startTime: string | null;
+  endTime: string | null;
+  status: (typeof META_DELIVERY_STATUSES)[number];
+}
+
+interface NormalizedMetaAdPublishInput {
+  name: string;
+  status: (typeof META_DELIVERY_STATUSES)[number];
+}
+
+interface MetaPublishPipelineIds {
+  instantFormId: string | null;
+  creativeId: string | null;
+  adSetId: string | null;
+  adId: string | null;
 }
 
 interface MetaLeadSourceInfo {
@@ -322,6 +436,12 @@ interface MetaGraphErrorPayload {
     error_subcode?: number;
     fbtrace_id?: string;
   };
+}
+
+interface MetaGraphCreateResponse {
+  id?: string;
+  success?: boolean;
+  effective_status?: string;
 }
 
 function normalizeText(value: unknown): string | null {
@@ -402,6 +522,19 @@ function normalizeMetaGraphError(payload: unknown, fallback: string): string {
   }
 
   return message;
+}
+
+function normalizeUrl(value: unknown): string | null {
+  const text = normalizeText(value);
+  if (!text) return null;
+
+  try {
+    const url = new URL(text);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 function sha256Hex(value: string): string {
@@ -631,6 +764,20 @@ async function assertMetaPublishAccess(): Promise<void> {
   }
 }
 
+async function assertMetaPagePublishAccess(needsPageWrite: boolean): Promise<void> {
+  if (!needsPageWrite) return;
+
+  const stored = await getStoredMetaTokenConfig();
+  if (!stored) return;
+
+  const granted = new Set(stored.grantedScopes.map((scope) => String(scope || '').trim().toLowerCase()).filter(Boolean));
+  if (granted.size === 0) return;
+
+  if (!granted.has('pages_manage_ads')) {
+    throw new Error('Connected Meta OAuth token is missing pages_manage_ads. Reconnect Meta before creating instant forms.');
+  }
+}
+
 async function buildGraphUrl(path: string, fields?: string[]): Promise<URL> {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}${cleanPath}`);
@@ -789,6 +936,149 @@ function normalizeSpecialAdCategories(categories: MetaCampaignPublishInput['spec
   return cleaned.filter((value) => META_SPECIAL_AD_CATEGORIES.includes(value as (typeof META_SPECIAL_AD_CATEGORIES)[number])) as Array<(typeof META_SPECIAL_AD_CATEGORIES)[number]>;
 }
 
+function normalizeQuestionKeys(questionKeys: string[] | null | undefined): string[] {
+  const cleaned = Array.from(new Set(
+    (Array.isArray(questionKeys) ? questionKeys : ['FULL_NAME', 'EMAIL', 'PHONE'])
+      .map((value) => String(value || '').trim().toUpperCase())
+      .filter(Boolean)
+  ));
+
+  return cleaned.length > 0 ? cleaned : ['FULL_NAME', 'EMAIL', 'PHONE'];
+}
+
+function validateMetaInstantFormPublishInput(input: MetaInstantFormPublishInput | null | undefined): NormalizedMetaInstantFormPublishInput | null {
+  if (!input) return null;
+
+  const name = String(input.name || '').trim();
+  if (!name) {
+    throw new Error('Instant form name is required');
+  }
+
+  const privacyPolicyUrl = normalizeUrl(input.privacyPolicyUrl);
+  if (!privacyPolicyUrl) {
+    throw new Error('Instant form privacy policy URL must be a valid http or https URL');
+  }
+
+  const thankYouTitle = String(input.thankYouTitle || 'Thanks for your interest').trim() || 'Thanks for your interest';
+  const thankYouBody = String(input.thankYouBody || 'We will contact you shortly.').trim() || 'We will contact you shortly.';
+
+  return {
+    name,
+    privacyPolicyUrl,
+    thankYouTitle,
+    thankYouBody,
+    followUpActionUrl: normalizeUrl(input.followUpActionUrl),
+    questionKeys: normalizeQuestionKeys(input.questionKeys),
+  };
+}
+
+function validateMetaAdCreativePublishInput(input: MetaAdCreativePublishInput | null | undefined): NormalizedMetaAdCreativePublishInput | null {
+  if (!input) return null;
+
+  const name = String(input.name || '').trim();
+  if (!name) throw new Error('Ad creative name is required');
+
+  const message = String(input.message || '').trim();
+  if (!message) throw new Error('Ad creative primary text is required');
+
+  const callToActionType = String(input.callToActionType || 'SIGN_UP').trim().toUpperCase();
+  if (!META_CALL_TO_ACTION_TYPES.includes(callToActionType as (typeof META_CALL_TO_ACTION_TYPES)[number])) {
+    throw new Error(`Unsupported call to action type: ${callToActionType}`);
+  }
+
+  const imageHash = normalizeText(input.imageHash);
+  const imageUrl = normalizeUrl(input.imageUrl);
+  if (!imageHash && !imageUrl) {
+    throw new Error('Ad creative requires either an image hash or an image URL');
+  }
+
+  return {
+    name,
+    message,
+    headline: normalizeText(input.headline),
+    linkUrl: normalizeUrl(input.linkUrl),
+    imageHash,
+    imageUrl,
+    callToActionType: callToActionType as (typeof META_CALL_TO_ACTION_TYPES)[number],
+  };
+}
+
+function normalizeCountries(value: string[] | null | undefined): string[] {
+  const cleaned = Array.from(new Set(
+    (Array.isArray(value) ? value : [])
+      .map((item) => String(item || '').trim().toUpperCase())
+      .filter((item) => /^[A-Z]{2}$/.test(item))
+  ));
+
+  return cleaned;
+}
+
+function validateMetaAdSetPublishInput(input: MetaAdSetPublishInput | null | undefined): NormalizedMetaAdSetPublishInput | null {
+  if (!input) return null;
+
+  const name = String(input.name || '').trim();
+  if (!name) throw new Error('Ad set name is required');
+
+  const dailyBudget = Number(input.dailyBudget || 0);
+  if (!Number.isFinite(dailyBudget) || dailyBudget <= 0) {
+    throw new Error('Ad set daily budget must be a positive number');
+  }
+
+  const countries = normalizeCountries(input.countries);
+  if (countries.length === 0) {
+    throw new Error('Ad set targeting must include at least one two-letter country code');
+  }
+
+  const billingEvent = String(input.billingEvent || 'IMPRESSIONS').trim().toUpperCase();
+  if (!META_BILLING_EVENTS.includes(billingEvent as (typeof META_BILLING_EVENTS)[number])) {
+    throw new Error(`Unsupported billing event: ${billingEvent}`);
+  }
+
+  const optimizationGoal = String(input.optimizationGoal || 'QUALITY_LEAD').trim().toUpperCase();
+  if (!META_OPTIMIZATION_GOALS.includes(optimizationGoal as (typeof META_OPTIMIZATION_GOALS)[number])) {
+    throw new Error(`Unsupported optimization goal: ${optimizationGoal}`);
+  }
+
+  const destinationType = String(input.destinationType || 'ON_AD').trim().toUpperCase();
+  if (!META_DESTINATION_TYPES.includes(destinationType as (typeof META_DESTINATION_TYPES)[number])) {
+    throw new Error(`Unsupported destination type: ${destinationType}`);
+  }
+
+  const status = String(input.status || 'PAUSED').trim().toUpperCase();
+  if (!META_DELIVERY_STATUSES.includes(status as (typeof META_DELIVERY_STATUSES)[number])) {
+    throw new Error(`Unsupported ad set status: ${status}`);
+  }
+
+  return {
+    name,
+    dailyBudget,
+    countries,
+    billingEvent: billingEvent as (typeof META_BILLING_EVENTS)[number],
+    optimizationGoal: optimizationGoal as (typeof META_OPTIMIZATION_GOALS)[number],
+    destinationType: destinationType as (typeof META_DESTINATION_TYPES)[number],
+    startTime: normalizeText(input.startTime),
+    endTime: normalizeText(input.endTime),
+    status: status as (typeof META_DELIVERY_STATUSES)[number],
+  };
+}
+
+function validateMetaAdPublishInput(input: MetaAdPublishInput | null | undefined): NormalizedMetaAdPublishInput | null {
+  if (!input) return null;
+
+  const name = String(input.name || '').trim();
+  if (!name) throw new Error('Ad name is required');
+
+  const status = String(input.status || 'PAUSED').trim().toUpperCase();
+  if (!META_DELIVERY_STATUSES.includes(status as (typeof META_DELIVERY_STATUSES)[number])) {
+    throw new Error(`Unsupported ad status: ${status}`);
+  }
+
+  return {
+    name,
+    status: status as (typeof META_DELIVERY_STATUSES)[number],
+  };
+}
+
 function validateMetaCampaignPublishInput(input: MetaCampaignPublishInput): NormalizedMetaCampaignPublishInput {
   const name = String(input.name || '').trim();
   if (!name) {
@@ -805,12 +1095,173 @@ function validateMetaCampaignPublishInput(input: MetaCampaignPublishInput): Norm
   }
 
   const specialAdCategories = normalizeSpecialAdCategories(input.specialAdCategories);
+  const pageId = normalizeText(input.pageId);
+  const websiteUrl = normalizeUrl(input.websiteUrl);
+  const instantForm = validateMetaInstantFormPublishInput(input.instantForm);
+  const creative = validateMetaAdCreativePublishInput(input.creative);
+  const adSet = validateMetaAdSetPublishInput(input.adSet);
+  const ad = validateMetaAdPublishInput(input.ad);
+
+  if ((instantForm || creative || adSet || ad) && !pageId) {
+    throw new Error('Page ID is required when creating instant forms, creatives, ad sets, or ads');
+  }
+
+  if (ad && !adSet) {
+    throw new Error('Ad creation requires an ad set configuration');
+  }
+
+  if (ad && !creative) {
+    throw new Error('Ad creation requires a creative configuration');
+  }
+
+  if (creative && !websiteUrl && !instantForm?.followUpActionUrl && !creative.linkUrl) {
+    throw new Error('Creative publishing requires a website URL, a creative link URL, or an instant form follow-up URL');
+  }
+
   return {
     name,
     objective: input.objective,
     status: status as (typeof META_CAMPAIGN_STATUSES)[number],
     specialAdCategories,
+    pageId,
+    websiteUrl,
+    instantForm,
+    creative,
+    adSet,
+    ad,
   };
+}
+
+function buildLeadFormQuestions(questionKeys: string[]): Array<Record<string, unknown>> {
+  return questionKeys.map((key) => ({ type: key }));
+}
+
+async function createMetaInstantForm(
+  pageId: string,
+  input: NormalizedMetaInstantFormPublishInput
+): Promise<{ id: string; name: string }> {
+  const result = await postGraphJson<MetaGraphCreateResponse>(
+    `/${pageId}/leadgen_forms`,
+    {
+      name: input.name,
+      locale: 'en_US',
+      questions: buildLeadFormQuestions(input.questionKeys),
+      privacy_policy: {
+        url: input.privacyPolicyUrl,
+        link_text: 'Privacy Policy',
+      },
+      thank_you_page: {
+        title: input.thankYouTitle,
+        body: input.thankYouBody,
+        button_type: input.followUpActionUrl ? 'VIEW_WEBSITE' : 'NO_BUTTON',
+        website_url: input.followUpActionUrl,
+      },
+      follow_up_action_url: input.followUpActionUrl,
+    }
+  );
+
+  const id = normalizeText(result.id);
+  if (!id) throw new Error('Meta instant form creation succeeded but no form id was returned');
+  return { id, name: input.name };
+}
+
+async function createMetaAdCreative(params: {
+  adAccountId: string;
+  pageId: string;
+  websiteUrl: string | null;
+  input: NormalizedMetaAdCreativePublishInput;
+  instantFormId: string | null;
+}): Promise<{ id: string; name: string }> {
+  const linkUrl = params.input.linkUrl || params.websiteUrl || `https://facebook.com/${params.pageId}`;
+  const callToActionValue = params.instantFormId
+    ? { lead_gen_form_id: params.instantFormId }
+    : { link: linkUrl };
+
+  const linkData: Record<string, unknown> = {
+    message: params.input.message,
+    link: linkUrl,
+    call_to_action: {
+      type: params.input.callToActionType,
+      value: callToActionValue,
+    },
+  };
+
+  if (params.input.headline) linkData.name = params.input.headline;
+  if (params.input.imageHash) linkData.image_hash = params.input.imageHash;
+  if (!params.input.imageHash && params.input.imageUrl) linkData.picture = params.input.imageUrl;
+
+  const result = await postGraphJson<MetaGraphCreateResponse>(
+    `/act_${params.adAccountId}/adcreatives`,
+    {
+      name: params.input.name,
+      object_story_spec: {
+        page_id: params.pageId,
+        link_data: linkData,
+      },
+    }
+  );
+
+  const id = normalizeText(result.id);
+  if (!id) throw new Error('Meta ad creative creation succeeded but no creative id was returned');
+  return { id, name: params.input.name };
+}
+
+async function createMetaAdSet(params: {
+  adAccountId: string;
+  campaignId: string;
+  pageId: string;
+  input: NormalizedMetaAdSetPublishInput;
+}): Promise<{ id: string; name: string }> {
+  const targeting = {
+    geo_locations: { countries: params.input.countries },
+    publisher_platforms: ['facebook', 'instagram'],
+    facebook_positions: ['feed'],
+    instagram_positions: ['stream'],
+  };
+
+  const payload: Record<string, unknown> = {
+    name: params.input.name,
+    campaign_id: params.campaignId,
+    daily_budget: Math.round(params.input.dailyBudget),
+    billing_event: params.input.billingEvent,
+    optimization_goal: params.input.optimizationGoal,
+    destination_type: params.input.destinationType,
+    bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+    targeting,
+    promoted_object: {
+      page_id: params.pageId,
+    },
+    status: params.input.status,
+  };
+
+  if (params.input.startTime) payload.start_time = params.input.startTime;
+  if (params.input.endTime) payload.end_time = params.input.endTime;
+
+  const result = await postGraphJson<MetaGraphCreateResponse>(`/act_${params.adAccountId}/adsets`, payload);
+  const id = normalizeText(result.id);
+  if (!id) throw new Error('Meta ad set creation succeeded but no ad set id was returned');
+  return { id, name: params.input.name };
+}
+
+async function createMetaAd(params: {
+  adAccountId: string;
+  adSetId: string;
+  creativeId: string;
+  input: NormalizedMetaAdPublishInput;
+}): Promise<{ id: string; name: string }> {
+  const result = await postGraphJson<MetaGraphCreateResponse>(
+    `/act_${params.adAccountId}/ads`,
+    {
+      name: params.input.name,
+      adset_id: params.adSetId,
+      creative: { creative_id: params.creativeId },
+      status: params.input.status,
+    }
+  );
+
+  const id = normalizeText(result.id);
+  if (!id) throw new Error('Meta ad creation succeeded but no ad id was returned');
+  return { id, name: params.input.name };
 }
 
 export async function publishMetaCampaign(
@@ -821,7 +1272,18 @@ export async function publishMetaCampaign(
   await assertMetaPublishAccess();
 
   const payload = validateMetaCampaignPublishInput(input);
+  await assertMetaPagePublishAccess(Boolean(payload.instantForm));
   const adAccountId = getMetaAdAccountIdRequired();
+  const created: MetaPublishPipelineIds = {
+    instantFormId: null,
+    creativeId: null,
+    adSetId: null,
+    adId: null,
+  };
+  let instantFormName: string | null = null;
+  let creativeName: string | null = null;
+  let adSetName: string | null = null;
+  let adName: string | null = null;
 
   try {
     const result = await postGraphJson<{ id?: string; effective_status?: string }>(
@@ -840,12 +1302,66 @@ export async function publishMetaCampaign(
       throw new Error('Meta campaign publish succeeded but no campaign id was returned');
     }
 
+    if (payload.pageId && payload.instantForm) {
+      const form = await createMetaInstantForm(payload.pageId, payload.instantForm);
+      created.instantFormId = form.id;
+      instantFormName = form.name;
+    }
+
+    if (payload.pageId && payload.creative) {
+      const creative = await createMetaAdCreative({
+        adAccountId,
+        pageId: payload.pageId,
+        websiteUrl: payload.websiteUrl,
+        input: payload.creative,
+        instantFormId: created.instantFormId,
+      });
+      created.creativeId = creative.id;
+      creativeName = creative.name;
+    }
+
+    if (payload.pageId && payload.adSet) {
+      const adSet = await createMetaAdSet({
+        adAccountId,
+        campaignId,
+        pageId: payload.pageId,
+        input: payload.adSet,
+      });
+      created.adSetId = adSet.id;
+      adSetName = adSet.name;
+    }
+
+    if (payload.ad && created.adSetId && created.creativeId) {
+      const ad = await createMetaAd({
+        adAccountId,
+        adSetId: created.adSetId,
+        creativeId: created.creativeId,
+        input: payload.ad,
+      });
+      created.adId = ad.id;
+      adName = ad.name;
+    }
+
     await logMetaCampaignPublishAttempt({
       adAccountId,
       requestedBy: options.requestedBy ?? null,
       input: payload,
-      result,
+      result: {
+        ...result,
+        instant_form_id: created.instantFormId,
+        creative_id: created.creativeId,
+        adset_id: created.adSetId,
+        ad_id: created.adId,
+      },
     });
+
+    const createdParts = [
+      campaignId ? `campaign ${campaignId}` : null,
+      created.instantFormId ? `form ${created.instantFormId}` : null,
+      created.creativeId ? `creative ${created.creativeId}` : null,
+      created.adSetId ? `ad set ${created.adSetId}` : null,
+      created.adId ? `ad ${created.adId}` : null,
+    ].filter(Boolean);
 
     return {
       campaignId,
@@ -855,7 +1371,18 @@ export async function publishMetaCampaign(
       effectiveStatus: normalizeText(result?.effective_status) || payload.status,
       specialAdCategories: payload.specialAdCategories,
       adAccountId,
-      message: 'Meta campaign created. This publishes the campaign container only; ad sets, creatives, ads, and forms remain separate.',
+      pageId: payload.pageId,
+      instantFormId: created.instantFormId,
+      instantFormName,
+      creativeId: created.creativeId,
+      creativeName,
+      adSetId: created.adSetId,
+      adSetName,
+      adId: created.adId,
+      adName,
+      message: createdParts.length > 1
+        ? `Meta publish complete: ${createdParts.join(', ')}.`
+        : 'Meta campaign created.',
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to publish Meta campaign';
@@ -2299,6 +2826,183 @@ export async function updateMetaLeadDetail(metaLeadId: string, input: MetaLeadUp
       [String(input.statusId), metaLeadId]
     );
   }
+
+  return getMetaLeadDetail(metaLeadId);
+}
+
+export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<MetaLeadDetailResult | null> {
+  await ensureMetaLeadTables();
+  const pool = getPool();
+
+  const [rows] = await pool.query(
+    `SELECT
+       meta_lead_id,
+       inquiry_id,
+       duplicate_of_inquiry_id,
+       student_name,
+       course_name,
+       mobile,
+       email,
+       lead_created_time,
+       contact_source,
+       source_label,
+       form_id,
+       form_name,
+       page_id,
+       page_name,
+       ad_id,
+       ad_name,
+       adset_id,
+       adset_name,
+       campaign_id,
+       campaign_name,
+       fields_json,
+       utm_json,
+       tags_json
+     FROM ${META_LEADS_TABLE}
+     WHERE meta_lead_id = ?
+     LIMIT 1`,
+    [metaLeadId]
+  );
+
+  const row = (rows as any[])[0];
+  if (!row) return null;
+  if (Number(row.inquiry_id || 0) > 0) {
+    return getMetaLeadDetail(metaLeadId);
+  }
+
+  let fields: Record<string, string | null> = {};
+  let utm: Record<string, string | null> = {};
+  let tags: string[] = [];
+
+  try {
+    const parsed = JSON.parse(row.fields_json || '{}');
+    fields = parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {}
+
+  try {
+    const parsed = JSON.parse(row.utm_json || '{}');
+    utm = parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {}
+
+  try {
+    const parsed = JSON.parse(row.tags_json || '[]');
+    tags = Array.isArray(parsed) ? parsed.map((tag) => String(tag)).filter(Boolean) : [];
+  } catch {}
+
+  const ctx: MetaLeadContext = {
+    formId: normalizeText(row.form_id),
+    formName: normalizeText(row.form_name),
+    pageId: normalizeText(row.page_id),
+    pageName: normalizeText(row.page_name),
+    adId: normalizeText(row.ad_id),
+    adName: normalizeText(row.ad_name),
+    adsetId: normalizeText(row.adset_id),
+    adsetName: normalizeText(row.adset_name),
+    campaignId: normalizeText(row.campaign_id),
+    campaignName: normalizeText(row.campaign_name),
+  };
+
+  const fallbackName = [firstValue(fields, ['first_name']), firstValue(fields, ['last_name'])]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  const sourceLabel = normalizeText(row.source_label) || META_SOURCE_LABEL;
+  const contactSource = normalizeText(row.contact_source) || META_CONTACT_SOURCE;
+  const studentName = normalizeText(row.student_name)
+    ?? firstValue(fields, ['full_name', 'full_name_1', 'name'])
+    ?? (fallbackName || null)
+    ?? 'Meta Lead';
+  const courseName = normalizeText(row.course_name) ?? resolveMetaCourseName(fields, ctx.formName);
+  const mobile = normalizeDigits(row.mobile)
+    ?? normalizeDigits(firstValue(fields, ['phone_number', 'phone', 'mobile', 'whatsapp_number', 'whatsapp']));
+  const email = normalizeEmail(row.email)
+    ?? normalizeEmail(firstValue(fields, ['email', 'email_address']));
+  const qualification = firstValue(fields, ['qualification', 'highest_qualification']);
+  const discipline = firstValue(fields, ['discipline', 'stream']);
+  const percentage = parseNumber(firstValue(fields, ['percentage', 'marks_percentage']));
+  const inquiryDate = normalizeDateOnly(row.lead_created_time) || new Date().toISOString().slice(0, 10);
+  const courseId = await resolveCourseId(courseName);
+  const nextTags = Array.from(new Set(tags)).sort();
+  const discussion = buildDiscussionNote(sourceLabel, ctx, nextTags);
+  const duplicate = await findDuplicateInquiry(mobile, email);
+
+  let inquiryId: number;
+  let duplicateReason: string | null = null;
+
+  if (duplicate) {
+    inquiryId = duplicate.inquiryId;
+    duplicateReason = mobile && email
+      ? 'Matched existing inquiry by mobile or email during manual conversion'
+      : mobile
+        ? 'Matched existing inquiry by mobile during manual conversion'
+        : 'Matched existing inquiry by email during manual conversion';
+
+    await updateInquiry(inquiryId, {
+      Student_Name: duplicate.studentName || studentName,
+      Present_Mobile: duplicate.presentMobile || mobile,
+      Email: duplicate.email || email,
+      Inquiry_From: contactSource,
+      Inquiry_Type: sourceLabel,
+      Course_Id: duplicate.courseId || courseId,
+      Qualification: qualification,
+      Discipline: discipline,
+      Percentage: percentage != null ? String(percentage) : null,
+      Discussion: discussion,
+    });
+  } else {
+    inquiryId = await createInquiry({
+      Student_Name: studentName,
+      Present_Mobile: mobile,
+      Email: email,
+      Inquiry_Dt: inquiryDate,
+      Inquiry_From: contactSource,
+      Inquiry_Type: sourceLabel,
+      Course_Id: courseId,
+      Qualification: qualification,
+      Discipline: discipline,
+      Percentage: percentage != null ? String(percentage) : null,
+      Discussion: discussion,
+      Status_id: 1,
+    });
+  }
+
+  if (discussion) {
+    await addDiscussionNote(inquiryId, discussion);
+  }
+
+  await pool.query(
+    `UPDATE ${META_LEADS_TABLE}
+     SET inquiry_id = ?,
+         duplicate_of_inquiry_id = ?,
+         student_name = ?,
+         course_name = ?,
+         mobile = ?,
+         email = ?,
+         contact_source = ?,
+         source_label = ?,
+         fields_json = ?,
+         utm_json = ?,
+         tags_json = ?,
+         duplicate_reason = ?
+     WHERE meta_lead_id = ?`,
+    [
+      inquiryId,
+      duplicate?.inquiryId ?? null,
+      studentName,
+      courseName,
+      mobile,
+      email,
+      contactSource,
+      sourceLabel,
+      JSON.stringify(fields),
+      JSON.stringify(utm),
+      JSON.stringify(nextTags),
+      duplicateReason,
+      metaLeadId,
+    ]
+  );
 
   return getMetaLeadDetail(metaLeadId);
 }

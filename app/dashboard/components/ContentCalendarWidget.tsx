@@ -26,6 +26,16 @@ interface ContentItem {
   platform: string;
   responsible_person: string;
   description: string;
+  meta_campaign_id: string | null;
+  meta_campaign_name: string | null;
+}
+
+interface MetaCampaignOption {
+  id: string;
+  name: string;
+  leads: number;
+  spend: number;
+  cpl: number | null;
 }
 
 type FormItem = Partial<ContentItem> & { platforms?: string[] };
@@ -181,11 +191,13 @@ function ModalField({ label, children }: { label: string; children: React.ReactN
 function ItemModal({
   initial,
   saving,
+  campaigns,
   onSave,
   onClose,
 }: {
   initial: FormItem;
   saving: boolean;
+  campaigns: MetaCampaignOption[];
   onSave: (f: FormItem) => void;
   onClose: () => void;
 }) {
@@ -289,6 +301,48 @@ function ItemModal({
               className={`${MODAL_INPUT_CLS} resize-none`}
             />
           </ModalField>
+
+          {/* Meta Campaign Attribution */}
+          <ModalField label="Meta Campaign">
+            <select
+              value={form.meta_campaign_id ?? ''}
+              onChange={e => {
+                const selected = campaigns.find(c => c.id === e.target.value);
+                set('meta_campaign_id', e.target.value || null);
+                set('meta_campaign_name', selected?.name ?? null);
+              }}
+              className={MODAL_INPUT_CLS}
+            >
+              <option value="">— Not linked to a Meta campaign —</option>
+              {campaigns.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.leads ? ` · ${c.leads} leads` : ''}
+                </option>
+              ))}
+            </select>
+          </ModalField>
+
+          {/* Show performance metrics when a campaign is linked */}
+          {form.meta_campaign_id && (() => {
+            const perf = campaigns.find(c => c.id === form.meta_campaign_id);
+            if (!perf) return null;
+            return (
+              <div className="grid grid-cols-3 gap-2 rounded-xl border border-[#2E3093]/15 bg-[#2E3093]/5 px-3 py-2.5">
+                <div className="text-center">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-[#2E3093]/60">Leads</p>
+                  <p className="text-sm font-bold text-[#2E3093]">{perf.leads}</p>
+                </div>
+                <div className="text-center border-x border-[#2E3093]/15">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-[#2E3093]/60">Spend</p>
+                  <p className="text-sm font-bold text-slate-700">₹{perf.spend.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-[#2E3093]/60">Cost/Lead</p>
+                  <p className="text-sm font-bold text-slate-700">{perf.cpl != null ? `₹${perf.cpl.toFixed(0)}` : '—'}</p>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Footer */}
@@ -324,6 +378,7 @@ export default function ContentCalendarWidget() {
   const [plan, setPlan]           = useState<ContentPlanRow[]>([]);
   const planLoaded                = useRef(false);
   const [trackerSort, setTrackerSort] = useState<{ col: string; dir: 'asc' | 'desc' } | null>(null);
+  const [campaigns, setCampaigns] = useState<MetaCampaignOption[]>([]);
 
   const load = useCallback(async (y: number, m: number) => {
     setLoading(true);
@@ -343,6 +398,24 @@ export default function ContentCalendarWidget() {
     fetch('/api/cbd-content-plan', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : { rows: [] })
       .then(d => setPlan(d.rows ?? []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/meta-ads/performance', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : { campaigns: [] })
+      .then(d => {
+        const opts: MetaCampaignOption[] = (d.campaigns ?? [])
+          .filter((c: { campaignId?: string | null }) => c.campaignId)
+          .map((c: { campaignId: string; campaignName?: string | null; leads?: number; spend?: number; costPerLead?: number | null }) => ({
+            id: c.campaignId,
+            name: c.campaignName || c.campaignId,
+            leads: c.leads ?? 0,
+            spend: c.spend ?? 0,
+            cpl: c.costPerLead ?? null,
+          }));
+        setCampaigns(opts);
+      })
       .catch(() => {});
   }, []);
 
@@ -653,13 +726,20 @@ export default function ContentCalendarWidget() {
                             onClick={e => { e.stopPropagation(); setModal({ ...item }); }}
                             className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-semibold truncate"
                             style={{ background: tc.bg, color: tc.color }}
-                            title={`${item.content_type}${item.description ? ' · ' + item.description : ''} (${item.status})`}
+                            title={`${item.content_type}${item.description ? ' · ' + item.description : ''} (${item.status})${item.meta_campaign_name ? ' · Meta: ' + item.meta_campaign_name : ''}`}
                           >
                             <span className="inline-flex items-center justify-center min-w-5 h-4 px-1 rounded text-[8px] font-bold tracking-wide bg-white/70">
                               {tc.short}
                             </span>
                             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[item.status]}`} />
-                            <span className="truncate">{item.content_type}</span>
+                            <span className="truncate flex-1">{item.content_type}</span>
+                            {item.meta_campaign_id && (
+                              <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-white/80 shrink-0" title={`Meta: ${item.meta_campaign_name}`}>
+                                <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"/>
+                                </svg>
+                              </span>
+                            )}
                           </div>
                         );
                       })}
@@ -691,8 +771,8 @@ export default function ContentCalendarWidget() {
       <table className="w-full text-sm">
         <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
           <tr>
-            {['#','Content Type','Planned','Execution','Status','Upload','Platform','Responsible','Description',''].map((h, i) => (
-              <th key={i} className={`py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap ${i === 0 || i === 9 ? 'text-center w-10' : i >= 4 && i <= 8 ? 'text-left' : 'text-left'}`}>
+            {['#','Content Type','Planned','Execution','Status','Upload','Platform','Responsible','Meta Campaign','Description',''].map((h, i) => (
+              <th key={i} className={`py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap ${i === 0 || i === 10 ? 'text-center w-10' : 'text-left'}`}>
                 {h}
               </th>
             ))}
@@ -833,6 +913,7 @@ export default function ContentCalendarWidget() {
         <ItemModal
           initial={modal}
           saving={saving}
+          campaigns={campaigns}
           onSave={handleSave}
           onClose={() => setModal(null)}
         />
