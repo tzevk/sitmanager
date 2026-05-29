@@ -9,6 +9,10 @@
     {
       "path": "/api/cron/meta-leads-refresh",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/suvidya-inquiry-sync",
+      "schedule": "*/5 * * * *"
     }
   ],
   "functions": {
