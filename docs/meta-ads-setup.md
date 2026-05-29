@@ -2,6 +2,8 @@
 
 This workspace now supports Meta lead ingestion into the inquiry module through a public webhook and a protected campaign performance API.
 
+It also supports a narrow outbound publish flow for creating Meta campaign containers from the Meta Leads page.
+
 ## Lead architecture
 
 The lead capture path is structured like this:
@@ -39,6 +41,7 @@ The Graph API fetch happens inside the backend API stage. It is part of the serv
 - Stores Meta-specific metadata in `meta_ads_lead_sync`.
 - Surfaces campaign, form, tags, duplicate flags, filtering, and export on the inquiry listing page.
 - Shows campaign reach/click/lead/spend summary on the inquiry listing page.
+- Lets authorized users create a Meta campaign shell from the Meta Leads page.
 
 ## Environment variables
 
@@ -94,6 +97,34 @@ Notes:
 - The existing lead sync and campaign performance APIs will use the stored OAuth token first, then fall back to `META_ACCESS_TOKEN`.
 - For production CRM integrations, a system user token is still the most stable option.
 - OAuth is mainly useful when you need an interactive connect flow during setup or troubleshooting.
+- Campaign publishing requires the Meta token to include `ads_management`. If you connected before this feature existed, reconnect Meta so the app can request the new scope.
+
+## Campaign publishing
+
+The outbound path is intentionally narrow.
+
+- Open the Meta Leads page.
+- Use the `Publish Meta Campaign` card.
+- Enter a campaign name and objective.
+- The app creates the campaign in Meta as a container-level object.
+
+What this creates:
+
+- Meta campaign
+
+What this does not create yet:
+
+- ad sets
+- creatives
+- ads
+- instant forms
+
+Runtime behavior:
+
+- Campaigns are created in the ad account from `META_AD_ACCOUNT_ID`.
+- The publish action currently sends campaigns in `PAUSED` status by default.
+- Publish attempts are logged locally in `meta_ads_campaign_publish_log`.
+- If the connected OAuth token lacks `ads_management`, the publish request is rejected with a reconnect message.
 
 ## Meta App configuration
 
@@ -107,6 +138,8 @@ https://your-domain.com/api/public/meta-ads/webhook
 
 4. Use the same value from `META_WEBHOOK_VERIFY_TOKEN` as the verify token in Meta.
 5. Make sure the access token in `META_ACCESS_TOKEN` can read leads and ad insights.
+
+For campaign publishing, the connected token also needs campaign write access, typically through `ads_management`.
 
 ## Inquiry mapping
 

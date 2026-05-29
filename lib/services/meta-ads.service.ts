@@ -7,16 +7,37 @@ import { sendAdmissionFormEmail } from '@/lib/mailer';
 
 const META_LEADS_TABLE = 'meta_ads_lead_sync';
 const META_SETTINGS_TABLE = 'meta_ads_settings';
+const META_CAMPAIGN_PUBLISH_LOG_TABLE = 'meta_ads_campaign_publish_log';
 const META_GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v22.0';
 const META_SOURCE_LABEL = 'Meta Ads';
 const META_CONTACT_SOURCE = 'Meta Instant Form';
 const META_OAUTH_SCOPES = [
   'ads_read',
+  'ads_management',
   'business_management',
   'leads_retrieval',
   'pages_read_engagement',
   'pages_show_list',
 ];
+
+const META_CAMPAIGN_OBJECTIVES = [
+  'OUTCOME_AWARENESS',
+  'OUTCOME_TRAFFIC',
+  'OUTCOME_ENGAGEMENT',
+  'OUTCOME_LEADS',
+  'OUTCOME_APP_PROMOTION',
+  'OUTCOME_SALES',
+] as const;
+
+const META_CAMPAIGN_STATUSES = ['PAUSED', 'ACTIVE'] as const;
+
+const META_SPECIAL_AD_CATEGORIES = [
+  'NONE',
+  'CREDIT',
+  'EMPLOYMENT',
+  'HOUSING',
+  'ISSUES_ELECTIONS_POLITICS',
+] as const;
 
 let metaTablesReady = false;
 
@@ -193,6 +214,42 @@ export interface MetaLeadSyncSummary {
   sinceHours: number | null;
 }
 
+export interface MetaCampaignPublishInput {
+  name: string;
+  objective: (typeof META_CAMPAIGN_OBJECTIVES)[number];
+  status?: (typeof META_CAMPAIGN_STATUSES)[number] | null;
+  specialAdCategories?: Array<(typeof META_SPECIAL_AD_CATEGORIES)[number]> | null;
+}
+
+export interface MetaCampaignPublishResult {
+  campaignId: string;
+  campaignName: string;
+  objective: string;
+  status: string;
+  effectiveStatus: string;
+  specialAdCategories: string[];
+  adAccountId: string;
+  message: string;
+}
+
+export interface MetaCampaignPublishLogRow {
+  id: number;
+  campaignId: string | null;
+  campaignName: string;
+  objective: string;
+  publishStatus: string;
+  requestedBy: number | null;
+  createdAt: string;
+  errorMessage: string | null;
+}
+
+interface NormalizedMetaCampaignPublishInput {
+  name: string;
+  objective: (typeof META_CAMPAIGN_OBJECTIVES)[number];
+  status: (typeof META_CAMPAIGN_STATUSES)[number];
+  specialAdCategories: Array<(typeof META_SPECIAL_AD_CATEGORIES)[number]>;
+}
+
 interface MetaLeadSourceInfo {
   sourceLabel: string;
   contactSource: string;
@@ -361,6 +418,14 @@ function getMetaPixelId(): string | null {
   return pixelId || null;
 }
 
+function getMetaAdAccountIdRequired(): string {
+  const rawAccountId = process.env.META_AD_ACCOUNT_ID?.trim();
+  if (!rawAccountId) {
+    throw new Error('META_AD_ACCOUNT_ID is not configured');
+  }
+  return normalizeMetaAdAccountId(rawAccountId);
+}
+
 function normalizeMetaAdAccountId(value: string): string {
   return value.trim().replace(/^act_/i, '');
 }
@@ -438,6 +503,25 @@ async function ensureMetaLeadTables() {
       setting_value LONGTEXT NULL,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (setting_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ${META_CAMPAIGN_PUBLISH_LOG_TABLE} (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      meta_campaign_id VARCHAR(191) NULL,
+      campaign_name VARCHAR(255) NOT NULL,
+      objective VARCHAR(64) NOT NULL,
+      publish_status VARCHAR(32) NOT NULL,
+      effective_status VARCHAR(64) NULL,
+      ad_account_id VARCHAR(64) NOT NULL,
+      requested_by INT NULL,
+      request_json LONGTEXT NULL,
+      response_json LONGTEXT NULL,
+      error_message TEXT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_meta_campaign_publish_campaign_id (meta_campaign_id),
+      KEY idx_meta_campaign_publish_created_at (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
   metaTablesReady = true;
@@ -533,6 +617,18 @@ async function getMetaAccessToken(): Promise<string> {
     throw new Error('META access token is not configured. Set META_ACCESS_TOKEN or connect Meta OAuth.');
   }
   return token;
+}
+
+async function assertMetaPublishAccess(): Promise<void> {
+  const stored = await getStoredMetaTokenConfig();
+  if (!stored) return;
+
+  const granted = new Set(stored.grantedScopes.map((scope) => String(scope || '').trim().toLowerCase()).filter(Boolean));
+  if (granted.size === 0) return;
+
+  if (!granted.has('ads_management')) {
+    throw new Error('Connected Meta OAuth token is missing ads_management. Reconnect Meta with campaign publishing permissions.');
+  }
 }
 
 async function buildGraphUrl(path: string, fields?: string[]): Promise<URL> {
@@ -648,6 +744,161 @@ async function postGraphJson<T>(path: string, body: Record<string, unknown>, acc
     throw new Error(normalizeMetaGraphError(data, `Meta Graph API POST failed with ${res.status}`));
   }
   return data as T;
+}
+
+async function logMetaCampaignPublishAttempt(params: {
+  adAccountId: string;
+  requestedBy: number | null;
+  input: MetaCampaignPublishInput;
+  result?: Record<string, unknown> | null;
+  errorMessage?: string | null;
+}): Promise<void> {
+  await ensureMetaLeadTables();
+  const pool = getPool();
+
+  await pool.query(
+    `INSERT INTO ${META_CAMPAIGN_PUBLISH_LOG_TABLE}
+      (meta_campaign_id, campaign_name, objective, publish_status, effective_status, ad_account_id, requested_by, request_json, response_json, error_message)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      normalizeText(params.result?.id),
+      params.input.name.trim(),
+      params.input.objective,
+      (params.input.status || 'PAUSED').toUpperCase(),
+      normalizeText(params.result?.effective_status),
+      params.adAccountId,
+      params.requestedBy,
+      JSON.stringify(params.input),
+      params.result ? JSON.stringify(params.result) : null,
+      params.errorMessage ?? null,
+    ]
+  );
+}
+
+function normalizeSpecialAdCategories(categories: MetaCampaignPublishInput['specialAdCategories']): Array<(typeof META_SPECIAL_AD_CATEGORIES)[number]> {
+  const values = Array.isArray(categories) ? categories : [];
+  const cleaned = Array.from(new Set(
+    values
+      .map((value) => String(value || '').trim().toUpperCase())
+      .filter(Boolean)
+  ));
+
+  if (cleaned.length === 0) return [];
+  if (cleaned.includes('NONE')) return ['NONE'];
+
+  return cleaned.filter((value) => META_SPECIAL_AD_CATEGORIES.includes(value as (typeof META_SPECIAL_AD_CATEGORIES)[number])) as Array<(typeof META_SPECIAL_AD_CATEGORIES)[number]>;
+}
+
+function validateMetaCampaignPublishInput(input: MetaCampaignPublishInput): NormalizedMetaCampaignPublishInput {
+  const name = String(input.name || '').trim();
+  if (!name) {
+    throw new Error('Campaign name is required');
+  }
+
+  if (!META_CAMPAIGN_OBJECTIVES.includes(input.objective)) {
+    throw new Error(`Unsupported Meta campaign objective: ${String(input.objective || '')}`);
+  }
+
+  const status = String(input.status || 'PAUSED').trim().toUpperCase();
+  if (!META_CAMPAIGN_STATUSES.includes(status as (typeof META_CAMPAIGN_STATUSES)[number])) {
+    throw new Error(`Unsupported Meta campaign status: ${status}`);
+  }
+
+  const specialAdCategories = normalizeSpecialAdCategories(input.specialAdCategories);
+  return {
+    name,
+    objective: input.objective,
+    status: status as (typeof META_CAMPAIGN_STATUSES)[number],
+    specialAdCategories,
+  };
+}
+
+export async function publishMetaCampaign(
+  input: MetaCampaignPublishInput,
+  options: { requestedBy?: number | null } = {}
+): Promise<MetaCampaignPublishResult> {
+  await ensureMetaLeadTables();
+  await assertMetaPublishAccess();
+
+  const payload = validateMetaCampaignPublishInput(input);
+  const adAccountId = getMetaAdAccountIdRequired();
+
+  try {
+    const result = await postGraphJson<{ id?: string; effective_status?: string }>(
+      `/act_${adAccountId}/campaigns`,
+      {
+        name: payload.name,
+        objective: payload.objective,
+        status: payload.status,
+        special_ad_categories: payload.specialAdCategories,
+        buying_type: 'AUCTION',
+      }
+    );
+
+    const campaignId = normalizeText(result?.id);
+    if (!campaignId) {
+      throw new Error('Meta campaign publish succeeded but no campaign id was returned');
+    }
+
+    await logMetaCampaignPublishAttempt({
+      adAccountId,
+      requestedBy: options.requestedBy ?? null,
+      input: payload,
+      result,
+    });
+
+    return {
+      campaignId,
+      campaignName: payload.name,
+      objective: payload.objective,
+      status: payload.status,
+      effectiveStatus: normalizeText(result?.effective_status) || payload.status,
+      specialAdCategories: payload.specialAdCategories,
+      adAccountId,
+      message: 'Meta campaign created. This publishes the campaign container only; ad sets, creatives, ads, and forms remain separate.',
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to publish Meta campaign';
+    await logMetaCampaignPublishAttempt({
+      adAccountId,
+      requestedBy: options.requestedBy ?? null,
+      input: payload,
+      errorMessage: message,
+    });
+    throw error;
+  }
+}
+
+export async function listMetaCampaignPublishLog(limit = 10): Promise<MetaCampaignPublishLogRow[]> {
+  await ensureMetaLeadTables();
+  const pool = getPool();
+  const safeLimit = Math.min(50, Math.max(1, Math.trunc(limit)));
+  const [rows] = await pool.query(
+    `SELECT
+       id,
+       meta_campaign_id AS campaignId,
+       campaign_name AS campaignName,
+       objective,
+       publish_status AS publishStatus,
+       requested_by AS requestedBy,
+       created_at AS createdAt,
+       error_message AS errorMessage
+     FROM ${META_CAMPAIGN_PUBLISH_LOG_TABLE}
+     ORDER BY id DESC
+     LIMIT ?`,
+    [safeLimit]
+  );
+
+  return (rows as any[]).map((row) => ({
+    id: Number(row.id),
+    campaignId: normalizeText(row.campaignId),
+    campaignName: String(row.campaignName || ''),
+    objective: String(row.objective || ''),
+    publishStatus: String(row.publishStatus || ''),
+    requestedBy: row.requestedBy == null ? null : Number(row.requestedBy),
+    createdAt: String(row.createdAt || ''),
+    errorMessage: normalizeText(row.errorMessage),
+  }));
 }
 
 export async function sendMetaConversionEvents(events: MetaConversionsEventInput[]): Promise<MetaConversionsApiResponse | null> {

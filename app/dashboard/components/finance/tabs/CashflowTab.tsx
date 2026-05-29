@@ -9,20 +9,20 @@ import CashflowCategoryBars from '../charts/CashflowCategoryBars';
 import { detectCashflowAnomalies, categoryMoMGrowth } from '../shared/predictions';
 
 const CF_TYPES: CashflowType[] = ['Payment', 'Receipt'];
-const CF_DEPARTMENTS = ['CBD','CORPORATE TRAINING','DEPUTATION ACCENT','PROJECT ACCENT','T&D','ADMIN ACCOUNTS','HELPING STAFF','GENERAL','MANAGEMENT','TRAINERS'] as const;
-const CF_COMPANIES   = ['Suvidya','SIT Alumni','ATS','Accent'] as const;
+const CF_DEPARTMENTS = ['CBD','CORPORATE TRAINING','DEPUTATION ACCENT','PROJECT ACCENT','T&D','ADMIN ACCOUNTS','HELPING STAFF','GENERAL','MANAGEMENT','TRAINERS','LOAN REPAYMENT'] as const;
+const CF_COMPANIES   = ['Suvidya','SIT Alumni','ATS','Accent','SIT Mumbai','SIT Pune'] as const;
 
 const SIT_CATS = [
   'OD Interest / Loan EMI','Management Car Expenses','Management Salary','Employee Salary',
   'Trainers Payment','Food','Utility','Marketing - SIT',
   'Travelling Expense - Staff (Marketing)','Software','Stationary','Infrastructure','Taxes',
-  'Internal Transfer',
+  'Mock Interview Charges','Mock Interview','Refund','Internal Transfer',
 ];
 const ACCENT_CATS = [
   'OD Interest / Loan EMI','Management Car Expenses','Management Salary','Employee Salary',
   'Trainers Payment','Food','Utility','Marketing - Accent',
   'Travelling Expense - Staff (Marketing)','Software','Stationary','Infrastructure','Taxes',
-  'Internal Transfer',
+  'Mock Interview Charges','Mock Interview','Refund','Internal Transfer',
 ];
 const RECEIPT_CATS = [
   'Tution Fees','Corporate Training','Deputation','Projects','Internal Transfer',

@@ -51,8 +51,36 @@ interface MetaPerformanceSummary {
   };
 }
 
+interface MetaCampaignPublishLogRow {
+  id: number;
+  campaignId: string | null;
+  campaignName: string;
+  objective: string;
+  publishStatus: string;
+  requestedBy: number | null;
+  createdAt: string;
+  errorMessage: string | null;
+}
+
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
 interface Filters { trainings: string[]; sources: string[]; statusOptions: { id: number; label: string }[]; }
+
+const META_PUBLISH_OBJECTIVES = [
+  { value: 'OUTCOME_LEADS', label: 'Leads' },
+  { value: 'OUTCOME_TRAFFIC', label: 'Traffic' },
+  { value: 'OUTCOME_ENGAGEMENT', label: 'Engagement' },
+  { value: 'OUTCOME_AWARENESS', label: 'Awareness' },
+  { value: 'OUTCOME_SALES', label: 'Sales' },
+  { value: 'OUTCOME_APP_PROMOTION', label: 'App Promotion' },
+] as const;
+
+const META_SPECIAL_CATEGORY_OPTIONS = [
+  { value: 'NONE', label: 'None' },
+  { value: 'CREDIT', label: 'Credit' },
+  { value: 'EMPLOYMENT', label: 'Employment' },
+  { value: 'HOUSING', label: 'Housing' },
+  { value: 'ISSUES_ELECTIONS_POLITICS', label: 'Politics / Issues' },
+] as const;
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 
@@ -235,10 +263,18 @@ export default function MetaLeadsPage() {
   const [training, setTraining] = useState('');
   const [duplicatesOnly, setDuplicatesOnly] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(100);
+  const [pageSize] = useState(100);
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [metaPerf, setMetaPerf] = useState<MetaPerformanceSummary | null>(null);
   const [metaPerfError, setMetaPerfError] = useState('');
+  const [publishName, setPublishName] = useState('');
+  const [publishObjective, setPublishObjective] = useState<string>('OUTCOME_LEADS');
+  const [publishSpecialCategory, setPublishSpecialCategory] = useState<string>('NONE');
+  const [publishBusy, setPublishBusy] = useState(false);
+  const [publishError, setPublishError] = useState('');
+  const [publishSuccess, setPublishSuccess] = useState('');
+  const [publishHistory, setPublishHistory] = useState<MetaCampaignPublishLogRow[]>([]);
+  const [publishHistoryLoading, setPublishHistoryLoading] = useState(true);
   const oauthStatus = searchParams.get('metaOAuth');
   const oauthMessage = searchParams.get('metaOAuthMessage');
   const oauthPages = searchParams.get('metaOAuthPages');
@@ -301,6 +337,72 @@ export default function MetaLeadsPage() {
     fetchMetaPerformance();
     return () => { cancelled = true; };
   }, [dateFrom, dateTo]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchPublishHistory() {
+      setPublishHistoryLoading(true);
+      try {
+        const res = await fetch('/api/meta-ads/campaigns/publish?limit=8');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || 'Failed to load Meta publish history');
+        if (!cancelled) setPublishHistory(Array.isArray(data.rows) ? data.rows : []);
+      } catch (error) {
+        if (!cancelled) {
+          console.error(error);
+          setPublishHistory([]);
+        }
+      } finally {
+        if (!cancelled) setPublishHistoryLoading(false);
+      }
+    }
+    fetchPublishHistory();
+    return () => { cancelled = true; };
+  }, []);
+
+  const submitCampaignPublish = useCallback(async () => {
+    if (!publishName.trim()) {
+      setPublishError('Campaign name is required.');
+      setPublishSuccess('');
+      return;
+    }
+
+    setPublishBusy(true);
+    setPublishError('');
+    setPublishSuccess('');
+    try {
+      const specialAdCategories = publishSpecialCategory === 'NONE' ? ['NONE'] : [publishSpecialCategory];
+      const res = await fetch('/api/meta-ads/campaigns/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: publishName.trim(),
+          objective: publishObjective,
+          status: 'PAUSED',
+          specialAdCategories,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to publish Meta campaign');
+
+      const campaignName = String(data?.campaign?.campaignName || publishName.trim());
+      const campaignId = String(data?.campaign?.campaignId || '').trim();
+      setPublishSuccess(campaignId ? `${campaignName} created as ${campaignId}.` : `${campaignName} created.`);
+      setPublishName('');
+      setPublishObjective('OUTCOME_LEADS');
+      setPublishSpecialCategory('NONE');
+
+      const historyRes = await fetch('/api/meta-ads/campaigns/publish?limit=8');
+      const historyData = await historyRes.json().catch(() => ({}));
+      if (historyRes.ok) {
+        setPublishHistory(Array.isArray(historyData.rows) ? historyData.rows : []);
+      }
+    } catch (error: unknown) {
+      setPublishError(error instanceof Error ? error.message : 'Failed to publish Meta campaign');
+    } finally {
+      setPublishBusy(false);
+    }
+  }, [publishName, publishObjective, publishSpecialCategory]);
 
   const doSearch = () => { setPage(1); setFetchTrigger((t) => t + 1); };
   const doClear = () => {
@@ -388,6 +490,104 @@ export default function MetaLeadsPage() {
               Meta connection failed: {oauthMessage}
             </div>
           )}
+
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#2A6BB5]/60">Outbound</p>
+                  <h3 className="text-sm font-bold text-slate-800">Publish Meta Campaign</h3>
+                  <p className="mt-1 text-xs text-slate-500">Creates the campaign shell in Meta Ads Manager. Ad sets, creatives, ads, and instant forms still need to be attached separately.</p>
+                </div>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">Creates paused</span>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <label className="block md:col-span-3">
+                  <span className="mb-1 block text-[11px] font-semibold text-slate-600">Campaign Name</span>
+                  <input
+                    value={publishName}
+                    onChange={(e) => setPublishName(e.target.value)}
+                    placeholder="Example: SIT July 2026 Lead Campaign"
+                    className={ctrl}
+                    disabled={!canUpdate || publishBusy}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-semibold text-slate-600">Objective</span>
+                  <select
+                    value={publishObjective}
+                    onChange={(e) => setPublishObjective(e.target.value)}
+                    className={ctrl}
+                    disabled={!canUpdate || publishBusy}
+                  >
+                    {META_PUBLISH_OBJECTIVES.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-semibold text-slate-600">Special Ad Category</span>
+                  <select
+                    value={publishSpecialCategory}
+                    onChange={(e) => setPublishSpecialCategory(e.target.value)}
+                    className={ctrl}
+                    disabled={!canUpdate || publishBusy}
+                  >
+                    {META_SPECIAL_CATEGORY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={submitCampaignPublish}
+                    disabled={!canUpdate || publishBusy}
+                    className="inline-flex w-full items-center justify-center rounded-lg bg-[#2E3093] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#25277a] disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {publishBusy ? 'Publishing…' : 'Publish Campaign'}
+                  </button>
+                </div>
+              </div>
+
+              {!canUpdate && (
+                <p className="mt-3 text-xs text-amber-700">You can view campaign publish history, but campaign creation requires inquiry update permission.</p>
+              )}
+              {publishError && <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{publishError}</p>}
+              {publishSuccess && <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{publishSuccess}</p>}
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#2A6BB5]/60">Recent Activity</p>
+                  <h3 className="text-sm font-bold text-slate-800">Campaign Publish Log</h3>
+                </div>
+              </div>
+              <div className="mt-4 space-y-2">
+                {publishHistoryLoading ? (
+                  [1, 2, 3].map((i) => <div key={i} className="h-14 rounded-lg bg-slate-50 animate-pulse" />)
+                ) : publishHistory.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-slate-200 px-3 py-5 text-center text-xs text-slate-400">No published campaigns yet.</div>
+                ) : publishHistory.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold text-slate-800">{item.campaignName}</p>
+                        <p className="mt-0.5 text-[11px] text-slate-500">{item.objective} · {item.campaignId || 'pending id'}</p>
+                      </div>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${item.errorMessage ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                        {item.errorMessage ? 'Failed' : item.publishStatus}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-slate-400">{formatDate(item.createdAt)}</p>
+                    {item.errorMessage && <p className="mt-1 text-[11px] text-red-600">{item.errorMessage}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
 
           {/* KPI Row */}
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">

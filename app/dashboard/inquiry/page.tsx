@@ -522,9 +522,11 @@ export default function InquiryPage() {
               ) : rows.map((r, i) => {
                 const attended = hasLatestFollowUp(r);
                 const colorCls = isPendingFollowUp(r) ? '[&>td]:text-purple-600' : attended ? '[&>td]:text-slate-800' : '[&>td]:text-red-500';
-                const puneRowCls = r.IsPuneInquiry ? 'bg-amber-50/70 hover:bg-amber-100/70' : 'hover:bg-slate-50';
-                const sourceText = r.Inquiry_Type || r.Inquiry_From || '—';
-                const puneHint = [r.PuneSourceLocation, r.PunePageSource].filter(Boolean).join(' | ');
+                const puneRowCls = r.IsPuneInquiry ? 'bg-amber-100/80 hover:bg-amber-200/70' : 'hover:bg-slate-50';
+                const primarySource = r.Inquiry_From || r.Inquiry_Type || '—';
+                const secondarySource = r.Inquiry_From && r.Inquiry_Type && r.Inquiry_From !== r.Inquiry_Type
+                  ? r.Inquiry_Type
+                  : null;
                 return (
                   <tr key={r.Student_Id} className={`border-b border-slate-100 transition-colors ${colorCls} ${puneRowCls}`}>
                     <td className="py-1.5 px-3 font-semibold font-mono tabular-nums relative pl-5">
@@ -545,15 +547,27 @@ export default function InquiryPage() {
                       {r.Discipline && r.Discipline !== 'NULL' && r.Discipline !== 'Select' ? r.Discipline : '—'}
                     </td>
                     <td className="py-1.5 px-3 min-w-[220px]">
-                      <div className="flex items-center gap-2 whitespace-nowrap">
-                        <span className="font-medium">{sourceText}</span>
-                        {r.IsPuneInquiry && (
-                          <span
-                            title={puneHint || 'Pune source'}
-                            className="inline-flex items-center rounded-full border border-amber-400 bg-amber-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-950"
-                          >
-                            Pune
-                          </span>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2 whitespace-nowrap">
+                          <span className="font-semibold">{primarySource}</span>
+                          {r.IsPuneInquiry && (
+                            <span
+                              title={r.PunePageSource || r.PuneSourceLocation || 'Pune source'}
+                              className="inline-flex items-center rounded-full border border-amber-700 bg-amber-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.14em] text-amber-950 shadow-sm"
+                            >
+                              Pune
+                            </span>
+                          )}
+                        </div>
+                        {(secondarySource || r.PuneSourceLocation) && (
+                          <div className="flex flex-wrap items-center gap-1 text-[10px] leading-tight">
+                            {secondarySource && <span className="text-slate-500">{secondarySource}</span>}
+                            {r.IsPuneInquiry && r.PuneSourceLocation && (
+                              <span className="rounded-full bg-amber-200 px-1.5 py-0.5 font-semibold text-amber-900">
+                                {r.PuneSourceLocation}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
                     </td>
