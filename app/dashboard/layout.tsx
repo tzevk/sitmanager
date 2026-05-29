@@ -44,6 +44,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Corporate Training > Training Execution': '/dashboard/corporate-inquiry/execution',
   'Reports > Inquiry': '/dashboard/reports/inquiry',
   'Reports > Inquiry Report': '/dashboard/reports/inquiry',
+  'Reports > Pune Inquiries': '/dashboard/reports/suvidya-pune',
   'Reports > Online Students': '/dashboard/reports/online-student',
   'Reports > Full Attendance Report': '/dashboard/reports/attendance',
   'Reports > Corporate Record': '/dashboard/reports/corporate-record',
@@ -129,6 +130,7 @@ const SUB_MENUS: Record<string, string[]> = {
   ],
   'Reports': [
     'Inquiry',
+    'Pune Inquiries',
     'Online Students',
     'Full Attendance Report',
     'Student Batch Wise',

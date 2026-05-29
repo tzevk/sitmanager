@@ -94,6 +94,9 @@ function statusPill(id: number | null, label: string) {
     if ([4,15,25].includes(id)) return 'bg-amber-100 text-amber-700 border border-amber-200';
     if ([6,9,19,29,34].includes(id)) return 'bg-red-100 text-red-600 border border-red-200';
     if ([8,33].includes(id)) return 'bg-gray-100 text-gray-500 border border-gray-200';
+    if ([35].includes(id)) return 'bg-indigo-100 text-indigo-700 border border-indigo-200';
+    if ([12,16].includes(id)) return 'bg-purple-100 text-purple-700 border border-purple-200';
+    if ([18,26].includes(id)) return 'bg-slate-100 text-slate-500 border border-slate-200';
   }
   const l = label.toLowerCase();
   if (['admitted','converted','enrolled'].includes(l)) return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
@@ -101,7 +104,75 @@ function statusPill(id: number | null, label: string) {
   if (['hot lead','interested'].includes(l)) return 'bg-orange-100 text-orange-700 border border-orange-200';
   if (['warm lead','follow up','callback'].includes(l)) return 'bg-amber-100 text-amber-700 border border-amber-200';
   if (['not interested','lost','dropped','dnc'].includes(l)) return 'bg-red-100 text-red-600 border border-red-200';
+  if (['visited','pending'].includes(l)) return 'bg-purple-100 text-purple-700 border border-purple-200';
   return 'bg-gray-100 text-gray-500 border border-gray-200';
+}
+
+function hasLatestFollowUp(r: InquiryRow) { return Boolean(r.Discussion && r.Discussion !== 'NULL' && r.Discussion.trim()); }
+function isPendingFollowUp(r: InquiryRow) {
+  if (r.Status_id != null && [4, 12, 15].includes(r.Status_id)) return true;
+  const l = String(r.StatusLabel || '').toLowerCase();
+  return l.includes('follow up') || l.includes('pending') || l.includes('callback');
+}
+function statusBar(id: number | null, label: string) {
+  if (id != null) {
+    if ([7,10,27].includes(id)) return 'bg-emerald-400';
+    if ([1,2,3].includes(id)) return 'bg-blue-400';
+    if ([5,24].includes(id)) return 'bg-orange-400';
+    if ([4,15,25].includes(id)) return 'bg-amber-400';
+    if ([6,9,19,29,34].includes(id)) return 'bg-red-400';
+    if ([35].includes(id)) return 'bg-indigo-400';
+    if ([12,16].includes(id)) return 'bg-purple-400';
+    if ([18,26].includes(id)) return 'bg-slate-400';
+  }
+  const l = label.toLowerCase();
+  if (['admitted','converted','enrolled'].includes(l)) return 'bg-emerald-400';
+  if (['hot lead','interested'].includes(l)) return 'bg-orange-400';
+  if (['warm lead','follow up','callback'].includes(l)) return 'bg-amber-400';
+  if (['not interested','lost','dropped','dnc'].includes(l)) return 'bg-red-400';
+  if (['visited','pending'].includes(l)) return 'bg-purple-400';
+  return 'bg-slate-300';
+}
+function campaignTier(cpl: number | null, avgCpl: number): { label: string; bg: string; text: string; border: string; bar: string } {
+  if (cpl === null || cpl === 0) return { label: 'Awareness', bg: 'bg-slate-50', text: 'text-slate-500', border: 'border-slate-200', bar: 'bg-slate-300' };
+  if (avgCpl === 0) return { label: 'Active', bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200', bar: 'bg-blue-400' };
+  const r = cpl / avgCpl;
+  if (r <= 0.7) return { label: 'Efficient', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', bar: 'bg-emerald-500' };
+  if (r <= 1.2) return { label: 'On Track', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', bar: 'bg-blue-400' };
+  if (r <= 1.8) return { label: 'Monitor', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', bar: 'bg-amber-400' };
+  return { label: 'High Cost', bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200', bar: 'bg-red-500' };
+}
+function freqTag(freq: number): string {
+  if (freq < 1.5) return 'bg-blue-100 text-blue-700';
+  if (freq < 2.5) return 'bg-emerald-100 text-emerald-700';
+  if (freq < 3.5) return 'bg-amber-100 text-amber-700';
+  return 'bg-red-100 text-red-600';
+}
+function ctrCls(ctr: number): string {
+  if (ctr >= 2) return 'text-emerald-600 font-bold';
+  if (ctr >= 1) return 'text-blue-600 font-semibold';
+  if (ctr >= 0.5) return 'text-amber-600';
+  return 'text-red-500';
+}
+function rowBg(id: number | null, label: string) {
+  if (id != null) {
+    if ([7,10,27].includes(id)) return 'bg-emerald-50/60 hover:bg-emerald-100/70';
+    if ([1,2,3].includes(id)) return 'bg-blue-50/60 hover:bg-blue-100/70';
+    if ([5,24].includes(id)) return 'bg-orange-50/60 hover:bg-orange-100/70';
+    if ([4,15,25].includes(id)) return 'bg-amber-50/60 hover:bg-amber-100/70';
+    if ([6,9,19,29,34].includes(id)) return 'bg-red-50/60 hover:bg-red-100/70';
+    if ([35].includes(id)) return 'bg-indigo-50/60 hover:bg-indigo-100/70';
+    if ([12,16].includes(id)) return 'bg-purple-50/60 hover:bg-purple-100/70';
+    if ([18,26].includes(id)) return 'bg-slate-50/60 hover:bg-slate-100/70';
+  }
+  const l = label.toLowerCase();
+  if (['admitted','converted','enrolled'].includes(l)) return 'bg-emerald-50/60 hover:bg-emerald-100/70';
+  if (['inquiry','new','contacted'].includes(l)) return 'bg-blue-50/60 hover:bg-blue-100/70';
+  if (['hot lead','interested'].includes(l)) return 'bg-orange-50/60 hover:bg-orange-100/70';
+  if (['warm lead','follow up','callback'].includes(l)) return 'bg-amber-50/60 hover:bg-amber-100/70';
+  if (['not interested','lost','dropped','dnc'].includes(l)) return 'bg-red-50/60 hover:bg-red-100/70';
+  if (['visited','pending'].includes(l)) return 'bg-purple-50/60 hover:bg-purple-100/70';
+  return 'hover:bg-slate-50/70';
 }
 
 function avatarColor(name: string | null | undefined): string {
@@ -277,12 +348,19 @@ export default function MetaLeadsPage() {
       .slice(0, 5);
   }, [rows]);
 
-  const topCampaigns = useMemo(
-    () => (metaPerf?.campaigns || []).slice().sort((a, b) => b.leads - a.leads).slice(0, 5),
+  const allCampaigns = useMemo(
+    () => (metaPerf?.campaigns || []).slice().sort((a, b) => b.leads - a.leads),
     [metaPerf]
   );
 
-  const maxCampaignLeads = topCampaigns[0]?.leads || 1;
+  const campaignStats = useMemo(() => {
+    const withLeads = allCampaigns.filter(c => c.costPerLead !== null && c.costPerLead > 0);
+    const avgCpl = withLeads.length > 0
+      ? withLeads.reduce((s, c) => s + c.costPerLead!, 0) / withLeads.length
+      : 0;
+    const maxLeads = allCampaigns[0]?.leads || 1;
+    return { avgCpl, maxLeads };
+  }, [allCampaigns]);
 
   return (
     <div className="space-y-5">
@@ -321,84 +399,169 @@ export default function MetaLeadsPage() {
             <KpiCard label="Cost / Lead" value={perfLoading ? '—' : (metaPerf?.totals.cpl == null ? '—' : `₹${metaPerf.totals.cpl.toFixed(0)}`)} accent="rose" loading={perfLoading} />
           </div>
 
-          {/* Analytics Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr_0.9fr] gap-4">
-
-            {/* Campaign Performance */}
-            <div className="rounded-xl border border-slate-100 bg-white shadow-sm overflow-hidden">
-              <div className="px-4 pt-4 pb-3 border-b border-slate-100 flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#2A6BB5]/60">Meta Ads</p>
-                  <h3 className="text-sm font-bold text-slate-800">Campaign Performance</h3>
-                </div>
+          {/* Campaign Analytics — full width */}
+          <div className="rounded-xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+            <div className="px-4 pt-4 pb-3 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#2A6BB5]/60">Meta Ads</p>
+                <h3 className="text-sm font-bold text-slate-800">Campaign Analytics</h3>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Legend */}
+                {[
+                  { dot: 'bg-emerald-500', label: 'Efficient (CPL ≤70% avg)' },
+                  { dot: 'bg-blue-400',    label: 'On Track' },
+                  { dot: 'bg-amber-400',   label: 'Monitor' },
+                  { dot: 'bg-red-500',     label: 'High Cost' },
+                  { dot: 'bg-slate-300',   label: 'Awareness (no leads)' },
+                ].map(({ dot, label }) => (
+                  <span key={label} className="flex items-center gap-1">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+                    <span className="text-[10px] text-slate-500">{label}</span>
+                  </span>
+                ))}
                 <span className="text-[10px] bg-slate-50 border border-slate-200 rounded-full px-2.5 py-1 text-slate-500 font-medium">
-                  Top 5 by leads
+                  {allCampaigns.length} campaign{allCampaigns.length !== 1 ? 's' : ''}
                 </span>
               </div>
-              <div className="overflow-x-auto">
-                {perfLoading ? (
-                  <div className="p-4 space-y-2">
-                    {[1,2,3,4].map((i) => <div key={i} className="h-8 bg-slate-50 rounded-lg animate-pulse" />)}
-                  </div>
-                ) : metaPerfError ? (
-                  <div className="p-4 text-xs text-amber-700 bg-amber-50 m-3 rounded-lg border border-amber-100">{metaPerfError}</div>
-                ) : topCampaigns.length === 0 ? (
-                  <div className="p-6 text-xs text-slate-400 text-center">No campaign data available</div>
-                ) : (
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
-                        <th className="text-left px-4 py-2.5 font-bold">Campaign</th>
-                        <th className="text-right px-3 py-2.5 font-bold">Reach</th>
-                        <th className="text-right px-3 py-2.5 font-bold">Leads</th>
-                        <th className="text-right px-4 py-2.5 font-bold">Spend</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {topCampaigns.map((c, i) => (
-                        <tr key={c.campaignId || i} className="border-t border-slate-50 hover:bg-slate-50/60 transition-colors">
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[9px] font-bold text-slate-300 tabular-nums w-3">#{i + 1}</span>
-                              <div>
-                                <div className="font-semibold text-slate-700 truncate max-w-[140px]" title={c.campaignName || c.campaignId || '—'}>
-                                  {c.campaignName || c.campaignId || '—'}
-                                </div>
-                                <div className="mt-1 h-1 bg-slate-100 rounded-full w-full">
-                                  <div
-                                    className="h-1 bg-[#2E3093]/40 rounded-full transition-all"
-                                    style={{ width: `${Math.round((c.leads / maxCampaignLeads) * 100)}%` }}
-                                  />
-                                </div>
+            </div>
+
+            <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+              {perfLoading ? (
+                <div className="p-4 space-y-2">
+                  {[1,2,3,4,5].map((i) => <div key={i} className="h-9 bg-slate-50 rounded-lg animate-pulse" />)}
+                </div>
+              ) : metaPerfError ? (
+                <div className="p-4 text-xs text-amber-700 bg-amber-50 m-3 rounded-lg border border-amber-100">{metaPerfError}</div>
+              ) : allCampaigns.length === 0 ? (
+                <div className="p-8 text-xs text-slate-400 text-center">No campaign data available</div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400 border-b border-slate-200">
+                      <th className="text-left px-3 py-2.5 font-bold w-6">#</th>
+                      <th className="text-left px-3 py-2.5 font-bold min-w-[180px]">Campaign</th>
+                      <th className="text-center px-3 py-2.5 font-bold">Tier</th>
+                      <th className="text-right px-3 py-2.5 font-bold">
+                        <span className="block">Unique Reach</span>
+                        <span className="block text-[9px] normal-case tracking-normal text-slate-300 font-normal">Freq = Imp ÷ Reach</span>
+                      </th>
+                      <th className="text-right px-3 py-2.5 font-bold">Impressions</th>
+                      <th className="text-right px-3 py-2.5 font-bold">Clicks</th>
+                      <th className="text-right px-3 py-2.5 font-bold">CTR</th>
+                      <th className="text-right px-3 py-2.5 font-bold">Spend</th>
+                      <th className="text-right px-3 py-2.5 font-bold">Leads</th>
+                      <th className="text-right px-3 py-2.5 font-bold">CPL</th>
+                      <th className="text-right px-3 py-2.5 font-bold">
+                        <span className="block">Prediction</span>
+                        <span className="block text-[9px] normal-case tracking-normal text-slate-300 font-normal">leads per ₹10k more</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allCampaigns.map((c, i) => {
+                      const tier = campaignTier(c.costPerLead, campaignStats.avgCpl);
+                      const freq = c.reach > 0 ? c.impressions / c.reach : 0;
+                      const projected = c.costPerLead && c.costPerLead > 0 ? Math.round(10000 / c.costPerLead) : null;
+                      const convRate = c.clicks > 0 ? ((c.leads / c.clicks) * 100) : 0;
+                      const leadPct = Math.round((c.leads / campaignStats.maxLeads) * 100);
+                      return (
+                        <tr key={c.campaignId || i} className={`border-b border-slate-100 transition-colors group ${tier.bg} hover:brightness-95`}>
+                          <td className="px-3 py-2.5 relative">
+                            <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${tier.bar} rounded-r`} />
+                            <span className="text-[10px] font-bold text-slate-400 tabular-nums">{i + 1}</span>
+                          </td>
+                          <td className="px-3 py-2.5 min-w-[180px]">
+                            <div className="font-semibold text-slate-800 truncate max-w-[220px]" title={c.campaignName || c.campaignId || '—'}>
+                              {c.campaignName || c.campaignId || '—'}
+                            </div>
+                            <div className="mt-1.5 flex items-center gap-1.5">
+                              <div className="flex-1 h-1 bg-slate-200 rounded-full">
+                                <div className={`h-1 ${tier.bar} rounded-full transition-all`} style={{ width: `${leadPct}%` }} />
                               </div>
+                              {convRate > 0 && (
+                                <span className="text-[9px] text-slate-400 whitespace-nowrap tabular-nums">{convRate.toFixed(1)}% conv</span>
+                              )}
                             </div>
                           </td>
-                          <td className="px-3 py-2.5 text-right text-slate-500 tabular-nums">{c.reach.toLocaleString()}</td>
-                          <td className="px-3 py-2.5 text-right font-bold text-[#2E3093] tabular-nums">{c.leads.toLocaleString()}</td>
-                          <td className="px-4 py-2.5 text-right text-slate-500 tabular-nums">₹{c.spend.toFixed(0)}</td>
+                          <td className="px-3 py-2.5 text-center">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${tier.bg} ${tier.text} ${tier.border}`}>
+                              {tier.label}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            <div className="tabular-nums font-semibold text-slate-700">{c.reach.toLocaleString()}</div>
+                            {freq > 0 && (
+                              <span className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold ${freqTag(freq)}`}>
+                                {freq.toFixed(1)}× freq
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{c.impressions.toLocaleString()}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{c.clicks.toLocaleString()}</td>
+                          <td className={`px-3 py-2.5 text-right tabular-nums ${ctrCls(c.ctr)}`}>{c.ctr.toFixed(2)}%</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">₹{c.spend.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums font-bold text-[#2E3093]">{c.leads}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums">
+                            {c.costPerLead != null
+                              ? <span className={`font-semibold ${tier.text}`}>₹{c.costPerLead.toFixed(0)}</span>
+                              : <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            {projected != null ? (
+                              <div>
+                                <span className="font-bold text-slate-700 tabular-nums">~{projected}</span>
+                                <span className="text-slate-400 text-[10px]"> leads</span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-300 text-[10px]">no data</span>
+                            )}
+                          </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-              {metaPerf && (
-                <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 grid grid-cols-3 gap-3 text-[11px]">
-                  <div className="text-center">
-                    <div className="font-bold text-slate-700">{metaPerf.totals.impressions.toLocaleString()}</div>
-                    <div className="text-slate-400 uppercase tracking-wide text-[9px] font-bold mt-0.5">Impressions</div>
-                  </div>
-                  <div className="text-center border-x border-slate-200">
-                    <div className="font-bold text-slate-700">{metaPerf.totals.clicks.toLocaleString()}</div>
-                    <div className="text-slate-400 uppercase tracking-wide text-[9px] font-bold mt-0.5">Clicks</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-bold text-slate-700">{metaPerf.totals.ctr.toFixed(2)}%</div>
-                    <div className="text-slate-400 uppercase tracking-wide text-[9px] font-bold mt-0.5">CTR</div>
-                  </div>
-                </div>
+                      );
+                    })}
+                  </tbody>
+                  {metaPerf && (
+                    <tfoot>
+                      <tr className="bg-slate-50 border-t-2 border-slate-200 text-[10px] font-bold text-slate-600">
+                        <td colSpan={3} className="px-3 py-2.5">Totals</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{metaPerf.totals.reach.toLocaleString()}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{metaPerf.totals.impressions.toLocaleString()}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{metaPerf.totals.clicks.toLocaleString()}</td>
+                        <td className={`px-3 py-2.5 text-right tabular-nums ${ctrCls(metaPerf.totals.ctr)}`}>{metaPerf.totals.ctr.toFixed(2)}%</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">₹{metaPerf.totals.spend.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-[#2E3093]">{metaPerf.totals.leads}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">
+                          {metaPerf.totals.cpl != null ? `₹${metaPerf.totals.cpl.toFixed(0)}` : '—'}
+                        </td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">
+                          {metaPerf.totals.cpl
+                            ? `~${Math.round(10000 / metaPerf.totals.cpl)} leads`
+                            : '—'}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
               )}
             </div>
+
+            {/* Reach bifurcation legend */}
+            <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/60 flex items-center gap-4 flex-wrap">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Frequency guide:</span>
+              {[
+                { cls: 'bg-blue-100 text-blue-700',     label: '< 1.5× Fresh audience' },
+                { cls: 'bg-emerald-100 text-emerald-700', label: '1.5–2.5× Optimal' },
+                { cls: 'bg-amber-100 text-amber-700',   label: '2.5–3.5× Saturating' },
+                { cls: 'bg-red-100 text-red-600',       label: '> 3.5× Ad fatigue' },
+              ].map(({ cls, label }) => (
+                <span key={label} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${cls}`}>{label}</span>
+              ))}
+            </div>
+          </div>
+
+          {/* Lead Status + Quality */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
             {/* Lead Status Breakdown */}
             <div className="rounded-xl border border-slate-100 bg-white shadow-sm overflow-hidden">
@@ -578,12 +741,16 @@ export default function MetaLeadsPage() {
                         <div className="text-xs text-slate-300 mt-1">Try adjusting your filters</div>
                       </td>
                     </tr>
-                  ) : rows.map((row, index) => (
+                  ) : rows.map((row, index) => {
+                    const attended = hasLatestFollowUp(row);
+                    const textCls = isPendingFollowUp(row) ? '[&>td]:text-purple-700' : attended ? '[&>td]:text-slate-800' : '[&>td]:text-red-500';
+                    return (
                     <tr
                       key={`${row.Student_Id}-${row.Email || row.Present_Mobile || row.Student_Name}-${row.Inquiry_Dt || index}-${index}`}
-                      className="hover:bg-slate-50/70 transition-colors group"
+                      className={`transition-colors group ${rowBg(row.Status_id, row.StatusLabel)} ${textCls}`}
                     >
-                      <td className="py-2 px-3 text-slate-400 font-mono tabular-nums text-[10px] border border-slate-100">
+                      <td className="py-2 px-3 font-mono tabular-nums text-[10px] border border-slate-100 relative pl-5">
+                        <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${statusBar(row.Status_id, row.StatusLabel)} rounded-r`} />
                         {(pagination.page - 1) * pagination.limit + index + 1}
                       </td>
                       <td className="py-2 px-3 border border-slate-100">
@@ -629,7 +796,8 @@ export default function MetaLeadsPage() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                  );
+                  })}
                 </tbody>
               </table>
             </div>

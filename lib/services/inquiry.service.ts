@@ -101,6 +101,7 @@ export interface InquiryListParams {
   duplicatesOnly?: boolean;
   dateFrom?: string;
   dateTo?: string;
+  puneOnly?: boolean;
   /** When true, only return rows whose latest discussion has nextdate <= CURDATE() */
   followUpDue?: boolean;
 }
@@ -126,6 +127,9 @@ export interface InquiryRow {
   MetaFormName?: string | null;
   LeadTags?: string[];
   IsDuplicateLead?: boolean;
+  IsPuneInquiry?: boolean;
+  PuneSourceLocation?: string | null;
+  PunePageSource?: string | null;
 }
 
 export interface StatusOption { id: number; label: string }
@@ -153,6 +157,7 @@ function getInquiryCountCacheKey(params: {
   duplicatesOnly: boolean;
   dateFrom: string;
   dateTo: string;
+  puneOnly: boolean;
   followUpDue: boolean;
 }): string {
   return `inquiry:list-count:${JSON.stringify(params)}`;
@@ -502,6 +507,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   const {
     page, limit, search = '', discipline = '', inquiryType = '', leadTag = '',
     location = '', training = '', statusId = '', duplicatesOnly = false, dateFrom = '', dateTo = '',
+    puneOnly = false,
     followUpDue = false,
   } = params;
   const usesMetaAds = inquiryType.trim().toLowerCase() === 'meta ads';
@@ -547,6 +553,35 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
 
   const locationColumn = await resolveLocationColumn(pool, inquiryTable);
   const inquiryDateColumnAvailable = await hasInquiryDateColumn(pool, inquiryTable);
+  const puneSyncAggregate = `(
+    SELECT
+      inquiry_id,
+      MAX(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.your_location')), '')) AS PuneSourceLocation,
+      MAX(COALESCE(
+        NULLIF(page_source, ''),
+        NULLIF(JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.page_source')), '')
+      )) AS PunePageSource
+    FROM suvidya_inquiry_sync
+    WHERE LOWER(COALESCE(page_source, '')) LIKE '%pune%'
+       OR LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.page_source')), '')) LIKE '%pune%'
+       OR LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.your_location')), '')) LIKE '%pune%'
+    GROUP BY inquiry_id
+  )`;
+  const puneListingTextCondition = `(
+    LOWER(COALESCE(si.Inquiry_From, '')) LIKE '%pune%'
+    OR LOWER(COALESCE(si.Discussion, '')) LIKE '%pune%'
+  )`;
+  const puneListJoin = `
+    LEFT JOIN ${puneSyncAggregate} pune_primary ON pune_primary.inquiry_id = si.Inquiry_Id
+    LEFT JOIN ${puneSyncAggregate} pune_legacy ON si.Student_Id IS NOT NULL AND pune_legacy.inquiry_id = si.Student_Id
+  `;
+  const puneMatchedCondition = `(
+    pune_primary.inquiry_id IS NOT NULL
+    OR pune_legacy.inquiry_id IS NOT NULL
+    OR ${puneListingTextCondition}
+  )`;
+  const puneLocationExpr = `COALESCE(pune_primary.PuneSourceLocation, pune_legacy.PuneSourceLocation)`;
+  const punePageSourceExpr = `COALESCE(pune_primary.PunePageSource, pune_legacy.PunePageSource)`;
 
   // Build WHERE
   const conditions: string[] = ['(si.IsDelete = 0 OR si.IsDelete IS NULL)'];
@@ -619,6 +654,9 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
        )`
     );
   }
+  if (puneOnly) {
+    conditions.push(puneMatchedCondition);
+  }
   if (followUpDue) {
     conditions.push(
       `EXISTS (
@@ -634,7 +672,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
 
   const hasActiveFilters = Boolean(
     search || discipline || inquiryType || leadTag || normalizedLocation || training ||
-    statusId || dateFrom || dateTo || duplicatesOnly || followUpDue
+    statusId || dateFrom || dateTo || duplicatesOnly || puneOnly || followUpDue
   );
 
   let total = 0;
@@ -655,6 +693,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
         duplicatesOnly,
         dateFrom,
         dateTo,
+        puneOnly,
         followUpDue,
       }),
       30_000,
@@ -664,6 +703,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
            FROM \`${inquiryTable}\` si
            ${listCourseJoin}
            ${listDisciplineJoin}
+           ${puneOnly ? puneListJoin : ''}
            ${whereClause}`,
           queryParams
         );
@@ -676,6 +716,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
        FROM \`${inquiryTable}\` si
        ${listCourseJoin}
        ${listDisciplineJoin}
+       ${puneOnly ? puneListJoin : ''}
        ${whereClause}`,
       queryParams
     );
@@ -687,6 +728,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
      FROM \`${inquiryTable}\` si
      ${listCourseJoin}
      ${listDisciplineJoin}
+     ${puneOnly ? puneListJoin : ''}
      ${whereClause}
      ORDER BY ${inquiryDateExpr} DESC, si.Inquiry_Id DESC
      LIMIT ? OFFSET ?`,
@@ -717,11 +759,15 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
            NULLIF(TRIM(CONCAT(COALESCE(au.firstname,''),' ',COALESCE(au.lastname,''))),''),
            NULLIF(TRIM(au.username),''), NULLIF(TRIM(au.email),''),
            NULLIF(TRIM(oe.Employee_Name),'')
-         ) as LatestDiscussionByName
+         ) as LatestDiscussionByName,
+        ${puneMatchedCondition} as IsPuneInquiry,
+         ${puneLocationExpr} as PuneSourceLocation,
+         ${punePageSourceExpr} as PunePageSource
       FROM \`${inquiryTable}\` si
        LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
       ${disciplineJoin}
       ${metaJoin}
+      ${puneListJoin}
        LEFT JOIN (
          SELECT si_map.Inquiry_Id as InquiryId, MAX(d.id) as max_id
          FROM \`${inquiryTable}\` si_map
@@ -785,6 +831,9 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       FollowUpBy: r.LatestDiscussionByName || (r.LatestDiscussionById != null ? `User ${r.LatestDiscussionById}` : null),
       MetaCampaignName: r.MetaCampaignName ?? null,
       MetaFormName: r.MetaFormName ?? null,
+      IsPuneInquiry: Boolean(r.IsPuneInquiry),
+      PuneSourceLocation: r.PuneSourceLocation?.trim() || null,
+      PunePageSource: r.PunePageSource?.trim() || null,
       LeadTags: (() => {
         try {
           const parsed = JSON.parse(r.MetaTagsJson || '[]');

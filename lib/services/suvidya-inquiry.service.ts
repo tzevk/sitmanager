@@ -1,8 +1,17 @@
 import type mysql from 'mysql2/promise';
-import { getPool } from '@/lib/db';
+import { cached, getPool } from '@/lib/db';
 import { resolveInquiryTableName } from '@/lib/services/inquiry.service';
 
 const DEFAULT_SUVIDYA_INQUIRY_API_URL = 'https://suvidya.ac.in/admission/GetInquiry.php';
+
+type StudentInquirySyncTextField =
+  | 'Student_Name'
+  | 'Present_Mobile'
+  | 'Email'
+  | 'Discussion'
+  | 'Inquiry_From'
+  | 'Inquiry_Type'
+  | 'Qualification';
 
 interface SuvidyaInquiryRecord {
   table_name?: unknown;
@@ -89,6 +98,67 @@ function mapInquiryType(tableName: string | null): string {
   return 'Online Inquiry';
 }
 
+function summarizeInquirySource(pageSource: string | null): string | null {
+  if (!pageSource) return 'Suvidya Website';
+
+  try {
+    const url = new URL(pageSource);
+    const path = url.pathname.replace(/\/+$/, '') || '/';
+    if (path === '/' || path === '') return url.hostname;
+
+    const lastSegment = path.split('/').filter(Boolean).pop();
+    if (!lastSegment) return url.hostname;
+
+    const label = lastSegment
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return label || url.hostname;
+  } catch {
+    return pageSource;
+  }
+}
+
+async function getStudentInquiryColumnMaxLength(
+  queryable: mysql.Pool | mysql.PoolConnection,
+  inquiryTable: string,
+  columnName: StudentInquirySyncTextField
+): Promise<number | null> {
+  return cached(
+    `schema:student-inquiry-maxlen:${inquiryTable}:${columnName}`,
+    60 * 60 * 1000,
+    async () => {
+      const [rows] = await queryable.query(
+        `SELECT CHARACTER_MAXIMUM_LENGTH
+         FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = ?
+           AND COLUMN_NAME = ?
+         LIMIT 1`,
+        [inquiryTable, columnName]
+      );
+
+      const maxLength = Number((rows as Array<{ CHARACTER_MAXIMUM_LENGTH?: unknown }>)[0]?.CHARACTER_MAXIMUM_LENGTH ?? null);
+      return Number.isFinite(maxLength) && maxLength > 0 ? maxLength : null;
+    }
+  );
+}
+
+async function fitStudentInquiryText(
+  queryable: mysql.Pool | mysql.PoolConnection,
+  inquiryTable: string,
+  columnName: StudentInquirySyncTextField,
+  value: string | null
+): Promise<string | null> {
+  if (!value) return null;
+
+  const maxLength = await getStudentInquiryColumnMaxLength(queryable, inquiryTable, columnName);
+  if (!maxLength || value.length <= maxLength) return value;
+
+  return value.slice(0, maxLength).trim() || value.slice(0, maxLength);
+}
+
 function buildDiscussion(record: {
   tableName: string | null;
   sourceId: number;
@@ -164,6 +234,14 @@ async function insertInquiry(
     discussion: string;
   }
 ): Promise<number> {
+  const studentName = await fitStudentInquiryText(connection, inquiryTable, 'Student_Name', payload.studentName);
+  const mobile = await fitStudentInquiryText(connection, inquiryTable, 'Present_Mobile', payload.mobile);
+  const email = await fitStudentInquiryText(connection, inquiryTable, 'Email', payload.email);
+  const discussion = await fitStudentInquiryText(connection, inquiryTable, 'Discussion', payload.discussion);
+  const inquiryFrom = await fitStudentInquiryText(connection, inquiryTable, 'Inquiry_From', payload.inquiryFrom);
+  const inquiryType = await fitStudentInquiryText(connection, inquiryTable, 'Inquiry_Type', payload.inquiryType);
+  const qualification = await fitStudentInquiryText(connection, inquiryTable, 'Qualification', payload.qualification);
+
   const [result] = await connection.query(
     `INSERT INTO \`${inquiryTable}\` (
       Student_Name,
@@ -181,16 +259,16 @@ async function insertInquiry(
       Date_Added
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'Inquiry', NOW())`,
     [
-      payload.studentName,
-      payload.mobile,
-      payload.email,
-      payload.discussion,
+      studentName,
+      mobile,
+      email,
+      discussion,
       1,
       payload.inquiryDate,
-      payload.inquiryFrom,
-      payload.inquiryType,
+      inquiryFrom,
+      inquiryType,
       payload.courseId,
-      payload.qualification,
+      qualification,
     ]
   );
 
@@ -202,7 +280,7 @@ async function insertInquiry(
   await connection.query(
     `INSERT INTO awt_inquirydiscussion (Inquiry_id, date, discussion, deleted, created_by, created_date)
      VALUES (?, CURDATE(), ?, 0, 1, NOW())`,
-    [insertId, payload.discussion]
+    [insertId, discussion]
   );
 
   return insertId;
@@ -284,14 +362,15 @@ export async function syncSuvidyaInquiries(
     const qualification = normalizeText(record.select_qualification);
     const location = normalizeText(record.your_location);
     const courseName = normalizeText(record.select_course);
-    const pageSource = normalizeText(record.page_source) || 'Suvidya Website';
+    const fullPageSource = normalizeText(record.page_source);
+    const pageSource = summarizeInquirySource(fullPageSource) || 'Suvidya Website';
     const inquiryDate = normalizeText(record.created_date) || new Date().toISOString().slice(0, 19).replace('T', ' ');
     const matchedCourseId = courseName ? (courseMap.get(normalizeCourseKey(courseName)) ?? null) : null;
     const discussion = buildDiscussion({
       tableName,
       sourceId,
       location,
-      pageSource,
+      pageSource: fullPageSource,
       courseName,
       matchedCourseId,
     });

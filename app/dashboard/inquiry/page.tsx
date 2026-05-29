@@ -45,6 +45,9 @@ interface InquiryRow {
   Status_id: number | null;
   StatusLabel: string;
   FollowUpBy?: string | null;
+  IsPuneInquiry?: boolean;
+  PuneSourceLocation?: string | null;
+  PunePageSource?: string | null;
 }
 
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
@@ -122,6 +125,7 @@ export default function InquiryPage() {
   const [dateFrom, setDateFrom] = useState(() => getInitParam('dateFrom'));
   const [dateTo, setDateTo] = useState(() => getInitParam('dateTo'));
   const [training, setTraining] = useState(() => getInitParam('training'));
+  const [puneOnly, setPuneOnly] = useState(() => getInitParam('puneOnly'));
   const [page, setPage] = useState(() => Math.max(1, parseInt(searchParams.get('page') || '1')));
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [sendingId, setSendingId] = useState<number | null>(null);
@@ -138,6 +142,7 @@ export default function InquiryPage() {
       if (dateFrom) p.set('dateFrom', dateFrom);
       if (dateTo) p.set('dateTo', dateTo);
       if (training) p.set('training', training);
+      if (puneOnly) p.set('puneOnly', puneOnly);
       const res = await fetch(`/api/inquiry?${p}`);
       const ct = res.headers.get('content-type') || '';
       const data = ct.includes('application/json') ? await res.json() : {};
@@ -158,7 +163,7 @@ export default function InquiryPage() {
     }
     finally { setLoading(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, fetchTrigger, search, discipline, inquiryType, status, dateFrom, dateTo, training]);
+  }, [page, fetchTrigger, search, discipline, inquiryType, status, dateFrom, dateTo, training, puneOnly]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -177,6 +182,7 @@ export default function InquiryPage() {
       dateFrom,
       dateTo,
       training,
+      puneOnly,
     };
     syncUrl(params);
     setPage(1); setFetchTrigger(t => t + 1);
@@ -185,6 +191,7 @@ export default function InquiryPage() {
     router.replace(pathname, { scroll: false });
     setSearch(''); setDiscipline(''); setInquiryType('');
     setStatus(''); setDateFrom(''); setDateTo(''); setTraining('');
+    setPuneOnly('');
     setPage(1); setFetchTrigger(t => t + 1);
   };
 
@@ -197,6 +204,7 @@ export default function InquiryPage() {
     if (dateFrom) p.set('dateFrom', dateFrom);
     if (dateTo) p.set('dateTo', dateTo);
     if (training) p.set('training', training);
+    if (puneOnly) p.set('puneOnly', puneOnly);
     if (page > 1) p.set('page', String(page));
     const qs = p.toString();
     return qs ? `${pathname}?${qs}` : pathname;
@@ -265,7 +273,7 @@ export default function InquiryPage() {
         row.CourseName,
         row.Present_Mobile,
         row.Email,
-        row.Inquiry_Type || row.Inquiry_From,
+        `${row.Inquiry_Type || row.Inquiry_From || ''}${row.IsPuneInquiry ? ' [Pune]' : ''}`,
         row.StatusLabel,
         row.Inquiry_Dt,
         row.Discussion,
@@ -457,6 +465,10 @@ export default function InquiryPage() {
           <option value="">Training</option>
           {filters.trainings.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
+        <select value={puneOnly} onChange={e => setPuneOnly(e.target.value)} className={`${ctrl} w-[130px]`}>
+          <option value="">All Sources</option>
+          <option value="1">Pune Only</option>
+        </select>
         <button onClick={doSearch} className="flex items-center gap-1 bg-[#2E3093] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-[#252880] transition-colors">
           <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -510,8 +522,11 @@ export default function InquiryPage() {
               ) : rows.map((r, i) => {
                 const attended = hasLatestFollowUp(r);
                 const colorCls = isPendingFollowUp(r) ? '[&>td]:text-purple-600' : attended ? '[&>td]:text-slate-800' : '[&>td]:text-red-500';
+                const puneRowCls = r.IsPuneInquiry ? 'bg-amber-50/70 hover:bg-amber-100/70' : 'hover:bg-slate-50';
+                const sourceText = r.Inquiry_Type || r.Inquiry_From || '—';
+                const puneHint = [r.PuneSourceLocation, r.PunePageSource].filter(Boolean).join(' | ');
                 return (
-                  <tr key={r.Student_Id} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${colorCls}`}>
+                  <tr key={r.Student_Id} className={`border-b border-slate-100 transition-colors ${colorCls} ${puneRowCls}`}>
                     <td className="py-1.5 px-3 font-semibold font-mono tabular-nums relative pl-5">
                       <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${statusBar(r.Status_id, r.StatusLabel)} rounded-r`} />
                       {(pagination.page - 1) * pagination.limit + i + 1}
@@ -530,7 +545,17 @@ export default function InquiryPage() {
                       {r.Discipline && r.Discipline !== 'NULL' && r.Discipline !== 'Select' ? r.Discipline : '—'}
                     </td>
                     <td className="py-1.5 px-3 min-w-[220px]">
-                      <span className="font-medium whitespace-nowrap">{r.Inquiry_Type || r.Inquiry_From || '—'}</span>
+                      <div className="flex items-center gap-2 whitespace-nowrap">
+                        <span className="font-medium">{sourceText}</span>
+                        {r.IsPuneInquiry && (
+                          <span
+                            title={puneHint || 'Pune source'}
+                            className="inline-flex items-center rounded-full border border-amber-400 bg-amber-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-950"
+                          >
+                            Pune
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-1.5 px-3 whitespace-nowrap">{formatDate(r.Inquiry_Dt)}</td>
                     <td className="py-1.5 px-3 max-w-[220px]">

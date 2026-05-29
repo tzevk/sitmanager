@@ -61,6 +61,7 @@ export async function GET(req: NextRequest) {
       duplicatesOnly: url.searchParams.get('duplicatesOnly') === '1',
       dateFrom: url.searchParams.get('dateFrom') || '',
       dateTo: url.searchParams.get('dateTo') || '',
+      puneOnly: url.searchParams.get('puneOnly') === '1',
       followUpDue: url.searchParams.get('followUpDue') === '1',
     });
 
