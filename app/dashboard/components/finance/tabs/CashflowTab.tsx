@@ -15,7 +15,7 @@ const CF_COMPANIES   = ['Suvidya','SIT Alumni','ATS','Accent','SIT Mumbai','SIT 
 const SIT_CATS = [
   'OD Interest / Loan EMI','Management Car Expenses','Management Salary','Employee Salary',
   'Trainers Payment','Food','Utility','Marketing - SIT',
-  'Travelling Expense - Staff (Marketing)','Software','Stationary','Infrastructure','Taxes',
+  'Travelling Expense - Staff (Marketing)','Travelling Expense - Operations','Software','Stationary','Infrastructure','Taxes',
   'Mock Interview Charges','Mock Interview','Refund','Internal Transfer',
 ];
 const ACCENT_CATS = [

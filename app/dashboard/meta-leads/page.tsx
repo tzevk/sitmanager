@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -327,10 +327,10 @@ export default function MetaLeadsPage() {
   const [publishSpecialCategory, setPublishSpecialCategory] = useState<string>('NONE');
   const [publishPageId, setPublishPageId] = useState('');
   const [publishWebsiteUrl, setPublishWebsiteUrl] = useState('');
-  const [publishWithForm, setPublishWithForm] = useState(false);
-  const [publishWithCreative, setPublishWithCreative] = useState(false);
-  const [publishWithAdSet, setPublishWithAdSet] = useState(false);
-  const [publishWithAd, setPublishWithAd] = useState(false);
+  const [publishWithForm, setPublishWithForm] = useState(true);
+  const [publishWithCreative, setPublishWithCreative] = useState(true);
+  const [publishWithAdSet, setPublishWithAdSet] = useState(true);
+  const [publishWithAd, setPublishWithAd] = useState(true);
   const [publishFormName, setPublishFormName] = useState('');
   const [publishFormPrivacyUrl, setPublishFormPrivacyUrl] = useState('');
   const [publishFormFollowUpUrl, setPublishFormFollowUpUrl] = useState('');
@@ -343,6 +343,9 @@ export default function MetaLeadsPage() {
   const [publishCreativeImageHash, setPublishCreativeImageHash] = useState('');
   const [publishCreativeImageUrl, setPublishCreativeImageUrl] = useState('');
   const [publishCreativeCta, setPublishCreativeCta] = useState<string>('SIGN_UP');
+  const [publishCreativeImageFileName, setPublishCreativeImageFileName] = useState('');
+  const [publishCreativeUploadBusy, setPublishCreativeUploadBusy] = useState(false);
+  const [publishCreativeUploadError, setPublishCreativeUploadError] = useState('');
   const [publishAdSetName, setPublishAdSetName] = useState('');
   const [publishAdSetBudget, setPublishAdSetBudget] = useState('10000');
   const [publishAdSetCountries, setPublishAdSetCountries] = useState('IN');
@@ -359,6 +362,7 @@ export default function MetaLeadsPage() {
   const [publishHistoryLoading, setPublishHistoryLoading] = useState(true);
   const [convertingLeadId, setConvertingLeadId] = useState<string | null>(null);
   const [convertError, setConvertError] = useState('');
+  const creativeImageInputRef = useRef<HTMLInputElement | null>(null);
   const oauthStatus = searchParams.get('metaOAuth');
   const oauthMessage = searchParams.get('metaOAuthMessage');
   const oauthPages = searchParams.get('metaOAuthPages');
@@ -444,6 +448,45 @@ export default function MetaLeadsPage() {
     return () => { cancelled = true; };
   }, []);
 
+  const handleCreativeImageUpload = useCallback(async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setPublishCreativeUploadError('Please choose an image file.');
+      return;
+    }
+
+    setPublishCreativeUploadBusy(true);
+    setPublishCreativeUploadError('');
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const res = await fetch('/api/meta-ads/creative-image', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to upload image');
+
+      const imageUrl = String(data?.imageUrl || '').trim();
+      if (!imageUrl) throw new Error('Upload succeeded but no image URL was returned');
+
+      setPublishCreativeImageUrl(imageUrl);
+      setPublishCreativeImageHash('');
+      setPublishCreativeImageFileName(String(data?.fileName || file.name || '').trim());
+    } catch (error: unknown) {
+      setPublishCreativeUploadError(error instanceof Error ? error.message : 'Failed to upload image');
+    } finally {
+      setPublishCreativeUploadBusy(false);
+      if (creativeImageInputRef.current) creativeImageInputRef.current.value = '';
+    }
+  }, []);
+
+  const handleCreativeImagePick = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    void handleCreativeImageUpload(file);
+  }, [handleCreativeImageUpload]);
+
   const submitCampaignPublish = useCallback(async () => {
     if (!publishName.trim()) {
       setPublishError('Campaign name is required.');
@@ -520,10 +563,10 @@ export default function MetaLeadsPage() {
       setPublishSpecialCategory('NONE');
       setPublishPageId('');
       setPublishWebsiteUrl('');
-      setPublishWithForm(false);
-      setPublishWithCreative(false);
-      setPublishWithAdSet(false);
-      setPublishWithAd(false);
+      setPublishWithForm(true);
+      setPublishWithCreative(true);
+      setPublishWithAdSet(true);
+      setPublishWithAd(true);
       setPublishFormName('');
       setPublishFormPrivacyUrl('');
       setPublishFormFollowUpUrl('');
@@ -535,6 +578,8 @@ export default function MetaLeadsPage() {
       setPublishCreativeHeadline('');
       setPublishCreativeImageHash('');
       setPublishCreativeImageUrl('');
+      setPublishCreativeImageFileName('');
+      setPublishCreativeUploadError('');
       setPublishCreativeCta('SIGN_UP');
       setPublishAdSetName('');
       setPublishAdSetBudget('10000');
@@ -683,140 +728,210 @@ export default function MetaLeadsPage() {
           <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
 
             {/* Left — Publish form */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
-              <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-100">
-                <div className="flex items-center gap-2 min-w-0">
-                  <svg className="w-4 h-4 text-[#2E3093] shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"/>
-                  </svg>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Outbound</p>
-                    <h3 className="text-xs font-bold text-slate-800 leading-tight">Publish Meta Campaign</h3>
+            <div className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(46,48,147,0.18),_transparent_38%),linear-gradient(135deg,_#0f172a,_#1e293b_62%,_#334155)] px-5 py-5 text-white">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="max-w-2xl">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-slate-100/90">
+                      <svg className="h-3.5 w-3.5 text-[#7dd3fc]" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"/>
+                      </svg>
+                      Outbound Campaign Builder
+                    </div>
+                    <h3 className="mt-3 text-xl font-semibold tracking-tight text-white">Publish the full Meta campaign stack from one guided widget</h3>
+                    <p className="mt-2 max-w-xl text-sm leading-6 text-slate-200/90">
+                      Set the campaign, ad set, creative, instant form, and ad in one place. The flow stays paused by default so you can review everything before pushing it live inside Meta.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 lg:max-w-[280px] lg:justify-end">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-amber-400/10 px-3 py-1.5 text-[11px] font-semibold text-amber-100">
+                      <span className="h-2 w-2 rounded-full bg-amber-300" />Default status: Paused
+                    </span>
+                    <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-slate-100/90">
+                      5 linked objects
+                    </span>
                   </div>
                 </div>
-                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 shrink-0">
-                  <span className="w-1 h-1 rounded-full bg-amber-400" />Paused
-                </span>
-              </div>
-
-              <div className="px-4 py-3 space-y-2 flex-1">
-
-                {/* Row 1 — core fields inline */}
-                <div className="flex flex-wrap gap-2 items-end">
-                  <label className="flex-1 min-w-[180px]">
-                    <span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Campaign Name</span>
-                    <input value={publishName} onChange={(e) => setPublishName(e.target.value)} placeholder="e.g. SIT July 2026 Lead Campaign" className={ctrl} disabled={!canUpdate || publishBusy} />
-                  </label>
-                  <label className="w-[120px] shrink-0">
-                    <span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Objective</span>
-                    <select value={publishObjective} onChange={(e) => setPublishObjective(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>
-                      {META_PUBLISH_OBJECTIVES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  </label>
-                  <label className="w-[120px] shrink-0">
-                    <span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Category</span>
-                    <select value={publishSpecialCategory} onChange={(e) => setPublishSpecialCategory(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>
-                      {META_SPECIAL_CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  </label>
-                  <label className="w-[110px] shrink-0">
-                    <span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Page ID</span>
-                    <input value={publishPageId} onChange={(e) => setPublishPageId(e.target.value)} placeholder="Page ID" className={ctrl} disabled={!canUpdate || publishBusy} />
-                  </label>
-                  <label className="flex-1 min-w-[160px]">
-                    <span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Website URL</span>
-                    <input value={publishWebsiteUrl} onChange={(e) => setPublishWebsiteUrl(e.target.value)} placeholder="https://…" className={ctrl} disabled={!canUpdate || publishBusy} />
-                  </label>
-                </div>
-
-                {/* Row 2 — optional toggles inline */}
-                <div className="flex flex-wrap gap-1.5 items-center pt-1">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide shrink-0">+ Add:</span>
-                  {[
-                    { label: 'Ad Set',   enabled: publishWithAdSet,    toggle: () => setPublishWithAdSet(v => !v),    on: 'border-violet-300 bg-violet-50 text-violet-700' },
-                    { label: 'Creative', enabled: publishWithCreative,  toggle: () => setPublishWithCreative(v => !v), on: 'border-blue-300 bg-blue-50 text-blue-700' },
-                    { label: 'Form',     enabled: publishWithForm,      toggle: () => setPublishWithForm(v => !v),     on: 'border-emerald-300 bg-emerald-50 text-emerald-700' },
-                    { label: 'Ad',       enabled: publishWithAd,        toggle: () => setPublishWithAd(v => !v),       on: 'border-orange-300 bg-orange-50 text-orange-700' },
-                  ].map(s => (
-                    <button key={s.label} type="button" onClick={s.toggle} disabled={!canUpdate || publishBusy}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-colors ${s.enabled ? s.on : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'}`}>
-                      {s.enabled
-                        ? <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
-                        : <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>}
-                      {s.label}
-                    </button>
+                <div className="mt-4 grid gap-2 sm:grid-cols-5">
+                  {['Campaign', 'Ad Set', 'Creative', 'Form', 'Ad'].map((step, index) => (
+                    <div key={step} className="rounded-xl border border-white/10 bg-white/8 px-3 py-2 backdrop-blur-sm">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">Step {index + 1}</div>
+                      <div className="mt-1 text-sm font-semibold text-white">{step}</div>
+                    </div>
                   ))}
                 </div>
-
-                {/* Ad Set — compact inline row */}
-                {publishWithAdSet && (
-                  <div className="flex flex-wrap gap-2 items-end rounded-lg border border-violet-200 bg-violet-50/40 px-3 py-2.5">
-                    <span className="text-[10px] font-bold text-violet-600 uppercase tracking-wide self-end pb-1.5 shrink-0">Ad Set</span>
-                    <label className="flex-1 min-w-[120px]"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Name</span><input value={publishAdSetName} onChange={e => setPublishAdSetName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                    <label className="w-[90px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Budget (₹)</span><input type="number" min="1" value={publishAdSetBudget} onChange={e => setPublishAdSetBudget(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                    <label className="w-[70px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Countries</span><input value={publishAdSetCountries} onChange={e => setPublishAdSetCountries(e.target.value)} placeholder="IN" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                    <label className="w-[110px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Billing</span><select value={publishAdSetBillingEvent} onChange={e => setPublishAdSetBillingEvent(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>{META_BILLING_EVENT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
-                    <label className="w-[130px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Goal</span><select value={publishAdSetOptimizationGoal} onChange={e => setPublishAdSetOptimizationGoal(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>{META_OPTIMIZATION_GOAL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
-                    <label className="w-[120px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Destination</span><select value={publishAdSetDestinationType} onChange={e => setPublishAdSetDestinationType(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>{META_DESTINATION_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
-                    <label className="w-[160px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Start</span><input value={publishAdSetStartTime} onChange={e => setPublishAdSetStartTime(e.target.value)} placeholder="2026-06-10T09:00:00+0530" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                    <label className="w-[90px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">End</span><input value={publishAdSetEndTime} onChange={e => setPublishAdSetEndTime(e.target.value)} placeholder="Optional" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                  </div>
-                )}
-
-                {/* Creative — compact inline row */}
-                {publishWithCreative && (
-                  <div className="flex flex-wrap gap-2 items-end rounded-lg border border-blue-200 bg-blue-50/40 px-3 py-2.5">
-                    <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wide self-end pb-1.5 shrink-0">Creative</span>
-                    <label className="w-[130px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Name</span><input value={publishCreativeName} onChange={e => setPublishCreativeName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                    <label className="w-[110px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">CTA</span><select value={publishCreativeCta} onChange={e => setPublishCreativeCta(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>{META_CTA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
-                    <label className="flex-1 min-w-[180px]"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Primary Text</span><input value={publishCreativeMessage} onChange={e => setPublishCreativeMessage(e.target.value)} placeholder="Ad copy…" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                    <label className="w-[130px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Headline</span><input value={publishCreativeHeadline} onChange={e => setPublishCreativeHeadline(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                    <label className="w-[110px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Image Hash</span><input value={publishCreativeImageHash} onChange={e => setPublishCreativeImageHash(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                    <label className="flex-1 min-w-[160px]"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Image URL</span><input value={publishCreativeImageUrl} onChange={e => setPublishCreativeImageUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                  </div>
-                )}
-
-                {/* Form — compact inline row */}
-                {publishWithForm && (
-                  <div className="flex flex-wrap gap-2 items-end rounded-lg border border-emerald-200 bg-emerald-50/40 px-3 py-2.5">
-                    <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide self-end pb-1.5 shrink-0">Form</span>
-                    <label className="w-[130px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Form Name</span><input value={publishFormName} onChange={e => setPublishFormName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                    <label className="flex-1 min-w-[150px]"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Privacy URL</span><input value={publishFormPrivacyUrl} onChange={e => setPublishFormPrivacyUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                    <label className="flex-1 min-w-[150px]"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Follow-up URL</span><input value={publishFormFollowUpUrl} onChange={e => setPublishFormFollowUpUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                    <label className="w-[150px] shrink-0"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Thank-you Title</span><input value={publishFormThankYouTitle} onChange={e => setPublishFormThankYouTitle(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                    <label className="flex-1 min-w-[160px]"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Questions</span><input value={publishFormQuestions} onChange={e => setPublishFormQuestions(e.target.value)} placeholder="FULL_NAME, EMAIL, PHONE" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                    <label className="flex-1 min-w-[160px]"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Thank-you Body</span><input value={publishFormThankYouBody} onChange={e => setPublishFormThankYouBody(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                  </div>
-                )}
-
-                {/* Ad — inline */}
-                {publishWithAd && (
-                  <div className="flex gap-2 items-end rounded-lg border border-orange-200 bg-orange-50/40 px-3 py-2.5">
-                    <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wide self-end pb-1.5 shrink-0">Ad</span>
-                    <label className="flex-1"><span className="mb-0.5 block text-[10px] font-semibold text-slate-500">Ad Name</span><input value={publishAdName} onChange={e => setPublishAdName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                  </div>
-                )}
-
-                {!canUpdate && <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">View-only — creation requires update permission.</p>}
-                {publishError && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">{publishError}</p>}
-                {publishSuccess && <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-700">{publishSuccess}</p>}
               </div>
 
-              {/* Footer */}
-              <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-1 flex-wrap">
-                  {['Campaign', ...(publishWithAdSet ? ['Ad Set'] : []), ...(publishWithCreative ? ['Creative'] : []), ...(publishWithForm ? ['Form'] : []), ...(publishWithAd ? ['Ad'] : [])].map((l, i, arr) => (
-                    <span key={l} className="flex items-center gap-1 text-[10px] text-slate-500">
-                      <span className="font-semibold">{l}</span>
-                      {i < arr.length - 1 && <span className="text-slate-300">+</span>}
+              <div className="space-y-4 bg-slate-50/70 px-5 py-5">
+                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Step 1</p>
+                      <h4 className="mt-1 text-sm font-semibold text-slate-900">Campaign foundation</h4>
+                      <p className="mt-1 text-xs text-slate-500">Start with the high-level identity and destination for the campaign.</p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-600">Required</span>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-12">
+                    <label className="xl:col-span-4">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Campaign Name</span>
+                      <input value={publishName} onChange={(e) => setPublishName(e.target.value)} placeholder="e.g. SIT July 2026 Lead Campaign" className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <label className="xl:col-span-2">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Objective</span>
+                      <select value={publishObjective} onChange={(e) => setPublishObjective(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>
+                        {META_PUBLISH_OBJECTIVES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="xl:col-span-2">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Category</span>
+                      <select value={publishSpecialCategory} onChange={(e) => setPublishSpecialCategory(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>
+                        {META_SPECIAL_CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="xl:col-span-2">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Page ID</span>
+                      <input value={publishPageId} onChange={(e) => setPublishPageId(e.target.value)} placeholder="Page ID" className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <label className="xl:col-span-2">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Website URL</span>
+                      <input value={publishWebsiteUrl} onChange={(e) => setPublishWebsiteUrl(e.target.value)} placeholder="https://…" className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                  </div>
+                </section>
+
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <section className="rounded-2xl border border-violet-200 bg-white p-4 shadow-sm shadow-violet-100/40">
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-violet-500">Step 2</p>
+                        <h4 className="mt-1 text-sm font-semibold text-slate-900">Ad Set configuration</h4>
+                        <p className="mt-1 text-xs text-slate-500">Define audience delivery, optimization, budget, and timing.</p>
+                      </div>
+                      <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-semibold text-violet-700">Delivery rules</span>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className="md:col-span-2"><span className="mb-1 block text-[11px] font-semibold text-slate-600">Ad Set Name</span><input value={publishAdSetName} onChange={e => setPublishAdSetName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Daily Budget (₹)</span><input type="number" min="1" value={publishAdSetBudget} onChange={e => setPublishAdSetBudget(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Countries</span><input value={publishAdSetCountries} onChange={e => setPublishAdSetCountries(e.target.value)} placeholder="IN" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Billing Event</span><select value={publishAdSetBillingEvent} onChange={e => setPublishAdSetBillingEvent(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>{META_BILLING_EVENT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Optimization Goal</span><select value={publishAdSetOptimizationGoal} onChange={e => setPublishAdSetOptimizationGoal(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>{META_OPTIMIZATION_GOAL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Destination</span><select value={publishAdSetDestinationType} onChange={e => setPublishAdSetDestinationType(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>{META_DESTINATION_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Start Time</span><input value={publishAdSetStartTime} onChange={e => setPublishAdSetStartTime(e.target.value)} placeholder="2026-06-10T09:00:00+0530" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">End Time</span><input value={publishAdSetEndTime} onChange={e => setPublishAdSetEndTime(e.target.value)} placeholder="Optional" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                    </div>
+                  </section>
+
+                  <section className="rounded-2xl border border-blue-200 bg-white p-4 shadow-sm shadow-blue-100/40">
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-500">Step 3</p>
+                        <h4 className="mt-1 text-sm font-semibold text-slate-900">Creative and artwork</h4>
+                        <p className="mt-1 text-xs text-slate-500">Add the ad copy, CTA, headline, and upload the visual asset.</p>
+                      </div>
+                      <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-700">Creative asset</span>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Creative Name</span><input value={publishCreativeName} onChange={e => setPublishCreativeName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">CTA</span><select value={publishCreativeCta} onChange={e => setPublishCreativeCta(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy}>{META_CTA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
+                      <label className="md:col-span-2"><span className="mb-1 block text-[11px] font-semibold text-slate-600">Primary Text</span><input value={publishCreativeMessage} onChange={e => setPublishCreativeMessage(e.target.value)} placeholder="Ad copy…" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Headline</span><input value={publishCreativeHeadline} onChange={e => setPublishCreativeHeadline(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Image Hash</span><input value={publishCreativeImageHash} onChange={e => setPublishCreativeImageHash(e.target.value)} placeholder="Optional" className={ctrl} disabled={!canUpdate || publishBusy || publishCreativeUploadBusy} /></label>
+                    </div>
+                    <div className="mt-3 rounded-2xl border border-dashed border-blue-300 bg-blue-50/30 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-600">Upload Artwork</p>
+                          <p className="mt-1 text-xs text-slate-500">Choose the creative image here instead of manually pasting a URL.</p>
+                        </div>
+                        <input ref={creativeImageInputRef} type="file" accept="image/*" className="hidden" onChange={handleCreativeImagePick} />
+                        <button
+                          type="button"
+                          onClick={() => creativeImageInputRef.current?.click()}
+                          disabled={!canUpdate || publishBusy || publishCreativeUploadBusy}
+                          className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3.5 py-2 text-[11px] font-semibold text-blue-700 shadow-sm transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                        >
+                          {publishCreativeUploadBusy ? <><span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-blue-200 border-t-blue-600 animate-spin" />Uploading...</> : <>
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0l-4 4m4-4l4 4M4 16.5v1A2.5 2.5 0 006.5 20h11a2.5 2.5 0 002.5-2.5v-1" /></svg>
+                            Upload Image
+                          </>}
+                        </button>
+                      </div>
+                      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
+                        <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-sm">
+                          {publishCreativeImageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={publishCreativeImageUrl} alt="Creative preview" className="h-full w-full object-cover" />
+                          ) : (
+                            <svg className="h-7 w-7 text-slate-300" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-slate-800">{publishCreativeImageFileName || 'No image uploaded yet'}</p>
+                          <p className="mt-1 break-all text-[11px] text-slate-500">{publishCreativeImageUrl || 'A hosted image URL will be generated automatically after upload.'}</p>
+                          {publishCreativeUploadError && <p className="mt-2 text-[11px] text-red-600">{publishCreativeUploadError}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+                  <section className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm shadow-emerald-100/40">
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-500">Step 4</p>
+                        <h4 className="mt-1 text-sm font-semibold text-slate-900">Instant form setup</h4>
+                        <p className="mt-1 text-xs text-slate-500">Prepare the lead form experience and the thank-you state after submission.</p>
+                      </div>
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">Lead capture</span>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Form Name</span><input value={publishFormName} onChange={e => setPublishFormName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Questions</span><input value={publishFormQuestions} onChange={e => setPublishFormQuestions(e.target.value)} placeholder="FULL_NAME, EMAIL, PHONE" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Privacy URL</span><input value={publishFormPrivacyUrl} onChange={e => setPublishFormPrivacyUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Follow-up URL</span><input value={publishFormFollowUpUrl} onChange={e => setPublishFormFollowUpUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Thank-you Title</span><input value={publishFormThankYouTitle} onChange={e => setPublishFormThankYouTitle(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                      <label className="md:col-span-2"><span className="mb-1 block text-[11px] font-semibold text-slate-600">Thank-you Body</span><input value={publishFormThankYouBody} onChange={e => setPublishFormThankYouBody(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                    </div>
+                  </section>
+
+                  <section className="rounded-2xl border border-orange-200 bg-white p-4 shadow-sm shadow-orange-100/40">
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-orange-500">Step 5</p>
+                        <h4 className="mt-1 text-sm font-semibold text-slate-900">Final ad shell</h4>
+                        <p className="mt-1 text-xs text-slate-500">Create the final Meta ad name that links the rest of the stack together.</p>
+                      </div>
+                    </div>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-600">Ad Name</span>
+                      <input value={publishAdName} onChange={e => setPublishAdName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} />
+                    </label>
+                    <div className="mt-4 rounded-xl border border-orange-100 bg-orange-50/70 px-3 py-3 text-[11px] leading-5 text-orange-800">
+                      Everything created from this widget is submitted in paused mode so you can review the objects safely in Meta before activation.
+                    </div>
+                  </section>
+                </div>
+
+                {!canUpdate && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] text-amber-700">View-only — creation requires update permission.</p>}
+                {publishError && <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[11px] text-red-700">{publishError}</p>}
+                {publishSuccess && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[11px] text-emerald-700">{publishSuccess}</p>}
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap gap-2">
+                  {['Campaign', 'Ad Set', 'Creative', 'Form', 'Ad'].map((l) => (
+                    <span key={l} className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      {l}
                     </span>
                   ))}
                 </div>
                 <button type="button" onClick={submitCampaignPublish} disabled={!canUpdate || publishBusy || !publishName.trim()}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#2E3093] px-4 py-2 text-xs font-bold text-white hover:bg-[#25277a] disabled:cursor-not-allowed disabled:bg-slate-300 transition-colors shrink-0">
-                  {publishBusy ? <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Publishing...</> : <>
-                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"/></svg>
-                    Publish
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2E3093] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-[#2E3093]/20 transition-colors hover:bg-[#25277a] disabled:cursor-not-allowed disabled:bg-slate-300 sm:min-w-[180px]">
+                  {publishBusy ? <><div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />Publishing...</> : <>
+                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"/></svg>
+                    Publish Campaign Stack
                   </>}
                 </button>
               </div>
