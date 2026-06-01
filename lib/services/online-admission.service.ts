@@ -206,7 +206,7 @@ async function resolveBatchCategoryId(
     params.push(categoryValue);
   }
 
-  const [rows] = await pool.query<any[]>(
+  const [rows] = await pool.query(
     `SELECT Batch_Category_id
      FROM batch_mst
      WHERE ${conditions.join(' AND ')}
@@ -214,7 +214,7 @@ async function resolveBatchCategoryId(
      ORDER BY COALESCE(IsActive, 0) DESC, COALESCE(Admission_Date, SDate, Date_Added) DESC, Batch_Id DESC
      LIMIT 1`,
     params
-  );
+  ) as [any[], any];
   return rows[0]?.Batch_Category_id != null ? Number(rows[0].Batch_Category_id) : null;
 }
 
