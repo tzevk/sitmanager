@@ -25,6 +25,23 @@ async function hasNextDateColumn(pool: any): Promise<boolean> {
   return Number((rows as any[])[0]?.cnt || 0) > 0;
 }
 
+async function resolveInquiryLink(pool: any, inquiryTable: string, inquiryIdNum: number) {
+  const [mapRows] = await pool.query(
+    `SELECT Inquiry_Id, Student_Id
+     FROM ${inquiryTable}
+     WHERE Inquiry_Id = ? OR Student_Id = ?
+     ORDER BY Inquiry_Id DESC
+     LIMIT 1`,
+    [inquiryIdNum, inquiryIdNum]
+  );
+
+  const mapped = (mapRows as any[])[0] || {};
+  return {
+    canonicalInquiryId: Number(mapped.Inquiry_Id || inquiryIdNum),
+    canonicalStudentId: mapped.Student_Id == null ? null : Number(mapped.Student_Id),
+  };
+}
+
 // GET discussions for an inquiry
 export async function GET(req: NextRequest) {
   try {
@@ -45,24 +62,16 @@ export async function GET(req: NextRequest) {
     // Canonicalize inquiry id: discussions are stored against a canonical Inquiry_Id.
     // Accept callers providing either Inquiry_Id or Student_Id, but resolve to a single
     // canonical Inquiry_Id to avoid pulling discussions for other linked inquiries.
-    const [mapRows] = await pool.query(
-      `SELECT Inquiry_Id
-       FROM ${inquiryTable}
-       WHERE Inquiry_Id = ? OR Student_Id = ?
-       ORDER BY Inquiry_Id DESC
-       LIMIT 1`,
-      [inquiryIdNum, inquiryIdNum]
-    );
-    const canonicalInquiryId = Number((mapRows as any[])[0]?.Inquiry_Id || inquiryIdNum);
+    const { canonicalInquiryId, canonicalStudentId } = await resolveInquiryLink(pool, inquiryTable, inquiryIdNum);
 
     const withNextDate = await hasNextDateColumn(pool);
     const nextDateSelect = withNextDate ? 'nextdate' : 'NULL as nextdate';
     const [rows] = await pool.query(
       `SELECT id, date, ${nextDateSelect}, discussion, created_by, created_date
        FROM awt_inquirydiscussion
-       WHERE Inquiry_id = ? AND (deleted = 0 OR deleted IS NULL)
+       WHERE (Inquiry_id = ? OR student_id = ?) AND (deleted = 0 OR deleted IS NULL)
        ORDER BY id ASC`,
-      [canonicalInquiryId]
+      [canonicalInquiryId, canonicalStudentId ?? inquiryIdNum]
     );
 
     return NextResponse.json({ discussions: rows });
@@ -96,30 +105,22 @@ export async function POST(req: NextRequest) {
     }
 
     // Canonicalize to Inquiry_Id when caller sends Student_Id.
-    const [mapRows] = await pool.query(
-      `SELECT Inquiry_Id
-       FROM ${inquiryTable}
-       WHERE Inquiry_Id = ? OR Student_Id = ?
-       ORDER BY Inquiry_Id DESC
-       LIMIT 1`,
-      [inquiryIdNum, inquiryIdNum]
-    );
-    const canonicalInquiryId = Number((mapRows as any[])[0]?.Inquiry_Id || inquiryIdNum);
+    const { canonicalInquiryId, canonicalStudentId } = await resolveInquiryLink(pool, inquiryTable, inquiryIdNum);
 
     const withNextDate = await hasNextDateColumn(pool);
 
     const [result] = withNextDate
       ? await pool.query(
           `INSERT INTO awt_inquirydiscussion
-             (Inquiry_id, date, nextdate, discussion, deleted, created_by, created_date)
-           VALUES (?, CURDATE(), ?, ?, 0, 1, NOW())`,
-            [canonicalInquiryId, nextFollowUpDate || null, discussion.trim()]
+             (Inquiry_id, student_id, date, nextdate, discussion, deleted, created_by, created_date)
+           VALUES (?, ?, CURDATE(), ?, ?, 0, 1, NOW())`,
+            [canonicalInquiryId, canonicalStudentId, nextFollowUpDate || null, discussion.trim()]
         )
       : await pool.query(
           `INSERT INTO awt_inquirydiscussion
-             (Inquiry_id, date, discussion, deleted, created_by, created_date)
-           VALUES (?, CURDATE(), ?, 0, 1, NOW())`,
-            [canonicalInquiryId, discussion.trim()]
+             (Inquiry_id, student_id, date, discussion, deleted, created_by, created_date)
+           VALUES (?, ?, CURDATE(), ?, 0, 1, NOW())`,
+            [canonicalInquiryId, canonicalStudentId, discussion.trim()]
         );
 
     const insertId = (result as any).insertId;

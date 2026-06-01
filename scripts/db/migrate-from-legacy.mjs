@@ -163,6 +163,42 @@ async function upsertBatched(newPool, targetTable, columns, rows, dryRun) {
   return written;
 }
 
+async function mapInquiryIdsForDiscussions(newPool, rows) {
+  const missingInquiryRows = rows.filter((row) => row.Inquiry_id == null && row.student_id != null);
+  if (!missingInquiryRows.length) return rows;
+
+  const studentIds = [...new Set(missingInquiryRows.map((row) => String(row.student_id).trim()).filter(Boolean))];
+  if (!studentIds.length) return rows;
+
+  const inquiryIdByStudentId = new Map();
+  for (let i = 0; i < studentIds.length; i += BATCH_SIZE) {
+    const chunk = studentIds.slice(i, i + BATCH_SIZE);
+    const placeholders = chunk.map(() => '?').join(',');
+    const [mappedRows] = await newPool.query(
+      `SELECT Student_Id, Inquiry_Id
+       FROM student_inquiry
+       WHERE Student_Id IN (${placeholders})
+         AND (IsDelete = 0 OR IsDelete IS NULL)
+       ORDER BY Inquiry_Id DESC`,
+      chunk,
+    );
+
+    for (const mappedRow of mappedRows) {
+      const studentId = mappedRow.Student_Id == null ? '' : String(mappedRow.Student_Id).trim();
+      if (studentId && !inquiryIdByStudentId.has(studentId)) {
+        inquiryIdByStudentId.set(studentId, mappedRow.Inquiry_Id);
+      }
+    }
+  }
+
+  return rows.map((row) => {
+    if (row.Inquiry_id != null || row.student_id == null) return row;
+    const studentId = String(row.student_id).trim();
+    const mappedInquiryId = inquiryIdByStudentId.get(studentId);
+    return mappedInquiryId == null ? row : { ...row, Inquiry_id: mappedInquiryId };
+  });
+}
+
 async function syncWholeTable(oldPool, newPool, srcTable, dstTable, dryRun) {
   const columns = await getSharedColumns(oldPool, newPool, srcTable, dstTable);
   if (!columns.length) {
@@ -271,6 +307,8 @@ async function main() {
           );
           rows = rows.concat(chunkRows);
         }
+
+        rows = await mapInquiryIdsForDiscussions(newPool, rows);
 
         console.log(`   Found ${rows.length} row(s) in legacy DB`);
         const written = await upsertBatched(newPool, table, columns, rows, DRY_RUN);

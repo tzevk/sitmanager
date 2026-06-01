@@ -15,6 +15,134 @@ async function resolveInquiryTableName(pool: any): Promise<string> {
   return String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
 }
 
+function normalizeText(value: unknown): string {
+  return value == null ? '' : String(value).trim();
+}
+
+function firstNonEmpty(...values: unknown[]): string {
+  for (const value of values) {
+    const normalized = normalizeText(value);
+    if (normalized) return normalized;
+  }
+  return '';
+}
+
+function parseOptionalNumber(value: unknown): number | null {
+  const normalized = normalizeText(value);
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function resolveBatchCategoryId(pool: any, batchCode: string | null, categoryValue: string | null): Promise<number | null> {
+  const numericCategoryId = parseOptionalNumber(categoryValue);
+  if (numericCategoryId !== null) return numericCategoryId;
+  if (!batchCode && !categoryValue) return null;
+
+  const conditions: string[] = ['(IsDelete = 0 OR IsDelete IS NULL)'];
+  const params: Array<string | number> = [];
+  if (batchCode) {
+    conditions.push('Batch_code = ?');
+    params.push(batchCode);
+  }
+  if (categoryValue) {
+    conditions.push('Category = ?');
+    params.push(categoryValue);
+  }
+
+  const [rows] = await pool.query<any[]>(
+    `SELECT Batch_Category_id
+     FROM batch_mst
+     WHERE ${conditions.join(' AND ')}
+       AND Batch_Category_id IS NOT NULL
+     ORDER BY COALESCE(IsActive, 0) DESC, COALESCE(Admission_Date, SDate, Date_Added) DESC, Batch_Id DESC
+     LIMIT 1`,
+    params
+  );
+  return rows[0]?.Batch_Category_id != null ? Number(rows[0].Batch_Category_id) : null;
+}
+
+function buildAddress(payload: Record<string, any>, prefix: 'present' | 'permanent'): string {
+  const combined = normalizeText(payload[`${prefix}Address`]);
+  if (combined) return combined;
+  const parts = [
+    payload[`${prefix}Flat`],
+    payload[`${prefix}Building`],
+    payload[`${prefix}Street`],
+    payload[`${prefix}Area`],
+    payload[`${prefix}Landmark`],
+  ].map(normalizeText).filter(Boolean);
+  return parts.join(', ');
+}
+
+function resolveAcademicProfile(payload: Record<string, any>) {
+  const candidates = [
+    [payload.qualification, payload.discipline, payload.percentage],
+    [payload.postgrad_degree, payload.postgrad_specialization, payload.postgrad_percentage],
+    [payload.grad_degree, payload.grad_specialization, payload.grad_percentage],
+    [payload.diploma_degree, payload.diploma_specialization, payload.diploma_percentage],
+    [payload.hsc_stream ? 'HSC' : '', payload.hsc_stream, payload.hsc_percentage],
+    [payload.ssc_board ? 'SSC' : '', '', payload.ssc_percentage],
+  ];
+  for (const [qualification, discipline, percentage] of candidates) {
+    if (normalizeText(qualification) || normalizeText(discipline) || normalizeText(percentage)) {
+      return { qualification, discipline, percentage };
+    }
+  }
+  return { qualification: '', discipline: '', percentage: '' };
+}
+
+function overlayStudentFromPayload(student: Record<string, any>, payload: Record<string, any>, onlineAdmissionDate: string | null) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { ...student, OnlineAdmission_Date: onlineAdmissionDate };
+  }
+
+  const academic = resolveAcademicProfile(payload);
+  const resolvedName = firstNonEmpty(
+    [payload.firstName, payload.middleName, payload.lastName].map(normalizeText).filter(Boolean).join(' '),
+    payload.fullName,
+    student.Student_Name,
+  );
+
+  return {
+    ...student,
+    Student_Name: resolvedName || student.Student_Name,
+    FName: firstNonEmpty(student.FName, payload.firstName),
+    MName: firstNonEmpty(student.MName, payload.middleName),
+    LName: firstNonEmpty(student.LName, payload.lastName),
+    DOB: firstNonEmpty(student.DOB, payload.dob),
+    Sex: firstNonEmpty(student.Sex, payload.gender),
+    Nationality: firstNonEmpty(student.Nationality, payload.nationality),
+    Email: firstNonEmpty(student.Email, payload.email),
+    Present_Mobile: firstNonEmpty(student.Present_Mobile, payload.mobile),
+    Present_Mobile2: firstNonEmpty(student.Present_Mobile2, payload.telephone),
+    Present_Address: firstNonEmpty(student.Present_Address, buildAddress(payload, 'present')),
+    Present_City: firstNonEmpty(student.Present_City, payload.presentCity),
+    Present_State: firstNonEmpty(student.Present_State, payload.presentState),
+    Present_Pin: firstNonEmpty(student.Present_Pin, payload.presentPin),
+    Present_Country: firstNonEmpty(student.Present_Country, payload.presentCountry),
+    Permanent_Address: firstNonEmpty(student.Permanent_Address, buildAddress(payload, 'permanent')),
+    Permanent_City: firstNonEmpty(student.Permanent_City, payload.permanentCity),
+    Permanent_State: firstNonEmpty(student.Permanent_State, payload.permanentState),
+    Permanent_Pin: firstNonEmpty(student.Permanent_Pin, payload.permanentPin),
+    Permanent_Country: firstNonEmpty(student.Permanent_Country, payload.permanentCountry),
+    Qualification: firstNonEmpty(student.Qualification, academic.qualification),
+    Discipline: firstNonEmpty(student.Discipline, academic.discipline),
+    Percentage: firstNonEmpty(student.Percentage, academic.percentage),
+    Course_Id: student.Course_Id ?? parseOptionalNumber(payload.trainingProgrammeId),
+    Batch_Code: firstNonEmpty(student.Batch_Code, payload.batchCode),
+    Batch_code: firstNonEmpty(student.Batch_code, student.Batch_Code, payload.batchCode),
+    Batch_Category_id: firstNonEmpty(student.Batch_Category_id, payload.trainingCategory),
+    OccupationalStatus: firstNonEmpty(student.OccupationalStatus, payload.occupationalStatus),
+    Organisation: firstNonEmpty(student.Organisation, payload.jobOrganisation),
+    Designation: firstNonEmpty(student.Designation, payload.jobDesignation),
+    JobDescription: firstNonEmpty(student.JobDescription, payload.jobDescription),
+    TotalExperience: firstNonEmpty(student.TotalExperience, payload.totalOccupationYears),
+    Refered_By: firstNonEmpty(student.Refered_By, payload.referredBy),
+    OnlineAdmission_Date: onlineAdmissionDate,
+  };
+}
+
 // GET - fetch single student with all related data
 export async function GET(
   req: NextRequest,
@@ -28,17 +156,20 @@ export async function GET(
   const inquiryTable = await resolveInquiryTableName(pool);
     const { id } = await params;
 
-    // Student + admission + batch + course + online form date
+    // Student + admission + batch + course
     const [rows] = await pool.query<any[]>(
       `SELECT
          s.*,
+        s.Company AS Organisation,
+        s.Occupation AS OccupationalStatus,
+        s.Total_Exp AS TotalExperience,
+        s.Remark AS JobDescription,
          a.Admission_Id, a.Batch_Id, a.Admission_Date,
          COALESCE(b.Batch_code, b2.Batch_code) AS Batch_code,
          COALESCE(b.SDate, b2.SDate) AS Batch_StartDate,
          COALESCE(b.EDate, b2.EDate) AS Batch_EndDate,
          c.Course_Name,
-         st.Status AS Status_name,
-         oap.Created_At AS OnlineAdmission_Date
+         st.Status AS Status_name
        FROM student_master s
        LEFT JOIN admission_master a
          ON s.Student_Id = a.Student_Id AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
@@ -47,9 +178,6 @@ export async function GET(
          ON b2.Batch_code = s.Batch_Code AND (b2.IsDelete = 0 OR b2.IsDelete IS NULL)
        LEFT JOIN course_mst c ON s.Course_Id = c.Course_Id
        LEFT JOIN status_master st ON s.Status_id = st.Id
-       LEFT JOIN ${inquiryTable} si
-         ON si.Student_Id = s.Student_Id AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
-       LEFT JOIN online_admission_payload oap ON oap.Inquiry_Id = si.Inquiry_Id
        WHERE s.Student_Id = ? AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
        LIMIT 1`,
       [id]
@@ -79,6 +207,23 @@ export async function GET(
       [id]
     );
     const inquiryId = inqRows[0]?.Inquiry_Id ?? null;
+
+    let payload: Record<string, any> = {};
+    let onlineAdmissionDate: string | null = null;
+    if (inquiryId) {
+      const [payloadRows] = await pool.query<any[]>(
+        `SELECT Payload, Created_At FROM online_admission_payload WHERE Inquiry_Id = ? LIMIT 1`,
+        [inquiryId]
+      );
+      if (payloadRows.length) {
+        try {
+          payload = payloadRows[0].Payload ? JSON.parse(String(payloadRows[0].Payload)) : {};
+        } catch {
+          payload = {};
+        }
+        onlineAdmissionDate = payloadRows[0].Created_At ? String(payloadRows[0].Created_At).slice(0, 10) : null;
+      }
+    }
 
     // Discussions (linked via Inquiry_Id for new records, student_id for older ones)
     const [discussions] = await pool.query<any[]>(
@@ -117,7 +262,7 @@ export async function GET(
     );
 
     return NextResponse.json({
-      student: rows[0],
+      student: overlayStudentFromPayload(rows[0], payload, onlineAdmissionDate),
       placement,
       discussions,
       documents,
@@ -173,6 +318,8 @@ export async function PUT(
 
     const fullName = Student_Name ||
       [FName, MName, LName].filter(Boolean).join(' ') || null;
+    const resolvedBatchCode = Batch_Code || Batch_code || null;
+    const resolvedBatchCategoryId = await resolveBatchCategoryId(pool, resolvedBatchCode, Batch_Category_id || null);
 
     await pool.query(
       `UPDATE student_master SET
@@ -202,12 +349,11 @@ export async function PUT(
          Course_Id = ?,
          Batch_Code = ?,
          Batch_Category_id = ?,
-         Organisation = ?,
+         Company = ?,
          Designation = ?,
-         OccupationalStatus = ?,
-         WorkingSince = ?,
-         TotalExperience = ?,
-         JobDescription = ?,
+         Occupation = ?,
+         Total_Exp = ?,
+         Remark = ?,
          Inquiry_From = ?,
          Inquiry_Type = ?,
          Inquiry_Dt = ?,
@@ -244,12 +390,11 @@ export async function PUT(
         Discipline || null,
         Percentage ? parseFloat(Percentage) : null,
         Course_Id ? parseInt(Course_Id) : null,
-        Batch_Code || Batch_code || null,
-        Batch_Category_id || null,
+        resolvedBatchCode,
+        resolvedBatchCategoryId,
         Organisation || null,
         Designation || null,
         OccupationalStatus || null,
-        WorkingSince || null,
         TotalExperience || null,
         JobDescription || null,
         Inquiry_From || null,

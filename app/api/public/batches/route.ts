@@ -13,13 +13,23 @@ export async function GET(req: NextRequest) {
 
     // Lookup fees for a specific batch code
     if (batchCode) {
-      const [rows] = await pool.query<(RowDataPacket & { totalFees: number | null; feesFullPayment: number | null; feesInstallment: number | null })[]>(
-        `SELECT INR_Total AS totalFees, Fees_Full_Payment AS feesFullPayment, Fees_Installment_Payment AS feesInstallment
-         FROM batch_mst WHERE Batch_code = ? AND IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+      const [rows] = await pool.query<(RowDataPacket & { category: string | null; courseId: number | null; totalFees: number | null; feesFullPayment: number | null; feesInstallment: number | null })[]>(
+        `SELECT
+           Category AS category,
+           Course_Id AS courseId,
+           COALESCE(Actual_Fees_Payment, INR_Total, INR_Basic + COALESCE(INR_ServiceTax, 0)) AS totalFees,
+           COALESCE(Fees_Full_Payment, Actual_Fees_Payment, INR_Total, INR_Basic + COALESCE(INR_ServiceTax, 0)) AS feesFullPayment,
+           COALESCE(Fees_Installment_Payment, Actual_Fees_Payment, INR_Total, INR_Basic + COALESCE(INR_ServiceTax, 0)) AS feesInstallment
+         FROM batch_mst
+         WHERE Batch_code = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+         ORDER BY COALESCE(IsActive, 0) DESC, COALESCE(Admission_Date, SDate, Date_Added) DESC, Batch_Id DESC
+         LIMIT 1`,
         [batchCode]
       );
       return NextResponse.json({
         success: true,
+        category: rows[0]?.category ?? null,
+        courseId: rows[0]?.courseId ?? null,
         totalFees: rows[0]?.totalFees ?? null,
         feesFullPayment: rows[0]?.feesFullPayment ?? null,
         feesInstallment: rows[0]?.feesInstallment ?? null,
@@ -35,14 +45,10 @@ export async function GET(req: NextRequest) {
       const [cats] = await pool.query<(RowDataPacket & { category: string })[]>(
         `SELECT DISTINCT Category AS category
          FROM batch_mst
-         WHERE Course_Id = ? AND IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL)
+         WHERE Course_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
            AND Category IS NOT NULL AND Category != ''
            AND LOWER(Category) NOT LIKE '%corporate%'
            AND (Cancel IS NULL OR Cancel = 0)
-           AND (
-             (Admission_Date IS NOT NULL AND Admission_Date >= CURDATE())
-             OR (Admission_Date IS NULL AND SDate IS NOT NULL AND SDate >= CURDATE())
-           )
          ORDER BY Category ASC`,
         [courseId]
       );
@@ -52,16 +58,14 @@ export async function GET(req: NextRequest) {
     // Return batch codes for this course + category (including total fees)
     // Only show batches where admission is still open or start date is upcoming
     const [batches] = await pool.query<(RowDataPacket & { batchCode: string; timings: string | null; totalFees: number | null; feesFullPayment: number | null; feesInstallment: number | null })[]>(
-      `SELECT Batch_code AS batchCode, Timings AS timings, INR_Total AS totalFees,
-              Fees_Full_Payment AS feesFullPayment, Fees_Installment_Payment AS feesInstallment
+      `SELECT Batch_code AS batchCode, Timings AS timings,
+              COALESCE(Actual_Fees_Payment, INR_Total, INR_Basic + COALESCE(INR_ServiceTax, 0)) AS totalFees,
+              COALESCE(Fees_Full_Payment, Actual_Fees_Payment, INR_Total, INR_Basic + COALESCE(INR_ServiceTax, 0)) AS feesFullPayment,
+              COALESCE(Fees_Installment_Payment, Actual_Fees_Payment, INR_Total, INR_Basic + COALESCE(INR_ServiceTax, 0)) AS feesInstallment
        FROM batch_mst
-       WHERE Course_Id = ? AND Category = ? AND IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL)
+       WHERE Course_Id = ? AND Category = ? AND (IsDelete = 0 OR IsDelete IS NULL)
          AND (Cancel IS NULL OR Cancel = 0)
-         AND (
-           (Admission_Date IS NOT NULL AND Admission_Date >= CURDATE())
-           OR (Admission_Date IS NULL AND SDate IS NOT NULL AND SDate >= CURDATE())
-         )
-       ORDER BY Batch_Id DESC`,
+       ORDER BY COALESCE(IsActive, 0) DESC, COALESCE(Admission_Date, SDate, Date_Added) DESC, Batch_Id DESC`,
       [courseId, category]
     );
     return NextResponse.json({ success: true, categories: [], batches });

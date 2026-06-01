@@ -4,12 +4,14 @@ import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { apiRateLimiter } from '@/lib/rate-limit';
 import { resolveInquiryTableName } from '@/lib/services/inquiry.service';
+import { syncOnlineAdmissionIntoCurrentDb } from '@/lib/services/online-admission.service';
 
 const ONLINE_ADMISSION_PAYLOAD_TABLE = 'online_admission_payload';
 
 let payloadTableReady = false;
 
 let statusTableCache: string | null | undefined;
+let studentMasterTableCache: string | null | undefined;
 async function resolveStatusTableName(pool: any): Promise<string | null> {
   if (statusTableCache !== undefined) return statusTableCache;
   try {
@@ -22,6 +24,22 @@ async function resolveStatusTableName(pool: any): Promise<string | null> {
     statusTableCache = null;
   }
   return statusTableCache ?? null;
+}
+
+async function resolveStudentMasterTableName(pool: any): Promise<string | null> {
+  if (studentMasterTableCache !== undefined) return studentMasterTableCache;
+  try {
+    const [rows] = await pool.query(
+      `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+       WHERE TABLE_SCHEMA = DATABASE() AND LOWER(TABLE_NAME) = 'student_master'
+       ORDER BY CASE WHEN TABLE_NAME = 'student_master' THEN 0 ELSE 1 END
+       LIMIT 1`
+    ) as [any[], any];
+    studentMasterTableCache = String((rows as any[])[0]?.TABLE_NAME || '').trim() || null;
+  } catch {
+    studentMasterTableCache = null;
+  }
+  return studentMasterTableCache;
 }
 
 const toStr = (value: unknown): string => (value == null ? '' : String(value));
@@ -114,9 +132,10 @@ export async function GET(
     const { id } = await params;
     const inquiryId = Number(id);
 
-    const [inquiryTable, statusTable] = await Promise.all([
+    const [inquiryTable, statusTable, studentMasterTable] = await Promise.all([
       resolveInquiryTableName(pool),
       resolveStatusTableName(pool),
+      resolveStudentMasterTableName(pool),
     ]);
 
     // Load inquiry record
@@ -124,9 +143,26 @@ export async function GET(
       ? `LEFT JOIN \`${statusTable}\` stm ON stm.Id = si.OnlineState`
       : '';
     const statusCol = statusTable ? `COALESCE(stm.Status, '')` : `''`;
+    const studentJoin = studentMasterTable
+      ? `LEFT JOIN \
+\`${studentMasterTable}\` sm
+           ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+         LEFT JOIN admission_master am
+           ON am.Admission_Id = (
+             SELECT am2.Admission_Id
+             FROM admission_master am2
+             WHERE am2.Student_Id = si.Student_Id
+               AND (am2.IsDelete = 0 OR am2.IsDelete IS NULL)
+             ORDER BY am2.Admission_Date DESC, am2.Admission_Id DESC
+             LIMIT 1
+           )
+         LEFT JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
+         LEFT JOIN batch_mst b2 ON b2.Batch_code = sm.Batch_Code AND (b2.IsDelete = 0 OR b2.IsDelete IS NULL)`
+      : '';
     const [siRows] = await pool.query(
       `SELECT
          si.Inquiry_Id,
+         si.Student_Id,
          si.Student_Name,
          COALESCE(si.Email, '') as Email,
          COALESCE(si.Present_Mobile, '') as Present_Mobile,
@@ -139,9 +175,45 @@ export async function GET(
          COALESCE(si.Batch_Code, '') as Batch_Code,
          COALESCE(si.Course_Id, 0) as Course_Id,
          COALESCE(si.Qualification, '') as Qualification,
-         COALESCE(si.Discipline, '') as Discipline
+         COALESCE(si.Discipline, '') as Discipline,
+         COALESCE(sm.FName, '') as Student_FName,
+         COALESCE(sm.MName, '') as Student_MName,
+         COALESCE(sm.LName, '') as Student_LName,
+         COALESCE(sm.Student_Name, '') as StudentMaster_Name,
+         COALESCE(sm.Email, '') as Student_Email,
+         COALESCE(sm.Present_Mobile, '') as Student_Present_Mobile,
+         COALESCE(sm.Present_Mobile2, '') as Student_Telephone,
+         COALESCE(sm.Sex, '') as Student_Sex,
+         sm.DOB as Student_DOB,
+         COALESCE(sm.Nationality, 'Indian') as Student_Nationality,
+         COALESCE(sm.Present_Address, '') as Student_Present_Address,
+         COALESCE(sm.Present_City, '') as Student_Present_City,
+         COALESCE(sm.Present_State, '') as Student_Present_State,
+         COALESCE(sm.Present_Pin, '') as Student_Present_Pin,
+         COALESCE(sm.Present_Country, 'India') as Student_Present_Country,
+         COALESCE(sm.Permanent_Address, '') as Student_Permanent_Address,
+         COALESCE(sm.Permanent_City, '') as Student_Permanent_City,
+         COALESCE(sm.Permanent_State, '') as Student_Permanent_State,
+         COALESCE(sm.Permanent_Pin, '') as Student_Permanent_Pin,
+         COALESCE(sm.Permanent_Country, 'India') as Student_Permanent_Country,
+         COALESCE(sm.Qualification, '') as Student_Qualification,
+         COALESCE(sm.Discipline, '') as Student_Discipline,
+         sm.Percentage as Student_Percentage,
+         COALESCE(sm.Course_Id, 0) as Student_Course_Id,
+         COALESCE(sm.Batch_Code, '') as Student_Batch_Code,
+         COALESCE(sm.Occupation, '') as Student_OccupationalStatus,
+         COALESCE(sm.Company, '') as Student_Organisation,
+         COALESCE(sm.Designation, '') as Student_Designation,
+         COALESCE(sm.Remark, '') as Student_JobDescription,
+         NULL as Student_WorkingSince,
+         COALESCE(sm.Total_Exp, '') as Student_TotalExperience,
+         COALESCE(sm.Refered_By, '') as Student_Refered_By,
+         sm.Admission_Dt as Student_Admission_Dt,
+         am.Admission_Date as Admission_Date,
+         COALESCE(b.Batch_code, b2.Batch_code, sm.Batch_Code, si.Batch_Code, '') as Resolved_Batch_Code
        FROM \`${inquiryTable}\` si
        ${statusJoin}
+       ${studentJoin}
        WHERE si.Inquiry_Id = ? AND (si.IsDelete = 0 OR si.IsDelete IS NULL)`,
       [inquiryId]
     ) as [any[], any];
@@ -152,6 +224,7 @@ export async function GET(
 
     const si = (siRows as any[])[0];
     const payload = await getPayload(pool, inquiryId);
+    const studentNameSource = String(si.StudentMaster_Name || si.Student_Name || '').trim();
 
     const rawStatusId = Number(si.Status_id);
     const rawStatusText = String(si.StatusText || '').trim();
@@ -177,18 +250,21 @@ export async function GET(
     if (!resolvedTrainingProgrammeId && si.Course_Id) {
       resolvedTrainingProgrammeId = String(si.Course_Id);
     }
+    if (!resolvedTrainingProgrammeId && si.Student_Course_Id) {
+      resolvedTrainingProgrammeId = String(si.Student_Course_Id);
+    }
 
     // Parse name parts from payload first, then fall back to inquiry name
-    const nameParts = String(si.Student_Name || '').split(' ');
-    const firstName  = payload.firstName  || nameParts[0] || '';
-    const lastName   = payload.lastName   || (nameParts.length > 1 ? nameParts[nameParts.length - 1] : '') || '';
-    const middleName = payload.middleName || (nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '') || '';
+    const nameParts = studentNameSource.split(' ').filter(Boolean);
+    const firstName  = si.Student_FName || payload.firstName || nameParts[0] || '';
+    const lastName   = si.Student_LName || payload.lastName || (nameParts.length > 1 ? nameParts[nameParts.length - 1] : '') || '';
+    const middleName = si.Student_MName || payload.middleName || (nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '') || '';
 
     return NextResponse.json({
       // metadata
       inquiryId:      si.Inquiry_Id,
       admissionId:    si.Inquiry_Id, // kept for edit page compat
-      studentId:      si.Inquiry_Id, // kept for edit page compat
+      studentId:      si.Student_Id || null,
       statusId:       rawStatusId || null,
       statusLabel,
       statusCategory,
@@ -198,14 +274,14 @@ export async function GET(
       middleName,
       lastName,
       shortName:      payload.shortName  || '',
-      dob:            payload.dob        || (si.DOB ? String(si.DOB).slice(0, 10) : ''),
-      gender:         payload.gender     || si.Sex || '',
-      nationality:    payload.nationality || si.Nationality || 'Indian',
+      dob:            (si.Student_DOB ? String(si.Student_DOB).slice(0, 10) : '') || payload.dob || (si.DOB ? String(si.DOB).slice(0, 10) : ''),
+      gender:         si.Student_Sex || payload.gender || si.Sex || '',
+      nationality:    si.Student_Nationality || payload.nationality || si.Nationality || 'Indian',
 
       // contact
-      email:          payload.email     || si.Email || '',
-      mobile:         payload.mobile    || si.Present_Mobile || '',
-      telephone:      payload.telephone || si.Present_Mobile2 || '',
+      email:          si.Student_Email || payload.email || si.Email || '',
+      mobile:         si.Student_Present_Mobile || payload.mobile || si.Present_Mobile || '',
+      telephone:      si.Student_Telephone || payload.telephone || si.Present_Mobile2 || '',
       familyContact:  payload.familyContact || '',
 
       // address
@@ -214,23 +290,23 @@ export async function GET(
       presentStreet:      payload.presentStreet      || '',
       presentArea:        payload.presentArea        || '',
       presentLandmark:    payload.presentLandmark    || '',
-      presentAddress:     payload.presentAddress     || '',
-      presentCity:        payload.presentCity        || '',
-      presentPin:         payload.presentPin         || '',
-      presentState:       payload.presentState       || '',
+      presentAddress:     si.Student_Present_Address || payload.presentAddress || '',
+      presentCity:        si.Student_Present_City || payload.presentCity || '',
+      presentPin:         toStr(si.Student_Present_Pin) || payload.presentPin || '',
+      presentState:       si.Student_Present_State || payload.presentState || '',
       presentDistrict:    payload.presentDistrict    || '',
-      presentCountry:     payload.presentCountry     || 'India',
+      presentCountry:     si.Student_Present_Country || payload.presentCountry || 'India',
       permanentFlat:      payload.permanentFlat      || '',
       permanentBuilding:  payload.permanentBuilding  || '',
       permanentStreet:    payload.permanentStreet    || '',
       permanentArea:      payload.permanentArea      || '',
       permanentLandmark:  payload.permanentLandmark  || '',
-      permanentAddress:   payload.permanentAddress   || '',
-      permanentCity:      payload.permanentCity      || '',
-      permanentPin:       payload.permanentPin       || '',
-      permanentState:     payload.permanentState     || '',
+      permanentAddress:   si.Student_Permanent_Address || payload.permanentAddress || '',
+      permanentCity:      si.Student_Permanent_City || payload.permanentCity || '',
+      permanentPin:       toStr(si.Student_Permanent_Pin) || payload.permanentPin || '',
+      permanentState:     si.Student_Permanent_State || payload.permanentState || '',
       permanentDistrict:  payload.permanentDistrict  || '',
-      permanentCountry:   payload.permanentCountry   || 'India',
+      permanentCountry:   si.Student_Permanent_Country || payload.permanentCountry || 'India',
       sameAsPresent:      Boolean(payload.sameAsPresent),
 
       // academic
@@ -269,14 +345,17 @@ export async function GET(
       postgrad_ktCount:    payload.postgrad_ktCount      || '0',
       postgrad_ktDetails:  payload.postgrad_ktDetails    || [],
       educationRemark:     payload.educationRemark       || '',
+      qualification:       si.Student_Qualification || payload.qualification || si.Qualification || '',
+      discipline:          si.Student_Discipline || payload.discipline || si.Discipline || '',
+      percentage:          toStr(si.Student_Percentage) || payload.percentage || '',
 
       // occupational
-      occupationalStatus:    payload.occupationalStatus    || '',
-      jobOrganisation:       payload.jobOrganisation       || '',
-      jobDesignation:        payload.jobDesignation        || '',
-      totalOccupationYears:  payload.totalOccupationYears  || '',
-      jobDescription:        payload.jobDescription        || '',
-      workingFromYears:      payload.workingFromYears      || '',
+      occupationalStatus:    si.Student_OccupationalStatus || payload.occupationalStatus || '',
+      jobOrganisation:       si.Student_Organisation || payload.jobOrganisation || '',
+      jobDesignation:        si.Student_Designation || payload.jobDesignation || '',
+      totalOccupationYears:  toStr(si.Student_TotalExperience) || payload.totalOccupationYears || '',
+      jobDescription:        si.Student_JobDescription || payload.jobDescription || '',
+      workingFromYears:      (si.Student_WorkingSince ? String(si.Student_WorkingSince).slice(0, 4) : '') || payload.workingFromYears || '',
       workingFromMonths:     payload.workingFromMonths     || '',
       selfEmploymentDetails: payload.selfEmploymentDetails || '',
 
@@ -284,7 +363,7 @@ export async function GET(
       trainingProgrammeId:   resolvedTrainingProgrammeId,
       trainingProgrammeName: payload.trainingProgrammeName || '',
       trainingCategory:      payload.trainingCategory      || '',
-      batchCode:             payload.batchCode || si.Batch_Code || '',
+      batchCode:             si.Resolved_Batch_Code || si.Student_Batch_Code || payload.batchCode || si.Batch_Code || '',
 
       // payment & terms
       modeOfPayment:         payload.modeOfPayment || '',
@@ -369,6 +448,7 @@ export async function PUT(
       postgrad_ktDetails: stripFiles(body.postgrad_ktDetails),
     };
     await savePayload(pool, inquiryId, cleanBody);
+    await syncOnlineAdmissionIntoCurrentDb(inquiryId, cleanBody, { statusAction: body.statusAction || 'update' });
 
     return NextResponse.json({ success: true, message: 'Admission updated successfully' });
   } catch (err: unknown) {

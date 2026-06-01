@@ -3,12 +3,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
+async function resolveInquiryTableName(pool: ReturnType<typeof getPool>): Promise<string> {
+  const [rows] = await pool.query(
+    `SELECT TABLE_NAME
+     FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND LOWER(TABLE_NAME) = 'student_inquiry'
+     ORDER BY CASE WHEN TABLE_NAME = 'Student_Inquiry' THEN 0 ELSE 1 END
+     LIMIT 1`
+  );
+  return String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
+}
+
 // GET - fetch all students with pagination and search
 export async function GET(req: NextRequest) {
   try {
     const auth = await requirePermission(req, 'student.view');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
+    const inquiryTable = await resolveInquiryTableName(pool);
     const { searchParams } = new URL(req.url);
 
     const page = Math.max(1, Number(searchParams.get('page')) || 1);
@@ -18,12 +31,28 @@ export async function GET(req: NextRequest) {
     const courseId = searchParams.get('courseId')?.trim() || '';
     const sex = searchParams.get('sex')?.trim() || '';
 
-    const acceptedAdmissionExists = `EXISTS (
-      SELECT 1
-      FROM admission_master a
-      WHERE a.Student_Id = s.Student_Id
-        AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
-        AND (a.Cancel IS NULL OR LOWER(TRIM(CAST(a.Cancel AS CHAR))) IN ('no', '0', 'false'))
+    const acceptedAdmissionExists = `(
+      s.Status_id = 8
+      OR LOWER(TRIM(CAST(COALESCE(s.Admission, '') AS CHAR))) IN ('yes', 'y', '1', 'true')
+      OR EXISTS (
+        SELECT 1
+        FROM admission_master a
+        WHERE a.Student_Id = s.Student_Id
+          AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
+          AND (a.Cancel IS NULL OR LOWER(TRIM(CAST(a.Cancel AS CHAR))) IN ('no', '0', 'false'))
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM \
+\`${inquiryTable}\` si
+        WHERE si.Student_Id = s.Student_Id
+          AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
+          AND (
+            si.OnlineState = 8
+            OR IFNULL(si.admission_done, 0) = 2
+            OR LOWER(TRIM(CAST(COALESCE(si.Admission, '') AS CHAR))) IN ('yes', 'y', '1', 'true')
+          )
+      )
     )`;
 
     // Build WHERE clause

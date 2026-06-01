@@ -6,7 +6,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 
 const STEPS = [
   { id: 1, title: 'Personal Info', icon: 'fa-user', description: 'Basic personal details' },
-  { id: 2, title: 'Academic', icon: 'fa-graduation-cap', description: 'Educational qualifications' },
+  { id: 2, title: 'Academic', icon: 'fa-graduation-cap', description: 'Educational qualifications (optional)' },
   { id: 3, title: 'Occupational Info', icon: 'fa-briefcase', description: 'Current occupational status' },
   { id: 4, title: 'Training', icon: 'fa-chalkboard-teacher', description: 'Training programme details' },
   { id: 5, title: 'Mode of Payment', icon: 'fa-credit-card', description: 'Select your payment method' },
@@ -309,9 +309,9 @@ export default function PublicAdmissionFormPage() {
         const res = await fetch(`/api/public/batches?batchCode=${encodeURIComponent(formData.batchCode)}`);
         const data = await res.json();
         if (data.success) {
-          if (data.totalFees) setBatchFees(parseFloat(String(data.totalFees)));
-          setBatchFeesFullPayment(data.feesFullPayment ? parseFloat(String(data.feesFullPayment)) : null);
-          setBatchFeesInstallment(data.feesInstallment ? parseFloat(String(data.feesInstallment)) : null);
+          setBatchFees(data.totalFees != null ? parseFloat(String(data.totalFees)) : null);
+          setBatchFeesFullPayment(data.feesFullPayment != null ? parseFloat(String(data.feesFullPayment)) : null);
+          setBatchFeesInstallment(data.feesInstallment != null ? parseFloat(String(data.feesInstallment)) : null);
         }
       } catch { /* non-fatal */ }
     })();
@@ -374,6 +374,23 @@ export default function PublicAdmissionFormPage() {
     );
   };
 
+  const requiresStudentConsent = () => formData.occupationalStatus === 'Student' && !checkEligibility();
+  const requiresExperiencedConsent = () => formData.occupationalStatus === 'Employee' && (parseFloat(formData.totalOccupationYears) || 0) >= 10;
+
+  const loadBatchesForCategory = useCallback(async (courseId: string, category: string) => {
+    if (!courseId || !category) return;
+    setLoadingBatches(true);
+    try {
+      const res = await fetch(`/api/public/batches?courseId=${courseId}&category=${encodeURIComponent(category)}`);
+      const data = await res.json();
+      if (data.success) setAvailableBatches(data.batches);
+    } catch {
+      // non-fatal
+    } finally {
+      setLoadingBatches(false);
+    }
+  }, []);
+
   const handleProgrammeChange = async (courseId: string) => {
     const course = courses.find((c) => String(c.Course_Id) === courseId);
     setFormData(prev => ({
@@ -408,17 +425,35 @@ export default function PublicAdmissionFormPage() {
     setBatchFeesFullPayment(null);
     setBatchFeesInstallment(null);
     if (!category || !formData.trainingProgrammeId) return;
-    setLoadingBatches(true);
-    try {
-      const res = await fetch(`/api/public/batches?courseId=${formData.trainingProgrammeId}&category=${encodeURIComponent(category)}`);
-      const data = await res.json();
-      if (data.success) setAvailableBatches(data.batches);
-    } catch {
-      // non-fatal
-    } finally {
-      setLoadingBatches(false);
-    }
+    await loadBatchesForCategory(formData.trainingProgrammeId, category);
   };
+
+  useEffect(() => {
+    if (!formData.trainingProgrammeId || !formData.batchCode || formData.trainingCategory) return;
+
+    let cancelled = false;
+
+    const hydrateBatchSelection = async () => {
+      try {
+        const res = await fetch(`/api/public/batches?batchCode=${encodeURIComponent(formData.batchCode)}`);
+        const data = await res.json();
+        if (!data.success || cancelled) return;
+
+        const resolvedCategory = typeof data.category === 'string' ? data.category.trim() : '';
+        if (!resolvedCategory) return;
+
+        setFormData(prev => (prev.trainingCategory === resolvedCategory ? prev : { ...prev, trainingCategory: resolvedCategory }));
+        await loadBatchesForCategory(formData.trainingProgrammeId, resolvedCategory);
+      } catch {
+        // non-fatal
+      }
+    };
+
+    void hydrateBatchSelection();
+    return () => {
+      cancelled = true;
+    };
+  }, [formData.batchCode, formData.trainingCategory, formData.trainingProgrammeId, loadBatchesForCategory]);
 
   const fetchStudentData = async () => {
     try {
@@ -538,22 +573,32 @@ export default function PublicAdmissionFormPage() {
         }
         break;
       case 2:
-        if (!formData.ssc_board || !formData.ssc_schoolName || !formData.ssc_yearOfPassing || !formData.ssc_percentage) {
-          alert('Please fill all required fields in 10th/SSC Education section');
-          return false;
-        }
-        if (!formData.hsc_board || !formData.hsc_collegeName || !formData.hsc_stream || !formData.hsc_yearOfPassing || !formData.hsc_percentage) {
-          alert('Please fill all required fields in 12th/HSC Education section');
+        break;
+      case 3:
+        if (requiresExperiencedConsent() && !experiencedConsentAcknowledged) {
+          setConsentType('experienced');
+          setShowConsentModal(true);
+          alert('Please complete the experienced candidate consent form before proceeding.');
           return false;
         }
         break;
-      case 3:
+      case 4:
         if (!formData.trainingProgrammeId || !formData.trainingProgrammeName) {
           alert('Please select a Training Programme');
           return false;
         }
+        if (!formData.trainingCategory) {
+          alert('Please select a Training Category');
+          return false;
+        }
         if (!formData.batchCode) {
           alert('Please select a Batch');
+          return false;
+        }
+        if (requiresStudentConsent() && !consentAcknowledged) {
+          setConsentType('student');
+          setShowConsentModal(true);
+          alert('Please complete the consent form before proceeding.');
           return false;
         }
         break;
@@ -599,19 +644,23 @@ export default function PublicAdmissionFormPage() {
       setCurrentStep(1);
       return;
     }
-    if (!formData.ssc_board || !formData.ssc_schoolName || !formData.ssc_yearOfPassing || !formData.ssc_percentage) {
-      alert('Please complete Step 2: Fill all required fields in 10th/SSC Education section');
-      setCurrentStep(2);
+    if (!formData.trainingProgrammeId || !formData.trainingCategory || !formData.batchCode) {
+      alert('Please complete Step 4: Select a Training Programme, Category, and Batch');
+      setCurrentStep(4);
       return;
     }
-    if (!formData.hsc_board || !formData.hsc_collegeName || !formData.hsc_stream || !formData.hsc_yearOfPassing || !formData.hsc_percentage) {
-      alert('Please complete Step 2: Fill all required fields in 12th/HSC Education section');
-      setCurrentStep(2);
-      return;
-    }
-    if (!formData.trainingProgrammeId || !formData.batchCode) {
-      alert('Please complete Step 3: Select a Training Programme and Batch');
+    if (requiresExperiencedConsent() && !experiencedConsentAcknowledged) {
+      alert('Please complete the experienced candidate consent form in Step 3 before submitting.');
+      setConsentType('experienced');
       setCurrentStep(3);
+      setShowConsentModal(true);
+      return;
+    }
+    if (requiresStudentConsent() && !consentAcknowledged) {
+      alert('Please complete the required consent form in Step 4 before submitting.');
+      setConsentType('student');
+      setCurrentStep(4);
+      setShowConsentModal(true);
       return;
     }
     if (!formData.modeOfPayment) {
@@ -1016,6 +1065,7 @@ export default function PublicAdmissionFormPage() {
                       <span className="truncate">{STEPS[currentStep - 1].title}</span>
                     </h1>
                     <p className="text-xs text-gray-600 mt-0.5 hidden sm:block">{STEPS[currentStep - 1].description}</p>
+                    <p className="text-[11px] text-gray-500 mt-1"><span className="text-red-500 font-bold">*</span> indicates a mandatory field.</p>
                   </div>
                   <div className="text-right flex-shrink-0 ml-2">
                     <div className="text-[10px] sm:text-xs text-gray-500">Step</div>
@@ -1399,27 +1449,27 @@ export default function PublicAdmissionFormPage() {
                             <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
                               <i className="fas fa-school text-[#2A6BB5]"></i>
                               10th / SSC Education
-                              <span className="text-red-500 ml-1">*</span>
+                              <span className="text-xs text-gray-500 font-normal ml-2">(Optional)</span>
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                               <div>
-                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Board <span className="text-red-500">*</span></label>
-                                <select value={formData.ssc_board} onChange={(e) => handleChange('ssc_board', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" required>
+                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Board</label>
+                                <select value={formData.ssc_board} onChange={(e) => handleChange('ssc_board', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all">
                                   <option value="">Select Board</option>
                                   <option>CBSE</option><option>ICSE</option><option>State Board</option><option>Other</option>
                                 </select>
                               </div>
                               <div className="md:col-span-2">
-                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">School Name <span className="text-red-500">*</span></label>
-                                <input type="text" value={formData.ssc_schoolName} onChange={(e) => handleChange('ssc_schoolName', e.target.value)} placeholder="Enter school name" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" required />
+                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">School Name</label>
+                                <input type="text" value={formData.ssc_schoolName} onChange={(e) => handleChange('ssc_schoolName', e.target.value)} placeholder="Enter school name" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
                               </div>
                               <div>
-                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Year of Passing <span className="text-red-500">*</span></label>
-                                <input type="number" value={formData.ssc_yearOfPassing} onChange={(e) => handleChange('ssc_yearOfPassing', e.target.value)} placeholder="YYYY" min="1990" max="2030" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" required />
+                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Year of Passing</label>
+                                <input type="number" value={formData.ssc_yearOfPassing} onChange={(e) => handleChange('ssc_yearOfPassing', e.target.value)} placeholder="YYYY" min="1990" max="2030" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
                               </div>
                               <div>
-                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Percentage / CGPA <span className="text-red-500">*</span></label>
-                                <input type="text" value={formData.ssc_percentage} onChange={(e) => handleChange('ssc_percentage', e.target.value)} placeholder="e.g. 85% or 8.5 CGPA" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" required />
+                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Percentage / CGPA</label>
+                                <input type="text" value={formData.ssc_percentage} onChange={(e) => handleChange('ssc_percentage', e.target.value)} placeholder="e.g. 85% or 8.5 CGPA" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
                               </div>
                               <div className="lg:col-span-3">
                                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">
@@ -1473,15 +1523,15 @@ export default function PublicAdmissionFormPage() {
                                     </h5>
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                       <div className="lg:col-span-3">
-                                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Subject Name <span className="text-red-500">*</span></label>
+                                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Subject Name</label>
                                         <input type="text" value={kt.subjectName} onChange={(e) => handleKtDetailChange('ssc', index, 'subjectName', e.target.value)} placeholder="Enter subject name" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
                                       </div>
                                       <div>
-                                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Year <span className="text-red-500">*</span></label>
+                                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Year</label>
                                         <input type="number" value={kt.year} onChange={(e) => handleKtDetailChange('ssc', index, 'year', e.target.value)} placeholder="YYYY" min="2000" max="2030" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
                                       </div>
                                       <div>
-                                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Semester <span className="text-red-500">*</span></label>
+                                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Semester</label>
                                         <select value={kt.semester} onChange={(e) => handleKtDetailChange('ssc', index, 'semester', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all">
                                           <option value="">Select Semester</option>
                                           {[1,2].map(s => <option key={s} value={s}>Semester {s}</option>)}
@@ -2083,6 +2133,39 @@ export default function PublicAdmissionFormPage() {
                         </div>
                       )}
 
+                      {requiresExperiencedConsent() && (
+                        <div className={`mt-5 rounded-xl border-2 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-start gap-3 ${
+                          experiencedConsentAcknowledged ? 'bg-green-50 border-green-300' : 'bg-blue-50 border-blue-300'
+                        }`}>
+                          <div className="flex items-start gap-3 flex-1">
+                            <i className={`fas ${
+                              experiencedConsentAcknowledged ? 'fa-check-circle text-green-500' : 'fa-briefcase text-blue-500'
+                            } text-lg flex-shrink-0 mt-0.5`}></i>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-bold ${experiencedConsentAcknowledged ? 'text-green-800' : 'text-blue-800'}`}>
+                                {experiencedConsentAcknowledged ? 'Experienced Candidate Consent Acknowledged' : 'Experienced Candidate Consent Form Required'}
+                              </p>
+                              <p className={`text-xs mt-0.5 ${experiencedConsentAcknowledged ? 'text-green-700' : 'text-blue-700'}`}>
+                                {experiencedConsentAcknowledged
+                                  ? 'You have reviewed and accepted all consent declarations for experienced candidates.'
+                                  : 'You have 10+ years of work experience. Please complete the consent form before continuing to training and payment.'}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => { setConsentType('experienced'); setShowConsentModal(true); }}
+                            className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all w-full sm:w-auto text-center ${
+                              experiencedConsentAcknowledged
+                                ? 'bg-green-100 text-green-700 border border-green-300 hover:bg-green-200'
+                                : 'bg-blue-500 text-white hover:bg-blue-600'
+                            }`}
+                          >
+                            {experiencedConsentAcknowledged ? 'Review' : 'Fill Consent Form'}
+                          </button>
+                        </div>
+                      )}
+
                     </div>
                   )}
 
@@ -2148,9 +2231,9 @@ export default function PublicAdmissionFormPage() {
                                 onChange={(e) => {
                                   handleChange('batchCode', e.target.value);
                                   const batch = availableBatches.find(b => b.batchCode === e.target.value);
-                                  setBatchFees(batch?.totalFees ? parseFloat(String(batch.totalFees)) : null);
-                                  setBatchFeesFullPayment(batch?.feesFullPayment ? parseFloat(String(batch.feesFullPayment)) : null);
-                                  setBatchFeesInstallment(batch?.feesInstallment ? parseFloat(String(batch.feesInstallment)) : null);
+                                  setBatchFees(batch?.totalFees != null ? parseFloat(String(batch.totalFees)) : null);
+                                  setBatchFeesFullPayment(batch?.feesFullPayment != null ? parseFloat(String(batch.feesFullPayment)) : null);
+                                  setBatchFeesInstallment(batch?.feesInstallment != null ? parseFloat(String(batch.feesInstallment)) : null);
                                 }}
                                 disabled={!formData.trainingCategory || loadingBatches}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-50"
@@ -2169,7 +2252,7 @@ export default function PublicAdmissionFormPage() {
                       </div>
 
                       {/* Consent Form Banner — triggers when Student doesn't meet course eligibility */}
-                      {formData.occupationalStatus === 'Student' && !checkEligibility() && (
+                      {requiresStudentConsent() && (
                         <div className={`mt-5 rounded-xl border-2 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-start gap-3 ${
                           consentAcknowledged ? 'bg-green-50 border-green-300' : 'bg-orange-50 border-orange-300'
                         }`}>
@@ -2198,40 +2281,6 @@ export default function PublicAdmissionFormPage() {
                             }`}
                           >
                             {consentAcknowledged ? 'Review' : 'Fill Consent Form'}
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Consent Form Banner — triggers when Employee has 10+ years experience */}
-                      {formData.occupationalStatus === 'Employee' && parseInt(formData.totalOccupationYears) >= 10 && (
-                        <div className={`mt-5 rounded-xl border-2 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-start gap-3 ${
-                          experiencedConsentAcknowledged ? 'bg-green-50 border-green-300' : 'bg-blue-50 border-blue-300'
-                        }`}>
-                          <div className="flex items-start gap-3 flex-1">
-                            <i className={`fas ${
-                              experiencedConsentAcknowledged ? 'fa-check-circle text-green-500' : 'fa-briefcase text-blue-500'
-                            } text-lg flex-shrink-0 mt-0.5`}></i>
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-sm font-bold ${experiencedConsentAcknowledged ? 'text-green-800' : 'text-blue-800'}`}>
-                                {experiencedConsentAcknowledged ? 'Experienced Candidate Consent Acknowledged' : 'Experienced Candidate Consent Form Required'}
-                              </p>
-                              <p className={`text-xs mt-0.5 ${experiencedConsentAcknowledged ? 'text-green-700' : 'text-blue-700'}`}>
-                                {experiencedConsentAcknowledged
-                                  ? 'You have reviewed and accepted all consent declarations for experienced candidates.'
-                                  : 'You have 10+ years of work experience. Please complete the consent form for experienced candidates.'}
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => { setConsentType('experienced'); setShowConsentModal(true); }}
-                            className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all w-full sm:w-auto text-center ${
-                              experiencedConsentAcknowledged
-                                ? 'bg-green-100 text-green-700 border border-green-300 hover:bg-green-200'
-                                : 'bg-blue-500 text-white hover:bg-blue-600'
-                            }`}
-                          >
-                            {experiencedConsentAcknowledged ? 'Review' : 'Fill Consent Form'}
                           </button>
                         </div>
                       )}

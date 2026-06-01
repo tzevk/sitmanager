@@ -492,14 +492,26 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     : `NULLIF(TRIM(si.Discipline),'')`;
   warmInquirySchema(pool, inquiryTable);
   const FOLLOW_UP_DUE_SUBQUERY = `
-    SELECT latest.Inquiry_id
-    FROM awt_inquirydiscussion latest
-    INNER JOIN (
-      SELECT Inquiry_id, MAX(id) AS max_id
+    SELECT latest.LinkId
+    FROM (
+      SELECT
+        COALESCE(NULLIF(Inquiry_id, 0), NULLIF(student_id, 0)) AS LinkId,
+        MAX(id) AS max_id
       FROM awt_inquirydiscussion
       WHERE deleted = 0
-      GROUP BY Inquiry_id
-    ) latest_ids ON latest_ids.Inquiry_id = latest.Inquiry_id AND latest_ids.max_id = latest.id
+        AND COALESCE(NULLIF(Inquiry_id, 0), NULLIF(student_id, 0)) IS NOT NULL
+      GROUP BY COALESCE(NULLIF(Inquiry_id, 0), NULLIF(student_id, 0))
+    ) latest_ids
+    INNER JOIN (
+      SELECT
+        id,
+        nextdate,
+        deleted,
+        COALESCE(NULLIF(Inquiry_id, 0), NULLIF(student_id, 0)) AS LinkId
+      FROM awt_inquirydiscussion
+    ) latest
+      ON latest.LinkId = latest_ids.LinkId
+     AND latest.id = latest_ids.max_id
     WHERE latest.deleted = 0
       AND latest.nextdate IS NOT NULL
       AND latest.nextdate <= CURDATE()
@@ -772,7 +784,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
          SELECT si_map.Inquiry_Id as InquiryId, MAX(d.id) as max_id
          FROM \`${inquiryTable}\` si_map
          INNER JOIN awt_inquirydiscussion d ON d.deleted = 0 AND (
-           d.Inquiry_id = si_map.Inquiry_Id OR d.Inquiry_id = si_map.Student_Id
+           d.Inquiry_id = si_map.Inquiry_Id OR d.Inquiry_id = si_map.Student_Id OR d.student_id = si_map.Student_Id
          )
          WHERE si_map.Inquiry_Id IN (${ph})
          GROUP BY si_map.Inquiry_Id
