@@ -12,7 +12,7 @@
     },
     {
       "path": "/api/cron/suvidya-inquiry-sync",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/2 * * * *"
     }
   ],
   "functions": {
