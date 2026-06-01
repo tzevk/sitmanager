@@ -457,22 +457,33 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                   </svg>
                   Student Feedback Link <span className="font-normal normal-case text-blue-500">(valid 24h · present students only)</span>
                 </p>
-                <div className="flex items-center gap-2">
-                  <input
-                    readOnly
-                    value={feedbackUrl}
-                    className="flex-1 text-xs bg-white border border-blue-200 rounded-md px-2.5 py-1.5 text-blue-800 truncate focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => { navigator.clipboard.writeText(feedbackUrl); }}
-                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#2E3093] text-white rounded-md hover:bg-[#252780] transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    Copy
-                  </button>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="min-w-0 flex-1 rounded-md border border-blue-200 bg-white px-2.5 py-1.5 text-xs text-blue-800 break-all">
+                    {feedbackUrl}
+                  </div>
+                  <div className="flex gap-2 sm:shrink-0">
+                    <a
+                      href={feedbackUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-blue-200 bg-white text-[#2E3093] rounded-md hover:bg-blue-100 transition-colors sm:flex-none"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H19m0 0v5.5M19 6l-7.5 7.5M17 13.5V17a2 2 0 01-2 2H7a2 2 0 01-2-2V9a2 2 0 012-2h3.5" />
+                      </svg>
+                      Open Link
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard.writeText(feedbackUrl); }}
+                      className="flex-1 shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#2E3093] text-white rounded-md hover:bg-[#252780] transition-colors sm:flex-none"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      Copy
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
