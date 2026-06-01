@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getPool } from '@/lib/db';
 import { sendOnlineAdmissionSubmissionEmail } from '@/lib/mailer';
+import { hasAdmissionUploads, type AdmissionUploadBundle, saveAdmissionAssetsForStudent } from '@/lib/student-documents.server';
 
 let inquiryTableNameCache: string | null = null;
 let statusTableNameCache: string | null | undefined;
@@ -167,6 +168,22 @@ async function ensurePayloadTable(pool: ReturnType<typeof getPool>): Promise<voi
      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   );
   payloadTableReady = true;
+}
+
+async function resolveStudentIdForInquiry(
+  pool: ReturnType<typeof getPool>,
+  inquiryId: number
+): Promise<number | null> {
+  const inquiryTable = await resolveInquiryTableName(pool);
+  const [rows] = await pool.query<any[]>(
+    `SELECT Student_Id
+    FROM \`${inquiryTable}\`
+     WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+     LIMIT 1`,
+    [inquiryId]
+  );
+  const studentId = Number(rows[0]?.Student_Id || 0);
+  return studentId > 0 ? studentId : null;
 }
 
 async function resolveBatchCategoryId(
@@ -662,7 +679,10 @@ export async function listOnlineAdmissions(
   };
 }
 
-export async function submitOnlineAdmission(input: SubmitAdmissionInput): Promise<number> {
+export async function submitOnlineAdmission(
+  input: SubmitAdmissionInput,
+  uploads?: AdmissionUploadBundle
+): Promise<{ inquiryId: number; studentId: number | null }> {
   const { inquiryId, firstName, middleName, lastName, email, mobile, batchCode, ...rest } = input;
 
   if (!Number.isFinite(inquiryId) || inquiryId <= 0) throw new Error('Invalid Inquiry ID');
@@ -722,6 +742,14 @@ export async function submitOnlineAdmission(input: SubmitAdmissionInput): Promis
 
   await syncOnlineAdmissionIntoCurrentDb(inquiryId, cleanBody, { statusAction: 'update' });
 
+  const studentId = await resolveStudentIdForInquiry(pool, inquiryId);
+  if (hasAdmissionUploads(uploads)) {
+    if (!studentId) {
+      throw Object.assign(new Error('Unable to attach uploaded files because the student record is not linked yet.'), { status: 409 });
+    }
+    await saveAdmissionAssetsForStudent(studentId, uploads);
+  }
+
   const recipientEmail = String(email || inquiry.Email || '').trim();
   const studentName = fullName || String(inquiry.Student_Name || '').trim();
   if (recipientEmail) {
@@ -736,5 +764,5 @@ export async function submitOnlineAdmission(input: SubmitAdmissionInput): Promis
     }
   }
 
-  return inquiryId;
+  return { inquiryId, studentId };
 }

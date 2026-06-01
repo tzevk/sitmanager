@@ -35,6 +35,25 @@ interface DocumentRow {
   upload_image: string;
 }
 
+function buildStudentDocumentUrl(studentId: string, uploadImage: string): string {
+  const safePath = String(uploadImage || '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+  return `/api/student-documents/${encodeURIComponent(studentId)}/${safePath}`;
+}
+
+function formatDocumentLabel(docName: string, uploadImage: string): string {
+  const raw = (docName || uploadImage || '')
+    .replace(/^oa:/i, '')
+    .replace(/_file$/i, '')
+    .replace(/_/g, ' ')
+    .trim();
+  return raw.replace(/\b\w/g, (char) => char.toUpperCase()) || 'Document';
+}
+
 const TABS = [
   { id: 'personal',     label: 'Personal Info' },
   { id: 'academic',     label: 'Academic Qualification' },
@@ -1105,14 +1124,11 @@ export default function EditStudentPage() {
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
                     {documents.map((doc) => {
-                      const fileUrl = `/api/student-documents/${studentId}/${doc.upload_image}`;
+                      const fileUrl = buildStudentDocumentUrl(studentId, doc.upload_image);
                       const ext = doc.upload_image.split('.').pop()?.toLowerCase() ?? '';
                       const isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext);
                       const isPdf = ext === 'pdf';
-                      const label = doc.doc_name
-                        .replace(/_file$/, '')
-                        .replace(/_/g, ' ')
-                        .replace(/\b\w/g, (c) => c.toUpperCase());
+                      const label = formatDocumentLabel(doc.doc_name, doc.upload_image);
                       return (
                         <a
                           key={doc.id}

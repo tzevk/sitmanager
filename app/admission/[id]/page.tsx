@@ -6,12 +6,41 @@ import { useParams, useSearchParams } from 'next/navigation';
 
 const STEPS = [
   { id: 1, title: 'Personal Info', icon: 'fa-user', description: 'Basic personal details' },
-  { id: 2, title: 'Academic', icon: 'fa-graduation-cap', description: 'Educational qualifications (optional)' },
+  { id: 2, title: 'Academic', icon: 'fa-graduation-cap', description: 'Educational background and documents' },
   { id: 3, title: 'Occupational Info', icon: 'fa-briefcase', description: 'Current occupational status' },
   { id: 4, title: 'Training', icon: 'fa-chalkboard-teacher', description: 'Training programme details' },
   { id: 5, title: 'Mode of Payment', icon: 'fa-credit-card', description: 'Select your payment method' },
   { id: 6, title: 'Terms & Conditions', icon: 'fa-scroll', description: 'Read & accept terms' },
 ];
+
+const STEP_GUIDANCE: Record<number, { focus: string; tip: string }> = {
+  1: {
+    focus: 'Enter the student’s core identity and contact details first. Address fields can be completed in the same pass.',
+    tip: 'If the present and permanent address are the same, use the toggle to avoid repeating the full address.',
+  },
+  2: {
+    focus: 'Add the education records the student has completed and upload the matching documents in the same tab.',
+    tip: 'Keep only the applicable qualification sections filled so the review team sees a clean academic trail.',
+  },
+  3: {
+    focus: 'Capture the current occupation exactly as it should appear in the student master and counselling records.',
+    tip: 'Experienced-candidate consent is shown here only when the work profile requires it.',
+  },
+  4: {
+    focus: 'Choose programme, category, and batch in order so fee and consent checks resolve correctly.',
+    tip: 'Once a batch is selected, the linked fee details are pulled automatically from the current database.',
+  },
+  5: {
+    focus: 'Pick the payment mode the admissions team should follow for this application.',
+    tip: 'This step is short by design, so it is a good point to pause and verify the programme details above.',
+  },
+  6: {
+    focus: 'Review the declarations one final time and confirm only after the information above is accurate.',
+    tip: 'Submitted forms stay editable only through admin-side follow-up, so use this step as the final review gate.',
+  },
+};
+
+const stepEnterStyle = { animation: 'stepEnter 320ms ease-out' };
 
 // Training Program Eligibility Map (based on educational background)
 const COURSE_ELIGIBILITY: { [key: string]: string[] } = {
@@ -768,10 +797,40 @@ export default function PublicAdmissionFormPage() {
         termsAgreed: formData.termsAgreed,
       };
 
+      const requestBody = new FormData();
+      requestBody.append('payload', JSON.stringify(submitData));
+
+      const appendFile = (field: string, file: File | null) => {
+        if (file) requestBody.append(field, file);
+      };
+
+      appendFile('photoFile', formData.photoFile);
+      appendFile('ssc_marksheetFile', formData.ssc_marksheetFile);
+      appendFile('hsc_marksheetFile', formData.hsc_marksheetFile);
+      appendFile('diploma_marksheetFile', formData.diploma_marksheetFile);
+      appendFile('grad_marksheetFile', formData.grad_marksheetFile);
+      appendFile('postgrad_marksheetFile', formData.postgrad_marksheetFile);
+
+      const appendKtFiles = (
+        level: 'ssc' | 'hsc' | 'diploma' | 'grad' | 'postgrad',
+        details: Array<{ marksheetFile: File | null }>
+      ) => {
+        details.forEach((detail, index) => {
+          if (detail.marksheetFile) {
+            requestBody.append(`${level}_ktDetails.${index}.marksheetFile`, detail.marksheetFile);
+          }
+        });
+      };
+
+      appendKtFiles('ssc', formData.ssc_ktDetails);
+      appendKtFiles('hsc', formData.hsc_ktDetails);
+      appendKtFiles('diploma', formData.diploma_ktDetails);
+      appendKtFiles('grad', formData.grad_ktDetails);
+      appendKtFiles('postgrad', formData.postgrad_ktDetails);
+
       const res = await fetch('/api/online-admission', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(submitData),
+        body: requestBody,
       });
 
       const data = await res.json();
@@ -863,30 +922,61 @@ export default function PublicAdmissionFormPage() {
     <div className="min-h-[100dvh] bg-white flex flex-col">
       {/* ── Header ── */}
       <header className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] shadow-lg flex-shrink-0 z-30">
-        <div className="max-w-full mx-auto px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-4">
+        <div className="max-w-full mx-auto px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
             <div className="bg-white rounded-lg sm:rounded-xl p-1 sm:p-1.5 shadow-md flex-shrink-0 -my-2 sm:-my-3">
               <Image src="/sit.png" alt="SIT Logo" width={48} height={48} className="block sm:hidden rounded-md" style={{ width: 'auto', height: 'auto' }} />
               <Image src="/sit.png" alt="SIT Logo" width={72} height={72} className="hidden sm:block rounded-lg" style={{ width: 'auto', height: 'auto' }} />
             </div>
-            <div>
-              <div className="text-white font-extrabold text-sm sm:text-lg leading-tight tracking-tight">Suvidya Institute of Technology</div>
+            <div className="min-w-0">
+              <div className="text-white font-extrabold text-sm sm:text-lg leading-tight tracking-tight truncate">Suvidya Institute of Technology</div>
               <div className="text-[#FAE452] text-[10px] sm:text-xs font-semibold mt-0.5 flex items-center gap-1.5">
                 <i className="fas fa-file-alt text-[8px] sm:text-[10px]"></i>
                 Online Admission Form
               </div>
+              <div className="sm:hidden mt-1 flex items-center gap-2 text-[10px] text-white/85">
+                <span className="inline-flex items-center gap-1 rounded-full bg-white/12 px-2 py-0.5 font-semibold">
+                  <i className={`fas ${STEPS[currentStep - 1]?.icon ?? ''} text-[9px]`}></i>
+                  {STEPS[currentStep - 1].title}
+                </span>
+                <span className="font-semibold text-white/70">{currentStep}/{STEPS.length}</span>
+              </div>
+              <div className="sm:hidden mt-1 flex gap-1">
+                {STEPS.map((step) => {
+                  const isLocked = !isPreviewTermsMode && step.id === 6 && ![1, 2, 3, 4, 5].every((s) => completedSteps.includes(s));
+                  const isCompleted = step.id < currentStep || completedSteps.includes(step.id);
+                  const isCurrent = step.id === currentStep;
+                  return (
+                    <button
+                      key={step.id}
+                      onClick={() => jumpToStep(step.id)}
+                      disabled={isLocked}
+                      className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                        isLocked
+                          ? 'bg-white/20 cursor-not-allowed'
+                          : isCompleted
+                          ? 'bg-[#FAE452]'
+                          : isCurrent
+                          ? 'bg-white'
+                          : 'bg-white/30'
+                      }`}
+                      aria-label={`Go to ${step.title}`}
+                    />
+                  );
+                })}
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             {/* Auto-save indicator */}
             {autoSaveStatus === 'saving' && (
-              <div className="flex items-center gap-1.5 bg-white/10 border border-white/20 rounded-lg px-2.5 py-1.5">
+              <div className="flex items-center gap-1.5 bg-white/10 border border-white/20 rounded-lg px-2 py-1.5 sm:px-2.5">
                 <div className="w-3 h-3 border-2 border-white/60 border-t-transparent rounded-full animate-spin" />
                 <span className="text-white/70 text-[11px] font-medium hidden sm:inline">Saving…</span>
               </div>
             )}
             {autoSaveStatus === 'saved' && (
-              <div className="flex items-center gap-1.5 bg-white/10 border border-white/20 rounded-lg px-2.5 py-1.5">
+              <div className="flex items-center gap-1.5 bg-white/10 border border-white/20 rounded-lg px-2 py-1.5 sm:px-2.5">
                 <svg className="w-3 h-3 text-[#FAE452]" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
@@ -902,7 +992,7 @@ export default function PublicAdmissionFormPage() {
       </header>
 
       {/* ── Mobile step indicator ── */}
-      <div className="lg:hidden bg-gradient-to-r from-white to-gray-50 border-b border-gray-200 shadow-sm flex-shrink-0">
+      <div className="hidden lg:hidden bg-gradient-to-r from-white to-gray-50 border-b border-gray-200 shadow-sm flex-shrink-0">
         <div className="max-w-full mx-auto px-3 py-2.5">
           {/* Current step info */}
           <div className="flex items-center justify-between mb-2.5">
@@ -1030,19 +1120,12 @@ export default function PublicAdmissionFormPage() {
               <ul className="p-3 space-y-2">
                 {[
                   { icon: 'fa-asterisk', text: 'Fields marked with * are mandatory.' },
-                  { icon: 'fa-save', text: 'Progress is not auto-saved. Complete all steps before submitting.' },
-                  { icon: 'fa-file-upload', text: 'Documents must be PDF, JPG, or PNG — max 5 MB each.' },
-                  { icon: 'fa-check-double', text: 'Review all details carefully before final submission.' },
-                  { icon: 'fa-lock', text: 'Submitted forms cannot be edited without admin approval.' },
-                  { icon: 'fa-user-shield', text: 'All data is handled as per institute privacy policy.' },
-                  { icon: 'fa-id-card', text: 'Ensure your name matches exactly as on official ID proof.' },
-                  { icon: 'fa-phone', text: 'Provide an active mobile number — OTPs may be sent for verification.' },
-                  { icon: 'fa-envelope', text: 'Use a valid email address; all communications will be sent there.' },
-                  { icon: 'fa-graduation-cap', text: 'Academic marksheets must be original or attested copies.' },
-                  { icon: 'fa-calendar-alt', text: 'Ensure dates of passing are filled accurately in the education section.' },
-                  { icon: 'fa-image', text: 'Passport photo must be recent, clear, and against a white background.' },
-                  { icon: 'fa-info-circle', text: 'Incomplete submissions will not be considered for admission.' },
-                  { icon: 'fa-clock', text: 'Submit before the batch registration deadline to secure your seat.' },
+                  { icon: 'fa-save', text: 'Draft progress is saved on this device while you fill the form.' },
+                  { icon: 'fa-file-upload', text: 'Keep photo and academic documents ready in PDF, JPG, PNG, or WebP up to 5 MB each.' },
+                  { icon: 'fa-id-card', text: 'Enter the student name exactly as it should appear on the ID proof and student master.' },
+                  { icon: 'fa-map-marked-alt', text: 'Use the same-address toggle to speed up address entry when both addresses match.' },
+                  { icon: 'fa-check-double', text: 'Confirm the selected programme, category, and batch before moving to payment.' },
+                  { icon: 'fa-lock', text: 'Changes after submission need admin follow-up, so use the final step as your review screen.' },
                 ].map((note, i) => (
                   <li key={i} className="flex items-start gap-2">
                     <i className={`fas ${note.icon} text-amber-500 text-xs mt-0.5 flex-shrink-0 w-3`}></i>
@@ -1055,10 +1138,10 @@ export default function PublicAdmissionFormPage() {
 
           {/* Main form card */}
           <main className="flex-1 min-w-0 h-full">
-            <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden h-full flex flex-col">
+            <div className="bg-white rounded-2xl sm:rounded-lg shadow-md border border-gray-200 overflow-hidden h-full flex flex-col">
               {/* Step header */}
-              <div className="bg-gradient-to-r from-gray-50 to-white px-3 sm:px-6 py-2 sm:py-3 border-b border-gray-200">
-                <div className="flex items-center justify-between">
+              <div className="bg-gradient-to-r from-gray-50 to-white px-3 sm:px-6 py-3 sm:py-3 border-b border-gray-200">
+                <div className="hidden sm:flex items-center justify-between">
                   <div className="flex-1 min-w-0">
                     <h1 className="text-base sm:text-xl font-bold text-[#2E3093] flex items-center gap-2">
                       <i className={`fas ${STEPS[currentStep - 1]?.icon ?? ''} text-[#2A6BB5] text-sm sm:text-base`}></i>
@@ -1074,7 +1157,7 @@ export default function PublicAdmissionFormPage() {
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-1 sm:gap-1.5 mt-2">
+                <div className="hidden sm:flex gap-1 sm:gap-1.5 mt-2">
                   {STEPS.map((step) => (
                     <div
                       key={step.id}
@@ -1088,14 +1171,42 @@ export default function PublicAdmissionFormPage() {
                     />
                   ))}
                 </div>
+                <div className="sm:hidden rounded-2xl border border-[#2E3093]/10 bg-[radial-gradient(circle_at_top_left,_rgba(46,48,147,0.08),_transparent_55%),linear-gradient(135deg,_#ffffff,_#f8fbff)] p-3 shadow-[0_10px_30px_rgba(46,48,147,0.08)]">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] text-white shadow-md">
+                      <i className={`fas ${STEPS[currentStep - 1]?.icon ?? ''} text-sm`}></i>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-black tracking-tight text-[#2E3093] truncate">{STEPS[currentStep - 1].title}</p>
+                        <span className="rounded-full bg-[#2E3093]/8 px-2 py-1 text-[10px] font-bold text-[#2E3093]">Step {currentStep}/{STEPS.length}</span>
+                      </div>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-600">{STEPS[currentStep - 1].description}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 ring-1 ring-amber-100">
+                    <i className="fas fa-lightbulb mt-0.5 text-[11px] text-amber-600"></i>
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-amber-700">Helpful Note</p>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-700">{STEP_GUIDANCE[currentStep].tip}</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-[11px] text-slate-500"><span className="text-red-500 font-bold">*</span> Mandatory fields need to be completed before continuing.</p>
+                </div>
+                <div className="hidden sm:block mt-2.5">
+                  <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-amber-700">Helpful Note</p>
+                    <p className="mt-1 text-xs text-slate-700 leading-relaxed">{STEP_GUIDANCE[currentStep].tip}</p>
+                  </div>
+                </div>
               </div>
 
               <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
-                <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4">
+                <div className="flex-1 overflow-y-auto px-2.5 sm:px-6 py-2.5 sm:py-4 mobile-form-stage">
 
                   {/* ── STEP 1: Personal Info ── */}
                   {currentStep === 1 && (
-                    <div className="space-y-5">
+                    <div className="space-y-4 sm:space-y-5" style={stepEnterStyle}>
                       {/* Basic Information */}
                       <div>
                         <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
@@ -1109,7 +1220,7 @@ export default function PublicAdmissionFormPage() {
                           </div>
                           <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Middle Name</label>
-                            <input type="text" value={formData.middleName} onChange={(e) => handleChange('middleName', e.target.value)} placeholder="Enter middle name (optional)" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                            <input type="text" value={formData.middleName} onChange={(e) => handleChange('middleName', e.target.value)} placeholder="Enter middle name" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
                           </div>
                           <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Last Name <span className="text-red-500">*</span></label>
@@ -1168,7 +1279,7 @@ export default function PublicAdmissionFormPage() {
                           </div>
                           <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Telephone Number</label>
-                            <input type="tel" value={formData.telephone} onChange={(e) => handleChange('telephone', e.target.value)} placeholder="Optional" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                            <input type="tel" value={formData.telephone} onChange={(e) => handleChange('telephone', e.target.value)} placeholder="Telephone number" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
                           </div>
                           <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Family Contact Number</label>
@@ -1210,7 +1321,7 @@ export default function PublicAdmissionFormPage() {
                               <input type="text" value={formData.presentArea} onChange={(e) => handleChange('presentArea', e.target.value)} placeholder="e.g. Bandra West" className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
                             </div>
                             <div>
-                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Landmark <span className="font-normal text-gray-400">(optional)</span></label>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Landmark</label>
                               <input type="text" value={formData.presentLandmark} onChange={(e) => handleChange('presentLandmark', e.target.value)} placeholder="e.g. Near City Mall" className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
                             </div>
                             <div>
@@ -1274,7 +1385,7 @@ export default function PublicAdmissionFormPage() {
                               <input type="text" value={formData.permanentArea} onChange={(e) => handleChange('permanentArea', e.target.value)} placeholder="e.g. Bandra West" disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400" />
                             </div>
                             <div>
-                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Landmark <span className="font-normal text-gray-400">(optional)</span></label>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Landmark</label>
                               <input type="text" value={formData.permanentLandmark} onChange={(e) => handleChange('permanentLandmark', e.target.value)} placeholder="e.g. Near City Mall" disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400" />
                             </div>
                             <div>
@@ -1375,17 +1486,18 @@ export default function PublicAdmissionFormPage() {
 
                   {/* ── STEP 2: Academic ── */}
                   {currentStep === 2 && (
-                    <div className="space-y-5">
+                    <div className="space-y-4 sm:space-y-5" style={stepEnterStyle}>
                       {/* Tab Navigation */}
-                      <div className="border-b border-gray-300">
-                        <div className="flex gap-1 sm:gap-2 overflow-x-auto pb-px -mb-px scrollbar-hide">
+                      <div className="border-b border-gray-200 sm:border-b-gray-300 pb-2 sm:pb-0">
+                        <div className="-mx-2.5 px-2.5 sm:mx-0 sm:px-0 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none]">
+                          <div className="flex w-max min-w-full gap-2 sm:gap-2 pb-1 sm:pb-px -mb-px pr-2 sm:pr-0">
                           <button
                             type="button"
                             onClick={() => setAcademicTab('ssc')}
-                            className={`px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all border-b-2 whitespace-nowrap flex-shrink-0 ${
+                            className={`snap-center sm:snap-none px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex-shrink-0 rounded-full sm:rounded-none border sm:border-0 sm:border-b-2 shadow-sm sm:shadow-none ${
                               academicTab === 'ssc'
-                                ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
-                                : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
+                                ? 'text-white bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] border-[#2A6BB5] sm:text-[#2A6BB5] sm:border-[#2A6BB5] sm:bg-blue-50'
+                                : 'text-gray-600 bg-white border-gray-200 hover:text-[#2A6BB5] hover:border-gray-300'
                             }`}
                           >
                             <i className="fas fa-school mr-1 sm:mr-2"></i>
@@ -1394,10 +1506,10 @@ export default function PublicAdmissionFormPage() {
                           <button
                             type="button"
                             onClick={() => setAcademicTab('hsc')}
-                            className={`px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all border-b-2 whitespace-nowrap flex-shrink-0 ${
+                            className={`snap-center sm:snap-none px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex-shrink-0 rounded-full sm:rounded-none border sm:border-0 sm:border-b-2 shadow-sm sm:shadow-none ${
                               academicTab === 'hsc'
-                                ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
-                                : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
+                                ? 'text-white bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] border-[#2A6BB5] sm:text-[#2A6BB5] sm:border-[#2A6BB5] sm:bg-blue-50'
+                                : 'text-gray-600 bg-white border-gray-200 hover:text-[#2A6BB5] hover:border-gray-300'
                             }`}
                           >
                             <i className="fas fa-graduation-cap mr-1 sm:mr-2"></i>
@@ -1406,10 +1518,10 @@ export default function PublicAdmissionFormPage() {
                           <button
                             type="button"
                             onClick={() => setAcademicTab('diploma')}
-                            className={`px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all border-b-2 whitespace-nowrap flex-shrink-0 ${
+                            className={`snap-center sm:snap-none px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex-shrink-0 rounded-full sm:rounded-none border sm:border-0 sm:border-b-2 shadow-sm sm:shadow-none ${
                               academicTab === 'diploma'
-                                ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
-                                : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
+                                ? 'text-white bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] border-[#2A6BB5] sm:text-[#2A6BB5] sm:border-[#2A6BB5] sm:bg-blue-50'
+                                : 'text-gray-600 bg-white border-gray-200 hover:text-[#2A6BB5] hover:border-gray-300'
                             }`}
                           >
                             <i className="fas fa-certificate mr-1 sm:mr-2"></i>
@@ -1418,10 +1530,10 @@ export default function PublicAdmissionFormPage() {
                           <button
                             type="button"
                             onClick={() => setAcademicTab('graduation')}
-                            className={`px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all border-b-2 whitespace-nowrap flex-shrink-0 ${
+                            className={`snap-center sm:snap-none px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex-shrink-0 rounded-full sm:rounded-none border sm:border-0 sm:border-b-2 shadow-sm sm:shadow-none ${
                               academicTab === 'graduation'
-                                ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
-                                : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
+                                ? 'text-white bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] border-[#2A6BB5] sm:text-[#2A6BB5] sm:border-[#2A6BB5] sm:bg-blue-50'
+                                : 'text-gray-600 bg-white border-gray-200 hover:text-[#2A6BB5] hover:border-gray-300'
                             }`}
                           >
                             <i className="fas fa-user-graduate mr-1 sm:mr-2"></i>
@@ -1430,26 +1542,26 @@ export default function PublicAdmissionFormPage() {
                           <button
                             type="button"
                             onClick={() => setAcademicTab('postgrad')}
-                            className={`px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all border-b-2 whitespace-nowrap flex-shrink-0 ${
+                            className={`snap-center sm:snap-none px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex-shrink-0 rounded-full sm:rounded-none border sm:border-0 sm:border-b-2 shadow-sm sm:shadow-none ${
                               academicTab === 'postgrad'
-                                ? 'text-[#2A6BB5] border-[#2A6BB5] bg-blue-50'
-                                : 'text-gray-600 border-transparent hover:text-[#2A6BB5] hover:border-gray-300'
+                                ? 'text-white bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] border-[#2A6BB5] sm:text-[#2A6BB5] sm:border-[#2A6BB5] sm:bg-blue-50'
+                                : 'text-gray-600 bg-white border-gray-200 hover:text-[#2A6BB5] hover:border-gray-300'
                             }`}
                           >
                             <i className="fas fa-award mr-1 sm:mr-2"></i>
                             <span className="hidden sm:inline">Post-Graduation</span><span className="sm:hidden">PG</span>
                           </button>
+                          </div>
                         </div>
                       </div>
 
                       {/* SSC Tab */}
                       {academicTab === 'ssc' && (
-                        <div className="space-y-5">
+                        <div className="space-y-4 sm:space-y-5">
                           <div>
                             <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
                               <i className="fas fa-school text-[#2A6BB5]"></i>
                               10th / SSC Education
-                              <span className="text-xs text-gray-500 font-normal ml-2">(Optional)</span>
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                               <div>
@@ -1562,7 +1674,7 @@ export default function PublicAdmissionFormPage() {
 
                       {/* HSC Tab */}
                       {academicTab === 'hsc' && (
-                        <div className="space-y-5">
+                        <div className="space-y-4 sm:space-y-5">
                           <div>
                             <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
                               <i className="fas fa-graduation-cap text-[#2A6BB5]"></i>
@@ -1684,11 +1796,11 @@ export default function PublicAdmissionFormPage() {
 
                       {/* Diploma Tab */}
                       {academicTab === 'diploma' && (
-                        <div className="space-y-5">
+                        <div className="space-y-4 sm:space-y-5">
                           <div>
                             <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
                               <i className="fas fa-certificate text-[#2A6BB5]"></i>
-                              Diploma Education <span className="text-xs text-gray-500 font-normal ml-2">(Optional)</span>
+                              Diploma Education
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                               <div>
@@ -1806,11 +1918,11 @@ export default function PublicAdmissionFormPage() {
 
                       {/* Graduation Tab */}
                       {academicTab === 'graduation' && (
-                        <div className="space-y-5">
+                        <div className="space-y-4 sm:space-y-5">
                           <div>
                             <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
                               <i className="fas fa-user-graduate text-[#2A6BB5]"></i>
-                              Graduation <span className="text-xs text-gray-500 font-normal ml-2">(Optional)</span>
+                              Graduation
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                               <div>
@@ -1928,11 +2040,11 @@ export default function PublicAdmissionFormPage() {
 
                       {/* Post-Graduation Tab */}
                       {academicTab === 'postgrad' && (
-                        <div className="space-y-5">
+                        <div className="space-y-4 sm:space-y-5">
                           <div>
                             <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
                               <i className="fas fa-award text-[#2A6BB5]"></i>
-                              Post-Graduation <span className="text-xs text-gray-500 font-normal ml-2">(Optional)</span>
+                              Post-Graduation
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                               <div>
@@ -2061,7 +2173,7 @@ export default function PublicAdmissionFormPage() {
 
                   {/* ── STEP 3: Occupational Information ── */}
                   {currentStep === 3 && (
-                    <div className="space-y-5">
+                    <div className="space-y-4 sm:space-y-5" style={stepEnterStyle}>
                       <div>
                         <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
                           <i className="fas fa-briefcase text-[#2A6BB5]"></i>
@@ -2171,7 +2283,7 @@ export default function PublicAdmissionFormPage() {
 
                   {/* ── STEP 4: Training ── */}
                   {currentStep === 4 && (
-                    <div className="space-y-5">
+                    <div className="space-y-4 sm:space-y-5" style={stepEnterStyle}>
                       <div>
                         <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
                           <i className="fas fa-chalkboard-teacher text-[#2A6BB5]"></i>
@@ -2298,7 +2410,7 @@ export default function PublicAdmissionFormPage() {
                     const fmt = (n: number) => n.toLocaleString('en-IN');
 
                     return (
-                    <div className="space-y-5">
+                    <div className="space-y-4 sm:space-y-5" style={stepEnterStyle}>
                       <div>
                         <h3 className="text-base font-bold text-gray-800 mb-1 pb-1.5 border-b border-gray-200 flex items-center gap-2">
                           <i className="fas fa-credit-card text-[#2A6BB5]"></i>
@@ -2507,7 +2619,7 @@ export default function PublicAdmissionFormPage() {
 
                   {/* ── STEP 6: Terms & Conditions ── */}
                   {currentStep === 6 && (
-                    <div className="space-y-5">
+                    <div className="space-y-4 sm:space-y-5" style={stepEnterStyle}>
                       <div>
                         <h3 className="text-base font-bold text-gray-800 mb-1 pb-1.5 border-b border-gray-200 flex items-center gap-2">
                           <i className="fas fa-scroll text-[#2A6BB5]"></i>
@@ -3200,7 +3312,7 @@ export default function PublicAdmissionFormPage() {
                 </label>
                 <textarea value={consentData.candidateRemark}
                   onChange={(e) => setConsentData(p => ({ ...p, candidateRemark: e.target.value }))}
-                  placeholder="Any additional remarks or comments (optional)"
+                  placeholder="Any additional remarks or comments"
                   rows={3}
                   className="w-full px-3 sm:px-4 py-2 sm:py-3 border-2 border-gray-300 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all resize-none" />
               </div>
@@ -3264,6 +3376,37 @@ export default function PublicAdmissionFormPage() {
           </div>
         </div>
       )}
+
+      <style jsx global>{`
+        @keyframes stepEnter {
+          0% {
+            opacity: 0;
+            transform: translateY(12px) scale(0.985);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        @media (max-width: 639px) {
+          .mobile-form-stage h3 {
+            margin-bottom: 0.75rem;
+          }
+
+          .mobile-form-stage .rounded-xl.border,
+          .mobile-form-stage .rounded-lg.border,
+          .mobile-form-stage .rounded-xl.border-2 {
+            margin-bottom: 0;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .mobile-form-stage [style*='stepEnter'] {
+            animation: none !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
