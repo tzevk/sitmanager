@@ -175,13 +175,13 @@ async function resolveStudentIdForInquiry(
   inquiryId: number
 ): Promise<number | null> {
   const inquiryTable = await resolveInquiryTableName(pool);
-  const [rows] = await pool.query<any[]>(
+  const [rows] = await pool.query(
     `SELECT Student_Id
     FROM \`${inquiryTable}\`
      WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
      LIMIT 1`,
     [inquiryId]
-  );
+  ) as [any[], any];
   const studentId = Number(rows[0]?.Student_Id || 0);
   return studentId > 0 ? studentId : null;
 }
@@ -364,13 +364,13 @@ export async function syncOnlineAdmissionIntoCurrentDb(
   const studentMasterTable = await resolveStudentMasterTableName(pool);
   if (!studentMasterTable) return;
 
-  const [inquiryRows] = await pool.query<any[]>(
+  const [inquiryRows] = await pool.query(
     `SELECT Inquiry_Id, Student_Id, Student_Name, Email, Present_Mobile, Batch_Code, Course_Id, OnlineState
      FROM \`${inquiryTable}\`
      WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
      LIMIT 1`,
     [inquiryId]
-  );
+  ) as [any[], any];
   if (!inquiryRows.length) return;
 
   const inquiry = inquiryRows[0];
@@ -497,21 +497,21 @@ export async function syncOnlineAdmissionIntoCurrentDb(
     if (statusAction === 'accept') {
       let batchId: number | null = null;
       if (batchCode) {
-        const [batchRows] = await pool.query<any[]>(
+        const [batchRows] = await pool.query(
           `SELECT Batch_Id FROM batch_mst WHERE Batch_code = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
           [batchCode]
-        );
+        ) as [any[], any];
         batchId = batchRows[0]?.Batch_Id ? Number(batchRows[0].Batch_Id) : null;
       }
 
-      const [admissionRows] = await pool.query<any[]>(
+      const [admissionRows] = await pool.query(
         `SELECT Admission_Id
          FROM admission_master
          WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
          ORDER BY Admission_Date DESC, Admission_Id DESC
          LIMIT 1`,
         [studentId]
-      );
+      ) as [any[], any];
 
       const admissionDate = normalizeText(input.admissionDate) || new Date().toISOString().slice(0, 10);
       if (admissionRows.length) {
@@ -604,17 +604,17 @@ export async function listOnlineAdmissions(
 
   let newRows: any[] = [];
   try {
-    [newRows] = await pool.query<any[]>(
+    [newRows] = await pool.query(
       `${buildNewQuery(true)} WHERE ${newConds.join(' AND ')} ORDER BY oap.Created_At DESC LIMIT ?`,
       [...newParams, fetchCap]
-    );
+    ) as [any[], any];
   } catch (e: any) {
     console.warn('[OnlineAdmission] new query with status joins failed, retrying without:', e?.message);
     try {
-      [newRows] = await pool.query<any[]>(
+      [newRows] = await pool.query(
         `${buildNewQuery(false)} WHERE ${newConds.join(' AND ')} ORDER BY oap.Created_At DESC LIMIT ?`,
         [...newParams, fetchCap]
-      );
+      ) as [any[], any];
     } catch (e2: any) {
       console.warn('[OnlineAdmission] new query skipped:', e2?.message);
     }
@@ -630,7 +630,7 @@ export async function listOnlineAdmissions(
   };
   try {
     if (statusTable && studentMasterTable) {
-      const [dbStatuses] = await pool.query<any[]>(
+      const [dbStatuses] = await pool.query(
         `SELECT DISTINCT sm.Status_id as id, COALESCE(MAX(stm.Status),'') as label
          FROM \`${inquiryTable}\` si
          JOIN \`${studentMasterTable}\` sm ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
@@ -638,7 +638,7 @@ export async function listOnlineAdmissions(
         WHERE EXISTS (SELECT 1 FROM ${PAYLOAD_TABLE} oap WHERE oap.Inquiry_Id = si.Inquiry_Id)
           AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
          GROUP BY sm.Status_id ORDER BY sm.Status_id`
-      );
+      ) as [any[], any];
       for (const r of dbStatuses) push(Number(r.id), r.label);
     }
   } catch { /* ignore */ }
@@ -690,11 +690,11 @@ export async function submitOnlineAdmission(
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
 
-  const [siRows] = await pool.query<any[]>(
+  const [siRows] = await pool.query(
     `SELECT Inquiry_Id, Student_Name, Email FROM \`${inquiryTable}\`
      WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
     [inquiryId]
-  );
+  ) as [any[], any];
   if (!siRows.length) throw Object.assign(new Error('Inquiry not found'), { status: 404 });
   const inquiry = siRows[0];
 
