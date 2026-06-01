@@ -26,8 +26,10 @@ function mimeType(filename: string): string {
   return map[ext] ?? 'application/octet-stream';
 }
 
+// turbopackIgnore: filesystem calls below use a fully dynamic runtime path
+// (UPLOADS_DIR env var). The comments suppress NFT whole-project tracing.
 function tryStatFile(p: string): { size: number } | null {
-  try { return statSync(p); } catch { return null; }
+  try { return statSync(/*turbopackIgnore: true*/ p); } catch { return null; }
 }
 
 export async function GET(
@@ -80,12 +82,13 @@ export async function GET(
       return NextResponse.json({ error: e.message }, { status: 503 });
     }
 
-    // Try candidate paths: per-student subdirectory, then flat
+    // turbopackIgnore comments prevent NFT from tracing the entire project when
+    // it encounters path.join with a fully dynamic runtime-configured base dir.
     const candidates = [
-      join(uploadsRoot, safeStudentId, fileBasename),
-      join(uploadsRoot, fileBasename),
-      join(uploadsRoot, matchedUploadImage),
-      join(uploadsRoot, safeStudentId, matchedUploadImage),
+      join(/*turbopackIgnore: true*/ uploadsRoot, safeStudentId, fileBasename),
+      join(/*turbopackIgnore: true*/ uploadsRoot, fileBasename),
+      join(/*turbopackIgnore: true*/ uploadsRoot, matchedUploadImage),
+      join(/*turbopackIgnore: true*/ uploadsRoot, safeStudentId, matchedUploadImage),
     ];
 
     let filePath: string | null = null;
@@ -99,7 +102,7 @@ export async function GET(
       return NextResponse.json({ error: 'File not found on server' }, { status: 404 });
     }
 
-    const stream = createReadStream(filePath);
+    const stream = createReadStream(/*turbopackIgnore: true*/ filePath);
     const nodeReadable = Readable.from(stream);
     const webStream = new ReadableStream({
       start(controller) {

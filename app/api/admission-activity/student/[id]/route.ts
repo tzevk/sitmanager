@@ -50,7 +50,7 @@ async function resolveBatchCategoryId(pool: any, batchCode: string | null, categ
     params.push(categoryValue);
   }
 
-  const [rows] = await pool.query<any[]>(
+  const [rows] = await pool.query(
     `SELECT Batch_Category_id
      FROM batch_mst
      WHERE ${conditions.join(' AND ')}
@@ -58,7 +58,7 @@ async function resolveBatchCategoryId(pool: any, batchCode: string | null, categ
      ORDER BY COALESCE(IsActive, 0) DESC, COALESCE(Admission_Date, SDate, Date_Added) DESC, Batch_Id DESC
      LIMIT 1`,
     params
-  );
+  ) as [any[], any];
   return rows[0]?.Batch_Category_id != null ? Number(rows[0].Batch_Category_id) : null;
 }
 
@@ -157,7 +157,7 @@ export async function GET(
     const { id } = await params;
 
     // Student + admission + batch + course
-    const [rows] = await pool.query<any[]>(
+    const [rows] = await pool.query(
       `SELECT
          s.*,
         s.Company AS Organisation,
@@ -181,14 +181,14 @@ export async function GET(
        WHERE s.Student_Id = ? AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
        LIMIT 1`,
       [id]
-    );
+    ) as [any[], any];
 
     if (!rows.length) {
       return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     }
 
     // Placement records — CV shortlist children for this student
-    const [placement] = await pool.query<any[]>(
+    const [placement] = await pool.query(
       `SELECT cc.*, cv.CompanyName, cv.TDate AS ShortlistDate, b.Batch_Code, c.Course_Name
        FROM cvchild cc
        LEFT JOIN cv_shortlisted cv ON cc.CV_Id = cv.id
@@ -197,24 +197,24 @@ export async function GET(
        WHERE cc.Student_Id = ? AND (cc.IsDelete = 0 OR cc.IsDelete IS NULL)
        ORDER BY cc.id DESC`,
       [id]
-    );
+    ) as [any[], any];
 
     // Inquiry_Id for this student (needed for discussions)
-    const [inqRows] = await pool.query<any[]>(
+    const [inqRows] = await pool.query(
       `SELECT Inquiry_Id FROM ${inquiryTable}
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
        ORDER BY Inquiry_Id DESC LIMIT 1`,
       [id]
-    );
+    ) as [any[], any];
     const inquiryId = inqRows[0]?.Inquiry_Id ?? null;
 
     let payload: Record<string, any> = {};
     let onlineAdmissionDate: string | null = null;
     if (inquiryId) {
-      const [payloadRows] = await pool.query<any[]>(
+      const [payloadRows] = await pool.query(
         `SELECT Payload, Created_At FROM online_admission_payload WHERE Inquiry_Id = ? LIMIT 1`,
         [inquiryId]
-      );
+      ) as [any[], any];
       if (payloadRows.length) {
         try {
           payload = payloadRows[0].Payload ? JSON.parse(String(payloadRows[0].Payload)) : {};
@@ -226,40 +226,40 @@ export async function GET(
     }
 
     // Discussions (linked via Inquiry_Id for new records, student_id for older ones)
-    const [discussions] = await pool.query<any[]>(
+    const [discussions] = await pool.query(
       `SELECT id, date, discussion, created_by, created_date, nextdate
        FROM awt_inquirydiscussion
        WHERE deleted = 0 AND (Inquiry_id = ? OR student_id = ?)
        ORDER BY id DESC`,
       [inquiryId ?? -1, id]
-    );
+    ) as [any[], any];
 
     // Documents
-    const [documents] = await pool.query<any[]>(
+    const [documents] = await pool.query(
       `SELECT id, doc_name, upload_image FROM documents
        WHERE Student_id = ?
        ORDER BY id ASC`,
       [id]
-    );
+    ) as [any[], any];
 
     // Dropdown options
-    const [courses] = await pool.query<any[]>(
+    const [courses] = await pool.query(
       `SELECT Course_Id, Course_Name FROM course_mst
        WHERE (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Course_Name`
-    );
-    const [batches] = await pool.query<any[]>(
+    ) as [any[], any];
+    const [batches] = await pool.query(
       `SELECT Batch_Id, Batch_code, Course_Id FROM batch_mst
        WHERE (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Batch_code DESC`
-    );
-    const [statuses] = await pool.query<any[]>(
+    ) as [any[], any];
+    const [statuses] = await pool.query(
       `SELECT Id AS id, Status AS label FROM status_master WHERE (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Id`
-    );
-    const [batchCategories] = await pool.query<any[]>(
+    ) as [any[], any];
+    const [batchCategories] = await pool.query(
       `SELECT DISTINCT Category AS label FROM batch_mst
        WHERE Category IS NOT NULL AND Category != ''
          AND (IsDelete = 0 OR IsDelete IS NULL)
        ORDER BY Category`
-    );
+    ) as [any[], any];
 
     return NextResponse.json({
       student: overlayStudentFromPayload(rows[0], payload, onlineAdmissionDate),
