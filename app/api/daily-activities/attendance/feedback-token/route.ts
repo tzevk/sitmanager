@@ -22,7 +22,7 @@ async function ensureTokenTable(pool: any) {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
 
-  const [cols] = await pool.query<any[]>(
+  const [cols] = await pool.query(
     `SELECT COLUMN_NAME
      FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
