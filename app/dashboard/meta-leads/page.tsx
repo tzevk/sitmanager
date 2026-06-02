@@ -75,6 +75,7 @@ interface MetaBatchRecommendationRow {
   priorityScore: number;
   recommendedBudget: number;
   adAngle: string;
+  effectivePlan?: string[];
 }
 
 interface MetaBatchRecommendationResponse {
@@ -1098,6 +1099,7 @@ export default function MetaLeadsPage() {
                       <th className="text-right px-3 py-2 font-bold">Priority</th>
                       <th className="text-right px-3 py-2 font-bold">Budget</th>
                       <th className="text-left px-3 py-2 font-bold min-w-[260px]">Ad Angle</th>
+                      <th className="text-left px-3 py-2 font-bold min-w-[340px]">Effective Plan</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1113,6 +1115,17 @@ export default function MetaLeadsPage() {
                         <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-[#2E3093]">{formatPercentFromRatio(row.priorityScore)}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums font-bold text-emerald-700">{formatCurrency(row.recommendedBudget)}</td>
                         <td className="px-3 py-2.5 text-slate-600">{row.adAngle}</td>
+                        <td className="px-3 py-2.5 text-slate-600">
+                          {row.effectivePlan && row.effectivePlan.length > 0 ? (
+                            <ul className="list-disc pl-4 space-y-1 text-[11px] leading-4">
+                              {row.effectivePlan.map((step, idx) => (
+                                <li key={`${row.batchId}-plan-${idx}`}>{step}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <span className="text-slate-400">Plan will be generated after next score run.</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

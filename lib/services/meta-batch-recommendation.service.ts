@@ -72,6 +72,7 @@ interface WorkingRecommendation {
   priorityScore: number;
   recommendedBudget: number;
   adAngle: string;
+  effectivePlan: string[];
   budgetWeight: number;
 }
 
@@ -96,6 +97,7 @@ export interface MetaBatchRecommendationRow {
   priorityScore: number;
   recommendedBudget: number;
   adAngle: string;
+  effectivePlan: string[];
 }
 
 export interface MetaBatchRecommendationResult {
@@ -268,6 +270,48 @@ function chooseAdAngle(row: {
     return 'Admissions drive: syllabus clarity + fee plans + counselling session CTA';
   }
   return 'Awareness nurture: career outcomes + faculty credibility + lead form objective';
+}
+
+function buildEffectivePlan(row: {
+  courseName: string;
+  batchCode: string;
+  daysToStart: number;
+  seatGap: number;
+  maxStudents: number;
+  leadToAdmissionRate: number;
+  estimatedCpl: number | null;
+  recommendedBudget: number;
+}): string[] {
+  const plan: string[] = [];
+
+  if (row.daysToStart <= 10) {
+    plan.push('Run urgency creatives daily with start-date and seat-closure CTA.');
+    plan.push('Assign immediate counsellor callback SLA (within 15 minutes) for all fresh leads.');
+  } else if (row.daysToStart <= 30) {
+    plan.push('Use conversion-focused ads with placement outcomes and alumni proof.');
+    plan.push('Run remarketing to last 30-day engagers and form openers.');
+  } else {
+    plan.push('Build top-funnel awareness for course outcomes and faculty strengths.');
+    plan.push('Collect qualified leads via intent-based form questions.');
+  }
+
+  if (row.maxStudents > 0 && (row.seatGap / row.maxStudents) >= 0.4) {
+    plan.push('Promote fee-plan + scholarship hooks to accelerate seat-fill velocity.');
+  }
+
+  if (row.leadToAdmissionRate < 0.12) {
+    plan.push('Tighten lead quality: add qualification and timeline qualifiers in form.');
+  } else {
+    plan.push('Prioritize high-intent follow-ups: convert warm leads with counsellor nudges.');
+  }
+
+  if (row.estimatedCpl != null && row.estimatedCpl > 0) {
+    plan.push(`Target CPL guardrail near ₹${Math.round(row.estimatedCpl)} while scaling.`);
+  }
+
+  plan.push(`Use approximately ₹${Math.max(0, Math.round(row.recommendedBudget))}/day for batch ${row.batchCode} (${row.courseName}).`);
+
+  return plan.slice(0, 5);
 }
 
 async function ensureScoreTable(): Promise<void> {
@@ -451,6 +495,7 @@ function mapPublicRow(row: WorkingRecommendation): MetaBatchRecommendationRow {
     priorityScore: row.priorityScore,
     recommendedBudget: row.recommendedBudget,
     adAngle: row.adAngle,
+    effectivePlan: row.effectivePlan,
   };
 }
 
@@ -527,6 +572,7 @@ export async function generateMetaBatchRecommendations(options?: {
       priorityScore: 0,
       recommendedBudget: 0,
       adAngle: '',
+      effectivePlan: [],
       budgetWeight: 0,
     });
   }
@@ -598,6 +644,19 @@ export async function generateMetaBatchRecommendations(options?: {
   budgetEligible.forEach((row, idx) => {
     row.budgetWeight = weights[idx] ?? 0;
     row.recommendedBudget = Math.min(MAX_DAILY_TOTAL_BUDGET, Math.round(totalBudget * row.budgetWeight));
+  });
+
+  workingRows.forEach((row) => {
+    row.effectivePlan = buildEffectivePlan({
+      courseName: row.courseName,
+      batchCode: row.batchCode,
+      daysToStart: row.daysToStart,
+      seatGap: row.seatGap,
+      maxStudents: row.maxStudents,
+      leadToAdmissionRate: row.leadToAdmissionRate,
+      estimatedCpl: row.estimatedCpl,
+      recommendedBudget: row.recommendedBudget,
+    });
   });
 
   const sorted = workingRows
@@ -675,7 +734,7 @@ export async function persistMetaBatchRecommendations(options?: {
           result.totalBudget > 0 ? row.recommendedBudget / result.totalBudget : 0,
           row.recommendedBudget,
           row.adAngle,
-          JSON.stringify({ formula: result.formula, totalBudget: result.totalBudget }),
+          JSON.stringify({ formula: result.formula, totalBudget: result.totalBudget, effectivePlan: row.effectivePlan }),
         ]
       );
     }
@@ -720,7 +779,8 @@ export async function getPersistedMetaBatchRecommendations(options?: {
        value_score,
        priority_score,
        recommended_budget,
-       ad_angle
+       ad_angle,
+       snapshot_json
      FROM ${SCORE_TABLE}
      WHERE score_date = ?
      ORDER BY priority_score DESC, days_to_start ASC
@@ -749,5 +809,16 @@ export async function getPersistedMetaBatchRecommendations(options?: {
     priorityScore: asNumber(row.priority_score),
     recommendedBudget: asNumber(row.recommended_budget),
     adAngle: String(row.ad_angle || ''),
+    effectivePlan: (() => {
+      try {
+        const parsed = JSON.parse(String(row.snapshot_json || '{}')) as { effectivePlan?: unknown };
+        if (Array.isArray(parsed.effectivePlan)) {
+          return parsed.effectivePlan.map((item) => String(item).trim()).filter(Boolean);
+        }
+      } catch {
+        // ignore parsing errors and fallback below
+      }
+      return [];
+    })(),
   }));
 }
