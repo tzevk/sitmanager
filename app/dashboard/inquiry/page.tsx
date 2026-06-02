@@ -42,6 +42,7 @@ interface InquiryRow {
   Discipline: string | null;
   Inquiry_From: string | null;
   Inquiry_Type: string | null;
+  IsMetaAdConverted?: boolean;
   Status_id: number | null;
   StatusLabel: string;
   FollowUpBy?: string | null;
@@ -550,6 +551,14 @@ export default function InquiryPage() {
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2 whitespace-nowrap">
                           <span className="font-semibold">{primarySource}</span>
+                          {r.IsMetaAdConverted && (
+                            <span
+                              title="Converted from Meta Ads"
+                              className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-blue-700"
+                            >
+                              Meta Converted
+                            </span>
+                          )}
                           {r.IsPuneInquiry && (
                             <span
                               title={r.PunePageSource || r.PuneSourceLocation || 'Pune source'}

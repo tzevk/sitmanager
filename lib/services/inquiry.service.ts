@@ -125,6 +125,7 @@ export interface InquiryRow {
   FollowUpBy: string | null;
   MetaCampaignName?: string | null;
   MetaFormName?: string | null;
+  IsMetaAdConverted?: boolean;
   LeadTags?: string[];
   IsDuplicateLead?: boolean;
   IsPuneInquiry?: boolean;
@@ -866,6 +867,12 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       (r.DisciplineName?.trim() || r.Discipline?.trim() || null);
     const cleanDiscipline =
       disciplineVal && !['NULL', 'Select'].includes(disciplineVal) ? disciplineVal : null;
+    const sourceFrom = String(r.Inquiry_From ?? '').toLowerCase();
+    const sourceType = String(inquiryTypeVal ?? '').toLowerCase();
+    const isMetaAdConverted =
+      sourceFrom.includes('meta')
+      || sourceType.includes('meta')
+      || Boolean(r.MetaCampaignName || r.MetaFormName);
 
     return {
       Student_Id: r.Student_Id,
@@ -878,6 +885,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       Discipline: cleanDiscipline,
       Inquiry_From: r.Inquiry_From ?? null,
       Inquiry_Type: inquiryTypeVal,
+      IsMetaAdConverted: isMetaAdConverted,
       Status_id: r.Status_id ?? null,
       StatusLabel:
         statusMap[r.Status_id] ??

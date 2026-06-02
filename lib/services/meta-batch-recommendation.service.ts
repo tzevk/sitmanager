@@ -12,6 +12,8 @@ const SMOOTH_BETA = 8;
 const URGENCY_TAU_DAYS = 21;
 const SOFTMAX_TEMPERATURE = 0.7;
 const ADMITTED_STATUS_IDS = [7, 8, 10, 27];
+const BATCHWISE_SCORE_FLOOR = 0.75;
+const BATCHWISE_SCORE_CEIL = 1.35;
 
 type NumberLike = number | string | null | undefined;
 
@@ -101,7 +103,32 @@ export interface MetaBatchRecommendationResult {
 }
 
 export const META_BATCH_SCORE_FORMULA =
-  'score = 0.35*gap_ratio + 0.25*urgency + 0.20*lead_to_admission_rate + 0.10*efficiency_score + 0.10*value_score';
+  'score = (0.35*gap_ratio + 0.25*urgency + 0.20*lead_to_admission_rate + 0.10*efficiency_score + 0.10*value_score) * batchwise_multiplier';
+
+function deriveBatchwiseMultiplier(params: {
+  seatGap: number;
+  maxStudents: number;
+  daysToStart: number;
+  metaLeads: number;
+}): number {
+  const seatPressure = params.maxStudents > 0
+    ? clamp(params.seatGap / Math.max(1, params.maxStudents), 0, 1)
+    : (params.seatGap > 0 ? 1 : 0);
+
+  // Boost near-start batches so budgets shift faster to urgent intakes.
+  const startWindowBoost = clamp(1 - (Math.max(0, params.daysToStart) / 45), 0, 1);
+
+  // Penalize low-history courses so noisy rates do not dominate allocation.
+  const dataConfidence = clamp(params.metaLeads / 50, 0, 1);
+
+  const multiplier =
+    1
+    + (0.18 * seatPressure)
+    + (0.12 * startWindowBoost)
+    - (0.10 * (1 - dataConfidence));
+
+  return clamp(multiplier, BATCHWISE_SCORE_FLOOR, BATCHWISE_SCORE_CEIL);
+}
 
 function asNumber(value: NumberLike): number {
   const n = Number(value ?? 0);
@@ -248,7 +275,7 @@ async function loadCourseHistorySignals(): Promise<Map<number, CourseSignals>> {
       `SELECT
          si.Course_Id,
          COUNT(*) AS meta_leads,
-         SUM(CASE WHEN si.Status_id IN (${ADMITTED_STATUS_IDS.join(',')}) THEN 1 ELSE 0 END) AS admitted
+         SUM(CASE WHEN CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) IN (${ADMITTED_STATUS_IDS.join(',')}) THEN 1 ELSE 0 END) AS admitted
        FROM meta_ads_lead_sync m
        INNER JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
        WHERE m.created_at >= ?
@@ -455,7 +482,7 @@ export async function generateMetaBatchRecommendations(options?: {
       row.efficiencyScore = clamp(1 - ((row.estimatedCpl - cplMin) / cplRange), 0, 1);
     }
 
-    row.priorityScore = clamp(
+    const baseScore = clamp(
       (0.35 * row.gapRatio)
       + (0.25 * row.urgency)
       + (0.20 * row.leadToAdmissionRate)
@@ -464,6 +491,16 @@ export async function generateMetaBatchRecommendations(options?: {
       0,
       1,
     );
+
+    const signals = row.courseId ? courseSignals.get(row.courseId) : undefined;
+    const batchwiseMultiplier = deriveBatchwiseMultiplier({
+      seatGap: row.seatGap,
+      maxStudents: row.maxStudents,
+      daysToStart: row.daysToStart,
+      metaLeads: signals?.metaLeads ?? 0,
+    });
+
+    row.priorityScore = clamp(baseScore * batchwiseMultiplier, 0, 1);
 
     row.adAngle = chooseAdAngle(row);
   });

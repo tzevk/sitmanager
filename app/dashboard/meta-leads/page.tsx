@@ -87,6 +87,14 @@ interface MetaBatchRecommendationResponse {
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
 interface Filters { trainings: string[]; sources: string[]; statusOptions: { id: number; label: string }[]; }
 
+interface LeadRowDraft {
+  studentName: string;
+  courseName: string;
+  mobile: string;
+  email: string;
+  statusId: number | null;
+}
+
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 
 function formatDate(dateStr: string | null): string {
@@ -314,6 +322,8 @@ export default function MetaLeadsPage() {
   const [metaReco, setMetaReco] = useState<MetaBatchRecommendationResponse | null>(null);
   const [metaRecoError, setMetaRecoError] = useState('');
   const [convertingLeadId, setConvertingLeadId] = useState<string | null>(null);
+  const [savingLeadId, setSavingLeadId] = useState<string | null>(null);
+  const [rowDrafts, setRowDrafts] = useState<Record<string, LeadRowDraft>>({});
   const [convertError, setConvertError] = useState('');
   const oauthStatus = searchParams.get('metaOAuth');
   const oauthMessage = searchParams.get('metaOAuthMessage');
@@ -358,6 +368,21 @@ export default function MetaLeadsPage() {
   useEffect(() => {
     setPage(1);
   }, [viewMode]);
+
+  useEffect(() => {
+    const nextDrafts: Record<string, LeadRowDraft> = {};
+    for (const row of rows) {
+      if (!row.MetaLead_Id) continue;
+      nextDrafts[row.MetaLead_Id] = {
+        studentName: row.Student_Name || '',
+        courseName: row.CourseName || '',
+        mobile: row.Present_Mobile || '',
+        email: row.Email || '',
+        statusId: row.Status_id ?? null,
+      };
+    }
+    setRowDrafts(nextDrafts);
+  }, [rows]);
 
   useEffect(() => {
     let cancelled = false;
@@ -479,6 +504,46 @@ export default function MetaLeadsPage() {
       setConvertingLeadId(null);
     }
   }, [buildMetaReturnTo, canCreate, router]);
+
+  const updateRowDraft = useCallback((leadId: string, patch: Partial<LeadRowDraft>) => {
+    setRowDrafts((prev) => {
+      const current = prev[leadId] || { studentName: '', courseName: '', mobile: '', email: '', statusId: null };
+      return { ...prev, [leadId]: { ...current, ...patch } };
+    });
+  }, []);
+
+  const saveExcelRow = useCallback(async (row: InquiryRow) => {
+    if (!canUpdate || !row.MetaLead_Id) return;
+    const draft = rowDrafts[row.MetaLead_Id];
+    if (!draft) return;
+
+    setConvertError('');
+    setSavingLeadId(row.MetaLead_Id);
+    try {
+      const res = await fetch(`/api/meta-ads/leads/${encodeURIComponent(row.MetaLead_Id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentName: draft.studentName,
+          courseName: draft.courseName,
+          mobile: draft.mobile,
+          email: draft.email,
+          statusId: draft.statusId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to save lead changes');
+
+      const updated = data?.lead as InquiryRow | undefined;
+      if (!updated) throw new Error('Lead updated but response was empty');
+
+      setRows((prev) => prev.map((item) => (item.MetaLead_Id === row.MetaLead_Id ? { ...item, ...updated } : item)));
+    } catch (error: unknown) {
+      setConvertError(error instanceof Error ? error.message : 'Failed to save lead changes');
+    } finally {
+      setSavingLeadId(null);
+    }
+  }, [canUpdate, rowDrafts]);
   const allCampaigns = useMemo(
     () => (metaPerf?.campaigns || []).slice().sort((a, b) => b.leads - a.leads),
     [metaPerf]
@@ -764,7 +829,7 @@ export default function MetaLeadsPage() {
                 <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#2A6BB5]/60">Meta Planning</p>
                 <h3 className="text-sm font-bold text-slate-800">Batch Budget Recommendations</h3>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  {metaReco?.formula || 'score = 0.35*gap + 0.25*urgency + 0.20*conversion + 0.10*efficiency + 0.10*value'}
+                  {metaReco?.formula || 'score = (0.35*gap + 0.25*urgency + 0.20*conversion + 0.10*efficiency + 0.10*value) * batchwise_multiplier'}
                 </p>
               </div>
               <div className="text-right">
@@ -1069,7 +1134,16 @@ export default function MetaLeadsPage() {
                             </div>
                           )}
                           <div className="min-w-0">
-                            <span className={`font-semibold whitespace-nowrap ${sentEmail ? 'text-blue-700' : 'text-slate-700'}`}>{formatName(row.Student_Name)}</span>
+                            {viewMode !== 'regular' ? (
+                              <input
+                                value={rowDrafts[row.MetaLead_Id]?.studentName ?? row.Student_Name ?? ''}
+                                onChange={(e) => updateRowDraft(row.MetaLead_Id, { studentName: e.target.value })}
+                                disabled={!canUpdate || savingLeadId === row.MetaLead_Id}
+                                className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+                              />
+                            ) : (
+                              <span className={`font-semibold whitespace-nowrap ${sentEmail ? 'text-blue-700' : 'text-slate-700'}`}>{formatName(row.Student_Name)}</span>
+                            )}
                             <div className="mt-0.5 text-[10px] text-slate-400 whitespace-nowrap">
                               {row.Student_Id > 0 ? `Inquiry #${row.Student_Id}` : 'Inquiry not linked'}
                               {' • '}
@@ -1086,7 +1160,16 @@ export default function MetaLeadsPage() {
                         </div>
                       </td>
                       <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} text-slate-500 border border-slate-100 max-w-[140px]`}>
-                        <span className="truncate block" title={row.CourseName || undefined}>{row.CourseName || '—'}</span>
+                        {viewMode !== 'regular' ? (
+                          <input
+                            value={rowDrafts[row.MetaLead_Id]?.courseName ?? row.CourseName ?? ''}
+                            onChange={(e) => updateRowDraft(row.MetaLead_Id, { courseName: e.target.value })}
+                            disabled={!canUpdate || savingLeadId === row.MetaLead_Id}
+                            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+                          />
+                        ) : (
+                          <span className="truncate block" title={row.CourseName || undefined}>{row.CourseName || '—'}</span>
+                        )}
                       </td>
                       <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 max-w-[160px]`}>
                         <span className="truncate block font-medium text-slate-700" title={row.MetaCampaignName || undefined}>{row.MetaCampaignName || '—'}</span>
@@ -1097,29 +1180,61 @@ export default function MetaLeadsPage() {
                         </td>
                       )}
                       <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 font-mono text-slate-700 text-[11px] whitespace-nowrap`}>
-                        {row.Present_Mobile || '—'}
+                        {viewMode !== 'regular' ? (
+                          <input
+                            value={rowDrafts[row.MetaLead_Id]?.mobile ?? row.Present_Mobile ?? ''}
+                            onChange={(e) => updateRowDraft(row.MetaLead_Id, { mobile: e.target.value })}
+                            disabled={!canUpdate || savingLeadId === row.MetaLead_Id}
+                            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+                          />
+                        ) : (
+                          row.Present_Mobile || '—'
+                        )}
                       </td>
                       <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 text-slate-500 text-[11px]`}>
-                        <span className="truncate block max-w-[160px]">{row.Email || '—'}</span>
+                        {viewMode !== 'regular' ? (
+                          <input
+                            value={rowDrafts[row.MetaLead_Id]?.email ?? row.Email ?? ''}
+                            onChange={(e) => updateRowDraft(row.MetaLead_Id, { email: e.target.value })}
+                            disabled={!canUpdate || savingLeadId === row.MetaLead_Id}
+                            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+                          />
+                        ) : (
+                          <span className="truncate block max-w-[160px]">{row.Email || '—'}</span>
+                        )}
                       </td>
-                      {viewMode === 'excel' && (
+                      {viewMode !== 'regular' && (
                         <td className="py-1.5 px-2 border border-slate-100 text-slate-600 max-w-[180px]">
                           <span className="truncate block">{(row.LeadTags || []).join(', ') || '—'}</span>
                         </td>
                       )}
-                      <td className={`${viewMode === 'excel' ? 'py-1.5 px-2' : 'py-2 px-3'} whitespace-nowrap border border-slate-100`}>
+                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} whitespace-nowrap border border-slate-100`}>
                         <div className="text-slate-500 text-[11px]">{formatDate(row.Inquiry_Dt)}</div>
-                        {viewMode !== 'excel' && (() => { const a = leadAge(row.Inquiry_Dt); return a.label !== '—' ? <span className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold ${a.cls}`}>{a.label} ago</span> : null; })()}
+                        {viewMode === 'regular' && (() => { const a = leadAge(row.Inquiry_Dt); return a.label !== '—' ? <span className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold ${a.cls}`}>{a.label} ago</span> : null; })()}
                       </td>
-                      {viewMode === 'excel' && (
+                      {viewMode !== 'regular' && (
                         <td className="py-1.5 px-2 border border-slate-100 text-[11px] text-slate-600 whitespace-nowrap">
                           {(() => { const a = leadAge(row.Inquiry_Dt); return a.label !== '—' ? `${a.label} ago` : '—'; })()}
                         </td>
                       )}
-                      <td className={`${viewMode === 'excel' ? 'py-1.5 px-2' : 'py-2 px-3'} text-center border border-slate-100`}>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${statusPill(row.Status_id, row.StatusLabel)}`}>
-                          {row.StatusLabel}
-                        </span>
+                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} text-center border border-slate-100`}>
+                        {viewMode !== 'regular' ? (
+                          <select
+                            value={rowDrafts[row.MetaLead_Id]?.statusId ?? ''}
+                            onChange={(e) => updateRowDraft(row.MetaLead_Id, { statusId: e.target.value ? Number(e.target.value) : null })}
+                            disabled={!canUpdate || savingLeadId === row.MetaLead_Id}
+                            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+                          >
+                            <option value="">Select status</option>
+                            {filters.statusOptions.map((s) => (
+                              <option key={s.id} value={s.id}>{s.label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${statusPill(row.Status_id, row.StatusLabel)}`}>
+                            {row.StatusLabel}
+                          </span>
+                        )}
                       </td>
                       {viewMode !== 'regular' && (
                         <td className="py-1.5 px-2 border border-slate-100 text-[11px] text-slate-600 max-w-[260px]">
@@ -1128,6 +1243,20 @@ export default function MetaLeadsPage() {
                       )}
                       <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} text-center border border-slate-100`}>
                         <div className="flex items-center justify-center gap-1">
+                          {viewMode !== 'regular' && (
+                            <button
+                              type="button"
+                              onClick={() => void saveExcelRow(row)}
+                              disabled={!canUpdate || !row.MetaLead_Id || savingLeadId === row.MetaLead_Id}
+                              className={`inline-flex items-center rounded-md px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+                                canUpdate && row.MetaLead_Id
+                                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                  : 'border border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed'
+                              }`}
+                            >
+                              {savingLeadId === row.MetaLead_Id ? 'Saving…' : 'Save'}
+                            </button>
+                          )}
                           {/* WhatsApp */}
                           {waLink(row.Present_Mobile, row.Student_Name, row.CourseName) && (
                             <a
