@@ -2603,18 +2603,6 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
     duplicatesOnly = false,
   } = params;
 
-  const [sourceCoverageRows] = await pool.query(
-    `SELECT
-       COUNT(*) AS total,
-       SUM(CASE WHEN LOWER(COALESCE(NULLIF(TRIM(source_label), ''), ?)) <> LOWER(?) THEN 1 ELSE 0 END) AS classified
-     FROM ${META_LEADS_TABLE}`,
-    [META_SOURCE_LABEL, META_SOURCE_LABEL]
-  );
-  const sourceCoverage = (sourceCoverageRows as any[])[0] || {};
-  if (Number(sourceCoverage.total || 0) > 0 && Number(sourceCoverage.classified || 0) === 0) {
-    await backfillStoredMetaLeadSources();
-  }
-
   const conditions: string[] = ['1=1'];
   const queryParams: any[] = [];
 
@@ -2664,80 +2652,90 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
   const whereClause = `WHERE ${conditions.join(' AND ')}`;
   const offset = (page - 1) * limit;
 
-  const [countRows] = await pool.query(
-    `SELECT COUNT(*) AS total
-     FROM ${META_LEADS_TABLE} m
-     LEFT JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
-     ${whereClause}`,
-    queryParams
-  );
-  let total = Number((countRows as any[])[0]?.total || 0);
-
-  if (total > 0) {
-    const [incompleteRows] = await pool.query(
-      `SELECT COUNT(*) AS total
-       FROM ${META_LEADS_TABLE}
-       WHERE COALESCE(NULLIF(TRIM(campaign_name), ''), NULLIF(TRIM(course_name), '')) IS NULL`
-    );
-    const incompleteTotal = Number((incompleteRows as any[])[0]?.total || 0);
-    if (incompleteTotal > 0) {
-      await syncLiveMetaLeadsToDb();
-    }
-  }
-
-  if (total === 0) {
-    await syncLiveMetaLeadsToDb();
-
-    const [refreshedCountRows] = await pool.query(
+  // Run count, main data, and filter-option queries in parallel.
+  const [
+    [countRows],
+    [rows],
+    [trainingRows],
+    [sourceRows],
+  ] = await Promise.all([
+    pool.query(
       `SELECT COUNT(*) AS total
        FROM ${META_LEADS_TABLE} m
        LEFT JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
        ${whereClause}`,
       queryParams
-    );
-    total = Number((refreshedCountRows as any[])[0]?.total || 0);
+    ),
+    pool.query(
+      `SELECT
+         m.meta_lead_id AS MetaLead_Id,
+         COALESCE(m.inquiry_id, 0) AS Student_Id,
+         COALESCE(CAST(si.Student_Id AS UNSIGNED), 0) AS StudentMaster_Id,
+         COALESCE(NULLIF(TRIM(m.student_name),''), NULLIF(TRIM(si.Student_Name),''), 'Meta Lead') AS Student_Name,
+         COALESCE(NULLIF(TRIM(m.course_name),''), NULLIF(TRIM(m.form_name),'')) AS CourseName,
+         COALESCE(NULLIF(TRIM(m.lead_created_time),''), CAST(m.created_at AS CHAR)) AS Inquiry_Dt,
+         NULLIF(TRIM(m.mobile),'') AS Present_Mobile,
+         NULLIF(TRIM(m.email),'') AS Email,
+         m.contact_source AS Inquiry_From,
+         m.source_label AS Inquiry_Type,
+         CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) AS Status_id,
+         si.Discussion AS Discussion,
+         COALESCE(NULLIF(TRIM(m.campaign_name),''), NULLIF(TRIM(m.campaign_id),'')) AS MetaCampaignName,
+         NULLIF(TRIM(m.form_name),'') AS MetaFormName,
+         m.tags_json AS LeadTagsJson,
+         m.duplicate_of_inquiry_id IS NOT NULL AS IsDuplicateLead,
+         CAST(m.applicant_email_sent_at AS CHAR) AS ApplicantEmailSentAt
+       FROM ${META_LEADS_TABLE} m
+       LEFT JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
+       ${whereClause}
+       ORDER BY COALESCE(NULLIF(m.lead_created_time,''), CAST(m.created_at AS CHAR)) DESC, m.id DESC
+       LIMIT ? OFFSET ?`,
+      [...queryParams, limit, offset]
+    ),
+    pool.query(
+      `SELECT DISTINCT course_name
+       FROM ${META_LEADS_TABLE}
+       WHERE course_name IS NOT NULL AND TRIM(course_name) != ''
+       ORDER BY course_name`
+    ),
+    pool.query(
+      `SELECT DISTINCT source_label
+       FROM ${META_LEADS_TABLE}
+       WHERE source_label IS NOT NULL AND TRIM(source_label) != ''
+       ORDER BY source_label`
+    ),
+  ]);
+
+  const total = Number((countRows as any[])[0]?.total || 0);
+
+  // Backfill and live-sync are maintenance tasks — run them in the background
+  // so they never block the response.
+  if (total === 0) {
+    // First-time load: kick off a background sync so the next request has data.
+    Promise.resolve().then(() => syncLiveMetaLeadsToDb()).catch(() => {});
+  } else {
+    // Schedule source backfill and incremental sync without awaiting.
+    Promise.resolve().then(async () => {
+      const [[coverage]] = await pool.query(
+        `SELECT
+           SUM(CASE WHEN LOWER(COALESCE(NULLIF(TRIM(source_label), ''), ?)) <> LOWER(?) THEN 1 ELSE 0 END) AS classified
+         FROM ${META_LEADS_TABLE}`,
+        [META_SOURCE_LABEL, META_SOURCE_LABEL]
+      ) as any;
+      if (Number(coverage?.classified || 0) === 0) {
+        await backfillStoredMetaLeadSources();
+      }
+
+      const [[incomplete]] = await pool.query(
+        `SELECT COUNT(*) AS total
+         FROM ${META_LEADS_TABLE}
+         WHERE COALESCE(NULLIF(TRIM(campaign_name), ''), NULLIF(TRIM(course_name), '')) IS NULL`
+      ) as any;
+      if (Number(incomplete?.total || 0) > 0) {
+        await syncLiveMetaLeadsToDb();
+      }
+    }).catch(() => {});
   }
-
-  const [rows] = await pool.query(
-    `SELECT
-       m.meta_lead_id AS MetaLead_Id,
-       COALESCE(m.inquiry_id, 0) AS Student_Id,
-       COALESCE(CAST(si.Student_Id AS UNSIGNED), 0) AS StudentMaster_Id,
-       COALESCE(NULLIF(TRIM(m.student_name),''), NULLIF(TRIM(si.Student_Name),''), 'Meta Lead') AS Student_Name,
-       COALESCE(NULLIF(TRIM(m.course_name),''), NULLIF(TRIM(m.form_name),'')) AS CourseName,
-       COALESCE(NULLIF(TRIM(m.lead_created_time),''), CAST(m.created_at AS CHAR)) AS Inquiry_Dt,
-       NULLIF(TRIM(m.mobile),'') AS Present_Mobile,
-       NULLIF(TRIM(m.email),'') AS Email,
-       m.contact_source AS Inquiry_From,
-       m.source_label AS Inquiry_Type,
-       CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) AS Status_id,
-       si.Discussion AS Discussion,
-       COALESCE(NULLIF(TRIM(m.campaign_name),''), NULLIF(TRIM(m.campaign_id),'')) AS MetaCampaignName,
-       NULLIF(TRIM(m.form_name),'') AS MetaFormName,
-       m.tags_json AS LeadTagsJson,
-       m.duplicate_of_inquiry_id IS NOT NULL AS IsDuplicateLead,
-       CAST(m.applicant_email_sent_at AS CHAR) AS ApplicantEmailSentAt
-     FROM ${META_LEADS_TABLE} m
-     LEFT JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
-     ${whereClause}
-     ORDER BY COALESCE(NULLIF(m.lead_created_time,''), CAST(m.created_at AS CHAR)) DESC, m.id DESC
-     LIMIT ? OFFSET ?`,
-    [...queryParams, limit, offset]
-  );
-
-  const [trainingRows] = await pool.query(
-    `SELECT DISTINCT course_name
-     FROM ${META_LEADS_TABLE}
-     WHERE course_name IS NOT NULL AND TRIM(course_name) != ''
-     ORDER BY course_name`
-  );
-
-  const [sourceRows] = await pool.query(
-    `SELECT DISTINCT source_label
-     FROM ${META_LEADS_TABLE}
-     WHERE source_label IS NOT NULL AND TRIM(source_label) != ''
-     ORDER BY source_label`
-  );
 
   const statusOptions = Object.entries(FALLBACK_STATUSES)
     .map(([id, label]) => ({ id: Number(id), label }))
