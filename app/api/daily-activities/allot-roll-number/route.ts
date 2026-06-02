@@ -86,14 +86,25 @@ export async function GET(req: NextRequest) {
            b.Batch_code,
            b.Category,
            b.Timings,
-           COUNT(CASE WHEN (a.IsDelete = 0 OR a.IsDelete IS NULL) AND (a.Cancel = 0 OR a.Cancel IS NULL) THEN 1 END) AS StudentCount
+           (
+             SELECT COUNT(DISTINCT combined.sid) FROM (
+               SELECT a.Student_Id AS sid
+               FROM admission_master a
+               WHERE a.Batch_Id = b.Batch_Id
+                 AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
+                 AND (a.Cancel = 0 OR a.Cancel IS NULL)
+               UNION
+               SELECT sm.Student_Id AS sid
+               FROM student_master sm
+               WHERE TRIM(sm.Batch_Code) = TRIM(b.Batch_code)
+                 AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+             ) combined
+           ) AS StudentCount
          FROM batch_mst b
-         LEFT JOIN admission_master a ON a.Batch_Id = b.Batch_Id
          WHERE b.Course_Id = ?
            AND b.IsActive = 1
            AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
            AND (b.Cancel = 0 OR b.Cancel IS NULL)
-         GROUP BY b.Batch_Id, b.Batch_code, b.Category, b.Timings
          ORDER BY b.Batch_Id DESC`,
         [Number(courseId)]
       );
@@ -118,6 +129,38 @@ export async function GET(req: NextRequest) {
     let total = 0;
 
     if (courseId && batchId) {
+      // Auto-create admission_master records for students linked via student_master.Batch_Code
+      // who were admitted through the CRM/inquiry flow without a formal enrollment record.
+      const [batchCodeRows] = await pool.query<any[]>(
+        `SELECT Batch_code FROM batch_mst WHERE Batch_Id = ? LIMIT 1`,
+        [Number(batchId)]
+      );
+      const thisBatchCode = batchCodeRows[0]?.Batch_code;
+
+      if (thisBatchCode) {
+        const [unrolledStudents] = await pool.query<any[]>(
+          `SELECT s.Student_Id
+           FROM student_master s
+           WHERE TRIM(s.Batch_Code) = TRIM(?)
+             AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
+             AND NOT EXISTS (
+               SELECT 1 FROM admission_master a2
+               WHERE a2.Student_Id = s.Student_Id
+                 AND a2.Batch_Id = ?
+                 AND (a2.IsDelete = 0 OR a2.IsDelete IS NULL)
+                 AND (a2.Cancel = 0 OR a2.Cancel IS NULL)
+             )`,
+          [thisBatchCode, Number(batchId)]
+        );
+        for (const student of unrolledStudents as any[]) {
+          await pool.query(
+            `INSERT INTO admission_master (Student_Id, Batch_Id, Admission_Date, IsActive, Cancel, IsDelete)
+             VALUES (?, ?, CURDATE(), 1, 0, 0)`,
+            [student.Student_Id, Number(batchId)]
+          );
+        }
+      }
+
       const conditions: string[] = [
         'a.Batch_Id = ?',
         '(a.IsDelete = 0 OR a.IsDelete IS NULL)',
@@ -137,18 +180,26 @@ export async function GET(req: NextRequest) {
 
       const where = conditions.join(' AND ');
 
-      // Count
+      // Count — use deduped subquery for Student_Inquiry to avoid inflated count
+      // when a student has multiple inquiry records.
       const [countRows] = await pool.query<any[]>(
         `SELECT COUNT(*) AS total
          FROM admission_master a
          LEFT JOIN student_master s ON a.Student_Id = s.Student_Id
-         LEFT JOIN \`${inquiryTable}\` si ON si.Student_Id = a.Student_Id
+         LEFT JOIN (
+           SELECT Student_Id,
+                  MAX(Student_Name) AS Student_Name,
+                  MAX(Email)        AS Email
+           FROM \`${inquiryTable}\`
+           WHERE (IsDelete = 0 OR IsDelete IS NULL)
+           GROUP BY Student_Id
+         ) si ON si.Student_Id = a.Student_Id
          WHERE ${where}`,
         params
       );
       total = countRows[0]?.total ?? 0;
 
-      // Data
+      // Data — same deduped subquery for Student_Inquiry
       const [dataRows] = await pool.query<any[]>(
         `SELECT
           a.Admission_Id AS id,
@@ -159,7 +210,14 @@ export async function GET(req: NextRequest) {
           COALESCE(a.Roll_No, '') AS rollNo
         FROM admission_master a
         LEFT JOIN student_master s ON a.Student_Id = s.Student_Id
-        LEFT JOIN \`${inquiryTable}\` si ON si.Student_Id = a.Student_Id
+        LEFT JOIN (
+          SELECT Student_Id,
+                 MAX(Student_Name) AS Student_Name,
+                 MAX(Email)        AS Email
+          FROM \`${inquiryTable}\`
+          WHERE (IsDelete = 0 OR IsDelete IS NULL)
+          GROUP BY Student_Id
+        ) si ON si.Student_Id = a.Student_Id
         JOIN batch_mst b ON a.Batch_Id = b.Batch_Id
         WHERE ${where}
         ORDER BY COALESCE(NULLIF(TRIM(s.Student_Name),''), NULLIF(TRIM(si.Student_Name),''), CONCAT('Student ', CAST(a.Student_Id AS CHAR))) ASC

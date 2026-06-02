@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -96,6 +97,37 @@ interface LeadRowDraft {
   statusId: number | null;
 }
 
+type SpreadsheetColumnKey =
+  | 'rowNo'
+  | 'lead'
+  | 'training'
+  | 'campaign'
+  | 'source'
+  | 'mobile'
+  | 'email'
+  | 'date'
+  | 'age'
+  | 'status'
+  | 'questions'
+  | 'actions';
+
+const SPREADSHEET_DEFAULT_COLUMN_WIDTHS: Record<SpreadsheetColumnKey, number> = {
+  rowNo: 52,
+  lead: 230,
+  training: 170,
+  campaign: 190,
+  source: 150,
+  mobile: 140,
+  email: 220,
+  date: 140,
+  age: 115,
+  status: 130,
+  questions: 320,
+  actions: 180,
+};
+
+const SPREADSHEET_MIN_COLUMN_WIDTH = 80;
+
 function toBulletEditorValue(raw: string | null | undefined): string {
   const text = String(raw || '').trim();
   if (!text) return '';
@@ -112,7 +144,7 @@ function fromBulletEditorValue(raw: string | null | undefined): string | null {
     .map((line) => line.trim().replace(/^[-*•]\s+/, ''))
     .filter(Boolean);
   if (!lines.length) return null;
-  return lines.map((line) => `- ${line}`).join('\n');
+  return lines.join('\n');
 }
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
@@ -344,11 +376,64 @@ export default function MetaLeadsPage() {
   const [convertingLeadId, setConvertingLeadId] = useState<string | null>(null);
   const [savingLeadId, setSavingLeadId] = useState<string | null>(null);
   const [rowDrafts, setRowDrafts] = useState<Record<string, LeadRowDraft>>({});
+  const [columnWidths, setColumnWidths] = useState<Record<SpreadsheetColumnKey, number>>(SPREADSHEET_DEFAULT_COLUMN_WIDTHS);
+  const [columnResize, setColumnResize] = useState<{
+    key: SpreadsheetColumnKey;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
   const [convertError, setConvertError] = useState('');
   const oauthStatus = searchParams.get('metaOAuth');
   const oauthMessage = searchParams.get('metaOAuthMessage');
   const oauthPages = searchParams.get('metaOAuthPages');
   const oauthUser = searchParams.get('metaOAuthUser');
+  const isSpreadsheetView = viewMode !== 'regular';
+
+  const getSpreadsheetColStyle = useCallback((key: SpreadsheetColumnKey) => {
+    if (!isSpreadsheetView) return undefined;
+    const width = columnWidths[key] ?? SPREADSHEET_DEFAULT_COLUMN_WIDTHS[key];
+    return {
+      width,
+      minWidth: width,
+      maxWidth: width,
+    };
+  }, [columnWidths, isSpreadsheetView]);
+
+  const beginColumnResize = useCallback((event: ReactMouseEvent<HTMLButtonElement>, key: SpreadsheetColumnKey) => {
+    if (!isSpreadsheetView) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const width = columnWidths[key] ?? SPREADSHEET_DEFAULT_COLUMN_WIDTHS[key];
+    setColumnResize({ key, startX: event.clientX, startWidth: width });
+  }, [columnWidths, isSpreadsheetView]);
+
+  useEffect(() => {
+    if (!columnResize) return;
+    const onMouseMove = (event: MouseEvent) => {
+      const delta = event.clientX - columnResize.startX;
+      const nextWidth = Math.max(SPREADSHEET_MIN_COLUMN_WIDTH, Math.round(columnResize.startWidth + delta));
+      setColumnWidths((prev) => ({ ...prev, [columnResize.key]: nextWidth }));
+    };
+    const onMouseUp = () => setColumnResize(null);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [columnResize]);
+
+  const renderColumnResizeHandle = useCallback((key: SpreadsheetColumnKey) => {
+    if (!isSpreadsheetView) return null;
+    return (
+      <button
+        type="button"
+        aria-label="Resize column"
+        onMouseDown={(event) => beginColumnResize(event, key)}
+        className="absolute right-0 top-0 h-full w-2 cursor-col-resize border-r border-transparent hover:border-slate-300"
+      />
+    );
+  }, [beginColumnResize, isSpreadsheetView]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -1098,37 +1183,54 @@ export default function MetaLeadsPage() {
                 {convertError}
               </div>
             )}
-            <div className={`${viewMode === 'sheet' ? 'overflow-x-auto overflow-y-auto max-h-[calc(100vh-260px)]' : 'overflow-x-auto'}`}>
-              <table className={`w-full border-collapse ${viewMode !== 'regular' ? 'text-[10px]' : ''}`}>
+            <div className={`${viewMode === 'sheet' ? 'overflow-x-auto overflow-y-auto max-h-[calc(100vh-260px)]' : 'overflow-x-auto'} ${columnResize ? 'cursor-col-resize select-none' : ''}`}>
+              <table className={`w-full border-collapse ${viewMode !== 'regular' ? 'text-[10px] table-fixed' : ''}`}>
                 <thead>
                   <tr className={`text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 ${(viewMode === 'excel' || viewMode === 'sheet') ? 'sticky top-0 z-20' : ''}`}>
-                    <th className={`text-left font-bold border border-slate-200 w-8 ${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2.5 px-3'} ${viewMode === 'sheet' ? 'sticky left-0 z-30 bg-slate-50' : ''}`}>#</th>
-                    <th className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2 min-w-[180px]' : 'py-2.5 px-3'}`}>Lead</th>
-                    <th className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2 min-w-[140px]' : 'py-2.5 px-3'}`}>Training</th>
-                    <th className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2 min-w-[160px]' : 'py-2.5 px-3'}`}>Campaign</th>
-                    {viewMode !== 'regular' && <th className="text-left py-1.5 px-2 font-bold border border-slate-200 min-w-[140px]">Source</th>}
-                    <th className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2.5 px-3'}`}>Mobile</th>
-                    <th className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2 min-w-[180px]' : 'py-2.5 px-3'}`}>Email</th>
-                    {viewMode !== 'regular' && <th className="text-left py-1.5 px-2 font-bold border border-slate-200 min-w-[150px]">Tags</th>}
-                    <th className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2.5 px-3'}`}>Date</th>
-                    {viewMode !== 'regular' && <th className="text-left py-1.5 px-2 font-bold border border-slate-200 min-w-[110px]">Age</th>}
-                    <th className={`text-center font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2 min-w-[110px]' : 'py-2.5 px-3'}`}>Status</th>
-                    {viewMode !== 'regular' && <th className="text-left py-1.5 px-2 font-bold border border-slate-200 min-w-[220px]">Follow Up / Discussion</th>}
-                    <th className={`text-center font-bold border border-slate-200 min-w-[148px] ${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2.5 px-3'}`}>Actions</th>
+                    <th style={getSpreadsheetColStyle('rowNo')} className={`text-left font-bold border border-slate-200 w-8 ${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2.5 px-3'} ${viewMode === 'sheet' ? 'sticky left-0 z-30 bg-slate-50' : ''}`}>
+                      <div className="relative"># {renderColumnResizeHandle('rowNo')}</div>
+                    </th>
+                    <th style={getSpreadsheetColStyle('lead')} className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2 min-w-[180px]' : 'py-2.5 px-3'}`}>
+                      <div className="relative">Lead {renderColumnResizeHandle('lead')}</div>
+                    </th>
+                    <th style={getSpreadsheetColStyle('training')} className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2 min-w-[140px]' : 'py-2.5 px-3'}`}>
+                      <div className="relative">Training {renderColumnResizeHandle('training')}</div>
+                    </th>
+                    <th style={getSpreadsheetColStyle('campaign')} className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2 min-w-[160px]' : 'py-2.5 px-3'}`}>
+                      <div className="relative">Campaign {renderColumnResizeHandle('campaign')}</div>
+                    </th>
+                    {viewMode !== 'regular' && <th style={getSpreadsheetColStyle('source')} className="text-left py-1.5 px-2 font-bold border border-slate-200 min-w-[140px]"><div className="relative">Source {renderColumnResizeHandle('source')}</div></th>}
+                    <th style={getSpreadsheetColStyle('mobile')} className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2.5 px-3'}`}>
+                      <div className="relative">Mobile {renderColumnResizeHandle('mobile')}</div>
+                    </th>
+                    <th style={getSpreadsheetColStyle('email')} className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2 min-w-[180px]' : 'py-2.5 px-3'}`}>
+                      <div className="relative">Email {renderColumnResizeHandle('email')}</div>
+                    </th>
+                    <th style={getSpreadsheetColStyle('date')} className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2.5 px-3'}`}>
+                      <div className="relative">Date {renderColumnResizeHandle('date')}</div>
+                    </th>
+                    {viewMode !== 'regular' && <th style={getSpreadsheetColStyle('age')} className="text-left py-1.5 px-2 font-bold border border-slate-200 min-w-[110px]"><div className="relative">Age {renderColumnResizeHandle('age')}</div></th>}
+                    <th style={getSpreadsheetColStyle('status')} className={`text-center font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2 min-w-[110px]' : 'py-2.5 px-3'}`}>
+                      <div className="relative">Status {renderColumnResizeHandle('status')}</div>
+                    </th>
+                    {viewMode !== 'regular' && <th style={getSpreadsheetColStyle('questions')} className="text-left py-1.5 px-2 font-bold border border-slate-200 min-w-[220px]"><div className="relative">Questions Replied {renderColumnResizeHandle('questions')}</div></th>}
+                    <th style={getSpreadsheetColStyle('actions')} className={`text-center font-bold border border-slate-200 min-w-[148px] ${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2.5 px-3'}`}>
+                      <div className="relative">Actions {renderColumnResizeHandle('actions')}</div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     Array.from({ length: 6 }).map((_, i) => (
                       <tr key={i}>
-                        {Array.from({ length: viewMode !== 'regular' ? 13 : 9 }).map((__, j) => (
+                        {Array.from({ length: viewMode !== 'regular' ? 12 : 9 }).map((__, j) => (
                           <td key={j} className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2.5 px-3'} border border-slate-100`}><div className="h-3.5 bg-slate-50 rounded animate-pulse" /></td>
                         ))}
                       </tr>
                     ))
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={viewMode !== 'regular' ? 13 : 9} className="py-16 text-center border border-slate-100">
+                      <td colSpan={viewMode !== 'regular' ? 12 : 9} className="py-16 text-center border border-slate-100">
                         <div className="text-slate-300 text-2xl mb-2">○</div>
                         <div className="text-xs text-slate-400 font-medium">No Meta leads found</div>
                         <div className="text-xs text-slate-300 mt-1">Try adjusting your filters</div>
@@ -1144,11 +1246,11 @@ export default function MetaLeadsPage() {
                       key={`${row.Student_Id}-${row.Email || row.Present_Mobile || row.Student_Name}-${row.Inquiry_Dt || index}-${index}`}
                       className={`transition-colors group ${bgCls} ${textCls}`}
                     >
-                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} font-mono tabular-nums text-[10px] border border-slate-100 relative ${viewMode !== 'regular' ? 'pl-4' : 'pl-5'} ${viewMode === 'sheet' ? 'sticky left-0 z-10 bg-white' : ''}`}>
+                      <td style={getSpreadsheetColStyle('rowNo')} className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} font-mono tabular-nums text-[10px] border border-slate-100 relative ${viewMode !== 'regular' ? 'pl-4' : 'pl-5'} ${viewMode === 'sheet' ? 'sticky left-0 z-10 bg-white' : ''}`}>
                         <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${statusBar(row.Status_id, row.StatusLabel)} rounded-r`} />
                         {(pagination.page - 1) * pagination.limit + index + 1}
                       </td>
-                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100`}>
+                      <td style={getSpreadsheetColStyle('lead')} className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100`}>
                         <div className="flex items-center gap-2">
                           {viewMode === 'regular' && (
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${sentEmail ? 'bg-blue-100 text-blue-700' : avatarColor(row.Student_Name)}`}>
@@ -1181,7 +1283,7 @@ export default function MetaLeadsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} text-slate-500 border border-slate-100 max-w-[140px]`}>
+                      <td style={getSpreadsheetColStyle('training')} className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} text-slate-500 border border-slate-100 max-w-[140px]`}>
                         {viewMode !== 'regular' ? (
                           <input
                             value={rowDrafts[row.MetaLead_Id]?.courseName ?? row.CourseName ?? ''}
@@ -1193,15 +1295,15 @@ export default function MetaLeadsPage() {
                           <span className="truncate block" title={row.CourseName || undefined}>{row.CourseName || '—'}</span>
                         )}
                       </td>
-                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 max-w-[160px]`}>
+                      <td style={getSpreadsheetColStyle('campaign')} className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 max-w-[160px]`}>
                         <span className="truncate block font-medium text-slate-700" title={row.MetaCampaignName || undefined}>{row.MetaCampaignName || '—'}</span>
                       </td>
                       {viewMode !== 'regular' && (
-                        <td className="py-1.5 px-2 border border-slate-100 text-slate-600 whitespace-nowrap">
+                        <td style={getSpreadsheetColStyle('source')} className="py-1.5 px-2 border border-slate-100 text-slate-600 whitespace-nowrap">
                           {row.Inquiry_From || row.MetaFormName || '—'}
                         </td>
                       )}
-                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 font-mono text-slate-700 text-[11px] whitespace-nowrap`}>
+                      <td style={getSpreadsheetColStyle('mobile')} className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 font-mono text-slate-700 text-[11px] whitespace-nowrap`}>
                         {viewMode !== 'regular' ? (
                           <input
                             value={rowDrafts[row.MetaLead_Id]?.mobile ?? row.Present_Mobile ?? ''}
@@ -1213,7 +1315,7 @@ export default function MetaLeadsPage() {
                           row.Present_Mobile || '—'
                         )}
                       </td>
-                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 text-slate-500 text-[11px]`}>
+                      <td style={getSpreadsheetColStyle('email')} className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 text-slate-500 text-[11px]`}>
                         {viewMode !== 'regular' ? (
                           <input
                             value={rowDrafts[row.MetaLead_Id]?.email ?? row.Email ?? ''}
@@ -1225,21 +1327,16 @@ export default function MetaLeadsPage() {
                           <span className="truncate block max-w-[160px]">{row.Email || '—'}</span>
                         )}
                       </td>
-                      {viewMode !== 'regular' && (
-                        <td className="py-1.5 px-2 border border-slate-100 text-slate-600 max-w-[180px]">
-                          <span className="truncate block">{(row.LeadTags || []).join(', ') || '—'}</span>
-                        </td>
-                      )}
-                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} whitespace-nowrap border border-slate-100`}>
+                      <td style={getSpreadsheetColStyle('date')} className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} whitespace-nowrap border border-slate-100`}>
                         <div className="text-slate-500 text-[11px]">{formatDate(row.Inquiry_Dt)}</div>
                         {viewMode === 'regular' && (() => { const a = leadAge(row.Inquiry_Dt); return a.label !== '—' ? <span className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold ${a.cls}`}>{a.label} ago</span> : null; })()}
                       </td>
                       {viewMode !== 'regular' && (
-                        <td className="py-1.5 px-2 border border-slate-100 text-[11px] text-slate-600 whitespace-nowrap">
+                        <td style={getSpreadsheetColStyle('age')} className="py-1.5 px-2 border border-slate-100 text-[11px] text-slate-600 whitespace-nowrap">
                           {(() => { const a = leadAge(row.Inquiry_Dt); return a.label !== '—' ? `${a.label} ago` : '—'; })()}
                         </td>
                       )}
-                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} text-center border border-slate-100`}>
+                      <td style={getSpreadsheetColStyle('status')} className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} text-center border border-slate-100`}>
                         {viewMode !== 'regular' ? (
                           <select
                             value={rowDrafts[row.MetaLead_Id]?.statusId ?? ''}
@@ -1259,18 +1356,18 @@ export default function MetaLeadsPage() {
                         )}
                       </td>
                       {viewMode !== 'regular' && (
-                        <td className="py-1 px-1.5 border border-slate-100 text-[10px] text-slate-600 min-w-[220px] max-w-[280px]">
+                        <td style={getSpreadsheetColStyle('questions')} className="py-1 px-1.5 border border-slate-100 text-[10px] text-slate-600 min-w-[220px] max-w-[280px]">
                           <textarea
                             value={rowDrafts[row.MetaLead_Id]?.discussion ?? toBulletEditorValue(row.Discussion)}
                             onChange={(e) => updateRowDraft(row.MetaLead_Id, { discussion: e.target.value })}
                             disabled={!canUpdate || savingLeadId === row.MetaLead_Id}
                             rows={3}
-                            placeholder={viewMode === 'excel' ? 'One follow-up point per line' : 'Type discussion points'}
+                            placeholder={viewMode === 'excel' ? 'Type replied questions/answers' : 'Type replied questions/answers'}
                             className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[10px] leading-4 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
                           />
                         </td>
                       )}
-                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} text-center border border-slate-100`}>
+                      <td style={getSpreadsheetColStyle('actions')} className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} text-center border border-slate-100`}>
                         <div className="flex items-center justify-center gap-1">
                           {viewMode !== 'regular' && (
                             <button
