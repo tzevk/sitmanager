@@ -252,6 +252,11 @@ export default function PublicAdmissionFormPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId]);
 
+  useEffect(() => {
+    if (formData.modeOfPayment !== 'Loan') return;
+    setFormData((prev) => ({ ...prev, modeOfPayment: '' }));
+  }, [formData.modeOfPayment]);
+
   // Restore draft from localStorage after server data loads
   useEffect(() => {
     if (loading) return;
@@ -2412,9 +2417,11 @@ export default function PublicAdmissionFormPage() {
                   {currentStep === 5 && (() => {
                     const baseFees = batchFees ?? 0;
                     const hasFees = baseFees > 0;
-                    const fullPayAmount = batchFeesFullPayment ?? Math.round(baseFees * 0.95);
-                    const installmentAmount = batchFeesInstallment ?? Math.round(baseFees / 2);
-                    const discount = baseFees - fullPayAmount;
+                    const fullPayAmount = Math.round(baseFees * 0.95);
+                    const discount = Math.max(baseFees - fullPayAmount, 0);
+                    const installmentPlanTotal = batchFeesInstallment ?? baseFees;
+                    const firstInstallmentAmount = Math.round(installmentPlanTotal / 2);
+                    const secondInstallmentAmount = Math.max(installmentPlanTotal - firstInstallmentAmount, 0);
                     const fmt = (n: number) => n.toLocaleString('en-IN');
 
                     return (
@@ -2510,7 +2517,7 @@ export default function PublicAdmissionFormPage() {
                                 <div className="flex-1 min-w-0">
                                   <span className={`text-sm font-bold ${isSelected ? 'text-violet-800' : 'text-gray-800'}`}>50% Payment in 2 Installments</span>
                                   <div className={`text-xs mt-0.5 ${isSelected ? 'text-violet-600' : 'text-gray-500'}`}>
-                                    Pay &#8377;{fmt(installmentAmount)} now + &#8377;{fmt(baseFees - installmentAmount)} later — total &#8377;{fmt(baseFees)}
+                                    Pay &#8377;{fmt(firstInstallmentAmount)} now + &#8377;{fmt(secondInstallmentAmount)} later — total &#8377;{fmt(installmentPlanTotal)}
                                   </div>
                                 </div>
                                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
@@ -2525,86 +2532,22 @@ export default function PublicAdmissionFormPage() {
                                 <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>1st Installment (now)</span>
-                                    <span className="font-bold text-violet-800">&#8377;{fmt(installmentAmount)}</span>
+                                    <span className="font-bold text-violet-800">&#8377;{fmt(firstInstallmentAmount)}</span>
                                   </div>
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>2nd Installment</span>
-                                    <span className="font-bold text-violet-800">&#8377;{fmt(baseFees - installmentAmount)}</span>
+                                    <span className="font-bold text-violet-800">&#8377;{fmt(secondInstallmentAmount)}</span>
                                   </div>
                                   <div className="border-t border-violet-200 pt-2 flex items-center justify-between text-xs">
                                     <span className="text-violet-800 font-bold">Total</span>
-                                    <span className="font-extrabold text-violet-900">&#8377;{fmt(baseFees)}</span>
+                                    <span className="font-extrabold text-violet-900">&#8377;{fmt(installmentPlanTotal)}</span>
                                   </div>
                                 </div>
                               )}
                             </button>
                           );
                         })()}
-
-                        {/* Option 3: Loan */}
-                        {(() => {
-                          const isSelected = formData.modeOfPayment === 'Loan';
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => handleChange('modeOfPayment', 'Loan')}
-                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
-                                isSelected
-                                  ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-200 shadow-md'
-                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                              }`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                                  isSelected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'
-                                }`}>
-                                  <i className="fas fa-hand-holding-usd text-lg"></i>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className={`text-sm font-bold ${isSelected ? 'text-blue-800' : 'text-gray-800'}`}>Loan</span>
-                                    <span className="bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">0% Interest</span>
-                                  </div>
-                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-blue-600' : 'text-gray-500'}`}>
-                                    Initial payment of &#8377;{fmt(baseFees)} at 0% interest — apply for loan via Varthana
-                                  </div>
-                                </div>
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                                  isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-                                }`}>
-                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />}
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })()}
                       </div>
-
-                      {/* Varthana Loan sign-up — shown when Loan is selected */}
-                      {formData.modeOfPayment === 'Loan' && (
-                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl p-4 sm:p-5">
-                          <div className="flex items-start gap-3">
-                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                              <i className="fas fa-hand-holding-usd text-blue-600 text-lg"></i>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-bold text-blue-900">Education Loan via Varthana</p>
-                              <p className="text-xs text-blue-700 mt-1 leading-relaxed">
-                                We have partnered with Varthana to offer hassle-free education loans at <span className="font-bold">0% interest</span>. Sign up on their portal to check your eligibility and apply.
-                              </p>
-                              <a
-                                href="https://varthana.com/student/"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 mt-3 px-4 py-2.5 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white rounded-lg text-xs font-bold hover:shadow-lg hover:-translate-y-0.5 transition-all"
-                              >
-                                <i className="fas fa-external-link-alt"></i>
-                                Sign Up on Varthana
-                              </a>
-                            </div>
-                          </div>
-                        </div>
-                      )}
 
                       {/* Selected summary */}
                       {formData.modeOfPayment && (
@@ -2615,8 +2558,7 @@ export default function PublicAdmissionFormPage() {
                             <p className="text-xs text-green-700 mt-0.5">
                               You have selected <span className="font-bold">{formData.modeOfPayment}</span>
                               {formData.modeOfPayment === 'Full Payment' && <> — you pay <span className="font-bold">&#8377;{fmt(fullPayAmount)}</span> (5% discount applied)</>}
-                              {formData.modeOfPayment === '50% Installment' && <> — &#8377;{fmt(installmentAmount)} now + &#8377;{fmt(baseFees - installmentAmount)} later</>}
-                              {formData.modeOfPayment === 'Loan' && <> — initial &#8377;{fmt(baseFees)} at 0% interest via Varthana</>}
+                              {formData.modeOfPayment === '50% Installment' && <> — &#8377;{fmt(firstInstallmentAmount)} now + &#8377;{fmt(secondInstallmentAmount)} later</>}
                             </p>
                           </div>
                         </div>

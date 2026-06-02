@@ -160,6 +160,11 @@ export default function EditOnlineAdmissionPage() {
   const set = (field: string, value: string | boolean) =>
     setFormData(prev => ({ ...prev, [field]: value }));
 
+  useEffect(() => {
+    if (formData.modeOfPayment !== 'Loan') return;
+    setFormData((prev) => ({ ...prev, modeOfPayment: '' }));
+  }, [formData.modeOfPayment]);
+
   /* ── Load courses for training cascade ── */
   useEffect(() => {
     fetch('/api/public/courses')
@@ -1013,23 +1018,15 @@ export default function EditOnlineAdmissionPage() {
                 sub: 'Pay 50% now and 50% later',
                 color: 'violet',
               },
-              {
-                value: 'Loan',
-                label: 'Loan (via Varthana)',
-                sub: '0% interest education loan — initial payment at the start',
-                color: 'blue',
-              },
             ].map(opt => {
               const isSelected = formData.modeOfPayment === opt.value;
               const colors: Record<string, string> = {
                 emerald: isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:border-emerald-300',
                 violet:  isSelected ? 'border-violet-500 bg-violet-50'  : 'border-gray-200 hover:border-violet-300',
-                blue:    isSelected ? 'border-blue-500 bg-blue-50'      : 'border-gray-200 hover:border-blue-300',
               };
               const dotColors: Record<string, string> = {
                 emerald: 'border-emerald-500 bg-emerald-500',
                 violet:  'border-violet-500 bg-violet-500',
-                blue:    'border-blue-500 bg-blue-500',
               };
               return (
                 <button
