@@ -130,6 +130,18 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    if (options === 'faculties') {
+      const [faculties] = await pool.query<any[]>(
+        `SELECT Faculty_Id, Faculty_Name
+         FROM faculty_master
+         WHERE (IsDelete = 0 OR IsDelete IS NULL)
+         ORDER BY Faculty_Name`
+      );
+      return NextResponse.json({ faculties }, {
+        headers: { 'Cache-Control': 'private, max-age=60' },
+      });
+    }
+
     // Schema check only runs for the student+attendance query, not for dropdowns
     await ensureAttendanceTable(pool);
 

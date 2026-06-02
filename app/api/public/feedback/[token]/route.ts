@@ -18,7 +18,7 @@ export async function GET(
 
     const pool = getPool();
     const [rows] = await pool.query<any[]>(
-      `SELECT Batch_Id, date, batch_name, expires_at
+      `SELECT Batch_Id, date, batch_name, trainer_name, trainer_time_from, trainer_time_to, expires_at
        FROM attendance_feedback_token
        WHERE token = ? LIMIT 1`,
       [token]
@@ -63,6 +63,9 @@ export async function GET(
       batchId,
       date: String(row.date).slice(0, 10),
       batchName: row.batch_name,
+      trainerName: row.trainer_name ?? null,
+      trainerTimeFrom: row.trainer_time_from ?? null,
+      trainerTimeTo: row.trainer_time_to ?? null,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Unknown error' }, { status: 500 });

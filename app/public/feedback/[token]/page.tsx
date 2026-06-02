@@ -12,12 +12,29 @@ function fmtDate(d: string) {
   return `${day}/${m}/${y}`;
 }
 
+function fmtTime(value: string | null | undefined) {
+  if (!value) return '';
+  const [hh = '00', mm = '00'] = String(value).split(':');
+  const hours = Number(hh);
+  const minutes = String(mm).padStart(2, '0');
+  if (Number.isNaN(hours)) return String(value);
+  const suffix = hours >= 12 ? 'PM' : 'AM';
+  const normalized = hours % 12 || 12;
+  return `${normalized}:${minutes} ${suffix}`;
+}
+
 export default function FeedbackPage() {
   const params = useParams();
   const token = params.token as string;
 
   /* session */
-  const [sessionInfo, setSessionInfo] = useState<{ batchName: string; date: string } | null>(null);
+  const [sessionInfo, setSessionInfo] = useState<{
+    batchName: string;
+    date: string;
+    trainerName: string | null;
+    trainerTimeFrom: string | null;
+    trainerTimeTo: string | null;
+  } | null>(null);
   const [tokenError, setTokenError] = useState('');
 
   /* device fingerprint */
@@ -63,7 +80,13 @@ export default function FeedbackPage() {
       .then(r => r.json())
       .then(d => {
         if (d.error) { setTokenError(d.error); return; }
-        setSessionInfo({ batchName: d.batchName || `Batch #${d.batchId}`, date: d.date });
+        setSessionInfo({
+          batchName: d.batchName || `Batch #${d.batchId}`,
+          date: d.date,
+          trainerName: d.trainerName || null,
+          trainerTimeFrom: d.trainerTimeFrom || null,
+          trainerTimeTo: d.trainerTimeTo || null,
+        });
       })
       .catch(() => setTokenError('Unable to load feedback session.'));
   }, [token]);
@@ -167,7 +190,22 @@ export default function FeedbackPage() {
               {/* Session banner */}
               <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-5 py-3 border-b border-gray-100">
                 <p className="text-xs font-semibold text-[#2E3093]">{sessionInfo.batchName}</p>
-                <p className="text-[11px] text-gray-500">{fmtDate(sessionInfo.date)}</p>
+                <div className="mt-0.5 space-y-0.5 text-[11px] text-gray-500">
+                  <p>{fmtDate(sessionInfo.date)}</p>
+                  {sessionInfo.trainerName && (
+                    <p>Trainer: <span className="font-semibold text-gray-700">{sessionInfo.trainerName}</span></p>
+                  )}
+                  {(sessionInfo.trainerTimeFrom || sessionInfo.trainerTimeTo) && (
+                    <p>
+                      Time Allotted:{' '}
+                      <span className="font-semibold text-gray-700">
+                        {fmtTime(sessionInfo.trainerTimeFrom) || '—'}
+                        {sessionInfo.trainerTimeFrom || sessionInfo.trainerTimeTo ? ' - ' : ''}
+                        {fmtTime(sessionInfo.trainerTimeTo) || '—'}
+                      </span>
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Thank-you screen */}
