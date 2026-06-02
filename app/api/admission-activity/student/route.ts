@@ -3,12 +3,28 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
+let _inquiryTableCache: string | null = null;
+async function resolveInquiryTableName(pool: ReturnType<typeof getPool>): Promise<string> {
+  if (_inquiryTableCache) return _inquiryTableCache;
+  const [rows] = await pool.query(
+    `SELECT TABLE_NAME
+     FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND LOWER(TABLE_NAME) = 'student_inquiry'
+     ORDER BY CASE WHEN TABLE_NAME = 'Student_Inquiry' THEN 0 ELSE 1 END
+     LIMIT 1`
+  );
+  _inquiryTableCache = String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
+  return _inquiryTableCache;
+}
+
 // GET - fetch all students with pagination and search
 export async function GET(req: NextRequest) {
   try {
     const auth = await requirePermission(req, 'student.view');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
+    const inquiryTable = await resolveInquiryTableName(pool);
     const { searchParams } = new URL(req.url);
 
     const page = Math.max(1, Number(searchParams.get('page')) || 1);
@@ -17,10 +33,35 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search')?.trim() || '';
     const courseId = searchParams.get('courseId')?.trim() || '';
     const sex = searchParams.get('sex')?.trim() || '';
+    const admittedOnlyRaw = (searchParams.get('admittedOnly') || '1').trim().toLowerCase();
+    const admittedOnly = !['0', 'false', 'no', 'all'].includes(admittedOnlyRaw);
 
     // Build WHERE clause
     const conditions: string[] = ['(s.IsDelete = 0 OR s.IsDelete IS NULL)'];
     const params: (string | number)[] = [];
+
+    if (admittedOnly) {
+      conditions.push(`(
+        EXISTS (
+          SELECT 1
+          FROM admission_master am
+          WHERE am.Student_Id = s.Student_Id
+            AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+            AND (am.Cancel IS NULL OR LOWER(TRIM(CAST(am.Cancel AS CHAR))) IN ('no','0','false'))
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM \`${inquiryTable}\` si_adm
+          WHERE si_adm.Student_Id = s.Student_Id
+            AND (si_adm.IsDelete = 0 OR si_adm.IsDelete IS NULL)
+            AND (
+              si_adm.OnlineState = 8
+              OR IFNULL(si_adm.admission_done, 0) IN (1, 2)
+              OR LOWER(TRIM(CAST(COALESCE(si_adm.Admission,'') AS CHAR))) IN ('yes','y','1','true')
+            )
+        )
+      )`);
+    }
 
     if (search) {
       const like = `%${search}%`;
