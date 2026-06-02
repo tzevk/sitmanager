@@ -700,9 +700,13 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
        OR LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.your_location')), '')) LIKE '%pune%'
     GROUP BY inquiry_id
   )`;
+  const puneLocationColumnCondition = locationColumn
+    ? `LOWER(TRIM(COALESCE(si.${locationColumn}, ''))) LIKE '%pune%'`
+    : '0=1';
   const puneListingTextCondition = `(
     LOWER(COALESCE(si.Inquiry_From, '')) LIKE '%pune%'
     OR LOWER(COALESCE(si.Discussion, '')) LIKE '%pune%'
+    OR ${puneLocationColumnCondition}
   )`;
   const puneListJoin = `
     LEFT JOIN ${puneSyncAggregate} pune_primary ON pune_primary.inquiry_id = si.Inquiry_Id
