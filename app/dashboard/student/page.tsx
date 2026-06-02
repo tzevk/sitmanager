@@ -66,6 +66,7 @@ export default function StudentPage() {
       const params = new URLSearchParams();
       params.set('page', String(page));
       params.set('limit', '25');
+      params.set('admittedOnly', '1');
       if (search) params.set('search', search);
       if (courseId) params.set('courseId', courseId);
       if (sex) params.set('sex', sex);

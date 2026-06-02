@@ -19,12 +19,9 @@ export function getPool(): mysql.Pool {
       user: env.DB_USER,
       password: env.DB_PASSWORD,
       waitForConnections: true,
-      // 1 connection per process — never opens more than one physical TCP
-      // connection, keeping MySQL max_user_connections as low as possible.
-      connectionLimit: 1,
-      // Close connections immediately after release so MySQL sees 0 open
-      // connections from this process while it is idle between requests.
-      maxIdle: 0,
+      connectionLimit: 10,
+      maxIdle: 3,
+      idleTimeout: 60_000,
       queueLimit: 0,
       connectTimeout: 30_000,
       namedPlaceholders: true,
