@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { syncSuvidyaInquiries } from '@/lib/services/suvidya-inquiry.service';
+import { recordSuvidyaSyncRun } from '@/lib/services/suvidya-sync-run.service';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // Vercel Pro allows up to 300s for cron functions
@@ -32,6 +33,7 @@ async function runSync(req: NextRequest) {
   const puneOnly = puneOnlyRaw === '1' || puneOnlyRaw === 'true' || puneOnlyRaw === 'yes';
 
   const summary = await syncSuvidyaInquiries({ sinceHours, maxRecords, puneOnly });
+  await recordSuvidyaSyncRun({ scope: 'main', status: 'success', summary });
   return NextResponse.json({ ok: true, summary });
 }
 
@@ -40,6 +42,7 @@ export async function GET(req: NextRequest) {
     return await runSync(req);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Suvidya inquiry sync failed';
+    await recordSuvidyaSyncRun({ scope: 'main', status: 'failed', errorMessage: message });
     console.error('Suvidya inquiry sync GET error:', error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
@@ -50,6 +53,7 @@ export async function POST(req: NextRequest) {
     return await runSync(req);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Suvidya inquiry sync failed';
+    await recordSuvidyaSyncRun({ scope: 'main', status: 'failed', errorMessage: message });
     console.error('Suvidya inquiry sync POST error:', error);
     return NextResponse.json({ error: message }, { status: 500 });
   }

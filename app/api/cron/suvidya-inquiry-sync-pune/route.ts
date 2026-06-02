@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { syncSuvidyaInquiries } from '@/lib/services/suvidya-inquiry.service';
+import { recordSuvidyaSyncRun } from '@/lib/services/suvidya-sync-run.service';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -30,6 +31,7 @@ async function runSync(req: NextRequest) {
   const maxRecords = Number.isFinite(maxRecordsRaw) && maxRecordsRaw > 0 ? Math.trunc(maxRecordsRaw) : undefined;
 
   const summary = await syncSuvidyaInquiries({ sinceHours, maxRecords, puneOnly: true });
+  await recordSuvidyaSyncRun({ scope: 'pune', status: 'success', summary });
   return NextResponse.json({ ok: true, scope: 'pune', summary });
 }
 
@@ -38,6 +40,7 @@ export async function GET(req: NextRequest) {
     return await runSync(req);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Suvidya Pune inquiry sync failed';
+    await recordSuvidyaSyncRun({ scope: 'pune', status: 'failed', errorMessage: message });
     console.error('Suvidya Pune inquiry sync GET error:', error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
@@ -48,6 +51,7 @@ export async function POST(req: NextRequest) {
     return await runSync(req);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Suvidya Pune inquiry sync failed';
+    await recordSuvidyaSyncRun({ scope: 'pune', status: 'failed', errorMessage: message });
     console.error('Suvidya Pune inquiry sync POST error:', error);
     return NextResponse.json({ error: message }, { status: 500 });
   }

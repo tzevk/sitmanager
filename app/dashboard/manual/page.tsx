@@ -10,6 +10,24 @@ interface Section {
   icon: React.ReactNode;
 }
 
+interface SuvidyaSyncRunView {
+  id: number;
+  scope: 'main' | 'pune';
+  status: 'success' | 'failed';
+  runAt: string;
+  errorMessage: string | null;
+  summary: Record<string, unknown> | null;
+}
+
+interface SuvidyaSyncStatusResponse {
+  ok?: boolean;
+  runs?: {
+    main: SuvidyaSyncRunView | null;
+    pune: SuvidyaSyncRunView | null;
+  };
+  error?: string;
+}
+
 const TECH_SECTIONS = [
   { id: 'tech-stack',     title: 'Tech Stack & Architecture' },
   { id: 'tech-env',       title: 'Environment Variables' },
@@ -157,6 +175,26 @@ function Tip({ children }: { children: React.ReactNode }) {
 
 function Divider() {
   return <hr className="my-8 border-gray-100" />;
+}
+
+function formatSyncRunTime(value: string | null | undefined): string {
+  if (!value) return 'Never';
+  const parsed = new Date(value.replace(' ', 'T'));
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function extractSummaryNumber(summary: Record<string, unknown> | null, key: string): number {
+  if (!summary) return 0;
+  const raw = summary[key];
+  const n = Number(raw ?? 0);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function CodeBlock({ children }: { children: string }) {
@@ -616,6 +654,9 @@ export default function ManualPage() {
   const [activeTab, setActiveTab] = useState<'guide' | 'tech'>('guide');
   const [activeSection, setActiveSection] = useState('overview');
   const [activeTechSection, setActiveTechSection] = useState('tech-stack');
+  const [syncStatus, setSyncStatus] = useState<{ main: SuvidyaSyncRunView | null; pune: SuvidyaSyncRunView | null } | null>(null);
+  const [syncStatusLoading, setSyncStatusLoading] = useState(false);
+  const [syncStatusError, setSyncStatusError] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
   const techContentRef = useRef<HTMLDivElement>(null);
 
@@ -647,6 +688,40 @@ export default function ManualPage() {
     const els = techContentRef.current?.querySelectorAll('[id]') ?? [];
     els.forEach(el => observer.observe(el));
     return () => observer.disconnect();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'guide') return;
+
+    let cancelled = false;
+
+    async function fetchSyncStatus() {
+      setSyncStatusLoading(true);
+      setSyncStatusError('');
+      try {
+        const res = await fetch('/api/cron/suvidya-inquiry-sync-status', { cache: 'no-store' });
+        const data = await res.json().catch(() => ({} as SuvidyaSyncStatusResponse));
+        if (!res.ok) throw new Error(data?.error || 'Failed to load sync status');
+        if (!cancelled) {
+          setSyncStatus(data.runs || { main: null, pune: null });
+        }
+      } catch (error: unknown) {
+        if (!cancelled) {
+          setSyncStatus(null);
+          setSyncStatusError(error instanceof Error ? error.message : 'Failed to load sync status');
+        }
+      } finally {
+        if (!cancelled) setSyncStatusLoading(false);
+      }
+    }
+
+    fetchSyncStatus();
+    const interval = setInterval(fetchSyncStatus, 120000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [activeTab]);
 
   const scrollTo = (id: string) => {
@@ -742,6 +817,42 @@ export default function ManualPage() {
             <P>
               <strong>SIT Manager</strong> is the internal operations platform for Suvidya Institute of Technology. It centralises admissions, academics, placement, finance, corporate training, and content marketing into a single role-based system. Every team member sees only the modules relevant to their department.
             </P>
+            <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Suvidya Sync Health</p>
+                {syncStatusLoading && <span className="text-[11px] text-gray-400">Refreshing...</span>}
+              </div>
+              {syncStatusError ? (
+                <p className="mt-2 text-[12px] text-rose-600">{syncStatusError}</p>
+              ) : (
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {([
+                    { key: 'main', label: 'Main Sync' },
+                    { key: 'pune', label: 'Pune Sync' },
+                  ] as const).map((item) => {
+                    const run = syncStatus?.[item.key] || null;
+                    const created = extractSummaryNumber(run?.summary || null, 'created');
+                    const failed = extractSummaryNumber(run?.summary || null, 'failed');
+                    const skippedExisting = extractSummaryNumber(run?.summary || null, 'skippedExisting');
+                    const skippedOld = extractSummaryNumber(run?.summary || null, 'skippedOld');
+
+                    return (
+                      <div key={item.key} className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[12px] font-semibold text-gray-700">{item.label}</p>
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${run?.status === 'failed' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                            {run ? (run.status === 'failed' ? 'Failed' : 'Success') : 'No Runs'}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[11px] text-gray-500">Last run: {formatSyncRunTime(run?.runAt)}</p>
+                        <p className="mt-1 text-[11px] text-gray-600">Created {created} • Failed {failed} • Existing {skippedExisting} • Old {skippedOld}</p>
+                        {run?.errorMessage && <p className="mt-1 text-[11px] text-rose-600 line-clamp-2">{run.errorMessage}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             <Table
               headers={['Department', 'Primary Modules']}
               rows={[
