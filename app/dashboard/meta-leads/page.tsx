@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
@@ -127,6 +127,11 @@ const SPREADSHEET_DEFAULT_COLUMN_WIDTHS: Record<SpreadsheetColumnKey, number> = 
 };
 
 const SPREADSHEET_MIN_COLUMN_WIDTH = 80;
+const SPREADSHEET_ROW_HEIGHT = 64;
+const SPREADSHEET_OVERSCAN_ROWS = 12;
+const REGULAR_PAGE_SIZE = 100;
+const EXCEL_PAGE_SIZE = 150;
+const SHEET_PAGE_SIZE = 300;
 
 function toBulletEditorValue(raw: string | null | undefined): string {
   const text = String(raw || '').trim();
@@ -146,6 +151,69 @@ function fromBulletEditorValue(raw: string | null | undefined): string | null {
   if (!lines.length) return null;
   return lines.join('\n');
 }
+
+interface SpreadsheetTextCellProps {
+  value: string;
+  leadId: string;
+  field: 'studentName' | 'courseName' | 'mobile' | 'email';
+  disabled: boolean;
+  onDraftChange: (leadId: string, field: 'studentName' | 'courseName' | 'mobile' | 'email', value: string) => void;
+}
+
+const SpreadsheetTextCell = memo(function SpreadsheetTextCell({ value, leadId, field, disabled, onDraftChange }: SpreadsheetTextCellProps) {
+  return (
+    <input
+      value={value}
+      onChange={(e) => onDraftChange(leadId, field, e.target.value)}
+      disabled={disabled}
+      className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+    />
+  );
+});
+
+interface SpreadsheetDiscussionCellProps {
+  value: string;
+  leadId: string;
+  disabled: boolean;
+  onDraftChange: (leadId: string, field: 'discussion', value: string) => void;
+}
+
+const SpreadsheetDiscussionCell = memo(function SpreadsheetDiscussionCell({ value, leadId, disabled, onDraftChange }: SpreadsheetDiscussionCellProps) {
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => onDraftChange(leadId, 'discussion', e.target.value)}
+      disabled={disabled}
+      rows={3}
+      placeholder="Person replies / answered questions"
+      className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[10px] leading-4 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+    />
+  );
+});
+
+interface SpreadsheetStatusCellProps {
+  value: number | null;
+  leadId: string;
+  disabled: boolean;
+  statusOptions: { id: number; label: string }[];
+  onDraftChange: (leadId: string, field: 'statusId', value: number | null) => void;
+}
+
+const SpreadsheetStatusCell = memo(function SpreadsheetStatusCell({ value, leadId, disabled, statusOptions, onDraftChange }: SpreadsheetStatusCellProps) {
+  return (
+    <select
+      value={value ?? ''}
+      onChange={(e) => onDraftChange(leadId, 'statusId', e.target.value ? Number(e.target.value) : null)}
+      disabled={disabled}
+      className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+    >
+      <option value="">Select status</option>
+      {statusOptions.map((s) => (
+        <option key={s.id} value={s.id}>{s.label}</option>
+      ))}
+    </select>
+  );
+});
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 
@@ -367,7 +435,7 @@ export default function MetaLeadsPage() {
   const [kpiExpanded, setKpiExpanded] = useState(false);
   const [viewMode, setViewMode] = useState<'regular' | 'excel' | 'sheet'>('regular');
   const [page, setPage] = useState(1);
-  const pageSize = viewMode === 'sheet' ? 1000 : viewMode === 'excel' ? 500 : 100;
+  const pageSize = viewMode === 'sheet' ? SHEET_PAGE_SIZE : viewMode === 'excel' ? EXCEL_PAGE_SIZE : REGULAR_PAGE_SIZE;
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [metaPerf, setMetaPerf] = useState<MetaPerformanceSummary | null>(null);
   const [metaPerfError, setMetaPerfError] = useState('');
@@ -382,6 +450,9 @@ export default function MetaLeadsPage() {
     startX: number;
     startWidth: number;
   } | null>(null);
+  const tableViewportRef = useRef<HTMLDivElement | null>(null);
+  const [tableScrollTop, setTableScrollTop] = useState(0);
+  const [tableViewportHeight, setTableViewportHeight] = useState(640);
   const [convertError, setConvertError] = useState('');
   const oauthStatus = searchParams.get('metaOAuth');
   const oauthMessage = searchParams.get('metaOAuthMessage');
@@ -434,6 +505,33 @@ export default function MetaLeadsPage() {
       />
     );
   }, [beginColumnResize, isSpreadsheetView]);
+
+  useEffect(() => {
+    if (!isSpreadsheetView) return;
+    const el = tableViewportRef.current;
+    if (!el) return;
+    setTableViewportHeight(Math.max(240, el.clientHeight || 640));
+
+    const onResize = () => {
+      const curr = tableViewportRef.current;
+      if (!curr) return;
+      setTableViewportHeight(Math.max(240, curr.clientHeight || 640));
+    };
+
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [isSpreadsheetView]);
+
+  const onTableScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    if (!isSpreadsheetView) return;
+    setTableScrollTop(event.currentTarget.scrollTop);
+  }, [isSpreadsheetView]);
+
+  useEffect(() => {
+    if (!isSpreadsheetView) return;
+    setTableScrollTop(0);
+    if (tableViewportRef.current) tableViewportRef.current.scrollTop = 0;
+  }, [isSpreadsheetView, page, fetchTrigger]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -618,6 +716,14 @@ export default function MetaLeadsPage() {
     });
   }, []);
 
+  const updateRowDraftTextField = useCallback((leadId: string, field: 'studentName' | 'courseName' | 'mobile' | 'email' | 'discussion', value: string) => {
+    updateRowDraft(leadId, { [field]: value });
+  }, [updateRowDraft]);
+
+  const updateRowDraftStatusField = useCallback((leadId: string, field: 'statusId', value: number | null) => {
+    updateRowDraft(leadId, { [field]: value });
+  }, [updateRowDraft]);
+
   const saveExcelRow = useCallback(async (row: InquiryRow) => {
     if (!canUpdate || !row.MetaLead_Id) return;
     const draft = rowDrafts[row.MetaLead_Id];
@@ -668,6 +774,30 @@ export default function MetaLeadsPage() {
       .filter(r => !hasLatestFollowUp(r))
       .sort((a, b) => (a.Inquiry_Dt ?? '').localeCompare(b.Inquiry_Dt ?? '')),
     [rows]
+  );
+
+  const virtualWindow = useMemo(() => {
+    if (!isSpreadsheetView || rows.length === 0) {
+      return {
+        start: 0,
+        end: rows.length,
+        topSpacer: 0,
+        bottomSpacer: 0,
+      };
+    }
+
+    const visibleCount = Math.max(20, Math.ceil(tableViewportHeight / SPREADSHEET_ROW_HEIGHT));
+    const start = Math.max(0, Math.floor(tableScrollTop / SPREADSHEET_ROW_HEIGHT) - SPREADSHEET_OVERSCAN_ROWS);
+    const end = Math.min(rows.length, start + visibleCount + (SPREADSHEET_OVERSCAN_ROWS * 2));
+    const topSpacer = start * SPREADSHEET_ROW_HEIGHT;
+    const bottomSpacer = Math.max(0, (rows.length - end) * SPREADSHEET_ROW_HEIGHT);
+
+    return { start, end, topSpacer, bottomSpacer };
+  }, [isSpreadsheetView, rows.length, tableScrollTop, tableViewportHeight]);
+
+  const visibleRows = useMemo(
+    () => (isSpreadsheetView ? rows.slice(virtualWindow.start, virtualWindow.end) : rows),
+    [isSpreadsheetView, rows, virtualWindow.end, virtualWindow.start],
   );
 
   return (
@@ -1183,7 +1313,11 @@ export default function MetaLeadsPage() {
                 {convertError}
               </div>
             )}
-            <div className={`${viewMode === 'sheet' ? 'overflow-x-auto overflow-y-auto max-h-[calc(100vh-260px)]' : 'overflow-x-auto'} ${columnResize ? 'cursor-col-resize select-none' : ''}`}>
+            <div
+              ref={tableViewportRef}
+              onScroll={onTableScroll}
+              className={`${viewMode !== 'regular' ? 'overflow-x-auto overflow-y-auto max-h-[calc(100vh-260px)]' : 'overflow-x-auto'} ${columnResize ? 'cursor-col-resize select-none' : ''}`}
+            >
               <table className={`w-full border-collapse ${viewMode !== 'regular' ? 'text-[10px] table-fixed' : ''}`}>
                 <thead>
                   <tr className={`text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 ${(viewMode === 'excel' || viewMode === 'sheet') ? 'sticky top-0 z-20' : ''}`}>
@@ -1236,7 +1370,17 @@ export default function MetaLeadsPage() {
                         <div className="text-xs text-slate-300 mt-1">Try adjusting your filters</div>
                       </td>
                     </tr>
-                  ) : rows.map((row, index) => {
+                  ) : (
+                    <>
+                  {isSpreadsheetView && virtualWindow.topSpacer > 0 && (
+                    <tr>
+                      <td colSpan={12} className="border-0 p-0">
+                        <div style={{ height: `${virtualWindow.topSpacer}px` }} />
+                      </td>
+                    </tr>
+                  )}
+                  {visibleRows.map((row, localIndex) => {
+                    const index = isSpreadsheetView ? virtualWindow.start + localIndex : localIndex;
                     const attended = hasLatestFollowUp(row);
                     const textCls = isPendingFollowUp(row) ? '[&>td]:text-purple-700' : attended ? '[&>td]:text-slate-800' : '[&>td]:text-red-500';
                     const sentEmail = Boolean(row.ApplicantEmailSentAt);
@@ -1259,11 +1403,12 @@ export default function MetaLeadsPage() {
                           )}
                           <div className="min-w-0">
                             {viewMode !== 'regular' ? (
-                              <input
+                              <SpreadsheetTextCell
                                 value={rowDrafts[row.MetaLead_Id]?.studentName ?? row.Student_Name ?? ''}
-                                onChange={(e) => updateRowDraft(row.MetaLead_Id, { studentName: e.target.value })}
+                                leadId={row.MetaLead_Id}
+                                field="studentName"
                                 disabled={!canUpdate || savingLeadId === row.MetaLead_Id}
-                                className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+                                onDraftChange={updateRowDraftTextField}
                               />
                             ) : (
                               <span className={`font-semibold whitespace-nowrap ${sentEmail ? 'text-blue-700' : 'text-slate-700'}`}>{formatName(row.Student_Name)}</span>
@@ -1285,11 +1430,12 @@ export default function MetaLeadsPage() {
                       </td>
                       <td style={getSpreadsheetColStyle('training')} className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} text-slate-500 border border-slate-100 max-w-[140px]`}>
                         {viewMode !== 'regular' ? (
-                          <input
+                          <SpreadsheetTextCell
                             value={rowDrafts[row.MetaLead_Id]?.courseName ?? row.CourseName ?? ''}
-                            onChange={(e) => updateRowDraft(row.MetaLead_Id, { courseName: e.target.value })}
+                            leadId={row.MetaLead_Id}
+                            field="courseName"
                             disabled={!canUpdate || savingLeadId === row.MetaLead_Id}
-                            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+                            onDraftChange={updateRowDraftTextField}
                           />
                         ) : (
                           <span className="truncate block" title={row.CourseName || undefined}>{row.CourseName || '—'}</span>
@@ -1305,11 +1451,12 @@ export default function MetaLeadsPage() {
                       )}
                       <td style={getSpreadsheetColStyle('mobile')} className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 font-mono text-slate-700 text-[11px] whitespace-nowrap`}>
                         {viewMode !== 'regular' ? (
-                          <input
+                          <SpreadsheetTextCell
                             value={rowDrafts[row.MetaLead_Id]?.mobile ?? row.Present_Mobile ?? ''}
-                            onChange={(e) => updateRowDraft(row.MetaLead_Id, { mobile: e.target.value })}
+                            leadId={row.MetaLead_Id}
+                            field="mobile"
                             disabled={!canUpdate || savingLeadId === row.MetaLead_Id}
-                            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+                            onDraftChange={updateRowDraftTextField}
                           />
                         ) : (
                           row.Present_Mobile || '—'
@@ -1317,11 +1464,12 @@ export default function MetaLeadsPage() {
                       </td>
                       <td style={getSpreadsheetColStyle('email')} className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 text-slate-500 text-[11px]`}>
                         {viewMode !== 'regular' ? (
-                          <input
+                          <SpreadsheetTextCell
                             value={rowDrafts[row.MetaLead_Id]?.email ?? row.Email ?? ''}
-                            onChange={(e) => updateRowDraft(row.MetaLead_Id, { email: e.target.value })}
+                            leadId={row.MetaLead_Id}
+                            field="email"
                             disabled={!canUpdate || savingLeadId === row.MetaLead_Id}
-                            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+                            onDraftChange={updateRowDraftTextField}
                           />
                         ) : (
                           <span className="truncate block max-w-[160px]">{row.Email || '—'}</span>
@@ -1338,17 +1486,13 @@ export default function MetaLeadsPage() {
                       )}
                       <td style={getSpreadsheetColStyle('status')} className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} text-center border border-slate-100`}>
                         {viewMode !== 'regular' ? (
-                          <select
-                            value={rowDrafts[row.MetaLead_Id]?.statusId ?? ''}
-                            onChange={(e) => updateRowDraft(row.MetaLead_Id, { statusId: e.target.value ? Number(e.target.value) : null })}
+                          <SpreadsheetStatusCell
+                            value={rowDrafts[row.MetaLead_Id]?.statusId ?? null}
+                            leadId={row.MetaLead_Id}
                             disabled={!canUpdate || savingLeadId === row.MetaLead_Id}
-                            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
-                          >
-                            <option value="">Select status</option>
-                            {filters.statusOptions.map((s) => (
-                              <option key={s.id} value={s.id}>{s.label}</option>
-                            ))}
-                          </select>
+                            statusOptions={filters.statusOptions}
+                            onDraftChange={updateRowDraftStatusField}
+                          />
                         ) : (
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${statusPill(row.Status_id, row.StatusLabel)}`}>
                             {row.StatusLabel}
@@ -1357,13 +1501,11 @@ export default function MetaLeadsPage() {
                       </td>
                       {viewMode !== 'regular' && (
                         <td style={getSpreadsheetColStyle('questions')} className="py-1 px-1.5 border border-slate-100 text-[10px] text-slate-600 min-w-[220px] max-w-[280px]">
-                          <textarea
+                          <SpreadsheetDiscussionCell
                             value={rowDrafts[row.MetaLead_Id]?.discussion ?? toBulletEditorValue(row.Discussion)}
-                            onChange={(e) => updateRowDraft(row.MetaLead_Id, { discussion: e.target.value })}
+                            leadId={row.MetaLead_Id}
                             disabled={!canUpdate || savingLeadId === row.MetaLead_Id}
-                            rows={3}
-                            placeholder={viewMode === 'excel' ? 'Type replied questions/answers' : 'Type replied questions/answers'}
-                            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[10px] leading-4 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+                            onDraftChange={updateRowDraftTextField}
                           />
                         </td>
                       )}
@@ -1440,6 +1582,15 @@ export default function MetaLeadsPage() {
                     </tr>
                   );
                   })}
+                  {isSpreadsheetView && virtualWindow.bottomSpacer > 0 && (
+                    <tr>
+                      <td colSpan={12} className="border-0 p-0">
+                        <div style={{ height: `${virtualWindow.bottomSpacer}px` }} />
+                      </td>
+                    </tr>
+                  )}
+                    </>
+                  )}
                 </tbody>
               </table>
             </div>
