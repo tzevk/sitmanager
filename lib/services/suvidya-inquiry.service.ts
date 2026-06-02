@@ -56,6 +56,21 @@ function normalizeText(value: unknown): string | null {
   return text || null;
 }
 
+function normalizePhoneText(value: unknown): string | null {
+  const text = normalizeText(value);
+  if (!text) return null;
+
+  const digits = text.replace(/\D/g, '');
+  if (!digits) return null;
+
+  // The upstream source sometimes overflows phone values into signed int32 max.
+  if (digits === '2147483647') return null;
+
+  if (digits.length < 10 || digits.length > 15) return null;
+
+  return /^\+?[0-9]+$/.test(text) ? text : digits;
+}
+
 function normalizeCourseKey(value: string): string {
   return value.replace(/\s+/g, ' ').trim().toLowerCase();
 }
@@ -358,7 +373,7 @@ export async function syncSuvidyaInquiries(
     }
 
     const email = normalizeText(record.email_id);
-    const mobile = normalizeText(record.phone);
+    const mobile = normalizePhoneText(record.phone);
     const qualification = normalizeText(record.select_qualification);
     const location = normalizeText(record.your_location);
     const courseName = normalizeText(record.select_course);

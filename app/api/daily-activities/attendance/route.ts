@@ -90,7 +90,6 @@ export async function GET(req: NextRequest) {
     const auth = await requirePermission(req, 'attendance.view');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
-    await ensureAttendanceTable(pool);
 
     const { searchParams } = new URL(req.url);
     const options  = searchParams.get('options');
@@ -99,18 +98,21 @@ export async function GET(req: NextRequest) {
     const sessionRaw = (searchParams.get('session') || 'first_half').toLowerCase();
     const session = sessionRaw === 'second_half' ? 'second_half' : 'first_half';
 
-    /* --- courses dropdown --- */
+    /* --- courses dropdown — no schema check needed, fast path --- */
     if (options === 'courses') {
       const [courses] = await pool.query<any[]>(`
         SELECT Course_Id, Course_Name
         FROM course_mst
-        WHERE (IsDelete = 0 OR IsDelete IS NULL) AND IsActive = 1
+        WHERE (IsDelete = 0 OR IsDelete IS NULL)
+          AND (IsActive = 1 OR IsActive IS NULL)
         ORDER BY Course_Name
       `);
-      return NextResponse.json({ courses });
+      return NextResponse.json({ courses }, {
+        headers: { 'Cache-Control': 'private, max-age=60' },
+      });
     }
 
-    /* --- batches dropdown --- */
+    /* --- batches dropdown — no schema check needed, fast path --- */
     if (options === 'batches') {
       const courseId = searchParams.get('courseId');
       if (!courseId) return NextResponse.json({ batches: [] });
@@ -123,11 +125,21 @@ export async function GET(req: NextRequest) {
          ORDER BY Batch_Id DESC`,
         [Number(courseId)]
       );
-      return NextResponse.json({ batches });
+      return NextResponse.json({ batches }, {
+        headers: { 'Cache-Control': 'private, max-age=60' },
+      });
     }
+
+    // Schema check only runs for the student+attendance query, not for dropdowns
+    await ensureAttendanceTable(pool);
 
     /* --- students + today's attendance for batch+date --- */
     if (batchId && date) {
+      // Use derived tables to eliminate duplicates from two sources:
+      // 1. admission_master: a student may have multiple records for the same batch
+      //    (e.g. cancelled + re-admitted). GROUP BY Student_Id picks MIN(Admission_Id).
+      // 2. student_attendance: stale duplicate rows before the unique key existed.
+      //    GROUP BY Student_Id picks the latest (MAX) attendance record.
       const [students] = await pool.query<any[]>(
         `SELECT
            a.Admission_Id,
@@ -135,26 +147,42 @@ export async function GET(req: NextRequest) {
            a.Student_Code,
            s.Student_Name AS studentName,
            COALESCE(a.Roll_No, '') AS rollNo,
-           s.Present_Mobile AS mobile,
+           COALESCE(NULLIF(TRIM(s.Present_Mobile), ''), NULLIF(TRIM(s.Present_Mobile2), '')) AS mobile,
            COALESCE(att.Status, '') AS attendanceStatus,
            att.Attendance_Id,
            att.In_Time,
            att.Out_Time
-         FROM admission_master a
+         FROM (
+           SELECT
+             MIN(Admission_Id) AS Admission_Id,
+             Student_Id,
+             MAX(Student_Code) AS Student_Code,
+             MAX(Roll_No)      AS Roll_No
+           FROM admission_master
+           WHERE Batch_Id = ?
+             AND (IsDelete = 0 OR IsDelete IS NULL)
+             AND (Cancel   = 0 OR Cancel   IS NULL)
+           GROUP BY Student_Id
+         ) a
          JOIN student_master s ON a.Student_Id = s.Student_Id
-         LEFT JOIN student_attendance att
-           ON att.Student_Id = s.Student_Id
-           AND att.Batch_Id  = a.Batch_Id
-           AND att.Attendance_Date = ?
-           AND att.Session = ?
-           AND (att.IsDelete = 0 OR att.IsDelete IS NULL)
-         WHERE a.Batch_Id = ?
-           AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
-           AND (a.Cancel   = 0 OR a.Cancel   IS NULL)
+         LEFT JOIN (
+           SELECT
+             Student_Id,
+             MAX(Attendance_Id) AS Attendance_Id,
+             MAX(Status)        AS Status,
+             MAX(In_Time)       AS In_Time,
+             MAX(Out_Time)      AS Out_Time
+           FROM student_attendance
+           WHERE Batch_Id = ?
+             AND Attendance_Date = ?
+             AND Session = ?
+             AND (IsDelete = 0 OR IsDelete IS NULL)
+           GROUP BY Student_Id
+         ) att ON att.Student_Id = a.Student_Id
          ORDER BY
            CASE WHEN a.Roll_No IS NULL OR a.Roll_No = '' THEN 1 ELSE 0 END,
            a.Roll_No + 0, s.Student_Name`,
-        [date, session, Number(batchId)]
+        [Number(batchId), Number(batchId), date, session]
       );
 
       /* summary counts */

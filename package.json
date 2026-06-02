@@ -13,7 +13,8 @@
     "vercel:env": "node -e \"const e=['DB_HOST','DB_NAME','DB_USER','DB_PASSWORD','JWT_SECRET'];const m=e.filter(k=>!process.env[k]);if(m.length){console.error('Missing:',m.join(', '));process.exit(1)}else console.log('All env vars set')\"",
     "db:import-ct": "node scripts/db/import-ct-xlsx.mjs --file ct.xlsx",
     "db:import-consultancy-excel": "node scripts/db/import-consultancy-excel.mjs",
-    "db:sync-ct-enquires": "node scripts/db/sync-ct-training-enquires-to-corporate-inquiry.mjs"
+    "db:sync-ct-enquires": "node scripts/db/sync-ct-training-enquires-to-corporate-inquiry.mjs",
+    "db:fix-invalid-inquiry-phones": "node scripts/db/fix-invalid-inquiry-phones.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-ses": "^3.1025.0",

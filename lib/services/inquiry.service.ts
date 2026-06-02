@@ -313,6 +313,12 @@ async function ensureMetaLeadSchema(pool: ReturnType<typeof getPool>): Promise<v
 const DISCIPLINE_NAME_EXPR =
   `COALESCE(NULLIF(TRIM(md.Deciplin),''), NULLIF(TRIM(si.Discipline),''))`;
 
+const PRIMARY_INQUIRY_MOBILE_EXPR =
+  `NULLIF(TRIM(si.Present_Mobile),'')`;
+
+const SEARCHABLE_INQUIRY_MOBILE_EXPR =
+  `COALESCE(${PRIMARY_INQUIRY_MOBILE_EXPR}, NULLIF(TRIM(si.Present_Mobile2),''))`;
+
 const FALLBACK_STATUSES: Record<number, string> = {
   1: 'New', 2: 'Contacted', 3: 'Inquiry', 4: 'Follow Up', 5: 'Interested',
   6: 'Not Interested', 7: 'Admitted', 8: 'Closed', 9: 'DNC', 10: 'Converted',
@@ -322,10 +328,29 @@ const FALLBACK_STATUSES: Record<number, string> = {
   36: 'Not Eligible',
 };
 
+function normalizeInquiryMobile(value: unknown): string | null {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+
+  const digits = text.replace(/\D/g, '');
+  if (!digits) return null;
+
+  // Upstream Suvidya payloads sometimes overflow phone numbers into int32 max.
+  if (digits === '2147483647') return null;
+
+  if (digits.length < 10 || digits.length > 15) return null;
+
+  return /^\+?[0-9]+$/.test(text) ? text : digits;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Detect which column on the inquiry table stores the branch/city. */
+let locationColumnCache: Map<string, string | null> | null = null;
+
+/** Detect which column on the inquiry table stores the branch/city. Cached for the lifetime of the process. */
 async function resolveLocationColumn(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<string | null> {
+  if (!locationColumnCache) locationColumnCache = new Map();
+  if (locationColumnCache.has(inquiryTable)) return locationColumnCache.get(inquiryTable) ?? null;
   try {
     const [rows] = await pool.query(
       `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
@@ -334,9 +359,13 @@ async function resolveLocationColumn(pool: ReturnType<typeof getPool>, inquiryTa
     );
     const cols = new Set((rows as any[]).map((r: any) => String(r.COLUMN_NAME)));
     for (const candidate of ['Branch', 'Location', 'Present_City', 'City']) {
-      if (cols.has(candidate)) return candidate;
+      if (cols.has(candidate)) {
+        locationColumnCache.set(inquiryTable, candidate);
+        return candidate;
+      }
     }
   } catch { /* best-effort */ }
+  locationColumnCache.set(inquiryTable, null);
   return null;
 }
 
@@ -602,7 +631,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   if (search) {
     const resolvedBatchCodeExpr = `NULLIF(TRIM(CAST(si.Batch_Code AS CHAR)),'')`;
     conditions.push(
-      `(si.Student_Name LIKE ? OR si.Email LIKE ? OR si.Present_Mobile LIKE ? OR c.Course_Name LIKE ? OR ${resolvedBatchCodeExpr} LIKE ?)`
+      `(si.Student_Name LIKE ? OR si.Email LIKE ? OR ${SEARCHABLE_INQUIRY_MOBILE_EXPR} LIKE ? OR c.Course_Name LIKE ? OR ${resolvedBatchCodeExpr} LIKE ?)`
     );
     const s = `%${search}%`;
     queryParams.push(s, s, s, s, s);
@@ -691,49 +720,38 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   let pageIds: number[] = [];
   let sortOrder = new Map<number, number>();
 
-  if (hasActiveFilters) {
-    total = await cached(
-      getInquiryCountCacheKey({
-        inquiryTable,
-        search,
-        discipline,
-        inquiryType,
-        leadTag,
-        location: normalizedLocation,
-        training,
-        statusId,
-        duplicatesOnly,
-        dateFrom,
-        dateTo,
-        puneOnly,
-        followUpDue,
-      }),
-      30_000,
-      async () => {
-        const [countResult] = await pool.query(
-          `SELECT COUNT(*) as total
-           FROM \`${inquiryTable}\` si
-           ${listCourseJoin}
-           ${listDisciplineJoin}
-           ${puneOnly ? puneListJoin : ''}
-           ${whereClause}`,
-          queryParams
-        );
-        return (countResult as any[])[0]?.total || 0;
-      }
-    );
-  } else {
-    const [countResult] = await pool.query(
-      `SELECT COUNT(*) as total
-       FROM \`${inquiryTable}\` si
-       ${listCourseJoin}
-       ${listDisciplineJoin}
-       ${puneOnly ? puneListJoin : ''}
-       ${whereClause}`,
-      queryParams
-    );
-    total = (countResult as any[])[0]?.total || 0;
-  }
+  // Always cache the COUNT — the no-filter case (default page load) is the heaviest
+  // full-table scan and was previously the only path without caching.
+  total = await cached(
+    getInquiryCountCacheKey({
+      inquiryTable,
+      search,
+      discipline,
+      inquiryType,
+      leadTag,
+      location: normalizedLocation,
+      training,
+      statusId,
+      duplicatesOnly,
+      dateFrom,
+      dateTo,
+      puneOnly,
+      followUpDue,
+    }),
+    hasActiveFilters ? 30_000 : 60_000, // no-filter total changes slowly; cache for 60s
+    async () => {
+      const [countResult] = await pool.query(
+        `SELECT COUNT(*) as total
+         FROM \`${inquiryTable}\` si
+         ${listCourseJoin}
+         ${listDisciplineJoin}
+         ${puneOnly ? puneListJoin : ''}
+         ${whereClause}`,
+        queryParams
+      );
+      return (countResult as any[])[0]?.total || 0;
+    }
+  );
 
   const [sortedIds] = await pool.query(
     `SELECT si.Inquiry_Id
@@ -758,7 +776,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       `SELECT
          si.Inquiry_Id as Student_Id, si.Student_Id as SourceStudentId,
          si.Student_Name, c.Course_Name as CourseName, si.Inquiry_Dt,
-         si.Present_Mobile, si.Email, ${locationSelect}
+        ${PRIMARY_INQUIRY_MOBILE_EXPR} as Present_Mobile, si.Email, ${locationSelect}
         si.Discipline, ${disciplineExpr} as DisciplineName,
          si.Inquiry_From, si.Inquiry_Type,
          si.OnlineState as OnlineStateRaw,
@@ -826,7 +844,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       Student_Name: r.Student_Name,
       CourseName: r.CourseName ?? null,
       Inquiry_Dt: r.Inquiry_Dt ?? null,
-      Present_Mobile: r.Present_Mobile ?? null,
+      Present_Mobile: normalizeInquiryMobile(r.Present_Mobile),
       Email: r.Email ?? null,
       Location: r.Location?.trim() || null,
       Discipline: cleanDiscipline,
