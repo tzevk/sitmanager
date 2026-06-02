@@ -17,6 +17,11 @@ interface Student {
 
 type AttStatus = 'P' | 'A' | 'L' | '';
 type StatusMap  = Record<number, AttStatus>;
+type FeedbackEntry = { rating: number; comments: string | null };
+type StudentFeedback = {
+  firstHalf: FeedbackEntry | null;
+  secondHalf: FeedbackEntry | null;
+};
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 function todayStr() {
@@ -51,7 +56,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   const [search, setSearch]         = useState('');
 
   /* feedback column */
-  const [feedbackMap, setFeedbackMap] = useState<Record<string, { rating: number; comments: string | null }>>({});
+  const [feedbackMap, setFeedbackMap] = useState<Record<string, StudentFeedback>>({});
 
   /* ui */
   const [loadingStudents, setLoadingStudents] = useState(false);
@@ -517,8 +522,23 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
               {filtered.map((student, idx) => {
                 const fh = statusMapFH[student.Student_Id] ?? '';
                 const sh = statusMapSH[student.Student_Id] ?? '';
+                const fb = student.rollNo ? feedbackMap[student.rollNo] : undefined;
                 const btnBase = (active: boolean, activeClr: string, inactiveClr: string) =>
                   `flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ${active ? activeClr : inactiveClr}`;
+                const ratingColors: Record<number, string> = {
+                  5: 'bg-emerald-50 text-emerald-700',
+                  4: 'bg-green-50 text-green-700',
+                  3: 'bg-blue-50 text-blue-700',
+                  2: 'bg-amber-50 text-amber-700',
+                  1: 'bg-red-50 text-red-600',
+                };
+                const ratingLabels: Record<number, string> = {
+                  5: 'Excellent',
+                  4: 'Very Good',
+                  3: 'Good',
+                  2: 'Satisfactory',
+                  1: 'Unsatisfactory',
+                };
                 return (
                   <div key={student.Student_Id} className="px-4 py-3 space-y-2">
                     <div className="flex items-start justify-between gap-3">
@@ -562,6 +582,32 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                         <span>2nd: <span className={`font-bold ${sh==='P'?'text-green-600':sh==='A'?'text-red-500':sh==='L'?'text-amber-600':'text-gray-400'}`}>{sh||'—'}</span></span>
                       </div>
                     )}
+
+                    <div className="rounded-lg border border-amber-100 bg-amber-50/40 px-3 py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-1.5">Feedback</p>
+                      {fb ? (
+                        <div className="space-y-2">
+                          {([
+                            { key: 'FH', label: 'First Half', value: fb.firstHalf },
+                            { key: 'SH', label: 'Second Half', value: fb.secondHalf },
+                          ] as const).map((part) => (
+                            part.value ? (
+                              <div key={part.key} className="space-y-0.5">
+                                <p className="text-[10px] font-semibold text-gray-500">{part.label}</p>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${ratingColors[part.value.rating] ?? 'bg-gray-50 text-gray-600'}`}>
+                                  {part.value.rating} — {ratingLabels[part.value.rating] ?? part.value.rating}
+                                </span>
+                                {part.value.comments && (
+                                  <p className="text-[11px] text-gray-500 italic leading-relaxed">&ldquo;{part.value.comments}&rdquo;</p>
+                                )}
+                              </div>
+                            ) : null
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400">No feedback submitted yet.</p>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -679,13 +725,23 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                         return (
                           <td className="py-2.5 px-3 bg-amber-50/20 border-l border-amber-100/60">
                             {fb ? (
-                              <div className="flex flex-col items-center gap-0.5">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${RATING_COLORS[fb.rating] ?? 'bg-gray-50 text-gray-600'}`}>
-                                  {fb.rating} — {RATING_LABELS[fb.rating] ?? fb.rating}
-                                </span>
-                                {fb.comments && (
-                                  <span className="text-[10px] text-gray-400 italic max-w-[120px] truncate" title={fb.comments}>&ldquo;{fb.comments}&rdquo;</span>
-                                )}
+                              <div className="flex flex-col items-start gap-1">
+                                {([
+                                  { key: 'FH', label: '1st', value: fb.firstHalf },
+                                  { key: 'SH', label: '2nd', value: fb.secondHalf },
+                                ] as const).map((part) => (
+                                  part.value ? (
+                                    <div key={part.key} className="flex flex-col items-start gap-0.5">
+                                      <span className="text-[9px] font-bold uppercase tracking-wide text-gray-400">{part.label} Half</span>
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${RATING_COLORS[part.value.rating] ?? 'bg-gray-50 text-gray-600'}`}>
+                                        {part.value.rating} — {RATING_LABELS[part.value.rating] ?? part.value.rating}
+                                      </span>
+                                      {part.value.comments && (
+                                        <span className="text-[10px] text-gray-400 italic max-w-[120px] truncate" title={part.value.comments}>&ldquo;{part.value.comments}&rdquo;</span>
+                                      )}
+                                    </div>
+                                  ) : null
+                                ))}
                               </div>
                             ) : (
                               <div className="flex justify-center">

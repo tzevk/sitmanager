@@ -90,16 +90,28 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { studentName, rollNo, rating, comments, deviceId } = body as {
+    const { studentName, rollNo, rating, comments, firstHalfRating, firstHalfComments, secondHalfRating, secondHalfComments, deviceId } = body as {
       studentName?: string;
       rollNo?: string;
       rating?: number;
       comments?: string;
+      firstHalfRating?: number;
+      firstHalfComments?: string;
+      secondHalfRating?: number;
+      secondHalfComments?: string;
       deviceId?: string;
     };
 
-    if (!rating || rating < 1 || rating > 5) {
-      return NextResponse.json({ error: 'Rating (1-5) is required' }, { status: 400 });
+    const normalizedFirstHalfRating = firstHalfRating ?? rating;
+    const normalizedSecondHalfRating = secondHalfRating ?? rating;
+    const normalizedFirstHalfComments = firstHalfComments ?? comments;
+    const normalizedSecondHalfComments = secondHalfComments ?? null;
+
+    if (!normalizedFirstHalfRating || normalizedFirstHalfRating < 1 || normalizedFirstHalfRating > 5) {
+      return NextResponse.json({ error: 'First half rating (1-5) is required' }, { status: 400 });
+    }
+    if (!normalizedSecondHalfRating || normalizedSecondHalfRating < 1 || normalizedSecondHalfRating > 5) {
+      return NextResponse.json({ error: 'Second half rating (1-5) is required' }, { status: 400 });
     }
     if (!rollNo?.trim()) {
       return NextResponse.json({ error: 'Roll number is required' }, { status: 400 });
@@ -134,6 +146,10 @@ export async function POST(
         device_id    VARCHAR(64) NULL,
         rating       TINYINT NOT NULL,
         comments     TEXT NULL,
+        first_half_rating TINYINT NULL,
+        first_half_comments TEXT NULL,
+        second_half_rating TINYINT NULL,
+        second_half_comments TEXT NULL,
         submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_batch_date (Batch_Id, date)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -152,6 +168,18 @@ export async function POST(
     }
     if (!colNames.includes('device_id')) {
       await pool.query(`ALTER TABLE attendance_feedback ADD COLUMN device_id VARCHAR(64) NULL AFTER roll_no`);
+    }
+    if (!colNames.includes('first_half_rating')) {
+      await pool.query(`ALTER TABLE attendance_feedback ADD COLUMN first_half_rating TINYINT NULL AFTER comments`);
+    }
+    if (!colNames.includes('first_half_comments')) {
+      await pool.query(`ALTER TABLE attendance_feedback ADD COLUMN first_half_comments TEXT NULL AFTER first_half_rating`);
+    }
+    if (!colNames.includes('second_half_rating')) {
+      await pool.query(`ALTER TABLE attendance_feedback ADD COLUMN second_half_rating TINYINT NULL AFTER first_half_comments`);
+    }
+    if (!colNames.includes('second_half_comments')) {
+      await pool.query(`ALTER TABLE attendance_feedback ADD COLUMN second_half_comments TEXT NULL AFTER second_half_rating`);
     }
 
     /* duplicate check — one submission per roll number per session */
@@ -181,9 +209,25 @@ export async function POST(
     }
 
     await pool.query(
-      `INSERT INTO attendance_feedback (token, Batch_Id, date, roll_no, student_name, device_id, rating, comments)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [token, rows[0].Batch_Id, rows[0].date, rollNo?.trim() || null, studentName?.trim() || null, deviceId?.trim() || null, rating, comments?.trim() || null]
+      `INSERT INTO attendance_feedback (
+         token, Batch_Id, date, roll_no, student_name, device_id,
+         rating, comments, first_half_rating, first_half_comments, second_half_rating, second_half_comments
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        token,
+        rows[0].Batch_Id,
+        rows[0].date,
+        rollNo?.trim() || null,
+        studentName?.trim() || null,
+        deviceId?.trim() || null,
+        normalizedFirstHalfRating,
+        normalizedFirstHalfComments?.trim() || null,
+        normalizedFirstHalfRating,
+        normalizedFirstHalfComments?.trim() || null,
+        normalizedSecondHalfRating,
+        normalizedSecondHalfComments?.trim() || null,
+      ]
     );
 
     return NextResponse.json({ success: true });

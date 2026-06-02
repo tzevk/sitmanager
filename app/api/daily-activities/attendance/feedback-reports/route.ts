@@ -21,15 +21,34 @@ export async function GET(req: NextRequest) {
     /* ── Attendance-page column mode: flat per-student feedback ── */
     if (batchId && date) {
       const [rows] = await pool.query<any[]>(`
-        SELECT af.roll_no, af.rating, af.comments
+        SELECT
+          af.roll_no,
+          af.rating,
+          af.comments,
+          af.first_half_rating,
+          af.first_half_comments,
+          af.second_half_rating,
+          af.second_half_comments
         FROM attendance_feedback af
         LEFT JOIN attendance_feedback_token aft ON aft.token = af.token
         WHERE af.Batch_Id = ? AND DATE(af.date) = ?
           AND (af.roll_no IS NOT NULL AND af.roll_no != '')
         ORDER BY CAST(af.roll_no AS UNSIGNED), af.roll_no
       `, [batchId, date]);
-      const map: Record<string, { rating: number; comments: string | null }> = {};
-      for (const r of rows) map[r.roll_no] = { rating: r.rating, comments: r.comments ?? null };
+      const map: Record<string, {
+        firstHalf: { rating: number; comments: string | null } | null;
+        secondHalf: { rating: number; comments: string | null } | null;
+      }> = {};
+      for (const r of rows) {
+        map[r.roll_no] = {
+          firstHalf: (r.first_half_rating ?? r.rating)
+            ? { rating: r.first_half_rating ?? r.rating, comments: r.first_half_comments ?? r.comments ?? null }
+            : null,
+          secondHalf: r.second_half_rating
+            ? { rating: r.second_half_rating, comments: r.second_half_comments ?? null }
+            : null,
+        };
+      }
       return NextResponse.json({ feedback: map });
     }
 
@@ -44,6 +63,10 @@ export async function GET(req: NextRequest) {
         af.student_name,
         af.rating,
         af.comments,
+        af.first_half_rating,
+        af.first_half_comments,
+        af.second_half_rating,
+        af.second_half_comments,
         DATE_FORMAT(af.submitted_at, '%Y-%m-%d %H:%i:%s') AS submitted_at
       FROM attendance_feedback af
       LEFT JOIN attendance_feedback_token aft ON aft.token = af.token
@@ -57,6 +80,10 @@ export async function GET(req: NextRequest) {
       studentName: string;
       rating: number;
       comments: string | null;
+      firstHalfRating: number | null;
+      firstHalfComments: string | null;
+      secondHalfRating: number | null;
+      secondHalfComments: string | null;
       submittedAt: string;
     };
     type BatchGroup = { batchId: number; batchName: string; students: StudentRow[] };
@@ -76,6 +103,10 @@ export async function GET(req: NextRequest) {
         studentName: r.student_name ?? '',
         rating: r.rating,
         comments: r.comments ?? null,
+        firstHalfRating: r.first_half_rating ?? r.rating ?? null,
+        firstHalfComments: r.first_half_comments ?? r.comments ?? null,
+        secondHalfRating: r.second_half_rating ?? null,
+        secondHalfComments: r.second_half_comments ?? null,
         submittedAt: r.submitted_at,
       });
     }

@@ -35,8 +35,10 @@ export default function FeedbackPage() {
   const [studentName, setStudentName] = useState('');
 
   /* rating form */
-  const [rating, setRating]         = useState(0);
-  const [improvement, setImprovement] = useState('');
+  const [firstHalfRating, setFirstHalfRating] = useState(0);
+  const [secondHalfRating, setSecondHalfRating] = useState(0);
+  const [firstHalfImprovement, setFirstHalfImprovement] = useState('');
+  const [secondHalfImprovement, setSecondHalfImprovement] = useState('');
   const [submitting, setSubmitting]   = useState(false);
   const [submitted, setSubmitted]     = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -92,14 +94,25 @@ export default function FeedbackPage() {
   /* 3. Submit feedback */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (rating < 1) { setSubmitError('Please select a rating.'); return; }
+    if (firstHalfRating < 1 || secondHalfRating < 1) {
+      setSubmitError('Please select ratings for both first half and second half.');
+      return;
+    }
     setSubmitting(true);
     setSubmitError('');
     try {
       const res = await fetch(`/api/public/feedback/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rollNo, studentName, rating, comments: rating === 1 ? improvement : undefined, deviceId }),
+        body: JSON.stringify({
+          rollNo,
+          studentName,
+          firstHalfRating,
+          firstHalfComments: firstHalfRating === 1 ? firstHalfImprovement : undefined,
+          secondHalfRating,
+          secondHalfComments: secondHalfRating === 1 ? secondHalfImprovement : undefined,
+          deviceId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Submission failed');
@@ -240,51 +253,68 @@ export default function FeedbackPage() {
                     <span><span className="font-semibold">{studentName}</span> — Roll No. {rollNo}</span>
                   </div>
 
-                  {/* Rating */}
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">
-                      Rate Today&apos;s Session <span className="text-red-400">*</span>
-                    </label>
-                    <div className="space-y-2">
-                      {([5, 4, 3, 2, 1] as const).map(star => (
-                        <button
-                          key={star}
-                          type="button"
-                          onClick={() => setRating(star)}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
-                            rating === star
-                              ? 'bg-[#2E3093] border-[#2E3093] text-white shadow-sm'
-                              : 'bg-white border-gray-200 text-gray-700 hover:border-[#2E3093]/40 hover:bg-[#2E3093]/5'
-                          }`}
-                        >
-                          <span className={`text-base font-bold w-5 text-center ${rating === star ? 'text-white' : 'text-[#2E3093]'}`}>{star}</span>
-                          <span>{RATING_LABELS[star]}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Improvement — only for Unsatisfactory */}
-                  {rating === 1 && (
-                    <div>
-                      <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-1">
-                        How can we improve?
+                  {([
+                    {
+                      key: 'first',
+                      title: 'First Half',
+                      rating: firstHalfRating,
+                      setRating: setFirstHalfRating,
+                      improvement: firstHalfImprovement,
+                      setImprovement: setFirstHalfImprovement,
+                    },
+                    {
+                      key: 'second',
+                      title: 'Second Half',
+                      rating: secondHalfRating,
+                      setRating: setSecondHalfRating,
+                      improvement: secondHalfImprovement,
+                      setImprovement: setSecondHalfImprovement,
+                    },
+                  ] as const).map((section) => (
+                    <div key={section.key} className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+                      <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-500">
+                        {section.title} Rating <span className="text-red-400">*</span>
                       </label>
-                      <textarea
-                        value={improvement}
-                        onChange={e => setImprovement(e.target.value)}
-                        placeholder="Please share what we can do better…"
-                        rows={4}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
-                      />
+                      <div className="space-y-2">
+                        {([5, 4, 3, 2, 1] as const).map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => section.setRating(star)}
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                              section.rating === star
+                                ? 'bg-[#2E3093] border-[#2E3093] text-white shadow-sm'
+                                : 'bg-white border-gray-200 text-gray-700 hover:border-[#2E3093]/40 hover:bg-[#2E3093]/5'
+                            }`}
+                          >
+                            <span className={`text-base font-bold w-5 text-center ${section.rating === star ? 'text-white' : 'text-[#2E3093]'}`}>{star}</span>
+                            <span>{RATING_LABELS[star]}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {section.rating === 1 && (
+                        <div>
+                          <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-1">
+                            How can we improve {section.title.toLowerCase()}?
+                          </label>
+                          <textarea
+                            value={section.improvement}
+                            onChange={e => section.setImprovement(e.target.value)}
+                            placeholder="Please share what we can do better…"
+                            rows={4}
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+                          />
+                        </div>
+                      )}
                     </div>
-                  )}
+                  ))}
 
                   {submitError && <p className="text-xs text-red-500">{submitError}</p>}
 
                   <button
                     type="submit"
-                    disabled={submitting || rating < 1}
+                    disabled={submitting || firstHalfRating < 1 || secondHalfRating < 1}
                     className="w-full py-2.5 rounded-xl bg-[#2E3093] text-white text-sm font-semibold hover:bg-[#252780] transition-colors disabled:opacity-50"
                   >
                     {submitting ? (
