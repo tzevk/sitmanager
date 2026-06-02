@@ -9,6 +9,7 @@ import { FilterBar, GhostBtn, PageHeader } from '@/components/ui/PageHeader';
 interface InquiryRow {
   MetaLead_Id: string;
   Student_Id: number;
+  StudentMaster_Id: number;
   Student_Name: string;
   CourseName: string | null;
   Inquiry_Dt: string | null;
@@ -304,9 +305,9 @@ export default function MetaLeadsPage() {
   const [duplicatesOnly, setDuplicatesOnly] = useState(false);
   const [untouchedExpanded, setUntouchedExpanded] = useState(false);
   const [kpiExpanded, setKpiExpanded] = useState(false);
-  const [viewMode, setViewMode] = useState<'regular' | 'excel'>('regular');
+  const [viewMode, setViewMode] = useState<'regular' | 'excel' | 'sheet'>('regular');
   const [page, setPage] = useState(1);
-  const pageSize = viewMode === 'excel' ? 500 : 100;
+  const pageSize = viewMode === 'sheet' ? 1000 : viewMode === 'excel' ? 500 : 100;
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [metaPerf, setMetaPerf] = useState<MetaPerformanceSummary | null>(null);
   const [metaPerfError, setMetaPerfError] = useState('');
@@ -512,6 +513,8 @@ export default function MetaLeadsPage() {
             </>}
           />
 
+          {viewMode !== 'sheet' && (
+            <>
           {oauthStatus === 'connected' && (
             <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
               <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -815,7 +818,8 @@ export default function MetaLeadsPage() {
               </div>
             )}
           </div>
-
+            </>
+          )}
 
           {/* Leads Section */}
           <div className="flex items-center justify-between gap-3">
@@ -863,6 +867,17 @@ export default function MetaLeadsPage() {
                 >
                   Excel View
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('sheet')}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                    viewMode === 'sheet'
+                      ? 'bg-slate-900 text-white'
+                      : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  Spreadsheet
+                </button>
               </div>
               <span className="tabular-nums">Page {pagination.page} of {Math.max(1, pagination.totalPages)}</span>
             </div>
@@ -897,7 +912,7 @@ export default function MetaLeadsPage() {
           </FilterBar>
 
           {/* Untouched Leads Banner */}
-          {!loading && untouchedRows.length > 0 && (
+          {viewMode !== 'sheet' && !loading && untouchedRows.length > 0 && (
             <div className="bg-red-50 border border-red-200 rounded-xl overflow-hidden">
               <button
                 type="button"
@@ -996,37 +1011,37 @@ export default function MetaLeadsPage() {
                 {convertError}
               </div>
             )}
-            <div className="overflow-x-auto">
+            <div className={`${viewMode === 'sheet' ? 'overflow-x-auto overflow-y-auto max-h-[calc(100vh-260px)]' : 'overflow-x-auto'}`}>
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className={`text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 ${viewMode === 'excel' ? 'sticky top-0 z-10' : ''}`}>
-                    <th className={`text-left font-bold border border-slate-200 w-8 ${viewMode === 'excel' ? 'py-1.5 px-2' : 'py-2.5 px-3'}`}>#</th>
-                    <th className={`text-left font-bold border border-slate-200 ${viewMode === 'excel' ? 'py-1.5 px-2 min-w-[180px]' : 'py-2.5 px-3'}`}>Lead</th>
-                    <th className={`text-left font-bold border border-slate-200 ${viewMode === 'excel' ? 'py-1.5 px-2 min-w-[140px]' : 'py-2.5 px-3'}`}>Training</th>
-                    <th className={`text-left font-bold border border-slate-200 ${viewMode === 'excel' ? 'py-1.5 px-2 min-w-[160px]' : 'py-2.5 px-3'}`}>Campaign</th>
-                    {viewMode === 'excel' && <th className="text-left py-1.5 px-2 font-bold border border-slate-200 min-w-[140px]">Source</th>}
-                    <th className={`text-left font-bold border border-slate-200 ${viewMode === 'excel' ? 'py-1.5 px-2' : 'py-2.5 px-3'}`}>Mobile</th>
-                    <th className={`text-left font-bold border border-slate-200 ${viewMode === 'excel' ? 'py-1.5 px-2 min-w-[180px]' : 'py-2.5 px-3'}`}>Email</th>
-                    {viewMode === 'excel' && <th className="text-left py-1.5 px-2 font-bold border border-slate-200 min-w-[150px]">Tags</th>}
-                    <th className={`text-left font-bold border border-slate-200 ${viewMode === 'excel' ? 'py-1.5 px-2' : 'py-2.5 px-3'}`}>Date</th>
-                    {viewMode === 'excel' && <th className="text-left py-1.5 px-2 font-bold border border-slate-200 min-w-[110px]">Age</th>}
-                    <th className={`text-center font-bold border border-slate-200 ${viewMode === 'excel' ? 'py-1.5 px-2 min-w-[110px]' : 'py-2.5 px-3'}`}>Status</th>
-                    {viewMode === 'excel' && <th className="text-left py-1.5 px-2 font-bold border border-slate-200 min-w-[220px]">Follow Up / Discussion</th>}
-                    <th className={`text-center font-bold border border-slate-200 min-w-[148px] ${viewMode === 'excel' ? 'py-1.5 px-2' : 'py-2.5 px-3'}`}>Actions</th>
+                  <tr className={`text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 ${(viewMode === 'excel' || viewMode === 'sheet') ? 'sticky top-0 z-20' : ''}`}>
+                    <th className={`text-left font-bold border border-slate-200 w-8 ${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2.5 px-3'} ${viewMode === 'sheet' ? 'sticky left-0 z-30 bg-slate-50' : ''}`}>#</th>
+                    <th className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2 min-w-[180px]' : 'py-2.5 px-3'}`}>Lead</th>
+                    <th className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2 min-w-[140px]' : 'py-2.5 px-3'}`}>Training</th>
+                    <th className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2 min-w-[160px]' : 'py-2.5 px-3'}`}>Campaign</th>
+                    {viewMode !== 'regular' && <th className="text-left py-1.5 px-2 font-bold border border-slate-200 min-w-[140px]">Source</th>}
+                    <th className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2.5 px-3'}`}>Mobile</th>
+                    <th className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2 min-w-[180px]' : 'py-2.5 px-3'}`}>Email</th>
+                    {viewMode !== 'regular' && <th className="text-left py-1.5 px-2 font-bold border border-slate-200 min-w-[150px]">Tags</th>}
+                    <th className={`text-left font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2.5 px-3'}`}>Date</th>
+                    {viewMode !== 'regular' && <th className="text-left py-1.5 px-2 font-bold border border-slate-200 min-w-[110px]">Age</th>}
+                    <th className={`text-center font-bold border border-slate-200 ${viewMode !== 'regular' ? 'py-1.5 px-2 min-w-[110px]' : 'py-2.5 px-3'}`}>Status</th>
+                    {viewMode !== 'regular' && <th className="text-left py-1.5 px-2 font-bold border border-slate-200 min-w-[220px]">Follow Up / Discussion</th>}
+                    <th className={`text-center font-bold border border-slate-200 min-w-[148px] ${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2.5 px-3'}`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     Array.from({ length: 6 }).map((_, i) => (
                       <tr key={i}>
-                        {Array.from({ length: viewMode === 'excel' ? 13 : 9 }).map((__, j) => (
-                          <td key={j} className={`${viewMode === 'excel' ? 'py-1.5 px-2' : 'py-2.5 px-3'} border border-slate-100`}><div className="h-3.5 bg-slate-50 rounded animate-pulse" /></td>
+                        {Array.from({ length: viewMode !== 'regular' ? 13 : 9 }).map((__, j) => (
+                          <td key={j} className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2.5 px-3'} border border-slate-100`}><div className="h-3.5 bg-slate-50 rounded animate-pulse" /></td>
                         ))}
                       </tr>
                     ))
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={viewMode === 'excel' ? 13 : 9} className="py-16 text-center border border-slate-100">
+                      <td colSpan={viewMode !== 'regular' ? 13 : 9} className="py-16 text-center border border-slate-100">
                         <div className="text-slate-300 text-2xl mb-2">○</div>
                         <div className="text-xs text-slate-400 font-medium">No Meta leads found</div>
                         <div className="text-xs text-slate-300 mt-1">Try adjusting your filters</div>
@@ -1042,20 +1057,25 @@ export default function MetaLeadsPage() {
                       key={`${row.Student_Id}-${row.Email || row.Present_Mobile || row.Student_Name}-${row.Inquiry_Dt || index}-${index}`}
                       className={`transition-colors group ${bgCls} ${textCls}`}
                     >
-                      <td className={`${viewMode === 'excel' ? 'py-1.5 px-2' : 'py-2 px-3'} font-mono tabular-nums text-[10px] border border-slate-100 relative ${viewMode === 'excel' ? 'pl-4' : 'pl-5'}`}>
+                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} font-mono tabular-nums text-[10px] border border-slate-100 relative ${viewMode !== 'regular' ? 'pl-4' : 'pl-5'} ${viewMode === 'sheet' ? 'sticky left-0 z-10 bg-white' : ''}`}>
                         <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${statusBar(row.Status_id, row.StatusLabel)} rounded-r`} />
                         {(pagination.page - 1) * pagination.limit + index + 1}
                       </td>
-                      <td className={`${viewMode === 'excel' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100`}>
+                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100`}>
                         <div className="flex items-center gap-2">
-                          {viewMode !== 'excel' && (
+                          {viewMode === 'regular' && (
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${sentEmail ? 'bg-blue-100 text-blue-700' : avatarColor(row.Student_Name)}`}>
                               {getInitials(row.Student_Name)}
                             </div>
                           )}
                           <div className="min-w-0">
                             <span className={`font-semibold whitespace-nowrap ${sentEmail ? 'text-blue-700' : 'text-slate-700'}`}>{formatName(row.Student_Name)}</span>
-                            {sentEmail && viewMode !== 'excel' && (
+                            <div className="mt-0.5 text-[10px] text-slate-400 whitespace-nowrap">
+                              {row.Student_Id > 0 ? `Inquiry #${row.Student_Id}` : 'Inquiry not linked'}
+                              {' • '}
+                              {row.StudentMaster_Id > 0 ? `Student Master #${row.StudentMaster_Id}` : 'Student master not linked'}
+                            </div>
+                            {sentEmail && viewMode === 'regular' && (
                               <div className="mt-0.5">
                                 <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-blue-700">
                                   Auto emailed
@@ -1065,21 +1085,21 @@ export default function MetaLeadsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className={`${viewMode === 'excel' ? 'py-1.5 px-2' : 'py-2 px-3'} text-slate-500 border border-slate-100 max-w-[140px]`}>
+                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} text-slate-500 border border-slate-100 max-w-[140px]`}>
                         <span className="truncate block" title={row.CourseName || undefined}>{row.CourseName || '—'}</span>
                       </td>
-                      <td className={`${viewMode === 'excel' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 max-w-[160px]`}>
+                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 max-w-[160px]`}>
                         <span className="truncate block font-medium text-slate-700" title={row.MetaCampaignName || undefined}>{row.MetaCampaignName || '—'}</span>
                       </td>
-                      {viewMode === 'excel' && (
+                      {viewMode !== 'regular' && (
                         <td className="py-1.5 px-2 border border-slate-100 text-slate-600 whitespace-nowrap">
                           {row.Inquiry_From || row.MetaFormName || '—'}
                         </td>
                       )}
-                      <td className={`${viewMode === 'excel' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 font-mono text-slate-700 text-[11px] whitespace-nowrap`}>
+                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 font-mono text-slate-700 text-[11px] whitespace-nowrap`}>
                         {row.Present_Mobile || '—'}
                       </td>
-                      <td className={`${viewMode === 'excel' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 text-slate-500 text-[11px]`}>
+                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} border border-slate-100 text-slate-500 text-[11px]`}>
                         <span className="truncate block max-w-[160px]">{row.Email || '—'}</span>
                       </td>
                       {viewMode === 'excel' && (
@@ -1101,12 +1121,12 @@ export default function MetaLeadsPage() {
                           {row.StatusLabel}
                         </span>
                       </td>
-                      {viewMode === 'excel' && (
+                      {viewMode !== 'regular' && (
                         <td className="py-1.5 px-2 border border-slate-100 text-[11px] text-slate-600 max-w-[260px]">
                           <span className="truncate block">{(row.Discussion || '').trim() || 'No follow-up logged yet'}</span>
                         </td>
                       )}
-                      <td className={`${viewMode === 'excel' ? 'py-1.5 px-2' : 'py-2 px-3'} text-center border border-slate-100`}>
+                      <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} text-center border border-slate-100`}>
                         <div className="flex items-center justify-center gap-1">
                           {/* WhatsApp */}
                           {waLink(row.Present_Mobile, row.Student_Name, row.CourseName) && (
@@ -1174,7 +1194,7 @@ export default function MetaLeadsPage() {
               <div className="text-xs text-slate-400">
                 Showing <span className="font-semibold text-slate-600">{fromRow.toLocaleString()}–{toRow.toLocaleString()}</span> of <span className="font-semibold text-slate-600">{pagination.total.toLocaleString()}</span> leads
                 <span className="ml-2 text-slate-300">•</span>
-                <span className="ml-2 text-slate-500">{viewMode === 'excel' ? 'Excel view (500 rows/page)' : 'Standard view (100 rows/page)'}</span>
+                <span className="ml-2 text-slate-500">{viewMode === 'sheet' ? 'Spreadsheet mode (1000 rows/page)' : viewMode === 'excel' ? 'Excel view (500 rows/page)' : 'Standard view (100 rows/page)'}</span>
               </div>
               <div className="flex items-center gap-2">
                 <button

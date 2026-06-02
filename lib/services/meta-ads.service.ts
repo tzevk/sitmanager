@@ -151,6 +151,7 @@ export interface MetaLeadListParams {
 export interface MetaLeadListRow {
   MetaLead_Id: string;
   Student_Id: number;
+  StudentMaster_Id: number;
   Student_Name: string;
   CourseName: string | null;
   Inquiry_Dt: string | null;
@@ -181,6 +182,7 @@ export interface MetaLeadListResult {
 export interface MetaLeadDetailResult {
   MetaLead_Id: string;
   Student_Id: number;
+  StudentMaster_Id: number;
   Student_Name: string;
   CourseName: string | null;
   Inquiry_Dt: string | null;
@@ -2716,6 +2718,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
     `SELECT
        m.meta_lead_id AS MetaLead_Id,
        COALESCE(m.inquiry_id, 0) AS Student_Id,
+       COALESCE(CAST(si.Student_Id AS UNSIGNED), 0) AS StudentMaster_Id,
        COALESCE(NULLIF(TRIM(m.student_name),''), NULLIF(TRIM(si.Student_Name),''), 'Meta Lead') AS Student_Name,
        COALESCE(NULLIF(TRIM(m.course_name),''), NULLIF(TRIM(m.form_name),'')) AS CourseName,
        COALESCE(NULLIF(TRIM(m.lead_created_time),''), CAST(m.created_at AS CHAR)) AS Inquiry_Dt,
@@ -2769,6 +2772,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
     return {
       MetaLead_Id: String(row.MetaLead_Id || ''),
       Student_Id: Number(row.Student_Id || 0),
+      StudentMaster_Id: Number(row.StudentMaster_Id || 0),
       Student_Name: String(row.Student_Name || 'Meta Lead'),
       CourseName: row.CourseName ?? null,
       Inquiry_Dt: row.Inquiry_Dt ?? null,
@@ -2807,6 +2811,7 @@ export async function getMetaLeadDetail(metaLeadId: string): Promise<MetaLeadDet
     `SELECT
        m.meta_lead_id AS MetaLead_Id,
        COALESCE(m.inquiry_id, 0) AS Student_Id,
+       COALESCE(CAST(si.Student_Id AS UNSIGNED), 0) AS StudentMaster_Id,
        COALESCE(NULLIF(TRIM(m.student_name),''), NULLIF(TRIM(si.Student_Name),''), 'Meta Lead') AS Student_Name,
        COALESCE(NULLIF(TRIM(m.course_name),''), NULLIF(TRIM(m.form_name),'')) AS CourseName,
        COALESCE(NULLIF(TRIM(m.lead_created_time),''), CAST(m.created_at AS CHAR)) AS Inquiry_Dt,
@@ -2876,6 +2881,7 @@ export async function getMetaLeadDetail(metaLeadId: string): Promise<MetaLeadDet
   return {
     MetaLead_Id: String(row.MetaLead_Id || ''),
     Student_Id: Number(row.Student_Id || 0),
+    StudentMaster_Id: Number(row.StudentMaster_Id || 0),
     Student_Name: String(row.Student_Name || 'Meta Lead'),
     CourseName: row.CourseName ?? null,
     Inquiry_Dt: row.Inquiry_Dt ?? null,

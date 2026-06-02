@@ -9,6 +9,7 @@ import { useResourcePermissions } from '@/lib/permissions-context';
 interface MetaLeadDetail {
   MetaLead_Id: string;
   Student_Id: number;
+  StudentMaster_Id: number;
   Student_Name: string;
   CourseName: string | null;
   Inquiry_Dt: string | null;
@@ -493,6 +494,7 @@ export default function MetaLeadDetailPage() {
                         <div className="space-y-1.5 text-sm">
                           <KvRow label="Lead Date" value={formatDate(lead.Inquiry_Dt)} />
                           <KvRow label="Inquiry #" value={lead.Student_Id > 0 ? `#${lead.Student_Id}` : 'Not linked'} />
+                          <KvRow label="Student Master #" value={lead.StudentMaster_Id > 0 ? `#${lead.StudentMaster_Id}` : 'Not linked'} />
                           <KvRow label="Source" value={lead.Inquiry_Type} />
                           <KvRow label="Contact Source" value={lead.Inquiry_From} />
                           <KvRow label="Duplicate Of" value={lead.DuplicateOfInquiryId ? `Inquiry #${lead.DuplicateOfInquiryId}` : null} />
