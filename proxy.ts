@@ -39,6 +39,7 @@ const PUBLIC_ROUTES = [
   '/api/auth/session',
   '/api/health',
   '/api/cron/meta-leads-refresh',
+  '/api/cron/meta-batch-recommendations',
   '/api/cron/suvidya-inquiry-sync',
   '/api/student-portal/auth/login',
   '/api/student-portal/auth/session',

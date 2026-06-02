@@ -52,6 +52,37 @@ interface MetaPerformanceSummary {
   };
 }
 
+interface MetaBatchRecommendationRow {
+  scoreDate: string;
+  batchId: number;
+  batchCode: string;
+  courseId: number | null;
+  courseName: string;
+  startDate: string | null;
+  endDate: string | null;
+  daysToStart: number;
+  maxStudents: number;
+  studentsAdmitted: number;
+  seatGap: number;
+  gapRatio: number;
+  urgency: number;
+  leadToAdmissionRate: number;
+  estimatedCpl: number | null;
+  efficiencyScore: number;
+  valueScore: number;
+  priorityScore: number;
+  recommendedBudget: number;
+  adAngle: string;
+}
+
+interface MetaBatchRecommendationResponse {
+  source: 'persisted' | 'live';
+  formula: string;
+  scoreDate: string;
+  totalBudget: number;
+  recommendations: MetaBatchRecommendationRow[];
+}
+
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
 interface Filters { trainings: string[]; sources: string[]; statusOptions: { id: number; label: string }[]; }
 
@@ -70,6 +101,16 @@ function formatDate(dateStr: string | null): string {
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return `${String(d.getDate()).padStart(2,'0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
   } catch { return '—'; }
+}
+
+function formatCurrency(value: number): string {
+  if (!Number.isFinite(value)) return '₹0';
+  return `₹${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+function formatPercentFromRatio(value: number): string {
+  if (!Number.isFinite(value)) return '0%';
+  return `${(value * 100).toFixed(1)}%`;
 }
 
 function formatName(name: string | null | undefined): string {
@@ -268,6 +309,8 @@ export default function MetaLeadsPage() {
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [metaPerf, setMetaPerf] = useState<MetaPerformanceSummary | null>(null);
   const [metaPerfError, setMetaPerfError] = useState('');
+  const [metaReco, setMetaReco] = useState<MetaBatchRecommendationResponse | null>(null);
+  const [metaRecoError, setMetaRecoError] = useState('');
   const [convertingLeadId, setConvertingLeadId] = useState<string | null>(null);
   const [convertError, setConvertError] = useState('');
   const oauthStatus = searchParams.get('metaOAuth');
@@ -332,6 +375,27 @@ export default function MetaLeadsPage() {
     fetchMetaPerformance();
     return () => { cancelled = true; };
   }, [dateFrom, dateTo]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchRecommendations() {
+      setMetaRecoError('');
+      try {
+        const res = await fetch('/api/meta-ads/recommendations?source=persisted&limit=6');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || 'Failed to load Meta batch recommendations');
+        if (!cancelled) setMetaReco(data);
+      } catch (error: unknown) {
+        if (!cancelled) {
+          setMetaReco(null);
+          setMetaRecoError(error instanceof Error ? error.message : 'Failed to load Meta batch recommendations');
+        }
+      }
+    }
+
+    fetchRecommendations();
+    return () => { cancelled = true; };
+  }, []);
 
   const doSearch = () => { setPage(1); setFetchTrigger((t) => t + 1); };
   const doClear = () => {
@@ -682,6 +746,69 @@ export default function MetaLeadsPage() {
                 <span key={label} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${cls}`}>{label}</span>
               ))}
             </div>
+          </div>
+
+
+          {/* Batch recommendation card */}
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#2A6BB5]/60">Meta Planning</p>
+                <h3 className="text-sm font-bold text-slate-800">Batch Budget Recommendations</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {metaReco?.formula || 'score = 0.35*gap + 0.25*urgency + 0.20*conversion + 0.10*efficiency + 0.10*value'}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wide">Source</p>
+                <p className="text-xs font-semibold text-slate-700">{metaReco?.source === 'persisted' ? 'Daily Snapshot' : 'Live Calculation'}</p>
+                {metaReco?.scoreDate && (
+                  <p className="text-[10px] text-slate-400 mt-0.5">Scored on {formatDate(metaReco.scoreDate)}</p>
+                )}
+              </div>
+            </div>
+
+            {metaRecoError ? (
+              <div className="m-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">{metaRecoError}</div>
+            ) : !metaReco ? (
+              <div className="p-4 space-y-2">
+                {[1, 2, 3, 4].map((i) => <div key={i} className="h-10 bg-slate-50 rounded-lg animate-pulse" />)}
+              </div>
+            ) : metaReco.recommendations.length === 0 ? (
+              <div className="px-4 py-8 text-center text-xs text-slate-400">No upcoming batches found for recommendation.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400 border-b border-slate-200">
+                      <th className="text-left px-3 py-2 font-bold">Batch</th>
+                      <th className="text-left px-3 py-2 font-bold">Course</th>
+                      <th className="text-right px-3 py-2 font-bold">Days</th>
+                      <th className="text-right px-3 py-2 font-bold">Seat Gap</th>
+                      <th className="text-right px-3 py-2 font-bold">Priority</th>
+                      <th className="text-right px-3 py-2 font-bold">Budget</th>
+                      <th className="text-left px-3 py-2 font-bold min-w-[260px]">Ad Angle</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {metaReco.recommendations.map((row) => (
+                      <tr key={`${row.scoreDate}-${row.batchId}`} className="border-b border-slate-100 hover:bg-slate-50/70">
+                        <td className="px-3 py-2.5 font-semibold text-slate-700 whitespace-nowrap">{row.batchCode}</td>
+                        <td className="px-3 py-2.5 text-slate-600">{row.courseName}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{row.daysToStart}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
+                          {Math.round(row.seatGap)} / {Math.round(row.maxStudents || 0)}
+                          <span className="ml-1 text-[10px] text-slate-400">({formatPercentFromRatio(row.gapRatio)})</span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-[#2E3093]">{formatPercentFromRatio(row.priorityScore)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums font-bold text-emerald-700">{formatCurrency(row.recommendedBudget)}</td>
+                        <td className="px-3 py-2.5 text-slate-600">{row.adAngle}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
 
