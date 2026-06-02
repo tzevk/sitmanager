@@ -53,9 +53,7 @@ export async function GET(req: NextRequest) {
       ) si_adm ON si_adm.Student_Id = s.Student_Id`;
 
     const admittedCondition = `(
-      s.Status_id = 8
-      OR LOWER(TRIM(CAST(COALESCE(s.Admission,'') AS CHAR))) IN ('yes','y','1','true')
-      OR am.Student_Id IS NOT NULL
+      am.Student_Id IS NOT NULL
       OR si_adm.Student_Id IS NOT NULL
     )`;
 

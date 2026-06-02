@@ -1843,26 +1843,6 @@ async function findDuplicateInquiry(mobile: string | null, email: string | null)
   };
 }
 
-async function addDiscussionNote(inquiryId: number, discussion: string) {
-  const pool = getPool();
-  await pool.query(
-    `INSERT INTO awt_inquirydiscussion (Inquiry_id, date, discussion, deleted, created_by, created_date)
-     VALUES (?, CURDATE(), ?, 0, 1, NOW())`,
-    [inquiryId, discussion]
-  );
-}
-
-function buildDiscussionNote(sourceLabel: string, ctx: MetaLeadContext, tags: string[]): string {
-  const parts = [
-    `${sourceLabel} synced`,
-    ctx.campaignName ? `Campaign: ${ctx.campaignName}` : ctx.campaignId ? `Campaign ID: ${ctx.campaignId}` : null,
-    ctx.adName ? `Ad: ${ctx.adName}` : ctx.adId ? `Ad ID: ${ctx.adId}` : null,
-    ctx.formName ? `Form: ${ctx.formName}` : ctx.formId ? `Form ID: ${ctx.formId}` : null,
-    tags.length ? `Tags: ${tags.join(', ')}` : null,
-  ].filter(Boolean);
-  return parts.join(' | ');
-}
-
 function resolveMetaCourseName(fields: Record<string, string | null>, formName: string | null): string | null {
   return firstValue(fields, [
     'course',
@@ -2019,6 +1999,16 @@ function parseJsonArray(raw: unknown): string[] {
   } catch {
     return [];
   }
+}
+
+function isAutoMetaSyncDiscussion(value: string | null | undefined): boolean {
+  const text = String(value || '').trim().toLowerCase();
+  if (!text) return false;
+  return (
+    text.includes('synced')
+    && (text.includes('campaign:') || text.includes('campaign id:'))
+    && (text.includes('form:') || text.includes('form id:'))
+  );
 }
 
 async function backfillStoredMetaLeadSources(): Promise<number> {
@@ -2251,7 +2241,6 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
   const sourceInfo = resolveMetaLeadSource({ rawPayload, event, fields, ctx });
   const tags = Array.from(new Set([...buildTags(fields, ctx), sourceInfo.sourceTag])).sort();
   const utm = Object.fromEntries(Object.entries(fields).filter(([key]) => key.startsWith('utm_')));
-  const discussion = buildDiscussionNote(sourceInfo.sourceLabel, ctx, tags);
 
   const duplicate = await findDuplicateInquiry(mobile, email);
 
@@ -2274,7 +2263,6 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
       Inquiry_From: sourceInfo.contactSource,
       Inquiry_Type: sourceInfo.sourceLabel,
       Course_Id: duplicate.courseId || courseId,
-      Discussion: discussion,
     });
   } else {
     const createPayload: CreateInquiryInput = {
@@ -2288,15 +2276,10 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
       Qualification: qualification,
       Discipline: discipline,
       Percentage: percentage != null ? String(percentage) : null,
-      Discussion: discussion,
       Status_id: 1,
     };
     inquiryId = await createInquiry(createPayload);
     created = true;
-  }
-
-  if (discussion) {
-    await addDiscussionNote(inquiryId, discussion);
   }
 
   const deliveryState = await getMetaLeadDeliveryState(leadId);
@@ -2769,6 +2752,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
     }
 
     const statusIdNum = row.Status_id == null ? null : Number(row.Status_id);
+    const discussion = row.Discussion ?? null;
     return {
       MetaLead_Id: String(row.MetaLead_Id || ''),
       Student_Id: Number(row.Student_Id || 0),
@@ -2782,7 +2766,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
       Inquiry_Type: row.Inquiry_Type ?? null,
       Status_id: statusIdNum,
       StatusLabel: statusIdNum != null ? (FALLBACK_STATUSES[statusIdNum] || `Status ${statusIdNum}`) : 'Open',
-      Discussion: row.Discussion ?? null,
+      Discussion: isAutoMetaSyncDiscussion(discussion) ? null : discussion,
       MetaCampaignName: row.MetaCampaignName ?? null,
       MetaFormName: row.MetaFormName ?? null,
       LeadTags: tags,
@@ -3126,7 +3110,6 @@ export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<Meta
   const inquiryDate = normalizeDateOnly(row.lead_created_time) || new Date().toISOString().slice(0, 10);
   const courseId = await resolveCourseId(courseName);
   const nextTags = Array.from(new Set(tags)).sort();
-  const discussion = buildDiscussionNote(sourceLabel, ctx, nextTags);
   const duplicate = await findDuplicateInquiry(mobile, email);
 
   let inquiryId: number;
@@ -3150,7 +3133,6 @@ export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<Meta
       Qualification: qualification,
       Discipline: discipline,
       Percentage: percentage != null ? String(percentage) : null,
-      Discussion: discussion,
     });
   } else {
     inquiryId = await createInquiry({
@@ -3164,13 +3146,8 @@ export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<Meta
       Qualification: qualification,
       Discipline: discipline,
       Percentage: percentage != null ? String(percentage) : null,
-      Discussion: discussion,
       Status_id: 1,
     });
-  }
-
-  if (discussion) {
-    await addDiscussionNote(inquiryId, discussion);
   }
 
   await pool.query(

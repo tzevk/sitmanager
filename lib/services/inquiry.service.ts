@@ -164,6 +164,16 @@ function getInquiryCountCacheKey(params: {
   return `inquiry:list-count:${JSON.stringify(params)}`;
 }
 
+function isAutoMetaSyncDiscussion(value: string | null | undefined): boolean {
+  const text = String(value || '').trim().toLowerCase();
+  if (!text) return false;
+  return (
+    text.includes('synced')
+    && (text.includes('campaign:') || text.includes('campaign id:'))
+    && (text.includes('form:') || text.includes('form id:'))
+  );
+}
+
 interface InquiryFilterOptions {
   disciplines: string[];
   inquiryTypes: string[];
@@ -859,6 +869,9 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
 
   const rows: InquiryRow[] = dataRows.map((r: any) => {
     const inlineDisc = r.InlineDiscussion && r.InlineDiscussion !== 'NULL' ? r.InlineDiscussion : null;
+    const latestDisc = r.LatestDiscussion && r.LatestDiscussion !== 'NULL' ? r.LatestDiscussion : null;
+    const cleanedInlineDisc = isAutoMetaSyncDiscussion(inlineDisc) ? null : inlineDisc;
+    const cleanedLatestDisc = isAutoMetaSyncDiscussion(latestDisc) ? null : latestDisc;
     const sourceStudentId = r.SourceStudentId == null ? '' : String(r.SourceStudentId).trim();
     const inquiryTypeVal = r.Inquiry_Type?.trim()
       ? r.Inquiry_Type.trim()
@@ -891,7 +904,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
         statusMap[r.Status_id] ??
         (r.OnlineStateRaw?.trim() || null) ??
         (r.Status_id != null ? `Status ${r.Status_id}` : 'Open'),
-      Discussion: r.LatestDiscussion || inlineDisc || null,
+      Discussion: cleanedLatestDisc || cleanedInlineDisc || null,
       DiscussionDate: r.LatestDiscDate ?? null,
       NextFollowUpDate: r.NextFollowUpDate ?? null,
       FollowUpBy: r.LatestDiscussionByName || (r.LatestDiscussionById != null ? `User ${r.LatestDiscussionById}` : null),

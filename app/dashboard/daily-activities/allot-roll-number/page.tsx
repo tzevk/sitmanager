@@ -17,6 +17,7 @@ interface Batch {
   Batch_code: string;
   Category: string | null;
   Timings: string | null;
+  StudentCount?: number;
 }
 
 interface AllocatedBatch {
@@ -275,7 +276,9 @@ export default function AllotRollNumberPage() {
   };
 
   const selectedCourseName = courses.find(c => String(c.Course_Id) === courseId)?.Course_Name || '';
-  const selectedBatchCode = batches.find(b => String(b.Batch_Id) === batchId)?.Batch_code || '';
+  const selectedBatch = batches.find(b => String(b.Batch_Id) === batchId) || null;
+  const selectedBatchCode = selectedBatch?.Batch_code || '';
+  const selectedBatchStudentCount = Number(selectedBatch?.StudentCount || 0);
   const totalPages = pagination.totalPages;
 
   /* ================================================================ */
@@ -361,7 +364,10 @@ export default function AllotRollNumberPage() {
               <option value="">— Choose Batch —</option>
               {batches.map(b => (
                 <option key={b.Batch_Id} value={b.Batch_Id}>
-                  {b.Batch_code}{b.Category ? ` (${b.Category})` : ''}{b.Timings ? ` — ${b.Timings}` : ''}
+                  {b.Batch_code}
+                  {b.Category ? ` (${b.Category})` : ''}
+                  {b.Timings ? ` — ${b.Timings}` : ''}
+                  {` [${Number(b.StudentCount || 0)} students]`}
                 </option>
               ))}
             </select>
@@ -381,7 +387,7 @@ export default function AllotRollNumberPage() {
               {selectedBatchCode}
             </span>
             <span className="ml-auto text-gray-400">
-              {pagination.total} student{pagination.total !== 1 ? 's' : ''} found
+              Batch strength: {selectedBatchStudentCount} | Loaded: {pagination.total} student{pagination.total !== 1 ? 's' : ''}
             </span>
           </div>
         )}

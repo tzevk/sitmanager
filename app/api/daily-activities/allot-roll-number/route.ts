@@ -65,13 +65,20 @@ export async function GET(req: NextRequest) {
     let batches: any[] = [];
     if (courseId) {
       const [batchRows] = await pool.query<any[]>(
-        `SELECT Batch_Id, Batch_code, Category, Timings
-         FROM batch_mst
-         WHERE Course_Id = ?
-           AND IsActive = 1
-           AND (IsDelete = 0 OR IsDelete IS NULL)
-           AND (Cancel = 0 OR Cancel IS NULL)
-         ORDER BY Batch_Id DESC`,
+        `SELECT
+           b.Batch_Id,
+           b.Batch_code,
+           b.Category,
+           b.Timings,
+           COUNT(CASE WHEN (a.IsDelete = 0 OR a.IsDelete IS NULL) AND (a.Cancel = 0 OR a.Cancel IS NULL) THEN 1 END) AS StudentCount
+         FROM batch_mst b
+         LEFT JOIN admission_master a ON a.Batch_Id = b.Batch_Id
+         WHERE b.Course_Id = ?
+           AND b.IsActive = 1
+           AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
+           AND (b.Cancel = 0 OR b.Cancel IS NULL)
+         GROUP BY b.Batch_Id, b.Batch_code, b.Category, b.Timings
+         ORDER BY b.Batch_Id DESC`,
         [Number(courseId)]
       );
       batches = batchRows;
