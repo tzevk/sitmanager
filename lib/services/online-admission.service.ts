@@ -743,10 +743,7 @@ export async function submitOnlineAdmission(
   await syncOnlineAdmissionIntoCurrentDb(inquiryId, cleanBody, { statusAction: 'update' });
 
   const studentId = await resolveStudentIdForInquiry(pool, inquiryId);
-  if (hasAdmissionUploads(uploads)) {
-    if (!studentId) {
-      throw Object.assign(new Error('Unable to attach uploaded files because the student record is not linked yet.'), { status: 409 });
-    }
+  if (hasAdmissionUploads(uploads) && studentId) {
     await saveAdmissionAssetsForStudent(studentId, uploads);
   }
 

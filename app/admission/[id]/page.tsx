@@ -621,7 +621,7 @@ export default function PublicAdmissionFormPage() {
           alert('Please select a Training Programme');
           return false;
         }
-        if (!formData.trainingCategory) {
+        if (!formData.trainingCategory && !formData.batchCode) {
           alert('Please select a Training Category');
           return false;
         }
@@ -678,8 +678,8 @@ export default function PublicAdmissionFormPage() {
       setCurrentStep(1);
       return;
     }
-    if (!formData.trainingProgrammeId || !formData.trainingCategory || !formData.batchCode) {
-      alert('Please complete Step 4: Select a Training Programme, Category, and Batch');
+    if (!formData.trainingProgrammeId || !formData.batchCode) {
+      alert('Please complete Step 4: Select a Training Programme and Batch');
       setCurrentStep(4);
       return;
     }
@@ -2360,10 +2360,13 @@ export default function PublicAdmissionFormPage() {
                                   setBatchFeesFullPayment(batch?.feesFullPayment != null ? parseFloat(String(batch.feesFullPayment)) : null);
                                   setBatchFeesInstallment(batch?.feesInstallment != null ? parseFloat(String(batch.feesInstallment)) : null);
                                 }}
-                                disabled={!formData.trainingCategory || loadingBatches}
+                                disabled={(!formData.trainingCategory && !formData.batchCode) || loadingBatches}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-50"
                               >
                                 <option value="">Select batch code</option>
+                                {formData.batchCode && !availableBatches.find(b => b.batchCode === formData.batchCode) && (
+                                  <option value={formData.batchCode}>{formData.batchCode.toUpperCase()}</option>
+                                )}
                                 {availableBatches.map((b) => (
                                   <option key={b.batchCode} value={b.batchCode}>
                                     {b.batchCode.toUpperCase()}
