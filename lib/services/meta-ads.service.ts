@@ -3237,12 +3237,27 @@ export async function addMetaLeadDiscussionNote(
 ): Promise<void> {
   await ensureMetaLeadTables();
   const pool = getPool();
-  const [leadRows] = await pool.query(
+  let [leadRows] = await pool.query(
     `SELECT inquiry_id FROM ${META_LEADS_TABLE} WHERE meta_lead_id = ? LIMIT 1`,
     [metaLeadId]
   );
-  const lead = (leadRows as any[])[0];
-  if (!lead?.inquiry_id) return;
+  let lead = (leadRows as any[])[0];
+
+  // Some Meta leads are not linked to a local inquiry until manual conversion.
+  // Auto-convert on first follow-up attempt so notes are always persisted.
+  if (!lead?.inquiry_id) {
+    await convertMetaLeadToInquiry(metaLeadId);
+    [leadRows] = await pool.query(
+      `SELECT inquiry_id FROM ${META_LEADS_TABLE} WHERE meta_lead_id = ? LIMIT 1`,
+      [metaLeadId]
+    );
+    lead = (leadRows as any[])[0];
+  }
+
+  if (!lead?.inquiry_id) {
+    throw new Error('Unable to link this Meta lead to an inquiry. Please convert the lead and try again.');
+  }
+
   const safeNext = nextDate && /^\d{4}-\d{2}-\d{2}$/.test(nextDate) ? nextDate : null;
   await pool.query(
     `INSERT INTO awt_inquirydiscussion (Inquiry_id, date, nextdate, discussion, deleted, created_by, created_date)

@@ -214,6 +214,19 @@ export default function MetaLeadDetailPage() {
     return () => { cancelled = true; };
   }, [activeTab, params?.leadId]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const applyHash = () => {
+      const hash = window.location.hash.toLowerCase();
+      if (hash === '#followups' || hash === '#follow-ups') {
+        setActiveTab('followups');
+      }
+    };
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+    return () => window.removeEventListener('hashchange', applyHash);
+  }, []);
+
   const editableFieldEntries = useMemo(
     () => Object.entries(draft.fields || {}).sort(([a], [b]) => a.localeCompare(b)),
     [draft.fields]

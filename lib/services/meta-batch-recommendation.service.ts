@@ -288,7 +288,7 @@ async function loadCourseHistorySignals(): Promise<Map<number, CourseSignals>> {
   }
 
   const campaignTotals = new Map<string, { spend: number; leads: number }>();
-  for (const campaign of campaigns as Array<Record<string, unknown>>) {
+  for (const campaign of campaigns) {
     const key = normalizeCampaignKey(String(campaign.campaignName ?? campaign.campaignId ?? ''));
     if (!key) continue;
     campaignTotals.set(key, {
