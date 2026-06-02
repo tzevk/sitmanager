@@ -107,35 +107,31 @@ export async function GET(req: NextRequest) {
       }
     };
 
-    // Count — includes the admission JOINs so the admitted filter applies
-    const countSql = `
-      SELECT COUNT(*) AS total
-      FROM student_master s
-      WHERE ${where}`;
-    const [countRows] = await runQuery(countSql, params);
+    // Run count, data, and courses queries in parallel.
+    const [[countRows], [rows], [courses]] = await Promise.all([
+      runQuery(`SELECT COUNT(*) AS total FROM student_master s WHERE ${where}`, params),
+      runQuery(
+        `SELECT
+          s.Student_Id, s.Student_Name, s.FName, s.LName, s.MName,
+          s.Qualification, s.Course_Id, s.Batch_Code, s.DOB, s.Sex, s.Nationality,
+          s.Present_Address, s.Present_City, s.Present_State, s.Present_Country, s.Present_Pin, s.Present_Mobile,
+          s.Email, s.IsActive,
+          c.Course_Name
+        FROM student_master s
+        LEFT JOIN course_mst c ON s.Course_Id = c.Course_Id
+        WHERE ${where}
+        ORDER BY s.Student_Id DESC
+        LIMIT ? OFFSET ?`,
+        [...params, limit, offset]
+      ),
+      runQuery(
+        `SELECT Course_Id, Course_Name FROM course_mst
+         WHERE (IsDelete = 0 OR IsDelete IS NULL)
+         ORDER BY Course_Name`
+      ),
+    ]);
+
     const total = countRows[0]?.total ?? 0;
-
-    // Data with course join
-    const dataSql = `
-      SELECT
-        s.Student_Id, s.Student_Name, s.FName, s.LName, s.MName,
-        s.Qualification, s.Course_Id, s.Batch_Code, s.DOB, s.Sex, s.Nationality,
-        s.Present_Address, s.Present_City, s.Present_State, s.Present_Country, s.Present_Pin, s.Present_Mobile,
-        s.Email, s.IsActive,
-        c.Course_Name
-      FROM student_master s
-      LEFT JOIN course_mst c ON s.Course_Id = c.Course_Id
-      WHERE ${where}
-      ORDER BY s.Student_Id DESC
-      LIMIT ? OFFSET ?`;
-    const [rows] = await runQuery(dataSql, [...params, limit, offset]);
-
-    // Get courses for filter dropdown
-    const [courses] = await runQuery(`
-      SELECT Course_Id, Course_Name FROM course_mst 
-      WHERE (IsDelete = 0 OR IsDelete IS NULL)
-      ORDER BY Course_Name
-    `);
 
     return NextResponse.json({
       rows,
