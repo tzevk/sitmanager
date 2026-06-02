@@ -103,7 +103,26 @@ export interface MetaBatchRecommendationResult {
 }
 
 export const META_BATCH_SCORE_FORMULA =
-  'score = (0.35*gap_ratio + 0.25*urgency + 0.20*lead_to_admission_rate + 0.10*efficiency_score + 0.10*value_score) * batchwise_multiplier';
+  'score = (0.35*gap_ratio + 0.25*urgency + 0.20*lead_to_admission_rate + 0.10*efficiency_score + 0.10*value_score) * previous_ads_comparison * batchwise_multiplier';
+
+function derivePreviousAdsComparisonScore(params: {
+  rowLeadToAdmissionRate: number;
+  rowEstimatedCpl: number | null;
+  benchmarkLeadToAdmissionRate: number;
+  benchmarkCpl: number | null;
+}): number {
+  const convBase = Math.max(0.01, params.benchmarkLeadToAdmissionRate);
+  const conversionDelta = clamp((params.rowLeadToAdmissionRate - convBase) / convBase, -1, 1);
+  const conversionScore = clamp(0.5 + (0.5 * conversionDelta), 0, 1);
+
+  let cplScore = 0.45;
+  if (params.rowEstimatedCpl != null && params.rowEstimatedCpl > 0 && params.benchmarkCpl != null && params.benchmarkCpl > 0) {
+    const cplRatio = params.benchmarkCpl / params.rowEstimatedCpl;
+    cplScore = clamp((cplRatio - 0.5) / 1.5, 0, 1);
+  }
+
+  return clamp((0.55 * conversionScore) + (0.45 * cplScore), 0, 1);
+}
 
 function deriveBatchwiseMultiplier(params: {
   seatGap: number;
@@ -471,6 +490,12 @@ export async function generateMetaBatchRecommendations(options?: {
     if (cpl > cplMax) cplMax = cpl;
   }
   const cplRange = cplMax - cplMin;
+  const benchmarkLeadToAdmissionRate = workingRows.length > 0
+    ? workingRows.reduce((sum, row) => sum + row.leadToAdmissionRate, 0) / workingRows.length
+    : 0;
+  const benchmarkCpl = cplValues.length > 0
+    ? cplValues.reduce((sum, value) => sum + value, 0) / cplValues.length
+    : null;
 
   workingRows.forEach((row, index) => {
     row.valueScore = valueNormMap.get(index) ?? 0.5;
@@ -492,6 +517,14 @@ export async function generateMetaBatchRecommendations(options?: {
       1,
     );
 
+    const previousAdsComparison = derivePreviousAdsComparisonScore({
+      rowLeadToAdmissionRate: row.leadToAdmissionRate,
+      rowEstimatedCpl: row.estimatedCpl,
+      benchmarkLeadToAdmissionRate,
+      benchmarkCpl,
+    });
+    const previousAdsMultiplier = clamp(0.8 + (0.4 * previousAdsComparison), 0.8, 1.2);
+
     const signals = row.courseId ? courseSignals.get(row.courseId) : undefined;
     const batchwiseMultiplier = deriveBatchwiseMultiplier({
       seatGap: row.seatGap,
@@ -500,7 +533,7 @@ export async function generateMetaBatchRecommendations(options?: {
       metaLeads: signals?.metaLeads ?? 0,
     });
 
-    row.priorityScore = clamp(baseScore * batchwiseMultiplier, 0, 1);
+    row.priorityScore = clamp(baseScore * previousAdsMultiplier * batchwiseMultiplier, 0, 1);
 
     row.adAngle = chooseAdAngle(row);
   });

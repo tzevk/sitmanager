@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+import type { RedisOptions } from 'ioredis';
 
 const REDIS_URL = process.env.REDIS_URL;
 
@@ -10,9 +11,7 @@ declare global {
 function createClient(): Redis | null {
   if (!REDIS_URL) return null;
 
-  const isTLS = REDIS_URL.startsWith('rediss://');
-
-  const client = new Redis(REDIS_URL, {
+  const baseOptions: RedisOptions = {
     // Don't block module init — connect on first command
     lazyConnect: true,
     // Allow null replies so eval doesn't throw on reconnect races
@@ -20,12 +19,32 @@ function createClient(): Redis | null {
     // Retry failed commands up to 2 times with a short backoff
     maxRetriesPerRequest: 2,
     // Auto-reconnect with exponential backoff, capped at 3s
-    retryStrategy(times) {
+    retryStrategy(times: number) {
       if (times > 5) return null; // give up after 5 attempts, let fallback handle it
       return Math.min(times * 200, 3000);
     },
-    ...(isTLS && { tls: { rejectUnauthorized: false } }),
-  });
+  };
+
+  let client: Redis;
+
+  try {
+    const parsed = new URL(REDIS_URL);
+    const parsedOptions: RedisOptions = {
+      host: parsed.hostname,
+      port: parsed.port ? Number(parsed.port) : 6379,
+      username: parsed.username || undefined,
+      password: parsed.password || undefined,
+      db: parsed.pathname && parsed.pathname !== '/' ? Number(parsed.pathname.replace('/', '')) || 0 : 0,
+      ...(parsed.protocol === 'rediss:' ? { tls: { rejectUnauthorized: false } } : {}),
+    };
+    client = new Redis({
+      ...baseOptions,
+      ...parsedOptions,
+    });
+  } catch {
+    // Fallback for non-standard Redis URLs.
+    client = new Redis(REDIS_URL, baseOptions);
+  }
 
   client.on('error', (err) => {
     // Log but never throw — callers must handle Redis being unavailable

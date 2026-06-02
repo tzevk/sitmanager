@@ -220,6 +220,7 @@ export interface MetaLeadUpdateInput {
   courseName?: string | null;
   mobile?: string | null;
   email?: string | null;
+  discussion?: string | null;
   fields?: Record<string, string | null>;
   utm?: Record<string, string | null>;
   statusId?: number | null;
@@ -3009,6 +3010,18 @@ export async function updateMetaLeadDetail(metaLeadId: string, input: MetaLeadUp
        SET si.OnlineState = ?
        WHERE m.meta_lead_id = ?`,
       [String(input.statusId), metaLeadId]
+    );
+  }
+
+  if (input.discussion !== undefined) {
+    const inquiryTable = await resolveInquiryTableName(pool);
+    const discussion = normalizeText(input.discussion);
+    await pool.query(
+      `UPDATE \`${inquiryTable}\` si
+       INNER JOIN ${META_LEADS_TABLE} m ON m.inquiry_id = si.Inquiry_Id
+       SET si.Discussion = ?
+       WHERE m.meta_lead_id = ?`,
+      [discussion, metaLeadId]
     );
   }
 

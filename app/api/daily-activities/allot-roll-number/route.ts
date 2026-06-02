@@ -2,6 +2,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+
+let inquiryTableNameCache: string | null = null;
+async function resolveInquiryTableName(pool: ReturnType<typeof getPool>): Promise<string> {
+  if (inquiryTableNameCache) return inquiryTableNameCache;
+  const [rows] = await pool.query(
+    `SELECT TABLE_NAME
+     FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND LOWER(TABLE_NAME) = 'student_inquiry'
+     ORDER BY CASE WHEN TABLE_NAME = 'Student_Inquiry' THEN 0 ELSE 1 END
+     LIMIT 1`
+  );
+  inquiryTableNameCache = String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
+  return inquiryTableNameCache;
+}
 /**
  * GET – Fetch students for roll number allotment
  *
@@ -42,6 +57,7 @@ export async function GET(req: NextRequest) {
     const auth = await requirePermission(req, 'roll_number.view');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
+    const inquiryTable = await resolveInquiryTableName(pool);
     await ensureRollNoColumn(pool);
     const { searchParams } = new URL(req.url);
 
@@ -111,7 +127,9 @@ export async function GET(req: NextRequest) {
 
       if (search) {
         conditions.push(
-          `(s.Student_Name LIKE ? OR CAST(s.Student_Id AS CHAR) LIKE ? OR s.Email LIKE ?)`
+          `(COALESCE(NULLIF(TRIM(s.Student_Name),''), NULLIF(TRIM(si.Student_Name),'')) LIKE ?
+            OR CAST(COALESCE(s.Student_Id, a.Student_Id) AS CHAR) LIKE ?
+            OR COALESCE(s.Email, si.Email, '') LIKE ?)`
         );
         const like = `%${search}%`;
         params.push(like, like, like);
@@ -123,7 +141,8 @@ export async function GET(req: NextRequest) {
       const [countRows] = await pool.query<any[]>(
         `SELECT COUNT(*) AS total
          FROM admission_master a
-         JOIN student_master s ON a.Student_Id = s.Student_Id
+         LEFT JOIN student_master s ON a.Student_Id = s.Student_Id
+         LEFT JOIN \`${inquiryTable}\` si ON si.Student_Id = a.Student_Id
          WHERE ${where}`,
         params
       );
@@ -133,16 +152,17 @@ export async function GET(req: NextRequest) {
       const [dataRows] = await pool.query<any[]>(
         `SELECT
           a.Admission_Id AS id,
-          s.Student_Id AS studentCode,
-          s.Student_Name AS studentName,
+          COALESCE(s.Student_Id, a.Student_Id) AS studentCode,
+          COALESCE(NULLIF(TRIM(s.Student_Name),''), NULLIF(TRIM(si.Student_Name),''), CONCAT('Student ', CAST(a.Student_Id AS CHAR))) AS studentName,
           a.Admission_Date AS admissionDate,
           b.Category AS phase,
           COALESCE(a.Roll_No, '') AS rollNo
         FROM admission_master a
-        JOIN student_master s ON a.Student_Id = s.Student_Id
+        LEFT JOIN student_master s ON a.Student_Id = s.Student_Id
+        LEFT JOIN \`${inquiryTable}\` si ON si.Student_Id = a.Student_Id
         JOIN batch_mst b ON a.Batch_Id = b.Batch_Id
         WHERE ${where}
-        ORDER BY s.Student_Name ASC
+        ORDER BY COALESCE(NULLIF(TRIM(s.Student_Name),''), NULLIF(TRIM(si.Student_Name),''), CONCAT('Student ', CAST(a.Student_Id AS CHAR))) ASC
         LIMIT ? OFFSET ?`,
         [...params, limit, offset]
       );

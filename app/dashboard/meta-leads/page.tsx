@@ -92,7 +92,27 @@ interface LeadRowDraft {
   courseName: string;
   mobile: string;
   email: string;
+  discussion: string;
   statusId: number | null;
+}
+
+function toBulletEditorValue(raw: string | null | undefined): string {
+  const text = String(raw || '').trim();
+  if (!text) return '';
+  const parts = text.includes('\n') ? text.split('\n') : text.split('|');
+  return parts
+    .map((part) => part.trim().replace(/^[-*•]\s+/, ''))
+    .filter(Boolean)
+    .join('\n');
+}
+
+function fromBulletEditorValue(raw: string | null | undefined): string | null {
+  const lines = String(raw || '')
+    .split('\n')
+    .map((line) => line.trim().replace(/^[-*•]\s+/, ''))
+    .filter(Boolean);
+  if (!lines.length) return null;
+  return lines.map((line) => `- ${line}`).join('\n');
 }
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
@@ -378,6 +398,7 @@ export default function MetaLeadsPage() {
         courseName: row.CourseName || '',
         mobile: row.Present_Mobile || '',
         email: row.Email || '',
+        discussion: toBulletEditorValue(row.Discussion),
         statusId: row.Status_id ?? null,
       };
     }
@@ -507,7 +528,7 @@ export default function MetaLeadsPage() {
 
   const updateRowDraft = useCallback((leadId: string, patch: Partial<LeadRowDraft>) => {
     setRowDrafts((prev) => {
-      const current = prev[leadId] || { studentName: '', courseName: '', mobile: '', email: '', statusId: null };
+      const current = prev[leadId] || { studentName: '', courseName: '', mobile: '', email: '', discussion: '', statusId: null };
       return { ...prev, [leadId]: { ...current, ...patch } };
     });
   }, []);
@@ -528,6 +549,7 @@ export default function MetaLeadsPage() {
           courseName: draft.courseName,
           mobile: draft.mobile,
           email: draft.email,
+          discussion: fromBulletEditorValue(draft.discussion),
           statusId: draft.statusId,
         }),
       });
@@ -829,7 +851,7 @@ export default function MetaLeadsPage() {
                 <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#2A6BB5]/60">Meta Planning</p>
                 <h3 className="text-sm font-bold text-slate-800">Batch Budget Recommendations</h3>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  {metaReco?.formula || 'score = (0.35*gap + 0.25*urgency + 0.20*conversion + 0.10*efficiency + 0.10*value) * batchwise_multiplier'}
+                  {metaReco?.formula || 'score = (0.35*gap + 0.25*urgency + 0.20*conversion + 0.10*efficiency + 0.10*value) * previous_ads_comparison * batchwise_multiplier'}
                 </p>
               </div>
               <div className="text-right">
@@ -1077,7 +1099,7 @@ export default function MetaLeadsPage() {
               </div>
             )}
             <div className={`${viewMode === 'sheet' ? 'overflow-x-auto overflow-y-auto max-h-[calc(100vh-260px)]' : 'overflow-x-auto'}`}>
-              <table className="w-full border-collapse">
+              <table className={`w-full border-collapse ${viewMode !== 'regular' ? 'text-[10px]' : ''}`}>
                 <thead>
                   <tr className={`text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 ${(viewMode === 'excel' || viewMode === 'sheet') ? 'sticky top-0 z-20' : ''}`}>
                     <th className={`text-left font-bold border border-slate-200 w-8 ${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2.5 px-3'} ${viewMode === 'sheet' ? 'sticky left-0 z-30 bg-slate-50' : ''}`}>#</th>
@@ -1237,8 +1259,15 @@ export default function MetaLeadsPage() {
                         )}
                       </td>
                       {viewMode !== 'regular' && (
-                        <td className="py-1.5 px-2 border border-slate-100 text-[11px] text-slate-600 max-w-[260px]">
-                          <span className="truncate block">{(row.Discussion || '').trim() || 'No follow-up logged yet'}</span>
+                        <td className="py-1 px-1.5 border border-slate-100 text-[10px] text-slate-600 min-w-[220px] max-w-[280px]">
+                          <textarea
+                            value={rowDrafts[row.MetaLead_Id]?.discussion ?? toBulletEditorValue(row.Discussion)}
+                            onChange={(e) => updateRowDraft(row.MetaLead_Id, { discussion: e.target.value })}
+                            disabled={!canUpdate || savingLeadId === row.MetaLead_Id}
+                            rows={3}
+                            placeholder={viewMode === 'excel' ? 'One follow-up point per line' : 'Type discussion points'}
+                            className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[10px] leading-4 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+                          />
                         </td>
                       )}
                       <td className={`${viewMode !== 'regular' ? 'py-1.5 px-2' : 'py-2 px-3'} text-center border border-slate-100`}>
