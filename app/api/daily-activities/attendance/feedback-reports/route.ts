@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
       }> = {};
       for (const r of rows) {
         map[r.roll_no] = {
-          firstHalf: (r.first_half_rating ?? r.rating)
+          firstHalf: (r.first_half_rating ?? (r.second_half_rating == null ? r.rating : null))
             ? { rating: r.first_half_rating ?? r.rating, comments: r.first_half_comments ?? r.comments ?? null }
             : null,
           secondHalf: r.second_half_rating
@@ -103,8 +103,8 @@ export async function GET(req: NextRequest) {
         studentName: r.student_name ?? '',
         rating: r.rating,
         comments: r.comments ?? null,
-        firstHalfRating: r.first_half_rating ?? r.rating ?? null,
-        firstHalfComments: r.first_half_comments ?? r.comments ?? null,
+        firstHalfRating: r.first_half_rating ?? (r.second_half_rating == null ? r.rating : null),
+        firstHalfComments: r.first_half_comments ?? (r.second_half_rating == null ? r.comments ?? null : null),
         secondHalfRating: r.second_half_rating ?? null,
         secondHalfComments: r.second_half_comments ?? null,
         submittedAt: r.submitted_at,

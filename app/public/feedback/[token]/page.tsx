@@ -31,6 +31,7 @@ export default function FeedbackPage() {
   const [sessionInfo, setSessionInfo] = useState<{
     batchName: string;
     date: string;
+    feedbackSession: 'first_half' | 'second_half' | 'combined';
     trainerName: string | null;
     trainerTimeFrom: string | null;
     trainerTimeTo: string | null;
@@ -60,6 +61,11 @@ export default function FeedbackPage() {
   const [submitted, setSubmitted]     = useState(false);
   const [submitError, setSubmitError] = useState('');
 
+  const activeSession = sessionInfo?.feedbackSession === 'second_half' ? 'second_half' : 'first_half';
+  const activeSessionTitle = activeSession === 'first_half' ? 'First Half' : 'Second Half';
+  const activeRating = activeSession === 'first_half' ? firstHalfRating : secondHalfRating;
+  const activeImprovement = activeSession === 'first_half' ? firstHalfImprovement : secondHalfImprovement;
+
   /* 0. Device ID + already-submitted check */
   useEffect(() => {
     if (!token) return;
@@ -83,6 +89,7 @@ export default function FeedbackPage() {
         setSessionInfo({
           batchName: d.batchName || `Batch #${d.batchId}`,
           date: d.date,
+          feedbackSession: d.feedbackSession || 'first_half',
           trainerName: d.trainerName || null,
           trainerTimeFrom: d.trainerTimeFrom || null,
           trainerTimeTo: d.trainerTimeTo || null,
@@ -117,8 +124,8 @@ export default function FeedbackPage() {
   /* 3. Submit feedback */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (firstHalfRating < 1 || secondHalfRating < 1) {
-      setSubmitError('Please select ratings for both first half and second half.');
+    if (activeRating < 1) {
+      setSubmitError(`Please select a rating for ${activeSessionTitle.toLowerCase()}.`);
       return;
     }
     setSubmitting(true);
@@ -130,10 +137,8 @@ export default function FeedbackPage() {
         body: JSON.stringify({
           rollNo,
           studentName,
-          firstHalfRating,
-          firstHalfComments: firstHalfRating === 1 ? firstHalfImprovement : undefined,
-          secondHalfRating,
-          secondHalfComments: secondHalfRating === 1 ? secondHalfImprovement : undefined,
+          rating: activeRating,
+          comments: activeRating === 1 ? activeImprovement : undefined,
           deviceId,
         }),
       });
@@ -192,6 +197,7 @@ export default function FeedbackPage() {
                 <p className="text-xs font-semibold text-[#2E3093]">{sessionInfo.batchName}</p>
                 <div className="mt-0.5 space-y-0.5 text-[11px] text-gray-500">
                   <p>{fmtDate(sessionInfo.date)}</p>
+                  <p>Feedback Window: <span className="font-semibold text-gray-700">{activeSessionTitle}</span></p>
                   {sessionInfo.trainerName && (
                     <p>Trainer: <span className="font-semibold text-gray-700">{sessionInfo.trainerName}</span></p>
                   )}
@@ -291,68 +297,49 @@ export default function FeedbackPage() {
                     <span><span className="font-semibold">{studentName}</span> — Roll No. {rollNo}</span>
                   </div>
 
-                  {([
-                    {
-                      key: 'first',
-                      title: 'First Half',
-                      rating: firstHalfRating,
-                      setRating: setFirstHalfRating,
-                      improvement: firstHalfImprovement,
-                      setImprovement: setFirstHalfImprovement,
-                    },
-                    {
-                      key: 'second',
-                      title: 'Second Half',
-                      rating: secondHalfRating,
-                      setRating: setSecondHalfRating,
-                      improvement: secondHalfImprovement,
-                      setImprovement: setSecondHalfImprovement,
-                    },
-                  ] as const).map((section) => (
-                    <div key={section.key} className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
-                      <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-500">
-                        {section.title} Rating <span className="text-red-400">*</span>
-                      </label>
-                      <div className="space-y-2">
-                        {([5, 4, 3, 2, 1] as const).map((star) => (
-                          <button
-                            key={star}
-                            type="button"
-                            onClick={() => section.setRating(star)}
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
-                              section.rating === star
-                                ? 'bg-[#2E3093] border-[#2E3093] text-white shadow-sm'
-                                : 'bg-white border-gray-200 text-gray-700 hover:border-[#2E3093]/40 hover:bg-[#2E3093]/5'
-                            }`}
-                          >
-                            <span className={`text-base font-bold w-5 text-center ${section.rating === star ? 'text-white' : 'text-[#2E3093]'}`}>{star}</span>
-                            <span>{RATING_LABELS[star]}</span>
-                          </button>
-                        ))}
-                      </div>
-
-                      {section.rating === 1 && (
-                        <div>
-                          <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-1">
-                            How can we improve {section.title.toLowerCase()}?
-                          </label>
-                          <textarea
-                            value={section.improvement}
-                            onChange={e => section.setImprovement(e.target.value)}
-                            placeholder="Please share what we can do better…"
-                            rows={4}
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
-                          />
-                        </div>
-                      )}
+                  <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+                    <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-500">
+                      {activeSessionTitle} Rating <span className="text-red-400">*</span>
+                    </label>
+                    <div className="space-y-2">
+                      {([5, 4, 3, 2, 1] as const).map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => activeSession === 'first_half' ? setFirstHalfRating(star) : setSecondHalfRating(star)}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                            activeRating === star
+                              ? 'bg-[#2E3093] border-[#2E3093] text-white shadow-sm'
+                              : 'bg-white border-gray-200 text-gray-700 hover:border-[#2E3093]/40 hover:bg-[#2E3093]/5'
+                          }`}
+                        >
+                          <span className={`text-base font-bold w-5 text-center ${activeRating === star ? 'text-white' : 'text-[#2E3093]'}`}>{star}</span>
+                          <span>{RATING_LABELS[star]}</span>
+                        </button>
+                      ))}
                     </div>
-                  ))}
+
+                    {activeRating === 1 && (
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-1">
+                          How can we improve {activeSessionTitle.toLowerCase()}?
+                        </label>
+                        <textarea
+                          value={activeImprovement}
+                          onChange={e => activeSession === 'first_half' ? setFirstHalfImprovement(e.target.value) : setSecondHalfImprovement(e.target.value)}
+                          placeholder="Please share what we can do better…"
+                          rows={4}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+                        />
+                      </div>
+                    )}
+                  </div>
 
                   {submitError && <p className="text-xs text-red-500">{submitError}</p>}
 
                   <button
                     type="submit"
-                    disabled={submitting || firstHalfRating < 1 || secondHalfRating < 1}
+                    disabled={submitting || activeRating < 1}
                     className="w-full py-2.5 rounded-xl bg-[#2E3093] text-white text-sm font-semibold hover:bg-[#252780] transition-colors disabled:opacity-50"
                   >
                     {submitting ? (

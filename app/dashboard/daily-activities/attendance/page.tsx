@@ -23,6 +23,12 @@ type StudentFeedback = {
   firstHalf: FeedbackEntry | null;
   secondHalf: FeedbackEntry | null;
 };
+type FeedbackLink = {
+  session: 'first_half' | 'second_half';
+  token?: string;
+  url: string;
+  expiresAt?: string;
+};
 
 const HOUR_OPTIONS = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0'));
 const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0'));
@@ -48,13 +54,17 @@ function formatExpiry(value: string) {
   });
 }
 
+function formatFeedbackSession(session: FeedbackLink['session']) {
+  return session === 'first_half' ? 'First Half' : 'Second Half';
+}
+
 function parseTimeParts(value: string) {
   if (!/^\d{2}:\d{2}$/.test(value)) {
     return { hour: '', minute: '', period: 'AM' as 'AM' | 'PM' };
   }
   const [hourText, minute] = value.split(':');
   const hourNumber = Number(hourText);
-  const period = hourNumber >= 12 ? 'PM' : 'AM';
+  const period: 'AM' | 'PM' = hourNumber >= 12 ? 'PM' : 'AM';
   const hour12 = hourNumber % 12 || 12;
   return {
     hour: String(hour12).padStart(2, '0'),
@@ -162,8 +172,8 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   const [saved, setSaved]                     = useState(false);
   const [error, setError]                     = useState('');
   const [loaded, setLoaded]                   = useState(false);
-  const [feedbackUrl, setFeedbackUrl]         = useState('');
-  const [feedbackExpiresAt, setFeedbackExpiresAt] = useState('');
+  const [feedbackLinks, setFeedbackLinks]     = useState<FeedbackLink[]>([]);
+  const [copiedFeedbackUrl, setCopiedFeedbackUrl] = useState('');
 
   /* load courses */
   useEffect(() => {
@@ -197,8 +207,8 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     setLoaded(false);
     setSaved(false);
     setError('');
-    setFeedbackUrl('');
-    setFeedbackExpiresAt('');
+    setFeedbackLinks([]);
+    setCopiedFeedbackUrl('');
     setTrainerId('');
     setTrainerTimeFrom('');
     setTrainerTimeTo('');
@@ -211,26 +221,28 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
-        if (data?.url) {
-          setFeedbackUrl(String(data.url));
-          setFeedbackExpiresAt(data.expiresAt ? String(data.expiresAt) : '');
+        if (Array.isArray(data?.links) && data.links.length) {
+          setFeedbackLinks(data.links.map((link: FeedbackLink) => ({
+            session: link.session,
+            token: link.token,
+            url: String(link.url),
+            expiresAt: link.expiresAt ? String(link.expiresAt) : (data.expiresAt ? String(data.expiresAt) : ''),
+          })));
           if (!trainerId && data.trainerId != null) setTrainerId(String(data.trainerId));
           if (!trainerTimeFrom && data.trainerTimeFrom) setTrainerTimeFrom(String(data.trainerTimeFrom).slice(0, 5));
           if (!trainerTimeTo && data.trainerTimeTo) setTrainerTimeTo(String(data.trainerTimeTo).slice(0, 5));
         } else {
-          setFeedbackUrl('');
-          setFeedbackExpiresAt('');
+          setFeedbackLinks([]);
         }
       })
       .catch(() => {
         if (cancelled) return;
-        setFeedbackUrl('');
-        setFeedbackExpiresAt('');
+        setFeedbackLinks([]);
       });
     return () => {
       cancelled = true;
     };
-  }, [batchId, date, trainerId, trainerTimeFrom, trainerTimeTo]);
+  }, [batchId, date]);
 
   /* load both halves in parallel */
   const loadAttendance = useCallback(async () => {
@@ -364,8 +376,12 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
         });
         if (fbRes.ok) {
           const fbData = await fbRes.json();
-          setFeedbackUrl(fbData.url || '');
-          setFeedbackExpiresAt(fbData.expiresAt || '');
+          setFeedbackLinks(Array.isArray(fbData.links) ? fbData.links.map((link: FeedbackLink) => ({
+            session: link.session,
+            token: link.token,
+            url: link.url,
+            expiresAt: link.expiresAt || fbData.expiresAt || '',
+          })) : []);
         }
       } catch { /* non-critical */ }
     } catch (e: unknown) {
@@ -607,7 +623,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
             <button className="ml-auto text-red-400 hover:text-red-600" onClick={() => setError('')}>✕</button>
           </div>
         )}
-        {(saved || feedbackUrl) && (
+        {(saved || feedbackLinks.length > 0) && (
           <div className="mx-4 my-2 space-y-2">
             {saved && (
               <div className="flex items-center gap-3 px-4 py-2.5 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
@@ -615,50 +631,72 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                 Attendance saved successfully.
               </div>
             )}
-            {feedbackUrl && (
+            {feedbackLinks.length > 0 && (
               <div className="px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-[11px] font-bold uppercase tracking-widest text-blue-700 mb-1.5 flex items-center gap-1.5">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
                   </svg>
-                    Student Feedback Link <span className="font-normal normal-case text-blue-500">(valid 24h · present/late students only)</span>
+                    Student Feedback Links <span className="font-normal normal-case text-blue-500">(valid 24h · present/late students only)</span>
                 </p>
-                  {feedbackExpiresAt && (
-                    <p className="mb-2 text-[11px] text-blue-700">Active until <span className="font-semibold">{formatExpiry(feedbackExpiresAt)}</span></p>
-                  )}
                   {(trainerId || trainerTimeFrom || trainerTimeTo) && (
                     <div className="mb-2 rounded-md border border-blue-200 bg-white px-2.5 py-2 text-[11px] text-blue-800">
                       {trainerId && <p>Trainer: <span className="font-semibold">{faculties.find((f) => String(f.Faculty_Id) === trainerId)?.Faculty_Name || '—'}</span></p>}
                       {(trainerTimeFrom || trainerTimeTo) && <p>Time Allotted: <span className="font-semibold">{formatTime12Hour(trainerTimeFrom)} - {formatTime12Hour(trainerTimeTo)}</span></p>}
                     </div>
                   )}
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <div className="min-w-0 flex-1 rounded-md border border-blue-200 bg-white px-2.5 py-1.5 text-xs text-blue-800 break-all">
-                    {feedbackUrl}
-                  </div>
-                  <div className="flex gap-2 sm:shrink-0">
-                    <a
-                      href={feedbackUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-blue-200 bg-white text-[#2E3093] rounded-md hover:bg-blue-100 transition-colors sm:flex-none"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H19m0 0v5.5M19 6l-7.5 7.5M17 13.5V17a2 2 0 01-2 2H7a2 2 0 01-2-2V9a2 2 0 012-2h3.5" />
-                      </svg>
-                      Open Link
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => { navigator.clipboard.writeText(feedbackUrl); }}
-                      className="flex-1 shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#2E3093] text-white rounded-md hover:bg-[#252780] transition-colors sm:flex-none"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                      Copy
-                    </button>
-                  </div>
+                <div className="space-y-3">
+                  {feedbackLinks.map((link) => (
+                    <div key={link.session} className="rounded-md border border-blue-200 bg-white p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-[#2E3093]">{formatFeedbackSession(link.session)} Link</p>
+                        {link.expiresAt && (
+                          <span className="text-[11px] text-blue-700">Active until {formatExpiry(link.expiresAt)}</span>
+                        )}
+                      </div>
+                      <div className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs text-blue-800 break-all">
+                        {link.url}
+                      </div>
+                      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-blue-200 bg-white text-[#2E3093] rounded-md hover:bg-blue-100 transition-colors sm:flex-none"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H19m0 0v5.5M19 6l-7.5 7.5M17 13.5V17a2 2 0 01-2 2H7a2 2 0 01-2-2V9a2 2 0 012-2h3.5" />
+                          </svg>
+                          Open Link
+                        </a>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(link.url);
+                              setCopiedFeedbackUrl(link.url);
+                              window.setTimeout(() => {
+                                setCopiedFeedbackUrl((current) => (current === link.url ? '' : current));
+                              }, 3000);
+                            } catch {
+                              setError('Failed to copy feedback link');
+                            }
+                          }}
+                          className="flex-1 shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#2E3093] text-white rounded-md hover:bg-[#252780] transition-colors sm:flex-none"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                          {copiedFeedbackUrl === link.url ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      {copiedFeedbackUrl === link.url && (
+                        <p className="mt-2 text-[11px] text-green-700">
+                          Copied link: <span className="font-semibold break-all">{copiedFeedbackUrl}</span>
+                        </p>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

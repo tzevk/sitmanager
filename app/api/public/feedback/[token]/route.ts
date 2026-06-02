@@ -18,7 +18,7 @@ export async function GET(
 
     const pool = getPool();
     const [rows] = await pool.query<any[]>(
-      `SELECT Batch_Id, date, batch_name, trainer_name, trainer_time_from, trainer_time_to, expires_at
+      `SELECT Batch_Id, date, batch_name, trainer_name, trainer_time_from, trainer_time_to, feedback_session, expires_at
        FROM attendance_feedback_token
        WHERE token = ? LIMIT 1`,
       [token]
@@ -66,6 +66,7 @@ export async function GET(
       trainerName: row.trainer_name ?? null,
       trainerTimeFrom: row.trainer_time_from ?? null,
       trainerTimeTo: row.trainer_time_to ?? null,
+      feedbackSession: row.feedback_session ?? 'combined',
     });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Unknown error' }, { status: 500 });
@@ -82,7 +83,7 @@ export async function POST(
     const pool = getPool();
 
     const [rows] = await pool.query<any[]>(
-      `SELECT Batch_Id, date, expires_at FROM attendance_feedback_token WHERE token = ? LIMIT 1`,
+      `SELECT Batch_Id, date, feedback_session, expires_at FROM attendance_feedback_token WHERE token = ? LIMIT 1`,
       [token]
     );
     if (!rows.length) {
@@ -109,11 +110,12 @@ export async function POST(
     const normalizedSecondHalfRating = secondHalfRating ?? rating;
     const normalizedFirstHalfComments = firstHalfComments ?? comments;
     const normalizedSecondHalfComments = secondHalfComments ?? null;
+    const feedbackSession = rows[0].feedback_session ?? 'combined';
 
-    if (!normalizedFirstHalfRating || normalizedFirstHalfRating < 1 || normalizedFirstHalfRating > 5) {
+    if ((feedbackSession === 'combined' || feedbackSession === 'first_half') && (!normalizedFirstHalfRating || normalizedFirstHalfRating < 1 || normalizedFirstHalfRating > 5)) {
       return NextResponse.json({ error: 'First half rating (1-5) is required' }, { status: 400 });
     }
-    if (!normalizedSecondHalfRating || normalizedSecondHalfRating < 1 || normalizedSecondHalfRating > 5) {
+    if ((feedbackSession === 'combined' || feedbackSession === 'second_half') && (!normalizedSecondHalfRating || normalizedSecondHalfRating < 1 || normalizedSecondHalfRating > 5)) {
       return NextResponse.json({ error: 'Second half rating (1-5) is required' }, { status: 400 });
     }
     if (!rollNo?.trim()) {
@@ -185,14 +187,27 @@ export async function POST(
       await pool.query(`ALTER TABLE attendance_feedback ADD COLUMN second_half_comments TEXT NULL AFTER second_half_rating`);
     }
 
-    /* duplicate check — one submission per roll number per session */
+    /* duplicate check — one submission per roll number per half */
     const [existing] = await pool.query<any[]>(
-      `SELECT id FROM attendance_feedback WHERE Batch_Id = ? AND date = ? AND roll_no = ? LIMIT 1`,
+      `SELECT id, first_half_rating, second_half_rating FROM attendance_feedback WHERE Batch_Id = ? AND date = ? AND roll_no = ? LIMIT 1`,
       [rows[0].Batch_Id, rows[0].date, rollNo!.trim()]
     );
-    if (existing.length) {
+    const existingRow = existing[0];
+    if (feedbackSession === 'combined' && existing.length) {
       return NextResponse.json(
         { error: 'You have already submitted feedback for this session.' },
+        { status: 409 }
+      );
+    }
+    if (feedbackSession === 'first_half' && existingRow?.first_half_rating != null) {
+      return NextResponse.json(
+        { error: 'You have already submitted first half feedback for this session.' },
+        { status: 409 }
+      );
+    }
+    if (feedbackSession === 'second_half' && existingRow?.second_half_rating != null) {
+      return NextResponse.json(
+        { error: 'You have already submitted second half feedback for this session.' },
         { status: 409 }
       );
     }
@@ -211,27 +226,109 @@ export async function POST(
       }
     }
 
-    await pool.query(
-      `INSERT INTO attendance_feedback (
-         token, Batch_Id, date, roll_no, student_name, device_id,
-         rating, comments, first_half_rating, first_half_comments, second_half_rating, second_half_comments
-       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        token,
-        rows[0].Batch_Id,
-        rows[0].date,
-        rollNo?.trim() || null,
-        studentName?.trim() || null,
-        deviceId?.trim() || null,
-        normalizedFirstHalfRating,
-        normalizedFirstHalfComments?.trim() || null,
-        normalizedFirstHalfRating,
-        normalizedFirstHalfComments?.trim() || null,
-        normalizedSecondHalfRating,
-        normalizedSecondHalfComments?.trim() || null,
-      ]
-    );
+    if (feedbackSession === 'combined') {
+      await pool.query(
+        `INSERT INTO attendance_feedback (
+           token, Batch_Id, date, roll_no, student_name, device_id,
+           rating, comments, first_half_rating, first_half_comments, second_half_rating, second_half_comments
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          token,
+          rows[0].Batch_Id,
+          rows[0].date,
+          rollNo?.trim() || null,
+          studentName?.trim() || null,
+          deviceId?.trim() || null,
+          normalizedFirstHalfRating,
+          normalizedFirstHalfComments?.trim() || null,
+          normalizedFirstHalfRating,
+          normalizedFirstHalfComments?.trim() || null,
+          normalizedSecondHalfRating,
+          normalizedSecondHalfComments?.trim() || null,
+        ]
+      );
+    } else if (feedbackSession === 'first_half') {
+      if (existingRow) {
+        await pool.query(
+          `UPDATE attendance_feedback
+           SET token = ?, student_name = ?, device_id = ?, rating = ?, comments = ?,
+               first_half_rating = ?, first_half_comments = ?
+           WHERE id = ?`,
+          [
+            token,
+            studentName?.trim() || null,
+            deviceId?.trim() || null,
+            normalizedFirstHalfRating,
+            normalizedFirstHalfComments?.trim() || null,
+            normalizedFirstHalfRating,
+            normalizedFirstHalfComments?.trim() || null,
+            existingRow.id,
+          ]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO attendance_feedback (
+             token, Batch_Id, date, roll_no, student_name, device_id,
+             rating, comments, first_half_rating, first_half_comments, second_half_rating, second_half_comments
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            token,
+            rows[0].Batch_Id,
+            rows[0].date,
+            rollNo?.trim() || null,
+            studentName?.trim() || null,
+            deviceId?.trim() || null,
+            normalizedFirstHalfRating,
+            normalizedFirstHalfComments?.trim() || null,
+            normalizedFirstHalfRating,
+            normalizedFirstHalfComments?.trim() || null,
+            null,
+            null,
+          ]
+        );
+      }
+    } else {
+      if (existingRow) {
+        await pool.query(
+          `UPDATE attendance_feedback
+           SET token = ?, student_name = ?, device_id = ?,
+               second_half_rating = ?, second_half_comments = ?
+           WHERE id = ?`,
+          [
+            token,
+            studentName?.trim() || null,
+            deviceId?.trim() || null,
+            normalizedSecondHalfRating,
+            normalizedSecondHalfComments?.trim() || null,
+            existingRow.id,
+          ]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO attendance_feedback (
+             token, Batch_Id, date, roll_no, student_name, device_id,
+             rating, comments, first_half_rating, first_half_comments, second_half_rating, second_half_comments
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            token,
+            rows[0].Batch_Id,
+            rows[0].date,
+            rollNo?.trim() || null,
+            studentName?.trim() || null,
+            deviceId?.trim() || null,
+            normalizedSecondHalfRating,
+            normalizedSecondHalfComments?.trim() || null,
+            null,
+            null,
+            normalizedSecondHalfRating,
+            normalizedSecondHalfComments?.trim() || null,
+          ]
+        );
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
