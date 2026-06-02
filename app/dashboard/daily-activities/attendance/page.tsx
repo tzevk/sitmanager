@@ -24,6 +24,9 @@ type StudentFeedback = {
   secondHalf: FeedbackEntry | null;
 };
 
+const HOUR_OPTIONS = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0'));
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0'));
+
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -31,6 +34,96 @@ function todayStr() {
 function pct(present: number, total: number) {
   if (!total) return 0;
   return Math.round((present / total) * 100);
+}
+
+function formatExpiry(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function parseTimeParts(value: string) {
+  if (!/^\d{2}:\d{2}$/.test(value)) {
+    return { hour: '', minute: '', period: 'AM' as 'AM' | 'PM' };
+  }
+  const [hourText, minute] = value.split(':');
+  const hourNumber = Number(hourText);
+  const period = hourNumber >= 12 ? 'PM' : 'AM';
+  const hour12 = hourNumber % 12 || 12;
+  return {
+    hour: String(hour12).padStart(2, '0'),
+    minute,
+    period,
+  };
+}
+
+function buildTimeValue(hour: string, minute: string, period: 'AM' | 'PM') {
+  if (!hour || !minute) return '';
+  let hourNumber = Number(hour) % 12;
+  if (period === 'PM') hourNumber += 12;
+  return `${String(hourNumber).padStart(2, '0')}:${minute}`;
+}
+
+function formatTime12Hour(value: string) {
+  const parts = parseTimeParts(value);
+  if (!parts.hour || !parts.minute) return value || '—';
+  return `${parts.hour}:${parts.minute} ${parts.period}`;
+}
+
+function TimePicker({
+  label,
+  value,
+  onChange,
+  className,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  className: string;
+}) {
+  const parts = parseTimeParts(value);
+
+  return (
+    <div className="flex flex-col gap-1 w-full sm:w-auto">
+      <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{label}</label>
+      <div className="grid grid-cols-3 gap-2 min-w-[230px]">
+        <select
+          value={parts.hour}
+          onChange={(e) => onChange(e.target.value ? buildTimeValue(e.target.value, parts.minute || '00', parts.period) : '')}
+          className={className}
+        >
+          <option value="">Hour</option>
+          {HOUR_OPTIONS.map((hour) => (
+            <option key={hour} value={hour}>{hour}</option>
+          ))}
+        </select>
+        <select
+          value={parts.minute}
+          onChange={(e) => onChange(parts.hour ? buildTimeValue(parts.hour, e.target.value, parts.period) : '')}
+          className={className}
+        >
+          <option value="">Min</option>
+          {MINUTE_OPTIONS.map((minute) => (
+            <option key={minute} value={minute}>{minute}</option>
+          ))}
+        </select>
+        <select
+          value={parts.period}
+          onChange={(e) => onChange(parts.hour ? buildTimeValue(parts.hour, parts.minute || '00', e.target.value as 'AM' | 'PM') : '')}
+          className={className}
+        >
+          <option value="AM">AM</option>
+          <option value="PM">PM</option>
+        </select>
+      </div>
+    </div>
+  );
 }
 
 /* ─── Main page ───────────────────────────────────────────────────── */
@@ -70,6 +163,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   const [error, setError]                     = useState('');
   const [loaded, setLoaded]                   = useState(false);
   const [feedbackUrl, setFeedbackUrl]         = useState('');
+  const [feedbackExpiresAt, setFeedbackExpiresAt] = useState('');
 
   /* load courses */
   useEffect(() => {
@@ -104,10 +198,39 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     setSaved(false);
     setError('');
     setFeedbackUrl('');
+    setFeedbackExpiresAt('');
     setTrainerId('');
     setTrainerTimeFrom('');
     setTrainerTimeTo('');
   }, [batchId, date]);
+
+  useEffect(() => {
+    if (!batchId || !date) return;
+    let cancelled = false;
+    fetch(`/api/daily-activities/attendance/feedback-token?batchId=${encodeURIComponent(batchId)}&date=${encodeURIComponent(date)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.url) {
+          setFeedbackUrl(String(data.url));
+          setFeedbackExpiresAt(data.expiresAt ? String(data.expiresAt) : '');
+          if (!trainerId && data.trainerId != null) setTrainerId(String(data.trainerId));
+          if (!trainerTimeFrom && data.trainerTimeFrom) setTrainerTimeFrom(String(data.trainerTimeFrom).slice(0, 5));
+          if (!trainerTimeTo && data.trainerTimeTo) setTrainerTimeTo(String(data.trainerTimeTo).slice(0, 5));
+        } else {
+          setFeedbackUrl('');
+          setFeedbackExpiresAt('');
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFeedbackUrl('');
+        setFeedbackExpiresAt('');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [batchId, date, trainerId, trainerTimeFrom, trainerTimeTo]);
 
   /* load both halves in parallel */
   const loadAttendance = useCallback(async () => {
@@ -242,6 +365,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
         if (fbRes.ok) {
           const fbData = await fbRes.json();
           setFeedbackUrl(fbData.url || '');
+          setFeedbackExpiresAt(fbData.expiresAt || '');
         }
       } catch { /* non-critical */ }
     } catch (e: unknown) {
@@ -357,25 +481,9 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
             </select>
           </div>
 
-          <div className="flex flex-col gap-1 w-full sm:w-auto">
-            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Trainer From</label>
-            <input
-              type="time"
-              value={trainerTimeFrom}
-              onChange={e => setTrainerTimeFrom(e.target.value)}
-              className={ctrlCls}
-            />
-          </div>
+          <TimePicker label="Trainer From" value={trainerTimeFrom} onChange={setTrainerTimeFrom} className={ctrlCls} />
 
-          <div className="flex flex-col gap-1 w-full sm:w-auto">
-            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Trainer To</label>
-            <input
-              type="time"
-              value={trainerTimeTo}
-              onChange={e => setTrainerTimeTo(e.target.value)}
-              className={ctrlCls}
-            />
-          </div>
+          <TimePicker label="Trainer To" value={trainerTimeTo} onChange={setTrainerTimeTo} className={ctrlCls} />
 
           {/* Load button */}
           <button
@@ -499,12 +607,14 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
             <button className="ml-auto text-red-400 hover:text-red-600" onClick={() => setError('')}>✕</button>
           </div>
         )}
-        {saved && (
+        {(saved || feedbackUrl) && (
           <div className="mx-4 my-2 space-y-2">
-            <div className="flex items-center gap-3 px-4 py-2.5 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
-              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-              Attendance saved successfully.
-            </div>
+            {saved && (
+              <div className="flex items-center gap-3 px-4 py-2.5 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                Attendance saved successfully.
+              </div>
+            )}
             {feedbackUrl && (
               <div className="px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-[11px] font-bold uppercase tracking-widest text-blue-700 mb-1.5 flex items-center gap-1.5">
@@ -513,10 +623,13 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                   </svg>
                     Student Feedback Link <span className="font-normal normal-case text-blue-500">(valid 24h · present/late students only)</span>
                 </p>
+                  {feedbackExpiresAt && (
+                    <p className="mb-2 text-[11px] text-blue-700">Active until <span className="font-semibold">{formatExpiry(feedbackExpiresAt)}</span></p>
+                  )}
                   {(trainerId || trainerTimeFrom || trainerTimeTo) && (
                     <div className="mb-2 rounded-md border border-blue-200 bg-white px-2.5 py-2 text-[11px] text-blue-800">
                       {trainerId && <p>Trainer: <span className="font-semibold">{faculties.find((f) => String(f.Faculty_Id) === trainerId)?.Faculty_Name || '—'}</span></p>}
-                      {(trainerTimeFrom || trainerTimeTo) && <p>Time Allotted: <span className="font-semibold">{trainerTimeFrom || '—'} - {trainerTimeTo || '—'}</span></p>}
+                      {(trainerTimeFrom || trainerTimeTo) && <p>Time Allotted: <span className="font-semibold">{formatTime12Hour(trainerTimeFrom)} - {formatTime12Hour(trainerTimeTo)}</span></p>}
                     </div>
                   )}
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

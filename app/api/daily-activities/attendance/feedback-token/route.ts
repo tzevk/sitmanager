@@ -4,6 +4,15 @@ import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { randomBytes } from 'crypto';
 
+function buildBaseUrl(req: NextRequest) {
+  const proto = req.headers.get('x-forwarded-proto') || 'https';
+  const host  = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
+  return process.env.NEXT_PUBLIC_BASE_URL
+    || (host ? `${proto}://${host}` : null)
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+    || 'https://suvidya.app';
+}
+
 async function ensureTokenTable(pool: any) {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS attendance_feedback_token (
@@ -47,6 +56,52 @@ async function ensureTokenTable(pool: any) {
   Body: { batchId, date, batchName?, trainerId?, trainerName?, trainerTimeFrom?, trainerTimeTo? }
    Returns: { token, url, expiresAt }
 */
+export async function GET(req: NextRequest) {
+  try {
+    const auth = await requirePermission(req, 'attendance.view');
+    if (auth instanceof NextResponse) return auth;
+
+    const pool = getPool();
+    await ensureTokenTable(pool);
+
+    const sp = req.nextUrl.searchParams;
+    const batchId = sp.get('batchId');
+    const date = sp.get('date');
+    if (!batchId || !date) {
+      return NextResponse.json({ error: 'batchId and date are required' }, { status: 400 });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT token, Batch_Id, date, batch_name, trainer_id, trainer_name, trainer_time_from, trainer_time_to, expires_at
+       FROM attendance_feedback_token
+       WHERE Batch_Id = ?
+         AND date = ?
+         AND expires_at > NOW()
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`,
+      [Number(batchId), date]
+    );
+
+    const row = (rows as any[])[0];
+    if (!row) {
+      return NextResponse.json({ token: null, url: null, expiresAt: null, trainerId: null, trainerName: null, trainerTimeFrom: null, trainerTimeTo: null });
+    }
+
+    return NextResponse.json({
+      token: row.token,
+      url: `${buildBaseUrl(req)}/public/feedback/${row.token}`,
+      expiresAt: row.expires_at instanceof Date ? row.expires_at.toISOString() : new Date(row.expires_at).toISOString(),
+      trainerId: row.trainer_id ?? null,
+      trainerName: row.trainer_name ?? null,
+      trainerTimeFrom: row.trainer_time_from ?? null,
+      trainerTimeTo: row.trainer_time_to ?? null,
+    });
+  } catch (err: any) {
+    console.error('Feedback token GET error:', err);
+    return NextResponse.json({ error: err?.message || 'Unknown error' }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await requirePermission(req, 'attendance.create');
@@ -83,13 +138,7 @@ export async function POST(req: NextRequest) {
       ]
     );
 
-    const proto = req.headers.get('x-forwarded-proto') || 'https';
-    const host  = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
-      || (host ? `${proto}://${host}` : null)
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-      || 'https://suvidya.app';
-    const url = `${baseUrl}/public/feedback/${token}`;
+    const url = `${buildBaseUrl(req)}/public/feedback/${token}`;
 
     return NextResponse.json({ token, url, expiresAt: expiresAt.toISOString() });
   } catch (err: any) {
