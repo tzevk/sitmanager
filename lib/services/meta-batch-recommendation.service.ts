@@ -363,36 +363,34 @@ function buildEffectivePlan(row: {
   structured: EffectivePlanStructured;
 }): string[] {
   const plan: string[] = [];
+  const budget = Math.max(0, Math.round(row.recommendedBudget));
+  const cpl = row.structured.cplGuardrail && row.structured.cplGuardrail > 0
+    ? row.structured.cplGuardrail
+    : (row.estimatedCpl && row.estimatedCpl > 0 ? Math.round(row.estimatedCpl) : 300);
 
-  plan.push(`Objective: ${row.structured.objective.toUpperCase()} | Audience: ${row.structured.audience}.`);
-  plan.push(`Creative direction: ${row.structured.creativeTheme}.`);
-  plan.push(`Primary CTA: ${row.structured.cta}.`);
+  const split = row.structured.objective === 'urgency'
+    ? { prospecting: 35, remarketing: 65 }
+    : row.structured.objective === 'conversion'
+      ? { prospecting: 55, remarketing: 45 }
+      : { prospecting: 75, remarketing: 25 };
 
-  if (row.daysToStart <= 10) {
-    plan.push('Assign immediate counsellor callback SLA (within 15 minutes) for all fresh leads.');
-  } else if (row.daysToStart <= 30 || row.gapRatio >= 0.4) {
-    plan.push('Run remarketing to last 30-day engagers and form openers.');
-  } else {
-    plan.push('Collect qualified leads via intent-based form questions.');
-  }
+  const prospectingBudget = Math.round((budget * split.prospecting) / 100);
+  const remarketingBudget = Math.max(0, budget - prospectingBudget);
 
-  if (row.maxStudents > 0 && (row.seatGap / row.maxStudents) >= 0.4) {
-    plan.push('Promote fee-plan + scholarship hooks to accelerate seat-fill velocity.');
-  }
+  const leadsPerDay = cpl > 0 ? (budget / cpl) : 0;
+  const leadsPerWeek = leadsPerDay * 7;
+  const admissionsPerWeek = leadsPerWeek * Math.max(0, row.leadToAdmissionRate);
 
-  if (row.leadToAdmissionRate < 0.12) {
-    plan.push('Tighten lead quality: add qualification and timeline qualifiers in form.');
-  } else {
-    plan.push('Prioritize high-intent follow-ups: convert warm leads with counsellor nudges.');
-  }
+  const creativeCount = row.structured.objective === 'urgency' ? 4 : row.structured.objective === 'conversion' ? 5 : 6;
+  const refreshDays = row.structured.objective === 'urgency' ? 3 : 5;
 
-  if (row.estimatedCpl != null && row.estimatedCpl > 0) {
-    plan.push(`Target CPL guardrail near ₹${Math.round(row.estimatedCpl)} while scaling.`);
-  }
+  plan.push(`Execution window: ${Math.max(0, row.daysToStart)} days to batch ${row.batchCode}; fill ${Math.round(row.seatGap)} seats (gap ${Math.round(row.gapRatio * 100)}%).`);
+  plan.push(`Daily budget split: ₹${budget} -> Prospecting ${split.prospecting}% (₹${prospectingBudget}) + Remarketing ${split.remarketing}% (₹${remarketingBudget}).`);
+  plan.push(`Creative plan: ${creativeCount} active ads (${row.structured.creativeTheme}) with refresh every ${refreshDays} days; CTA: ${row.structured.cta}.`);
+  plan.push(`Ops plan: callback SLA ${row.structured.followUpSlaMinutes} min, 3-attempt cadence at 0h/24h/72h, and qualify lead intent before counselor assignment.`);
+  plan.push(`Target metrics: CPL <= ₹${Math.round(cpl)}, ~${Math.round(leadsPerDay)} leads/day (~${Math.round(leadsPerWeek)}/week), ~${admissionsPerWeek.toFixed(1)} admissions/week.`);
 
-  plan.push(`Use approximately ₹${Math.max(0, Math.round(row.recommendedBudget))}/day for batch ${row.batchCode} (${row.courseName}).`);
-
-  return plan.slice(0, 5);
+  return plan;
 }
 
 function parseSnapshotPayload(snapshotJson: unknown): {
