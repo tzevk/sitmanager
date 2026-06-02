@@ -754,43 +754,68 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     search || discipline || inquiryType || leadTag || normalizedLocation || training ||
     statusId || dateFrom || dateTo || duplicatesOnly || puneOnly || followUpDue
   );
+  const useFastUnfilteredPath = !hasActiveFilters;
+
+  // When _inquiry_date is not available yet, sorting with STR_TO_DATE(...) is very expensive
+  // on large tables. Fall back to primary-key recency to keep first page responsive.
+  const listOrderByClause = inquiryDateColumnAvailable
+    ? `${inquiryDateExpr} DESC, si.Inquiry_Id DESC`
+    : `si.Inquiry_Id DESC`;
 
   let total = 0;
   let pageIds: number[] = [];
   let sortOrder = new Map<number, number>();
 
-  // Always cache the COUNT — the no-filter case (default page load) is the heaviest
-  // full-table scan and was previously the only path without caching.
-  total = await cached(
-    getInquiryCountCacheKey({
-      inquiryTable,
-      search,
-      discipline,
-      inquiryType,
-      leadTag,
-      location: normalizedLocation,
-      training,
-      statusId,
-      duplicatesOnly,
-      dateFrom,
-      dateTo,
-      puneOnly,
-      followUpDue,
-    }),
-    hasActiveFilters ? 30_000 : 60_000, // no-filter total changes slowly; cache for 60s
-    async () => {
-      const [countResult] = await pool.query(
-        `SELECT COUNT(*) as total
-         FROM \`${inquiryTable}\` si
-         ${listCourseJoin}
-         ${listDisciplineJoin}
-         ${puneOnly ? puneListJoin : ''}
-         ${whereClause}`,
-        queryParams
-      );
-      return (countResult as any[])[0]?.total || 0;
-    }
-  );
+  if (useFastUnfilteredPath) {
+    // Avoid a full table COUNT(*) on default listing requests. TABLE_ROWS is near-instant
+    // and good enough for pagination totals on high-traffic pages.
+    total = await cached(
+      `inquiry:list-count:approx:${inquiryTable}`,
+      60_000,
+      async () => {
+        const [approxRows] = await pool.query(
+          `SELECT TABLE_ROWS as total
+           FROM INFORMATION_SCHEMA.TABLES
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+           LIMIT 1`,
+          [inquiryTable]
+        );
+        const approx = Number((approxRows as any[])[0]?.total || 0);
+        return Number.isFinite(approx) && approx > 0 ? approx : 0;
+      }
+    );
+  } else {
+    total = await cached(
+      getInquiryCountCacheKey({
+        inquiryTable,
+        search,
+        discipline,
+        inquiryType,
+        leadTag,
+        location: normalizedLocation,
+        training,
+        statusId,
+        duplicatesOnly,
+        dateFrom,
+        dateTo,
+        puneOnly,
+        followUpDue,
+      }),
+      30_000,
+      async () => {
+        const [countResult] = await pool.query(
+          `SELECT COUNT(*) as total
+           FROM \`${inquiryTable}\` si
+           ${listCourseJoin}
+           ${listDisciplineJoin}
+           ${puneOnly ? puneListJoin : ''}
+           ${whereClause}`,
+          queryParams
+        );
+        return (countResult as any[])[0]?.total || 0;
+      }
+    );
+  }
 
   const [sortedIds] = await pool.query(
     `SELECT si.Inquiry_Id
@@ -799,7 +824,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
      ${listDisciplineJoin}
      ${puneOnly ? puneListJoin : ''}
      ${whereClause}
-     ORDER BY ${inquiryDateExpr} DESC, si.Inquiry_Id DESC
+     ORDER BY ${listOrderByClause}
      LIMIT ? OFFSET ?`,
     [...queryParams, limit, offset]
   );
