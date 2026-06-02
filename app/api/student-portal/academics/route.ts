@@ -54,6 +54,49 @@ export async function GET(req: NextRequest) {
     const student = studentRows[0] || null;
     const batchId = student?.Batch_Id ?? null;
 
+    // 1b. Trainer schedule snapshot (prefer today's/next schedule; fallback to latest)
+    let trainerSchedule: {
+      trainer_name: string | null;
+      trainer_time_from: string | null;
+      trainer_time_to: string | null;
+      trainer_link: string | null;
+    } = {
+      trainer_name: null,
+      trainer_time_from: null,
+      trainer_time_to: null,
+      trainer_link: null,
+    };
+
+    if (batchId) {
+      const [trainerRows] = await pool.query<any[]>(
+        `SELECT faculty_name, starttime, endtime, class_room, date
+         FROM batch_lecture_master
+         WHERE batch_id = ?
+           AND (deleted = '0' OR deleted IS NULL)
+         ORDER BY
+           CASE
+             WHEN date = CURDATE() THEN 0
+             WHEN date > CURDATE() THEN 1
+             ELSE 2
+           END,
+           CASE WHEN date >= CURDATE() THEN date END ASC,
+           CASE WHEN date < CURDATE() THEN date END DESC,
+           id DESC
+         LIMIT 1`,
+        [batchId]
+      );
+
+      const trainer = trainerRows[0] || null;
+      if (trainer) {
+        trainerSchedule = {
+          trainer_name: trainer.faculty_name ? String(trainer.faculty_name) : null,
+          trainer_time_from: trainer.starttime ? String(trainer.starttime) : null,
+          trainer_time_to: trainer.endtime ? String(trainer.endtime) : null,
+          trainer_link: trainer.class_room ? String(trainer.class_room).trim() : null,
+        };
+      }
+    }
+
     // 2. Attendance summary: based on daily attendance marks (first/second half)
     let attendanceSummary = { total_lectures: 0, attended: 0, absent: 0, percentage: 0 };
     let recentLectures: any[] = [];
@@ -198,6 +241,10 @@ export async function GET(req: NextRequest) {
         batch_start: student?.SDate ?? '',
         batch_end: student?.EDate ?? '',
         percentage: student?.Percentage ?? '',
+        trainer_name: trainerSchedule.trainer_name,
+        trainer_time_from: trainerSchedule.trainer_time_from,
+        trainer_time_to: trainerSchedule.trainer_time_to,
+        trainer_link: trainerSchedule.trainer_link,
       },
       attendance: attendanceSummary,
       assignments: assignmentsSummary,

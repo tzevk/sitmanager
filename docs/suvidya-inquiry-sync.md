@@ -11,7 +11,7 @@ This app can pull inquiry records from the live Suvidya Admission API and insert
 ### App Route
 
 - Cron/manual endpoint: `/api/cron/suvidya-inquiry-sync`
-- Vercel cron schedule: `*/2 * * * *` (every 2 minutes)
+- Vercel cron schedule: `*/5 * * * *` (every 5 minutes)
 - Methods: `GET`, `POST`
 - Auth:
   - `x-vercel-cron` header from Vercel Cron, or

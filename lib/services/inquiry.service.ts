@@ -732,7 +732,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
          SELECT 1 FROM (
            ${FOLLOW_UP_DUE_SUBQUERY}
          ) due_followups
-         WHERE due_followups.Inquiry_id IN (si.Inquiry_Id, si.Student_Id)
+         WHERE due_followups.LinkId IN (si.Inquiry_Id, si.Student_Id)
        )`
     );
   }

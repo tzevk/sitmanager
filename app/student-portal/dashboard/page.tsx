@@ -17,6 +17,10 @@ interface AcademicsData {
     batch_start: string;
     batch_end: string;
     percentage: string;
+    trainer_name?: string | null;
+    trainer_time_from?: string | null;
+    trainer_time_to?: string | null;
+    trainer_link?: string | null;
   };
   attendance: {
     total_lectures: number;
@@ -75,6 +79,28 @@ function fmtDate(s: string) {
   return new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 }
 
+function fmtTime(value?: string | null): string {
+  const t = String(value ?? '').trim();
+  if (!t) return '';
+  const hhmm = t.slice(0, 5);
+  if (!/^\d{2}:\d{2}$/.test(hhmm)) return t;
+  const [hhRaw, mmRaw] = hhmm.split(':');
+  const hh = Number(hhRaw);
+  const mm = Number(mmRaw);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return t;
+  const period = hh >= 12 ? 'PM' : 'AM';
+  const twelveHour = hh % 12 || 12;
+  return `${String(twelveHour).padStart(2, '0')}:${String(mm).padStart(2, '0')} ${period}`;
+}
+
+function normalizeUrl(link?: string | null): string | null {
+  const raw = String(link ?? '').trim();
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (/^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(raw)) return `https://${raw}`;
+  return null;
+}
+
 export default function StudentDashboardPage() {
   const router = useRouter();
   const [data, setData] = useState<AcademicsData | null>(null);
@@ -118,6 +144,10 @@ export default function StudentDashboardPage() {
 
   const firstName = student?.student_name?.split(' ')[0] ?? 'Student';
   const timings = student?.batch_timings ? cleanTimings(student.batch_timings) : '';
+  const trainerFrom = fmtTime(student?.trainer_time_from);
+  const trainerTo = fmtTime(student?.trainer_time_to);
+  const trainerLink = normalizeUrl(student?.trainer_link);
+  const trainerLinkLabel = String(student?.trainer_link ?? '').trim();
 
   return (
     <div className="pb-6">
@@ -130,11 +160,38 @@ export default function StudentDashboardPage() {
           <p className="text-white/50 text-xs font-medium">{greeting},</p>
           <h1 className="text-[2rem] font-black text-white leading-tight mt-0.5">{firstName}</h1>
           {student?.course_name && (
-            <p className="text-white/60 text-xs mt-2 leading-relaxed">
-              {student.course_name}
-              {student.batch_code ? <><br /><span className="text-white/40">{toBatchNumber(student.batch_code)}</span></> : ''}
-              {timings ? <><span className="text-white/30"> · </span><span className="text-[#FAE452]/80">{timings}</span></> : ''}
-            </p>
+            <>
+              <p className="text-white/60 text-xs mt-2 leading-relaxed">
+                {student.course_name}
+                {student.batch_code ? <><br /><span className="text-white/40">{toBatchNumber(student.batch_code)}</span></> : ''}
+                {timings ? <><span className="text-white/30"> · </span><span className="text-[#FAE452]/80">{timings}</span></> : ''}
+              </p>
+              {(student?.trainer_name || trainerFrom || trainerTo || trainerLinkLabel) && (
+                <div className="mt-3 rounded-xl bg-white/10 border border-white/15 px-3 py-2.5 max-w-md">
+                  <p className="text-[10px] uppercase tracking-wider text-white/50 font-bold">Trainer</p>
+                  {student?.trainer_name ? (
+                    <p className="text-xs text-white font-semibold mt-0.5">{student.trainer_name}</p>
+                  ) : null}
+                  {(trainerFrom || trainerTo) ? (
+                    <p className="text-[11px] text-[#FAE452] mt-1">
+                      {trainerFrom || '—'}{trainerFrom || trainerTo ? ' - ' : ''}{trainerTo || '—'}
+                    </p>
+                  ) : null}
+                  {trainerLink ? (
+                    <a
+                      href={trainerLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-block mt-1 text-[11px] text-white underline underline-offset-2 break-all"
+                    >
+                      Join link
+                    </a>
+                  ) : trainerLinkLabel ? (
+                    <p className="text-[11px] text-white/70 mt-1 break-all">{trainerLinkLabel}</p>
+                  ) : null}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

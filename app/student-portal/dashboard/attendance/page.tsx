@@ -14,9 +14,39 @@ interface Lecture {
   Late: number;
 }
 
+interface StudentInfo {
+  trainer_name?: string | null;
+  trainer_time_from?: string | null;
+  trainer_time_to?: string | null;
+  trainer_link?: string | null;
+}
+
+function fmtTime(value?: string | null): string {
+  const t = String(value ?? '').trim();
+  if (!t) return '';
+  const hhmm = t.slice(0, 5);
+  if (!/^\d{2}:\d{2}$/.test(hhmm)) return t;
+  const [hhRaw, mmRaw] = hhmm.split(':');
+  const hh = Number(hhRaw);
+  const mm = Number(mmRaw);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return t;
+  const period = hh >= 12 ? 'PM' : 'AM';
+  const twelveHour = hh % 12 || 12;
+  return `${String(twelveHour).padStart(2, '0')}:${String(mm).padStart(2, '0')} ${period}`;
+}
+
+function normalizeUrl(link?: string | null): string | null {
+  const raw = String(link ?? '').trim();
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (/^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(raw)) return `https://${raw}`;
+  return null;
+}
+
 export default function AttendancePage() {
   const router = useRouter();
   const [lectures, setLectures] = useState<Lecture[]>([]);
+  const [studentInfo, setStudentInfo] = useState<StudentInfo | null>(null);
   const [summary, setSummary] = useState({ total_lectures: 0, attended: 0, absent: 0, percentage: 0 });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'present' | 'absent'>('all');
@@ -29,6 +59,7 @@ export default function AttendancePage() {
         if (res.status === 401) { router.push('/student-portal/signin'); return; }
         const data = await res.json();
         setLectures(data.all_lectures ?? []);
+        setStudentInfo(data.student ?? null);
         setSummary(data.attendance ?? { total_lectures: 0, attended: 0, absent: 0, percentage: 0 });
       } catch { /* silent */ }
       setLoading(false);
@@ -45,6 +76,10 @@ export default function AttendancePage() {
 
   const filtered = filter === 'all' ? lectures : lectures.filter(l => filter === 'present' ? l.present : !l.present);
   const attStatus = summary.percentage >= 75 ? 'good' : summary.percentage >= 60 ? 'warning' : 'low';
+  const trainerFrom = fmtTime(studentInfo?.trainer_time_from);
+  const trainerTo = fmtTime(studentInfo?.trainer_time_to);
+  const trainerLink = normalizeUrl(studentInfo?.trainer_link);
+  const trainerLinkLabel = String(studentInfo?.trainer_link ?? '').trim();
 
   return (
     <div className="pb-4">
@@ -65,6 +100,32 @@ export default function AttendancePage() {
         <p className="text-white/40 text-[11px] mt-1.5">
           {attStatus === 'good' ? 'On track' : attStatus === 'warning' ? 'Needs improvement' : 'Below minimum'}
         </p>
+
+        {(studentInfo?.trainer_name || trainerFrom || trainerTo || trainerLinkLabel) && (
+          <div className="mt-4 rounded-xl bg-white/10 border border-white/15 px-3 py-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-white/50 font-bold">Trainer</p>
+            {studentInfo?.trainer_name ? (
+              <p className="text-xs text-white font-semibold mt-0.5">{studentInfo.trainer_name}</p>
+            ) : null}
+            {(trainerFrom || trainerTo) ? (
+              <p className="text-[11px] text-[#FAE452] mt-1">
+                {trainerFrom || '—'}{trainerFrom || trainerTo ? ' - ' : ''}{trainerTo || '—'}
+              </p>
+            ) : null}
+            {trainerLink ? (
+              <a
+                href={trainerLink}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-block mt-1 text-[11px] text-white underline underline-offset-2 break-all"
+              >
+                Join link
+              </a>
+            ) : trainerLinkLabel ? (
+              <p className="text-[11px] text-white/70 mt-1 break-all">{trainerLinkLabel}</p>
+            ) : null}
+          </div>
+        )}
       </div>
 
       {/* Stats strip — overlap */}

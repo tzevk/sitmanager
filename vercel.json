@@ -16,7 +16,7 @@
     },
     {
       "path": "/api/cron/suvidya-inquiry-sync",
-      "schedule": "*/8 * * * *"
+      "schedule": "*/5 * * * *"
     }
   ],
   "functions": {
