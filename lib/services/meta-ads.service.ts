@@ -1815,6 +1815,7 @@ async function findDuplicateInquiry(mobile: string | null, email: string | null)
   }
 
   const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
   const [rows] = await pool.query(
     `SELECT
        si.Inquiry_Id as inquiryId,
@@ -1822,7 +1823,7 @@ async function findDuplicateInquiry(mobile: string | null, email: string | null)
        si.Present_Mobile as presentMobile,
        si.Email as email,
        CAST(NULLIF(si.Course_Id,'') AS UNSIGNED) as courseId
-     FROM Student_Inquiry si
+     FROM \`${inquiryTable}\` si
      WHERE ${conditions.join(' OR ')}
      ORDER BY si.Inquiry_Id DESC
      LIMIT 1`,
