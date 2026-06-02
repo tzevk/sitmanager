@@ -14,6 +14,7 @@
     "db:import-ct": "node scripts/db/import-ct-xlsx.mjs --file ct.xlsx",
     "db:import-consultancy-excel": "node scripts/db/import-consultancy-excel.mjs",
     "db:sync-ct-enquires": "node scripts/db/sync-ct-training-enquires-to-corporate-inquiry.mjs",
+    "db:convert-student-inquiry-innodb": "node scripts/db/convert-student-inquiry-innodb.mjs",
     "db:fix-invalid-inquiry-phones": "node scripts/db/fix-invalid-inquiry-phones.mjs"
   },
   "dependencies": {

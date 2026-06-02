@@ -18,7 +18,14 @@ interface SuvidyaInquiryRecord {
   id?: unknown;
   first_name?: unknown;
   email_id?: unknown;
+  // The API uses different field names across form types — try all of them
   phone?: unknown;
+  mobile?: unknown;
+  phone_number?: unknown;
+  contact?: unknown;
+  contact_number?: unknown;
+  whatsapp?: unknown;
+  whatsapp_number?: unknown;
   select_qualification?: unknown;
   your_location?: unknown;
   select_course?: unknown;
@@ -50,6 +57,8 @@ export interface SyncSuvidyaInquirySummary {
   failed: number;
   totalRecordsHint: number | null;
 }
+
+const SUVIDYA_SYNC_DB_LOCK = 'sit:suvidya_inquiry_sync';
 
 function normalizeText(value: unknown): string | null {
   const text = String(value ?? '').trim();
@@ -301,6 +310,23 @@ async function insertInquiry(
   return insertId;
 }
 
+async function acquireSyncLock(connection: mysql.PoolConnection): Promise<boolean> {
+  const [rows] = await connection.query(
+    'SELECT GET_LOCK(?, 0) AS acquired',
+    [SUVIDYA_SYNC_DB_LOCK]
+  );
+
+  return Number((rows as Array<{ acquired?: unknown }>)[0]?.acquired ?? 0) === 1;
+}
+
+async function releaseSyncLock(connection: mysql.PoolConnection): Promise<void> {
+  try {
+    await connection.query('DO RELEASE_LOCK(?)', [SUVIDYA_SYNC_DB_LOCK]);
+  } catch {
+    // Best-effort; connection close also releases named locks.
+  }
+}
+
 export async function syncSuvidyaInquiries(
   options: SyncSuvidyaInquiryOptions = {}
 ): Promise<SyncSuvidyaInquirySummary> {
@@ -310,159 +336,172 @@ export async function syncSuvidyaInquiries(
   const fetchImpl = options.fetchImpl ?? fetch;
   const pool = getPool();
 
-  await ensureSuvidyaSyncTable(pool);
-  const courseMap = await loadCourseMap(pool);
-
-  const response = await fetchImpl(apiUrl, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-      'User-Agent': 'sitmanager/1.0',
-    },
-    cache: 'no-store',
-  });
-
-  if (!response.ok) {
-    throw new Error(`Suvidya API request failed with status ${response.status}`);
-  }
-
-  const payload = await response.json() as SuvidyaInquiryApiResponse;
-  const allRecords = Array.isArray(payload.data) ? payload.data as SuvidyaInquiryRecord[] : [];
-  const maxRecords = Number.isFinite(options.maxRecords) && Number(options.maxRecords) > 0
-    ? Math.trunc(Number(options.maxRecords))
-    : null;
-  const filteredRecords = allRecords
-    .filter((record) => isWithinSinceHours(record.created_date, options.sinceHours));
-  const consideredRecords = maxRecords ? filteredRecords.slice(0, maxRecords) : filteredRecords;
-
   const summary: SyncSuvidyaInquirySummary = {
     apiUrl,
-    fetched: allRecords.length,
-    considered: consideredRecords.length,
+    fetched: 0,
+    considered: 0,
     created: 0,
     skippedExisting: 0,
     skippedInvalid: 0,
-    skippedOld: allRecords.length - filteredRecords.length,
+    skippedOld: 0,
     failed: 0,
-    totalRecordsHint: toPositiveInt(payload.total_records),
+    totalRecordsHint: null,
   };
 
-  const inquiryTable = await resolveInquiryTableName(pool);
+  const syncConnection = await pool.getConnection();
 
-  // Pre-validate records and batch-check which ones already exist.
-  // This replaces N sequential SELECTs with a single query, which is the main
-  // cause of the 30-second timeout on large syncs.
-  type ValidRecord = { record: SuvidyaInquiryRecord; sourceId: number; tableName: string; studentName: string };
-  const validRecords: ValidRecord[] = [];
-  for (const record of consideredRecords) {
-    const sourceId = toPositiveInt(record.id);
-    const tableName = normalizeText(record.table_name);
-    const studentName = normalizeText(record.first_name);
-    if (!sourceId || !tableName || !studentName) {
-      summary.skippedInvalid += 1;
-    } else {
-      validRecords.push({ record, sourceId, tableName, studentName });
-    }
-  }
-
-  // One query to find all already-synced records in this batch
-  const existingKeys = new Set<string>();
-  if (validRecords.length > 0) {
-    const whereParts = validRecords.map(() => '(source_table_name = ? AND source_inquiry_id = ?)').join(' OR ');
-    const whereParams = validRecords.flatMap(({ tableName, sourceId }) => [tableName, sourceId]);
-    const [existingRows] = await pool.query(
-      `SELECT source_table_name, source_inquiry_id FROM suvidya_inquiry_sync WHERE ${whereParts}`,
-      whereParams
-    );
-    for (const row of existingRows as Array<{ source_table_name: string; source_inquiry_id: number }>) {
-      existingKeys.add(`${row.source_table_name}:${row.source_inquiry_id}`);
-    }
-  }
-
-  for (const { record, sourceId, tableName, studentName } of validRecords) {
-    if (existingKeys.has(`${tableName}:${sourceId}`)) {
-      summary.skippedExisting += 1;
-      continue;
+  try {
+    const hasLock = await acquireSyncLock(syncConnection);
+    if (!hasLock) {
+      throw new Error('Suvidya inquiry sync is already running on another connection');
     }
 
-    const email = normalizeText(record.email_id);
-    const mobile = normalizePhoneText(record.phone);
-    const qualification = normalizeText(record.select_qualification);
-    const location = normalizeText(record.your_location);
-    const courseName = normalizeText(record.select_course);
-    const fullPageSource = normalizeText(record.page_source);
-    const pageSource = summarizeInquirySource(fullPageSource) || 'Suvidya Website';
-    const inquiryDate = normalizeText(record.created_date) || new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const matchedCourseId = courseName ? (courseMap.get(normalizeCourseKey(courseName)) ?? null) : null;
-    const discussion = buildDiscussion({
-      tableName,
-      sourceId,
-      location,
-      pageSource: fullPageSource,
-      courseName,
-      matchedCourseId,
+    await syncConnection.query('SET SESSION innodb_lock_wait_timeout = 5');
+
+    await ensureSuvidyaSyncTable(pool);
+    const courseMap = await loadCourseMap(pool);
+
+    const response = await fetchImpl(apiUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'sitmanager/1.0',
+      },
+      cache: 'no-store',
     });
 
-    let connection: mysql.PoolConnection | null = null;
-    try {
-      connection = await pool.getConnection();
-      await connection.beginTransaction();
+    if (!response.ok) {
+      throw new Error(`Suvidya API request failed with status ${response.status}`);
+    }
 
-      const inquiryId = await insertInquiry(connection, inquiryTable, {
-        studentName,
-        mobile,
-        email,
-        qualification,
-        inquiryDate,
-        inquiryFrom: pageSource,
-        inquiryType: mapInquiryType(tableName),
-        courseId: matchedCourseId,
-        discussion,
-      });
+    const payload = await response.json() as SuvidyaInquiryApiResponse;
+    const allRecords = Array.isArray(payload.data) ? payload.data as SuvidyaInquiryRecord[] : [];
+    const maxRecords = Number.isFinite(options.maxRecords) && Number(options.maxRecords) > 0
+      ? Math.trunc(Number(options.maxRecords))
+      : null;
+    const filteredRecords = allRecords
+      .filter((record) => isWithinSinceHours(record.created_date, options.sinceHours));
+    const consideredRecords = maxRecords ? filteredRecords.slice(0, maxRecords) : filteredRecords;
 
-      await connection.query(
-        `INSERT INTO suvidya_inquiry_sync (
-          source_table_name,
-          source_inquiry_id,
-          inquiry_id,
-          student_name,
-          email,
-          mobile,
-          course_name,
-          page_source,
-          created_date,
-          payload_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          tableName,
-          sourceId,
-          inquiryId,
-          studentName,
-          email,
-          mobile,
-          courseName,
-          pageSource,
-          inquiryDate,
-          JSON.stringify(record),
-        ]
-      );
+    summary.fetched = allRecords.length;
+    summary.considered = consideredRecords.length;
+    summary.skippedOld = allRecords.length - filteredRecords.length;
+    summary.totalRecordsHint = toPositiveInt(payload.total_records);
 
-      await connection.commit();
-      summary.created += 1;
-    } catch (error) {
-      summary.failed += 1;
-      if (connection) {
-        await connection.rollback().catch(() => {});
+    const inquiryTable = await resolveInquiryTableName(pool);
+
+    // Pre-validate records and batch-check which ones already exist.
+    // This replaces N sequential SELECTs with a single query, which is the main
+    // cause of the 30-second timeout on large syncs.
+    type ValidRecord = { record: SuvidyaInquiryRecord; sourceId: number; tableName: string; studentName: string };
+    const validRecords: ValidRecord[] = [];
+    for (const record of consideredRecords) {
+      const sourceId = toPositiveInt(record.id);
+      const tableName = normalizeText(record.table_name);
+      const studentName = normalizeText(record.first_name);
+      if (!sourceId || !tableName || !studentName) {
+        summary.skippedInvalid += 1;
+      } else {
+        validRecords.push({ record, sourceId, tableName, studentName });
       }
-      console.error('Suvidya inquiry sync record failed:', {
+    }
+
+    // One query to find all already-synced records in this batch
+    const existingKeys = new Set<string>();
+    if (validRecords.length > 0) {
+      const whereParts = validRecords.map(() => '(source_table_name = ? AND source_inquiry_id = ?)').join(' OR ');
+      const whereParams = validRecords.flatMap(({ tableName, sourceId }) => [tableName, sourceId]);
+      const [existingRows] = await syncConnection.query(
+        `SELECT source_table_name, source_inquiry_id FROM suvidya_inquiry_sync WHERE ${whereParts}`,
+        whereParams
+      );
+      for (const row of existingRows as Array<{ source_table_name: string; source_inquiry_id: number }>) {
+        existingKeys.add(`${row.source_table_name}:${row.source_inquiry_id}`);
+      }
+    }
+
+    for (const { record, sourceId, tableName, studentName } of validRecords) {
+      if (existingKeys.has(`${tableName}:${sourceId}`)) {
+        summary.skippedExisting += 1;
+        continue;
+      }
+
+      const email = normalizeText(record.email_id);
+      const mobile = normalizePhoneText(
+      record.phone ?? record.mobile ?? record.phone_number ??
+      record.contact ?? record.contact_number ??
+      record.whatsapp ?? record.whatsapp_number
+    );
+      const qualification = normalizeText(record.select_qualification);
+      const location = normalizeText(record.your_location);
+      const courseName = normalizeText(record.select_course);
+      const fullPageSource = normalizeText(record.page_source);
+      const pageSource = summarizeInquirySource(fullPageSource) || 'Suvidya Website';
+      const inquiryDate = normalizeText(record.created_date) || new Date().toISOString().slice(0, 19).replace('T', ' ');
+      const matchedCourseId = courseName ? (courseMap.get(normalizeCourseKey(courseName)) ?? null) : null;
+      const discussion = buildDiscussion({
         tableName,
         sourceId,
-        error,
+        location,
+        pageSource: fullPageSource,
+        courseName,
+        matchedCourseId,
       });
-    } finally {
-      connection?.release();
-    }
-  }
 
-  return summary;
+      try {
+        const inquiryId = await insertInquiry(syncConnection, inquiryTable, {
+          studentName,
+          mobile,
+          email,
+          qualification,
+          inquiryDate,
+          inquiryFrom: pageSource,
+          inquiryType: mapInquiryType(tableName),
+          courseId: matchedCourseId,
+          discussion,
+        });
+
+        await syncConnection.query(
+          `INSERT INTO suvidya_inquiry_sync (
+            source_table_name,
+            source_inquiry_id,
+            inquiry_id,
+            student_name,
+            email,
+            mobile,
+            course_name,
+            page_source,
+            created_date,
+            payload_json
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            tableName,
+            sourceId,
+            inquiryId,
+            studentName,
+            email,
+            mobile,
+            courseName,
+            pageSource,
+            inquiryDate,
+            JSON.stringify(record),
+          ]
+        );
+
+        summary.created += 1;
+      } catch (error) {
+        summary.failed += 1;
+        console.error('Suvidya inquiry sync record failed:', {
+          tableName,
+          sourceId,
+          error,
+        });
+      }
+    }
+
+    return summary;
+  } finally {
+    await releaseSyncLock(syncConnection);
+    syncConnection.release();
+  }
 }

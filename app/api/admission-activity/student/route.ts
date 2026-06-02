@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
+let _inquiryTableCache: string | null = null;
 async function resolveInquiryTableName(pool: ReturnType<typeof getPool>): Promise<string> {
+  if (_inquiryTableCache) return _inquiryTableCache;
   const [rows] = await pool.query(
     `SELECT TABLE_NAME
      FROM INFORMATION_SCHEMA.TABLES
@@ -12,7 +14,8 @@ async function resolveInquiryTableName(pool: ReturnType<typeof getPool>): Promis
      ORDER BY CASE WHEN TABLE_NAME = 'Student_Inquiry' THEN 0 ELSE 1 END
      LIMIT 1`
   );
-  return String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
+  _inquiryTableCache = String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
+  return _inquiryTableCache;
 }
 
 // GET - fetch all students with pagination and search
@@ -31,32 +34,33 @@ export async function GET(req: NextRequest) {
     const courseId = searchParams.get('courseId')?.trim() || '';
     const sex = searchParams.get('sex')?.trim() || '';
 
-    const acceptedAdmissionExists = `(
-      s.Status_id = 8
-      OR LOWER(TRIM(CAST(COALESCE(s.Admission, '') AS CHAR))) IN ('yes', 'y', '1', 'true')
-      OR EXISTS (
-        SELECT 1
-        FROM admission_master a
-        WHERE a.Student_Id = s.Student_Id
-          AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
-          AND (a.Cancel IS NULL OR LOWER(TRIM(CAST(a.Cancel AS CHAR))) IN ('no', '0', 'false'))
-      )
-      OR EXISTS (
-        SELECT 1
-        FROM \
-\`${inquiryTable}\` si
-        WHERE si.Student_Id = s.Student_Id
-          AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
+    // Admitted-student filter — resolved via LEFT JOINs on pre-aggregated derived
+    // tables rather than per-row correlated EXISTS, which caused full table scans.
+    const admissionJoin = `
+      LEFT JOIN (
+        SELECT DISTINCT Student_Id FROM admission_master
+        WHERE (IsDelete = 0 OR IsDelete IS NULL)
+          AND (Cancel IS NULL OR LOWER(TRIM(CAST(Cancel AS CHAR))) IN ('no','0','false'))
+      ) am ON am.Student_Id = s.Student_Id
+      LEFT JOIN (
+        SELECT DISTINCT Student_Id FROM \`${inquiryTable}\`
+        WHERE (IsDelete = 0 OR IsDelete IS NULL)
           AND (
-            si.OnlineState = 8
-            OR IFNULL(si.admission_done, 0) = 2
-            OR LOWER(TRIM(CAST(COALESCE(si.Admission, '') AS CHAR))) IN ('yes', 'y', '1', 'true')
+            OnlineState = 8
+            OR IFNULL(admission_done, 0) = 2
+            OR LOWER(TRIM(CAST(COALESCE(Admission,'') AS CHAR))) IN ('yes','y','1','true')
           )
-      )
+      ) si_adm ON si_adm.Student_Id = s.Student_Id`;
+
+    const admittedCondition = `(
+      s.Status_id = 8
+      OR LOWER(TRIM(CAST(COALESCE(s.Admission,'') AS CHAR))) IN ('yes','y','1','true')
+      OR am.Student_Id IS NOT NULL
+      OR si_adm.Student_Id IS NOT NULL
     )`;
 
     // Build WHERE clause
-    const conditions: string[] = ['(s.IsDelete = 0 OR s.IsDelete IS NULL)', acceptedAdmissionExists];
+    const conditions: string[] = ['(s.IsDelete = 0 OR s.IsDelete IS NULL)', admittedCondition];
     const params: (string | number)[] = [];
 
     if (search) {
@@ -91,25 +95,29 @@ export async function GET(req: NextRequest) {
 
     const where = conditions.join(' AND ');
 
-    // Count
-    const countSql = `SELECT COUNT(*) AS total FROM student_master s WHERE ${where}`;
+    // Count — includes the admission JOINs so the admitted filter applies
+    const countSql = `
+      SELECT COUNT(*) AS total
+      FROM student_master s
+      ${admissionJoin}
+      WHERE ${where}`;
     const [countRows] = await pool.query<any[]>(countSql, params);
     const total = countRows[0]?.total ?? 0;
 
     // Data with course join
     const dataSql = `
-      SELECT 
+      SELECT
         s.Student_Id, s.Student_Name, s.FName, s.LName, s.MName,
         s.Qualification, s.Course_Id, s.Batch_Code, s.DOB, s.Sex, s.Nationality,
         s.Present_Address, s.Present_City, s.Present_State, s.Present_Country, s.Present_Pin, s.Present_Mobile,
         s.Email, s.IsActive,
         c.Course_Name
       FROM student_master s
+      ${admissionJoin}
       LEFT JOIN course_mst c ON s.Course_Id = c.Course_Id
       WHERE ${where}
       ORDER BY s.Student_Id DESC
-      LIMIT ? OFFSET ?
-    `;
+      LIMIT ? OFFSET ?`;
     const [rows] = await pool.query<any[]>(dataSql, [...params, limit, offset]);
 
     // Get courses for filter dropdown

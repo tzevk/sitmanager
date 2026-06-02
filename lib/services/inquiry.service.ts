@@ -212,52 +212,80 @@ async function resolveDisciplineTableName(pool: ReturnType<typeof getPool>): Pro
   return disciplineTableNameCache;
 }
 
+interface InquirySchemaIndexSpec {
+  table: string;
+  name: string;
+  cols: string;
+}
+
+function getStudentInquiryTargetIndexes(inquiryTable: string): InquirySchemaIndexSpec[] {
+  return [
+    { table: inquiryTable, name: 'idx_si_list', cols: 'IsDelete, _inquiry_date, Inquiry_Id' },
+    { table: inquiryTable, name: 'idx_si_status_list', cols: 'IsDelete, OnlineState, _inquiry_date, Inquiry_Id' },
+    { table: inquiryTable, name: 'idx_si_type_list', cols: 'IsDelete, Inquiry_Type, _inquiry_date, Inquiry_Id' },
+    { table: inquiryTable, name: 'idx_si_course_list', cols: 'IsDelete, Course_Id, _inquiry_date, Inquiry_Id' },
+  ];
+}
+
+function getDiscussionTargetIndexes(): InquirySchemaIndexSpec[] {
+  return [
+    { table: 'awt_inquirydiscussion', name: 'idx_disc_lookup', cols: 'Inquiry_id, deleted, id' },
+    { table: 'awt_inquirydiscussion', name: 'idx_disc_student_lookup', cols: 'student_id, deleted, id' },
+    { table: 'awt_inquirydiscussion', name: 'idx_disc_due', cols: 'deleted, nextdate, Inquiry_id, id' },
+  ];
+}
+
+async function ensureInquiryDateColumn(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<void> {
+  const [colRows] = await pool.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+       AND COLUMN_NAME = '_inquiry_date'`,
+    [inquiryTable]
+  );
+  if ((colRows as any[]).length === 0) {
+    await pool.query(
+      `ALTER TABLE \`${inquiryTable}\` ADD COLUMN _inquiry_date DATE GENERATED ALWAYS AS (` +
+      `COALESCE(` +
+      `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),19),'%Y-%m-%d %H:%i:%s'),` +
+      `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),10),'%Y-%m-%d'),` +
+      `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),10),'%d-%m-%Y'),` +
+      `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),10),'%d/%m/%Y')` +
+      `)) VIRTUAL`
+    );
+  }
+}
+
+async function ensureSchemaIndexes(
+  pool: ReturnType<typeof getPool>,
+  indexes: InquirySchemaIndexSpec[]
+): Promise<void> {
+  const tableNames = [...new Set(indexes.map((index) => index.table))];
+  const placeholders = tableNames.map(() => '?').join(', ');
+  const [existingRows] = await pool.query(
+    `SELECT INDEX_NAME, TABLE_NAME FROM INFORMATION_SCHEMA.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME IN (${placeholders})
+     GROUP BY TABLE_NAME, INDEX_NAME`,
+    tableNames
+  );
+  const existing = new Set(
+    (existingRows as any[]).map((row: any) => `${row.TABLE_NAME}.${row.INDEX_NAME}`)
+  );
+
+  await Promise.all(
+    indexes
+      .filter((index) => !existing.has(`${index.table}.${index.name}`))
+      .map((index) => pool.query(`ALTER TABLE \`${index.table}\` ADD INDEX \`${index.name}\` (${index.cols})`))
+  );
+}
+
 async function ensureInquirySchema(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<void> {
   await cached('schema:inquiry_indexes', 60 * 60 * 1000, async () => {
-    // Add virtual generated column so _inquiry_date can be indexed
-    const [colRows] = await pool.query(
-      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
-         AND COLUMN_NAME = '_inquiry_date'`,
-      [inquiryTable]
-    );
-    if ((colRows as any[]).length === 0) {
-      await pool.query(
-        `ALTER TABLE \`${inquiryTable}\` ADD COLUMN _inquiry_date DATE GENERATED ALWAYS AS (` +
-        `COALESCE(` +
-        `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),19),'%Y-%m-%d %H:%i:%s'),` +
-        `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),10),'%Y-%m-%d'),` +
-        `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),10),'%d-%m-%Y'),` +
-        `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),10),'%d/%m/%Y')` +
-        `)) VIRTUAL`
-      );
-    }
-
-    const indexes: Array<{ table: string; name: string; cols: string }> = [
-      { table: inquiryTable,            name: 'idx_si_list',     cols: 'IsDelete, _inquiry_date, Inquiry_Id' },
-      { table: inquiryTable,            name: 'idx_si_status',   cols: 'IsDelete, OnlineState, Inquiry_Id' },
-      { table: inquiryTable,            name: 'idx_si_type',     cols: 'IsDelete, Inquiry_Type, Inquiry_Id' },
-      { table: inquiryTable,            name: 'idx_si_course',   cols: 'IsDelete, Course_Id, Inquiry_Id' },
-      { table: 'awt_inquirydiscussion', name: 'idx_disc_lookup', cols: 'Inquiry_id, deleted, id' },
-      { table: 'awt_inquirydiscussion', name: 'idx_disc_due',    cols: 'deleted, nextdate, Inquiry_id, id' },
-    ];
-
-    const [existingRows] = await pool.query(
-      `SELECT INDEX_NAME, TABLE_NAME FROM INFORMATION_SCHEMA.STATISTICS
-       WHERE TABLE_SCHEMA = DATABASE()
-         AND TABLE_NAME IN (?, 'awt_inquirydiscussion')
-       GROUP BY TABLE_NAME, INDEX_NAME`,
-      [inquiryTable]
-    );
-    const existing = new Set(
-      (existingRows as any[]).map((r: any) => `${r.TABLE_NAME}.${r.INDEX_NAME}`)
-    );
-
-    await Promise.all(
-      indexes
-        .filter((ix) => !existing.has(`${ix.table}.${ix.name}`))
-        .map((ix) => pool.query(`ALTER TABLE \`${ix.table}\` ADD INDEX \`${ix.name}\` (${ix.cols})`))
-    );
+    await ensureInquiryDateColumn(pool, inquiryTable);
+    await ensureSchemaIndexes(pool, [
+      ...getStudentInquiryTargetIndexes(inquiryTable),
+      ...getDiscussionTargetIndexes(),
+    ]);
 
     return true;
   });
