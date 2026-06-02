@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
-import { getPool } from '@/lib/db';
+import { getPool, cached } from '@/lib/db';
 import { getEnv } from '@/lib/env';
 import { createInquiry, updateInquiry, type CreateInquiryInput } from '@/lib/services/inquiry.service';
 import { sendAdmissionFormEmail, sendMetaLeadThankYouEmail } from '@/lib/mailer';
@@ -599,95 +599,101 @@ function buildMetaEventUserData(params: {
 async function ensureMetaLeadTables() {
   if (metaTablesReady) return;
   const pool = getPool();
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS ${META_LEADS_TABLE} (
-      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-      meta_lead_id VARCHAR(191) NOT NULL,
-      inquiry_id INT NULL,
-      duplicate_of_inquiry_id INT NULL,
-      source_label VARCHAR(100) NOT NULL DEFAULT 'Meta Ads',
-      contact_source VARCHAR(100) NOT NULL DEFAULT 'Meta Instant Form',
-      page_id VARCHAR(191) NULL,
-      page_name VARCHAR(255) NULL,
-      form_id VARCHAR(191) NULL,
-      form_name VARCHAR(255) NULL,
-      campaign_id VARCHAR(191) NULL,
-      campaign_name VARCHAR(255) NULL,
-      adset_id VARCHAR(191) NULL,
-      adset_name VARCHAR(255) NULL,
-      ad_id VARCHAR(191) NULL,
-      ad_name VARCHAR(255) NULL,
-      lead_created_time VARCHAR(100) NULL,
-      student_name VARCHAR(255) NULL,
-      mobile VARCHAR(30) NULL,
-      email VARCHAR(191) NULL,
-      course_name VARCHAR(255) NULL,
-      utm_json LONGTEXT NULL,
-      tags_json LONGTEXT NULL,
-      fields_json LONGTEXT NULL,
-      payload_json LONGTEXT NULL,
-      duplicate_reason VARCHAR(255) NULL,
-      last_error TEXT NULL,
-      notifications_sent_at TIMESTAMP NULL,
-      applicant_email_sent_at TIMESTAMP NULL,
-      applicant_email_last_error TEXT NULL,
-      synced_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (id),
-      UNIQUE KEY uq_meta_ads_lead_id (meta_lead_id),
-      KEY idx_meta_ads_inquiry_id (inquiry_id),
-      KEY idx_meta_ads_duplicate_inquiry_id (duplicate_of_inquiry_id),
-      KEY idx_meta_ads_campaign_id (campaign_id),
-      KEY idx_meta_ads_form_id (form_id),
-      KEY idx_meta_ads_mobile (mobile),
-      KEY idx_meta_ads_email (email)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS ${META_SETTINGS_TABLE} (
-      setting_key VARCHAR(100) NOT NULL,
-      setting_value LONGTEXT NULL,
-      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      PRIMARY KEY (setting_key)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS ${META_CAMPAIGN_PUBLISH_LOG_TABLE} (
-      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-      meta_campaign_id VARCHAR(191) NULL,
-      campaign_name VARCHAR(255) NOT NULL,
-      objective VARCHAR(64) NOT NULL,
-      publish_status VARCHAR(32) NOT NULL,
-      effective_status VARCHAR(64) NULL,
-      ad_account_id VARCHAR(64) NOT NULL,
-      requested_by INT NULL,
-      request_json LONGTEXT NULL,
-      response_json LONGTEXT NULL,
-      error_message TEXT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (id),
-      KEY idx_meta_campaign_publish_campaign_id (meta_campaign_id),
-      KEY idx_meta_campaign_publish_created_at (created_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS ${META_LEAD_EMAIL_CLICK_LOG_TABLE} (
-      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-      meta_lead_id VARCHAR(191) NOT NULL,
-      inquiry_id INT NULL,
-      destination_url TEXT NOT NULL,
-      ip_address VARCHAR(100) NULL,
-      user_agent VARCHAR(512) NULL,
-      referer TEXT NULL,
-      clicked_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (id),
-      KEY idx_meta_lead_email_click_lead_id (meta_lead_id),
-      KEY idx_meta_lead_email_click_inquiry_id (inquiry_id),
-      KEY idx_meta_lead_email_click_clicked_at (clicked_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-  await pool.query(`ALTER TABLE ${META_LEADS_TABLE} ADD COLUMN IF NOT EXISTS applicant_email_sent_at TIMESTAMP NULL`);
-  await pool.query(`ALTER TABLE ${META_LEADS_TABLE} ADD COLUMN IF NOT EXISTS applicant_email_last_error TEXT NULL`);
+  // Phase 1: create all four tables in parallel (all idempotent).
+  await Promise.all([
+    pool.query(`
+      CREATE TABLE IF NOT EXISTS ${META_LEADS_TABLE} (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        meta_lead_id VARCHAR(191) NOT NULL,
+        inquiry_id INT NULL,
+        duplicate_of_inquiry_id INT NULL,
+        source_label VARCHAR(100) NOT NULL DEFAULT 'Meta Ads',
+        contact_source VARCHAR(100) NOT NULL DEFAULT 'Meta Instant Form',
+        page_id VARCHAR(191) NULL,
+        page_name VARCHAR(255) NULL,
+        form_id VARCHAR(191) NULL,
+        form_name VARCHAR(255) NULL,
+        campaign_id VARCHAR(191) NULL,
+        campaign_name VARCHAR(255) NULL,
+        adset_id VARCHAR(191) NULL,
+        adset_name VARCHAR(255) NULL,
+        ad_id VARCHAR(191) NULL,
+        ad_name VARCHAR(255) NULL,
+        lead_created_time VARCHAR(100) NULL,
+        student_name VARCHAR(255) NULL,
+        mobile VARCHAR(30) NULL,
+        email VARCHAR(191) NULL,
+        course_name VARCHAR(255) NULL,
+        utm_json LONGTEXT NULL,
+        tags_json LONGTEXT NULL,
+        fields_json LONGTEXT NULL,
+        payload_json LONGTEXT NULL,
+        duplicate_reason VARCHAR(255) NULL,
+        last_error TEXT NULL,
+        notifications_sent_at TIMESTAMP NULL,
+        applicant_email_sent_at TIMESTAMP NULL,
+        applicant_email_last_error TEXT NULL,
+        synced_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_meta_ads_lead_id (meta_lead_id),
+        KEY idx_meta_ads_inquiry_id (inquiry_id),
+        KEY idx_meta_ads_duplicate_inquiry_id (duplicate_of_inquiry_id),
+        KEY idx_meta_ads_campaign_id (campaign_id),
+        KEY idx_meta_ads_form_id (form_id),
+        KEY idx_meta_ads_mobile (mobile),
+        KEY idx_meta_ads_email (email)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `),
+    pool.query(`
+      CREATE TABLE IF NOT EXISTS ${META_SETTINGS_TABLE} (
+        setting_key VARCHAR(100) NOT NULL,
+        setting_value LONGTEXT NULL,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (setting_key)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `),
+    pool.query(`
+      CREATE TABLE IF NOT EXISTS ${META_CAMPAIGN_PUBLISH_LOG_TABLE} (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        meta_campaign_id VARCHAR(191) NULL,
+        campaign_name VARCHAR(255) NOT NULL,
+        objective VARCHAR(64) NOT NULL,
+        publish_status VARCHAR(32) NOT NULL,
+        effective_status VARCHAR(64) NULL,
+        ad_account_id VARCHAR(64) NOT NULL,
+        requested_by INT NULL,
+        request_json LONGTEXT NULL,
+        response_json LONGTEXT NULL,
+        error_message TEXT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_meta_campaign_publish_campaign_id (meta_campaign_id),
+        KEY idx_meta_campaign_publish_created_at (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `),
+    pool.query(`
+      CREATE TABLE IF NOT EXISTS ${META_LEAD_EMAIL_CLICK_LOG_TABLE} (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        meta_lead_id VARCHAR(191) NOT NULL,
+        inquiry_id INT NULL,
+        destination_url TEXT NOT NULL,
+        ip_address VARCHAR(100) NULL,
+        user_agent VARCHAR(512) NULL,
+        referer TEXT NULL,
+        clicked_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_meta_lead_email_click_lead_id (meta_lead_id),
+        KEY idx_meta_lead_email_click_inquiry_id (inquiry_id),
+        KEY idx_meta_lead_email_click_clicked_at (clicked_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `),
+  ]);
+  // Phase 2: migration columns — must run after the leads table is guaranteed to exist.
+  await Promise.all([
+    pool.query(`ALTER TABLE ${META_LEADS_TABLE} ADD COLUMN IF NOT EXISTS applicant_email_sent_at TIMESTAMP NULL`),
+    pool.query(`ALTER TABLE ${META_LEADS_TABLE} ADD COLUMN IF NOT EXISTS applicant_email_last_error TEXT NULL`),
+  ]);
   metaTablesReady = true;
 }
 
@@ -2421,57 +2427,60 @@ export function verifyMetaSignature(rawBody: string, signatureHeader: string | n
 }
 
 export async function fetchMetaCampaignPerformance(params: { dateFrom?: string | null; dateTo?: string | null }) {
-  const rawAccountId = process.env.META_AD_ACCOUNT_ID?.trim();
-  if (!rawAccountId) {
-    throw new Error('META_AD_ACCOUNT_ID is not configured');
-  }
-  const accountId = normalizeMetaAdAccountId(rawAccountId);
+  const cacheKey = `meta:perf:${params.dateFrom ?? ''}:${params.dateTo ?? ''}`;
+  return cached(cacheKey, 300, async () => {
+    const rawAccountId = process.env.META_AD_ACCOUNT_ID?.trim();
+    if (!rawAccountId) {
+      throw new Error('META_AD_ACCOUNT_ID is not configured');
+    }
+    const accountId = normalizeMetaAdAccountId(rawAccountId);
 
-  const url = await buildGraphUrl(`/act_${accountId}/insights`, [
-    'campaign_id',
-    'campaign_name',
-    'reach',
-    'impressions',
-    'clicks',
-    'ctr',
-    'spend',
-    'cpc',
-    'actions',
-    'cost_per_action_type',
-  ]);
-  url.searchParams.set('level', 'campaign');
-  url.searchParams.set('limit', '100');
+    const url = await buildGraphUrl(`/act_${accountId}/insights`, [
+      'campaign_id',
+      'campaign_name',
+      'reach',
+      'impressions',
+      'clicks',
+      'ctr',
+      'spend',
+      'cpc',
+      'actions',
+      'cost_per_action_type',
+    ]);
+    url.searchParams.set('level', 'campaign');
+    url.searchParams.set('limit', '100');
 
-  if (params.dateFrom && params.dateTo) {
-    url.searchParams.set('time_range', JSON.stringify({ since: params.dateFrom, until: params.dateTo }));
-  }
+    if (params.dateFrom && params.dateTo) {
+      url.searchParams.set('time_range', JSON.stringify({ since: params.dateFrom, until: params.dateTo }));
+    }
 
-  const res = await fetch(url.toString(), { headers: { Accept: 'application/json' }, cache: 'no-store' });
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
-  if (!res.ok) {
-    throw new Error(data?.error?.message || `Meta insights request failed with ${res.status}`);
-  }
+    const res = await fetch(url.toString(), { headers: { Accept: 'application/json' }, cache: 'no-store' });
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
+    if (!res.ok) {
+      throw new Error(data?.error?.message || `Meta insights request failed with ${res.status}`);
+    }
 
-  const rows = Array.isArray(data?.data) ? data.data : [];
-  return rows.map((row: any) => {
-    const actions = Array.isArray(row?.actions) ? row.actions : [];
-    const leads = actions
-      .filter((item: any) => ['lead', 'onsite_conversion.lead_grouped', 'leadgen.other'].includes(String(item?.action_type || '')))
-      .reduce((sum: number, item: any) => sum + Number(item?.value || 0), 0);
+    const rows = Array.isArray(data?.data) ? data.data : [];
+    return rows.map((row: any) => {
+      const actions = Array.isArray(row?.actions) ? row.actions : [];
+      const leads = actions
+        .filter((item: any) => ['lead', 'onsite_conversion.lead_grouped', 'leadgen.other'].includes(String(item?.action_type || '')))
+        .reduce((sum: number, item: any) => sum + Number(item?.value || 0), 0);
 
-    return {
-      campaignId: normalizeText(row?.campaign_id),
-      campaignName: normalizeText(row?.campaign_name),
-      reach: Number(row?.reach || 0),
-      impressions: Number(row?.impressions || 0),
-      clicks: Number(row?.clicks || 0),
-      ctr: Number(row?.ctr || 0),
-      spend: Number(row?.spend || 0),
-      cpc: Number(row?.cpc || 0),
-      leads,
-      costPerLead: leads > 0 ? Number(row?.spend || 0) / leads : null,
-    };
+      return {
+        campaignId: normalizeText(row?.campaign_id),
+        campaignName: normalizeText(row?.campaign_name),
+        reach: Number(row?.reach || 0),
+        impressions: Number(row?.impressions || 0),
+        clicks: Number(row?.clicks || 0),
+        ctr: Number(row?.ctr || 0),
+        spend: Number(row?.spend || 0),
+        cpc: Number(row?.cpc || 0),
+        leads,
+        costPerLead: leads > 0 ? Number(row?.spend || 0) / leads : null,
+      };
+    });
   });
 }
 
@@ -2587,9 +2596,12 @@ async function getMetaLeadPages(): Promise<Array<{ id: string; name: string | nu
 }
 
 export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLeadListResult> {
-  await ensureMetaLeadTables();
   const pool = getPool();
-  const inquiryTable = await resolveInquiryTableName(pool);
+  // Run table setup and inquiry-table name resolution concurrently.
+  const [inquiryTable] = await Promise.all([
+    resolveInquiryTableName(pool),
+    ensureMetaLeadTables(),
+  ]);
   const {
     page,
     limit,
