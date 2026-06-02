@@ -14,6 +14,8 @@ const SOFTMAX_TEMPERATURE = 0.7;
 const ADMITTED_STATUS_IDS = [7, 8, 10, 27];
 const BATCHWISE_SCORE_FLOOR = 0.75;
 const BATCHWISE_SCORE_CEIL = 1.35;
+const PREVIOUS_ADS_COMPARISON_FLOOR = 0.75;
+const PREVIOUS_ADS_COMPARISON_CEIL = 1.25;
 
 type NumberLike = number | string | null | undefined;
 
@@ -121,7 +123,12 @@ function derivePreviousAdsComparisonScore(params: {
     cplScore = clamp((cplRatio - 0.5) / 1.5, 0, 1);
   }
 
-  return clamp((0.55 * conversionScore) + (0.45 * cplScore), 0, 1);
+  const blended = clamp((0.55 * conversionScore) + (0.45 * cplScore), 0, 1);
+  return clamp(
+    PREVIOUS_ADS_COMPARISON_FLOOR + (blended * (PREVIOUS_ADS_COMPARISON_CEIL - PREVIOUS_ADS_COMPARISON_FLOOR)),
+    PREVIOUS_ADS_COMPARISON_FLOOR,
+    PREVIOUS_ADS_COMPARISON_CEIL,
+  );
 }
 
 function deriveBatchwiseMultiplier(params: {
@@ -523,7 +530,6 @@ export async function generateMetaBatchRecommendations(options?: {
       benchmarkLeadToAdmissionRate,
       benchmarkCpl,
     });
-    const previousAdsMultiplier = clamp(0.8 + (0.4 * previousAdsComparison), 0.8, 1.2);
 
     const signals = row.courseId ? courseSignals.get(row.courseId) : undefined;
     const batchwiseMultiplier = deriveBatchwiseMultiplier({
@@ -533,7 +539,7 @@ export async function generateMetaBatchRecommendations(options?: {
       metaLeads: signals?.metaLeads ?? 0,
     });
 
-    row.priorityScore = clamp(baseScore * previousAdsMultiplier * batchwiseMultiplier, 0, 1);
+    row.priorityScore = Math.max(0, baseScore * previousAdsComparison * batchwiseMultiplier);
 
     row.adAngle = chooseAdAngle(row);
   });
