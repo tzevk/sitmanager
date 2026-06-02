@@ -1181,10 +1181,10 @@ export default function MetaLeadsPage() {
                     <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400 border-b border-slate-200">
                       <th className="text-left px-3 py-2 font-bold">Batch</th>
                       <th className="text-left px-3 py-2 font-bold">Course</th>
-                      <th className="text-right px-3 py-2 font-bold">Days</th>
-                      <th className="text-right px-3 py-2 font-bold">Seat Gap</th>
-                      <th className="text-right px-3 py-2 font-bold">Priority</th>
-                      <th className="text-center px-3 py-2 font-bold">Confidence</th>
+                      <th className="text-right px-3 py-2 font-bold">Days to Start</th>
+                      <th className="text-right px-3 py-2 font-bold">Seats Remaining</th>
+                      <th className="text-right px-3 py-2 font-bold">Priority Score</th>
+                      <th className="text-center px-3 py-2 font-bold">Confidence Score</th>
                       <th className="text-right px-3 py-2 font-bold">Budget</th>
                       <th className="text-left px-3 py-2 font-bold min-w-[260px]">Ad Angle</th>
                       <th className="text-left px-3 py-2 font-bold min-w-[340px]">Effective Plan</th>
