@@ -16,12 +16,15 @@
     },
     {
       "path": "/api/cron/suvidya-inquiry-sync",
-      "schedule": "*/2 * * * *"
+      "schedule": "*/8 * * * *"
     }
   ],
   "functions": {
     "app/api/**/*.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
+    },
+    "app/api/cron/**/*.ts": {
+      "maxDuration": 300
     }
   }
 }

@@ -128,7 +128,12 @@ async function main() {
     for (const id of ids) {
       const phone   = phoneMap.get(id);
       const current = newNeedsPhone.get(id) ?? '';
+      const normalizedCurrent = normalizePhone(current);
       if (!phone) { skipped++; continue; }
+      if (OVERWRITE && normalizedCurrent === phone) {
+        skipped++;
+        continue;
+      }
 
       console.log(`  [${OVERWRITE && current ? 'OVERWRITE' : 'FILL'}] Inquiry_Id=${id}  "${current || '(empty)'}" → "${phone}"`);
 

@@ -93,14 +93,21 @@ async function redisCheck(
   maxRequests: number,
   windowSeconds: number
 ): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
-  const key = `rl:${storeKey}:${ip}`;
-  const result = await redis!.eval(LUA_SCRIPT, 1, key, String(maxRequests), String(windowSeconds)) as [number, number, number];
-  const [allowed, remaining, ttl] = result;
-  return {
-    allowed: allowed === 1,
-    remaining,
-    resetAt: Date.now() + ttl * 1000,
-  };
+  try {
+    const key = `rl:${storeKey}:${ip}`;
+    const result = await redis!.eval(LUA_SCRIPT, 1, key, String(maxRequests), String(windowSeconds)) as [number, number, number];
+    const [allowed, remaining, ttl] = result;
+    return {
+      allowed: allowed === 1,
+      remaining,
+      resetAt: Date.now() + ttl * 1000,
+    };
+  } catch (err) {
+    // Redis unavailable (ECONNRESET, timeout, etc.) — fall back to in-memory
+    // so login and other routes keep working during Redis outages.
+    console.warn('[RateLimit] Redis error, using in-memory fallback:', err instanceof Error ? err.message : String(err));
+    return memCheck(ip, storeKey, maxRequests, windowSeconds);
+  }
 }
 
 // ── Factory ───────────────────────────────────────────────────────────────────
