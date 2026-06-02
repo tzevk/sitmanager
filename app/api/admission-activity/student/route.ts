@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
           FROM admission_master am
           WHERE am.Student_Id = s.Student_Id
             AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
-            AND (am.Cancel IS NULL OR LOWER(TRIM(CAST(am.Cancel AS CHAR))) IN ('no','0','false'))
+            AND (am.Cancel = 0 OR am.Cancel IS NULL)
         )
         OR EXISTS (
           SELECT 1
