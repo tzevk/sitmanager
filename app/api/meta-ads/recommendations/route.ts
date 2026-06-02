@@ -13,12 +13,14 @@ export async function GET(req: NextRequest) {
 
     const url = req.nextUrl;
     const limitRaw = Number(url.searchParams.get('limit') || '10');
-    const totalBudgetRaw = Number(url.searchParams.get('totalBudget') || process.env.META_ADS_RECOMMENDATION_BUDGET || '100000');
+    const totalBudgetRaw = Number(url.searchParams.get('totalBudget') || process.env.META_ADS_RECOMMENDATION_BUDGET || '300');
     const scoreDate = url.searchParams.get('scoreDate') || undefined;
     const source = (url.searchParams.get('source') || 'persisted').toLowerCase();
 
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(100, Math.trunc(limitRaw)) : 10;
-    const totalBudget = Number.isFinite(totalBudgetRaw) && totalBudgetRaw > 0 ? totalBudgetRaw : 100000;
+    const totalBudget = Number.isFinite(totalBudgetRaw) && totalBudgetRaw > 0
+      ? Math.min(300, totalBudgetRaw)
+      : 300;
 
     if (source === 'persisted') {
       const rows = await getPersistedMetaBatchRecommendations({ scoreDate, limit });

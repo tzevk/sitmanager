@@ -4,7 +4,8 @@ import { fetchMetaCampaignPerformance } from '@/lib/services/meta-ads.service';
 import { resolveInquiryTableName } from '@/lib/services/inquiry.service';
 
 const SCORE_TABLE = 'meta_ads_batch_scores';
-const DEFAULT_TOTAL_BUDGET = 100_000;
+const DEFAULT_TOTAL_BUDGET = 300;
+const MAX_DAILY_TOTAL_BUDGET = 300;
 const COURSE_HISTORY_WINDOW_DAYS = 180;
 const CAMPAIGN_PERF_WINDOW_DAYS = 90;
 const SMOOTH_ALPHA = 2;
@@ -105,7 +106,7 @@ export interface MetaBatchRecommendationResult {
 }
 
 export const META_BATCH_SCORE_FORMULA =
-  'score = (0.35*gap_ratio + 0.25*urgency + 0.20*lead_to_admission_rate + 0.10*efficiency_score + 0.10*value_score) * previous_ads_comparison * batchwise_multiplier';
+  'score = (0.35*gap_ratio + 0.25*urgency + 0.20*lead_to_admission_rate + 0.10*efficiency_score + 0.10*value_score) * previous_ads_comparison * batchwise_multiplier * previous_budget_multiplier; total_daily_budget <= 300';
 
 function derivePreviousAdsComparisonScore(params: {
   rowLeadToAdmissionRate: number;
@@ -154,6 +155,48 @@ function deriveBatchwiseMultiplier(params: {
     - (0.10 * (1 - dataConfidence));
 
   return clamp(multiplier, BATCHWISE_SCORE_FLOOR, BATCHWISE_SCORE_CEIL);
+}
+
+async function loadPreviousBudgetMap(scoreDate: string): Promise<Map<number, number>> {
+  await ensureScoreTable();
+  const pool = getPool();
+  const [rows] = await pool.query<any[]>(
+    `SELECT batch_id, recommended_budget
+     FROM ${SCORE_TABLE}
+     WHERE score_date = (
+       SELECT MAX(score_date)
+       FROM ${SCORE_TABLE}
+       WHERE score_date < ?
+     )`,
+    [scoreDate]
+  );
+
+  const out = new Map<number, number>();
+  for (const row of rows as any[]) {
+    const batchId = Math.trunc(asNumber(row.batch_id));
+    if (batchId <= 0) continue;
+    out.set(batchId, Math.max(0, asNumber(row.recommended_budget)));
+  }
+  return out;
+}
+
+function normalizeBudgetHistory(previousBudgetMap: Map<number, number>): Map<number, number> {
+  const values = Array.from(previousBudgetMap.values());
+  if (values.length === 0) return new Map<number, number>();
+
+  let min = values[0];
+  let max = values[0];
+  for (const v of values) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+
+  const range = max - min;
+  const out = new Map<number, number>();
+  for (const [batchId, budget] of previousBudgetMap.entries()) {
+    out.set(batchId, range <= 0 ? 0.5 : (budget - min) / range);
+  }
+  return out;
 }
 
 function asNumber(value: NumberLike): number {
@@ -425,13 +468,16 @@ export async function generateMetaBatchRecommendations(options?: {
   scoreDate?: string;
 }): Promise<MetaBatchRecommendationResult> {
   const totalBudgetRaw = asNumber(options?.totalBudget ?? process.env.META_ADS_RECOMMENDATION_BUDGET ?? DEFAULT_TOTAL_BUDGET);
-  const totalBudget = totalBudgetRaw > 0 ? totalBudgetRaw : DEFAULT_TOTAL_BUDGET;
+  const totalBudgetRequested = totalBudgetRaw > 0 ? totalBudgetRaw : DEFAULT_TOTAL_BUDGET;
+  const totalBudget = clamp(totalBudgetRequested, 1, MAX_DAILY_TOTAL_BUDGET);
   const scoreDate = options?.scoreDate || isoToday();
 
-  const [batches, courseSignals] = await Promise.all([
+  const [batches, courseSignals, previousBudgetMap] = await Promise.all([
     loadUpcomingBatches(),
     loadCourseHistorySignals(),
+    loadPreviousBudgetMap(scoreDate),
   ]);
+  const normalizedBudgetHistory = normalizeBudgetHistory(previousBudgetMap);
 
   const workingRows: WorkingRecommendation[] = [];
 
@@ -531,6 +577,9 @@ export async function generateMetaBatchRecommendations(options?: {
       benchmarkCpl,
     });
 
+    const previousBudgetNorm = normalizedBudgetHistory.get(row.batchId) ?? 0.5;
+    const previousBudgetMultiplier = clamp(0.9 + (0.2 * previousBudgetNorm), 0.9, 1.1);
+
     const signals = row.courseId ? courseSignals.get(row.courseId) : undefined;
     const batchwiseMultiplier = deriveBatchwiseMultiplier({
       seatGap: row.seatGap,
@@ -539,7 +588,7 @@ export async function generateMetaBatchRecommendations(options?: {
       metaLeads: signals?.metaLeads ?? 0,
     });
 
-    row.priorityScore = Math.max(0, baseScore * previousAdsComparison * batchwiseMultiplier);
+    row.priorityScore = Math.max(0, baseScore * previousAdsComparison * batchwiseMultiplier * previousBudgetMultiplier);
 
     row.adAngle = chooseAdAngle(row);
   });
@@ -548,7 +597,7 @@ export async function generateMetaBatchRecommendations(options?: {
   const weights = deriveBudgetWeights(budgetEligible.map((row) => row.priorityScore));
   budgetEligible.forEach((row, idx) => {
     row.budgetWeight = weights[idx] ?? 0;
-    row.recommendedBudget = Math.round(totalBudget * row.budgetWeight);
+    row.recommendedBudget = Math.min(MAX_DAILY_TOTAL_BUDGET, Math.round(totalBudget * row.budgetWeight));
   });
 
   const sorted = workingRows

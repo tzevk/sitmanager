@@ -26,12 +26,12 @@ async function runPersist(req: NextRequest) {
   const totalBudgetRaw = Number(
     req.nextUrl.searchParams.get('totalBudget')
     || process.env.META_ADS_RECOMMENDATION_BUDGET
-    || '100000'
+    || '300'
   );
 
   const totalBudget = Number.isFinite(totalBudgetRaw) && totalBudgetRaw > 0
-    ? totalBudgetRaw
-    : 100000;
+    ? Math.min(300, totalBudgetRaw)
+    : 300;
 
   const summary = await persistMetaBatchRecommendations({ totalBudget });
   return NextResponse.json({ ok: true, summary });
