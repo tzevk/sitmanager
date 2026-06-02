@@ -54,6 +54,7 @@ const PUBLIC_PREFIXES = [
   '/_next',
   '/favicon',
   '/static',
+  '/api/cron',
   '/student-portal',
   '/company',
   '/api/public',
