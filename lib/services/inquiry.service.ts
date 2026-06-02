@@ -893,7 +893,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       `SELECT
          si.Inquiry_Id as Student_Id, si.Student_Id as SourceStudentId,
          si.Student_Name, c.Course_Name as CourseName, si.Inquiry_Dt,
-        ${PRIMARY_INQUIRY_MOBILE_EXPR} as Present_Mobile, si.Email, ${locationSelect}
+        ${SEARCHABLE_INQUIRY_MOBILE_EXPR} as Present_Mobile, si.Email, ${locationSelect}
         si.Discipline, ${disciplineExpr} as DisciplineName,
          si.Inquiry_From, si.Inquiry_Type,
          si.OnlineState as OnlineStateRaw,
