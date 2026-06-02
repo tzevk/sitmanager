@@ -73,8 +73,18 @@ interface MetaBatchRecommendationRow {
   efficiencyScore: number;
   valueScore: number;
   priorityScore: number;
+  confidenceScore: number;
   recommendedBudget: number;
   adAngle: string;
+  effectivePlanStructured?: {
+    objective: 'urgency' | 'conversion' | 'awareness';
+    audience: string;
+    creativeTheme: string;
+    cta: string;
+    followUpSlaMinutes: number;
+    cplGuardrail: number | null;
+    dailyBudget: number;
+  };
   effectivePlan?: string[];
 }
 
@@ -241,6 +251,13 @@ function formatCurrency(value: number): string {
 function formatPercentFromRatio(value: number): string {
   if (!Number.isFinite(value)) return '0%';
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function confidenceBadge(score: number | null | undefined): { label: string; cls: string } {
+  const safe = Number.isFinite(score as number) ? (score as number) : 0;
+  if (safe >= 0.75) return { label: 'High', cls: 'bg-emerald-100 text-emerald-700 border border-emerald-200' };
+  if (safe >= 0.5) return { label: 'Medium', cls: 'bg-amber-100 text-amber-700 border border-amber-200' };
+  return { label: 'Low', cls: 'bg-rose-100 text-rose-700 border border-rose-200' };
 }
 
 function formatName(name: string | null | undefined): string {
@@ -762,6 +779,47 @@ export default function MetaLeadsPage() {
     () => (metaPerf?.campaigns || []).slice().sort((a, b) => b.leads - a.leads),
     [metaPerf]
   );
+
+  const planVsResult = useMemo(() => {
+    if (!metaReco || metaReco.recommendations.length === 0) return null;
+
+    const plannedBudget = metaReco.recommendations.reduce((sum, row) => sum + (Number.isFinite(row.recommendedBudget) ? row.recommendedBudget : 0), 0);
+
+    const avgRate = metaReco.recommendations.length > 0
+      ? metaReco.recommendations.reduce((sum, row) => sum + (Number.isFinite(row.leadToAdmissionRate) ? row.leadToAdmissionRate : 0), 0) / metaReco.recommendations.length
+      : 0;
+
+    const plannedLeadsFromRows = metaReco.recommendations.reduce((sum, row) => {
+      if (!Number.isFinite(row.recommendedBudget) || !Number.isFinite(row.estimatedCpl || NaN) || !row.estimatedCpl || row.estimatedCpl <= 0) {
+        return sum;
+      }
+      return sum + (row.recommendedBudget / row.estimatedCpl);
+    }, 0);
+
+    const fallbackCpl = metaPerf?.totals.cpl && metaPerf.totals.cpl > 0 ? metaPerf.totals.cpl : null;
+    const plannedLeads = plannedLeadsFromRows > 0
+      ? plannedLeadsFromRows
+      : (fallbackCpl && plannedBudget > 0 ? plannedBudget / fallbackCpl : 0);
+
+    const actualSpend = metaPerf?.totals.spend ?? 0;
+    const actualLeads = metaPerf?.totals.leads ?? 0;
+
+    const plannedAdmissions = plannedLeads * avgRate;
+    const projectedActualAdmissions = actualLeads * avgRate;
+
+    return {
+      plannedBudget,
+      actualSpend,
+      spendDelta: actualSpend - plannedBudget,
+      plannedLeads,
+      actualLeads,
+      leadsDelta: actualLeads - plannedLeads,
+      plannedAdmissions,
+      projectedActualAdmissions,
+      admissionsDelta: projectedActualAdmissions - plannedAdmissions,
+    };
+  }, [metaPerf, metaReco]);
+
   const campaignStats = useMemo(() => {
     const withLeads = allCampaigns.filter(c => c.costPerLead !== null && c.costPerLead > 0);
     const avgCpl = withLeads.length > 0
@@ -1088,6 +1146,35 @@ export default function MetaLeadsPage() {
             ) : metaReco.recommendations.length === 0 ? (
               <div className="px-4 py-8 text-center text-xs text-slate-400">No upcoming batches found for recommendation.</div>
             ) : (
+              <>
+                {planVsResult && (
+                  <div className="m-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Weekly Plan vs Result</p>
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="rounded border border-slate-200 bg-white px-2.5 py-2">
+                        <p className="text-[10px] text-slate-400 font-semibold uppercase">Budget</p>
+                        <p className="text-xs font-bold text-slate-700">Plan {formatCurrency(planVsResult.plannedBudget)} | Actual {formatCurrency(planVsResult.actualSpend)}</p>
+                        <p className={`text-[10px] ${planVsResult.spendDelta <= 0 ? 'text-emerald-600' : 'text-amber-600'}`}>{planVsResult.spendDelta <= 0 ? 'Under plan' : 'Over plan'} {formatCurrency(Math.abs(planVsResult.spendDelta))}</p>
+                      </div>
+                      <div className="rounded border border-slate-200 bg-white px-2.5 py-2">
+                        <p className="text-[10px] text-slate-400 font-semibold uppercase">Leads</p>
+                        <p className="text-xs font-bold text-slate-700">Plan {Math.round(planVsResult.plannedLeads)} | Actual {Math.round(planVsResult.actualLeads)}</p>
+                        <p className={`text-[10px] ${planVsResult.leadsDelta >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{planVsResult.leadsDelta >= 0 ? '+' : ''}{Math.round(planVsResult.leadsDelta)} vs plan</p>
+                      </div>
+                      <div className="rounded border border-slate-200 bg-white px-2.5 py-2">
+                        <p className="text-[10px] text-slate-400 font-semibold uppercase">Projected Admissions</p>
+                        <p className="text-xs font-bold text-slate-700">Plan {planVsResult.plannedAdmissions.toFixed(1)} | Projected {planVsResult.projectedActualAdmissions.toFixed(1)}</p>
+                        <p className={`text-[10px] ${planVsResult.admissionsDelta >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{planVsResult.admissionsDelta >= 0 ? '+' : ''}{planVsResult.admissionsDelta.toFixed(1)} admissions</p>
+                      </div>
+                      <div className="rounded border border-slate-200 bg-white px-2.5 py-2">
+                        <p className="text-[10px] text-slate-400 font-semibold uppercase">Window</p>
+                        <p className="text-xs font-bold text-slate-700">{dateFrom || dateTo ? `${dateFrom || 'Start'} to ${dateTo || 'Now'}` : 'Current rolling window'}</p>
+                        <p className="text-[10px] text-slate-500">Set date filters above for strict weekly comparison.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
@@ -1097,6 +1184,7 @@ export default function MetaLeadsPage() {
                       <th className="text-right px-3 py-2 font-bold">Days</th>
                       <th className="text-right px-3 py-2 font-bold">Seat Gap</th>
                       <th className="text-right px-3 py-2 font-bold">Priority</th>
+                      <th className="text-center px-3 py-2 font-bold">Confidence</th>
                       <th className="text-right px-3 py-2 font-bold">Budget</th>
                       <th className="text-left px-3 py-2 font-bold min-w-[260px]">Ad Angle</th>
                       <th className="text-left px-3 py-2 font-bold min-w-[340px]">Effective Plan</th>
@@ -1113,9 +1201,21 @@ export default function MetaLeadsPage() {
                           <span className="ml-1 text-[10px] text-slate-400">({formatPercentFromRatio(row.gapRatio)})</span>
                         </td>
                         <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-[#2E3093]">{formatPercentFromRatio(row.priorityScore)}</td>
+                        <td className="px-3 py-2.5 text-center">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${confidenceBadge(row.confidenceScore).cls}`}>
+                            {confidenceBadge(row.confidenceScore).label} ({formatPercentFromRatio(row.confidenceScore)})
+                          </span>
+                        </td>
                         <td className="px-3 py-2.5 text-right tabular-nums font-bold text-emerald-700">{formatCurrency(row.recommendedBudget)}</td>
                         <td className="px-3 py-2.5 text-slate-600">{row.adAngle}</td>
                         <td className="px-3 py-2.5 text-slate-600">
+                          {row.effectivePlanStructured && (
+                            <div className="mb-1.5 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] leading-4 text-slate-600">
+                              <div><span className="font-semibold text-slate-700">Objective:</span> {row.effectivePlanStructured.objective}</div>
+                              <div><span className="font-semibold text-slate-700">CTA:</span> {row.effectivePlanStructured.cta}</div>
+                              <div><span className="font-semibold text-slate-700">SLA:</span> {row.effectivePlanStructured.followUpSlaMinutes} min</div>
+                            </div>
+                          )}
                           {row.effectivePlan && row.effectivePlan.length > 0 ? (
                             <ul className="list-disc pl-4 space-y-1 text-[11px] leading-4">
                               {row.effectivePlan.map((step, idx) => (
@@ -1131,6 +1231,7 @@ export default function MetaLeadsPage() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
             </>

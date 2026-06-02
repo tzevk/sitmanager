@@ -70,10 +70,24 @@ interface WorkingRecommendation {
   efficiencyScore: number;
   valueScore: number;
   priorityScore: number;
+  confidenceScore: number;
   recommendedBudget: number;
   adAngle: string;
+  effectivePlanStructured: EffectivePlanStructured;
   effectivePlan: string[];
   budgetWeight: number;
+}
+
+type EffectivePlanObjective = 'urgency' | 'conversion' | 'awareness';
+
+export interface EffectivePlanStructured {
+  objective: EffectivePlanObjective;
+  audience: string;
+  creativeTheme: string;
+  cta: string;
+  followUpSlaMinutes: number;
+  cplGuardrail: number | null;
+  dailyBudget: number;
 }
 
 export interface MetaBatchRecommendationRow {
@@ -95,8 +109,10 @@ export interface MetaBatchRecommendationRow {
   efficiencyScore: number;
   valueScore: number;
   priorityScore: number;
+  confidenceScore: number;
   recommendedBudget: number;
   adAngle: string;
+  effectivePlanStructured: EffectivePlanStructured;
   effectivePlan: string[];
 }
 
@@ -272,26 +288,91 @@ function chooseAdAngle(row: {
   return 'Awareness nurture: career outcomes + faculty credibility + lead form objective';
 }
 
+function deriveConfidenceScore(params: {
+  metaLeads: number;
+  admitted: number;
+  estimatedCpl: number | null;
+  daysToStart: number;
+}): number {
+  const leadEvidence = clamp(Math.log1p(Math.max(0, params.metaLeads)) / Math.log1p(80), 0, 1);
+  const admissionEvidence = clamp(Math.max(0, params.admitted) / 15, 0, 1);
+  const cplEvidence = params.estimatedCpl != null && params.estimatedCpl > 0 ? 1 : 0.4;
+  const timelineStability = params.daysToStart <= 3 ? 0.7 : 1;
+  return clamp(
+    (0.45 * leadEvidence)
+    + (0.30 * admissionEvidence)
+    + (0.15 * cplEvidence)
+    + (0.10 * timelineStability),
+    0,
+    1,
+  );
+}
+
+function buildStructuredEffectivePlan(row: {
+  daysToStart: number;
+  gapRatio: number;
+  leadToAdmissionRate: number;
+  estimatedCpl: number | null;
+  recommendedBudget: number;
+}): EffectivePlanStructured {
+  if (row.daysToStart <= 10) {
+    return {
+      objective: 'urgency',
+      audience: 'Recent engagers + high-intent prospects from last 30 days',
+      creativeTheme: 'Limited seats, start-date countdown, immediate counselor access',
+      cta: 'Apply today / Book counseling now',
+      followUpSlaMinutes: 15,
+      cplGuardrail: row.estimatedCpl && row.estimatedCpl > 0 ? Math.round(row.estimatedCpl) : null,
+      dailyBudget: Math.max(0, Math.round(row.recommendedBudget)),
+    };
+  }
+
+  if (row.leadToAdmissionRate >= 0.12 || row.gapRatio >= 0.4) {
+    return {
+      objective: 'conversion',
+      audience: 'Qualified lead pools, website visitors, and lookalike of admitted students',
+      creativeTheme: 'Placement proof, alumni results, fee-plan clarity, counselor support',
+      cta: 'Schedule a call / Start application',
+      followUpSlaMinutes: 30,
+      cplGuardrail: row.estimatedCpl && row.estimatedCpl > 0 ? Math.round(row.estimatedCpl) : null,
+      dailyBudget: Math.max(0, Math.round(row.recommendedBudget)),
+    };
+  }
+
+  return {
+    objective: 'awareness',
+    audience: 'Broad interest audiences and early-stage career explorers',
+    creativeTheme: 'Career outcomes, curriculum highlights, faculty credibility',
+    cta: 'Download brochure / Know more',
+    followUpSlaMinutes: 60,
+    cplGuardrail: row.estimatedCpl && row.estimatedCpl > 0 ? Math.round(row.estimatedCpl) : null,
+    dailyBudget: Math.max(0, Math.round(row.recommendedBudget)),
+  };
+}
+
 function buildEffectivePlan(row: {
   courseName: string;
   batchCode: string;
   daysToStart: number;
   seatGap: number;
   maxStudents: number;
+  gapRatio: number;
   leadToAdmissionRate: number;
   estimatedCpl: number | null;
   recommendedBudget: number;
+  structured: EffectivePlanStructured;
 }): string[] {
   const plan: string[] = [];
 
+  plan.push(`Objective: ${row.structured.objective.toUpperCase()} | Audience: ${row.structured.audience}.`);
+  plan.push(`Creative direction: ${row.structured.creativeTheme}.`);
+  plan.push(`Primary CTA: ${row.structured.cta}.`);
+
   if (row.daysToStart <= 10) {
-    plan.push('Run urgency creatives daily with start-date and seat-closure CTA.');
     plan.push('Assign immediate counsellor callback SLA (within 15 minutes) for all fresh leads.');
-  } else if (row.daysToStart <= 30) {
-    plan.push('Use conversion-focused ads with placement outcomes and alumni proof.');
+  } else if (row.daysToStart <= 30 || row.gapRatio >= 0.4) {
     plan.push('Run remarketing to last 30-day engagers and form openers.');
   } else {
-    plan.push('Build top-funnel awareness for course outcomes and faculty strengths.');
     plan.push('Collect qualified leads via intent-based form questions.');
   }
 
@@ -312,6 +393,61 @@ function buildEffectivePlan(row: {
   plan.push(`Use approximately ₹${Math.max(0, Math.round(row.recommendedBudget))}/day for batch ${row.batchCode} (${row.courseName}).`);
 
   return plan.slice(0, 5);
+}
+
+function parseSnapshotPayload(snapshotJson: unknown): {
+  effectivePlan: string[];
+  effectivePlanStructured: EffectivePlanStructured | null;
+  confidenceScore: number | null;
+} {
+  const fallback = {
+    effectivePlan: [] as string[],
+    effectivePlanStructured: null as EffectivePlanStructured | null,
+    confidenceScore: null as number | null,
+  };
+
+  if (!snapshotJson) return fallback;
+
+  try {
+    const parsed = JSON.parse(String(snapshotJson || '{}')) as {
+      effectivePlan?: unknown;
+      effectivePlanStructured?: Partial<EffectivePlanStructured> | null;
+      confidenceScore?: unknown;
+    };
+
+    const effectivePlan = Array.isArray(parsed.effectivePlan)
+      ? parsed.effectivePlan.map((item) => String(item).trim()).filter(Boolean)
+      : [];
+
+    let effectivePlanStructured: EffectivePlanStructured | null = null;
+    if (parsed.effectivePlanStructured && typeof parsed.effectivePlanStructured === 'object') {
+      const objectiveRaw = String(parsed.effectivePlanStructured.objective || '').toLowerCase();
+      const objective: EffectivePlanObjective = objectiveRaw === 'urgency' || objectiveRaw === 'conversion' || objectiveRaw === 'awareness'
+        ? objectiveRaw
+        : 'awareness';
+
+      effectivePlanStructured = {
+        objective,
+        audience: String(parsed.effectivePlanStructured.audience || '').trim(),
+        creativeTheme: String(parsed.effectivePlanStructured.creativeTheme || '').trim(),
+        cta: String(parsed.effectivePlanStructured.cta || '').trim(),
+        followUpSlaMinutes: Math.max(5, Math.trunc(asNumber(parsed.effectivePlanStructured.followUpSlaMinutes as NumberLike))),
+        cplGuardrail: parsed.effectivePlanStructured.cplGuardrail == null ? null : Math.max(0, asNumber(parsed.effectivePlanStructured.cplGuardrail as NumberLike)),
+        dailyBudget: Math.max(0, Math.round(asNumber(parsed.effectivePlanStructured.dailyBudget as NumberLike))),
+      };
+    }
+
+    const confidenceRaw = asNumber(parsed.confidenceScore as NumberLike);
+    const confidenceScore = Number.isFinite(confidenceRaw) ? clamp(confidenceRaw, 0, 1) : null;
+
+    return {
+      effectivePlan,
+      effectivePlanStructured,
+      confidenceScore,
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 async function ensureScoreTable(): Promise<void> {
@@ -493,8 +629,10 @@ function mapPublicRow(row: WorkingRecommendation): MetaBatchRecommendationRow {
     efficiencyScore: row.efficiencyScore,
     valueScore: row.valueScore,
     priorityScore: row.priorityScore,
+    confidenceScore: row.confidenceScore,
     recommendedBudget: row.recommendedBudget,
     adAngle: row.adAngle,
+    effectivePlanStructured: row.effectivePlanStructured,
     effectivePlan: row.effectivePlan,
   };
 }
@@ -570,8 +708,18 @@ export async function generateMetaBatchRecommendations(options?: {
       efficiencyScore: 0,
       valueScore: valueRaw,
       priorityScore: 0,
+      confidenceScore: 0,
       recommendedBudget: 0,
       adAngle: '',
+      effectivePlanStructured: {
+        objective: 'awareness',
+        audience: '',
+        creativeTheme: '',
+        cta: '',
+        followUpSlaMinutes: 60,
+        cplGuardrail: null,
+        dailyBudget: 0,
+      },
       effectivePlan: [],
       budgetWeight: 0,
     });
@@ -627,6 +775,13 @@ export async function generateMetaBatchRecommendations(options?: {
     const previousBudgetMultiplier = clamp(0.9 + (0.2 * previousBudgetNorm), 0.9, 1.1);
 
     const signals = row.courseId ? courseSignals.get(row.courseId) : undefined;
+    row.confidenceScore = deriveConfidenceScore({
+      metaLeads: signals?.metaLeads ?? 0,
+      admitted: signals?.admitted ?? 0,
+      estimatedCpl: row.estimatedCpl,
+      daysToStart: row.daysToStart,
+    });
+
     const batchwiseMultiplier = deriveBatchwiseMultiplier({
       seatGap: row.seatGap,
       maxStudents: row.maxStudents,
@@ -647,15 +802,25 @@ export async function generateMetaBatchRecommendations(options?: {
   });
 
   workingRows.forEach((row) => {
+    row.effectivePlanStructured = buildStructuredEffectivePlan({
+      daysToStart: row.daysToStart,
+      gapRatio: row.gapRatio,
+      leadToAdmissionRate: row.leadToAdmissionRate,
+      estimatedCpl: row.estimatedCpl,
+      recommendedBudget: row.recommendedBudget,
+    });
+
     row.effectivePlan = buildEffectivePlan({
       courseName: row.courseName,
       batchCode: row.batchCode,
       daysToStart: row.daysToStart,
       seatGap: row.seatGap,
       maxStudents: row.maxStudents,
+      gapRatio: row.gapRatio,
       leadToAdmissionRate: row.leadToAdmissionRate,
       estimatedCpl: row.estimatedCpl,
       recommendedBudget: row.recommendedBudget,
+      structured: row.effectivePlanStructured,
     });
   });
 
@@ -734,7 +899,13 @@ export async function persistMetaBatchRecommendations(options?: {
           result.totalBudget > 0 ? row.recommendedBudget / result.totalBudget : 0,
           row.recommendedBudget,
           row.adAngle,
-          JSON.stringify({ formula: result.formula, totalBudget: result.totalBudget, effectivePlan: row.effectivePlan }),
+          JSON.stringify({
+            formula: result.formula,
+            totalBudget: result.totalBudget,
+            effectivePlan: row.effectivePlan,
+            effectivePlanStructured: row.effectivePlanStructured,
+            confidenceScore: row.confidenceScore,
+          }),
         ]
       );
     }
@@ -788,37 +959,41 @@ export async function getPersistedMetaBatchRecommendations(options?: {
     [scoreDate, limit]
   );
 
-  return (rows as any[]).map((row) => ({
-    scoreDate: String(row.score_date),
-    batchId: Math.trunc(asNumber(row.batch_id)),
-    batchCode: String(row.batch_code || ''),
-    courseId: row.course_id != null ? Math.trunc(asNumber(row.course_id)) : null,
-    courseName: String(row.course_name || 'Unknown Course'),
-    startDate: row.start_date ? String(row.start_date) : null,
-    endDate: row.end_date ? String(row.end_date) : null,
-    daysToStart: Math.trunc(asNumber(row.days_to_start)),
-    maxStudents: asNumber(row.max_students),
-    studentsAdmitted: asNumber(row.students_admitted),
-    seatGap: asNumber(row.seat_gap),
-    gapRatio: asNumber(row.gap_ratio),
-    urgency: asNumber(row.urgency),
-    leadToAdmissionRate: asNumber(row.lead_to_admission_rate),
-    estimatedCpl: row.estimated_cpl == null ? null : asNumber(row.estimated_cpl),
-    efficiencyScore: asNumber(row.efficiency_score),
-    valueScore: asNumber(row.value_score),
-    priorityScore: asNumber(row.priority_score),
-    recommendedBudget: asNumber(row.recommended_budget),
-    adAngle: String(row.ad_angle || ''),
-    effectivePlan: (() => {
-      try {
-        const parsed = JSON.parse(String(row.snapshot_json || '{}')) as { effectivePlan?: unknown };
-        if (Array.isArray(parsed.effectivePlan)) {
-          return parsed.effectivePlan.map((item) => String(item).trim()).filter(Boolean);
-        }
-      } catch {
-        // ignore parsing errors and fallback below
-      }
-      return [];
-    })(),
-  }));
+  return (rows as any[]).map((row) => {
+    const snapshot = parseSnapshotPayload(row.snapshot_json);
+
+    return {
+      scoreDate: String(row.score_date),
+      batchId: Math.trunc(asNumber(row.batch_id)),
+      batchCode: String(row.batch_code || ''),
+      courseId: row.course_id != null ? Math.trunc(asNumber(row.course_id)) : null,
+      courseName: String(row.course_name || 'Unknown Course'),
+      startDate: row.start_date ? String(row.start_date) : null,
+      endDate: row.end_date ? String(row.end_date) : null,
+      daysToStart: Math.trunc(asNumber(row.days_to_start)),
+      maxStudents: asNumber(row.max_students),
+      studentsAdmitted: asNumber(row.students_admitted),
+      seatGap: asNumber(row.seat_gap),
+      gapRatio: asNumber(row.gap_ratio),
+      urgency: asNumber(row.urgency),
+      leadToAdmissionRate: asNumber(row.lead_to_admission_rate),
+      estimatedCpl: row.estimated_cpl == null ? null : asNumber(row.estimated_cpl),
+      efficiencyScore: asNumber(row.efficiency_score),
+      valueScore: asNumber(row.value_score),
+      priorityScore: asNumber(row.priority_score),
+      confidenceScore: snapshot.confidenceScore ?? 0.5,
+      recommendedBudget: asNumber(row.recommended_budget),
+      adAngle: String(row.ad_angle || ''),
+      effectivePlanStructured: snapshot.effectivePlanStructured || {
+        objective: 'awareness',
+        audience: 'General eligible audience',
+        creativeTheme: 'Career outcomes + faculty credibility',
+        cta: 'Know more',
+        followUpSlaMinutes: 60,
+        cplGuardrail: null,
+        dailyBudget: Math.max(0, Math.round(asNumber(row.recommended_budget))),
+      },
+      effectivePlan: snapshot.effectivePlan,
+    };
+  });
 }
