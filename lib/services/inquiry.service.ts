@@ -6,6 +6,7 @@ let disciplineTableNameCache: string | null | undefined;
 let inquirySchemaWarmupPromise: Promise<void> | null = null;
 let metaLeadSchemaWarmupPromise: Promise<void> | null = null;
 const inquiryDateColumnReadyTables = new Set<string>();
+const inquiryFilterOptionsMemoryCache = new Map<string, InquiryFilterOptions>();
 
 function getInquiryDateColumnCacheKey(inquiryTable: string): string {
   return `schema:inquiry-date-column:${inquiryTable}`;
@@ -179,6 +180,15 @@ interface InquiryFilterOptions {
   inquiryTypes: string[];
   trainings: string[];
   statusOptions: StatusOption[];
+}
+
+function buildFallbackFilterOptions(): InquiryFilterOptions {
+  return {
+    disciplines: [],
+    inquiryTypes: [],
+    trainings: [],
+    statusOptions: Object.entries(FALLBACK_STATUSES).map(([id, label]) => ({ id: Number(id), label })),
+  };
 }
 
 // ── Schema helpers ────────────────────────────────────────────────────────────
@@ -882,13 +892,33 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     );
   }
 
-  // Filter option queries (run in parallel)
-  const { disciplines, inquiryTypes, trainings, statusOptions } = await loadInquiryFilterOptions(
+  const filterCacheKey = `filters:${inquiryTable}:${disciplineJoin ? 'with-discipline' : 'without-discipline'}`;
+  const fallbackFilters = inquiryFilterOptionsMemoryCache.get(filterCacheKey) || buildFallbackFilterOptions();
+  const filtersPromise = loadInquiryFilterOptions(
     pool,
     inquiryTable,
     disciplineJoin,
     disciplineExpr,
-  );
+  )
+    .then((resolved) => {
+      inquiryFilterOptionsMemoryCache.set(filterCacheKey, resolved);
+      return resolved;
+    })
+    .catch(() => fallbackFilters);
+
+  // Keep /api/inquiry responsive: do not let expensive DISTINCT filter generation
+  // block default list responses on cold/serverless invocations.
+  const resolvedFilters = await Promise.race<InquiryFilterOptions>([
+    filtersPromise,
+    new Promise((resolve) => setTimeout(() => resolve(fallbackFilters), hasActiveFilters ? 180 : 80)),
+  ]);
+
+  // If we returned fallback due timeout, let the latest options warm in background.
+  if (resolvedFilters === fallbackFilters) {
+    void filtersPromise;
+  }
+
+  const { disciplines, inquiryTypes, trainings, statusOptions } = resolvedFilters;
 
   const statusMap = Object.fromEntries(statusOptions.map((s) => [s.id, s.label]));
 

@@ -8,6 +8,9 @@ import {
   updateInquiry,
 } from '@/lib/services/inquiry.service';
 
+export const runtime = 'nodejs';
+export const maxDuration = 300;
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await requirePermission(req, 'inquiry.create');
