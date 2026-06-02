@@ -349,25 +349,38 @@ export async function syncSuvidyaInquiries(
 
   const inquiryTable = await resolveInquiryTableName(pool);
 
+  // Pre-validate records and batch-check which ones already exist.
+  // This replaces N sequential SELECTs with a single query, which is the main
+  // cause of the 30-second timeout on large syncs.
+  type ValidRecord = { record: SuvidyaInquiryRecord; sourceId: number; tableName: string; studentName: string };
+  const validRecords: ValidRecord[] = [];
   for (const record of consideredRecords) {
     const sourceId = toPositiveInt(record.id);
     const tableName = normalizeText(record.table_name);
     const studentName = normalizeText(record.first_name);
-
     if (!sourceId || !tableName || !studentName) {
       summary.skippedInvalid += 1;
-      continue;
+    } else {
+      validRecords.push({ record, sourceId, tableName, studentName });
     }
+  }
 
+  // One query to find all already-synced records in this batch
+  const existingKeys = new Set<string>();
+  if (validRecords.length > 0) {
+    const whereParts = validRecords.map(() => '(source_table_name = ? AND source_inquiry_id = ?)').join(' OR ');
+    const whereParams = validRecords.flatMap(({ tableName, sourceId }) => [tableName, sourceId]);
     const [existingRows] = await pool.query(
-      `SELECT inquiry_id
-       FROM suvidya_inquiry_sync
-       WHERE source_table_name = ? AND source_inquiry_id = ?
-       LIMIT 1`,
-      [tableName, sourceId]
+      `SELECT source_table_name, source_inquiry_id FROM suvidya_inquiry_sync WHERE ${whereParts}`,
+      whereParams
     );
+    for (const row of existingRows as Array<{ source_table_name: string; source_inquiry_id: number }>) {
+      existingKeys.add(`${row.source_table_name}:${row.source_inquiry_id}`);
+    }
+  }
 
-    if ((existingRows as unknown[]).length > 0) {
+  for (const { record, sourceId, tableName, studentName } of validRecords) {
+    if (existingKeys.has(`${tableName}:${sourceId}`)) {
       summary.skippedExisting += 1;
       continue;
     }

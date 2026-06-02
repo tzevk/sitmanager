@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { syncSuvidyaInquiries } from '@/lib/services/suvidya-inquiry.service';
 
 export const runtime = 'nodejs';
+export const maxDuration = 300; // Vercel Pro allows up to 300s for cron functions
 
 function isAuthorizedCronRequest(req: NextRequest): boolean {
   if (req.headers.get('x-vercel-cron')) return true;
