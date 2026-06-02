@@ -406,7 +406,7 @@ export default function InquiryPage() {
                   ) : overdueFollowUps.map(r => (
                     <tr key={r.Student_Id} className="border-b border-amber-100 hover:bg-amber-50 transition-colors">
                       <td className="py-1.5 px-3 font-semibold">{formatName(r.Student_Name)}</td>
-                      <td className="py-1.5 px-3 text-slate-600 max-w-[140px]">
+                      <td className="py-1.5 px-3 text-red-600 max-w-[140px]">
                         <span className="truncate block">{r.CourseName || '—'}</span>
                       </td>
                       <td className="py-1.5 px-3 font-mono whitespace-nowrap">{r.Present_Mobile || '—'}</td>
@@ -538,7 +538,7 @@ export default function InquiryPage() {
                       <span className="truncate block">{formatName(r.Student_Name)}</span>
                     </td>
                     <td className="py-1.5 px-3 max-w-[140px]">
-                      <span className="truncate block text-slate-500">{r.CourseName || '—'}</span>
+                      <span className="truncate block text-red-600">{r.CourseName || '—'}</span>
                     </td>
                     <td className="py-1.5 px-3 whitespace-nowrap font-mono">{r.Present_Mobile || '—'}</td>
                     <td className="py-1.5 px-3 max-w-[160px]">
@@ -714,7 +714,7 @@ export default function InquiryPage() {
                 {followUps.map(r => (
                   <tr key={`fu-${r.Student_Id}`} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
                     <td className="py-1.5 px-3 font-semibold text-slate-800 whitespace-nowrap">{formatName(r.Student_Name)}</td>
-                    <td className="py-1.5 px-3 text-slate-500 max-w-[140px]"><span className="truncate block">{r.CourseName || '—'}</span></td>
+                    <td className="py-1.5 px-3 text-red-600 max-w-[140px]"><span className="truncate block">{r.CourseName || '—'}</span></td>
                     <td className="py-1.5 px-3 font-mono whitespace-nowrap">{r.Present_Mobile || '—'}</td>
                     <td className="py-1.5 px-3 font-semibold text-[#2E3093] whitespace-nowrap">{formatDate(r.NextFollowUpDate || null)}</td>
                     <td className="py-1.5 px-3 text-slate-400 whitespace-nowrap">{r.FollowUpBy || 'System'}</td>
