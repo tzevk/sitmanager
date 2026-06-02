@@ -165,14 +165,57 @@ function getInquiryCountCacheKey(params: {
   return `inquiry:list-count:${JSON.stringify(params)}`;
 }
 
-function isAutoMetaSyncDiscussion(value: string | null | undefined): boolean {
-  const text = String(value || '').trim().toLowerCase();
-  if (!text) return false;
-  return (
+function isSystemGeneratedDiscussionChunk(value: string): boolean {
+  const text = value.trim().toLowerCase();
+  if (!text) return true;
+
+  if (
+    text.startsWith('imported from suvidya')
+    || text.startsWith('imported from meta')
+    || text.startsWith('synced from meta')
+  ) {
+    return true;
+  }
+
+  if (
+    text.startsWith('location:')
+    || text.startsWith('source:')
+    || text.startsWith('course:')
+    || text.startsWith('campaign:')
+    || text.startsWith('campaign id:')
+    || text.startsWith('form:')
+    || text.startsWith('form id:')
+    || text.startsWith('tags:')
+  ) {
+    return true;
+  }
+
+  if (
     text.includes('synced')
     && (text.includes('campaign:') || text.includes('campaign id:'))
     && (text.includes('form:') || text.includes('form id:'))
-  );
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function toManualDiscussion(value: string | null | undefined): string | null {
+  const raw = String(value || '').trim();
+  if (!raw || raw === 'NULL') return null;
+
+  const chunks = raw
+    .split(/\r?\n|\|/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+
+  if (chunks.length === 0) return null;
+
+  const manualChunks = chunks.filter((chunk) => !isSystemGeneratedDiscussionChunk(chunk));
+  if (manualChunks.length === 0) return null;
+
+  return manualChunks.join(' | ');
 }
 
 interface InquiryFilterOptions {
@@ -925,8 +968,8 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   const rows: InquiryRow[] = dataRows.map((r: any) => {
     const inlineDisc = r.InlineDiscussion && r.InlineDiscussion !== 'NULL' ? r.InlineDiscussion : null;
     const latestDisc = r.LatestDiscussion && r.LatestDiscussion !== 'NULL' ? r.LatestDiscussion : null;
-    const cleanedInlineDisc = isAutoMetaSyncDiscussion(inlineDisc) ? null : inlineDisc;
-    const cleanedLatestDisc = isAutoMetaSyncDiscussion(latestDisc) ? null : latestDisc;
+    const cleanedInlineDisc = toManualDiscussion(inlineDisc);
+    const cleanedLatestDisc = toManualDiscussion(latestDisc);
     const sourceStudentId = r.SourceStudentId == null ? '' : String(r.SourceStudentId).trim();
     const inquiryTypeVal = r.Inquiry_Type?.trim()
       ? r.Inquiry_Type.trim()
