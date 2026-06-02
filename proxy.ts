@@ -41,6 +41,7 @@ const PUBLIC_ROUTES = [
   '/api/cron/meta-leads-refresh',
   '/api/cron/meta-batch-recommendations',
   '/api/cron/suvidya-inquiry-sync',
+  '/api/cron/suvidya-inquiry-sync-pune',
   '/api/student-portal/auth/login',
   '/api/student-portal/auth/session',
   '/api/student-portal/auth/logout',

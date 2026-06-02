@@ -19,6 +19,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/suvidya-inquiry-sync-pune",
+      "schedule": "2-59/5 * * * *"
+    },
+    {
       "path": "/api/cron/meta-batch-recommendations",
       "schedule": "5 0 * * *"
     }

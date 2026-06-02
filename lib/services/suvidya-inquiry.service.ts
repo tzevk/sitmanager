@@ -43,6 +43,7 @@ export interface SyncSuvidyaInquiryOptions {
   apiUrl?: string;
   sinceHours?: number;
   maxRecords?: number;
+  puneOnly?: boolean;
   fetchImpl?: typeof fetch;
 }
 
@@ -54,6 +55,7 @@ export interface SyncSuvidyaInquirySummary {
   skippedExisting: number;
   skippedInvalid: number;
   skippedOld: number;
+  skippedNonPune: number;
   failed: number;
   totalRecordsHint: number | null;
 }
@@ -115,6 +117,12 @@ function isWithinSinceHours(createdDate: unknown, sinceHours: number | undefined
   const parsed = parseSuvidyaDate(createdDate);
   if (!parsed) return true;
   return parsed.getTime() >= Date.now() - sinceHours * 60 * 60 * 1000;
+}
+
+function isPuneRecord(record: SuvidyaInquiryRecord): boolean {
+  const location = normalizeText(record.your_location)?.toLowerCase() || '';
+  const source = normalizeText(record.page_source)?.toLowerCase() || '';
+  return location.includes('pune') || source.includes('pune');
 }
 
 function mapInquiryType(tableName: string | null): string {
@@ -344,6 +352,7 @@ export async function syncSuvidyaInquiries(
     skippedExisting: 0,
     skippedInvalid: 0,
     skippedOld: 0,
+    skippedNonPune: 0,
     failed: 0,
     totalRecordsHint: null,
   };
@@ -381,11 +390,15 @@ export async function syncSuvidyaInquiries(
       : null;
     const filteredRecords = allRecords
       .filter((record) => isWithinSinceHours(record.created_date, options.sinceHours));
-    const consideredRecords = maxRecords ? filteredRecords.slice(0, maxRecords) : filteredRecords;
+    const scopedRecords = options.puneOnly
+      ? filteredRecords.filter((record) => isPuneRecord(record))
+      : filteredRecords;
+    const consideredRecords = maxRecords ? scopedRecords.slice(0, maxRecords) : scopedRecords;
 
     summary.fetched = allRecords.length;
     summary.considered = consideredRecords.length;
     summary.skippedOld = allRecords.length - filteredRecords.length;
+    summary.skippedNonPune = filteredRecords.length - scopedRecords.length;
     summary.totalRecordsHint = toPositiveInt(payload.total_records);
 
     const inquiryTable = await resolveInquiryTableName(pool);
