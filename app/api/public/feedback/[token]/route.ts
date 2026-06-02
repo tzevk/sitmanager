@@ -34,7 +34,7 @@ export async function GET(
 
     const batchId = row.Batch_Id;
 
-    /* ?verify=1&rollNo=X&phone=Y — verify roll number + phone, must be marked Present */
+    /* ?verify=1&rollNo=X&phone=Y — verify roll number + phone, must be marked present or late */
     if (req.nextUrl.searchParams.get('verify') === '1') {
       const rollNo = req.nextUrl.searchParams.get('rollNo')?.trim() ?? '';
       const phone  = req.nextUrl.searchParams.get('phone')?.trim().replace(/\D/g, '') ?? '';
@@ -46,7 +46,7 @@ export async function GET(
          FROM student_attendance sa
          JOIN admission_master a ON a.Student_Id = sa.Student_Id AND a.Batch_Id = sa.Batch_Id
          JOIN student_master s ON s.Student_Id = sa.Student_Id
-         WHERE sa.Batch_Id = ? AND sa.Attendance_Date = ? AND sa.Status = 'P'
+         WHERE sa.Batch_Id = ? AND sa.Attendance_Date = ? AND sa.Status IN ('P', 'L')
            AND (sa.IsDelete IS NULL OR sa.IsDelete = 0)
            AND a.Roll_No = ?
            AND REGEXP_REPLACE(COALESCE(s.Present_Mobile,''), '[^0-9]', '') LIKE ?
@@ -54,7 +54,7 @@ export async function GET(
         [batchId, String(row.date).slice(0, 10), rollNo, `%${phone.slice(-10)}`]
       );
       if (!students.length) {
-        return NextResponse.json({ error: 'Roll number and phone number do not match, or you are not marked present.' }, { status: 403 });
+        return NextResponse.json({ error: 'Roll number and phone number do not match, or you are not marked present/late.' }, { status: 403 });
       }
       return NextResponse.json({ studentName: students[0].studentName, rollNo: students[0].rollNo });
     }
@@ -105,20 +105,20 @@ export async function POST(
       return NextResponse.json({ error: 'Roll number is required' }, { status: 400 });
     }
 
-    /* Verify the student was marked present for this session */
-    const [presentCheck] = await pool.query<any[]>(
+    /* Verify the student was marked present or late for this session */
+    const [attendanceCheck] = await pool.query<any[]>(
       `SELECT sa.Attendance_Id
        FROM student_attendance sa
        JOIN admission_master a ON a.Student_Id = sa.Student_Id AND a.Batch_Id = sa.Batch_Id
-       WHERE sa.Batch_Id = ? AND sa.Attendance_Date = ? AND sa.Status = 'P'
+       WHERE sa.Batch_Id = ? AND sa.Attendance_Date = ? AND sa.Status IN ('P', 'L')
          AND (sa.IsDelete IS NULL OR sa.IsDelete = 0)
          AND a.Roll_No = ?
        LIMIT 1`,
       [rows[0].Batch_Id, rows[0].date, rollNo.trim()]
     );
-    if (!presentCheck.length) {
+    if (!attendanceCheck.length) {
       return NextResponse.json(
-        { error: 'Your roll number was not marked present for this session.' },
+        { error: 'Your roll number was not marked present or late for this session.' },
         { status: 403 }
       );
     }

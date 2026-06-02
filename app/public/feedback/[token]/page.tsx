@@ -301,7 +301,7 @@ export default function FeedbackPage() {
         </div>
 
         <p className="text-center text-[11px] text-gray-400 mt-4">
-          Only students marked present today can submit feedback.
+          Students marked present or late today can submit feedback.
         </p>
       </div>
     </div>
