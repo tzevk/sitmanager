@@ -722,6 +722,10 @@ export default function MetaLeadsPage() {
   }, [canUpdate, rowDrafts]);
 
   const allCampaigns = useMemo(() => (metaPerf?.campaigns || []).slice().sort((a, b) => b.leads - a.leads), [metaPerf]);
+  const recommendations = useMemo(() => {
+    const raw = metaReco?.recommendations;
+    return Array.isArray(raw) ? raw : [];
+  }, [metaReco]);
   const campaignStats = useMemo(() => {
     const withLeads = allCampaigns.filter((c) => c.costPerLead !== null && c.costPerLead > 0);
     const avgCpl = withLeads.length > 0 ? withLeads.reduce((s, c) => s + c.costPerLead!, 0) / withLeads.length : 0;
@@ -729,10 +733,10 @@ export default function MetaLeadsPage() {
   }, [allCampaigns]);
 
   const planVsResult = useMemo(() => {
-    if (!metaReco || metaReco.recommendations.length === 0) return null;
-    const plannedBudget = metaReco.recommendations.reduce((s, r) => s + (Number.isFinite(r.recommendedBudget) ? r.recommendedBudget : 0), 0);
-    const avgRate = metaReco.recommendations.reduce((s, r) => s + (Number.isFinite(r.leadToAdmissionRate) ? r.leadToAdmissionRate : 0), 0) / metaReco.recommendations.length;
-    const plannedLeads = metaReco.recommendations.reduce((s, r) => {
+    if (recommendations.length === 0) return null;
+    const plannedBudget = recommendations.reduce((s, r) => s + (Number.isFinite(r.recommendedBudget) ? r.recommendedBudget : 0), 0);
+    const avgRate = recommendations.reduce((s, r) => s + (Number.isFinite(r.leadToAdmissionRate) ? r.leadToAdmissionRate : 0), 0) / recommendations.length;
+    const plannedLeads = recommendations.reduce((s, r) => {
       if (!Number.isFinite(r.recommendedBudget) || !r.estimatedCpl || r.estimatedCpl <= 0) return s;
       return s + r.recommendedBudget / r.estimatedCpl;
     }, 0);
@@ -745,7 +749,7 @@ export default function MetaLeadsPage() {
       projectedActualAdmissions: actualLeads * avgRate,
       admissionsDelta: (actualLeads - plannedLeads) * avgRate,
     };
-  }, [metaPerf, metaReco]);
+  }, [metaPerf, recommendations]);
 
   const untouchedRows = useMemo(() => rows.filter((r) => !hasLatestFollowUp(r)).sort((a, b) => (a.Inquiry_Dt ?? '').localeCompare(b.Inquiry_Dt ?? '')), [rows]);
   const perfLoading = !metaPerf && !metaPerfError;
@@ -974,7 +978,7 @@ export default function MetaLeadsPage() {
                   <div className="m-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">{metaRecoError}</div>
                 ) : !metaReco ? (
                   <div className="p-4 space-y-2">{[1,2,3,4].map((i) => <div key={i} className="h-10 bg-slate-50 rounded-lg animate-pulse" />)}</div>
-                ) : metaReco.recommendations.length === 0 ? (
+                ) : recommendations.length === 0 ? (
                   <div className="px-4 py-8 text-center text-xs text-slate-400">No upcoming batches found for recommendation.</div>
                 ) : (
                   <>
@@ -1013,7 +1017,9 @@ export default function MetaLeadsPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {metaReco.recommendations.map((rec) => (
+                          {recommendations.map((rec) => {
+                            const planSteps = Array.isArray(rec.effectivePlan) ? rec.effectivePlan : [];
+                            return (
                             <tr key={`${rec.scoreDate}-${rec.batchId}`} className="border-b border-slate-100 hover:bg-slate-50/70">
                               <td className="px-3 py-2.5 font-semibold text-slate-700 whitespace-nowrap">{rec.batchCode}</td>
                               <td className="px-3 py-2.5 text-slate-600">{rec.courseName}</td>
@@ -1033,14 +1039,15 @@ export default function MetaLeadsPage() {
                                     <div><span className="font-semibold text-slate-700">SLA:</span> {rec.effectivePlanStructured.followUpSlaMinutes} min</div>
                                   </div>
                                 )}
-                                {rec.effectivePlan && rec.effectivePlan.length > 0 ? (
-                                  <ul className="list-disc pl-4 space-y-1 text-[11px] leading-4">{rec.effectivePlan.map((step, idx) => <li key={idx}>{step}</li>)}</ul>
+                                {planSteps.length > 0 ? (
+                                  <ul className="list-disc pl-4 space-y-1 text-[11px] leading-4">{planSteps.map((step, idx) => <li key={idx}>{step}</li>)}</ul>
                                 ) : (
                                   <span className="text-slate-400">Plan will be generated after next score run.</span>
                                 )}
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

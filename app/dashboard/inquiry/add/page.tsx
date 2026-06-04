@@ -345,7 +345,7 @@ export default function AddInquiryPage() {
               <label className={lbl}>Gender</label>
               <select value={gender} onChange={e => setGender(e.target.value)} className={ctrl}>
                 <option value="">— Select —</option>
-                {opts?.genders.map(g => <option key={g} value={g}>{g}</option>)}
+                {opts?.genders?.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
             </div>
             <div>
@@ -369,12 +369,12 @@ export default function AddInquiryPage() {
             <div>
               <label className={lbl}>Nationality</label>
               <input list="nat-list" value={nationality} onChange={e => setNationality(e.target.value)} placeholder="Type or select" className={ctrl} />
-              <datalist id="nat-list">{opts?.nationalities.map(n => <option key={n} value={n} />)}</datalist>
+              <datalist id="nat-list">{opts?.nationalities?.map(n => <option key={n} value={n} />)}</datalist>
             </div>
             <div>
               <label className={lbl}>Country</label>
               <input list="country-list" value={country} onChange={e => setCountry(e.target.value)} placeholder="Type or select" className={ctrl} />
-              <datalist id="country-list">{opts?.countries.map(c => <option key={c} value={c} />)}</datalist>
+              <datalist id="country-list">{opts?.countries?.map(c => <option key={c} value={c} />)}</datalist>
             </div>
             <div className="col-span-2">
               <label className={lbl}>Notes</label>
@@ -391,14 +391,14 @@ export default function AddInquiryPage() {
               <label className={lbl}>Mode</label>
               <select value={inquiryMode} onChange={e => setInquiryMode(e.target.value)} className={ctrl}>
                 <option value="">— Select —</option>
-                {opts?.inquiryModes.map(m => <option key={m} value={m}>{m}</option>)}
+                {opts?.inquiryModes?.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
             <div className="col-span-2">
               <label className={lbl}>How They Know About SIT</label>
               <select value={inquiryType} onChange={e => setInquiryType(e.target.value)} className={ctrl}>
                 <option value="">— Select —</option>
-                {opts?.inquiryTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                {opts?.inquiryTypes?.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
 
@@ -408,14 +408,14 @@ export default function AddInquiryPage() {
               <label className={lbl}>Course</label>
               <select value={courseId} onChange={e => { setCourseId(e.target.value); setBatchCode(''); }} className={ctrl}>
                 <option value="">— Select Course —</option>
-                {opts?.courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {opts?.courses?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>
               <label className={lbl}>Category</label>
               <select value={category} onChange={e => { setCategory(e.target.value); setBatchCode(''); }} className={ctrl}>
                 <option value="">— Select —</option>
-                {opts?.categories.map(c => <option key={c} value={c}>{c}</option>)}
+                {opts?.categories?.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
@@ -435,12 +435,12 @@ export default function AddInquiryPage() {
             <div>
               <label className={lbl}>Qualification</label>
               <input list="qual-list" value={qualification} onChange={e => setQualification(e.target.value)} placeholder="Type or select" className={ctrl} />
-              <datalist id="qual-list">{opts?.qualifications.map(q => <option key={q} value={q} />)}</datalist>
+              <datalist id="qual-list">{opts?.qualifications?.map(q => <option key={q} value={q} />)}</datalist>
             </div>
             <div>
               <label className={lbl}>Discipline</label>
               <input list="disc-list" value={discipline} onChange={e => setDiscipline(e.target.value)} placeholder="Type or select" className={ctrl} />
-              <datalist id="disc-list">{opts?.disciplines.map(d => <option key={d} value={d} />)}</datalist>
+              <datalist id="disc-list">{opts?.disciplines?.map(d => <option key={d} value={d} />)}</datalist>
             </div>
             <div>
               <label className={lbl}>Percentage</label>
@@ -449,7 +449,7 @@ export default function AddInquiryPage() {
             <div>
               <label className={lbl}>Status</label>
               <select value={statusId} onChange={e => setStatusId(parseInt(e.target.value))} className={ctrl}>
-                {opts?.statuses.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                {opts?.statuses?.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
               </select>
             </div>
           </div>
