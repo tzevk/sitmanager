@@ -20,7 +20,7 @@ interface Consultancy {
   EMail?: string | null;
 }
 
-type Tab = 'details' | 'discussion';
+type Tab = 'details' | 'company' | 'discussion';
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (

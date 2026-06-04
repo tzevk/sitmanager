@@ -1829,15 +1829,15 @@ async function resolveCourseId(courseName: string | null): Promise<number | null
 async function findDuplicateInquiry(mobile: string | null, email: string | null): Promise<DuplicateMatch | null> {
   if (!mobile && !email) return null;
 
-  const conditions: string[] = ['(si.IsDelete = 0 OR si.IsDelete IS NULL)'];
+  const duplicateMatchConditions: string[] = [];
   const params: any[] = [];
 
   if (mobile) {
-    conditions.push(`RIGHT(REGEXP_REPLACE(COALESCE(si.Present_Mobile,''), '[^0-9]', ''), 10) = ?`);
+    duplicateMatchConditions.push(`RIGHT(REGEXP_REPLACE(COALESCE(si.Present_Mobile,''), '[^0-9]', ''), 10) = ?`);
     params.push(mobile);
   }
   if (email) {
-    conditions.push(`LOWER(TRIM(COALESCE(si.Email,''))) = ?`);
+    duplicateMatchConditions.push(`LOWER(TRIM(COALESCE(si.Email,''))) = ?`);
     params.push(email);
   }
 
@@ -1851,7 +1851,8 @@ async function findDuplicateInquiry(mobile: string | null, email: string | null)
        si.Email as email,
        CAST(NULLIF(si.Course_Id,'') AS UNSIGNED) as courseId
      FROM \`${inquiryTable}\` si
-     WHERE ${conditions.join(' OR ')}
+     WHERE (si.IsDelete = 0 OR si.IsDelete IS NULL)
+       AND (${duplicateMatchConditions.join(' OR ')})
      ORDER BY si.Inquiry_Id DESC
      LIMIT 1`,
     params
@@ -3112,7 +3113,27 @@ export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<Meta
   const row = (rows as any[])[0];
   if (!row) return null;
   if (Number(row.inquiry_id || 0) > 0) {
-    return getMetaLeadDetail(metaLeadId);
+    const inquiryId = Number(row.inquiry_id || 0);
+    const inquiryTable = await resolveInquiryTableName(pool);
+    const [inquiryRows] = await pool.query(
+      `SELECT Inquiry_Id
+       FROM \`${inquiryTable}\`
+       WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+       LIMIT 1`,
+      [inquiryId]
+    );
+
+    if ((inquiryRows as any[]).length > 0) {
+      return getMetaLeadDetail(metaLeadId);
+    }
+
+    await pool.query(
+      `UPDATE ${META_LEADS_TABLE}
+       SET inquiry_id = NULL,
+           duplicate_of_inquiry_id = NULL
+       WHERE meta_lead_id = ?`,
+      [metaLeadId]
+    );
   }
 
   let fields: Record<string, string | null> = {};
