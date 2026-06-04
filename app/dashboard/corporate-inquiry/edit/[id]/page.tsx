@@ -220,6 +220,14 @@ function parseFollowUpJson(raw: string | null | undefined): FollowUpData {
               : typeof obj.Purpose === 'string'
                 ? obj.Purpose
                 : '',
+          purposeOther:
+            typeof obj.purposeOther === 'string'
+              ? obj.purposeOther
+              : typeof obj.PurposeOther === 'string'
+                ? obj.PurposeOther
+                : typeof obj.purpose_other === 'string'
+                  ? obj.purpose_other
+                  : '',
           course:
             typeof obj.course === 'string'
               ? obj.course

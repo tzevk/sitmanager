@@ -1,10 +1,5 @@
-'use client';
-
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { redirect } from 'next/navigation';
 
 export default function StudentPortalIndex() {
-  const router = useRouter();
-  useEffect(() => { router.replace('/student-portal/signin'); }, [router]);
-  return null;
+  redirect('/student-portal/signin');
 }
