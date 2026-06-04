@@ -50,8 +50,10 @@ export default function CorporateRecordReportPage() {
 
   const [companies, setCompanies] = useState<Option[]>([]);
   const [courses, setCourses] = useState<Option[]>([]);
+  const [purposes, setPurposes] = useState<string[]>([]);
   const [companyId, setCompanyId] = useState('all');
   const [courseId, setCourseId] = useState('all');
+  const [purpose, setPurpose] = useState('all');
   const [periodMode, setPeriodMode] = useState<PeriodMode>('range');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -73,6 +75,7 @@ export default function CorporateRecordReportPage() {
         if (!cancelled) {
           setCompanies(Array.isArray(data.companies) ? data.companies : []);
           setCourses(Array.isArray(data.courses) ? data.courses : []);
+          setPurposes(Array.isArray(data.purposes) ? data.purposes : []);
         }
       } catch (err: unknown) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load report filters');
@@ -116,6 +119,7 @@ export default function CorporateRecordReportPage() {
       const params = new URLSearchParams({
         companyId,
         courseId,
+        purpose,
         status,
         periodMode,
       });
@@ -222,6 +226,11 @@ export default function CorporateRecordReportPage() {
         <select value={courseId} onChange={(e) => setCourseId(e.target.value)} className={`${ctrl} w-[170px]`}>
           <option value="all">All Courses</option>
           {courses.map((course) => <option key={course.id} value={course.id}>{course.name}</option>)}
+        </select>
+
+        <select value={purpose} onChange={(e) => setPurpose(e.target.value)} className={`${ctrl} w-[170px]`}>
+          <option value="all">All Purposes</option>
+          {purposes.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
       </FilterBar>
 

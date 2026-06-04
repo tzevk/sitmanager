@@ -214,22 +214,34 @@ export async function GET(req: NextRequest) {
            ORDER BY Course_Name`
         ),
       ]);
+      const [purposes] = await pool.query<any[]>(
+        `SELECT DISTINCT TRIM(Purpose) AS Purpose
+         FROM consultant_follows
+         WHERE Purpose IS NOT NULL AND TRIM(Purpose) != ''
+           AND (IsDelete = 0 OR IsDelete IS NULL OR IsDelete = '' OR IsDelete = '0' OR IsDelete = 'N' OR IsDelete = 'No')
+         ORDER BY TRIM(Purpose)`
+      );
 
       return NextResponse.json({
         companies: (companies[0] as any[]).map((row) => ({ id: Number(row.Const_Id), name: String(row.Comp_Name || '').trim() })),
         courses: (courses[0] as any[]).map((row) => ({ id: Number(row.Course_Id), name: String(row.Course_Name || '').trim() })),
+        purposes: (purposes[0] as any[]).map((row) => String(row.Purpose || '').trim()).filter(Boolean),
         statuses: FOLLOWUP_STATUS_VALUES,
       });
     }
 
     const companyIdRaw = (searchParams.get('companyId') || '').trim();
     const courseIdRaw = (searchParams.get('courseId') || '').trim();
+    const purposeRaw = (searchParams.get('purpose') || '').trim();
     const status = (searchParams.get('status') || '').trim() as CorporateRecordStatus;
 
     const companyId = Number(companyIdRaw);
     const courseId = Number(courseIdRaw);
     const includeAllCompanies = !companyIdRaw || companyIdRaw === '0' || companyIdRaw.toLowerCase() === 'all';
     const includeAllCourses = !courseIdRaw || courseIdRaw === '0' || courseIdRaw.toLowerCase() === 'all';
+    const includeAllPurposes = !purposeRaw || purposeRaw === 'all';
+    const companyIdFilter = includeAllCompanies && !Number.isFinite(companyId) ? 0 : companyId;
+    const courseIdFilter = includeAllCourses && !Number.isFinite(courseId) ? 0 : courseId;
     const { fromDate, toDate, label: periodLabel } = resolveDateRange(searchParams);
     if (!includeAllCompanies && (!Number.isFinite(companyId) || companyId <= 0)) {
       return NextResponse.json({ error: 'Select Company is required' }, { status: 400 });
@@ -239,6 +251,9 @@ export async function GET(req: NextRequest) {
     }
     if (!FOLLOWUP_STATUS_VALUES.includes(status)) {
       return NextResponse.json({ error: 'Follow-up status is required' }, { status: 400 });
+    }
+    if (status === 'Follow Up' && !includeAllPurposes && !purposeRaw) {
+      return NextResponse.json({ error: 'Select Purpose is required' }, { status: 400 });
     }
 
     const [[companyRows], [courseRows]] = await Promise.all([
@@ -256,6 +271,7 @@ export async function GET(req: NextRequest) {
     const courseName = includeAllCourses
       ? 'All Courses'
       : String(courseRows?.[0]?.Course_Name || '').trim() || `Course ${courseId}`;
+    const purposeName = includeAllPurposes ? 'All Purposes' : purposeRaw;
 
     let rows: any[] = [];
 
@@ -291,6 +307,7 @@ export async function GET(req: NextRequest) {
            AND (? = 1 OR cm.Const_Id = ?)
            AND ${followupDateSortExpr} IS NOT NULL
            AND DATE(${followupDateSortExpr}) BETWEEN ? AND ?
+           AND (? = 1 OR LOWER(TRIM(COALESCE(f.Purpose, ''))) = LOWER(?))
            AND (
              ? = 1
              OR CAST(NULLIF(TRIM(f.Course), '') AS UNSIGNED) = ?
@@ -299,7 +316,7 @@ export async function GET(req: NextRequest) {
              OR cm.Course_Id4 = ? OR cm.Course_Id5 = ? OR cm.Course_Id6 = ?
            )
          ORDER BY ${followupDateSortExpr} DESC, f.ID DESC`,
-          [courseName, includeAllCompanies ? 1 : 0, companyId, fromDate, toDate, includeAllCourses ? 1 : 0, courseId, courseName, courseId, courseId, courseId, courseId, courseId, courseId]
+          [courseName, includeAllCompanies ? 1 : 0, companyIdFilter, fromDate, toDate, includeAllPurposes ? 1 : 0, purposeName, includeAllCourses ? 1 : 0, courseIdFilter, courseName, courseIdFilter, courseIdFilter, courseIdFilter, courseIdFilter, courseIdFilter, courseIdFilter]
       );
       rows = result;
     } else {
@@ -334,7 +351,7 @@ export async function GET(req: NextRequest) {
            AND (? = 1 OR cv.Course_id = ?)
            AND ${statusCondition}
          ORDER BY cv.TDate DESC, cv.id DESC, cc.Id DESC`,
-        [companyName, fromDate, toDate, includeAllCompanies ? 1 : 0, companyId, companyName, includeAllCourses ? 1 : 0, courseId]
+        [companyName, fromDate, toDate, includeAllCompanies ? 1 : 0, companyIdFilter, companyName, includeAllCourses ? 1 : 0, courseIdFilter]
       );
       rows = result;
     }

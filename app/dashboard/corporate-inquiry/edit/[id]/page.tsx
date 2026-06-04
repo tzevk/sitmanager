@@ -37,6 +37,7 @@ type CorporateFollowUpItem = {
   mobile: string;
   email: string;
   purpose: string;
+  purposeOther: string;
   course: string;
   directLine: string;
   remark: string;
@@ -320,6 +321,28 @@ function parseFollowUpJson(raw: string | null | undefined): FollowUpData {
 
 const FOLLOWUP_PURPOSES = ['Meeting', 'Seminar', 'Internship', 'Trainer', 'Placements', 'Placements Received', 'Training', 'Project', 'Others'] as const;
 
+const normalizeFollowUpPurpose = (item: CorporateFollowUpItem): CorporateFollowUpItem => {
+  const purpose = String(item.purpose || '').trim();
+  const purposeOther = String(item.purposeOther || '').trim();
+
+  if (!purpose) {
+    return { ...item, purpose: '', purposeOther: '' };
+  }
+
+  if (!FOLLOWUP_PURPOSES.includes(purpose as (typeof FOLLOWUP_PURPOSES)[number])) {
+    return { ...item, purpose: 'Others', purposeOther: purposeOther || purpose };
+  }
+
+  if (purpose === 'Others') {
+    return { ...item, purposeOther };
+  }
+
+  return { ...item, purposeOther: '' };
+};
+
+const displayFollowUpPurpose = (item: CorporateFollowUpItem) =>
+  item.purpose === 'Others' ? String(item.purposeOther || '').trim() || 'Others' : item.purpose;
+
 export default function EditCorporateInquiryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -353,6 +376,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
     mobile: '',
     email: '',
     purpose: '',
+    purposeOther: '',
     course: '',
     directLine: '',
     remark: '',
@@ -470,7 +494,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
           combinedFollowUps.push(
             ...parsedFollowUp.followUps.map((f, idx) => {
               const contact = legacyContacts[idx] || legacyContacts[0];
-              return {
+              return normalizeFollowUpPurpose({
                 ...f,
                 contactPerson: f.contactPerson || contact?.fullName || parsedFollowUp.attendeeClient || '',
                 designation: f.designation || contact?.jobTitle || '',
@@ -478,7 +502,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                 email: f.email || contact?.email || '',
                 directLine: f.directLine || contact?.alternateNumber || '',
                 remark: f.remark || contact?.discussion || parsedFollowUp.meetingAgenda || '',
-              };
+              });
             }),
           );
 
@@ -491,6 +515,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
               mobile: c.phoneNumber || '',
               email: c.email || '',
               purpose: '',
+              purposeOther: '',
               course: '',
               directLine: c.alternateNumber || '',
               remark: c.discussion || '',
@@ -509,6 +534,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                   mobile: contact?.phoneNumber || '',
                   email: contact?.email || '',
                   purpose: 'Meeting',
+                  purposeOther: '',
                   course: '',
                   directLine: contact?.alternateNumber || '',
                   remark: m.remark || contact?.discussion || parsedFollowUp.meetingAgenda || '',
@@ -526,6 +552,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
               splitList(f.mobile).join('|').toLowerCase(),
               splitList(f.email).join('|').toLowerCase(),
               f.purpose.trim().toLowerCase(),
+              f.purposeOther.trim().toLowerCase(),
               f.course.trim().toLowerCase(),
               splitList(f.directLine).join('|').toLowerCase(),
               f.remark.trim().toLowerCase(),
@@ -562,6 +589,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
               mobile: normalizeMultiValue(inq?.Mobile ?? inq?.Phone ?? null),
               email: normalizeMultiValue(inq?.Email ?? null),
               purpose: '',
+              purposeOther: '',
               course: '',
               directLine: '',
               remark: String(inq?.Discussion ?? inq?.Remark ?? '').trim(),
@@ -635,6 +663,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
             mobile: '',
             email: '',
             purpose: '',
+            purposeOther: '',
             course: '',
             directLine: '',
             remark: '',
@@ -708,15 +737,20 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
         nextDate: f.nextDate,
         remark: f.remark,
       })),
-      followUps: followUps.map((f) => ({
-        ...f,
-        email: splitList(f.email).join(', '),
-        emails: splitList(f.email),
-        mobile: splitList(f.mobile).join(', '),
-        phoneNumbers: splitList(f.mobile),
-        directLine: splitList(f.directLine).join(', '),
-        alternateNumbers: splitList(f.directLine),
-      })),
+      followUps: followUps.map((f) => {
+        const normalized = normalizeFollowUpPurpose(f);
+        const purpose = normalized.purpose === 'Others' ? String(normalized.purposeOther || '').trim() || 'Others' : normalized.purpose;
+        return {
+          ...normalized,
+          purpose,
+          email: splitList(f.email).join(', '),
+          emails: splitList(f.email),
+          mobile: splitList(f.mobile).join(', '),
+          phoneNumbers: splitList(f.mobile),
+          directLine: splitList(f.directLine).join(', '),
+          alternateNumbers: splitList(f.directLine),
+        };
+      }),
     });
 
   function handleCompanyChange(constId: string) {
@@ -1285,12 +1319,24 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                       </div>
                       <div>
                         <label className={labelClass}>Purpose</label>
-                        <select className={inputClass} value={followUpDraft.purpose} onChange={(e) => setFollowUpDraft((d) => ({ ...d, purpose: e.target.value }))}>
+                        <select
+                          className={inputClass}
+                          value={followUpDraft.purpose}
+                          onChange={(e) => setFollowUpDraft((d) => ({ ...d, purpose: e.target.value, purposeOther: e.target.value === 'Others' ? d.purposeOther : '' }))}
+                        >
                           <option value="">--Select Purpose--</option>
                           {FOLLOWUP_PURPOSES.map((p) => (
                             <option key={p} value={p}>{p}</option>
                           ))}
                         </select>
+                        {followUpDraft.purpose === 'Others' && (
+                          <input
+                            className={`${inputClass} mt-2`}
+                            value={followUpDraft.purposeOther}
+                            onChange={(e) => setFollowUpDraft((d) => ({ ...d, purposeOther: e.target.value }))}
+                            placeholder="Enter purpose name"
+                          />
+                        )}
                       </div>
                       <div>
                         <label className={labelClass}>Course</label>
@@ -1311,15 +1357,16 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                         onClick={() => {
                           const hasAny = Boolean(followUpDraft.date || followUpDraft.contactPerson?.trim() || followUpDraft.email?.trim() || followUpDraft.remark?.trim());
                           if (!hasAny) return;
-                          setFollowUps((prev) => (editingFollowUpIndex === null ? [...prev, followUpDraft] : prev.map((m, i) => (i === editingFollowUpIndex ? followUpDraft : m))));
-                          setFollowUpDraft({ date: '', nextDate: '', contactPerson: '', designation: '', mobile: '', email: '', purpose: '', course: '', directLine: '', remark: '' });
+                          const nextFollowUp = normalizeFollowUpPurpose(followUpDraft);
+                          setFollowUps((prev) => (editingFollowUpIndex === null ? [...prev, nextFollowUp] : prev.map((m, i) => (i === editingFollowUpIndex ? nextFollowUp : m))));
+                          setFollowUpDraft({ date: '', nextDate: '', contactPerson: '', designation: '', mobile: '', email: '', purpose: '', purposeOther: '', course: '', directLine: '', remark: '' });
                           setEditingFollowUpIndex(null);
                         }}
                       >
                         {editingFollowUpIndex === null ? 'Add Follow Up' : 'Update Follow Up'}
                       </button>
                       {editingFollowUpIndex !== null && (
-                        <button type="button" className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-semibold" onClick={() => { setFollowUpDraft({ date: '', nextDate: '', contactPerson: '', designation: '', mobile: '', email: '', purpose: '', course: '', directLine: '', remark: '' }); setEditingFollowUpIndex(null); }}>Cancel</button>
+                        <button type="button" className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-semibold" onClick={() => { setFollowUpDraft({ date: '', nextDate: '', contactPerson: '', designation: '', mobile: '', email: '', purpose: '', purposeOther: '', course: '', directLine: '', remark: '' }); setEditingFollowUpIndex(null); }}>Cancel</button>
                       )}
                     </div>
                     <div className="overflow-x-auto rounded-lg border border-gray-200">
@@ -1334,11 +1381,11 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                               <td className="px-3 py-2">{c.contactPerson || '—'}</td>
                               <td className="px-3 py-2">{c.designation || '—'}</td>
                               <td className="px-3 py-2">{splitList(c.mobile).join(', ') || '—'} / {splitList(c.email).join(', ') || '—'}</td>
-                              <td className="px-3 py-2">{c.purpose || '—'} / {c.course || '—'}</td>
+                              <td className="px-3 py-2">{displayFollowUpPurpose(c) || '—'} / {c.course || '—'}</td>
                               <td className="px-3 py-2">{c.directLine || '—'}</td>
                               <td className="px-3 py-2">{c.remark || '—'}</td>
                               <td className="px-3 py-2 text-right">
-                                <button type="button" className="text-[#2A6BB5] mr-2" onClick={() => { setEditingFollowUpIndex(idx); setFollowUpDraft({ ...c }); }}>Edit</button>
+                                <button type="button" className="text-[#2A6BB5] mr-2" onClick={() => { setEditingFollowUpIndex(idx); setFollowUpDraft(normalizeFollowUpPurpose({ ...c })); }}>Edit</button>
                                 <button type="button" className="text-red-600" onClick={() => setFollowUps((prev) => prev.filter((_, i) => i !== idx))}>Delete</button>
                               </td>
                             </tr>
