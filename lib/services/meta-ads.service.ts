@@ -106,6 +106,11 @@ interface DuplicateMatch {
   courseId: number | null;
 }
 
+interface DuplicateMatchOptions {
+  studentName?: string | null;
+  preferStrongMatch?: boolean;
+}
+
 interface MetaLeadDeliveryState {
   notificationsSentAt: string | null;
   applicantEmailSentAt: string | null;
@@ -1826,7 +1831,32 @@ async function resolveCourseId(courseName: string | null): Promise<number | null
   return Number.isFinite(id) && id > 0 ? id : null;
 }
 
-async function findDuplicateInquiry(mobile: string | null, email: string | null): Promise<DuplicateMatch | null> {
+function normalizeNameForDuplicateCheck(name: string | null | undefined): string {
+  return String(name ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function namesLikelySame(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = normalizeNameForDuplicateCheck(a);
+  const nb = normalizeNameForDuplicateCheck(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  if (na.length >= 4 && nb.length >= 4 && (na.includes(nb) || nb.includes(na))) return true;
+
+  const ta = na.split(' ').filter(Boolean);
+  const tb = nb.split(' ').filter(Boolean);
+  if (ta.length === 0 || tb.length === 0) return false;
+  return ta[0] === tb[0];
+}
+
+async function findDuplicateInquiry(
+  mobile: string | null,
+  email: string | null,
+  options: DuplicateMatchOptions = {}
+): Promise<DuplicateMatch | null> {
   if (!mobile && !email) return null;
 
   const duplicateMatchConditions: string[] = [];
@@ -1854,18 +1884,56 @@ async function findDuplicateInquiry(mobile: string | null, email: string | null)
      WHERE (si.IsDelete = 0 OR si.IsDelete IS NULL)
        AND (${duplicateMatchConditions.join(' OR ')})
      ORDER BY si.Inquiry_Id DESC
-     LIMIT 1`,
+     LIMIT 20`,
     params
   );
 
-  const row = (rows as any[])[0];
-  if (!row) return null;
+  const candidates = (rows as any[])
+    .map((row) => {
+      const candidateMobile = normalizeDigits(row.presentMobile);
+      const candidateEmail = normalizeEmail(row.email);
+      const mobileMatch = Boolean(mobile && candidateMobile && mobile === candidateMobile);
+      const emailMatch = Boolean(email && candidateEmail && email === candidateEmail);
+      const nameMatch = namesLikelySame(options.studentName, normalizeText(row.studentName));
+      return {
+        inquiryId: Number(row.inquiryId),
+        studentName: normalizeText(row.studentName),
+        presentMobile: normalizeText(row.presentMobile),
+        email: normalizeText(row.email),
+        courseId: parseNumber(row.courseId),
+        mobileMatch,
+        emailMatch,
+        nameMatch,
+      };
+    })
+    .filter((c) => Number.isFinite(c.inquiryId) && c.inquiryId > 0);
+
+  if (candidates.length === 0) return null;
+
+  const requireStrong = Boolean(options.preferStrongMatch && mobile && email);
+  const selected = candidates.find((c) => {
+    if (requireStrong) {
+      // Manual convert: if both identifiers are available, only accept both-match rows.
+      if (!(c.mobileMatch && c.emailMatch)) return false;
+      return c.nameMatch || !options.studentName;
+    }
+
+    // If only one identifier is present, avoid cross-person merges unless name also matches.
+    const identifierMatched = c.mobileMatch || c.emailMatch;
+    if (!identifierMatched) return false;
+    if ((mobile && !email) || (email && !mobile)) {
+      return c.nameMatch || !options.studentName;
+    }
+    return true;
+  });
+
+  if (!selected) return null;
   return {
-    inquiryId: Number(row.inquiryId),
-    studentName: normalizeText(row.studentName),
-    presentMobile: normalizeText(row.presentMobile),
-    email: normalizeText(row.email),
-    courseId: parseNumber(row.courseId),
+    inquiryId: selected.inquiryId,
+    studentName: selected.studentName,
+    presentMobile: selected.presentMobile,
+    email: selected.email,
+    courseId: selected.courseId,
   };
 }
 
@@ -2268,7 +2336,10 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
   const tags = Array.from(new Set([...buildTags(fields, ctx), sourceInfo.sourceTag])).sort();
   const utm = Object.fromEntries(Object.entries(fields).filter(([key]) => key.startsWith('utm_')));
 
-  const duplicate = await findDuplicateInquiry(mobile, email);
+  const duplicate = await findDuplicateInquiry(mobile, email, {
+    studentName,
+    preferStrongMatch: true,
+  });
 
   let inquiryId: number;
   let created = false;
@@ -2951,10 +3022,13 @@ export async function updateMetaLeadDetail(metaLeadId: string, input: MetaLeadUp
   const [rows] = await pool.query(
     `SELECT
        meta_lead_id,
+       inquiry_id,
        student_name,
        course_name,
        mobile,
        email,
+       contact_source,
+       source_label,
        form_id,
        form_name,
        page_id,
@@ -3049,28 +3123,51 @@ export async function updateMetaLeadDetail(metaLeadId: string, input: MetaLeadUp
     ]
   );
 
-  if (input.statusId != null) {
+  const linkedInquiryId = Number(row.inquiry_id || 0);
+  if (Number.isFinite(linkedInquiryId) && linkedInquiryId > 0) {
     const inquiryTable = await resolveInquiryTableName(pool);
+    const courseId = await resolveCourseId(courseName);
+    const inquirySource = normalizeText(row.contact_source) || META_CONTACT_SOURCE;
+    const inquiryType = normalizeText(row.source_label) || META_SOURCE_LABEL;
+
+    const updates: string[] = [
+      'si.Student_Name = ?',
+      'si.Present_Mobile = ?',
+      'si.Email = ?',
+      'si.Inquiry_From = ?',
+      'si.Inquiry_Type = ?',
+      'si.Course_Id = ?',
+    ];
+    const updateParams: any[] = [
+      studentName,
+      mobile,
+      email,
+      inquirySource,
+      inquiryType,
+      courseId,
+    ];
+
+    if (input.statusId != null) {
+      updates.push('si.OnlineState = ?');
+      updateParams.push(String(input.statusId));
+    }
+
+    if (input.discussion !== undefined) {
+      updates.push('si.Discussion = ?');
+      updateParams.push(normalizeText(input.discussion));
+    }
+
+    updateParams.push(linkedInquiryId);
+
     await pool.query(
       `UPDATE \`${inquiryTable}\` si
-       INNER JOIN ${META_LEADS_TABLE} m ON m.inquiry_id = si.Inquiry_Id
-       SET si.OnlineState = ?
-       WHERE m.meta_lead_id = ?`,
-      [String(input.statusId), metaLeadId]
+       SET ${updates.join(', ')}
+       WHERE si.Inquiry_Id = ?`,
+      updateParams
     );
   }
 
-  if (input.discussion !== undefined) {
-    const inquiryTable = await resolveInquiryTableName(pool);
-    const discussion = normalizeText(input.discussion);
-    await pool.query(
-      `UPDATE \`${inquiryTable}\` si
-       INNER JOIN ${META_LEADS_TABLE} m ON m.inquiry_id = si.Inquiry_Id
-       SET si.Discussion = ?
-       WHERE m.meta_lead_id = ?`,
-      [discussion, metaLeadId]
-    );
-  }
+  invalidateCache('api:inquiry');
 
   return getMetaLeadDetail(metaLeadId);
 }
@@ -3116,7 +3213,7 @@ export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<Meta
     const inquiryId = Number(row.inquiry_id || 0);
     const inquiryTable = await resolveInquiryTableName(pool);
     const [inquiryRows] = await pool.query(
-      `SELECT Inquiry_Id
+      `SELECT Inquiry_Id, Student_Name, Present_Mobile, Email
        FROM \`${inquiryTable}\`
        WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
        LIMIT 1`,
@@ -3124,7 +3221,23 @@ export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<Meta
     );
 
     if ((inquiryRows as any[]).length > 0) {
-      return getMetaLeadDetail(metaLeadId);
+      const inquiry = (inquiryRows as any[])[0] ?? {};
+      const linkedName = normalizeText(inquiry.Student_Name);
+      const linkedMobile = normalizeDigits(inquiry.Present_Mobile);
+      const linkedEmail = normalizeEmail(inquiry.Email);
+      const leadName = normalizeText(row.student_name);
+      const leadMobile = normalizeDigits(row.mobile);
+      const leadEmail = normalizeEmail(row.email);
+
+      const hasLeadIdentity = Boolean(leadName || leadMobile || leadEmail);
+      const nameOk = namesLikelySame(leadName, linkedName);
+      const mobileOk = Boolean(leadMobile && linkedMobile && leadMobile === linkedMobile);
+      const emailOk = Boolean(leadEmail && linkedEmail && leadEmail === linkedEmail);
+
+      // Keep existing link only when it looks like the same person.
+      if (!hasLeadIdentity || nameOk || mobileOk || emailOk) {
+        return getMetaLeadDetail(metaLeadId);
+      }
     }
 
     await pool.query(

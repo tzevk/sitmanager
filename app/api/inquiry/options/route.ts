@@ -72,15 +72,15 @@ export async function GET() {
         ),
       ]);
 
-      const courses = (coursesRes[0] as any[]).map((r) => ({
+      const courses = (coursesRes as any[]).map((r) => ({
         id: r.Course_Id,
         name: r.Course_Name,
       }));
-      const categories = (categoriesRes[0] as any[]).map((r) => r.Category);
-      const qualifications = (qualificationsRes[0] as any[]).map((r) => r.Qualification);
-      const disciplines = (disciplinesRes[0] as any[]).map((r) => r.Discipline);
-      const nationalities = (nationalitiesRes[0] as any[]).map((r) => r.Nationality);
-      const countries = (countriesRes[0] as any[]).map((r) => r.Present_Country);
+      const categories = (categoriesRes as any[]).map((r) => r.Category);
+      const qualifications = (qualificationsRes as any[]).map((r) => r.Qualification);
+      const disciplines = (disciplinesRes as any[]).map((r) => r.Discipline);
+      const nationalities = (nationalitiesRes as any[]).map((r) => r.Nationality);
+      const countries = (countriesRes as any[]).map((r) => r.Present_Country);
 
       // Statuses (prefer DB; fallback to common labels)
       let statuses: Array<{ id: number; label: string }> = [];

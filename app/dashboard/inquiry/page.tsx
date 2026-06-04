@@ -523,13 +523,17 @@ export default function InquiryPage() {
               ) : rows.map((r, i) => {
                 const attended = hasLatestFollowUp(r);
                 const colorCls = isPendingFollowUp(r) ? '[&>td]:text-purple-600' : attended ? '[&>td]:text-slate-800' : '[&>td]:text-red-500';
-                const puneRowCls = r.IsPuneInquiry ? 'bg-amber-100/80 hover:bg-amber-200/70' : 'hover:bg-slate-50';
+                const sourceRowCls = r.IsPuneInquiry
+                  ? 'bg-amber-100/80 hover:bg-amber-200/70'
+                  : r.IsMetaAdConverted
+                    ? 'bg-[#2E3093]/[0.06] hover:bg-[#2E3093]/[0.12]'
+                    : 'hover:bg-slate-50';
                 const primarySource = r.Inquiry_From || r.Inquiry_Type || '—';
                 const secondarySource = r.Inquiry_From && r.Inquiry_Type && r.Inquiry_From !== r.Inquiry_Type
                   ? r.Inquiry_Type
                   : null;
                 return (
-                  <tr key={r.Student_Id} className={`border-b border-slate-100 transition-colors ${colorCls} ${puneRowCls}`}>
+                  <tr key={r.Student_Id} className={`border-b border-slate-100 transition-colors ${colorCls} ${sourceRowCls}`}>
                     <td className="py-1.5 px-3 font-semibold font-mono tabular-nums relative pl-5">
                       <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${statusBar(r.Status_id, r.StatusLabel)} rounded-r`} />
                       {(pagination.page - 1) * pagination.limit + i + 1}

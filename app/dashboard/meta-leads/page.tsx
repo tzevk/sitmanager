@@ -314,8 +314,6 @@ function avatarColor(name: string | null | undefined): string {
   return t ? colors[t.charCodeAt(0) % colors.length] : colors[0];
 }
 
-const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors w-full';
-
 // --- Inline editable cell ---
 interface InlineCellProps {
   value: string;
@@ -638,8 +636,14 @@ export default function MetaLeadsPage() {
   const handleConvertLead = useCallback(async (row: InquiryRow) => {
     if (!row.MetaLead_Id) return;
     const returnTo = encodeURIComponent(buildMetaReturnTo());
-    if (row.Student_Id > 0) { router.push(`/dashboard/inquiry/add?editId=${row.Student_Id}&returnTo=${returnTo}`); return; }
-    if (!canCreate) { setConvertError('You do not have permission to create inquiries from Meta leads.'); return; }
+    const canProceed = row.Student_Id > 0 ? canUpdate : canCreate;
+    if (!canProceed) {
+      setConvertError(row.Student_Id > 0
+        ? 'You do not have permission to open/update linked inquiries from Meta leads.'
+        : 'You do not have permission to create inquiries from Meta leads.');
+      return;
+    }
+
     setConvertError('');
     setConvertingLeadId(row.MetaLead_Id);
     try {
@@ -667,11 +671,10 @@ export default function MetaLeadsPage() {
       if (!res.ok) throw new Error(data?.error || 'Failed to convert Meta lead');
       const inquiryId = Number(data?.lead?.Student_Id || 0);
       if (!inquiryId) throw new Error('Meta lead converted but no inquiry id was returned');
-      // Update the row in local state immediately so the button switches to "Open Inquiry"
+
       setRows((prev) => prev.map((r) =>
         r.MetaLead_Id === row.MetaLead_Id ? { ...r, Student_Id: inquiryId } : r
       ));
-      // Bust the Next.js router cache so returning to this page fetches fresh data
       router.refresh();
       router.push(`/dashboard/inquiry/add?editId=${inquiryId}&returnTo=${returnTo}`);
     } catch (error: unknown) {
@@ -1292,14 +1295,6 @@ export default function MetaLeadsPage() {
                                   disabled={!row.MetaLead_Id || (row.Student_Id > 0 ? !canUpdate : !canCreate) || convertingLeadId === row.MetaLead_Id}
                                   className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${row.MetaLead_Id && (row.Student_Id > 0 ? canUpdate : canCreate) ? 'border border-[#2E3093]/20 bg-[#2E3093]/5 text-[#2E3093] hover:bg-[#2E3093]/10' : 'border border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed'}`}
                                 >{convertingLeadId === row.MetaLead_Id ? '…' : row.Student_Id > 0 ? 'Open' : 'Convert'}</button>
-                                <button
-                                  title="Open lead details"
-                                  onClick={() => row.MetaLead_Id && router.push(`/dashboard/meta-leads/${encodeURIComponent(row.MetaLead_Id)}`)}
-                                  disabled={!canView || !row.MetaLead_Id}
-                                  className={`w-6 h-6 rounded flex items-center justify-center transition-all ${canView && row.MetaLead_Id ? 'text-slate-300 hover:text-[#2E3093] hover:bg-[#2E3093]/5' : 'text-slate-200 cursor-not-allowed'}`}
-                                >
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                                </button>
                               </div>
                             </td>
                           </tr>
