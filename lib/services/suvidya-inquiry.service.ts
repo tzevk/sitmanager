@@ -60,7 +60,8 @@ export interface SyncSuvidyaInquirySummary {
   totalRecordsHint: number | null;
 }
 
-const SUVIDYA_SYNC_DB_LOCK = 'sit:suvidya_inquiry_sync';
+const SUVIDYA_SYNC_DB_LOCK_MAIN = 'sit:suvidya_inquiry_sync:main';
+const SUVIDYA_SYNC_DB_LOCK_PUNE = 'sit:suvidya_inquiry_sync:pune';
 
 function normalizeText(value: unknown): string | null {
   const text = String(value ?? '').trim();
@@ -327,18 +328,18 @@ async function insertInquiry(
   return insertId;
 }
 
-async function acquireSyncLock(connection: mysql.PoolConnection): Promise<boolean> {
+async function acquireSyncLock(connection: mysql.PoolConnection, lockName: string): Promise<boolean> {
   const [rows] = await connection.query(
     'SELECT GET_LOCK(?, 0) AS acquired',
-    [SUVIDYA_SYNC_DB_LOCK]
+    [lockName]
   );
 
   return Number((rows as Array<{ acquired?: unknown }>)[0]?.acquired ?? 0) === 1;
 }
 
-async function releaseSyncLock(connection: mysql.PoolConnection): Promise<void> {
+async function releaseSyncLock(connection: mysql.PoolConnection, lockName: string): Promise<void> {
   try {
-    await connection.query('DO RELEASE_LOCK(?)', [SUVIDYA_SYNC_DB_LOCK]);
+    await connection.query('DO RELEASE_LOCK(?)', [lockName]);
   } catch {
     // Best-effort; connection close also releases named locks.
   }
@@ -366,12 +367,14 @@ export async function syncSuvidyaInquiries(
     totalRecordsHint: null,
   };
 
+  const lockName = options.puneOnly ? SUVIDYA_SYNC_DB_LOCK_PUNE : SUVIDYA_SYNC_DB_LOCK_MAIN;
+
   const syncConnection = await pool.getConnection();
 
   try {
-    const hasLock = await acquireSyncLock(syncConnection);
+    const hasLock = await acquireSyncLock(syncConnection, lockName);
     if (!hasLock) {
-      throw new Error('Suvidya inquiry sync is already running on another connection');
+      throw new Error(`Suvidya inquiry sync is already running for lock ${lockName}`);
     }
 
     await syncConnection.query('SET SESSION innodb_lock_wait_timeout = 5');
@@ -530,7 +533,7 @@ export async function syncSuvidyaInquiries(
 
     return summary;
   } finally {
-    await releaseSyncLock(syncConnection);
+    await releaseSyncLock(syncConnection, lockName);
     syncConnection.release();
   }
 }
