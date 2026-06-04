@@ -491,8 +491,9 @@ function PlacementReportContent({ canExport }: { canExport: boolean }) {
                     const sitPct = r.SIT_Performance && r.SIT_Performance !== '0.00' && r.SIT_Performance !== 'NULL'
                       ? parseFloat(r.SIT_Performance)
                       : null;
+                    const rowKey = `${r.Student_Id}-${r.Batch_code ?? ''}-${r.Company ?? ''}-${r.Designation ?? ''}-${i}`;
                     return (
-                      <tr key={r.Student_Id} className={`transition-colors hover:bg-blue-50/20 ${isPlaced ? '' : 'bg-gray-50/40'}`}>
+                      <tr key={rowKey} className={`transition-colors hover:bg-blue-50/20 ${isPlaced ? '' : 'bg-gray-50/40'}`}>
                         <td className="py-2.5 px-3 text-center text-gray-400 font-mono text-[11px]">{i + 1}</td>
                         <td className="py-2.5 px-3">
                           <span className="font-mono text-[11px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">
