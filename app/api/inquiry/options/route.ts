@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import { getPool, cached } from '@/lib/db';
+import { logEndpointTiming } from '@/lib/perf-log';
 
 let supportsStatementTimeout: boolean | null = null;
 
@@ -36,6 +37,9 @@ async function runGuardedQuery(
 }
 
 export async function GET() {
+  const startedAt = Date.now();
+  let perfStatus: 'ok' | 'error' = 'ok';
+  let perfCode = 200;
   try {
     const pool = getPool();
 
@@ -168,10 +172,20 @@ export async function GET() {
       },
     });
   } catch (error: any) {
+    perfStatus = 'error';
+    perfCode = 500;
     console.error('Inquiry options API error:', error);
     return NextResponse.json(
       { error: 'Failed to fetch options', details: error.message },
       { status: 500 }
     );
+  } finally {
+    logEndpointTiming({
+      endpoint: '/api/inquiry/options',
+      method: 'GET',
+      durationMs: Date.now() - startedAt,
+      status: perfStatus,
+      code: perfCode,
+    });
   }
 }

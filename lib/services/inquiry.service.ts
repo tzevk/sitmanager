@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { cached, getPool, invalidateCache } from '@/lib/db';
+import { getSlowRequestThresholdMs } from '@/lib/perf-log';
 
 let inquiryTableNameCache: string | null = null;
 let disciplineTableNameCache: string | null | undefined;
@@ -555,7 +556,7 @@ async function loadInquiryFilterOptions(
 
 // ── Public service functions ──────────────────────────────────────────────────
 
-export async function createInquiry(data: CreateInquiryInput): Promise<number> {
+export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Promise<number> {
   if (!data.Student_Name?.trim()) throw new Error('Name is required');
 
   const pool = getPool();
@@ -596,8 +597,8 @@ export async function createInquiry(data: CreateInquiryInput): Promise<number> {
   if (data.Discussion?.trim()) {
     await pool.query(
       `INSERT INTO awt_inquirydiscussion (Inquiry_id, date, discussion, deleted, created_by, created_date)
-       VALUES (?, CURDATE(), ?, 0, 1, NOW())`,
-      [insertId, data.Discussion.trim()]
+       VALUES (?, CURDATE(), ?, 0, ?, NOW())`,
+      [insertId, data.Discussion.trim(), createdBy]
     );
   }
 
@@ -636,6 +637,15 @@ export async function getInquiryById(id: number): Promise<any | null> {
 }
 
 export async function listInquiries(params: InquiryListParams): Promise<InquiryListResult> {
+  const startedAt = Date.now();
+  const perfPhases: Record<string, number> = {
+    prepMs: 0,
+    countMs: 0,
+    idsMs: 0,
+    rowsMs: 0,
+    filtersMs: 0,
+  };
+
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
   const disciplineTable = await resolveDisciplineTableName(pool);
@@ -840,6 +850,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   }
 
   const whereClause = `WHERE (${conditions.join(') AND (')})`;
+  perfPhases.prepMs = Date.now() - startedAt;
 
   const hasActiveFilters = Boolean(
     search || discipline || inquiryType || leadTag || normalizedLocation || training ||
@@ -860,6 +871,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   let filteredCountPromise: Promise<number> | null = null;
 
   if (useFastUnfilteredPath) {
+    const countStartedAt = Date.now();
     // Avoid a full table COUNT(*) on default listing requests. TABLE_ROWS is near-instant
     // and good enough for pagination totals on high-traffic pages.
     total = await cached(
@@ -877,7 +889,9 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
         return Number.isFinite(approx) && approx > 0 ? approx : 0;
       }
     );
+    perfPhases.countMs = Date.now() - countStartedAt;
   } else {
+    const countStartedAt = Date.now();
     filteredCountPromise = cached(
       getInquiryCountCacheKey({
         inquiryTable,
@@ -910,8 +924,10 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
         return Number((countResult as any[])[0]?.total || 0);
       }
     );
+    perfPhases.countMs = Date.now() - countStartedAt;
   }
 
+  const idsStartedAt = Date.now();
   const sortedIds = await runGuardedQuery(
     pool,
     `SELECT si.Inquiry_Id
@@ -927,8 +943,10 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   );
   pageIds = (sortedIds as any[]).map((r: any) => r.Inquiry_Id);
   sortOrder = new Map((sortedIds as any[]).map((r: any, i: number) => [r.Inquiry_Id, i]));
+  perfPhases.idsMs = Date.now() - idsStartedAt;
 
   if (filteredCountPromise) {
+    const countWaitStartedAt = Date.now();
     const countOrTimeout = await Promise.race<number | null>([
       filteredCountPromise,
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
@@ -937,11 +955,13 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     total = countOrTimeout == null
       ? offset + pageIds.length + (pageIds.length === limit ? 1 : 0)
       : countOrTimeout;
+    perfPhases.countMs += Date.now() - countWaitStartedAt;
   }
 
   // Fetch full rows for page IDs
   let dataRows: any[] = [];
   if (pageIds.length > 0) {
+    const rowsStartedAt = Date.now();
     const ph = pageIds.map(() => '?').join(',');
     const locationSelect = locationColumn ? `si.${locationColumn} as Location,` : 'NULL as Location,';
     const rows = await runGuardedQuery(
@@ -990,8 +1010,10 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     dataRows = (rows as any[]).sort(
       (a: any, b: any) => (sortOrder.get(a.Student_Id) ?? 0) - (sortOrder.get(b.Student_Id) ?? 0)
     );
+    perfPhases.rowsMs = Date.now() - rowsStartedAt;
   }
 
+  const filtersStartedAt = Date.now();
   const filterCacheKey = `filters:${inquiryTable}:${disciplineJoin ? 'with-discipline' : 'without-discipline'}`;
   const fallbackFilters = inquiryFilterOptionsMemoryCache.get(filterCacheKey) || buildFallbackFilterOptions();
   const filtersPromise = loadInquiryFilterOptions(
@@ -1017,6 +1039,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   if (resolvedFilters === fallbackFilters) {
     void filtersPromise;
   }
+  perfPhases.filtersMs = Date.now() - filtersStartedAt;
 
   const { disciplines, inquiryTypes, trainings, statusOptions } = resolvedFilters;
 
@@ -1080,6 +1103,18 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     };
   });
 
+  const totalMs = Date.now() - startedAt;
+  const level = totalMs >= getSlowRequestThresholdMs() ? 'warn' : 'info';
+  console[level](
+    `[perf] listInquiries ${totalMs}ms` +
+    ` prep=${perfPhases.prepMs}ms` +
+    ` count=${perfPhases.countMs}ms` +
+    ` ids=${perfPhases.idsMs}ms` +
+    ` rows=${perfPhases.rowsMs}ms` +
+    ` filters=${perfPhases.filtersMs}ms` +
+    ` page=${page} limit=${limit} resultRows=${rows.length}`
+  );
+
   return {
     rows,
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
@@ -1092,7 +1127,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   };
 }
 
-export async function updateInquiry(id: number, data: UpdateInquiryInput): Promise<void> {
+export async function updateInquiry(id: number, data: UpdateInquiryInput, createdBy = 1): Promise<void> {
   if (!data.Student_Name?.trim()) throw new Error('Name is required');
 
   const pool = getPool();
@@ -1134,12 +1169,11 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput): Promi
   if (data.Discussion?.trim()) {
     await pool.query(
       `INSERT INTO awt_inquirydiscussion (Inquiry_id, date, discussion, deleted, created_by, created_date)
-       VALUES (?, CURDATE(), ?, 0, 1, NOW())`,
-      [id, data.Discussion.trim()]
+       VALUES (?, CURDATE(), ?, 0, ?, NOW())`,
+      [id, data.Discussion.trim(), createdBy]
     );
   }
 
   invalidateCache('inquiry:filters');
-  invalidateCache('inquiry:list-count');
   invalidateCache('inquiry:list-count');
 }

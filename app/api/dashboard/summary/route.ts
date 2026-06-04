@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool, cached } from '@/lib/db';
 import { requireAuth } from '@/lib/api-auth';
 import { dashboardRateLimiter } from '@/lib/rate-limit';
+import { logEndpointTiming } from '@/lib/perf-log';
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 min
 let dashboardSupportsStatementTimeout: boolean | null = null;
@@ -43,12 +44,21 @@ async function safeQuery<T>(
 }
 
 export async function GET(request: NextRequest) {
+  const startedAt = Date.now();
+  let perfStatus: 'ok' | 'error' = 'ok';
+  let perfCode = 200;
   try {
     const rateLimited = await dashboardRateLimiter(request);
-    if (rateLimited) return rateLimited;
+    if (rateLimited) {
+      perfCode = rateLimited.status;
+      return rateLimited;
+    }
 
     const auth = await requireAuth(request);
-    if (auth instanceof NextResponse) return auth;
+    if (auth instanceof NextResponse) {
+      perfCode = auth.status;
+      return auth;
+    }
     const roleKey = String(auth.session.role ?? 'na');
     const deptKey = String(auth.session.department || 'unknown')
       .trim()
@@ -161,7 +171,17 @@ export async function GET(request: NextRequest) {
       headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' },
     });
   } catch (error: unknown) {
+    perfStatus = 'error';
+    perfCode = 500;
     console.error('Dashboard summary error:', error);
     return NextResponse.json({ error: 'Failed to fetch summary' }, { status: 500 });
+  } finally {
+    logEndpointTiming({
+      endpoint: '/api/dashboard/summary',
+      method: 'GET',
+      durationMs: Date.now() - startedAt,
+      status: perfStatus,
+      code: perfCode,
+    });
   }
 }

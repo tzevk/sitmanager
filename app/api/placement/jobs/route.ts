@@ -4,6 +4,7 @@ import { cached, getPool, invalidateCache } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { logTableActivity } from '@/lib/activity-log';
 import crypto from 'crypto';
+import { logEndpointTiming } from '@/lib/perf-log';
 
 let supportsStatementTimeout: boolean | null = null;
 
@@ -41,9 +42,15 @@ async function runGuardedQuery(
 
 // GET — list placement jobs
 export async function GET(req: NextRequest) {
+  const startedAt = Date.now();
+  let perfStatus: 'ok' | 'error' = 'ok';
+  let perfCode = 200;
   try {
     const auth = await requirePermission(req, 'placement.view');
-    if (auth instanceof NextResponse) return auth;
+    if (auth instanceof NextResponse) {
+      perfCode = auth.status;
+      return auth;
+    }
 
     const pool = getPool();
     const url = req.nextUrl;
@@ -95,16 +102,33 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(result);
   } catch (err: unknown) {
+    perfStatus = 'error';
+    perfCode = 500;
     console.error('Placement jobs GET error:', err);
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });
+  } finally {
+    logEndpointTiming({
+      endpoint: '/api/placement/jobs',
+      method: 'GET',
+      durationMs: Date.now() - startedAt,
+      status: perfStatus,
+      code: perfCode,
+      meta: { search: Boolean(req.nextUrl.searchParams.get('search')), statusFilter: Boolean(req.nextUrl.searchParams.get('status')) },
+    });
   }
 }
 
 // POST — create new job posting
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
+  let perfStatus: 'ok' | 'error' = 'ok';
+  let perfCode = 200;
   try {
     const auth = await requirePermission(req, 'placement.create');
-    if (auth instanceof NextResponse) return auth;
+    if (auth instanceof NextResponse) {
+      perfCode = auth.status;
+      return auth;
+    }
 
     const pool = getPool();
     const body = await req.json();
@@ -148,7 +172,17 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, Job_Id: jobId, token });
   } catch (err: unknown) {
+    perfStatus = 'error';
+    perfCode = 500;
     console.error('Placement jobs POST error:', err);
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });
+  } finally {
+    logEndpointTiming({
+      endpoint: '/api/placement/jobs',
+      method: 'POST',
+      durationMs: Date.now() - startedAt,
+      status: perfStatus,
+      code: perfCode,
+    });
   }
 }
