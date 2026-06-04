@@ -4,6 +4,15 @@ import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
 let _inquiryTableCache: string | null = null;
+let _supportsStatementTimeout: boolean | null = null;
+const STUDENT_COUNT_CACHE_TTL_MS = 30_000;
+const COURSE_CACHE_TTL_MS = 10 * 60_000;
+
+type CacheEntry = { value: number; expiresAt: number };
+const studentCountCache = new Map<string, CacheEntry>();
+const studentCountInFlight = new Map<string, Promise<number>>();
+let courseCache: { rows: any[]; expiresAt: number } | null = null;
+
 async function resolveInquiryTableName(pool: ReturnType<typeof getPool>): Promise<string> {
   if (_inquiryTableCache) return _inquiryTableCache;
   const [rows] = await pool.query(
@@ -16,6 +25,62 @@ async function resolveInquiryTableName(pool: ReturnType<typeof getPool>): Promis
   );
   _inquiryTableCache = String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
   return _inquiryTableCache;
+}
+
+function withStatementTimeout(sql: string, seconds: number): string {
+  const safeSeconds = Math.max(1, Math.min(30, Math.trunc(seconds)));
+  return `SET STATEMENT max_statement_time=${safeSeconds} FOR ${sql}`;
+}
+
+function buildCountCacheKey(where: string, params: (string | number)[]): string {
+  return `${where}::${JSON.stringify(params)}`;
+}
+
+function readCountCache(key: string): number | null {
+  const hit = studentCountCache.get(key);
+  if (!hit) return null;
+  if (Date.now() >= hit.expiresAt) {
+    studentCountCache.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function writeCountCache(key: string, value: number): number {
+  const normalized = Number.isFinite(Number(value)) ? Number(value) : 0;
+  studentCountCache.set(key, { value: normalized, expiresAt: Date.now() + STUDENT_COUNT_CACHE_TTL_MS });
+  return normalized;
+}
+
+async function getDedupedCount(key: string, loader: () => Promise<number>): Promise<number> {
+  const cached = readCountCache(key);
+  if (cached != null) return cached;
+
+  const existing = studentCountInFlight.get(key);
+  if (existing) return existing;
+
+  const promise = loader()
+    .then((value) => writeCountCache(key, value))
+    .finally(() => {
+      studentCountInFlight.delete(key);
+    });
+
+  studentCountInFlight.set(key, promise);
+  return promise;
+}
+
+function readCourseCache(): any[] | null {
+  if (!courseCache) return null;
+  if (Date.now() >= courseCache.expiresAt) {
+    courseCache = null;
+    return null;
+  }
+  return courseCache.rows;
+}
+
+function writeCourseCache(rows: any[]): any[] {
+  courseCache = { rows, expiresAt: Date.now() + COURSE_CACHE_TTL_MS };
+  return rows;
 }
 
 // GET - fetch all students with pagination and search
@@ -100,22 +165,47 @@ export async function GET(req: NextRequest) {
 
     const where = conditions.join(' AND ');
 
-    const runQuery = async (sql: string, queryParams: (string | number)[] = []) => {
+    const runQuery = async (
+      sql: string,
+      queryParams: (string | number)[] = [],
+      options: { statementTimeoutSeconds?: number } = {}
+    ) => {
+      const timeoutSql = options.statementTimeoutSeconds && _supportsStatementTimeout !== false
+        ? withStatementTimeout(sql, options.statementTimeoutSeconds)
+        : sql;
+
       try {
-        return await pool.query<any[]>(sql, queryParams);
+        return await pool.query<any[]>(timeoutSql, queryParams);
       } catch (error: any) {
         if (error?.code === 'PROTOCOL_CONNECTION_LOST') {
           const retryPool = getPool();
-          return await retryPool.query<any[]>(sql, queryParams);
+          return await retryPool.query<any[]>(timeoutSql, queryParams);
         }
+
+        if (timeoutSql !== sql && _supportsStatementTimeout !== false) {
+          const msg = String(error?.message || '').toLowerCase();
+          if (msg.includes('max_statement_time') || msg.includes('syntax')) {
+            _supportsStatementTimeout = false;
+            return await pool.query<any[]>(sql, queryParams);
+          }
+        }
+
+        if (timeoutSql !== sql) _supportsStatementTimeout = true;
         throw error;
       }
     };
 
-    // Run count, data, and courses queries in parallel.
-    const [[countRows], [rows], [courses]] = await Promise.all([
-      runQuery(`SELECT COUNT(*) AS total FROM student_master s WHERE ${where}`, params),
-      runQuery(
+    const countKey = buildCountCacheKey(where, params);
+    const countPromise = getDedupedCount(countKey, async () => {
+      const [countRows] = await runQuery(
+        `SELECT COUNT(*) AS total FROM student_master s WHERE ${where}`,
+        params,
+        { statementTimeoutSeconds: 4 }
+      );
+      return Number((countRows as any[])[0]?.total ?? 0);
+    });
+
+    const rowsPromise = runQuery(
         `SELECT
           s.Student_Id, s.Student_Name, s.FName, s.LName, s.MName,
           s.Qualification, s.Course_Id, s.Batch_Code, s.DOB, s.Sex, s.Nationality,
@@ -127,16 +217,39 @@ export async function GET(req: NextRequest) {
         WHERE ${where}
         ORDER BY s.Student_Id DESC
         LIMIT ? OFFSET ?`,
-        [...params, limit, offset]
-      ),
-      runQuery(
+        [...params, limit, offset],
+        { statementTimeoutSeconds: 8 }
+      );
+
+    const coursesPromise = (async () => {
+      const cached = readCourseCache();
+      if (cached) return cached;
+      const [courseRows] = await runQuery(
         `SELECT Course_Id, Course_Name FROM course_mst
          WHERE (IsDelete = 0 OR IsDelete IS NULL)
          ORDER BY Course_Name`
-      ),
-    ]);
+      );
+      return writeCourseCache(courseRows as any[]);
+    })();
 
-    const total = countRows[0]?.total ?? 0;
+    const [[rows], courses] = await Promise.all([rowsPromise, coursesPromise]);
+
+    let total = readCountCache(countKey);
+    let totalIsEstimate = false;
+
+    if (total == null) {
+      const countOrTimeout = await Promise.race<number | null>([
+        countPromise,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
+      ]);
+
+      if (countOrTimeout == null) {
+        total = offset + (rows as any[]).length + ((rows as any[]).length === limit ? 1 : 0);
+        totalIsEstimate = true;
+      } else {
+        total = countOrTimeout;
+      }
+    }
 
     return NextResponse.json({
       rows,
@@ -146,6 +259,7 @@ export async function GET(req: NextRequest) {
         limit,
         total,
         totalPages: Math.ceil(total / limit),
+        totalIsEstimate,
       },
     });
   } catch (err: unknown) {

@@ -27,7 +27,10 @@
       "Bash(mkdir -p /Users/tanvikadam/Desktop/SIT/sitmanager/app/api/meta-ads/leads/\\\\[leadId\\\\]/discussions)",
       "Bash(grep -E \"\\\\.ts$\")",
       "Bash(node -e \"const p = require\\('/Users/tanvikadam/Desktop/SIT/sitmanager/node_modules/next/package.json'\\); console.log\\(p.version\\)\")",
-      "Read(//Users/tanvikadam/Users/tanvikadam/.claude/projects/-Users-tanvikadam-Desktop-SIT-sitmanager/memory/**)"
+      "Read(//Users/tanvikadam/Users/tanvikadam/.claude/projects/-Users-tanvikadam-Desktop-SIT-sitmanager/memory/**)",
+      "Bash(node scripts/db/migrate-from-legacy.mjs --since 2026-01-01 --inquiries-only)",
+      "Bash(node scripts/db/migrate-from-legacy.mjs --since 2026-05-01 --inquiries-only)",
+      "Bash(node scripts/db/migrate-from-legacy.mjs --since 2026-03-01 --inquiries-only)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
