@@ -31,6 +31,8 @@ interface PlacementRow {
   Duration: string | null;
 }
 
+type PeriodMode = '' | 'range' | 'month' | 'year';
+
 /* ──────────────────────────────── Helpers ───────────────────────── */
 function fmtDate(d: string | null | undefined): string {
   if (!d) return '';
@@ -46,6 +48,21 @@ const selectCls =
   'hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 ' +
   'focus:border-[#2E3093] transition-colors';
 
+const MONTH_OPTIONS = [
+  { value: '1', label: 'January' },
+  { value: '2', label: 'February' },
+  { value: '3', label: 'March' },
+  { value: '4', label: 'April' },
+  { value: '5', label: 'May' },
+  { value: '6', label: 'June' },
+  { value: '7', label: 'July' },
+  { value: '8', label: 'August' },
+  { value: '9', label: 'September' },
+  { value: '10', label: 'October' },
+  { value: '11', label: 'November' },
+  { value: '12', label: 'December' },
+];
+
 /* ──────────────────────────────── Page ─────────────────────────── */
 export default function PlacementReportPage() {
   const { canView, canExport, loading: permLoading } = useResourcePermissions('report_placement');
@@ -60,6 +77,10 @@ function PlacementReportContent({ canExport }: { canExport: boolean }) {
   const [courseId,     setCourseId]     = useState('');
   const [batchId,      setBatchId]      = useState('');
   const [year,         setYear]         = useState('');
+  const [periodMode,   setPeriodMode]   = useState<PeriodMode>('');
+  const [fromDate,     setFromDate]     = useState('');
+  const [toDate,       setToDate]       = useState('');
+  const [month,        setMonth]        = useState('');
   const [qualification, setQualification] = useState('');
   const [discipline,   setDiscipline]   = useState('');
 
@@ -74,6 +95,7 @@ function PlacementReportContent({ canExport }: { canExport: boolean }) {
   const [rows,       setRows]       = useState<PlacementRow[]>([]);
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState('');
+  const [notice,     setNotice]     = useState('');
   const [triggered,  setTriggered]  = useState(false);
   const [exporting,  setExporting]  = useState(false);
 
@@ -108,31 +130,59 @@ function PlacementReportContent({ canExport }: { canExport: boolean }) {
 
   /* ── Fetch report data ── */
   const fetchReport = useCallback(async () => {
-    if (!courseId && !batchId && !year && !qualification && !discipline) {
-      setError('Please select at least one filter before searching.');
+    if (periodMode === 'range') {
+      if (!fromDate || !toDate) {
+        setError('Select both From Date and To Date for Date Range.');
+        return;
+      }
+      if (fromDate > toDate) {
+        setError('From Date cannot be after To Date.');
+        return;
+      }
+    }
+    if (periodMode === 'month' && (!month || !year)) {
+      setError('Select both Month and Year for Monthly filter.');
       return;
     }
+    if (periodMode === 'year' && !year) {
+      setError('Select Year for Annual filter.');
+      return;
+    }
+
     setError('');
+    setNotice('');
     setLoading(true);
     setTriggered(true);
     try {
       const params = new URLSearchParams();
       if (courseId)     params.set('courseId',     courseId);
       if (batchId)      params.set('batchId',      batchId);
-      if (year)         params.set('year',         year);
       if (qualification) params.set('qualification', qualification);
       if (discipline)   params.set('discipline',   discipline);
+      if (periodMode)   params.set('periodMode',   periodMode);
+      if (periodMode === 'range') {
+        params.set('fromDate', fromDate);
+        params.set('toDate', toDate);
+      }
+      if (periodMode === 'month') {
+        params.set('month', month);
+        params.set('year', year);
+      }
+      if (periodMode === 'year') {
+        params.set('year', year);
+      }
 
       const res  = await fetch(`/api/reports/placement?${params}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed to fetch report');
       setRows(data.rows ?? []);
+      setNotice(data?.truncated && data?.message ? String(data.message) : '');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
-  }, [courseId, batchId, year, qualification, discipline]);
+  }, [courseId, batchId, year, qualification, discipline, periodMode, fromDate, toDate, month]);
 
   /* ── Excel export ── */
   const handleExport = useCallback(async () => {
@@ -206,7 +256,7 @@ function PlacementReportContent({ canExport }: { canExport: boolean }) {
         <div>
           <h1 className="text-lg font-bold text-[#2E3093]">Student Placement Report</h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            Filter by training programme, batch, year, qualification or discipline.
+            Filters are optional. You can also apply Date Range, Monthly, or Annual period filters.
           </p>
         </div>
         {canExport && triggered && rows.length > 0 && (
@@ -233,7 +283,7 @@ function PlacementReportContent({ canExport }: { canExport: boolean }) {
 
       {/* ── Filters ── */}
       <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {/* Training Programme */}
           <div>
             <label className={labelCls}>Training Programme</label>
@@ -256,7 +306,7 @@ function PlacementReportContent({ canExport }: { canExport: boolean }) {
             </select>
           </div>
 
-          {/* Year */}
+          {/* Annual Year */}
           <div>
             <label className={labelCls}>Year</label>
             <select className={selectCls} value={year} onChange={(e) => setYear(e.target.value)}>
@@ -264,6 +314,17 @@ function PlacementReportContent({ canExport }: { canExport: boolean }) {
               {years.map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}
+            </select>
+          </div>
+
+          {/* Period Filter */}
+          <div>
+            <label className={labelCls}>Period Filter</label>
+            <select className={selectCls} value={periodMode} onChange={(e) => setPeriodMode(e.target.value as PeriodMode)}>
+              <option value="">None</option>
+              <option value="range">Date Range</option>
+              <option value="month">Monthly</option>
+              <option value="year">Annual</option>
             </select>
           </div>
 
@@ -290,6 +351,56 @@ function PlacementReportContent({ canExport }: { canExport: boolean }) {
           </div>
         </div>
 
+        {periodMode === 'range' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+            <div>
+              <label className={labelCls}>From Date</label>
+              <input type="date" className={selectCls} value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+            </div>
+            <div>
+              <label className={labelCls}>To Date</label>
+              <input type="date" className={selectCls} value={toDate} onChange={(e) => setToDate(e.target.value)} />
+            </div>
+          </div>
+        )}
+
+        {periodMode === 'month' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+            <div>
+              <label className={labelCls}>Month</label>
+              <select className={selectCls} value={month} onChange={(e) => setMonth(e.target.value)}>
+                <option value="">Select Month</option>
+                {MONTH_OPTIONS.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Year</label>
+              <select className={selectCls} value={year} onChange={(e) => setYear(e.target.value)}>
+                <option value="">Select Year</option>
+                {years.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {periodMode === 'year' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+            <div>
+              <label className={labelCls}>Year</label>
+              <select className={selectCls} value={year} onChange={(e) => setYear(e.target.value)}>
+                <option value="">Select Year</option>
+                {years.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center gap-3 mt-3">
           <button
             onClick={fetchReport}
@@ -303,8 +414,9 @@ function PlacementReportContent({ canExport }: { canExport: boolean }) {
             <button
               onClick={() => {
                 setCourseId(''); setBatchId(''); setYear('');
+                setPeriodMode(''); setFromDate(''); setToDate(''); setMonth('');
                 setQualification(''); setDiscipline('');
-                setRows([]); setTriggered(false); setError('');
+                setRows([]); setTriggered(false); setError(''); setNotice('');
               }}
               className="text-xs text-gray-500 hover:text-gray-700 underline"
             >
@@ -318,6 +430,12 @@ function PlacementReportContent({ canExport }: { canExport: boolean }) {
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-md px-3 py-2">
           {error}
+        </div>
+      )}
+
+      {notice && !error && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded-md px-3 py-2">
+          {notice}
         </div>
       )}
 

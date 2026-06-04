@@ -327,7 +327,7 @@ function parseFollowUpJson(raw: string | null | undefined): FollowUpData {
   }
 }
 
-const FOLLOWUP_PURPOSES = ['Meeting', 'Seminar', 'Internship', 'Trainer', 'Placements', 'Placements Received', 'Training', 'Project', 'Others'] as const;
+const FOLLOWUP_PURPOSES = ['Meeting', 'Seminar', 'Internship', 'Trainer', 'Placements', 'Placements Received', 'Candidate Placed', 'Training', 'Project', 'Others'] as const;
 
 const normalizeFollowUpPurpose = (item: CorporateFollowUpItem): CorporateFollowUpItem => {
   const purpose = String(item.purpose || '').trim();

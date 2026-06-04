@@ -222,10 +222,18 @@ export async function GET(req: NextRequest) {
          ORDER BY TRIM(Purpose)`
       );
 
+      const purposeRows = Array.isArray(purposes) ? purposes : [];
+      const purposeValues = purposeRows
+        .map((row) => String(row.Purpose || '').trim())
+        .filter(Boolean);
+      if (!purposeValues.some((value) => value.toLowerCase() === 'candidate placed')) {
+        purposeValues.push('Candidate Placed');
+      }
+
       return NextResponse.json({
         companies: (companies[0] as any[]).map((row) => ({ id: Number(row.Const_Id), name: String(row.Comp_Name || '').trim() })),
         courses: (courses[0] as any[]).map((row) => ({ id: Number(row.Course_Id), name: String(row.Course_Name || '').trim() })),
-        purposes: (purposes[0] as any[]).map((row) => String(row.Purpose || '').trim()).filter(Boolean),
+        purposes: purposeValues,
         statuses: FOLLOWUP_STATUS_VALUES,
       });
     }

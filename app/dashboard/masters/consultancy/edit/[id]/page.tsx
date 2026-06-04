@@ -69,7 +69,7 @@ interface StudentRow {
   status: string;
 }
 
-const FOLLOWUP_PURPOSES = ['Meeting', 'Seminar', 'Internship', 'Trainer', 'Placements', 'Placements Received', 'Training', 'Project', 'Proposal', 'Others'] as const;
+const FOLLOWUP_PURPOSES = ['Meeting', 'Seminar', 'Internship', 'Trainer', 'Placements', 'Placements Received', 'Candidate Placed', 'Training', 'Project', 'Proposal', 'Others'] as const;
 
 const toDateInput = (v: string | null | undefined) => {
   if (!v) return '';

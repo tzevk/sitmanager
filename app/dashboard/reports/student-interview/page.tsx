@@ -41,16 +41,16 @@ function getRowTone(row: ReportRow): { rowClass: string; badgeClass: string; lab
 
   if (status === 'Placed') {
     return {
-      rowClass: 'bg-orange-100/70 hover:bg-orange-200/70',
-      badgeClass: 'bg-orange-200 text-orange-900 border border-orange-300',
+      rowClass: 'bg-yellow-200/85 hover:bg-yellow-300/85',
+      badgeClass: 'bg-yellow-300 text-yellow-950 border border-yellow-500',
       label: 'Placed',
     };
   }
 
   if (status === 'Interview Call') {
     return {
-      rowClass: 'bg-pink-100/80 hover:bg-pink-200/80',
-      badgeClass: 'bg-pink-200 text-pink-900 border border-pink-300',
+      rowClass: 'bg-blue-200/85 hover:bg-blue-300/85',
+      badgeClass: 'bg-blue-300 text-blue-950 border border-blue-500',
       label: 'Interview Call',
     };
   }
@@ -238,12 +238,12 @@ export default function StudentInterviewReportPage() {
       {triggered && !error && (
         <div className="bg-white rounded-xl border border-[#2E3093]/10 overflow-hidden">
           <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-zinc-200 bg-zinc-50 text-[11px] font-medium text-slate-600">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-300 bg-orange-200 px-2.5 py-1 text-orange-900">
-              <span className="h-2 w-2 rounded-full bg-orange-700" />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-yellow-500 bg-yellow-300 px-2.5 py-1 text-yellow-950">
+              <span className="h-2 w-2 rounded-full bg-yellow-700" />
               Placed students
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-pink-300 bg-pink-200 px-2.5 py-1 text-pink-900">
-              <span className="h-2 w-2 rounded-full bg-pink-700" />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-500 bg-blue-300 px-2.5 py-1 text-blue-950">
+              <span className="h-2 w-2 rounded-full bg-blue-700" />
               Interview calls
             </span>
           </div>

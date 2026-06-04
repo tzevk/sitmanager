@@ -188,9 +188,7 @@ export async function GET(req: NextRequest) {
 
       const [rows] = await pool.query(
         `SELECT Id AS id, Deciplin AS name
-         FROM \
- ${disciplineTableName}\
- 
+         FROM \`${disciplineTableName}\`
          WHERE IsDelete = 0 OR IsDelete IS NULL
          ORDER BY Deciplin`
       );
@@ -237,14 +235,48 @@ export async function GET(req: NextRequest) {
 
     const courseId    = url.searchParams.get('courseId');
     const batchId     = url.searchParams.get('batchId');
+    const periodMode  = (url.searchParams.get('periodMode') || '').trim();
+    const fromDate    = (url.searchParams.get('fromDate') || '').trim();
+    const toDate      = (url.searchParams.get('toDate') || '').trim();
+    const month       = url.searchParams.get('month');
     const year        = url.searchParams.get('year');
     const qualification = url.searchParams.get('qualification');
     const discipline  = url.searchParams.get('discipline');
 
-    // At least one filter must be provided
-    if (!courseId && !batchId && !year && !qualification && !discipline) {
-      return NextResponse.json({ error: 'Please apply at least one filter.' }, { status: 400 });
+    if (periodMode && !['range', 'month', 'year'].includes(periodMode)) {
+      return NextResponse.json({ error: 'Invalid period mode.' }, { status: 400 });
     }
+    if (periodMode === 'range') {
+      if (!fromDate || !toDate) {
+        return NextResponse.json({ error: 'From Date and To Date are required for date range filter.' }, { status: 400 });
+      }
+      if (fromDate > toDate) {
+        return NextResponse.json({ error: 'From Date cannot be after To Date.' }, { status: 400 });
+      }
+    }
+    if (periodMode === 'month') {
+      const monthNum = Number(month || '0');
+      const yearNum = Number(year || '0');
+      if (!Number.isInteger(monthNum) || monthNum < 1 || monthNum > 12 || !Number.isInteger(yearNum) || yearNum < 1900) {
+        return NextResponse.json({ error: 'Valid month and year are required for monthly filter.' }, { status: 400 });
+      }
+    }
+    if (periodMode === 'year') {
+      const yearNum = Number(year || '0');
+      if (!Number.isInteger(yearNum) || yearNum < 1900) {
+        return NextResponse.json({ error: 'Valid year is required for annual filter.' }, { status: 400 });
+      }
+    }
+
+    const hasAnyFilter = Boolean(
+      (courseId && courseId.trim()) ||
+      (batchId && batchId.trim()) ||
+      (year && year.trim()) ||
+      (qualification && qualification.trim()) ||
+      (discipline && discipline.trim()) ||
+      (periodMode && periodMode.trim())
+    );
+    const rowLimit = hasAnyFilter ? 10000 : 2000;
 
     const conditions: string[] = ['(s.IsDelete = 0 OR s.IsDelete IS NULL)', '(am.IsDelete = 0 OR am.IsDelete IS NULL)'];
     const params: any[] = [];
@@ -270,13 +302,28 @@ export async function GET(req: NextRequest) {
       params.push(parseInt(discipline));
     }
 
+    if (periodMode === 'range') {
+      conditions.push('DATE(b.SDate) >= ?');
+      conditions.push('DATE(b.SDate) <= ?');
+      params.push(fromDate, toDate);
+    }
+    if (periodMode === 'month') {
+      conditions.push('MONTH(b.SDate) = ?');
+      conditions.push('YEAR(b.SDate) = ?');
+      params.push(parseInt(String(month), 10), parseInt(String(year), 10));
+    }
+    if (periodMode === 'year') {
+      conditions.push('YEAR(b.SDate) = ?');
+      params.push(parseInt(String(year), 10));
+    }
+
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const cacheKey = `report:placement:data:${courseId || ''}:${batchId || ''}:${year || ''}:${qualification || ''}:${discipline || ''}`;
-    const cachedData = await cache.get<{ rows: unknown }>(cacheKey);
+    const cacheKey = `report:placement:data:${courseId || ''}:${batchId || ''}:${year || ''}:${qualification || ''}:${discipline || ''}:${periodMode || ''}:${fromDate || ''}:${toDate || ''}:${month || ''}:limit:${rowLimit}`;
+    const cachedData = await cache.get<{ rows: unknown; truncated?: boolean; limit?: number; message?: string }>(cacheKey);
     if (cachedData) {
-      logReportCacheTiming('placement.report', startedAt, 'HIT', { courseId, batchId, year, qualification, discipline });
+      logReportCacheTiming('placement.report', startedAt, 'HIT', { courseId, batchId, year, qualification, discipline, periodMode, fromDate, toDate, month });
       return NextResponse.json(cachedData, {
-        headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60', 'X-Cache': 'HIT' },
+        headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'HIT' },
       });
     }
 
@@ -286,18 +333,18 @@ export async function GET(req: NextRequest) {
       resolveCompanyInfoTableName(pool),
     ]);
     const qualificationExpr = educationTableName
-      ? 'COALESCE(me.Education, s.Qualification)'
-      : 's.Qualification';
+      ? 'COALESCE(me.Education, fs.Qualification)'
+      : 'fs.Qualification';
     const disciplineExpr = disciplineTableName
-      ? 'COALESCE(md.Deciplin, s.Discipline)'
-      : 's.Discipline';
+      ? 'COALESCE(md.Deciplin, fs.Discipline)'
+      : 'fs.Discipline';
     const educationJoin = educationTableName
       ? `LEFT JOIN \`${educationTableName}\` me ON me.Id = aq.Qualification`
       : '';
     const disciplineJoin = disciplineTableName
       ? `LEFT JOIN \`${disciplineTableName}\` md ON md.Id = COALESCE(
                                             aq.Discipline,
-                                            CAST(NULLIF(TRIM(s.Discipline), '') AS UNSIGNED)
+                                            CAST(NULLIF(TRIM(fs.Discipline), '') AS UNSIGNED)
                                           )`
       : '';
     const companyInfoJoin = companyInfoTableName
@@ -305,56 +352,90 @@ export async function GET(req: NextRequest) {
          SELECT ci2.student_id, ci2.Company, ci2.Designation, ci2.BussinessNature, ci2.Duration
          FROM \`${companyInfoTableName}\` ci2
          INNER JOIN (
-           SELECT MAX(id) AS id FROM \`${companyInfoTableName}\` GROUP BY student_id
+           SELECT ci3.student_id, MAX(ci3.id) AS id
+           FROM \`${companyInfoTableName}\` ci3
+           INNER JOIN filtered_students fs2 ON fs2.Student_Id = ci3.student_id
+           GROUP BY ci3.student_id
          ) latest ON latest.id = ci2.id
-       ) ci ON ci.student_id = s.Student_Id`
+       ) ci ON ci.student_id = fs.Student_Id`
       : `LEFT JOIN (
          SELECT NULL AS student_id, NULL AS Company, NULL AS Designation, NULL AS BussinessNature, NULL AS Duration
        ) ci ON 1 = 0`;
 
     const [rows] = await pool.query(
-      `SELECT
-         s.Student_Id,
-         am.Student_Code,
-         s.Student_Name,
-         s.Present_Mobile,
-         s.Email,
+      `WITH filtered_students AS (
+         SELECT
+           s.Student_Id,
+           am.Student_Code,
+           s.Student_Name,
+           s.Present_Mobile,
+           s.Email,
+           s.Course_Id,
+           am.Batch_Id,
+           s.Qualification,
+           s.Discipline,
+           s.SitPerformance,
+           s.PlacementRemark
+         FROM student_master s
+         INNER JOIN admission_master am ON am.Student_Id = s.Student_Id
+         LEFT JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
+         ${where}
+         ORDER BY am.Batch_Id DESC, s.Student_Id DESC
+         LIMIT ?
+       )
+       SELECT
+         fs.Student_Id,
+         fs.Student_Code,
+         fs.Student_Name,
+         fs.Present_Mobile,
+         fs.Email,
          ${qualificationExpr}                      AS Qualification,
          ${disciplineExpr}                         AS Discipline_Name,
          c.Course_Name,
          b.Batch_code,
          b.SDate                                   AS Batch_Start,
          b.EDate                                   AS Batch_End,
-         s.SitPerformance                          AS SIT_Performance,
-         s.PlacementRemark                         AS Placement_Remark,
+         fs.SitPerformance                         AS SIT_Performance,
+         fs.PlacementRemark                        AS Placement_Remark,
          ci.Company,
          ci.Designation,
          ci.BussinessNature,
          ci.Duration
-       FROM student_master s
-       INNER JOIN admission_master am   ON am.Student_Id = s.Student_Id
-       LEFT JOIN  batch_mst b           ON b.Batch_Id = am.Batch_Id
-       LEFT JOIN  course_mst c          ON c.Course_Id = s.Course_Id
+       FROM filtered_students fs
+       LEFT JOIN  batch_mst b           ON b.Batch_Id = fs.Batch_Id
+       LEFT JOIN  course_mst c          ON c.Course_Id = fs.Course_Id
        LEFT JOIN  (
          SELECT aq2.Student_id, aq2.Qualification, aq2.Discipline
          FROM awt_academicqualification aq2
          INNER JOIN (
-           SELECT MAX(id) AS id FROM awt_academicqualification GROUP BY Student_id
+           SELECT aq3.Student_id, MAX(aq3.id) AS id
+           FROM awt_academicqualification aq3
+           INNER JOIN filtered_students fs3 ON fs3.Student_Id = aq3.Student_id
+           GROUP BY aq3.Student_id
          ) aqlatest ON aqlatest.id = aq2.id
-       ) aq ON aq.Student_id = s.Student_Id
+       ) aq ON aq.Student_id = fs.Student_Id
        ${educationJoin}
        ${disciplineJoin}
        ${companyInfoJoin}
-       ${where}
-       ORDER BY b.Batch_code, s.Student_Name`,
-      params
+       WHERE TRIM(COALESCE(ci.Company, '')) != ''
+       ORDER BY b.Batch_code, fs.Student_Name`,
+      [...params, rowLimit]
     );
 
-    const responseData = { rows };
-    await cache.set(cacheKey, responseData, cacheTTL.short);
-    logReportCacheTiming('placement.report', startedAt, 'MISS', { courseId, batchId, year, qualification, discipline, total: (rows as any[]).length });
+    const normalizedRows = rows as any[];
+    const isTruncated = normalizedRows.length >= rowLimit;
+    const responseData = {
+      rows: normalizedRows,
+      truncated: isTruncated,
+      limit: rowLimit,
+      message: isTruncated
+        ? `Showing first ${rowLimit} rows for faster loading. Apply filters to narrow results.`
+        : '',
+    };
+    await cache.set(cacheKey, responseData, cacheTTL.medium);
+    logReportCacheTiming('placement.report', startedAt, 'MISS', { courseId, batchId, year, qualification, discipline, periodMode, fromDate, toDate, month, total: normalizedRows.length, rowLimit, truncated: isTruncated });
     return NextResponse.json(responseData, {
-      headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60', 'X-Cache': 'MISS' },
+      headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300', 'X-Cache': 'MISS' },
     });
   } catch (err: unknown) {
     console.error('[Placement Report] GET error:', err);

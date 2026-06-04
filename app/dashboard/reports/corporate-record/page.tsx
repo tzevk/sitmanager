@@ -16,13 +16,6 @@ type PeriodMode = 'range' | 'month' | 'year';
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 
-const STATUS_OPTIONS: CorporateRecordStatus[] = [
-  'Follow Up',
-  'CV Send',
-  'Candidate Shortlisted',
-  'Candidate Placed',
-];
-
 const PERIOD_OPTIONS: Array<{ value: PeriodMode; label: string }> = [
   { value: 'range', label: 'Date Range' },
   { value: 'month', label: 'Monthly' },
@@ -59,7 +52,7 @@ export default function CorporateRecordReportPage() {
   const [toDate, setToDate] = useState('');
   const [month, setMonth] = useState('');
   const [year, setYear] = useState(String(new Date().getFullYear()));
-  const [status, setStatus] = useState<CorporateRecordStatus | ''>('');
+  const status: CorporateRecordStatus = 'Follow Up';
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -88,7 +81,6 @@ export default function CorporateRecordReportPage() {
   }, []);
 
   const validationError = useMemo(() => {
-    if (!status) return 'Select a report type';
     if (periodMode === 'range') {
       if (!fromDate) return 'From Date is required';
       if (!toDate) return 'To Date is required';
@@ -100,7 +92,7 @@ export default function CorporateRecordReportPage() {
     }
     if (periodMode === 'year' && !year) return 'Year is required for yearly reports';
     return '';
-  }, [status, periodMode, fromDate, toDate, month, year]);
+  }, [periodMode, fromDate, toDate, month, year]);
 
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -239,30 +231,6 @@ export default function CorporateRecordReportPage() {
           {error}
         </div>
       )}
-
-      <div className="bg-white rounded-xl border border-[#2E3093]/10 overflow-hidden">
-        <div className="px-4 py-3 border-b border-zinc-200 bg-zinc-50">
-          <h2 className="text-sm font-semibold text-[#2E3093]">Report Type</h2>
-          <p className="text-[11px] text-slate-500 mt-1">Choose which corporate activity should be exported for the selected filters.</p>
-        </div>
-        <div className="p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-            {STATUS_OPTIONS.map((option) => (
-              <label key={option} className={`flex items-center gap-3 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${status === option ? 'border-[#2E3093] bg-indigo-50 text-[#2E3093]' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'}`}>
-                <input
-                  type="radio"
-                  name="corporate-record-status"
-                  value={option}
-                  checked={status === option}
-                  onChange={() => setStatus(option)}
-                  className="text-[#2E3093] focus:ring-[#2E3093]"
-                />
-                <span className="text-sm font-medium">{option}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

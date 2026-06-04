@@ -102,9 +102,9 @@ async function buildWorkbook(params: {
 
     const status = String(row.Shortlist_Status || '').trim();
     const fill = status === 'Placed'
-      ? { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFFEDD5' } }
+      ? { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFDE047' } }
       : status === 'Interview Call'
-        ? { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFDE7F3' } }
+        ? { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF93C5FD' } }
         : index % 2 === 1
           ? { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFF7F9FC' } }
           : null;
