@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
-import { getPool, cached } from '@/lib/db';
+import { getPool, cached, invalidateCache } from '@/lib/db';
 import { getEnv } from '@/lib/env';
 import { createInquiry, updateInquiry, type CreateInquiryInput } from '@/lib/services/inquiry.service';
 import { sendAdmissionFormEmail, sendMetaLeadThankYouEmail } from '@/lib/mailer';
@@ -3204,12 +3204,13 @@ export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<Meta
         : 'Matched existing inquiry by email during manual conversion';
 
     await updateInquiry(inquiryId, {
-      Student_Name: duplicate.studentName || studentName,
-      Present_Mobile: duplicate.presentMobile || mobile,
-      Email: duplicate.email || email,
+      Student_Name: studentName || duplicate.studentName || 'Meta Lead',
+      Present_Mobile: mobile || duplicate.presentMobile,
+      Email: email || duplicate.email,
+      Inquiry_Dt: inquiryDate,
       Inquiry_From: contactSource,
       Inquiry_Type: sourceLabel,
-      Course_Id: duplicate.courseId || courseId,
+      Course_Id: courseId || duplicate.courseId,
       Qualification: qualification,
       Discipline: discipline,
       Percentage: percentage != null ? String(percentage) : null,
@@ -3261,6 +3262,9 @@ export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<Meta
       metaLeadId,
     ]
   );
+
+  // Keep inquiry list/edit endpoints in sync immediately after conversion.
+  invalidateCache('api:inquiry');
 
   return getMetaLeadDetail(metaLeadId);
 }

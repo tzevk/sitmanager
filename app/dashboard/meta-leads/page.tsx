@@ -643,6 +643,25 @@ export default function MetaLeadsPage() {
     setConvertError('');
     setConvertingLeadId(row.MetaLead_Id);
     try {
+      const draft = rowDrafts[row.MetaLead_Id];
+      if (draft && canUpdate) {
+        const patchRes = await fetch(`/api/meta-ads/leads/${encodeURIComponent(row.MetaLead_Id)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentName: draft.studentName,
+            courseName: draft.courseName,
+            mobile: draft.mobile,
+            email: draft.email,
+            city: draft.city,
+            discussion: fromBulletEditorValue(draft.discussion),
+            statusId: draft.statusId,
+          }),
+        });
+        const patchData = await patchRes.json().catch(() => ({}));
+        if (!patchRes.ok) throw new Error(patchData?.error || 'Failed to save lead changes before conversion');
+      }
+
       const res = await fetch(`/api/meta-ads/leads/${encodeURIComponent(row.MetaLead_Id)}/convert`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Failed to convert Meta lead');
@@ -660,7 +679,7 @@ export default function MetaLeadsPage() {
     } finally {
       setConvertingLeadId(null);
     }
-  }, [buildMetaReturnTo, canCreate, router]);
+  }, [buildMetaReturnTo, canCreate, canUpdate, rowDrafts, router]);
 
   const updateRowDraft = useCallback((leadId: string, patch: Partial<LeadRowDraft>) => {
     setRowDrafts((prev) => {
