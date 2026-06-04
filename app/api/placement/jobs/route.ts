@@ -1,9 +1,43 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { getPool } from '@/lib/db';
+import { cached, getPool, invalidateCache } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { logTableActivity } from '@/lib/activity-log';
 import crypto from 'crypto';
+
+let supportsStatementTimeout: boolean | null = null;
+
+function withStatementTimeout(sql: string, seconds: number): string {
+  const safeSeconds = Math.max(1, Math.min(30, Math.trunc(seconds)));
+  return `SET STATEMENT max_statement_time=${safeSeconds} FOR ${sql}`;
+}
+
+async function runGuardedQuery(
+  pool: ReturnType<typeof getPool>,
+  sql: string,
+  params: any[] = [],
+  statementTimeoutSeconds?: number,
+): Promise<any[]> {
+  const timeoutSql = statementTimeoutSeconds && supportsStatementTimeout !== false
+    ? withStatementTimeout(sql, statementTimeoutSeconds)
+    : sql;
+
+  try {
+    const [rows] = await pool.query(timeoutSql, params);
+    return rows as any[];
+  } catch (error: any) {
+    if (timeoutSql !== sql && supportsStatementTimeout !== false) {
+      const msg = String(error?.message || '').toLowerCase();
+      if (msg.includes('max_statement_time') || msg.includes('syntax')) {
+        supportsStatementTimeout = false;
+        const [rows] = await pool.query(sql, params);
+        return rows as any[];
+      }
+    }
+    if (timeoutSql !== sql) supportsStatementTimeout = true;
+    throw error;
+  }
+}
 
 // GET — list placement jobs
 export async function GET(req: NextRequest) {
@@ -33,23 +67,33 @@ export async function GET(req: NextRequest) {
 
     const where = conditions.join(' AND ');
 
-    const [countRows] = await pool.query<any[]>(
-      `SELECT COUNT(*) AS total FROM placement_jobs j WHERE ${where}`,
-      params
-    );
-    const total = countRows[0]?.total ?? 0;
+    const cacheKey = `placement:jobs:list:${page}:${limit}:${search}:${status}`;
+    const result = await cached(cacheKey, 20_000, async () => {
+      const countPromise = runGuardedQuery(
+        pool,
+        `SELECT COUNT(*) AS total FROM placement_jobs j WHERE ${where}`,
+        params,
+        4,
+      );
 
-    const [rows] = await pool.query<any[]>(
-      `SELECT j.*, 
-              (SELECT COUNT(*) FROM placement_applications a WHERE a.Job_Id = j.Job_Id AND a.IsDelete = 0) AS application_count
-       FROM placement_jobs j
-       WHERE ${where}
-       ORDER BY j.Created_Date DESC
-       LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
-    );
+      const rowsPromise = runGuardedQuery(
+        pool,
+        `SELECT j.*, 
+                (SELECT COUNT(*) FROM placement_applications a WHERE a.Job_Id = j.Job_Id AND a.IsDelete = 0) AS application_count
+         FROM placement_jobs j
+         WHERE ${where}
+         ORDER BY j.Created_Date DESC
+         LIMIT ? OFFSET ?`,
+        [...params, limit, offset],
+        8,
+      );
 
-    return NextResponse.json({ rows, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+      const [rows, countRows] = await Promise.all([rowsPromise, countPromise]);
+      const total = Number((countRows as any[])[0]?.total ?? 0);
+      return { rows, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+    });
+
+    return NextResponse.json(result);
   } catch (err: unknown) {
     console.error('Placement jobs GET error:', err);
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });
@@ -99,6 +143,8 @@ export async function POST(req: NextRequest) {
       recordId: jobId,
       details: { companyName: body.Company_Name || null, jobTitle: body.Job_Title || null },
     });
+
+    invalidateCache('placement:jobs:list');
 
     return NextResponse.json({ success: true, Job_Id: jobId, token });
   } catch (err: unknown) {

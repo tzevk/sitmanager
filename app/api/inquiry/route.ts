@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
 import { logTableActivity } from '@/lib/activity-log';
+import { cached, invalidateCache } from '@/lib/db';
 import {
   createInquiry,
   getInquiryById,
@@ -27,6 +28,8 @@ export async function POST(req: NextRequest) {
       details: { studentName: body.Student_Name?.trim() ?? null, courseId: body.Course_Id ?? null },
     });
 
+    invalidateCache('api:inquiry');
+
     return NextResponse.json({ success: true, Student_Id: insertId });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -46,12 +49,14 @@ export async function GET(req: NextRequest) {
     const singleId = url.searchParams.get('id');
 
     if (singleId) {
-      const row = await getInquiryById(parseInt(singleId));
+      const id = parseInt(singleId);
+      const row = await cached(`api:inquiry:single:${id}`, 20_000, () => getInquiryById(id));
       if (!row) return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
       return NextResponse.json({ inquiry: row });
     }
 
-    const result = await listInquiries({
+    const queryKey = url.searchParams.toString();
+    const result = await cached(`api:inquiry:list:${queryKey}`, 20_000, async () => listInquiries({
       page: Math.max(1, parseInt(url.searchParams.get('page') || '1')),
       limit: Math.min(100, Math.max(10, parseInt(url.searchParams.get('limit') || '25'))),
       search: url.searchParams.get('search')?.trim() || '',
@@ -66,7 +71,7 @@ export async function GET(req: NextRequest) {
       dateTo: url.searchParams.get('dateTo') || '',
       puneOnly: url.searchParams.get('puneOnly') === '1',
       followUpDue: url.searchParams.get('followUpDue') === '1',
-    });
+    }));
 
     return NextResponse.json(result);
   } catch (error: unknown) {
@@ -96,6 +101,8 @@ export async function PUT(req: NextRequest) {
       recordId: Student_Id,
       details: { studentName: body.Student_Name?.trim() ?? null, statusId: body.Status_id ?? null },
     });
+
+    invalidateCache('api:inquiry');
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {

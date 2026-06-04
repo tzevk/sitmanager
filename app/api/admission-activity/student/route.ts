@@ -1,17 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { getPool } from '@/lib/db';
+import { cached, getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
 let _inquiryTableCache: string | null = null;
 let _supportsStatementTimeout: boolean | null = null;
 const STUDENT_COUNT_CACHE_TTL_MS = 30_000;
 const COURSE_CACHE_TTL_MS = 10 * 60_000;
-
-type CacheEntry = { value: number; expiresAt: number };
-const studentCountCache = new Map<string, CacheEntry>();
-const studentCountInFlight = new Map<string, Promise<number>>();
-let courseCache: { rows: any[]; expiresAt: number } | null = null;
 
 async function resolveInquiryTableName(pool: ReturnType<typeof getPool>): Promise<string> {
   if (_inquiryTableCache) return _inquiryTableCache;
@@ -34,53 +29,6 @@ function withStatementTimeout(sql: string, seconds: number): string {
 
 function buildCountCacheKey(where: string, params: (string | number)[]): string {
   return `${where}::${JSON.stringify(params)}`;
-}
-
-function readCountCache(key: string): number | null {
-  const hit = studentCountCache.get(key);
-  if (!hit) return null;
-  if (Date.now() >= hit.expiresAt) {
-    studentCountCache.delete(key);
-    return null;
-  }
-  return hit.value;
-}
-
-function writeCountCache(key: string, value: number): number {
-  const normalized = Number.isFinite(Number(value)) ? Number(value) : 0;
-  studentCountCache.set(key, { value: normalized, expiresAt: Date.now() + STUDENT_COUNT_CACHE_TTL_MS });
-  return normalized;
-}
-
-async function getDedupedCount(key: string, loader: () => Promise<number>): Promise<number> {
-  const cached = readCountCache(key);
-  if (cached != null) return cached;
-
-  const existing = studentCountInFlight.get(key);
-  if (existing) return existing;
-
-  const promise = loader()
-    .then((value) => writeCountCache(key, value))
-    .finally(() => {
-      studentCountInFlight.delete(key);
-    });
-
-  studentCountInFlight.set(key, promise);
-  return promise;
-}
-
-function readCourseCache(): any[] | null {
-  if (!courseCache) return null;
-  if (Date.now() >= courseCache.expiresAt) {
-    courseCache = null;
-    return null;
-  }
-  return courseCache.rows;
-}
-
-function writeCourseCache(rows: any[]): any[] {
-  courseCache = { rows, expiresAt: Date.now() + COURSE_CACHE_TTL_MS };
-  return rows;
 }
 
 // GET - fetch all students with pagination and search
@@ -196,14 +144,18 @@ export async function GET(req: NextRequest) {
     };
 
     const countKey = buildCountCacheKey(where, params);
-    const countPromise = getDedupedCount(countKey, async () => {
+    const countPromise = cached(
+      `admission-activity:student:count:${countKey}`,
+      STUDENT_COUNT_CACHE_TTL_MS,
+      async () => {
       const [countRows] = await runQuery(
         `SELECT COUNT(*) AS total FROM student_master s WHERE ${where}`,
         params,
         { statementTimeoutSeconds: 4 }
       );
       return Number((countRows as any[])[0]?.total ?? 0);
-    });
+      }
+    );
 
     const rowsPromise = runQuery(
         `SELECT
@@ -221,34 +173,34 @@ export async function GET(req: NextRequest) {
         { statementTimeoutSeconds: 8 }
       );
 
-    const coursesPromise = (async () => {
-      const cached = readCourseCache();
-      if (cached) return cached;
-      const [courseRows] = await runQuery(
+    const coursesPromise = cached(
+      'admission-activity:student:courses',
+      COURSE_CACHE_TTL_MS,
+      async () => {
+        const [courseRows] = await runQuery(
         `SELECT Course_Id, Course_Name FROM course_mst
          WHERE (IsDelete = 0 OR IsDelete IS NULL)
          ORDER BY Course_Name`
-      );
-      return writeCourseCache(courseRows as any[]);
-    })();
+        );
+        return courseRows as any[];
+      }
+    );
 
     const [[rows], courses] = await Promise.all([rowsPromise, coursesPromise]);
 
-    let total = readCountCache(countKey);
+    let total: number | null = null;
     let totalIsEstimate = false;
 
-    if (total == null) {
-      const countOrTimeout = await Promise.race<number | null>([
+    const countOrTimeout = await Promise.race<number | null>([
         countPromise,
         new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
-      ]);
+    ]);
 
-      if (countOrTimeout == null) {
-        total = offset + (rows as any[]).length + ((rows as any[]).length === limit ? 1 : 0);
-        totalIsEstimate = true;
-      } else {
-        total = countOrTimeout;
-      }
+    if (countOrTimeout == null) {
+      total = offset + (rows as any[]).length + ((rows as any[]).length === limit ? 1 : 0);
+      totalIsEstimate = true;
+    } else {
+      total = countOrTimeout;
     }
 
     return NextResponse.json({

@@ -1,9 +1,43 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { getPool } from '@/lib/db';
+import { cached, getPool, invalidateCache } from '@/lib/db';
+
+let supportsStatementTimeout: boolean | null = null;
+
+function withStatementTimeout(sql: string, seconds: number): string {
+  const safeSeconds = Math.max(1, Math.min(30, Math.trunc(seconds)));
+  return `SET STATEMENT max_statement_time=${safeSeconds} FOR ${sql}`;
+}
+
+async function runGuardedQuery(
+  pool: ReturnType<typeof getPool>,
+  sql: string,
+  params: any[] = [],
+  statementTimeoutSeconds = 5,
+): Promise<any[]> {
+  const timeoutSql = supportsStatementTimeout !== false
+    ? withStatementTimeout(sql, statementTimeoutSeconds)
+    : sql;
+
+  try {
+    const [rows] = await pool.query(timeoutSql, params);
+    if (timeoutSql !== sql) supportsStatementTimeout = true;
+    return rows as any[];
+  } catch (error: any) {
+    if (timeoutSql !== sql && supportsStatementTimeout !== false) {
+      const msg = String(error?.message || '').toLowerCase();
+      if (msg.includes('max_statement_time') || msg.includes('syntax')) {
+        supportsStatementTimeout = false;
+        const [rows] = await pool.query(sql, params);
+        return rows as any[];
+      }
+    }
+    throw error;
+  }
+}
 
 async function resolveInquiryTableName(pool: any): Promise<string> {
-  const [rows] = await pool.query(
+  const rows = await runGuardedQuery(pool,
     `SELECT TABLE_NAME
      FROM INFORMATION_SCHEMA.TABLES
      WHERE TABLE_SCHEMA = DATABASE()
@@ -15,7 +49,7 @@ async function resolveInquiryTableName(pool: any): Promise<string> {
 }
 
 async function hasNextDateColumn(pool: any): Promise<boolean> {
-  const [rows] = await pool.query(
+  const rows = await runGuardedQuery(pool,
     `SELECT COUNT(*) as cnt
      FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
@@ -26,7 +60,7 @@ async function hasNextDateColumn(pool: any): Promise<boolean> {
 }
 
 async function resolveInquiryLink(pool: any, inquiryTable: string, inquiryIdNum: number) {
-  const [mapRows] = await pool.query(
+  const mapRows = await runGuardedQuery(pool,
     `SELECT Inquiry_Id, Student_Id
      FROM ${inquiryTable}
      WHERE Inquiry_Id = ? OR Student_Id = ?
@@ -66,13 +100,16 @@ export async function GET(req: NextRequest) {
 
     const withNextDate = await hasNextDateColumn(pool);
     const nextDateSelect = withNextDate ? 'nextdate' : 'NULL as nextdate';
-    const [rows] = await pool.query(
+    const cacheKey = `api:inquiry:discussions:${canonicalInquiryId}:${canonicalStudentId ?? inquiryIdNum}`;
+    const rows = await cached(cacheKey, 10_000, async () => runGuardedQuery(
+      pool,
       `SELECT id, date, ${nextDateSelect}, discussion, created_by, created_date
        FROM awt_inquirydiscussion
        WHERE (Inquiry_id = ? OR student_id = ?) AND (deleted = 0 OR deleted IS NULL)
        ORDER BY id ASC`,
-      [canonicalInquiryId, canonicalStudentId ?? inquiryIdNum]
-    );
+      [canonicalInquiryId, canonicalStudentId ?? inquiryIdNum],
+      5,
+    ));
 
     return NextResponse.json({ discussions: rows });
   } catch (error: any) {
@@ -124,6 +161,7 @@ export async function POST(req: NextRequest) {
         );
 
     const insertId = (result as any).insertId;
+    invalidateCache('api:inquiry:discussions');
     return NextResponse.json({ success: true, id: insertId });
   } catch (error: any) {
     console.error('Discussions POST error:', error);
@@ -155,6 +193,8 @@ export async function PUT(req: NextRequest) {
       [discussion.trim(), idNum]
     );
 
+    invalidateCache('api:inquiry:discussions');
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Discussions PUT error:', error);
@@ -185,6 +225,8 @@ export async function DELETE(req: NextRequest) {
       `UPDATE awt_inquirydiscussion SET deleted = 1 WHERE id = ?`,
       [idNum]
     );
+
+    invalidateCache('api:inquiry:discussions');
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

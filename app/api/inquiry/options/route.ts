@@ -2,6 +2,39 @@
 import { NextResponse } from 'next/server';
 import { getPool, cached } from '@/lib/db';
 
+let supportsStatementTimeout: boolean | null = null;
+
+function withStatementTimeout(sql: string, seconds: number): string {
+  const safeSeconds = Math.max(1, Math.min(30, Math.trunc(seconds)));
+  return `SET STATEMENT max_statement_time=${safeSeconds} FOR ${sql}`;
+}
+
+async function runGuardedQuery(
+  pool: ReturnType<typeof getPool>,
+  sql: string,
+  statementTimeoutSeconds = 5,
+): Promise<any[]> {
+  const timeoutSql = supportsStatementTimeout !== false
+    ? withStatementTimeout(sql, statementTimeoutSeconds)
+    : sql;
+
+  try {
+    const [rows] = await pool.query(timeoutSql);
+    if (timeoutSql !== sql) supportsStatementTimeout = true;
+    return rows as any[];
+  } catch (error: any) {
+    if (timeoutSql !== sql && supportsStatementTimeout !== false) {
+      const msg = String(error?.message || '').toLowerCase();
+      if (msg.includes('max_statement_time') || msg.includes('syntax')) {
+        supportsStatementTimeout = false;
+        const [rows] = await pool.query(sql);
+        return rows as any[];
+      }
+    }
+    throw error;
+  }
+}
+
 export async function GET() {
   try {
     const pool = getPool();
@@ -15,22 +48,22 @@ export async function GET() {
         nationalitiesRes,
         countriesRes,
       ] = await Promise.all([
-        pool.query(
+        runGuardedQuery(pool,
           "SELECT Course_Id, Course_Name FROM course_mst WHERE IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Course_Name"
         ),
-        pool.query(
+        runGuardedQuery(pool,
           "SELECT DISTINCT Category FROM batch_mst WHERE IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL) AND Category IS NOT NULL AND Category != '' ORDER BY Category"
         ),
-        pool.query(
+        runGuardedQuery(pool,
           "SELECT DISTINCT Qualification FROM student_master WHERE Qualification IS NOT NULL AND Qualification != '' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Qualification"
         ),
-        pool.query(
+        runGuardedQuery(pool,
           "SELECT DISTINCT Discipline FROM student_master WHERE Discipline IS NOT NULL AND Discipline != '' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Discipline"
         ),
-        pool.query(
+        runGuardedQuery(pool,
           "SELECT DISTINCT Nationality FROM student_master WHERE Nationality IS NOT NULL AND Nationality != '' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Nationality"
         ),
-        pool.query(
+        runGuardedQuery(pool,
           "SELECT DISTINCT Present_Country FROM student_master WHERE Present_Country IS NOT NULL AND Present_Country != '' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Present_Country"
         ),
       ]);
@@ -48,7 +81,7 @@ export async function GET() {
       // Statuses (prefer DB; fallback to common labels)
       let statuses: Array<{ id: number; label: string }> = [];
       try {
-        const [statusRows] = await pool.query(
+        const statusRows = await runGuardedQuery(pool,
           `SELECT Status_id as id, Status as label
            FROM awt_status
            WHERE (IsDelete = 0 OR IsDelete IS NULL)

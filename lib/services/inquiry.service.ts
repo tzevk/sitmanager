@@ -5,8 +5,42 @@ let inquiryTableNameCache: string | null = null;
 let disciplineTableNameCache: string | null | undefined;
 let inquirySchemaWarmupPromise: Promise<void> | null = null;
 let metaLeadSchemaWarmupPromise: Promise<void> | null = null;
+let inquirySupportsStatementTimeout: boolean | null = null;
 const inquiryDateColumnReadyTables = new Set<string>();
 const inquiryFilterOptionsMemoryCache = new Map<string, InquiryFilterOptions>();
+
+function withStatementTimeout(sql: string, seconds: number): string {
+  const safeSeconds = Math.max(1, Math.min(30, Math.trunc(seconds)));
+  return `SET STATEMENT max_statement_time=${safeSeconds} FOR ${sql}`;
+}
+
+async function runGuardedQuery(
+  pool: ReturnType<typeof getPool>,
+  sql: string,
+  params: any[] = [],
+  statementTimeoutSeconds?: number,
+): Promise<any[]> {
+  const timeoutSql = statementTimeoutSeconds && inquirySupportsStatementTimeout !== false
+    ? withStatementTimeout(sql, statementTimeoutSeconds)
+    : sql;
+
+  try {
+    const [rows] = await pool.query(timeoutSql, params);
+    return rows as any[];
+  } catch (error: any) {
+    if (timeoutSql !== sql && inquirySupportsStatementTimeout !== false) {
+      const message = String(error?.message || '').toLowerCase();
+      if (message.includes('max_statement_time') || message.includes('syntax')) {
+        inquirySupportsStatementTimeout = false;
+        const [rows] = await pool.query(sql, params);
+        return rows as any[];
+      }
+    }
+
+    if (timeoutSql !== sql) inquirySupportsStatementTimeout = true;
+    throw error;
+  }
+}
 
 function getInquiryDateColumnCacheKey(inquiryTable: string): string {
   return `schema:inquiry-date-column:${inquiryTable}`;
@@ -823,6 +857,8 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   let pageIds: number[] = [];
   let sortOrder = new Map<number, number>();
 
+  let filteredCountPromise: Promise<number> | null = null;
+
   if (useFastUnfilteredPath) {
     // Avoid a full table COUNT(*) on default listing requests. TABLE_ROWS is near-instant
     // and good enough for pagination totals on high-traffic pages.
@@ -842,7 +878,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       }
     );
   } else {
-    total = await cached(
+    filteredCountPromise = cached(
       getInquiryCountCacheKey({
         inquiryTable,
         search,
@@ -860,21 +896,24 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       }),
       30_000,
       async () => {
-        const [countResult] = await pool.query(
+        const countResult = await runGuardedQuery(
+          pool,
           `SELECT COUNT(*) as total
            FROM \`${inquiryTable}\` si
            ${listCourseJoin}
            ${listDisciplineJoin}
            ${puneOnly ? puneListJoin : ''}
            ${whereClause}`,
-          queryParams
+          queryParams,
+          5,
         );
-        return (countResult as any[])[0]?.total || 0;
+        return Number((countResult as any[])[0]?.total || 0);
       }
     );
   }
 
-  const [sortedIds] = await pool.query(
+  const sortedIds = await runGuardedQuery(
+    pool,
     `SELECT si.Inquiry_Id
      FROM \`${inquiryTable}\` si
      ${listCourseJoin}
@@ -883,17 +922,30 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
      ${whereClause}
      ORDER BY ${listOrderByClause}
      LIMIT ? OFFSET ?`,
-    [...queryParams, limit, offset]
+    [...queryParams, limit, offset],
+    8,
   );
   pageIds = (sortedIds as any[]).map((r: any) => r.Inquiry_Id);
   sortOrder = new Map((sortedIds as any[]).map((r: any, i: number) => [r.Inquiry_Id, i]));
+
+  if (filteredCountPromise) {
+    const countOrTimeout = await Promise.race<number | null>([
+      filteredCountPromise,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
+    ]);
+
+    total = countOrTimeout == null
+      ? offset + pageIds.length + (pageIds.length === limit ? 1 : 0)
+      : countOrTimeout;
+  }
 
   // Fetch full rows for page IDs
   let dataRows: any[] = [];
   if (pageIds.length > 0) {
     const ph = pageIds.map(() => '?').join(',');
     const locationSelect = locationColumn ? `si.${locationColumn} as Location,` : 'NULL as Location,';
-    const [rows] = await pool.query(
+    const rows = await runGuardedQuery(
+      pool,
       `SELECT
          si.Inquiry_Id as Student_Id, si.Student_Id as SourceStudentId,
          si.Student_Name, c.Course_Name as CourseName, si.Inquiry_Dt,
@@ -932,7 +984,8 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
        LEFT JOIN awt_adminuser au ON au.id = ld.created_by
        LEFT JOIN office_employee_mst oe ON oe.Emp_Id = ld.created_by
        WHERE si.Inquiry_Id IN (${ph})`,
-      [...pageIds, ...pageIds]
+      [...pageIds, ...pageIds],
+      10,
     );
     dataRows = (rows as any[]).sort(
       (a: any, b: any) => (sortOrder.get(a.Student_Id) ?? 0) - (sortOrder.get(b.Student_Id) ?? 0)

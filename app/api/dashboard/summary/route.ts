@@ -4,12 +4,40 @@ import { requireAuth } from '@/lib/api-auth';
 import { dashboardRateLimiter } from '@/lib/rate-limit';
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 min
+let dashboardSupportsStatementTimeout: boolean | null = null;
 
-async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallback: T): Promise<T> {
+function withStatementTimeout(sql: string, seconds: number): string {
+  const safeSeconds = Math.max(1, Math.min(30, Math.trunc(seconds)));
+  return `SET STATEMENT max_statement_time=${safeSeconds} FOR ${sql}`;
+}
+
+async function safeQuery<T>(
+  pool: ReturnType<typeof getPool>,
+  sql: string,
+  fallback: T,
+  statementTimeoutSeconds = 5,
+): Promise<T> {
+  const timeoutSql = dashboardSupportsStatementTimeout !== false
+    ? withStatementTimeout(sql, statementTimeoutSeconds)
+    : sql;
+
   try {
-    const [rows] = await pool.query(sql);
+    const [rows] = await pool.query(timeoutSql);
+    if (timeoutSql !== sql) dashboardSupportsStatementTimeout = true;
     return rows as T;
-  } catch {
+  } catch (error: any) {
+    if (timeoutSql !== sql && dashboardSupportsStatementTimeout !== false) {
+      const msg = String(error?.message || '').toLowerCase();
+      if (msg.includes('max_statement_time') || msg.includes('syntax')) {
+        dashboardSupportsStatementTimeout = false;
+        try {
+          const [rows] = await pool.query(sql);
+          return rows as T;
+        } catch {
+          return fallback;
+        }
+      }
+    }
     return fallback;
   }
 }
