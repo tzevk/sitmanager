@@ -125,6 +125,13 @@ function fromBulletEditorValue(raw: string | null | undefined): string | null {
   return lines.length ? lines.join('\n') : null;
 }
 
+function getCityFromLeadFields(fields: Record<string, string | null> | undefined): string | null {
+  if (!fields) return null;
+  const rawCity = fields.city ?? fields.location ?? fields.your_location ?? null;
+  const city = String(rawCity ?? '').trim();
+  return city || null;
+}
+
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
   try {
@@ -179,62 +186,73 @@ function getInitials(name: string | null | undefined): string {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
-function statusPill(id: number | null, label: string) {
+// Maps FALLBACK_STATUSES IDs to semantic color groups.
+// Emerald = admitted/positive; Blue = new/inquiry; Orange = interested/hot;
+// Amber = follow-up/pending/on-hold; Red = cancelled/lost; Purple = demo/prospective;
+// Gray = duplicate; Slate = transfer/misc
+function statusColor(id: number | null, label: string): 'emerald' | 'blue' | 'orange' | 'amber' | 'red' | 'purple' | 'gray' | 'slate' {
   if (id != null) {
-    if ([7,10,27].includes(id)) return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
-    if ([1,2,3].includes(id)) return 'bg-blue-100 text-blue-700 border border-blue-200';
-    if ([5,24].includes(id)) return 'bg-orange-100 text-orange-700 border border-orange-200';
-    if ([4,15,25].includes(id)) return 'bg-amber-100 text-amber-700 border border-amber-200';
-    if ([6,9,19,29,34].includes(id)) return 'bg-red-100 text-red-600 border border-red-200';
-    if ([8,33].includes(id)) return 'bg-gray-100 text-gray-500 border border-gray-200';
-    if ([35].includes(id)) return 'bg-indigo-100 text-indigo-700 border border-indigo-200';
-    if ([12,16].includes(id)) return 'bg-purple-100 text-purple-700 border border-purple-200';
-    if ([18,26].includes(id)) return 'bg-slate-100 text-slate-500 border border-slate-200';
+    // Admitted / positive outcomes
+    if ([3, 6, 8, 34, 40].includes(id)) return 'emerald';
+    // New / inquiry / online
+    if ([0, 13, 15, 19, 26, 29].includes(id)) return 'blue';
+    // Interested / hot / batch started
+    if ([2, 5].includes(id)) return 'orange';
+    // Follow up / on hold / fees pending / document pending
+    if ([1, 10, 23, 24].includes(id)) return 'amber';
+    // Cancelled / not interested / left / refund
+    if ([4, 7, 9, 35].includes(id)) return 'red';
+    // Demo / prospective / walk-in demo
+    if ([12, 16, 17].includes(id)) return 'purple';
+    // Duplicate / neutral
+    if ([27].includes(id)) return 'gray';
+    // Transfer / need-based / misc
+    if ([25, 18, 26, 33].includes(id)) return 'slate';
   }
   const l = label.toLowerCase();
-  if (['admitted','converted','enrolled'].includes(l)) return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
-  if (['inquiry','new','contacted'].includes(l)) return 'bg-blue-100 text-blue-700 border border-blue-200';
-  if (['hot lead','interested'].includes(l)) return 'bg-orange-100 text-orange-700 border border-orange-200';
-  if (['warm lead','follow up','callback'].includes(l)) return 'bg-amber-100 text-amber-700 border border-amber-200';
-  if (['not interested','lost','dropped','dnc'].includes(l)) return 'bg-red-100 text-red-600 border border-red-200';
+  if (l.includes('admitted') || l.includes('enrolled') || l.includes('confirm') || l.includes('complete')) return 'emerald';
+  if (l.includes('not interested') || l.includes('cancel') || l.includes('lost') || l.includes('dropped') || l.includes('dnc')) return 'red';
+  if (l.includes('interested') || l.includes('hot')) return 'orange';
+  if (l.includes('follow') || l.includes('pending') || l.includes('hold') || l.includes('callback')) return 'amber';
+  if (l.includes('demo') || l.includes('prospective') || l.includes('walk')) return 'purple';
+  if (l.includes('duplicate')) return 'gray';
+  if (l.includes('inquiry') || l.includes('new') || l.includes('online')) return 'blue';
+  return 'gray';
+}
+
+function statusPill(id: number | null, label: string) {
+  const c = statusColor(id, label);
+  if (c === 'emerald') return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+  if (c === 'blue')    return 'bg-blue-100 text-blue-700 border border-blue-200';
+  if (c === 'orange')  return 'bg-orange-100 text-orange-700 border border-orange-200';
+  if (c === 'amber')   return 'bg-amber-100 text-amber-700 border border-amber-200';
+  if (c === 'red')     return 'bg-red-100 text-red-600 border border-red-200';
+  if (c === 'purple')  return 'bg-purple-100 text-purple-700 border border-purple-200';
+  if (c === 'slate')   return 'bg-slate-100 text-slate-500 border border-slate-200';
   return 'bg-gray-100 text-gray-500 border border-gray-200';
 }
 
 function statusBar(id: number | null, label: string) {
-  if (id != null) {
-    if ([7,10,27].includes(id)) return 'bg-emerald-400';
-    if ([1,2,3].includes(id)) return 'bg-blue-400';
-    if ([5,24].includes(id)) return 'bg-orange-400';
-    if ([4,15,25].includes(id)) return 'bg-amber-400';
-    if ([6,9,19,29,34].includes(id)) return 'bg-red-400';
-    if ([35].includes(id)) return 'bg-indigo-400';
-    if ([12,16].includes(id)) return 'bg-purple-400';
-    if ([18,26].includes(id)) return 'bg-slate-400';
-  }
-  const l = label.toLowerCase();
-  if (['admitted','converted','enrolled'].includes(l)) return 'bg-emerald-400';
-  if (['hot lead','interested'].includes(l)) return 'bg-orange-400';
-  if (['warm lead','follow up','callback'].includes(l)) return 'bg-amber-400';
-  if (['not interested','lost','dropped','dnc'].includes(l)) return 'bg-red-400';
+  const c = statusColor(id, label);
+  if (c === 'emerald') return 'bg-emerald-400';
+  if (c === 'blue')    return 'bg-blue-400';
+  if (c === 'orange')  return 'bg-orange-400';
+  if (c === 'amber')   return 'bg-amber-400';
+  if (c === 'red')     return 'bg-red-400';
+  if (c === 'purple')  return 'bg-purple-400';
+  if (c === 'slate')   return 'bg-slate-400';
   return 'bg-slate-300';
 }
 
 function rowBg(id: number | null, label: string) {
-  if (id != null) {
-    if ([7,10,27].includes(id)) return 'bg-emerald-50/60 hover:bg-emerald-100/70';
-    if ([1,2,3].includes(id)) return 'bg-blue-50/60 hover:bg-blue-100/70';
-    if ([5,24].includes(id)) return 'bg-orange-50/60 hover:bg-orange-100/70';
-    if ([4,15,25].includes(id)) return 'bg-amber-50/60 hover:bg-amber-100/70';
-    if ([6,9,19,29,34].includes(id)) return 'bg-red-50/60 hover:bg-red-100/70';
-    if ([35].includes(id)) return 'bg-indigo-50/60 hover:bg-indigo-100/70';
-    if ([12,16].includes(id)) return 'bg-purple-50/60 hover:bg-purple-100/70';
-    if ([18,26].includes(id)) return 'bg-slate-50/60 hover:bg-slate-100/70';
-  }
-  const l = label.toLowerCase();
-  if (['admitted','converted','enrolled'].includes(l)) return 'bg-emerald-50/60 hover:bg-emerald-100/70';
-  if (['hot lead','interested'].includes(l)) return 'bg-orange-50/60 hover:bg-orange-100/70';
-  if (['warm lead','follow up','callback'].includes(l)) return 'bg-amber-50/60 hover:bg-amber-100/70';
-  if (['not interested','lost','dropped','dnc'].includes(l)) return 'bg-red-50/60 hover:bg-red-100/70';
+  const c = statusColor(id, label);
+  if (c === 'emerald') return 'bg-emerald-50/60 hover:bg-emerald-100/70';
+  if (c === 'blue')    return 'bg-blue-50/60 hover:bg-blue-100/70';
+  if (c === 'orange')  return 'bg-orange-50/60 hover:bg-orange-100/70';
+  if (c === 'amber')   return 'bg-amber-50/60 hover:bg-amber-100/70';
+  if (c === 'red')     return 'bg-red-50/60 hover:bg-red-100/70';
+  if (c === 'purple')  return 'bg-purple-50/60 hover:bg-purple-100/70';
+  if (c === 'slate')   return 'bg-slate-50/60 hover:bg-slate-100/70';
   return 'hover:bg-slate-50/70';
 }
 
@@ -660,7 +678,11 @@ export default function MetaLeadsPage() {
   }, [updateRowDraft]);
 
   const saveRow = useCallback(async (row: InquiryRow) => {
-    if (!canUpdate || !row.MetaLead_Id) return;
+    if (!row.MetaLead_Id) return;
+    if (!canUpdate) {
+      setConvertError('You do not have permission to update Meta leads.');
+      return;
+    }
     const draft = rowDrafts[row.MetaLead_Id];
     if (!draft) return;
     setConvertError('');
@@ -681,9 +703,17 @@ export default function MetaLeadsPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Failed to save lead changes');
-      const updated = data?.lead as InquiryRow | undefined;
+      const updated = data?.lead as (InquiryRow & { Fields?: Record<string, string | null> }) | undefined;
       if (!updated) throw new Error('Lead updated but response was empty');
-      setRows((prev) => prev.map((item) => item.MetaLead_Id === row.MetaLead_Id ? { ...item, ...updated } : item));
+      const cityFromFields = getCityFromLeadFields(updated.Fields);
+      setRows((prev) => prev.map((item) => {
+        if (item.MetaLead_Id !== row.MetaLead_Id) return item;
+        return {
+          ...item,
+          ...updated,
+          City: cityFromFields ?? item.City,
+        };
+      }));
     } catch (error: unknown) {
       setConvertError(error instanceof Error ? error.message : 'Failed to save lead changes');
     } finally {
