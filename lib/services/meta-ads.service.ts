@@ -167,6 +167,7 @@ export interface MetaLeadListRow {
   LeadTags: string[];
   IsDuplicateLead: boolean;
   ApplicantEmailSentAt: string | null;
+  City: string | null;
 }
 
 export interface MetaLeadListResult {
@@ -220,6 +221,7 @@ export interface MetaLeadUpdateInput {
   courseName?: string | null;
   mobile?: string | null;
   email?: string | null;
+  city?: string | null;
   discussion?: string | null;
   fields?: Record<string, string | null>;
   utm?: Record<string, string | null>;
@@ -521,6 +523,22 @@ async function resolveInquiryTableName(pool: ReturnType<typeof getPool>): Promis
   }
 
   return inquiryTableNameCache;
+}
+
+async function hasTableColumn(
+  pool: ReturnType<typeof getPool>,
+  tableName: string,
+  columnName: string
+): Promise<boolean> {
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) as cnt
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?
+       AND COLUMN_NAME = ?`,
+    [tableName, columnName]
+  );
+  return Number((rows as any[])[0]?.cnt || 0) > 0;
 }
 
 function normalizeMetaGraphError(payload: unknown, fallback: string): string {
@@ -2695,6 +2713,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
          COALESCE(NULLIF(TRIM(m.campaign_name),''), NULLIF(TRIM(m.campaign_id),'')) AS MetaCampaignName,
          NULLIF(TRIM(m.form_name),'') AS MetaFormName,
          m.tags_json AS LeadTagsJson,
+         m.fields_json AS FieldsJson,
          m.duplicate_of_inquiry_id IS NOT NULL AS IsDuplicateLead,
          CAST(m.applicant_email_sent_at AS CHAR) AS ApplicantEmailSentAt
        FROM ${META_LEADS_TABLE} m
@@ -2762,6 +2781,19 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
       tags = [];
     }
 
+    let fields: Record<string, string | null> = {};
+    try {
+      const parsed = JSON.parse(row.FieldsJson || '{}');
+      fields = parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {}
+
+    const city: string | null =
+      (fields['city'] as string | null) ||
+      (fields['location'] as string | null) ||
+      tags.find((t) => t.startsWith('city:'))?.slice('city:'.length) ||
+      tags.find((t) => t.startsWith('location:'))?.slice('location:'.length) ||
+      null;
+
     const statusIdNum = row.Status_id == null ? null : Number(row.Status_id);
     const discussion = row.Discussion ?? null;
     return {
@@ -2783,6 +2815,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
       LeadTags: tags,
       IsDuplicateLead: Boolean(row.IsDuplicateLead),
       ApplicantEmailSentAt: row.ApplicantEmailSentAt ?? null,
+      City: city ? String(city).trim() || null : null,
     };
   });
 
@@ -2955,7 +2988,10 @@ export async function updateMetaLeadDetail(metaLeadId: string, input: MetaLeadUp
     existingUtm = parsed && typeof parsed === 'object' ? parsed : {};
   } catch {}
 
-  const nextFields = input.fields ?? existingFields;
+  const nextFields = { ...(input.fields ?? existingFields) };
+  if (input.city !== undefined) {
+    nextFields['city'] = input.city ? input.city.trim() || null : null;
+  }
   const nextUtm = input.utm ?? existingUtm;
   const ctx: MetaLeadContext = {
     formId: normalizeText(row.form_id),
@@ -3219,11 +3255,19 @@ export interface DiscussionEntry {
 export async function getMetaLeadDiscussions(metaLeadId: string): Promise<DiscussionEntry[]> {
   await ensureMetaLeadTables();
   const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
+  const hasStudentIdColumn = await hasTableColumn(pool, 'awt_inquirydiscussion', 'student_id');
+  const hasNextDateColumn = await hasTableColumn(pool, 'awt_inquirydiscussion', 'nextdate');
+  const nextDateSelect = hasNextDateColumn ? 'd.nextdate AS nextDate' : 'NULL AS nextDate';
+  const studentJoin = hasStudentIdColumn ? 'OR (d.student_id IS NOT NULL AND d.student_id = si.Student_Id)' : '';
   const [rows] = await pool.query(
-    `SELECT d.id, d.date, d.nextdate AS nextDate, d.discussion AS note, d.created_date AS createdAt
+    `SELECT d.id, d.date, ${nextDateSelect}, d.discussion AS note, d.created_date AS createdAt
      FROM awt_inquirydiscussion d
      INNER JOIN ${META_LEADS_TABLE} m ON m.inquiry_id = d.Inquiry_id
-     WHERE m.meta_lead_id = ? AND d.deleted = 0
+     LEFT JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
+     WHERE m.meta_lead_id = ?
+       AND (d.deleted = 0 OR d.deleted IS NULL)
+       AND (d.Inquiry_id = m.inquiry_id ${studentJoin})
      ORDER BY d.id DESC`,
     [metaLeadId]
   );
@@ -3264,10 +3308,53 @@ export async function addMetaLeadDiscussionNote(
     throw new Error('Unable to link this Meta lead to an inquiry. Please convert the lead and try again.');
   }
 
+  const inquiryTable = await resolveInquiryTableName(pool);
+  const [inquiryRows] = await pool.query(
+    `SELECT Inquiry_Id, Student_Id
+     FROM \`${inquiryTable}\`
+     WHERE Inquiry_Id = ? OR Student_Id = ?
+     ORDER BY Inquiry_Id DESC
+     LIMIT 1`,
+    [lead.inquiry_id, lead.inquiry_id]
+  );
+  const inquiry = (inquiryRows as any[])[0] || {};
+  const canonicalInquiryId = Number(inquiry.Inquiry_Id || lead.inquiry_id);
+  const canonicalStudentId = inquiry.Student_Id == null ? null : Number(inquiry.Student_Id);
+
+  const hasStudentIdColumn = await hasTableColumn(pool, 'awt_inquirydiscussion', 'student_id');
+  const hasNextDateColumn = await hasTableColumn(pool, 'awt_inquirydiscussion', 'nextdate');
   const safeNext = nextDate && /^\d{4}-\d{2}-\d{2}$/.test(nextDate) ? nextDate : null;
+
+  if (hasStudentIdColumn && hasNextDateColumn) {
+    await pool.query(
+      `INSERT INTO awt_inquirydiscussion (Inquiry_id, student_id, date, nextdate, discussion, deleted, created_by, created_date)
+       VALUES (?, ?, CURDATE(), ?, ?, 0, 1, NOW())`,
+      [canonicalInquiryId, canonicalStudentId, safeNext, note.trim()]
+    );
+  } else if (hasStudentIdColumn) {
+    await pool.query(
+      `INSERT INTO awt_inquirydiscussion (Inquiry_id, student_id, date, discussion, deleted, created_by, created_date)
+       VALUES (?, ?, CURDATE(), ?, 0, 1, NOW())`,
+      [canonicalInquiryId, canonicalStudentId, note.trim()]
+    );
+  } else if (hasNextDateColumn) {
+    await pool.query(
+      `INSERT INTO awt_inquirydiscussion (Inquiry_id, date, nextdate, discussion, deleted, created_by, created_date)
+       VALUES (?, CURDATE(), ?, ?, 0, 1, NOW())`,
+      [canonicalInquiryId, safeNext, note.trim()]
+    );
+  } else {
+    await pool.query(
+      `INSERT INTO awt_inquirydiscussion (Inquiry_id, date, discussion, deleted, created_by, created_date)
+       VALUES (?, CURDATE(), ?, 0, 1, NOW())`,
+      [canonicalInquiryId, note.trim()]
+    );
+  }
+
   await pool.query(
-    `INSERT INTO awt_inquirydiscussion (Inquiry_id, date, nextdate, discussion, deleted, created_by, created_date)
-     VALUES (?, CURDATE(), ?, ?, 0, 1, NOW())`,
-    [lead.inquiry_id, safeNext, note.trim()]
+    `UPDATE \`${inquiryTable}\`
+     SET Discussion = ?
+     WHERE Inquiry_Id = ?`,
+    [note.trim(), canonicalInquiryId]
   );
 }

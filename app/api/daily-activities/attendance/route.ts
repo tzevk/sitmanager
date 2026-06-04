@@ -221,13 +221,19 @@ export async function POST(req: NextRequest) {
     await ensureAttendanceTable(pool);
 
     const body = await req.json();
-    const { batchId, date, session: sessionRaw, records } = body as {
+    const { batchId, date, session: sessionRaw, records, trainerId, trainerTimeFrom, trainerTimeTo } = body as {
       batchId: number;
       date: string;
       session?: 'first_half' | 'second_half';
       records: { studentId: number; admissionId: number; status: 'P' | 'A' | 'L'; In_Time?: string; Out_Time?: string }[];
+      trainerId?: number | string | null;
+      trainerTimeFrom?: string | null;
+      trainerTimeTo?: string | null;
     };
     const session = sessionRaw === 'second_half' ? 'second_half' : 'first_half';
+    const normalizedTrainerId = Number.isFinite(Number(trainerId)) && Number(trainerId) > 0 ? Number(trainerId) : null;
+    const normalizedTrainerTimeFrom = trainerTimeFrom || null;
+    const normalizedTrainerTimeTo = trainerTimeTo || null;
 
     if (!batchId || !date || !Array.isArray(records) || records.length === 0) {
       return NextResponse.json({ error: 'batchId, date and records are required' }, { status: 400 });
@@ -278,11 +284,20 @@ export async function POST(req: NextRequest) {
       if (!takeId) {
         const [ins] = await conn.query<any>(
           `INSERT INTO lecture_taken_master
-             (Course_Id, Batch_Id, Take_Dt, Lecture_Start, IsActive, IsDelete)
-           VALUES (?, ?, ?, ?, 1, 0)`,
-          [courseId, batchId, date, lectureStart]
+             (Course_Id, Batch_Id, Faculty_Id, Take_Dt, Lecture_Start, Faculty_Start, Faculty_End, IsActive, IsDelete)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+          [courseId, batchId, normalizedTrainerId, date, lectureStart, normalizedTrainerTimeFrom, normalizedTrainerTimeTo]
         );
         takeId = ins.insertId;
+      } else {
+        await conn.query(
+          `UPDATE lecture_taken_master
+           SET Faculty_Id = ?,
+               Faculty_Start = ?,
+               Faculty_End = ?
+           WHERE Take_Id = ?`,
+          [normalizedTrainerId, normalizedTrainerTimeFrom, normalizedTrainerTimeTo, takeId]
+        );
       }
 
       // Get student names in bulk

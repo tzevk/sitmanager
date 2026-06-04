@@ -25,7 +25,7 @@ async function runSync(req: NextRequest) {
   }
 
   const sinceHoursRaw = Number(req.nextUrl.searchParams.get('sinceHours') || process.env.SUVIDYA_PUNE_INQUIRY_SYNC_SINCE_HOURS || process.env.SUVIDYA_INQUIRY_SYNC_SINCE_HOURS || '0');
-  const maxRecordsRaw = Number(req.nextUrl.searchParams.get('maxRecords') || process.env.SUVIDYA_PUNE_INQUIRY_SYNC_MAX_RECORDS || process.env.SUVIDYA_INQUIRY_SYNC_MAX_RECORDS || '250');
+  const maxRecordsRaw = Number(req.nextUrl.searchParams.get('maxRecords') || process.env.SUVIDYA_PUNE_INQUIRY_SYNC_MAX_RECORDS || process.env.SUVIDYA_INQUIRY_SYNC_MAX_RECORDS || '2000');
 
   const sinceHours = Number.isFinite(sinceHoursRaw) && sinceHoursRaw > 0 ? sinceHoursRaw : undefined;
   const maxRecords = Number.isFinite(maxRecordsRaw) && maxRecordsRaw > 0 ? Math.trunc(maxRecordsRaw) : undefined;

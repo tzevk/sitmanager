@@ -25,7 +25,7 @@ async function runSync(req: NextRequest) {
   }
 
   const sinceHoursRaw = Number(req.nextUrl.searchParams.get('sinceHours') || process.env.SUVIDYA_INQUIRY_SYNC_SINCE_HOURS || '0');
-  const maxRecordsRaw = Number(req.nextUrl.searchParams.get('maxRecords') || process.env.SUVIDYA_INQUIRY_SYNC_MAX_RECORDS || '250');
+  const maxRecordsRaw = Number(req.nextUrl.searchParams.get('maxRecords') || process.env.SUVIDYA_INQUIRY_SYNC_MAX_RECORDS || '2000');
   const puneOnlyRaw = (req.nextUrl.searchParams.get('puneOnly') || process.env.SUVIDYA_INQUIRY_SYNC_PUNE_ONLY || '').trim().toLowerCase();
 
   const sinceHours = Number.isFinite(sinceHoursRaw) && sinceHoursRaw > 0 ? sinceHoursRaw : undefined;

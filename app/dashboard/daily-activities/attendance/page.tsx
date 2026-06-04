@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { PermissionGate } from '@/components/ui/PermissionGate';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 /* ─── Types ───────────────────────────────────────────────────────── */
 interface Course  { Course_Id: number; Course_Name: string }
@@ -86,6 +88,26 @@ function formatTime12Hour(value: string) {
   return `${parts.hour}:${parts.minute} ${parts.period}`;
 }
 
+async function loadImageAsDataUrl(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') resolve(reader.result);
+        else reject(new Error('Failed to load image'));
+      };
+      reader.onerror = () => reject(new Error('Failed to read image blob'));
+      reader.readAsDataURL(blob);
+    });
+    return dataUrl;
+  } catch {
+    return null;
+  }
+}
+
 function TimePicker({
   label,
   value,
@@ -154,6 +176,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   const [batchId, setBatchId]   = useState('');
   const [date, setDate]         = useState(todayStr());
   const [trainerId, setTrainerId] = useState('');
+  const [trainerSearch, setTrainerSearch] = useState('');
   const [trainerTimeFrom, setTrainerTimeFrom] = useState('');
   const [trainerTimeTo, setTrainerTimeTo] = useState('');
 
@@ -210,6 +233,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     setFeedbackLinks([]);
     setCopiedFeedbackUrl('');
     setTrainerId('');
+    setTrainerSearch('');
     setTrainerTimeFrom('');
     setTrainerTimeTo('');
   }, [batchId, date]);
@@ -339,14 +363,30 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
         fetch('/api/daily-activities/attendance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ batchId: Number(batchId), date, session: 'first_half', records: fhRecords }),
+          body: JSON.stringify({
+            batchId: Number(batchId),
+            date,
+            session: 'first_half',
+            records: fhRecords,
+            trainerId: trainerId || null,
+            trainerTimeFrom: trainerTimeFrom || null,
+            trainerTimeTo: trainerTimeTo || null,
+          }),
         })
       );
       if (shRecords.length) posts.push(
         fetch('/api/daily-activities/attendance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ batchId: Number(batchId), date, session: 'second_half', records: shRecords }),
+          body: JSON.stringify({
+            batchId: Number(batchId),
+            date,
+            session: 'second_half',
+            records: shRecords,
+            trainerId: trainerId || null,
+            trainerTimeFrom: trainerTimeFrom || null,
+            trainerTimeTo: trainerTimeTo || null,
+          }),
         })
       );
       const results = await Promise.all(posts);
@@ -391,6 +431,168 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     }
   };
 
+  const exportExcel = useCallback(async () => {
+    if (!students.length) return;
+
+    let exportFeedbackMap: Record<string, StudentFeedback> = feedbackMap;
+    if (!Object.keys(exportFeedbackMap).length && batchId && date) {
+      try {
+        const fbRes = await fetch(`/api/daily-activities/attendance/feedback-reports?batchId=${batchId}&date=${date}`);
+        if (fbRes.ok) {
+          const fbData = await fbRes.json();
+          if (fbData?.feedback && typeof fbData.feedback === 'object') {
+            exportFeedbackMap = fbData.feedback as Record<string, StudentFeedback>;
+          }
+        }
+      } catch {
+        // Non-critical: keep export working even if feedback fetch fails.
+      }
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'SIT Manager';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('Attendance Sheet');
+    sheet.getColumn('A').width = 8;
+    sheet.getColumn('B').width = 12;
+    sheet.getColumn('C').width = 28;
+    sheet.getColumn('D').width = 16;
+    sheet.getColumn('E').width = 14;
+    sheet.getColumn('F').width = 14;
+    sheet.getColumn('G').width = 44;
+
+    const titleCell = sheet.getCell('B1');
+    titleCell.value = 'Suvidya Institute of Technology';
+    titleCell.font = { bold: true, size: 14, color: { argb: 'FF1F2A78' } };
+
+    sheet.getCell('B2').value = 'Attendance Register';
+    sheet.getCell('B2').font = { bold: true, size: 12, color: { argb: 'FF2E3093' } };
+
+    sheet.mergeCells('F1:G1');
+    const formIdCell = sheet.getCell('F1');
+    formIdCell.value = 'Form ID: F/TD/05/01';
+    formIdCell.font = { bold: true, size: 10, color: { argb: 'FF1F2937' } };
+    formIdCell.alignment = { horizontal: 'right', vertical: 'middle' };
+
+    const selectedCourse = courses.find((c) => String(c.Course_Id) === courseId)?.Course_Name || '—';
+    const selectedBatchObj = batches.find((b) => String(b.Batch_Id) === batchId);
+    const selectedTrainer = faculties.find((f) => String(f.Faculty_Id) === trainerId)?.Faculty_Name || '—';
+
+    sheet.getCell('B4').value = `Course: ${selectedCourse}`;
+    sheet.getCell('D4').value = `Batch: ${selectedBatchObj?.Batch_code || '—'}`;
+    sheet.getCell('F4').value = `Date: ${new Date(`${date}T00:00:00`).toLocaleDateString('en-IN')}`;
+    sheet.getCell('B5').value = `Trainer: ${selectedTrainer}`;
+    sheet.getCell('D5').value = `Time: ${formatTime12Hour(trainerTimeFrom)} - ${formatTime12Hour(trainerTimeTo)}`;
+
+    const logoData = await loadImageAsDataUrl('/sit.png');
+    if (logoData) {
+      const imageId = workbook.addImage({ base64: logoData, extension: 'png' });
+      sheet.addImage(imageId, {
+        tl: { col: 0, row: 0 },
+        ext: { width: 110, height: 48 },
+      });
+    }
+
+    const headerRowNumber = 7;
+    const headerLabels = [
+      'Sr',
+      'Roll No',
+      'Student Name',
+      'Mobile',
+      'First Half',
+      'Second Half',
+      'Feedback',
+    ];
+    const headerRow = sheet.getRow(headerRowNumber);
+    headerLabels.forEach((label, index) => {
+      const cell = headerRow.getCell(index + 1);
+      cell.value = label;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E3093' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF1F2A78' } },
+        left: { style: 'thin', color: { argb: 'FF1F2A78' } },
+        bottom: { style: 'thin', color: { argb: 'FF1F2A78' } },
+        right: { style: 'thin', color: { argb: 'FF1F2A78' } },
+      };
+    });
+    headerRow.height = 22;
+
+    students.forEach((student, index) => {
+      const rowNumber = headerRowNumber + 1 + index;
+      const row = sheet.getRow(rowNumber);
+      const firstHalf = statusMapFH[student.Student_Id] || '';
+      const secondHalf = statusMapSH[student.Student_Id] || '';
+      const feedback = student.rollNo ? exportFeedbackMap[student.rollNo] : undefined;
+      const fhFeedback = feedback?.firstHalf?.rating ? String(feedback.firstHalf.rating) : '—';
+      const shFeedback = feedback?.secondHalf?.rating ? String(feedback.secondHalf.rating) : '—';
+      const fhComments = feedback?.firstHalf?.comments?.trim() || '';
+      const shComments = feedback?.secondHalf?.comments?.trim() || '';
+      const feedbackSummary = [
+        fhFeedback !== '—' || fhComments ? `FH: ${fhFeedback}${fhComments ? ` (${fhComments})` : ''}` : '',
+        shFeedback !== '—' || shComments ? `SH: ${shFeedback}${shComments ? ` (${shComments})` : ''}` : '',
+      ].filter(Boolean).join(' | ') || '—';
+      const values = [
+        index + 1,
+        student.rollNo || '—',
+        student.studentName,
+        student.mobile || '—',
+        firstHalf || '—',
+        secondHalf || '—',
+        feedbackSummary,
+      ];
+
+      values.forEach((value, colIndex) => {
+        const cell = row.getCell(colIndex + 1);
+        cell.value = value;
+        const isCenterCol = [0, 1, 4, 5].includes(colIndex);
+        cell.alignment = {
+          horizontal: isCenterCol ? 'center' : 'left',
+          vertical: 'middle',
+          wrapText: colIndex === 6,
+        };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+          left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+          bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+          right: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+        };
+      });
+
+      const applyStatusColor = (cellRef: string, status: string) => {
+        const statusCell = sheet.getCell(cellRef);
+        if (status === 'P') {
+          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+          statusCell.font = { bold: true, color: { argb: 'FF065F46' } };
+        } else if (status === 'A') {
+          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+          statusCell.font = { bold: true, color: { argb: 'FFB91C1C' } };
+        } else if (status === 'L') {
+          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
+          statusCell.font = { bold: true, color: { argb: 'FF92400E' } };
+        }
+      };
+
+      applyStatusColor(`E${rowNumber}`, firstHalf);
+      applyStatusColor(`F${rowNumber}`, secondHalf);
+
+      if (feedbackSummary !== '—') {
+        const feedbackCell = sheet.getCell(`G${rowNumber}`);
+        feedbackCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFBEB' } };
+        feedbackCell.font = { color: { argb: 'FF854D0E' } };
+      }
+    });
+
+    const filenameDate = date.replaceAll('-', '');
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(
+      new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+      `Attendance_${selectedBatchObj?.Batch_code || 'batch'}_${filenameDate}.xlsx`
+    );
+  }, [students, statusMapFH, statusMapSH, feedbackMap, courses, courseId, batches, batchId, faculties, trainerId, date, trainerTimeFrom, trainerTimeTo]);
+
   /* derived */
   const filtered = students.filter(s =>
     !search ||
@@ -409,6 +611,9 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   const fhPct      = pct(fhPresent, students.length);
   const shPct      = pct(shPresent, students.length);
   const selectedBatch = batches.find(b => String(b.Batch_Id) === batchId);
+  const filteredFaculties = faculties.filter((faculty) =>
+    !trainerSearch || faculty.Faculty_Name.toLowerCase().includes(trainerSearch.toLowerCase())
+  );
 
   const ctrlCls = 'border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-800 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]';
 
@@ -432,6 +637,15 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
           </div>
 
           <div className="flex items-center gap-2">
+            {loaded && students.length > 0 && (
+              <button
+                onClick={exportExcel}
+                className="inline-flex w-full sm:w-auto justify-center items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg border border-white/50 text-white hover:bg-white/10 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 11v6m0 0l-3-3m3 3l3-3M7 4h7l5 5v10a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" /></svg>
+                Export Excel
+              </button>
+            )}
             {canCreate && loaded && students.length > 0 && (
               <button
                 onClick={save}
@@ -489,9 +703,16 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
 
           <div className="flex flex-col gap-1 w-full sm:w-auto sm:min-w-[220px]">
             <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Trainer</label>
+            <input
+              type="text"
+              value={trainerSearch}
+              onChange={(e) => setTrainerSearch(e.target.value)}
+              placeholder="Search trainer..."
+              className={`${ctrlCls} sm:hidden`}
+            />
             <select value={trainerId} onChange={e => setTrainerId(e.target.value)} className={ctrlCls}>
               <option value="">— Select Trainer —</option>
-              {faculties.map((faculty) => (
+              {filteredFaculties.map((faculty) => (
                 <option key={faculty.Faculty_Id} value={faculty.Faculty_Id}>{faculty.Faculty_Name}</option>
               ))}
             </select>

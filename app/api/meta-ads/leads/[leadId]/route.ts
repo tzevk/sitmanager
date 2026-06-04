@@ -39,6 +39,7 @@ export async function PATCH(
       courseName: typeof body?.courseName === 'string' ? body.courseName : null,
       mobile: typeof body?.mobile === 'string' ? body.mobile : null,
       email: typeof body?.email === 'string' ? body.email : null,
+      city: typeof body?.city === 'string' ? body.city : undefined,
       discussion: typeof body?.discussion === 'string' ? body.discussion : null,
       fields: body?.fields && typeof body.fields === 'object' ? body.fields : undefined,
       utm: body?.utm && typeof body.utm === 'object' ? body.utm : undefined,

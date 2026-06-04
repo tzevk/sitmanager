@@ -8,7 +8,7 @@
   "crons": [
     {
       "path": "/api/cron/meta-leads-refresh",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/2 * * * *"
     },
     {
       "path": "/api/cron/db-connection-cleanup",
@@ -16,11 +16,11 @@
     },
     {
       "path": "/api/cron/suvidya-inquiry-sync",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/2 * * * *"
     },
     {
       "path": "/api/cron/suvidya-inquiry-sync-pune",
-      "schedule": "2-59/5 * * * *"
+      "schedule": "1-59/2 * * * *"
     },
     {
       "path": "/api/cron/meta-batch-recommendations",

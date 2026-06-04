@@ -74,12 +74,21 @@ function normalizePhoneText(value: unknown): string | null {
   const digits = text.replace(/\D/g, '');
   if (!digits) return null;
 
-  // The upstream source sometimes overflows phone values into signed int32 max.
-  if (digits === '2147483647') return null;
+  // Filter overflow / garbage values the legacy source sometimes emits.
+  if (digits === '2147483647' || digits === '9999999999' || /^0+$/.test(digits)) return null;
 
-  if (digits.length < 10 || digits.length > 15) return null;
+  // Must have at least 10 digits to be a valid Indian mobile.
+  if (digits.length < 10) return null;
 
-  return /^\+?[0-9]+$/.test(text) ? text : digits;
+  // Strip country code: take the last 10 digits for Indian mobiles.
+  // e.g. "919876543210" (12 digits) → "9876543210"
+  //      "+91 98765 43210" (12 digits stripped) → "9876543210"
+  const normalized = digits.length > 10 ? digits.slice(-10) : digits;
+
+  // Reject sequences that are clearly not mobile numbers.
+  if (/^0+$/.test(normalized)) return null;
+
+  return normalized;
 }
 
 function normalizeCourseKey(value: string): string {
@@ -393,7 +402,14 @@ export async function syncSuvidyaInquiries(
     const scopedRecords = options.puneOnly
       ? filteredRecords.filter((record) => isPuneRecord(record))
       : filteredRecords;
-    const consideredRecords = maxRecords ? scopedRecords.slice(0, maxRecords) : scopedRecords;
+    // Sort newest-first before capping so the most recent leads are always processed
+    // even when the API returns more records than the safety limit allows.
+    const sortedRecords = scopedRecords.slice().sort((a, b) => {
+      const ta = parseSuvidyaDate(a.created_date)?.getTime() ?? 0;
+      const tb = parseSuvidyaDate(b.created_date)?.getTime() ?? 0;
+      return tb - ta;
+    });
+    const consideredRecords = maxRecords ? sortedRecords.slice(0, maxRecords) : sortedRecords;
 
     summary.fetched = allRecords.length;
     summary.considered = consideredRecords.length;
@@ -441,10 +457,10 @@ export async function syncSuvidyaInquiries(
 
       const email = normalizeText(record.email_id);
       const mobile = normalizePhoneText(
-      record.phone ?? record.mobile ?? record.phone_number ??
-      record.contact ?? record.contact_number ??
-      record.whatsapp ?? record.whatsapp_number
-    );
+        record.phone || record.mobile || record.phone_number ||
+        record.contact || record.contact_number ||
+        record.whatsapp || record.whatsapp_number
+      );
       const qualification = normalizeText(record.select_qualification);
       const location = normalizeText(record.your_location);
       const courseName = normalizeText(record.select_course);

@@ -24,7 +24,8 @@
       "Bash(curl -s -X POST http://localhost:3000/api/public/inquiry -H 'Content-Type: application/json' -d '{\"Student_Name\":\"Test User\",\"Qualification\":\"B.E.\",\"Discipline\":\"Mechanical\",\"Percentage\":60,\"Present_Mobile\":\"9999999999\",\"Email\":\"test@test.com\",\"Inquiry_Type\":\"Online Inquiry\"}')",
       "Bash(curl -s \"http://localhost:3000/api/online-admission\" -H \"Cookie: sit_session=test\")",
       "Bash(curl -s \"http://localhost:3000/api/online-admission\")",
-      "Bash(mkdir -p /Users/tanvikadam/Desktop/SIT/sitmanager/app/api/meta-ads/leads/\\\\[leadId\\\\]/discussions)"
+      "Bash(mkdir -p /Users/tanvikadam/Desktop/SIT/sitmanager/app/api/meta-ads/leads/\\\\[leadId\\\\]/discussions)",
+      "Bash(grep -E \"\\\\.ts$\")"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
