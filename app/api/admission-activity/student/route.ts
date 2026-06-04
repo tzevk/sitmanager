@@ -57,7 +57,12 @@ export async function GET(req: NextRequest) {
             AND (
               si_adm.OnlineState = 8
               OR IFNULL(si_adm.admission_done, 0) IN (1, 2)
-              OR LOWER(TRIM(CAST(COALESCE(si_adm.Admission,'') AS CHAR))) IN ('yes','y','1','true')
+              OR LOWER(TRIM(CAST(COALESCE(si_adm.Admission,'') AS CHAR))) IN (
+                'yes','y','1','true',
+                'admission taken','admissiontaken',
+                'admitted','done','complete','completed','taken'
+              )
+              OR LOWER(TRIM(CAST(COALESCE(si_adm.Admission,'') AS CHAR))) LIKE '%admission%'
             )
         )
       )`);

@@ -3,11 +3,26 @@ import { getDbEnv } from '@/lib/env';
 import { cache as sharedCache } from '@/lib/cache';
 
 declare global {
-  // eslint-disable-next-line no-var
   var __sitDbPool: mysql.Pool | undefined;
+  var __sitLegacyDbPool: mysql.Pool | undefined;
 }
 
 let pool: mysql.Pool | null = global.__sitDbPool ?? null;
+let legacyPool: mysql.Pool | null = global.__sitLegacyDbPool ?? null;
+let cleanupRegistered = false;
+
+function registerPoolCleanup() {
+  if (cleanupRegistered) return;
+  cleanupRegistered = true;
+
+  const cleanup = () => {
+    destroyAllPools().catch(() => {});
+  };
+
+  process.once('SIGINT', cleanup);
+  process.once('SIGTERM', cleanup);
+  process.once('beforeExit', cleanup);
+}
 
 export function getPool(): mysql.Pool {
   if (!pool) {
@@ -39,11 +54,7 @@ export function getPool(): mysql.Pool {
     });
 
     global.__sitDbPool = pool;
-
-    const cleanup = () => { destroyPool().catch(() => {}); };
-    process.once('SIGINT', cleanup);
-    process.once('SIGTERM', cleanup);
-    process.once('beforeExit', cleanup);
+    registerPoolCleanup();
   }
   return pool;
 }
@@ -54,6 +65,57 @@ export async function destroyPool(): Promise<void> {
     pool = null;
     global.__sitDbPool = undefined;
   }
+}
+
+export async function destroyLegacyPool(): Promise<void> {
+  if (legacyPool) {
+    await legacyPool.end();
+    legacyPool = null;
+    global.__sitLegacyDbPool = undefined;
+  }
+}
+
+export async function destroyAllPools(): Promise<void> {
+  await Promise.allSettled([
+    destroyPool(),
+    destroyLegacyPool(),
+  ]);
+}
+
+/**
+ * Returns a pool connected to the legacy (OLD_DB_*) database.
+ * Returns null if the legacy DB is not configured.
+ */
+export function getLegacyPool(): mysql.Pool | null {
+  const host = process.env.OLD_DB_HOST?.trim();
+  if (!host) return null;
+
+  if (!legacyPool) {
+    legacyPool = mysql.createPool({
+      host,
+      port: parseInt(process.env.OLD_DB_PORT || '3306', 10),
+      database: process.env.OLD_DB_NAME || '',
+      user: process.env.OLD_DB_USER || '',
+      password: process.env.OLD_DB_PASSWORD || '',
+      waitForConnections: true,
+      connectionLimit: 5,
+      maxIdle: 2,
+      idleTimeout: 60_000,
+      connectTimeout: 30_000,
+      dateStrings: true,
+    });
+
+    legacyPool.on('connection', (conn) => {
+      conn.on('error', (err) => {
+        console.error('[Legacy DB] connection error:', err.code);
+      });
+    });
+
+    global.__sitLegacyDbPool = legacyPool;
+    registerPoolCleanup();
+  }
+
+  return legacyPool;
 }
 
 // ── query / queryOne helpers ──────────────────────────────────────────────────

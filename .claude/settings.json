@@ -25,7 +25,9 @@
       "Bash(curl -s \"http://localhost:3000/api/online-admission\" -H \"Cookie: sit_session=test\")",
       "Bash(curl -s \"http://localhost:3000/api/online-admission\")",
       "Bash(mkdir -p /Users/tanvikadam/Desktop/SIT/sitmanager/app/api/meta-ads/leads/\\\\[leadId\\\\]/discussions)",
-      "Bash(grep -E \"\\\\.ts$\")"
+      "Bash(grep -E \"\\\\.ts$\")",
+      "Bash(node -e \"const p = require\\('/Users/tanvikadam/Desktop/SIT/sitmanager/node_modules/next/package.json'\\); console.log\\(p.version\\)\")",
+      "Read(//Users/tanvikadam/Users/tanvikadam/.claude/projects/-Users-tanvikadam-Desktop-SIT-sitmanager/memory/**)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
