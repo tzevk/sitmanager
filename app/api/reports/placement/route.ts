@@ -395,7 +395,7 @@ export async function GET(req: NextRequest) {
          b.Batch_code,
          b.SDate                                   AS Batch_Start,
          b.EDate                                   AS Batch_End,
-         fs.SitPerformance                         AS SIT_Performance,
+         NULLIF(NULLIF(TRIM(CAST(fs.SitPerformance AS CHAR)), ''), 'NULL') AS SIT_Performance,
          fs.PlacementRemark                        AS Placement_Remark,
          ci.Company,
          ci.Designation,

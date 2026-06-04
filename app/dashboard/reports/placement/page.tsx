@@ -488,8 +488,9 @@ function PlacementReportContent({ canExport }: { canExport: boolean }) {
                 <tbody className="divide-y divide-gray-50">
                   {rows.map((r, i) => {
                     const isPlaced = !!r.Company;
-                    const sitPct = r.SIT_Performance && r.SIT_Performance !== '0.00' && r.SIT_Performance !== 'NULL'
-                      ? parseFloat(r.SIT_Performance)
+                    const sitRaw = r.SIT_Performance == null ? '' : String(r.SIT_Performance).trim();
+                    const sitPct = sitRaw && sitRaw.toUpperCase() !== 'NULL'
+                      ? parseFloat(sitRaw)
                       : null;
                     const rowKey = `${r.Student_Id}-${r.Batch_code ?? ''}-${r.Company ?? ''}-${r.Designation ?? ''}-${i}`;
                     return (
@@ -548,7 +549,7 @@ function PlacementReportContent({ canExport }: { canExport: boolean }) {
                               : sitPct >= 50 ? 'bg-amber-50 text-amber-700'
                               : 'bg-red-50 text-red-600'
                             }`}>
-                              {r.SIT_Performance}%
+                              {sitRaw}%
                             </span>
                           ) : <span className="text-gray-300">—</span>}
                         </td>
