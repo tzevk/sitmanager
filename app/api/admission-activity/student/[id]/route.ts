@@ -322,62 +322,46 @@ export async function PUT(
     const resolvedCourseId = Course_Id ? parseInt(Course_Id) : null;
     const resolvedBatchCategoryId = await resolveBatchCategoryId(pool, resolvedBatchCode, Batch_Category_id || null);
 
-    // ── 1. Update student_master ──────────────────────────────────────────
+    // ── 1. Core UPDATE — columns guaranteed to exist in all deployments ───
     await pool.query(
       `UPDATE student_master SET
          Student_Name = ?,
-         FName = ?,
-         MName = ?,
-         LName = ?,
-         DOB = ?,
-         Sex = ?,
-         Nationality = ?,
-         Email = ?,
-         Present_Mobile = ?,
-         Present_Mobile2 = ?,
-         Present_Address = ?,
-         Present_City = ?,
-         Present_State = ?,
-         Present_Pin = ?,
-         Present_Country = ?,
+         DOB          = ?,
+         Sex          = ?,
+         Nationality  = ?,
+         Email        = ?,
+         Present_Mobile   = ?,
+         Present_Address  = ?,
+         Present_City     = ?,
+         Present_State    = ?,
+         Present_Pin      = ?,
+         Present_Country  = ?,
          Permanent_Address = ?,
-         Permanent_City = ?,
-         Permanent_Pin = ?,
-         Permanent_State = ?,
+         Permanent_City   = ?,
+         Permanent_Pin    = ?,
+         Permanent_State  = ?,
          Permanent_Country = ?,
-         Qualification = ?,
-         Discipline = ?,
-         Percentage = ?,
-         Course_Id = ?,
-         Batch_Code = ?,
+         Course_Id        = ?,
+         Batch_Code       = ?,
          Batch_Category_id = ?,
-         Company = ?,
-         Designation = ?,
-         Occupation = ?,
-         Total_Exp = ?,
-         Remark = ?,
-         Inquiry_From = ?,
-         Inquiry_Type = ?,
-         Inquiry_Dt = ?,
-         Admission_Dt = ?,
-         Status_id = ?,
-         Status_date = ?,
-         Login_Password = ?,
-         Refered_By = ?,
-         SitPerformance = ?,
-         PlacementRemark = ?
+         Qualification    = ?,
+         Percentage       = ?,
+         Company          = ?,
+         Occupation       = ?,
+         Total_Exp        = ?,
+         Remark           = ?,
+         Admission_Dt     = ?,
+         Status_id        = ?,
+         Status_date      = ?,
+         Refered_By       = ?
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
       [
         fullName,
-        FName || null,
-        MName || null,
-        LName || null,
         DOB || null,
         Sex || null,
         Nationality || null,
         Email || null,
         Present_Mobile || null,
-        Telephone || null,
         Present_Address || null,
         Present_City || null,
         Present_State || null,
@@ -388,30 +372,50 @@ export async function PUT(
         Permanent_Pin || null,
         Permanent_State || null,
         Permanent_Country || null,
-        Qualification || null,
-        Discipline || null,
-        Percentage ? parseFloat(Percentage) : null,
         resolvedCourseId,
         resolvedBatchCode,
         resolvedBatchCategoryId,
+        Qualification || null,
+        Percentage ? parseFloat(Percentage) : null,
         Organisation || null,
-        Designation || null,
         OccupationalStatus || null,
         TotalExperience || null,
         JobDescription || null,
-        Inquiry_From || null,
-        Inquiry_Type || null,
-        Inquiry_Dt || null,
         Admission_Dt || null,
         Status_id ? parseInt(Status_id) : null,
         Status_date || null,
-        Login_Password || null,
         Refered_By || null,
-        SitPerformance ? parseFloat(SitPerformance) : null,
-        PlacementRemark || null,
         id,
       ]
     );
+
+    // ── 2. Optional columns — silently skipped if they don't exist ────────
+    const extras: { col: string; val: unknown }[] = [
+      { col: 'FName',          val: FName || null },
+      { col: 'MName',          val: MName || null },
+      { col: 'LName',          val: LName || null },
+      { col: 'Present_Mobile2', val: Telephone || null },
+      { col: 'Permanent_State', val: Permanent_State || null },
+      { col: 'Discipline',     val: Discipline || null },
+      { col: 'Designation',    val: Designation || null },
+      { col: 'Inquiry_From',   val: Inquiry_From || null },
+      { col: 'Inquiry_Type',   val: Inquiry_Type || null },
+      { col: 'Inquiry_Dt',     val: Inquiry_Dt || null },
+      { col: 'Login_Password', val: Login_Password || null },
+      { col: 'SitPerformance', val: SitPerformance ? parseFloat(SitPerformance) : null },
+      { col: 'PlacementRemark', val: PlacementRemark || null },
+    ].filter(({ val }) => val !== null && val !== undefined);
+
+    for (const { col, val } of extras) {
+      try {
+        await pool.query(
+          `UPDATE student_master SET \`${col}\` = ? WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+          [val, id]
+        );
+      } catch {
+        // Column doesn't exist in this deployment — skip silently
+      }
+    }
 
     // ── 2. Sync admission_master (batch, course, admission date) ──────────
     // The student list page reads from admission_master, so keep it in sync.
