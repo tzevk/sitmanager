@@ -167,8 +167,8 @@ export async function GET(req: NextRequest) {
          am.Admission_Date,
          am.Payment_Type,
          am.Amount,
-         COALESCE(NULLIF(TRIM(b.Batch_code), ''), NULLIF(TRIM(s.Batch_Code), '')) AS Batch_Code,
-         b.Batch_code   AS Batch_code_resolved,
+         COALESCE(NULLIF(TRIM(s.Batch_Code), ''), NULLIF(TRIM(b.Batch_code), '')) AS Batch_Code,
+         COALESCE(NULLIF(TRIM(s.Batch_Code), ''), NULLIF(TRIM(b.Batch_code), '')) AS Batch_code_resolved,
          b.SDate        AS Batch_SDate,
          b.EDate        AS Batch_EDate,
          c.Course_Name
