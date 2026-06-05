@@ -3,220 +3,222 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cached, getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
-let _inquiryTableCache: string | null = null;
 let _supportsStatementTimeout: boolean | null = null;
 const STUDENT_COUNT_CACHE_TTL_MS = 30_000;
 const COURSE_CACHE_TTL_MS = 10 * 60_000;
-
-async function resolveInquiryTableName(pool: ReturnType<typeof getPool>): Promise<string> {
-  if (_inquiryTableCache) return _inquiryTableCache;
-  const [rows] = await pool.query(
-    `SELECT TABLE_NAME
-     FROM INFORMATION_SCHEMA.TABLES
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND LOWER(TABLE_NAME) = 'student_inquiry'
-     ORDER BY CASE WHEN TABLE_NAME = 'Student_Inquiry' THEN 0 ELSE 1 END
-     LIMIT 1`
-  );
-  _inquiryTableCache = String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
-  return _inquiryTableCache;
-}
 
 function withStatementTimeout(sql: string, seconds: number): string {
   const safeSeconds = Math.max(1, Math.min(30, Math.trunc(seconds)));
   return `SET STATEMENT max_statement_time=${safeSeconds} FOR ${sql}`;
 }
 
-function buildCountCacheKey(where: string, params: (string | number)[]): string {
-  return `${where}::${JSON.stringify(params)}`;
+async function runQuery(
+  pool: ReturnType<typeof getPool>,
+  sql: string,
+  queryParams: (string | number)[] = [],
+  timeoutSeconds?: number
+) {
+  const timeoutSql =
+    timeoutSeconds && _supportsStatementTimeout !== false
+      ? withStatementTimeout(sql, timeoutSeconds)
+      : sql;
+  try {
+    return await pool.query<any[]>(timeoutSql, queryParams);
+  } catch (error: any) {
+    if (error?.code === 'PROTOCOL_CONNECTION_LOST') {
+      return await getPool().query<any[]>(timeoutSql, queryParams);
+    }
+    if (timeoutSql !== sql && (error?.errno === 1969 || error?.sqlState === '70100')) {
+      _supportsStatementTimeout = true;
+      return await pool.query<any[]>(sql, queryParams);
+    }
+    if (timeoutSql !== sql && _supportsStatementTimeout !== false) {
+      const msg = String(error?.message || '').toLowerCase();
+      if (msg.includes('max_statement_time') || msg.includes('syntax')) {
+        _supportsStatementTimeout = false;
+        return await pool.query<any[]>(sql, queryParams);
+      }
+    }
+    if (timeoutSql !== sql) _supportsStatementTimeout = true;
+    throw error;
+  }
 }
 
-// GET - fetch all students with pagination and search
+// GET - fetch admitted students with pagination
 export async function GET(req: NextRequest) {
   try {
     const auth = await requirePermission(req, 'student.view');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
-    const inquiryTable = await resolveInquiryTableName(pool);
     const { searchParams } = new URL(req.url);
 
-    const page = Math.max(1, Number(searchParams.get('page')) || 1);
-    const limit = Math.min(100, Math.max(10, Number(searchParams.get('limit')) || 25));
+    const page   = Math.max(1, Number(searchParams.get('page'))  || 1);
+    const limit  = Math.min(100, Math.max(10, Number(searchParams.get('limit')) || 25));
     const offset = (page - 1) * limit;
-    const search = searchParams.get('search')?.trim() || '';
-    const courseId = searchParams.get('courseId')?.trim() || '';
-    const sex = searchParams.get('sex')?.trim() || '';
+    const search    = searchParams.get('search')?.trim()    || '';
+    const courseId  = searchParams.get('courseId')?.trim()  || '';
+    const batchCode = searchParams.get('batchCode')?.trim() || '';
+    const sex       = searchParams.get('sex')?.trim()       || '';
     const admittedOnlyRaw = (searchParams.get('admittedOnly') || '1').trim().toLowerCase();
     const admittedOnly = !['0', 'false', 'no', 'all'].includes(admittedOnlyRaw);
 
-    // Build WHERE clause
+    const latestAdmissionSql = `
+      SELECT MAX(Admission_Id) AS Admission_Id
+      FROM admission_master
+      WHERE (IsDelete = 0 OR IsDelete IS NULL)
+        AND (Cancel = 0 OR Cancel IS NULL)
+      GROUP BY Student_Id
+    `;
+
+    const allStudentFrom = `
+      FROM student_master s
+      LEFT JOIN (
+        ${latestAdmissionSql}
+      ) am_top ON am_top.Admission_Id IS NOT NULL
+      LEFT JOIN admission_master am ON am.Admission_Id = am_top.Admission_Id AND am.Student_Id = s.Student_Id
+      LEFT JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
+      LEFT JOIN course_mst c ON c.Course_Id = s.Course_Id
+    `;
+
+    const admittedStudentFrom = `
+      FROM (
+        ${latestAdmissionSql}
+      ) am_top
+      INNER JOIN admission_master am ON am.Admission_Id = am_top.Admission_Id
+      INNER JOIN student_master s ON s.Student_Id = am.Student_Id
+      LEFT JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
+      LEFT JOIN course_mst c ON c.Course_Id = COALESCE(am.Course_Id, s.Course_Id)
+    `;
+
+    const baseFrom = admittedOnly ? admittedStudentFrom : allStudentFrom;
+
+    // ── WHERE ────────────────────────────────────────────────────────────────
     const conditions: string[] = ['(s.IsDelete = 0 OR s.IsDelete IS NULL)'];
     const params: (string | number)[] = [];
 
     if (admittedOnly) {
-      conditions.push(`(
-        EXISTS (
-          SELECT 1
-          FROM admission_master am
-          WHERE am.Student_Id = s.Student_Id
-            AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
-            AND (am.Cancel = 0 OR am.Cancel IS NULL)
-        )
-        OR EXISTS (
-          SELECT 1
-          FROM \`${inquiryTable}\` si_adm
-          WHERE si_adm.Student_Id = s.Student_Id
-            AND (si_adm.IsDelete = 0 OR si_adm.IsDelete IS NULL)
-            AND (
-              si_adm.OnlineState = 8
-              OR IFNULL(si_adm.admission_done, 0) IN (1, 2)
-              OR LOWER(TRIM(CAST(COALESCE(si_adm.Admission,'') AS CHAR))) IN (
-                'yes','y','1','true',
-                'admission taken','admissiontaken',
-                'admitted','done','complete','completed','taken'
-              )
-              OR LOWER(TRIM(CAST(COALESCE(si_adm.Admission,'') AS CHAR))) LIKE '%admission%'
-            )
-        )
-      )`);
+      conditions.push('(s.Status_id = 8 OR s.Status_id IS NULL)');
     }
 
     if (search) {
       const like = `%${search}%`;
       conditions.push(`(
         s.Student_Name LIKE ?
-        OR CONCAT_WS(' ', s.FName, s.MName, s.LName) LIKE ?
+        OR s.FName LIKE ?
         OR s.Email LIKE ?
         OR s.Present_Mobile LIKE ?
-        OR s.Present_City LIKE ?
         OR s.Batch_Code LIKE ?
-        OR CAST(s.Student_Id AS CHAR) LIKE ?
-        OR EXISTS (
-          SELECT 1
-          FROM course_mst c2
-          WHERE c2.Course_Id = s.Course_Id
-            AND c2.Course_Name LIKE ?
-        )
+        OR b.Batch_code LIKE ?
+        OR CAST(am.Student_Code AS CHAR) LIKE ?
       )`);
-      params.push(like, like, like, like, like, like, like, like);
+      params.push(like, like, like, like, like, like, like);
     }
 
     if (courseId) {
-      conditions.push(`s.Course_Id = ?`);
+      conditions.push('COALESCE(am.Course_Id, s.Course_Id) = ?');
       params.push(Number(courseId));
     }
 
+    if (batchCode) {
+      conditions.push('(s.Batch_Code = ? OR b.Batch_code = ?)');
+      params.push(batchCode, batchCode);
+    }
+
     if (sex) {
-      conditions.push(`s.Sex = ?`);
+      conditions.push('s.Sex = ?');
       params.push(sex);
     }
 
     const where = conditions.join(' AND ');
 
-    const runQuery = async (
-      sql: string,
-      queryParams: (string | number)[] = [],
-      options: { statementTimeoutSeconds?: number } = {}
-    ) => {
-      const timeoutSql = options.statementTimeoutSeconds && _supportsStatementTimeout !== false
-        ? withStatementTimeout(sql, options.statementTimeoutSeconds)
-        : sql;
-
-      try {
-        return await pool.query<any[]>(timeoutSql, queryParams);
-      } catch (error: any) {
-        if (error?.code === 'PROTOCOL_CONNECTION_LOST') {
-          const retryPool = getPool();
-          return await retryPool.query<any[]>(timeoutSql, queryParams);
-        }
-
-        if (timeoutSql !== sql && _supportsStatementTimeout !== false) {
-          const msg = String(error?.message || '').toLowerCase();
-          if (msg.includes('max_statement_time') || msg.includes('syntax')) {
-            _supportsStatementTimeout = false;
-            return await pool.query<any[]>(sql, queryParams);
-          }
-        }
-
-        if (timeoutSql !== sql) _supportsStatementTimeout = true;
-        throw error;
-      }
-    };
-
-    const countKey = buildCountCacheKey(where, params);
+    // ── Queries ──────────────────────────────────────────────────────────────
+    const countCacheKey = `student:count:${where}:${JSON.stringify(params)}:${admittedOnly}`;
     const countPromise = cached(
-      `admission-activity:student:count:${countKey}`,
+      countCacheKey,
       STUDENT_COUNT_CACHE_TTL_MS,
       async () => {
-      const [countRows] = await runQuery(
-        `SELECT COUNT(*) AS total FROM student_master s WHERE ${where}`,
-        params,
-        { statementTimeoutSeconds: 4 }
-      );
-      return Number((countRows as any[])[0]?.total ?? 0);
+        const [rows] = await runQuery(
+          pool,
+          `SELECT COUNT(*) AS total
+           ${baseFrom}
+           WHERE ${where}`,
+          params,
+          5
+        );
+        return Number((rows as any[])[0]?.total ?? 0);
       }
     );
 
     const rowsPromise = runQuery(
-        `SELECT
-          s.Student_Id, s.Student_Name, s.FName, s.LName, s.MName,
-          s.Qualification, s.Course_Id, s.Batch_Code, s.DOB, s.Sex, s.Nationality,
-          s.Present_Address, s.Present_City, s.Present_State, s.Present_Country, s.Present_Pin, s.Present_Mobile,
-          s.Email, s.IsActive,
-          c.Course_Name
-        FROM student_master s
-        LEFT JOIN course_mst c ON s.Course_Id = c.Course_Id
-        WHERE ${where}
-        ORDER BY s.Student_Id DESC
-        LIMIT ? OFFSET ?`,
-        [...params, limit, offset],
-        { statementTimeoutSeconds: 8 }
-      );
+      pool,
+      `SELECT
+         s.Student_Id,
+         am.Student_Code,
+         COALESCE(NULLIF(TRIM(s.Student_Name), ''), CONCAT_WS(' ', s.FName, s.MName, s.LName)) AS Student_Name,
+         s.DOB,
+         s.Present_Address,
+         s.Present_City,
+         s.Email,
+         s.Present_Mobile,
+         s.Qualification,
+         COALESCE(am.Course_Id, s.Course_Id) AS Course_Id,
+         s.Sex,
+         am.IsActive,
+         am.Admission_Date,
+         am.Payment_Type,
+         am.Amount,
+         COALESCE(NULLIF(TRIM(b.Batch_code), ''), NULLIF(TRIM(s.Batch_Code), '')) AS Batch_Code,
+         b.Batch_code   AS Batch_code_resolved,
+         b.SDate        AS Batch_SDate,
+         b.EDate        AS Batch_EDate,
+         c.Course_Name
+       ${baseFrom}
+       WHERE ${where}
+       ORDER BY COALESCE(am.Admission_Id, s.Student_Id) DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset],
+      6
+    );
 
     const coursesPromise = cached(
-      'admission-activity:student:courses',
+      'student:courses',
       COURSE_CACHE_TTL_MS,
       async () => {
-        const [courseRows] = await runQuery(
-        `SELECT Course_Id, Course_Name FROM course_mst
-         WHERE (IsDelete = 0 OR IsDelete IS NULL)
-         ORDER BY Course_Name`
+        const [rows] = await runQuery(
+          pool,
+          `SELECT Course_Id, Course_Name FROM course_mst
+           WHERE (IsDelete = 0 OR IsDelete IS NULL)
+           ORDER BY Course_Name`
         );
-        return courseRows as any[];
+        return rows as any[];
       }
     );
 
     const [[rows], courses] = await Promise.all([rowsPromise, coursesPromise]);
 
-    let total: number | null = null;
+    // Count with 1.5 s timeout — fall back to estimate if slow
+    let total: number;
     let totalIsEstimate = false;
-
-    const countOrTimeout = await Promise.race<number | null>([
-        countPromise,
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
+    const counted = await Promise.race<number | null>([
+      countPromise,
+      new Promise<null>((r) => setTimeout(() => r(null), 1500)),
     ]);
-
-    if (countOrTimeout == null) {
+    if (counted == null) {
       total = offset + (rows as any[]).length + ((rows as any[]).length === limit ? 1 : 0);
       totalIsEstimate = true;
     } else {
-      total = countOrTimeout;
+      total = counted;
     }
 
     return NextResponse.json({
       rows,
       courses,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        totalIsEstimate,
-      },
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit), totalIsEstimate },
     });
   } catch (err: unknown) {
     console.error('Student API error:', err);
-    const message = err instanceof Error ? err.message : "Unknown error"; return NextResponse.json({ error: message }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -226,18 +228,13 @@ export async function DELETE(req: NextRequest) {
     const auth = await requirePermission(req, 'student.delete');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json({ error: 'ID is required' }, { status: 400 });
-    }
-
-    await pool.query(`UPDATE student_master SET IsDelete = 1 WHERE Student_Id = ?`, [id]);
-
+    const id = new URL(req.url).searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'ID is required' }, { status: 400 });
+    await pool.query('UPDATE student_master SET IsDelete = 1 WHERE Student_Id = ?', [id]);
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     console.error('Student DELETE error:', err);
-    const message = err instanceof Error ? err.message : "Unknown error"; return NextResponse.json({ error: message }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

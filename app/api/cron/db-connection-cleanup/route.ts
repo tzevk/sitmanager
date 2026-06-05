@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cleanupNoisyDbConnections } from '@/lib/services/db-maintenance.service';
+import { destroyAllPools } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -44,6 +45,8 @@ export async function GET(req: NextRequest) {
     const message = error instanceof Error ? error.message : 'DB connection cleanup failed';
     console.error('DB connection cleanup GET error:', error);
     return NextResponse.json({ error: message }, { status: 500 });
+  } finally {
+    await destroyAllPools();
   }
 }
 
@@ -54,5 +57,7 @@ export async function POST(req: NextRequest) {
     const message = error instanceof Error ? error.message : 'DB connection cleanup failed';
     console.error('DB connection cleanup POST error:', error);
     return NextResponse.json({ error: message }, { status: 500 });
+  } finally {
+    await destroyAllPools();
   }
 }

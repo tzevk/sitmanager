@@ -23,6 +23,7 @@ interface Batch {
 interface AllocatedBatch {
   Batch_Id: number;
   Batch_code: string;
+  Course_Id: number;
   Course_Name: string;
 }
 
@@ -56,6 +57,7 @@ export default function AllotRollNumberPage() {
   /* ---- Selected filters ---- */
   const [courseId, setCourseId] = useState('');
   const [batchId, setBatchId] = useState('');
+  const [pendingBatchId, setPendingBatchId] = useState<string | null>(null);
 
   /* ---- Student list ---- */
   const [rows, setRows] = useState<Student[]>([]);
@@ -106,6 +108,16 @@ export default function AllotRollNumberPage() {
     setRows([]);
     setRollEdits({});
   }, [courseId]);
+
+  useEffect(() => {
+    if (!pendingBatchId || !batches.length) return;
+    const exists = batches.some((b) => String(b.Batch_Id) === pendingBatchId);
+    if (exists) {
+      setBatchId(pendingBatchId);
+      setPage(1);
+    }
+    setPendingBatchId(null);
+  }, [pendingBatchId, batches]);
 
   /* ================================================================ */
   /*  Fetch students when batch selected                              */
@@ -317,11 +329,9 @@ export default function AllotRollNumberPage() {
               <button
                 key={ab.Batch_Id}
                 onClick={() => {
-                  // Quick-jump: set the course and batch
-                  const course = courses.find(c => c.Course_Name === ab.Course_Name);
-                  if (course) setCourseId(String(course.Course_Id));
-                  // batchId will be set after batches load via effect
-                  setTimeout(() => setBatchId(String(ab.Batch_Id)), 300);
+                  // Quick-jump: set the exact course first, then select batch once loaded.
+                  setPendingBatchId(String(ab.Batch_Id));
+                  setCourseId(String(ab.Course_Id));
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-50 text-green-700 border border-green-200 rounded-full hover:bg-green-100 transition-colors cursor-pointer"
               >

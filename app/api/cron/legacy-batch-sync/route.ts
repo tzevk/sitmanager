@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { syncLegacyInquiries } from '@/lib/services/legacy-inquiry-sync.service';
+import { syncLegacyBatchData } from '@/lib/services/legacy-batch-sync.service';
 import { destroyAllPools } from '@/lib/db';
 
 export const runtime = 'nodejs';
@@ -24,19 +24,18 @@ async function runSync(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const sinceHoursRaw = Number(
-    req.nextUrl.searchParams.get('sinceHours') ||
-    process.env.LEGACY_INQUIRY_SYNC_SINCE_HOURS ||
-    '48'
-  );
-  const sinceHours = Number.isFinite(sinceHoursRaw) && sinceHoursRaw > 0 ? sinceHoursRaw : 48;
+  const dryRunRaw = (req.nextUrl.searchParams.get('dryRun') || '').toLowerCase();
+  const dryRun = dryRunRaw === '1' || dryRunRaw === 'true' || dryRunRaw === 'yes';
 
-  const summary = await syncLegacyInquiries({ sinceHours });
+  const batchSizeRaw = Number(req.nextUrl.searchParams.get('batchSize') || process.env.LEGACY_BATCH_SYNC_BATCH_SIZE || '500');
+  const batchSize = Number.isFinite(batchSizeRaw) && batchSizeRaw > 0 ? Math.trunc(batchSizeRaw) : 500;
+
+  const summary = await syncLegacyBatchData({ dryRun, batchSize });
 
   if (!summary.configured) {
     return NextResponse.json({
       ok: false,
-      message: 'OLD_DB_HOST is not configured — legacy sync skipped',
+      message: 'OLD_DB_HOST is not configured — legacy batch sync skipped',
     });
   }
 
@@ -47,8 +46,8 @@ export async function GET(req: NextRequest) {
   try {
     return await runSync(req);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Legacy inquiry sync failed';
-    console.error('Legacy inquiry sync GET error:', error);
+    const message = error instanceof Error ? error.message : 'Legacy batch sync failed';
+    console.error('Legacy batch sync GET error:', error);
     return NextResponse.json({ error: message }, { status: 500 });
   } finally {
     await destroyAllPools();
@@ -59,8 +58,8 @@ export async function POST(req: NextRequest) {
   try {
     return await runSync(req);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Legacy inquiry sync failed';
-    console.error('Legacy inquiry sync POST error:', error);
+    const message = error instanceof Error ? error.message : 'Legacy batch sync failed';
+    console.error('Legacy batch sync POST error:', error);
     return NextResponse.json({ error: message }, { status: 500 });
   } finally {
     await destroyAllPools();

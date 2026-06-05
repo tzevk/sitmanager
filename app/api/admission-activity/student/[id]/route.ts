@@ -319,8 +319,10 @@ export async function PUT(
     const fullName = Student_Name ||
       [FName, MName, LName].filter(Boolean).join(' ') || null;
     const resolvedBatchCode = Batch_Code || Batch_code || null;
+    const resolvedCourseId = Course_Id ? parseInt(Course_Id) : null;
     const resolvedBatchCategoryId = await resolveBatchCategoryId(pool, resolvedBatchCode, Batch_Category_id || null);
 
+    // ── 1. Update student_master ──────────────────────────────────────────
     await pool.query(
       `UPDATE student_master SET
          Student_Name = ?,
@@ -389,7 +391,7 @@ export async function PUT(
         Qualification || null,
         Discipline || null,
         Percentage ? parseFloat(Percentage) : null,
-        Course_Id ? parseInt(Course_Id) : null,
+        resolvedCourseId,
         resolvedBatchCode,
         resolvedBatchCategoryId,
         Organisation || null,
@@ -410,6 +412,50 @@ export async function PUT(
         id,
       ]
     );
+
+    // ── 2. Sync admission_master (batch, course, admission date) ──────────
+    // The student list page reads from admission_master, so keep it in sync.
+    try {
+      // Resolve Batch_Id from batch code
+      let batchId: number | null = null;
+      if (resolvedBatchCode) {
+        const [batchRows] = await pool.query(
+          `SELECT Batch_Id FROM batch_mst WHERE Batch_code = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+          [resolvedBatchCode]
+        ) as [any[], any];
+        batchId = batchRows[0]?.Batch_Id ? Number(batchRows[0].Batch_Id) : null;
+      }
+
+      // Update the latest non-cancelled admission for this student
+      await pool.query(
+        `UPDATE admission_master SET
+           Batch_Id       = COALESCE(?, Batch_Id),
+           Course_Id      = COALESCE(?, Course_Id),
+           Admission_Date = COALESCE(?, Admission_Date)
+         WHERE Student_Id = ?
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+           AND (Cancel   = 0 OR Cancel   IS NULL)
+           AND Admission_Id = (
+             SELECT Admission_Id FROM (
+               SELECT MAX(Admission_Id) AS Admission_Id
+               FROM admission_master
+               WHERE Student_Id = ?
+                 AND (IsDelete = 0 OR IsDelete IS NULL)
+                 AND (Cancel   = 0 OR Cancel   IS NULL)
+             ) sub
+           )`,
+        [
+          batchId,
+          resolvedCourseId,
+          Admission_Dt || null,
+          id,
+          id,
+        ]
+      );
+    } catch (admErr) {
+      // Non-fatal: student_master is the source of truth; admission_master sync is best-effort
+      console.warn('Student PUT: admission_master sync skipped:', (admErr as Error)?.message);
+    }
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {

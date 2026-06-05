@@ -87,24 +87,32 @@ export async function GET(req: NextRequest) {
            b.Category,
            b.Timings,
            (
-             SELECT COUNT(DISTINCT combined.sid) FROM (
-               SELECT a.Student_Id AS sid
+             (
+               SELECT COUNT(DISTINCT a.Student_Id)
                FROM admission_master a
                WHERE a.Batch_Id = b.Batch_Id
                  AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
                  AND (a.Cancel = 0 OR a.Cancel IS NULL)
-               UNION
-               SELECT sm.Student_Id AS sid
+             )
+             +
+             (
+               SELECT COUNT(DISTINCT sm.Student_Id)
                FROM student_master sm
                WHERE TRIM(sm.Batch_Code) = TRIM(b.Batch_code)
                  AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-             ) combined
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM admission_master a2
+                   WHERE a2.Student_Id = sm.Student_Id
+                     AND a2.Batch_Id = b.Batch_Id
+                     AND (a2.IsDelete = 0 OR a2.IsDelete IS NULL)
+                     AND (a2.Cancel = 0 OR a2.Cancel IS NULL)
+                 )
+             )
            ) AS StudentCount
          FROM batch_mst b
          WHERE b.Course_Id = ?
-           AND b.IsActive = 1
            AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
-           AND (b.Cancel = 0 OR b.Cancel IS NULL)
          ORDER BY b.Batch_Id DESC`,
         [Number(courseId)]
       );
@@ -113,7 +121,7 @@ export async function GET(req: NextRequest) {
 
     // ── Allocated batches (batches that have at least one Roll_No set) ──
     const [allocatedRows] = await pool.query<any[]>(`
-      SELECT DISTINCT b.Batch_Id, b.Batch_code, c.Course_Name
+      SELECT DISTINCT b.Batch_Id, b.Batch_code, b.Course_Id, c.Course_Name
       FROM admission_master a
       JOIN batch_mst b ON a.Batch_Id = b.Batch_Id
       JOIN course_mst c ON b.Course_Id = c.Course_Id
@@ -171,7 +179,7 @@ export async function GET(req: NextRequest) {
       if (search) {
         conditions.push(
           `(COALESCE(NULLIF(TRIM(s.Student_Name),''), NULLIF(TRIM(si.Student_Name),'')) LIKE ?
-            OR CAST(COALESCE(s.Student_Id, a.Student_Id) AS CHAR) LIKE ?
+            OR CAST(COALESCE(s.Student_Id, a.Student_Id, a.Student_Code) AS CHAR) LIKE ?
             OR COALESCE(s.Email, si.Email, '') LIKE ?)`
         );
         const like = `%${search}%`;
@@ -203,10 +211,14 @@ export async function GET(req: NextRequest) {
       const [dataRows] = await pool.query<any[]>(
         `SELECT
           a.Admission_Id AS id,
-          COALESCE(s.Student_Id, a.Student_Id) AS studentCode,
-          COALESCE(NULLIF(TRIM(s.Student_Name),''), NULLIF(TRIM(si.Student_Name),''), CONCAT('Student ', CAST(a.Student_Id AS CHAR))) AS studentName,
-          a.Admission_Date AS admissionDate,
-          b.Category AS phase,
+          COALESCE(s.Student_Id, a.Student_Id, a.Student_Code) AS studentCode,
+          COALESCE(
+            NULLIF(TRIM(s.Student_Name),''),
+            NULLIF(TRIM(si.Student_Name),''),
+            CONCAT('Student ', CAST(COALESCE(a.Student_Id, a.Student_Code, a.Admission_Id) AS CHAR))
+          ) AS studentName,
+          COALESCE(a.Admission_Date, s.Admission_Dt, s.Inquiry_Dt) AS admissionDate,
+          COALESCE(NULLIF(TRIM(a.Phase), ''), NULLIF(TRIM(b.Category), ''), 'Not Set') AS phase,
           COALESCE(a.Roll_No, '') AS rollNo
         FROM admission_master a
         LEFT JOIN student_master s ON a.Student_Id = s.Student_Id
@@ -220,7 +232,11 @@ export async function GET(req: NextRequest) {
         ) si ON si.Student_Id = a.Student_Id
         JOIN batch_mst b ON a.Batch_Id = b.Batch_Id
         WHERE ${where}
-        ORDER BY COALESCE(NULLIF(TRIM(s.Student_Name),''), NULLIF(TRIM(si.Student_Name),''), CONCAT('Student ', CAST(a.Student_Id AS CHAR))) ASC
+        ORDER BY COALESCE(
+          NULLIF(TRIM(s.Student_Name),''),
+          NULLIF(TRIM(si.Student_Name),''),
+          CONCAT('Student ', CAST(COALESCE(a.Student_Id, a.Student_Code, a.Admission_Id) AS CHAR))
+        ) ASC
         LIMIT ? OFFSET ?`,
         [...params, limit, offset]
       );

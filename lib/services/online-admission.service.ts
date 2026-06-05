@@ -385,7 +385,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
   const presentAddress = buildAddress(input, 'present');
   const permanentAddress = buildAddress(input, 'permanent');
   const academic = resolveAcademicProfile(input);
-  const workingSince = resolveWorkingSince(input);
+  void resolveWorkingSince(input); // computed for future use; no matching student_master column yet
 
   const inquiryUpdateParts: string[] = [];
   const inquiryUpdateValues: any[] = [];
@@ -414,6 +414,10 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       [...inquiryUpdateValues, inquiryId]
     );
   }
+
+  const admissionDate = normalizeText(input.admissionDate) || new Date().toISOString().slice(0, 10);
+
+  let resolvedStudentId = studentId;
 
   if (studentId > 0) {
     const studentUpdateValues = [
@@ -450,7 +454,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       normalizeText(input.jobDescription) || null,
       nextStatusId,
       nextStatusId !== null ? new Date().toISOString().slice(0, 10) : null,
-      nextStatusId === 8 ? (normalizeText(input.admissionDate) || new Date().toISOString().slice(0, 10)) : null,
+      nextStatusId === 8 ? admissionDate : null,
       studentId,
     ];
 
@@ -493,46 +497,110 @@ export async function syncOnlineAdmissionIntoCurrentDb(
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
       studentUpdateValues
     );
+  } else if (statusAction === 'accept') {
+    // No existing student linked — create one from the online admission form data
+    try {
+      const [insertResult] = await pool.query(
+        `INSERT INTO \`${studentMasterTable}\` (
+           Student_Name, FName, MName, LName,
+           DOB, Sex, Nationality,
+           Email, Present_Mobile, Present_Mobile2,
+           Present_Address, Present_City, Present_State, Present_Pin, Present_Country,
+           Permanent_Address, Permanent_City, Permanent_Pin, Permanent_State, Permanent_Country,
+           Qualification, Discipline, Percentage,
+           Course_Id, Batch_Code, Batch_Category_id,
+           Company, Designation, Occupation, Total_Exp, Remark,
+           Status_id, Status_date, Admission_Dt,
+           IsActive, IsDelete
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+        [
+          fullName || null,
+          normalizeText(input.firstName) || null,
+          normalizeText(input.middleName) || null,
+          normalizeText(input.lastName) || null,
+          normalizeText(input.dob) || null,
+          normalizeText(input.gender) || null,
+          normalizeText(input.nationality) || 'Indian',
+          firstNonEmpty(input.email, inquiry.Email) || null,
+          firstNonEmpty(input.mobile, inquiry.Present_Mobile) || null,
+          normalizeText(input.telephone) || null,
+          presentAddress,
+          normalizeText(input.presentCity) || null,
+          normalizeText(input.presentState) || null,
+          normalizeText(input.presentPin) || null,
+          normalizeText(input.presentCountry) || 'India',
+          permanentAddress,
+          normalizeText(input.permanentCity) || null,
+          normalizeText(input.permanentPin) || null,
+          normalizeText(input.permanentState) || null,
+          normalizeText(input.permanentCountry) || 'India',
+          academic.qualification,
+          academic.discipline,
+          academic.percentage,
+          courseId,
+          batchCode,
+          batchCategoryId,
+          normalizeText(input.jobOrganisation) || null,
+          normalizeText(input.jobDesignation) || null,
+          normalizeText(input.occupationalStatus) || null,
+          parseOptionalNumber(input.totalOccupationYears),
+          normalizeText(input.jobDescription) || null,
+          8, // Admitted
+          new Date().toISOString().slice(0, 10),
+          admissionDate,
+        ]
+      ) as [any, any];
 
-    if (statusAction === 'accept') {
-      let batchId: number | null = null;
-      if (batchCode) {
-        const [batchRows] = await pool.query(
-          `SELECT Batch_Id FROM batch_mst WHERE Batch_code = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
-          [batchCode]
-        ) as [any[], any];
-        batchId = batchRows[0]?.Batch_Id ? Number(batchRows[0].Batch_Id) : null;
+      const newStudentId = Number((insertResult as any).insertId);
+      if (newStudentId > 0) {
+        resolvedStudentId = newStudentId;
+        await pool.query(
+          `UPDATE \`${inquiryTable}\` SET Student_Id = ? WHERE Inquiry_Id = ?`,
+          [newStudentId, inquiryId]
+        );
       }
+    } catch (err) {
+      console.error('[OnlineAdmission] Failed to create student_master record:', err);
+    }
+  }
 
-      const [admissionRows] = await pool.query(
-        `SELECT Admission_Id
-         FROM admission_master
-         WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
-         ORDER BY Admission_Date DESC, Admission_Id DESC
-         LIMIT 1`,
-        [studentId]
+  if (statusAction === 'accept' && resolvedStudentId > 0) {
+    let batchId: number | null = null;
+    if (batchCode) {
+      const [batchRows] = await pool.query(
+        `SELECT Batch_Id FROM batch_mst WHERE Batch_code = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+        [batchCode]
       ) as [any[], any];
+      batchId = batchRows[0]?.Batch_Id ? Number(batchRows[0].Batch_Id) : null;
+    }
 
-      const admissionDate = normalizeText(input.admissionDate) || new Date().toISOString().slice(0, 10);
-      if (admissionRows.length) {
-        await pool.query(
-          `UPDATE admission_master SET
-             Batch_Id = COALESCE(?, Batch_Id),
-             Course_Id = COALESCE(?, Course_Id),
-             Admission_Date = COALESCE(?, Admission_Date),
-             IsActive = 1,
-             Cancel = 0
-           WHERE Admission_Id = ?`,
-          [batchId, courseId, admissionDate, admissionRows[0].Admission_Id]
-        );
-      } else {
-        await pool.query(
-          `INSERT INTO admission_master (
-             Student_Id, Course_Id, Batch_Id, Admission_Date, IsActive, Cancel, IsDelete
-           ) VALUES (?, ?, ?, ?, 1, 0, 0)`,
-          [studentId, courseId, batchId, admissionDate]
-        );
-      }
+    const [admissionRows] = await pool.query(
+      `SELECT Admission_Id
+       FROM admission_master
+       WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+       ORDER BY Admission_Date DESC, Admission_Id DESC
+       LIMIT 1`,
+      [resolvedStudentId]
+    ) as [any[], any];
+
+    if (admissionRows.length) {
+      await pool.query(
+        `UPDATE admission_master SET
+           Batch_Id = COALESCE(?, Batch_Id),
+           Course_Id = COALESCE(?, Course_Id),
+           Admission_Date = COALESCE(?, Admission_Date),
+           IsActive = 1,
+           Cancel = 0
+         WHERE Admission_Id = ?`,
+        [batchId, courseId, admissionDate, admissionRows[0].Admission_Id]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO admission_master (
+           Student_Id, Course_Id, Batch_Id, Admission_Date, IsActive, Cancel, IsDelete
+         ) VALUES (?, ?, ?, ?, 1, 0, 0)`,
+        [resolvedStudentId, courseId, batchId, admissionDate]
+      );
     }
   }
 }
