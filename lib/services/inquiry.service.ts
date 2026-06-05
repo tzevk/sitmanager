@@ -29,6 +29,12 @@ async function runGuardedQuery(
     const [rows] = await pool.query(timeoutSql, params);
     return rows as any[];
   } catch (error: any) {
+    if (timeoutSql !== sql && (error?.errno === 1969 || error?.sqlState === '70100')) {
+      inquirySupportsStatementTimeout = true;
+      const [rows] = await pool.query(sql, params);
+      return rows as any[];
+    }
+
     if (timeoutSql !== sql && inquirySupportsStatementTimeout !== false) {
       const message = String(error?.message || '').toLowerCase();
       if (message.includes('max_statement_time') || message.includes('syntax')) {
@@ -656,31 +662,6 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     ? DISCIPLINE_NAME_EXPR
     : `NULLIF(TRIM(si.Discipline),'')`;
   warmInquirySchema(pool, inquiryTable);
-  const FOLLOW_UP_DUE_SUBQUERY = `
-    SELECT latest.LinkId
-    FROM (
-      SELECT
-        COALESCE(NULLIF(Inquiry_id, 0), NULLIF(student_id, 0)) AS LinkId,
-        MAX(id) AS max_id
-      FROM awt_inquirydiscussion
-      WHERE deleted = 0
-        AND COALESCE(NULLIF(Inquiry_id, 0), NULLIF(student_id, 0)) IS NOT NULL
-      GROUP BY COALESCE(NULLIF(Inquiry_id, 0), NULLIF(student_id, 0))
-    ) latest_ids
-    INNER JOIN (
-      SELECT
-        id,
-        nextdate,
-        deleted,
-        COALESCE(NULLIF(Inquiry_id, 0), NULLIF(student_id, 0)) AS LinkId
-      FROM awt_inquirydiscussion
-    ) latest
-      ON latest.LinkId = latest_ids.LinkId
-     AND latest.id = latest_ids.max_id
-    WHERE latest.deleted = 0
-      AND latest.nextdate IS NOT NULL
-      AND latest.nextdate <= CURDATE()
-  `;
   const {
     page, limit, search = '', discipline = '', inquiryType = '', leadTag = '',
     location = '', training = '', statusId = '', duplicatesOnly = false, dateFrom = '', dateTo = '',
@@ -840,12 +821,50 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   }
   if (followUpDue) {
     conditions.push(
-      `EXISTS (
-         SELECT 1 FROM (
-           ${FOLLOW_UP_DUE_SUBQUERY}
-         ) due_followups
-         WHERE due_followups.LinkId IN (si.Inquiry_Id, si.Student_Id)
-       )`
+      `(
+        EXISTS (
+          SELECT 1
+          FROM awt_inquirydiscussion d
+          WHERE d.deleted = 0
+            AND d.nextdate IS NOT NULL
+            AND d.nextdate <= CURDATE()
+            AND d.Inquiry_id = si.Inquiry_Id
+            AND d.id = (
+              SELECT MAX(d2.id)
+              FROM awt_inquirydiscussion d2
+              WHERE d2.deleted = 0
+                AND d2.Inquiry_id = si.Inquiry_Id
+            )
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM awt_inquirydiscussion d
+          WHERE d.deleted = 0
+            AND d.nextdate IS NOT NULL
+            AND d.nextdate <= CURDATE()
+            AND d.Inquiry_id = si.Student_Id
+            AND d.id = (
+              SELECT MAX(d2.id)
+              FROM awt_inquirydiscussion d2
+              WHERE d2.deleted = 0
+                AND d2.Inquiry_id = si.Student_Id
+            )
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM awt_inquirydiscussion d
+          WHERE d.deleted = 0
+            AND d.nextdate IS NOT NULL
+            AND d.nextdate <= CURDATE()
+            AND d.student_id = si.Student_Id
+            AND d.id = (
+              SELECT MAX(d2.id)
+              FROM awt_inquirydiscussion d2
+              WHERE d2.deleted = 0
+                AND d2.student_id = si.Student_Id
+            )
+        )
+      )`
     );
   }
 

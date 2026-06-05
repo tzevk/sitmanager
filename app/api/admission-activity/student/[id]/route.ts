@@ -156,28 +156,48 @@ export async function GET(
   const inquiryTable = await resolveInquiryTableName(pool);
     const { id } = await params;
 
-    // Student + admission + batch + course
+    // Student + latest admission + batch + course (explicit columns — no s.*)
     const [rows] = await pool.query(
       `SELECT
-         s.*,
-        s.Company AS Organisation,
-        s.Occupation AS OccupationalStatus,
-        s.Total_Exp AS TotalExperience,
-        s.Remark AS JobDescription,
+         s.Student_Id, s.Student_Name, s.FName, s.MName, s.LName,
+         s.DOB, s.Sex, s.Nationality,
+         s.Email, s.Present_Mobile, s.Present_Mobile2,
+         s.Present_Address, s.Present_City, s.Present_State, s.Present_Pin, s.Present_Country,
+         s.Permanent_Address, s.Permanent_City, s.Permanent_State, s.Permanent_Pin, s.Permanent_Country,
+         s.Qualification, s.Discipline, s.Percentage,
+         s.Course_Id, s.Batch_Code, s.Batch_Category_id,
+         s.Company          AS Organisation,
+         s.Designation,
+         s.Occupation       AS OccupationalStatus,
+         s.Total_Exp        AS TotalExperience,
+         s.Remark           AS JobDescription,
+         s.Inquiry_From, s.Inquiry_Type, s.Inquiry_Dt,
+         s.Status_id, s.Status_date,
+         s.Admission_Dt,
+         s.Refered_By,
+         s.SitPerformance, s.PlacementRemark,
+         s.Photo, s.Student_Photo, s.PhotoPath,
          a.Admission_Id, a.Batch_Id, a.Admission_Date,
          COALESCE(b.Batch_code, b2.Batch_code) AS Batch_code,
-         COALESCE(b.SDate, b2.SDate) AS Batch_StartDate,
-         COALESCE(b.EDate, b2.EDate) AS Batch_EndDate,
+         COALESCE(b.SDate, b2.SDate)           AS Batch_StartDate,
+         COALESCE(b.EDate, b2.EDate)           AS Batch_EndDate,
          c.Course_Name,
          st.Status AS Status_name
        FROM student_master s
        LEFT JOIN admission_master a
-         ON s.Student_Id = a.Student_Id AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
-       LEFT JOIN batch_mst b ON a.Batch_Id = b.Batch_Id
-       LEFT JOIN batch_mst b2
-         ON b2.Batch_code = s.Batch_Code AND (b2.IsDelete = 0 OR b2.IsDelete IS NULL)
-       LEFT JOIN course_mst c ON s.Course_Id = c.Course_Id
-       LEFT JOIN status_master st ON s.Status_id = st.Id
+         ON a.Student_Id = s.Student_Id
+         AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
+         AND a.Admission_Id = (
+           SELECT MAX(a2.Admission_Id)
+           FROM admission_master a2
+           WHERE a2.Student_Id = s.Student_Id
+             AND (a2.IsDelete = 0 OR a2.IsDelete IS NULL)
+         )
+       LEFT JOIN batch_mst b  ON b.Batch_Id = a.Batch_Id
+       LEFT JOIN batch_mst b2 ON b2.Batch_code = s.Batch_Code
+                              AND (b2.IsDelete = 0 OR b2.IsDelete IS NULL)
+       LEFT JOIN course_mst c ON c.Course_Id = s.Course_Id
+       LEFT JOIN status_master st ON st.Id = s.Status_id
        WHERE s.Student_Id = ? AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
        LIMIT 1`,
       [id]
