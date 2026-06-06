@@ -92,6 +92,31 @@ function normalizePhoneText(value: unknown): string | null {
   return normalized;
 }
 
+function pickRawPhoneText(record: SuvidyaInquiryRecord): string | null {
+  return normalizeText(
+    record.phone || record.mobile || record.phone_number ||
+    record.contact || record.contact_number ||
+    record.whatsapp || record.whatsapp_number
+  );
+}
+
+function extractPhoneForSync(record: SuvidyaInquiryRecord, tableName: string): string | null {
+  const raw = pickRawPhoneText(record);
+  if (!raw) return null;
+
+  const normalized = normalizePhoneText(raw);
+  if (normalized) return normalized;
+
+  // quick_enquiry_form on source occasionally emits truncated values.
+  // Keep numeric fallback so phone is not dropped entirely.
+  if (tableName === 'quick_enquiry_form') {
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length >= 9 && digits.length <= 15) return digits;
+  }
+
+  return null;
+}
+
 function normalizeCourseKey(value: string): string {
   return value.replace(/\s+/g, ' ').trim().toLowerCase();
 }
@@ -439,31 +464,62 @@ export async function syncSuvidyaInquiries(
     }
 
     // One query to find all already-synced records in this batch
-    const existingKeys = new Set<string>();
+    const existingRowsByKey = new Map<string, { inquiry_id: number | null; mobile: string | null }>();
     if (validRecords.length > 0) {
       const whereParts = validRecords.map(() => '(source_table_name = ? AND source_inquiry_id = ?)').join(' OR ');
       const whereParams = validRecords.flatMap(({ tableName, sourceId }) => [tableName, sourceId]);
       const [existingRows] = await syncConnection.query(
-        `SELECT source_table_name, source_inquiry_id FROM suvidya_inquiry_sync WHERE ${whereParts}`,
+        `SELECT source_table_name, source_inquiry_id, inquiry_id, mobile
+         FROM suvidya_inquiry_sync
+         WHERE ${whereParts}`,
         whereParams
       );
-      for (const row of existingRows as Array<{ source_table_name: string; source_inquiry_id: number }>) {
-        existingKeys.add(`${row.source_table_name}:${row.source_inquiry_id}`);
+      for (const row of existingRows as Array<{ source_table_name: string; source_inquiry_id: number; inquiry_id: number | null; mobile: string | null }>) {
+        existingRowsByKey.set(`${row.source_table_name}:${row.source_inquiry_id}`, {
+          inquiry_id: row.inquiry_id ?? null,
+          mobile: normalizeText(row.mobile),
+        });
       }
     }
 
     for (const { record, sourceId, tableName, studentName } of validRecords) {
-      if (existingKeys.has(`${tableName}:${sourceId}`)) {
+      const existing = existingRowsByKey.get(`${tableName}:${sourceId}`);
+      if (existing) {
+        // Repair path: if an existing synced row has empty mobile, try updating it from latest source payload.
+        if (!existing.mobile) {
+          const repairedMobile = extractPhoneForSync(record, tableName);
+          if (repairedMobile) {
+            try {
+              await syncConnection.query(
+                `UPDATE suvidya_inquiry_sync
+                 SET mobile = ?
+                 WHERE source_table_name = ? AND source_inquiry_id = ?`,
+                [repairedMobile, tableName, sourceId]
+              );
+
+              if (existing.inquiry_id) {
+                await syncConnection.query(
+                  `UPDATE \`${inquiryTable}\`
+                   SET Present_Mobile = COALESCE(NULLIF(Present_Mobile, ''), ?)
+                   WHERE Inquiry_Id = ?`,
+                  [repairedMobile, existing.inquiry_id]
+                );
+              }
+            } catch (error) {
+              console.error('Suvidya inquiry mobile repair failed:', {
+                tableName,
+                sourceId,
+                error,
+              });
+            }
+          }
+        }
         summary.skippedExisting += 1;
         continue;
       }
 
       const email = normalizeText(record.email_id);
-      const mobile = normalizePhoneText(
-        record.phone || record.mobile || record.phone_number ||
-        record.contact || record.contact_number ||
-        record.whatsapp || record.whatsapp_number
-      );
+      const mobile = extractPhoneForSync(record, tableName);
       const qualification = normalizeText(record.select_qualification);
       const location = normalizeText(record.your_location);
       const courseName = normalizeText(record.select_course);
