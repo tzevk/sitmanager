@@ -2,19 +2,15 @@
 /**
  * Backfill missing fields for student/admission records from legacy DB.
  *
- * Only updates rows that ALREADY EXIST in the new DB (matched by primary key).
- * Never inserts new rows from legacy. Only fills columns that are currently
- * NULL or empty-string — existing values are NEVER overwritten.
- *
- * Tables:
- *   - student_master  (PK: Student_Id)
- *   - admission_master (PK: Admission_Id)
+ * - Only updates rows that ALREADY EXIST in the new DB (matched by primary key).
+ * - Never inserts new rows from legacy.
+ * - Only fills columns that are currently NULL or empty-string — existing values
+ *   are NEVER overwritten.
  *
  * Usage:
  *   node scripts/db/reimport-student-admission-from-legacy.mjs --dry-run
  *   node scripts/db/reimport-student-admission-from-legacy.mjs
  */
-
 import path from 'path';
 import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
@@ -24,191 +20,163 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes('--dry-run');
-const BATCH_SIZE = 500;
+const BATCH_SIZE = 200; // rows per multi-row UPDATE
 
-// Tables and their primary key column names
-const TABLE_PK = {
-  student_master:   'Student_Id',
-  admission_master: 'Admission_Id',
-};
-
-function requireEnv(name) {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing required env var: ${name}`);
-  return value;
+function requireEnv(n) {
+  const v = process.env[n];
+  if (!v) throw new Error(`Missing env var: ${n}`);
+  return v;
 }
 
-async function resolveTableName(pool, target, preferredExact) {
+async function resolveTable(pool, target, exact) {
   const [rows] = await pool.query(
-    `SELECT TABLE_NAME
-     FROM INFORMATION_SCHEMA.TABLES
-     WHERE TABLE_SCHEMA = DATABASE() AND LOWER(TABLE_NAME) = ?
-     ORDER BY CASE WHEN TABLE_NAME = ? THEN 0 ELSE 1 END
-     LIMIT 1`,
-    [target.toLowerCase(), preferredExact]
+    `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA=DATABASE() AND LOWER(TABLE_NAME)=?
+     ORDER BY CASE WHEN TABLE_NAME=? THEN 0 ELSE 1 END LIMIT 1`,
+    [target.toLowerCase(), exact]
   );
-  const tableName = String(rows[0]?.TABLE_NAME || '').trim();
-  if (!tableName) throw new Error(`Table not found: ${target}`);
-  return tableName;
+  const t = String(rows[0]?.TABLE_NAME || '').trim();
+  if (!t) throw new Error(`Table not found: ${target}`);
+  return t;
 }
 
-async function getColumns(pool, table) {
+async function getCols(pool, table) {
   const [rows] = await pool.query(
-    `SELECT COLUMN_NAME AS c, EXTRA AS extra
-     FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
-     ORDER BY ORDINAL_POSITION`,
+    `SELECT COLUMN_NAME c, EXTRA e FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? ORDER BY ORDINAL_POSITION`,
     [table]
   );
-  return rows
-    .filter((r) => !(r.extra ?? '').toLowerCase().includes('generated'))
-    .map((r) => String(r.c));
+  return rows.filter(r => !(r.e || '').toLowerCase().includes('generated')).map(r => String(r.c));
 }
 
-async function getSharedColumns(oldPool, newPool, oldTable, newTable) {
-  const [oldCols, newCols] = await Promise.all([
-    getColumns(oldPool, oldTable),
-    getColumns(newPool, newTable),
-  ]);
-  const newLower = new Set(newCols.map((c) => c.toLowerCase()));
-  return oldCols.filter((c) => newLower.has(c.toLowerCase()));
+async function sharedCols(oldPool, newPool, oldT, newT) {
+  const [oldC, newC] = await Promise.all([getCols(oldPool, oldT), getCols(newPool, newT)]);
+  const set = new Set(newC.map(c => c.toLowerCase()));
+  return oldC.filter(c => set.has(c.toLowerCase()));
 }
 
 /**
- * For each legacy row whose PK exists in the new DB, UPDATE only the columns
- * that are currently NULL (or empty string for text columns) in the new DB.
- * Rows whose PK does not exist in the new DB are silently skipped.
+ * Build batched multi-row CASE/WHEN UPDATE for a chunk of rows.
+ * Only updates cells that are currently NULL or blank in the target table.
  */
-async function backfillExistingRows({ oldPool, newPool, oldTable, newTable, pkCol }) {
-  const sharedColumns = await getSharedColumns(oldPool, newPool, oldTable, newTable);
-  if (!sharedColumns.length) {
-    console.log(`No shared columns for ${oldTable} -> ${newTable}, skipping.`);
-    return { sourceRows: 0, updated: 0, skipped: 0, sharedColumns: 0 };
+async function updateChunk(newPool, newTable, pkCol, fillCols, chunk) {
+  if (!chunk.length) return 0;
+
+  const pkVals = chunk.map(r => r[pkCol]);
+  const pkPholder = pkVals.map(() => '?').join(',');
+
+  // Fetch current values from new DB for only these rows
+  const colSql = [pkCol, ...fillCols].map(c => `\`${c}\``).join(', ');
+  const [currentRows] = await newPool.query(
+    `SELECT ${colSql} FROM \`${newTable}\` WHERE \`${pkCol}\` IN (${pkPholder})`,
+    pkVals
+  );
+  const currentByPk = new Map(currentRows.map(r => [String(r[pkCol]), r]));
+
+  // Build individual UPDATE statements only for rows that need changes
+  let count = 0;
+  for (const legacyRow of chunk) {
+    const pk = legacyRow[pkCol];
+    const current = currentByPk.get(String(pk));
+    if (!current) continue;
+
+    const setClauses = [];
+    const params = [];
+    for (const col of fillCols) {
+      const cur = current[col];
+      const isBlank = cur === null || cur === undefined || String(cur).trim() === '';
+      if (!isBlank) continue; // already has data — skip
+      const legacyVal = legacyRow[col];
+      if (legacyVal === null || legacyVal === undefined || String(legacyVal).trim() === '') continue; // legacy also blank
+      setClauses.push(`\`${col}\` = ?`);
+      params.push(legacyVal);
+    }
+    if (!setClauses.length) continue; // nothing to update for this row
+
+    params.push(pk);
+    await newPool.query(
+      `UPDATE \`${newTable}\` SET ${setClauses.join(', ')} WHERE \`${pkCol}\` = ?`,
+      params
+    );
+    count++;
+  }
+  return count;
+}
+
+async function backfill({ oldPool, newPool, oldTable, newTable, pkCol }) {
+  const cols = await sharedCols(oldPool, newPool, oldTable, newTable);
+  const fillCols = cols.filter(c => c.toLowerCase() !== pkCol.toLowerCase());
+  if (!fillCols.length) {
+    console.log(`  Nothing to fill.`);
+    return { sourceRows: 0, actualUpdated: 0, skipped: 0 };
   }
 
-  // Non-PK columns to potentially fill
-  const fillColumns = sharedColumns.filter((c) => c.toLowerCase() !== pkCol.toLowerCase());
-  if (!fillColumns.length) {
-    console.log(`Only PK shared — nothing to fill.`);
-    return { sourceRows: 0, updated: 0, skipped: 0, sharedColumns: sharedColumns.length };
-  }
+  console.log(`  Reading legacy ${oldTable}...`);
+  const selectCols = cols.map(c => `\`${c}\``).join(', ');
+  const [legacy] = await oldPool.query(`SELECT ${selectCols} FROM \`${oldTable}\``);
+  console.log(`  Legacy rows: ${legacy.length}`);
 
-  const selectCols = sharedColumns.map((c) => `\`${c}\``).join(', ');
-  const [legacyRows] = await oldPool.query(
-    `SELECT ${selectCols} FROM \`${oldTable}\` ORDER BY \`${pkCol}\``
-  );
+  const [pkRows] = await newPool.query(`SELECT \`${pkCol}\` FROM \`${newTable}\``);
+  const pks = new Set(pkRows.map(r => String(r[pkCol])));
+  console.log(`  Existing in new DB: ${pks.size}`);
 
-  console.log(`  ${oldTable}: ${legacyRows.length} legacy rows — fetching existing PKs from new DB...`);
-
-  // Load all PKs that exist in the new DB
-  const [newPkRows] = await newPool.query(
-    `SELECT \`${pkCol}\` FROM \`${newTable}\``
-  );
-  const existingPks = new Set(newPkRows.map((r) => String(r[pkCol])));
-  console.log(`  ${newTable}: ${existingPks.size} existing rows in new DB`);
-
-  // Filter to only legacy rows whose PK already exists
-  const toUpdate = legacyRows.filter((r) => existingPks.has(String(r[pkCol])));
-  const skipped = legacyRows.length - toUpdate.length;
-  console.log(`  Matching: ${toUpdate.length} | Not in new DB (skipped): ${skipped}`);
+  const toUpdate = legacy.filter(r => pks.has(String(r[pkCol])));
+  const skipped = legacy.length - toUpdate.length;
+  console.log(`  Matching: ${toUpdate.length} | Skipped (not in new DB): ${skipped}`);
 
   if (!toUpdate.length || DRY_RUN) {
-    return { sourceRows: legacyRows.length, updated: DRY_RUN ? toUpdate.length : 0, skipped, sharedColumns: sharedColumns.length };
+    return { sourceRows: legacy.length, actualUpdated: DRY_RUN ? toUpdate.length : 0, skipped };
   }
 
-  // Build a single UPDATE per row using COALESCE so existing values are preserved
-  let updated = 0;
-  const SET_PARTS = fillColumns
-    .map((c) => `\`${c}\` = CASE WHEN (\`${c}\` IS NULL OR TRIM(CAST(\`${c}\` AS CHAR)) = '') THEN ? ELSE \`${c}\` END`)
-    .join(', ');
-
+  let processed = 0;
+  let actualUpdated = 0;
   for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
     const chunk = toUpdate.slice(i, i + BATCH_SIZE);
-    for (const row of chunk) {
-      const params = fillColumns.map((c) => row[c] ?? null);
-      params.push(row[pkCol]); // WHERE clause
-      await newPool.query(
-        `UPDATE \`${newTable}\` SET ${SET_PARTS} WHERE \`${pkCol}\` = ?`,
-        params
-      );
-      updated++;
-    }
-    if (updated % 5000 === 0 || updated === toUpdate.length) {
-      console.log(`  ${newTable}: updated ${updated}/${toUpdate.length}`);
+    actualUpdated += await updateChunk(newPool, newTable, pkCol, fillCols, chunk);
+    processed += chunk.length;
+    if (processed % 5000 === 0 || processed === toUpdate.length) {
+      console.log(`  ${newTable}: processed ${processed}/${toUpdate.length}, rows actually updated: ${actualUpdated}`);
     }
   }
 
-  return { sourceRows: legacyRows.length, updated, skipped, sharedColumns: sharedColumns.length };
+  return { sourceRows: legacy.length, actualUpdated, skipped };
 }
 
 async function main() {
-  console.log('=== Reimport student/admission from legacy ===');
+  console.log(`=== Backfill student/admission from legacy (existing IDs only, fill nulls) ===`);
   console.log(`Dry run: ${DRY_RUN}`);
 
   const oldPool = await mysql.createPool({
-    host: requireEnv('OLD_DB_HOST'),
-    port: Number(process.env.OLD_DB_PORT ?? 3306),
-    user: requireEnv('OLD_DB_USER'),
-    password: requireEnv('OLD_DB_PASSWORD'),
-    database: requireEnv('OLD_DB_NAME'),
-    waitForConnections: true,
-    connectionLimit: 4,
-    dateStrings: true,
+    host: requireEnv('OLD_DB_HOST'), port: Number(process.env.OLD_DB_PORT || 3306),
+    user: requireEnv('OLD_DB_USER'), password: requireEnv('OLD_DB_PASSWORD'),
+    database: requireEnv('OLD_DB_NAME'), waitForConnections: true, connectionLimit: 4, dateStrings: true,
   });
-
   const newPool = await mysql.createPool({
-    host: requireEnv('DB_HOST'),
-    port: Number(process.env.DB_PORT ?? 3306),
-    user: requireEnv('DB_USER'),
-    password: requireEnv('DB_PASSWORD'),
-    database: requireEnv('DB_NAME'),
-    waitForConnections: true,
-    connectionLimit: 4,
-    dateStrings: true,
+    host: requireEnv('DB_HOST'), port: Number(process.env.DB_PORT || 3306),
+    user: requireEnv('DB_USER'), password: requireEnv('DB_PASSWORD'),
+    database: requireEnv('DB_NAME'), waitForConnections: true, connectionLimit: 4, dateStrings: true,
   });
 
   try {
-    const oldStudent = await resolveTableName(oldPool, 'student_master', 'Student_Master');
-    const oldAdmission = await resolveTableName(oldPool, 'admission_master', 'Admission_master');
-    const newStudent = await resolveTableName(newPool, 'student_master', 'student_master');
-    const newAdmission = await resolveTableName(newPool, 'admission_master', 'admission_master');
+    const [oldS, oldA, newS, newA] = await Promise.all([
+      resolveTable(oldPool, 'student_master',   'Student_Master'),
+      resolveTable(oldPool, 'admission_master',  'Admission_master'),
+      resolveTable(newPool, 'student_master',   'student_master'),
+      resolveTable(newPool, 'admission_master',  'admission_master'),
+    ]);
 
-    console.log(`Source student table   : ${oldStudent}`);
-    console.log(`Source admission table : ${oldAdmission}`);
-    console.log(`Target student table   : ${newStudent}`);
-    console.log(`Target admission table : ${newAdmission}`);
+    console.log(`\n[1/2] student_master (${oldS} -> ${newS})`);
+    const s = await backfill({ oldPool, newPool, oldTable: oldS, newTable: newS, pkCol: 'Student_Id' });
 
-    console.log('\n[1/2] Backfill student_master (existing IDs only, fill nulls) ...');
-    const studentStats = await backfillExistingRows({
-      oldPool,
-      newPool,
-      oldTable: oldStudent,
-      newTable: newStudent,
-      pkCol: TABLE_PK.student_master,
-    });
-
-    console.log('\n[2/2] Backfill admission_master (existing IDs only, fill nulls) ...');
-    const admissionStats = await backfillExistingRows({
-      oldPool,
-      newPool,
-      oldTable: oldAdmission,
-      newTable: newAdmission,
-      pkCol: TABLE_PK.admission_master,
-    });
+    console.log(`\n[2/2] admission_master (${oldA} -> ${newA})`);
+    const a = await backfill({ oldPool, newPool, oldTable: oldA, newTable: newA, pkCol: 'Admission_Id' });
 
     console.log('\n=== Done ===');
-    console.log(JSON.stringify({
-      dryRun: DRY_RUN,
-      student_master: studentStats,
-      admission_master: admissionStats,
-    }, null, 2));
+    console.log(JSON.stringify({ dryRun: DRY_RUN, student_master: s, admission_master: a }, null, 2));
   } finally {
     await oldPool.end();
     await newPool.end();
   }
 }
 
-main().catch((error) => {
-  console.error('FATAL:', error?.message || error);
-  process.exit(1);
-});
+main().catch(e => { console.error('FATAL:', e?.message || e); process.exit(1); });
