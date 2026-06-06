@@ -53,10 +53,13 @@ export async function GET(req: NextRequest) {
       [facultyId]
     );
 
-    // Total lectures taken
+    // Total lectures taken this month
     const [lectureCountRows] = await pool.query<any[]>(
       `SELECT COUNT(*) as total FROM lecture_taken_master
-       WHERE Faculty_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+       WHERE Faculty_Id = ?
+         AND (IsDelete = 0 OR IsDelete IS NULL)
+         AND MONTH(Take_Dt) = MONTH(CURDATE())
+         AND YEAR(Take_Dt) = YEAR(CURDATE())`,
       [facultyId]
     );
     const totalLectures = lectureCountRows[0]?.total ?? 0;

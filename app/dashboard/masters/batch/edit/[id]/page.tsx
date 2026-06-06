@@ -70,6 +70,7 @@ interface StandardLecture {
   endtime: string | null;
   assignment: string | null;
   assignment_date: string | null;
+  faculty_id?: number | null;
   faculty_name: string | null;
   class_room: string | null;
   documents: string | null;
@@ -328,6 +329,7 @@ export default function EditBatchPage() {
   const [standardLectures, setStandardLectures] = useState<StandardLecture[]>([]);
   const [stdPlanLocked, setStdPlanLocked] = useState(false);
   const [savingSLectureRowId, setSavingSLectureRowId] = useState<number | null>(null);
+  const [autoLinkingLegacyTrainers, setAutoLinkingLegacyTrainers] = useState(false);
   const [sLectureSearch, setSLectureSearch] = useState('');
   const [loadingSLectures, setLoadingSLectures] = useState(false);
   // Standard Lecture Plan is edited inline (no modal)
@@ -402,6 +404,7 @@ export default function EditBatchPage() {
           endtime: row.endtime,
           assignment: row.assignment,
           assignment_date: formatDateForInput(row.assignment_date) || null,
+          faculty_id: row.faculty_id ?? null,
           faculty_name: row.faculty_name,
           class_room: row.class_room,
           documents: row.documents,
@@ -413,6 +416,120 @@ export default function EditBatchPage() {
       fetchStandardLectures();
     } catch { /* ignore */ }
     setSavingSLectureRowId(null);
+  };
+
+  const normalizeTrainerName = (value: string | null | undefined) =>
+    (value ?? '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const handleAutoLinkLegacyTrainers = async () => {
+    if (stdPlanLocked) return;
+    if (!facultyList.length) {
+      alert('Faculty list is not loaded yet. Please refresh the tab and try again.');
+      return;
+    }
+
+    const legacyRows = standardLectures.filter(
+      (l) => l.faculty_id == null && Boolean((l.faculty_name ?? '').toString().trim())
+    );
+
+    if (!legacyRows.length) {
+      alert('No legacy trainer names found to auto-link.');
+      return;
+    }
+
+    const facultyByNormalized = new Map<string, Faculty>();
+    facultyList.forEach((f) => {
+      const key = normalizeTrainerName(f.Faculty_Name);
+      if (key && !facultyByNormalized.has(key)) {
+        facultyByNormalized.set(key, f);
+      }
+    });
+
+    const updates = legacyRows
+      .map((row) => {
+        const key = normalizeTrainerName(row.faculty_name);
+        const matched = key ? facultyByNormalized.get(key) : undefined;
+        if (!matched) return null;
+        return {
+          row,
+          facultyId: matched.Faculty_Id,
+          facultyName: matched.Faculty_Name,
+        };
+      })
+      .filter(Boolean) as Array<{
+      row: StandardLecture;
+      facultyId: number;
+      facultyName: string;
+    }>;
+
+    if (!updates.length) {
+      alert('No exact trainer-name matches found for auto-linking.');
+      return;
+    }
+
+    setAutoLinkingLegacyTrainers(true);
+    try {
+      const results = await Promise.all(
+        updates.map(async ({ row, facultyId, facultyName }) => {
+          const res = await fetch(`/api/masters/batch/${batchId}/slectures`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: row.id,
+              lecture_no: row.lecture_no,
+              subject: (row.subject ?? null),
+              subject_topic: (row.subject_topic ?? null),
+              lecturecontent: (row.lecturecontent ?? null),
+              date: formatDateForInput(row.date) || null,
+              lectureday: row.lectureday,
+              starttime: row.starttime,
+              endtime: row.endtime,
+              assignment: row.assignment,
+              assignment_date: formatDateForInput(row.assignment_date) || null,
+              faculty_id: facultyId,
+              faculty_name: facultyName,
+              class_room: row.class_room,
+              documents: row.documents,
+              unit_test: row.unit_test,
+              publish: row.publish,
+            }),
+          });
+
+          return { ok: res.ok };
+        })
+      );
+
+      const successCount = results.filter((r) => r.ok).length;
+      const failedCount = results.length - successCount;
+
+      if (successCount > 0) {
+        setStandardLectures((prev) =>
+          prev.map((row) => {
+            const matched = updates.find((u) => u.row.id === row.id);
+            if (!matched) return row;
+            return {
+              ...row,
+              faculty_id: matched.facultyId,
+              faculty_name: matched.facultyName,
+            };
+          })
+        );
+      }
+
+      await fetchStandardLectures();
+      alert(
+        failedCount > 0
+          ? `Auto-link complete: ${successCount} linked, ${failedCount} failed.`
+          : `Auto-link complete: ${successCount} trainer(s) linked.`
+      );
+    } catch {
+      alert('Auto-link failed. Please try again.');
+    }
+    setAutoLinkingLegacyTrainers(false);
   };
 
   const handleSaveLectureInline = async (row: Lecture) => {
@@ -2158,6 +2275,14 @@ export default function EditBatchPage() {
           {stdPlanLocked ? 'Locked' : 'Unlocked'}
         </button>
         <button
+          onClick={handleAutoLinkLegacyTrainers}
+          disabled={stdPlanLocked || autoLinkingLegacyTrainers || !facultyList.length}
+          className="flex items-center gap-1 px-2 py-1 border border-amber-300 text-amber-800 bg-amber-50 text-xs font-medium rounded h-7 hover:bg-amber-100 disabled:opacity-50"
+          title="Map legacy trainer names to linked trainer records"
+        >
+          {autoLinkingLegacyTrainers ? 'Auto Linking...' : 'Auto Link Legacy Trainers'}
+        </button>
+        <button
           onClick={handleExportSLectures}
           className="flex items-center gap-1 px-2 py-1 border border-gray-300 text-gray-600 text-xs font-medium rounded h-7 hover:bg-gray-50"
         >
@@ -2312,14 +2437,31 @@ export default function EditBatchPage() {
                     />
                   </td>
                   <td className="px-2 py-1.5 text-gray-700">
-                    <input
-                      type="text"
-                      value={(l.faculty_name ?? '').toString()}
+                    <select
+                      value={l.faculty_id != null ? String(l.faculty_id) : ((l.faculty_name ?? '').toString().trim() ? '__legacy__' : '')}
                       disabled={stdPlanLocked}
-                      onChange={(e) => updateStandardLectureInline(l.id, { faculty_name: e.target.value })}
-                      className="w-full min-w-[120px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-                      placeholder="Trainer"
-                    />
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (!v || v === '__legacy__') {
+                          updateStandardLectureInline(l.id, { faculty_id: null });
+                          return;
+                        }
+                        const selected = facultyList.find((f) => String(f.Faculty_Id) === v);
+                        updateStandardLectureInline(l.id, {
+                          faculty_id: selected?.Faculty_Id ?? null,
+                          faculty_name: selected?.Faculty_Name ?? l.faculty_name,
+                        });
+                      }}
+                      className="w-full min-w-[140px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                    >
+                      <option value="">Select Trainer</option>
+                      {l.faculty_id == null && (l.faculty_name ?? '').toString().trim() && (
+                        <option value="__legacy__">Legacy: {(l.faculty_name ?? '').toString()}</option>
+                      )}
+                      {facultyList.map((f) => (
+                        <option key={f.Faculty_Id} value={String(f.Faculty_Id)}>{f.Faculty_Name}</option>
+                      ))}
+                    </select>
                   </td>
                   <td className="px-2 py-1.5 text-gray-700">
                     <input

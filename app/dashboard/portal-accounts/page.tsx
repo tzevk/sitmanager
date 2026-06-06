@@ -32,6 +32,7 @@ export default function PortalAccountsPage() {
 
   const DEFAULT_IN_TIME = '08:00';
   const DEFAULT_OUT_TIME = '17:30';
+  const DEFAULT_TRAINER_PASSWORD = 'Suvidya@2026';
 
   const [tab, setTab] = useState<Tab>('trainer');
   const [studentForm, setStudentForm] = useState({
@@ -63,6 +64,7 @@ export default function PortalAccountsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState<string>('');
+  const [copiedTrainerId, setCopiedTrainerId] = useState<number | null>(null);
 
   const [facultySearch, setFacultySearch] = useState('');
   const [scheduleDate, setScheduleDate] = useState(getTodayIsoDate());
@@ -82,7 +84,6 @@ export default function PortalAccountsPage() {
   >(
     []
   );
-  const [facultyPasswords, setFacultyPasswords] = useState<Record<number, string>>({});
   const [trainerActiveByFacultyId, setTrainerActiveByFacultyId] = useState<Record<number, boolean>>({});
   const [breakSavingId, setBreakSavingId] = useState<number | null>(null);
   const [timeSavingId, setTimeSavingId] = useState<number | null>(null);
@@ -101,26 +102,18 @@ export default function PortalAccountsPage() {
   const subtitle = useMemo(
     () =>
       tab === 'trainer'
-        ? 'Create Trainer Portal logins from faculty_master'
+        ? 'One-click trainer account creation: login with trainer name and default password'
         : 'Creates or updates a Student Portal login (links to student_master)',
     [tab]
   );
 
-  const slugifyUsernamePart = useCallback((value: string): string => {
-    return value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '.')
-      .replace(/^\.+|\.+$/g, '')
-      .slice(0, 30);
-  }, []);
-
   const suggestUsername = useCallback(
     (facultyName: string, facultyId: number): string => {
-      const base = slugifyUsernamePart(facultyName || 'trainer');
-      const withId = `${base || 'trainer'}.${facultyId}`;
-      return withId.replace(/\.+/g, '.');
+      const byName = String(facultyName || '').trim();
+      if (byName) return byName;
+      return `trainer.${facultyId}`;
     },
-    [slugifyUsernamePart]
+    []
   );
 
   function generatePassword(length = 10): string {
@@ -274,15 +267,6 @@ export default function PortalAccountsPage() {
 
     if (facultyLoading || filtered.length === 0) return;
 
-    // Ensure every faculty row has a stable password both for export and UI.
-    const passwordMap: Record<number, string> = { ...facultyPasswords };
-    for (const r of filtered) {
-      const id = Number(r?.Faculty_Id);
-      if (!Number.isFinite(id) || id <= 0) continue;
-      if (!passwordMap[id]) passwordMap[id] = generatePassword(10);
-    }
-    setFacultyPasswords(passwordMap);
-
     const headers = ['Trainer ID', 'Trainer Name', 'In Time', 'Out Time', 'Break Time (min)', 'Username', 'Password', 'Active'];
     const rows = filtered.map((f) => {
       const facultyId = Number(f.Faculty_Id);
@@ -295,7 +279,7 @@ export default function PortalAccountsPage() {
       const outTime = overrideOut || defaultOut;
       const breakMinutes = f.BreakTimeMinutes === null || f.BreakTimeMinutes === undefined ? '' : Number(f.BreakTimeMinutes);
       const username = suggestUsername(facultyName, facultyId);
-      const password = passwordMap[facultyId] || '';
+      const password = DEFAULT_TRAINER_PASSWORD;
       const active = (trainerActiveByFacultyId[facultyId] ?? true) ? 'Yes' : 'No';
       return [facultyId, facultyName, inTime, outTime, breakMinutes, username, password, active];
     });
@@ -323,10 +307,7 @@ export default function PortalAccountsPage() {
     const username = suggestUsername(facultyName, facultyId);
 
     // Ensure we have a stable password for this faculty.
-    const password = facultyPasswords[facultyId] || generatePassword(10);
-    if (!facultyPasswords[facultyId]) {
-      setFacultyPasswords((prev) => ({ ...prev, [facultyId]: password }));
-    }
+    const password = DEFAULT_TRAINER_PASSWORD;
 
     setSaving(true);
     try {
@@ -348,6 +329,18 @@ export default function PortalAccountsPage() {
       setError(e instanceof Error ? e.message : 'Failed to create trainer account');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function copyTrainerCredentials(facultyId: number, facultyName: string) {
+    const loginName = suggestUsername(facultyName, facultyId);
+    const text = `Login Name: ${loginName}\nPassword: ${DEFAULT_TRAINER_PASSWORD}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedTrainerId(facultyId);
+      setTimeout(() => setCopiedTrainerId((prev) => (prev === facultyId ? null : prev)), 1800);
+    } catch {
+      setError('Failed to copy credentials');
     }
   }
 
@@ -438,15 +431,6 @@ export default function PortalAccountsPage() {
           return next;
         });
 
-        setFacultyPasswords((prev) => {
-          const next = { ...prev };
-          for (const r of sortedRows) {
-            const id = Number(r?.Faculty_Id);
-            if (!Number.isFinite(id) || id <= 0) continue;
-            if (!next[id]) next[id] = generatePassword(10);
-          }
-          return next;
-        });
       } catch (e: unknown) {
         if (!alive) return;
         setError(e instanceof Error ? e.message : 'Failed to fetch trainer');
@@ -618,9 +602,9 @@ export default function PortalAccountsPage() {
                     <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
                       <div>
                         <div className="text-[12px] font-bold text-gray-800">Trainer List</div>
-                        <div className="text-[11px] text-gray-600">Auto-generated username &amp; password per trainer</div>
+                        <div className="text-[11px] text-gray-600">Username = trainer name, password = Suvidya@2026</div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap justify-end">
                         <div className="flex items-center gap-2 rounded-lg border border-[#2E3093]/25 bg-gradient-to-r from-[#2E3093]/10 to-[#2A6BB5]/10 px-2.5 py-1.5">
                           <div className="text-[11px] text-[#2E3093] font-bold">Schedule Date</div>
                           <input
@@ -651,8 +635,12 @@ export default function PortalAccountsPage() {
                       </div>
                     </div>
 
+                    <div className="px-3 py-2 border-b border-gray-100 bg-amber-50/60 text-[11px] text-amber-800">
+                      Trainers sign in with <span className="font-semibold">their full name</span> and default password <span className="font-semibold">Suvidya@2026</span>.
+                    </div>
+
                     <div className="relative h-[60vh] overflow-x-auto overflow-y-scroll overscroll-contain [-webkit-overflow-scrolling:touch]">
-                      <table className="min-w-[1100px] w-full text-xs">
+                      <table className="min-w-[1020px] w-full text-xs">
                         <thead className="bg-gray-50">
                           <tr className="text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                             <th className="px-3 py-2 sticky top-0 z-10 bg-gray-50">Trainer ID</th>
@@ -660,9 +648,9 @@ export default function PortalAccountsPage() {
                             <th className="px-3 py-2 sticky top-0 z-10 bg-gray-50">In Time</th>
                             <th className="px-3 py-2 sticky top-0 z-10 bg-gray-50">Out Time</th>
                             <th className="px-3 py-2 sticky top-0 z-10 bg-gray-50">Break (min)</th>
-                            <th className="px-3 py-2 sticky top-0 z-10 bg-gray-50">Username</th>
-                            <th className="px-3 py-2 sticky top-0 z-10 bg-gray-50">Password</th>
-                            <th className="px-3 py-2 w-[180px] sticky top-0 z-10 bg-gray-50">Action</th>
+                            <th className="px-3 py-2 sticky top-0 z-10 bg-gray-50">Login Name</th>
+                            <th className="px-3 py-2 sticky top-0 z-10 bg-gray-50">Default Password</th>
+                            <th className="px-3 py-2 w-[230px] sticky top-0 z-10 bg-gray-50">Action</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -671,7 +659,7 @@ export default function PortalAccountsPage() {
                             const facultyName = String(f.Faculty_Name ?? '').trim();
                             const breakMinutes = f.BreakTimeMinutes === null || f.BreakTimeMinutes === undefined ? '' : String(f.BreakTimeMinutes);
                             const username = suggestUsername(facultyName, facultyId);
-                            const password = facultyPasswords[facultyId] || '';
+                            const password = DEFAULT_TRAINER_PASSWORD;
                             const defaultIn = (f.InTime ? String(f.InTime).slice(0, 5) : DEFAULT_IN_TIME) || DEFAULT_IN_TIME;
                             const defaultOut = (f.OutTime ? String(f.OutTime).slice(0, 5) : DEFAULT_OUT_TIME) || DEFAULT_OUT_TIME;
                             const overrideIn = f.OverrideInTime ? String(f.OverrideInTime).slice(0, 5) : '';
@@ -746,8 +734,12 @@ export default function PortalAccountsPage() {
                                     title="Break time in minutes"
                                   />
                                 </td>
-                                <td className="px-3 py-2 text-gray-700 font-mono">{username}</td>
-                                <td className="px-3 py-2 text-gray-700 font-mono">{password || '—'}</td>
+                                <td className="px-3 py-2 text-gray-700 font-medium">{username}</td>
+                                <td className="px-3 py-2">
+                                  <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                                    {password}
+                                  </span>
+                                </td>
                                 <td className="px-3 py-2">
                                   <div className="flex items-center gap-3">
                                     <label className="inline-flex items-center gap-2 select-none">
@@ -777,6 +769,14 @@ export default function PortalAccountsPage() {
                                         {(trainerActiveByFacultyId[facultyId] ?? true) ? 'Active' : 'Not Active'}
                                       </span>
                                     </label>
+                                    <button
+                                      type="button"
+                                      className={btnGhost}
+                                      onClick={() => { void copyTrainerCredentials(facultyId, facultyName); }}
+                                      title="Copy login name and password"
+                                    >
+                                      {copiedTrainerId === facultyId ? 'Copied' : 'Copy'}
+                                    </button>
                                     <button
                                       type="button"
                                       className={btnGhost}

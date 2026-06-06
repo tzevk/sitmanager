@@ -371,7 +371,7 @@ export default function TrainerDashboardPage() {
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col gap-1">
           <p className="text-3xl font-bold" style={{ color: '#2E3093' }}>{data.total_lectures}</p>
-          <p className="text-base text-gray-500 font-medium">Total Lectures</p>
+          <p className="text-base text-gray-500 font-medium">Lectures This Month</p>
         </div>
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col gap-1">
           <p className="text-3xl font-bold" style={{ color: '#16a34a' }}>{data.this_month_attendance}</p>

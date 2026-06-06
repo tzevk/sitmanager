@@ -31,19 +31,21 @@ async function syncLectureForSession(
   const displayTopic = [input.topic, input.subtopic ? `(${input.subtopic})` : ''].filter(Boolean).join(' ').trim() || null;
   const { assignGiven, testGiven } = activityFlags(input.activityType);
 
-  const [batchRows] = await pool.query<any[]>(
+  const [batchRowsRaw] = await pool.query(
     `SELECT Course_Id FROM batch_mst WHERE Batch_Id = ? LIMIT 1`,
     [input.batchId]
   );
+  const batchRows = batchRowsRaw as any[];
   const courseId = batchRows?.[0]?.Course_Id ?? null;
 
-  const [existing] = await pool.query<any[]>(
+  const [existingRaw] = await pool.query(
     `SELECT MAX(Take_Id) AS Take_Id
      FROM lecture_taken_master
      WHERE Batch_Id = ? AND Take_Dt = ? AND Lecture_Start = ?
        AND (IsDelete = 0 OR IsDelete IS NULL)`,
     [input.batchId, input.dateIso, lectureStart]
   );
+  const existing = existingRaw as any[];
 
   const takeId = Number(existing?.[0]?.Take_Id || 0);
   if (takeId > 0) {
@@ -88,7 +90,7 @@ export async function GET(req: NextRequest) {
       params.push(month);
     }
 
-    const [records] = await pool.query<any[]>(
+    const [recordsRaw] = await pool.query(
       `SELECT ta.*, b.Batch_code
        FROM trainer_attendance ta
        LEFT JOIN batch_mst b ON ta.Batch_Id = b.Batch_Id
@@ -97,15 +99,17 @@ export async function GET(req: NextRequest) {
        LIMIT 60`,
       params
     );
+    const records = recordsRaw as any[];
 
     // Today's record
-    const [today] = await pool.query<any[]>(
+    const [todayRaw] = await pool.query(
       `SELECT * FROM trainer_attendance WHERE Faculty_Id = ? AND Attend_Date = CURDATE()`,
       [facultyId]
     );
+    const today = todayRaw as any[];
 
     // Stats for current month
-    const [stats] = await pool.query<any[]>(
+    const [statsRaw] = await pool.query(
       `SELECT
         COUNT(*) as total_days,
         SUM(CASE WHEN Status = 'Present' THEN 1 ELSE 0 END) as present_days,
@@ -115,6 +119,7 @@ export async function GET(req: NextRequest) {
        WHERE Faculty_Id = ? AND DATE_FORMAT(Attend_Date, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m')`,
       [facultyId]
     );
+    const stats = statsRaw as any[];
 
     return NextResponse.json({
       records,
@@ -142,10 +147,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if today's record exists
-    const [existing] = await pool.query<any[]>(
+    const [existingRaw] = await pool.query(
       `SELECT * FROM trainer_attendance WHERE Faculty_Id = ? AND Attend_Date = CURDATE()`,
       [facultyId]
     );
+    const existing = existingRaw as any[];
 
     if (action === 'check_in') {
       if (existing.length) {

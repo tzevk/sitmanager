@@ -2,6 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
+async function ensureFacultyIdColumn(pool: ReturnType<typeof getPool>) {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT COUNT(*) AS cnt
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'batch_slecture_master'
+       AND COLUMN_NAME = 'faculty_id'`
+  );
+  const cnt = Number(rows?.[0]?.cnt ?? 0);
+  if (cnt > 0) return;
+
+  await pool.query(
+    `ALTER TABLE batch_slecture_master
+     ADD COLUMN faculty_id INT NULL AFTER assignment_date`
+  );
+}
+
 // Helper to adjust dates from previous batch to current batch
 function adjustDate(
   originalDate: string | null, 
@@ -33,6 +50,7 @@ export async function GET(
   try {
     const { id: batchId } = await params;
     const pool = getPool();
+    await ensureFacultyIdColumn(pool);
     
     // First, get the current batch info (Course_Id, SDate, EDate)
     const [batchRows] = await pool.query<RowDataPacket[]>(`
@@ -67,7 +85,8 @@ export async function GET(
           s.endtime,
           s.assignment,
           s.assignment_date,
-          s.faculty_name,
+          s.faculty_id,
+          COALESCE(f.Faculty_Name, s.faculty_name) AS faculty_name,
           s.class_room,
           s.documents,
           s.unit_test,
@@ -75,6 +94,7 @@ export async function GET(
           s.publish,
           s.lecturecontent
         FROM batch_slecture_master s
+        LEFT JOIN faculty_master f ON f.Faculty_Id = s.faculty_id
         LEFT JOIN awt_unittesttaken u ON u.id = CAST(s.unit_test AS UNSIGNED)
         WHERE s.batch_id = ? AND (s.deleted IS NULL OR s.deleted = '0')
         ORDER BY s.lecture_no ASC, s.date ASC
@@ -112,7 +132,8 @@ export async function GET(
             s.endtime,
             s.assignment,
             s.assignment_date,
-            s.faculty_name,
+            s.faculty_id,
+            COALESCE(f.Faculty_Name, s.faculty_name) AS faculty_name,
             s.class_room,
             s.documents,
             s.unit_test,
@@ -120,6 +141,7 @@ export async function GET(
             s.publish,
             s.lecturecontent
           FROM batch_slecture_master s
+          LEFT JOIN faculty_master f ON f.Faculty_Id = s.faculty_id
           LEFT JOIN awt_unittesttaken u ON u.id = CAST(s.unit_test AS UNSIGNED)
           WHERE s.batch_id = ? AND (s.deleted IS NULL OR s.deleted = '0')
           ORDER BY s.lecture_no ASC, s.date ASC
@@ -139,9 +161,9 @@ export async function GET(
           const [insertResult] = await pool.query(`
             INSERT INTO batch_slecture_master 
             (batch_id, lecture_no, subject, subject_topic, date, lectureday, starttime, endtime, 
-             assignment, assignment_date, faculty_name, class_room, documents, unit_test, publish,
+             assignment, assignment_date, faculty_id, faculty_name, class_room, documents, unit_test, publish,
              lecturecontent, deleted, created_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
           `, [
             batchId,
             lec.lecture_no,
@@ -153,6 +175,7 @@ export async function GET(
             lec.endtime,
             lec.assignment,
             adjustedAssignmentDate,
+            lec.faculty_id || null,
             lec.faculty_name,
             lec.class_room,
             lec.documents,
@@ -172,6 +195,7 @@ export async function GET(
             endtime: lec.endtime,
             assignment: lec.assignment,
             assignment_date: adjustedAssignmentDate,
+            faculty_id: lec.faculty_id,
             faculty_name: lec.faculty_name,
             class_room: lec.class_room,
             documents: lec.documents,
@@ -208,13 +232,24 @@ export async function POST(
     const { id: batchId } = await params;
     const body = await request.json();
     const pool = getPool();
+    await ensureFacultyIdColumn(pool);
+
+    const facultyId = body.faculty_id ? Number(body.faculty_id) : null;
+    let facultyName = body.faculty_name || null;
+    if (facultyId && Number.isFinite(facultyId)) {
+      const [fRows] = await pool.query<RowDataPacket[]>(
+        `SELECT Faculty_Name FROM faculty_master WHERE Faculty_Id = ? LIMIT 1`,
+        [facultyId]
+      );
+      if (fRows.length) facultyName = fRows[0].Faculty_Name;
+    }
 
     const [result] = await pool.query(`
       INSERT INTO batch_slecture_master 
       (batch_id, lecture_no, subject, subject_topic, date, lectureday, starttime, endtime, 
-       assignment, assignment_date, faculty_name, class_room, documents, unit_test, publish, lecturecontent,
+       assignment, assignment_date, faculty_id, faculty_name, class_room, documents, unit_test, publish, lecturecontent,
        deleted, created_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
     `, [
       batchId,
       body.lecture_no || null,
@@ -226,7 +261,8 @@ export async function POST(
       body.endtime || null,
       body.assignment || null,
       body.assignment_date || null,
-      body.faculty_name || null,
+      facultyId,
+      facultyName,
       body.class_room || null,
       body.documents || null,
       body.unit_test || null,
@@ -252,6 +288,18 @@ export async function PUT(request: NextRequest) {
     }
 
     const pool = getPool();
+    await ensureFacultyIdColumn(pool);
+
+    const facultyId = data.faculty_id ? Number(data.faculty_id) : null;
+    let facultyName = data.faculty_name || null;
+    if (facultyId && Number.isFinite(facultyId)) {
+      const [fRows] = await pool.query<RowDataPacket[]>(
+        `SELECT Faculty_Name FROM faculty_master WHERE Faculty_Id = ? LIMIT 1`,
+        [facultyId]
+      );
+      if (fRows.length) facultyName = fRows[0].Faculty_Name;
+    }
+
     await pool.query(`
       UPDATE batch_slecture_master SET
         lecture_no = ?,
@@ -263,6 +311,7 @@ export async function PUT(request: NextRequest) {
         endtime = ?,
         assignment = ?,
         assignment_date = ?,
+        faculty_id = ?,
         faculty_name = ?,
         class_room = ?,
         documents = ?,
@@ -280,7 +329,8 @@ export async function PUT(request: NextRequest) {
       data.endtime || null,
       data.assignment || null,
       data.assignment_date || null,
-      data.faculty_name || null,
+      facultyId,
+      facultyName,
       data.class_room || null,
       data.documents || null,
       data.unit_test || null,
@@ -307,6 +357,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const pool = getPool();
+    await ensureFacultyIdColumn(pool);
     await pool.query(`UPDATE batch_slecture_master SET deleted = '1' WHERE id = ?`, [lectureId]);
 
     return NextResponse.json({ success: true });

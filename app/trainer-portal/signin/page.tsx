@@ -82,7 +82,7 @@ export default function TrainerSignIn() {
 
           <div className="bg-white rounded-2xl shadow-lg p-8">
             <h2 className="text-2xl font-bold text-gray-800 mb-1">Welcome Back</h2>
-            <p className="text-gray-500 mb-8">Sign in to your trainer account</p>
+            <p className="text-gray-500 mb-8" suppressHydrationWarning>Sign in using your trainer name and password</p>
 
             {error && (
               <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-center gap-2">
@@ -94,9 +94,9 @@ export default function TrainerSignIn() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Username */}
+              {/* Name / Username */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Username</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5" suppressHydrationWarning>Trainer Name</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,10 +108,12 @@ export default function TrainerSignIn() {
                     value={username}
                     onChange={e => setUsername(e.target.value)}
                     required
-                    placeholder="Enter your username"
+                    placeholder="Enter your trainer name"
+                    suppressHydrationWarning
                     className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2A6BB5] focus:border-transparent transition-all text-gray-800 placeholder-gray-400"
                   />
                 </div>
+                <p className="mt-1 text-xs text-gray-400" suppressHydrationWarning>Default password: Suvidya@2026</p>
               </div>
 
               {/* Password */}
