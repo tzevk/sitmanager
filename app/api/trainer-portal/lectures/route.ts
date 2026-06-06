@@ -15,20 +15,45 @@ export async function GET(req: NextRequest) {
     const month = searchParams.get('month'); // YYYY-MM format
     const facultyId = session.facultyId;
 
-    // Get batches this trainer is assigned to
+    // Get batches this trainer is assigned to (from both standard plan and taken lectures),
+    // and auto-classify them as current vs closed by end date.
     if (!batchId) {
       const [batches] = await pool.query<any[]>(
-        `SELECT DISTINCT ltm.Batch_Id, b.Batch_code, c.Course_Name
-         FROM lecture_taken_master ltm
-         JOIN batch_mst b ON ltm.Batch_Id = b.Batch_Id
+        `SELECT DISTINCT b.Batch_Id, b.Batch_code, c.Course_Name, b.SDate, b.EDate, b.Timings,
+                CASE
+                  WHEN b.EDate IS NOT NULL AND DATE(b.EDate) < CURDATE() THEN 1
+                  ELSE 0
+                END AS Is_Closed,
+                CASE
+                  WHEN b.SDate IS NOT NULL AND b.EDate IS NOT NULL AND CURDATE() BETWEEN DATE(b.SDate) AND DATE(b.EDate)
+                    THEN 1
+                  ELSE 0
+                END AS Is_Current
+         FROM batch_mst b
          LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
-         WHERE ltm.Faculty_Id = ? AND (ltm.IsDelete = 0 OR ltm.IsDelete IS NULL)
+         LEFT JOIN batch_slecture_master bsl
+           ON bsl.batch_id = b.Batch_Id
+          AND (bsl.deleted IS NULL OR bsl.deleted = '0' OR bsl.deleted = 0)
+          AND bsl.faculty_id = ?
+         LEFT JOIN lecture_taken_master ltm
+           ON ltm.Batch_Id = b.Batch_Id
+          AND (ltm.IsDelete = 0 OR ltm.IsDelete IS NULL)
+          AND ltm.Faculty_Id = ?
+         WHERE (bsl.id IS NOT NULL OR ltm.Take_Id IS NOT NULL)
            AND (b.Cancel = 0 OR b.Cancel IS NULL)
-         ORDER BY b.Batch_Id DESC
+         ORDER BY Is_Closed ASC, Is_Current DESC, b.EDate DESC, b.Batch_Id DESC
          LIMIT 20`,
-        [facultyId]
+        [facultyId, facultyId]
       );
-      return NextResponse.json({ batches });
+
+      const currentBatches = (batches || []).filter((b) => Number(b.Is_Closed || 0) === 0);
+      const closedBatches = (batches || []).filter((b) => Number(b.Is_Closed || 0) === 1);
+
+      return NextResponse.json({
+        batches: currentBatches,
+        current_batches: currentBatches,
+        closed_batches: closedBatches,
+      });
     }
 
     // Get planned lectures for month from Standard Lecture Plan first

@@ -94,8 +94,9 @@ export async function GET(req: NextRequest) {
     const breakTimeMinutes = Math.max(0, Math.round(Number(faculty?.BreakTimeMinutes ?? 60)));
     const hourlyRate = Number(faculty?.HourlyRate ?? 0);
 
-    // Current/assigned batches for this trainer with configured batch timings.
-    // Includes both planned (standard lecture plan) and already taken lectures.
+    // Assigned batches for this trainer with configured batch timings.
+    // Includes both planned (standard lecture plan) and already taken lectures,
+    // then auto-classifies by end date.
     const [batchRows] = await pool.query<any[]>(
       `SELECT DISTINCT b.Batch_Id, b.Batch_code, c.Course_Name, b.Category,
               b.SDate, b.EDate, b.No_of_Lectures, b.Timings,
@@ -103,7 +104,12 @@ export async function GET(req: NextRequest) {
                 WHEN b.SDate IS NOT NULL AND b.EDate IS NOT NULL AND CURDATE() BETWEEN DATE(b.SDate) AND DATE(b.EDate)
                   THEN 1
                 ELSE 0
-              END AS Is_Current
+              END AS Is_Current,
+              CASE
+                WHEN b.EDate IS NOT NULL AND DATE(b.EDate) < CURDATE()
+                  THEN 1
+                ELSE 0
+              END AS Is_Closed
        FROM batch_mst b
        LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
        LEFT JOIN batch_slecture_master bsl
@@ -120,6 +126,8 @@ export async function GET(req: NextRequest) {
        LIMIT 20`,
       [facultyId, facultyId]
     );
+    const currentBatches = (batchRows || []).filter((b) => Number(b.Is_Closed || 0) === 0);
+    const closedBatches = (batchRows || []).filter((b) => Number(b.Is_Closed || 0) === 1);
 
     // Total lectures taken this month
     const [lectureCountRows] = await pool.query<any[]>(
@@ -195,7 +203,8 @@ export async function GET(req: NextRequest) {
         breakTimeMinutes: faculty?.BreakTimeMinutes ?? null,
         hourlyRate: Number.isFinite(hourlyRate) ? hourlyRate : null,
       },
-      batches: batchRows,
+      batches: currentBatches,
+      closed_batches: closedBatches,
       total_lectures: totalLectures,
       recent_lectures: recentLectures,
       this_month_attendance: thisMonthAttendance,

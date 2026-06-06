@@ -31,6 +31,15 @@ const NAV_ITEMS = [
     ),
   },
   {
+    label: 'Closed Batches',
+    href: '/trainer-portal/dashboard/closed-batches',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-3-3v6m-9 4.5A2.5 2.5 0 015.5 17h13a2.5 2.5 0 012.5 2.5M7 7a5 5 0 0110 0v2H7V7z" />
+      </svg>
+    ),
+  },
+  {
     label: 'Assignments',
     href: '/trainer-portal/dashboard/assignments',
     icon: (

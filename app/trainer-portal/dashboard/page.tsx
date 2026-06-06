@@ -62,6 +62,34 @@ interface PlannedLecture {
 
 type DisciplineOption = { name: string; subtopics: string[] };
 
+function buildDisciplineOptionsFromLectures(lectures: PlannedLecture[]): DisciplineOption[] {
+  const groups = new Map<string, { name: string; subtopics: string[] }>();
+
+  for (const l of lectures) {
+    const topic = String(l.lecturecontent || l.subject || '').trim();
+    if (!topic) continue;
+    const key = topic.toLowerCase();
+    const subtopic = String(l.subject_topic || '').trim();
+
+    if (!groups.has(key)) {
+      groups.set(key, { name: topic, subtopics: [] });
+    }
+    if (subtopic) groups.get(key)!.subtopics.push(subtopic);
+  }
+
+  return Array.from(groups.values()).map((g) => {
+    const uniqueSubtopics: string[] = [];
+    const seen = new Set<string>();
+    for (const s of g.subtopics) {
+      const k = s.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      uniqueSubtopics.push(s);
+    }
+    return { name: g.name, subtopics: uniqueSubtopics };
+  });
+}
+
 function monthKey(d: Date) {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -188,10 +216,11 @@ export default function TrainerDashboardPage() {
   useEffect(() => {
     if (!modalOpen || !currentBatch?.Batch_Id) return;
     setTopicLoading(true);
-    fetch(`/api/trainer-portal/lecture-topics?batchId=${currentBatch.Batch_Id}`)
+    fetch(`/api/trainer-portal/lectures?batchId=${currentBatch.Batch_Id}`)
       .then(r => r.json())
       .then(d => {
-        const opts: DisciplineOption[] = Array.isArray(d?.disciplines) ? d.disciplines : [];
+        const lectures: PlannedLecture[] = Array.isArray(d?.lectures) ? d.lectures : [];
+        const opts: DisciplineOption[] = buildDisciplineOptionsFromLectures(lectures);
         setDisciplineOptions(opts);
         setSelectedTopic(prev => {
           const has = prev && opts.some(o => o.name === prev);
