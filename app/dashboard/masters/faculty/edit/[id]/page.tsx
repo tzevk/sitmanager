@@ -33,8 +33,9 @@ export default function EditFacultyPage({ params }: { params: Promise<{ id: stri
     Permanent_Address: '', Permanent_City: '', Permanent_State: '', Permanent_Country: '', Permanent_Pin: '', Permanent_Tel: '',
     Service_Offered: '', Specialization: '', Experience: '', Company_Name: '', Company_Address: '', Company_Phone: '',
     Interview_Date: '', Working_At: '', Qualified: '', Joining_Date: '', Comments: '', Interviewer: '',
-    Sal_Struct: '', Salary: '', TDS: '', PAN: '', Resigned: '', InvoiceName: '', CourseId: '', DesignExp: '', KnowSw: '',
-    Working_Status: '', TrainingCategory: '', Interview_Status: '', Reference_by: ''
+    Sal_Struct: '', Salary: '', HourlyRate: '', TDS: '', PAN: '', Resigned: '', InvoiceName: '', CourseId: '', DesignExp: '', KnowSw: '',
+    Working_Status: '', TrainingCategory: '', Interview_Status: '', Reference_by: '',
+    Date_added: '', BreakTimeMinutes: '60', IsActive: '1', IsDelete: '0'
   });
 
   useEffect(() => {
@@ -81,6 +82,7 @@ export default function EditFacultyPage({ params }: { params: Promise<{ id: stri
             Interviewer: f.Interviewer || '',
             Sal_Struct: f.Sal_Struct || '',
             Salary: f.Salary?.toString() || '',
+            HourlyRate: f.HourlyRate?.toString() || '',
             TDS: f.TDS || '',
             PAN: f.PAN || '',
             Resigned: f.Resigned || '',
@@ -91,7 +93,11 @@ export default function EditFacultyPage({ params }: { params: Promise<{ id: stri
             Working_Status: f.Working_Status || '',
             TrainingCategory: f.TrainingCategory || '',
             Interview_Status: f.Interview_Status || '',
-            Reference_by: f.Reference_by || ''
+            Reference_by: f.Reference_by || '',
+            Date_added: f.Date_added ? String(f.Date_added).slice(0, 10) : '',
+            BreakTimeMinutes: f.BreakTimeMinutes != null ? String(f.BreakTimeMinutes) : '60',
+            IsActive: f.IsActive != null ? String(f.IsActive) : '1',
+            IsDelete: f.IsDelete != null ? String(f.IsDelete) : '0'
           });
         }
       } catch {
@@ -400,8 +406,44 @@ export default function EditFacultyPage({ params }: { params: Promise<{ id: stri
               <input type="number" value={formData.Salary} onChange={e => handleChange('Salary', e.target.value)} className={inputCls} />
             </div>
             <div>
+              <label className={labelCls}>Hourly Rate</label>
+              <input type="number" step="0.01" value={formData.HourlyRate} onChange={e => handleChange('HourlyRate', e.target.value)} className={inputCls} />
+            </div>
+            <div>
               <label className={labelCls}>TDS</label>
               <input type="text" value={formData.TDS} onChange={e => handleChange('TDS', e.target.value)} className={inputCls} />
+            </div>
+          </div>
+        </SectionCard>
+
+        {/* System Fields */}
+        <SectionCard title="System Fields">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <label className={labelCls}>Date Added</label>
+              <input type="date" value={formData.Date_added} onChange={e => handleChange('Date_added', e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Break Time (Minutes)</label>
+              <input type="number" value={formData.BreakTimeMinutes} onChange={e => handleChange('BreakTimeMinutes', e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Is Active</label>
+              <select value={formData.IsActive} onChange={e => handleChange('IsActive', e.target.value)} className={inputCls}>
+                <option value="1">Yes</option>
+                <option value="0">No</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Is Delete</label>
+              <select value={formData.IsDelete} onChange={e => handleChange('IsDelete', e.target.value)} className={inputCls}>
+                <option value="0">No</option>
+                <option value="1">Yes</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Course ID</label>
+              <input type="number" value={formData.CourseId} onChange={e => handleChange('CourseId', e.target.value)} className={inputCls} />
             </div>
           </div>
         </SectionCard>

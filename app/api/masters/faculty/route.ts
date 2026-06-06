@@ -3,6 +3,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
+async function ensureTrainerCompensationColumns(pool: ReturnType<typeof getPool>) {
+  const [rows] = await pool.query<any[]>(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'faculty_master'
+       AND COLUMN_NAME IN ('BreakTimeMinutes', 'HourlyRate')`
+  );
+  const existing = new Set((rows || []).map((r) => String(r.COLUMN_NAME || '')));
+
+  if (!existing.has('BreakTimeMinutes')) {
+    await pool.query(
+      `ALTER TABLE faculty_master
+       ADD COLUMN BreakTimeMinutes INT NULL DEFAULT 60`
+    );
+  }
+
+  if (!existing.has('HourlyRate')) {
+    await pool.query(
+      `ALTER TABLE faculty_master
+       ADD COLUMN HourlyRate DECIMAL(10,2) NULL`
+    );
+  }
+}
+
 // GET - fetch all faculty with pagination and search
 export async function GET(req: NextRequest) {
   try {
@@ -63,6 +88,7 @@ export async function POST(req: NextRequest) {
     const auth = await requirePermission(req, 'faculty.create');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
+    await ensureTrainerCompensationColumns(pool);
     const body = await req.json();
 
     const {
@@ -73,7 +99,8 @@ export async function POST(req: NextRequest) {
       Service_Offered, Specialization, Experience, Company_Name, Company_Address, Company_Phone,
       Interview_Date, Working_At, Qualified, Joining_Date, Comments, Interviewer,
       Sal_Struct, Salary, TDS, PAN, Resigned, InvoiceName, CourseId, DesignExp, KnowSw,
-      Working_Status, TrainingCategory, Interview_Status, Reference_by
+      Working_Status, TrainingCategory, Interview_Status, Reference_by,
+      Date_added, BreakTimeMinutes, HourlyRate, IsActive, IsDelete
     } = body;
 
     if (!Faculty_Name?.trim()) {
@@ -89,8 +116,9 @@ export async function POST(req: NextRequest) {
         Service_Offered, Specialization, Experience, Company_Name, Company_Address, Company_Phone,
         Interview_Date, Working_At, Qualified, Joining_Date, Comments, Interviewer,
         Sal_Struct, Salary, TDS, PAN, Resigned, InvoiceName, CourseId, DesignExp, KnowSw,
-        Working_Status, TrainingCategory, Interview_Status, Reference_by, IsActive, IsDelete
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+        Working_Status, TrainingCategory, Interview_Status, Reference_by,
+        Date_added, BreakTimeMinutes, HourlyRate, IsActive, IsDelete
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         Faculty_Name.trim(), Faculty_Code || null, Married || null, DOB || null, Nationality || null, Faculty_Type || null,
         Office_Tel || null, Res_Tel || null, Mobile || null, EMail || null,
@@ -99,7 +127,12 @@ export async function POST(req: NextRequest) {
         Service_Offered || null, Specialization || null, Experience || null, Company_Name || null, Company_Address || null, Company_Phone || null,
         Interview_Date || null, Working_At || null, Qualified || null, Joining_Date || null, Comments || null, Interviewer || null,
         Sal_Struct || null, Salary || null, TDS || null, PAN || null, Resigned || null, InvoiceName || null, CourseId || null, DesignExp || null, KnowSw || null,
-        Working_Status || null, TrainingCategory || null, Interview_Status || null, Reference_by || null
+        Working_Status || null, TrainingCategory || null, Interview_Status || null, Reference_by || null,
+        Date_added || null,
+        BreakTimeMinutes !== undefined && BreakTimeMinutes !== null && String(BreakTimeMinutes) !== '' ? Number(BreakTimeMinutes) : null,
+        HourlyRate !== undefined && HourlyRate !== null && String(HourlyRate) !== '' ? Number(HourlyRate) : null,
+        IsActive !== undefined && IsActive !== null && String(IsActive) !== '' ? Number(IsActive) : 1,
+        IsDelete !== undefined && IsDelete !== null && String(IsDelete) !== '' ? Number(IsDelete) : 0
       ]
     );
 
@@ -116,6 +149,7 @@ export async function PUT(req: NextRequest) {
     const auth = await requirePermission(req, 'faculty.update');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
+    await ensureTrainerCompensationColumns(pool);
     const body = await req.json();
 
     const {
@@ -126,7 +160,8 @@ export async function PUT(req: NextRequest) {
       Service_Offered, Specialization, Experience, Company_Name, Company_Address, Company_Phone,
       Interview_Date, Working_At, Qualified, Joining_Date, Comments, Interviewer,
       Sal_Struct, Salary, TDS, PAN, Resigned, InvoiceName, CourseId, DesignExp, KnowSw,
-      Working_Status, TrainingCategory, Interview_Status, Reference_by
+      Working_Status, TrainingCategory, Interview_Status, Reference_by,
+      Date_added, BreakTimeMinutes, HourlyRate, IsActive, IsDelete
     } = body;
 
     if (!Faculty_Id) {
@@ -145,7 +180,8 @@ export async function PUT(req: NextRequest) {
         Service_Offered = ?, Specialization = ?, Experience = ?, Company_Name = ?, Company_Address = ?, Company_Phone = ?,
         Interview_Date = ?, Working_At = ?, Qualified = ?, Joining_Date = ?, Comments = ?, Interviewer = ?,
         Sal_Struct = ?, Salary = ?, TDS = ?, PAN = ?, Resigned = ?, InvoiceName = ?, CourseId = ?, DesignExp = ?, KnowSw = ?,
-        Working_Status = ?, TrainingCategory = ?, Interview_Status = ?, Reference_by = ?
+        Working_Status = ?, TrainingCategory = ?, Interview_Status = ?, Reference_by = ?,
+        Date_added = ?, BreakTimeMinutes = ?, HourlyRate = ?, IsActive = ?, IsDelete = ?
       WHERE Faculty_Id = ?`,
       [
         Faculty_Name.trim(), Faculty_Code || null, Married || null, DOB || null, Nationality || null, Faculty_Type || null,
@@ -156,6 +192,11 @@ export async function PUT(req: NextRequest) {
         Interview_Date || null, Working_At || null, Qualified || null, Joining_Date || null, Comments || null, Interviewer || null,
         Sal_Struct || null, Salary || null, TDS || null, PAN || null, Resigned || null, InvoiceName || null, CourseId || null, DesignExp || null, KnowSw || null,
         Working_Status || null, TrainingCategory || null, Interview_Status || null, Reference_by || null,
+        Date_added || null,
+        BreakTimeMinutes !== undefined && BreakTimeMinutes !== null && String(BreakTimeMinutes) !== '' ? Number(BreakTimeMinutes) : null,
+        HourlyRate !== undefined && HourlyRate !== null && String(HourlyRate) !== '' ? Number(HourlyRate) : null,
+        IsActive !== undefined && IsActive !== null && String(IsActive) !== '' ? Number(IsActive) : 1,
+        IsDelete !== undefined && IsDelete !== null && String(IsDelete) !== '' ? Number(IsDelete) : 0,
         Faculty_Id
       ]
     );

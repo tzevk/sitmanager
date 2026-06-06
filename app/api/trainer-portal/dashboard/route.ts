@@ -20,6 +20,58 @@ async function ensureBreakTimeColumn(pool: any) {
   );
 }
 
+async function ensureHourlyRateColumn(pool: any) {
+  const [cRows] = await pool.query(
+    `SELECT COUNT(*) as cnt
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'faculty_master'
+       AND COLUMN_NAME = 'HourlyRate'`
+  );
+  const cnt = Number((cRows as any)?.[0]?.cnt ?? 0);
+  if (cnt > 0) return;
+
+  await pool.query(
+    `ALTER TABLE faculty_master
+     ADD COLUMN HourlyRate DECIMAL(10,2) NULL`
+  );
+}
+
+function parseTimeToMinutes(t?: string | null): number | null {
+  if (!t) return null;
+  const raw = String(t).trim();
+  if (!raw) return null;
+  const m = raw
+    .replace(/\./g, '')
+    .trim()
+    .match(/^\s*(\d{1,2})\s*:\s*(\d{2})(?:\s*:\s*(\d{2}))?\s*([aApP])?\s*([mM])?\s*$/);
+  if (!m) return null;
+  let hh = Number(m[1]);
+  const mm = Number(m[2]);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm) || mm < 0 || mm > 59) return null;
+  const hasMeridiem = Boolean(m[4]);
+  if (hasMeridiem) {
+    const ap = String(m[4]).toLowerCase();
+    if (hh < 1 || hh > 12) return null;
+    if (ap === 'a') {
+      if (hh === 12) hh = 0;
+    } else if (ap === 'p') {
+      if (hh !== 12) hh += 12;
+    }
+  }
+  if (hh < 0 || hh > 23) return null;
+  return hh * 60 + mm;
+}
+
+function computeMinutesMinusBreak(startMin: number, endMin: number, breakMinutes: number) {
+  if (endMin <= startMin) return 0;
+  const total = endMin - startMin;
+  const breakStart = 13 * 60;
+  const breakEnd = breakStart + Math.max(0, Math.round(breakMinutes));
+  const overlap = Math.max(0, Math.min(endMin, breakEnd) - Math.max(startMin, breakStart));
+  return Math.max(0, total - overlap);
+}
+
 /* GET — Dashboard overview for the trainer */
 export async function GET(req: NextRequest) {
   try {
@@ -30,27 +82,43 @@ export async function GET(req: NextRequest) {
     const facultyId = session.facultyId;
 
     await ensureBreakTimeColumn(pool);
+    await ensureHourlyRateColumn(pool);
 
     // Faculty info
     const [fRows] = await pool.query<any[]>(
-      `SELECT Faculty_Id, Faculty_Name, EMail, Mobile, Specialization, Faculty_Type, BreakTimeMinutes
+      `SELECT Faculty_Id, Faculty_Name, EMail, Mobile, Specialization, Faculty_Type, BreakTimeMinutes, HourlyRate
        FROM faculty_master WHERE Faculty_Id = ?`,
       [facultyId]
     );
     const faculty = fRows[0] || null;
+    const breakTimeMinutes = Math.max(0, Math.round(Number(faculty?.BreakTimeMinutes ?? 60)));
+    const hourlyRate = Number(faculty?.HourlyRate ?? 0);
 
-    // Current batches assigned to this faculty (from lecture_taken_master)
+    // Current/assigned batches for this trainer with configured batch timings.
+    // Includes both planned (standard lecture plan) and already taken lectures.
     const [batchRows] = await pool.query<any[]>(
-      `SELECT DISTINCT ltm.Batch_Id, b.Batch_code, c.Course_Name, b.Category,
-              b.SDate, b.EDate, b.No_of_Lectures
-       FROM lecture_taken_master ltm
-       JOIN batch_mst b ON ltm.Batch_Id = b.Batch_Id
+      `SELECT DISTINCT b.Batch_Id, b.Batch_code, c.Course_Name, b.Category,
+              b.SDate, b.EDate, b.No_of_Lectures, b.Timings,
+              CASE
+                WHEN b.SDate IS NOT NULL AND b.EDate IS NOT NULL AND CURDATE() BETWEEN DATE(b.SDate) AND DATE(b.EDate)
+                  THEN 1
+                ELSE 0
+              END AS Is_Current
+       FROM batch_mst b
        LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
-       WHERE ltm.Faculty_Id = ? AND (ltm.IsDelete = 0 OR ltm.IsDelete IS NULL)
+       LEFT JOIN batch_slecture_master bsl
+         ON bsl.batch_id = b.Batch_Id
+        AND (bsl.deleted IS NULL OR bsl.deleted = '0')
+        AND bsl.faculty_id = ?
+       LEFT JOIN lecture_taken_master ltm
+         ON ltm.Batch_Id = b.Batch_Id
+        AND (ltm.IsDelete = 0 OR ltm.IsDelete IS NULL)
+        AND ltm.Faculty_Id = ?
+       WHERE (bsl.id IS NOT NULL OR ltm.Take_Id IS NOT NULL)
          AND (b.Cancel = 0 OR b.Cancel IS NULL)
-       ORDER BY b.Batch_Id DESC
-       LIMIT 10`,
-      [facultyId]
+       ORDER BY Is_Current DESC, b.EDate DESC, b.Batch_Id DESC
+       LIMIT 20`,
+      [facultyId, facultyId]
     );
 
     // Total lectures taken this month
@@ -63,6 +131,27 @@ export async function GET(req: NextRequest) {
       [facultyId]
     );
     const totalLectures = lectureCountRows[0]?.total ?? 0;
+
+    // Working hours this month (derived from in/out timings with lunch-break overlap deduction)
+    const [monthLectureRows] = await pool.query<any[]>(
+      `SELECT Faculty_Start, Faculty_End
+       FROM lecture_taken_master
+       WHERE Faculty_Id = ?
+         AND (IsDelete = 0 OR IsDelete IS NULL)
+         AND MONTH(Take_Dt) = MONTH(CURDATE())
+         AND YEAR(Take_Dt) = YEAR(CURDATE())`,
+      [facultyId]
+    );
+
+    let monthWorkMinutes = 0;
+    for (const row of monthLectureRows || []) {
+      const startMin = parseTimeToMinutes(row?.Faculty_Start ?? null);
+      const endMin = parseTimeToMinutes(row?.Faculty_End ?? null);
+      if (startMin == null || endMin == null) continue;
+      monthWorkMinutes += computeMinutesMinusBreak(startMin, endMin, breakTimeMinutes);
+    }
+    const monthWorkHours = monthWorkMinutes / 60;
+    const estimatedPayThisMonth = hourlyRate > 0 ? monthWorkHours * hourlyRate : 0;
 
     // Recent 5 lectures
     const [recentLectures] = await pool.query<any[]>(
@@ -104,11 +193,15 @@ export async function GET(req: NextRequest) {
         specialization: faculty?.Specialization,
         type: faculty?.Faculty_Type,
         breakTimeMinutes: faculty?.BreakTimeMinutes ?? null,
+        hourlyRate: Number.isFinite(hourlyRate) ? hourlyRate : null,
       },
       batches: batchRows,
       total_lectures: totalLectures,
       recent_lectures: recentLectures,
       this_month_attendance: thisMonthAttendance,
+      this_month_work_minutes: monthWorkMinutes,
+      this_month_work_hours: Number(monthWorkHours.toFixed(2)),
+      this_month_estimated_pay: Number(estimatedPayThisMonth.toFixed(2)),
       today_attendance: todayAtt.length > 0 ? todayAtt[0] : null,
     });
   } catch (err: unknown) {

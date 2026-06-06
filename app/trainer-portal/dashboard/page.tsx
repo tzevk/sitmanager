@@ -12,11 +12,16 @@ interface DashboardData {
     specialization: string;
     type: string;
     breakTimeMinutes?: number | null;
+    hourlyRate?: number | null;
   };
   batches: {
     Batch_Id: number;
     Batch_code: string;
     Course_Name?: string;
+    Timings?: string | null;
+    SDate?: string | null;
+    EDate?: string | null;
+    Is_Current?: number;
   }[];
   total_lectures: number;
   recent_lectures: {
@@ -32,6 +37,9 @@ interface DashboardData {
     students_present: number;
   }[];
   this_month_attendance: number;
+  this_month_work_minutes?: number;
+  this_month_work_hours?: number;
+  this_month_estimated_pay?: number;
   today_attendance: { Check_In: string; Check_Out: string; Status: string } | null;
 }
 
@@ -109,6 +117,14 @@ function formatHmFromMinutes(totalMinutes: number) {
   if (h === 0) return `${rem}m`;
   if (rem === 0) return `${h}h`;
   return `${h}h ${rem}m`;
+}
+
+function formatCurrencyInr(value: number) {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 function computeMinutesMinusBreak(startMin: number, endMin: number, breakMinutes: number) {
@@ -368,7 +384,7 @@ export default function TrainerDashboardPage() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col gap-1">
           <p className="text-3xl font-bold" style={{ color: '#2E3093' }}>{data.total_lectures}</p>
           <p className="text-base text-gray-500 font-medium">Lectures This Month</p>
@@ -376,6 +392,23 @@ export default function TrainerDashboardPage() {
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col gap-1">
           <p className="text-3xl font-bold" style={{ color: '#16a34a' }}>{data.this_month_attendance}</p>
           <p className="text-base text-gray-500 font-medium">Days This Month</p>
+        </div>
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col gap-1">
+          <p className="text-3xl font-bold" style={{ color: '#0f766e' }}>
+            {formatHmFromMinutes(Number(data.this_month_work_minutes || 0))}
+          </p>
+          <p className="text-base text-gray-500 font-medium">Working Hours This Month</p>
+        </div>
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col gap-1">
+          <p className="text-2xl font-bold" style={{ color: '#7c3aed' }}>
+            {formatCurrencyInr(Number(data.this_month_estimated_pay || 0))}
+          </p>
+          <p className="text-base text-gray-500 font-medium">Estimated Payout This Month</p>
+          <p className="text-xs text-gray-400">
+            {data.faculty.hourlyRate && data.faculty.hourlyRate > 0
+              ? `${Number(data.this_month_work_hours || 0).toFixed(2)}h x ${formatCurrencyInr(Number(data.faculty.hourlyRate))}/hr`
+              : 'Set Hourly Rate in Trainer Master'}
+          </p>
         </div>
       </div>
 
@@ -394,6 +427,7 @@ export default function TrainerDashboardPage() {
             <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Current Batch</p>
             <p className="text-lg font-bold text-gray-800 leading-tight">{toBatchNumber(currentBatch.Batch_code)}</p>
             <p className="text-sm text-gray-500 truncate">{currentBatch.Course_Name || '—'}</p>
+            <p className="text-xs text-gray-400 mt-0.5">Timing: {currentBatch.Timings?.trim() || '—'}</p>
           </div>
           <div className="text-right shrink-0">
             <p className="text-sm text-gray-500">{plannedLectures.length} planned</p>
@@ -401,6 +435,35 @@ export default function TrainerDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* All current batches with timings */}
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h2 className="text-lg font-bold text-gray-800">All Current Batches</h2>
+          <span className="text-xs text-gray-400">with timings</span>
+        </div>
+        {data.batches.length === 0 ? (
+          <p className="text-sm text-gray-400">No assigned batches found.</p>
+        ) : (
+          <div className="space-y-2">
+            {data.batches.map((b) => (
+              <div
+                key={b.Batch_Id}
+                className="rounded-xl border border-gray-200 bg-gray-50/60 px-3 py-2.5 flex items-start justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 truncate">{toBatchNumber(b.Batch_code)}</p>
+                  <p className="text-xs text-gray-500 truncate">{b.Course_Name || '—'}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs font-semibold text-[#2E3093]">{b.Timings?.trim() || 'Timing not set'}</p>
+                  <p className="text-[11px] text-gray-400">{Number(b.Is_Current || 0) === 1 ? 'Current' : 'Assigned'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Today's lecture cross-check */}
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
