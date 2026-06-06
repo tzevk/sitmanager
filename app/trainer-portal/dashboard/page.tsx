@@ -41,6 +41,8 @@ interface PlannedLecture {
   subject_topic: string;
   subject?: string;
   lecturecontent?: string | null;
+  assignment?: number;
+  unit_test?: number;
   faculty_name?: string;
   date: string;
   starttime?: string;
@@ -136,6 +138,12 @@ export default function TrainerDashboardPage() {
   const [disciplineOptions, setDisciplineOptions] = useState<DisciplineOption[]>([]);
   const [topicLoading, setTopicLoading] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState('');
+  const [firstHalfTopic, setFirstHalfTopic] = useState('');
+  const [firstHalfSubtopic, setFirstHalfSubtopic] = useState('');
+  const [firstHalfActivity, setFirstHalfActivity] = useState<'lecture' | 'assignment' | 'test'>('lecture');
+  const [secondHalfTopic, setSecondHalfTopic] = useState('');
+  const [secondHalfSubtopic, setSecondHalfSubtopic] = useState('');
+  const [secondHalfActivity, setSecondHalfActivity] = useState<'lecture' | 'assignment' | 'test'>('lecture');
 
   useEffect(() => {
     fetch('/api/trainer-portal/dashboard')
@@ -177,6 +185,42 @@ export default function TrainerDashboardPage() {
       .catch(() => setDisciplineOptions([]))
       .finally(() => setTopicLoading(false));
   }, [modalOpen, currentBatch?.Batch_Id]);
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayLectures = plannedLectures.filter((l) => String(l.date || '').slice(0, 10) === todayIso);
+
+  const firstHalfPlan = todayLectures.find((l) => {
+    const mins = parseTimeToMinutes(l.starttime || null);
+    return mins != null ? mins < 13 * 60 : true;
+  }) || todayLectures[0] || null;
+
+  const secondHalfPlan = todayLectures.find((l) => {
+    const mins = parseTimeToMinutes(l.starttime || null);
+    return mins != null ? mins >= 13 * 60 : false;
+  }) || todayLectures[1] || null;
+
+  useEffect(() => {
+    if (!modalOpen) return;
+
+    const defaultActivity = (l: PlannedLecture | null): 'lecture' | 'assignment' | 'test' => {
+      if (!l) return 'lecture';
+      if (Number(l.unit_test || 0) > 0) return 'test';
+      if (Number(l.assignment || 0) > 0) return 'assignment';
+      return 'lecture';
+    };
+
+    const firstTopic = String(firstHalfPlan?.lecturecontent || firstHalfPlan?.subject || '').trim();
+    const firstSubtopic = String(firstHalfPlan?.subject_topic || '').trim();
+    const secondTopic = String(secondHalfPlan?.lecturecontent || secondHalfPlan?.subject || '').trim();
+    const secondSubtopic = String(secondHalfPlan?.subject_topic || '').trim();
+
+    setFirstHalfTopic(firstTopic);
+    setFirstHalfSubtopic(firstSubtopic);
+    setSecondHalfTopic(secondTopic);
+    setSecondHalfSubtopic(secondSubtopic);
+    setFirstHalfActivity(defaultActivity(firstHalfPlan));
+    setSecondHalfActivity(defaultActivity(secondHalfPlan));
+  }, [modalOpen, firstHalfPlan, secondHalfPlan]);
 
   if (loading) {
     return (
@@ -223,7 +267,23 @@ export default function TrainerDashboardPage() {
       const res = await fetch('/api/trainer-portal/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, remarks }),
+        body: JSON.stringify({
+          action,
+          remarks,
+          batchId: currentBatch?.Batch_Id ?? null,
+          sessions: {
+            first_half: {
+              topic: firstHalfTopic || null,
+              subtopic: firstHalfSubtopic || null,
+              activityType: firstHalfActivity,
+            },
+            second_half: {
+              topic: secondHalfTopic || null,
+              subtopic: secondHalfSubtopic || null,
+              activityType: secondHalfActivity,
+            },
+          },
+        }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { setSaveMsg(d?.error || 'Something went wrong. Try again.'); return; }
@@ -342,6 +402,26 @@ export default function TrainerDashboardPage() {
         </div>
       )}
 
+      {/* Today's lecture cross-check */}
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h2 className="text-lg font-bold text-gray-800">Today's Lecture Cross-Check</h2>
+          <span className="text-xs text-gray-400">From Standard Lecture Plan</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+            <p className="text-xs font-bold text-[#2E3093] uppercase tracking-wide">First Half</p>
+            <p className="text-sm font-semibold text-gray-800 mt-1">{String(firstHalfPlan?.lecturecontent || firstHalfPlan?.subject || '—')}</p>
+            <p className="text-xs text-gray-500 mt-0.5">Subtopic: {String(firstHalfPlan?.subject_topic || '—')}</p>
+          </div>
+          <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-3">
+            <p className="text-xs font-bold text-purple-700 uppercase tracking-wide">Second Half</p>
+            <p className="text-sm font-semibold text-gray-800 mt-1">{String(secondHalfPlan?.lecturecontent || secondHalfPlan?.subject || '—')}</p>
+            <p className="text-xs text-gray-500 mt-0.5">Subtopic: {String(secondHalfPlan?.subject_topic || '—')}</p>
+          </div>
+        </div>
+      </div>
+
       {/* Recent lectures */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -447,6 +527,96 @@ export default function TrainerDashboardPage() {
                   </select>
                 )}
                 <p className="mt-1.5 text-xs text-gray-400">Optional — you can skip this.</p>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3">
+                <p className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-2">Today's Plan Cross-Check</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-2.5">
+                    <p className="text-[11px] font-bold text-[#2E3093] uppercase tracking-wide">First Half</p>
+                    <p className="text-xs text-gray-800 mt-1">Topic: {String(firstHalfPlan?.lecturecontent || firstHalfPlan?.subject || '—')}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Subtopic: {String(firstHalfPlan?.subject_topic || '—')}</p>
+                  </div>
+                  <div className="rounded-lg border border-purple-100 bg-purple-50/50 p-2.5">
+                    <p className="text-[11px] font-bold text-purple-700 uppercase tracking-wide">Second Half</p>
+                    <p className="text-xs text-gray-800 mt-1">Topic: {String(secondHalfPlan?.lecturecontent || secondHalfPlan?.subject || '—')}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Subtopic: {String(secondHalfPlan?.subject_topic || '—')}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3 space-y-2">
+                  <p className="text-xs font-bold text-[#2E3093] uppercase tracking-wide">First Half</p>
+                  <select
+                    value={firstHalfTopic}
+                    onChange={(e) => {
+                      setFirstHalfTopic(e.target.value);
+                      setFirstHalfSubtopic('');
+                    }}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                  >
+                    <option value="">Select topic</option>
+                    {disciplineOptions.map((o) => (
+                      <option key={`fh-${o.name}`} value={o.name}>{o.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={firstHalfSubtopic}
+                    onChange={(e) => setFirstHalfSubtopic(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                  >
+                    <option value="">Select subtopic</option>
+                    {(disciplineOptions.find((o) => o.name === firstHalfTopic)?.subtopics || []).map((s) => (
+                      <option key={`fh-sub-${s}`} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={firstHalfActivity}
+                    onChange={(e) => setFirstHalfActivity(e.target.value as 'lecture' | 'assignment' | 'test')}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                  >
+                    <option value="lecture">Lecture</option>
+                    <option value="assignment">Assignment</option>
+                    <option value="test">Test</option>
+                  </select>
+                </div>
+
+                <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-3 space-y-2">
+                  <p className="text-xs font-bold text-purple-700 uppercase tracking-wide">Second Half</p>
+                  <select
+                    value={secondHalfTopic}
+                    onChange={(e) => {
+                      setSecondHalfTopic(e.target.value);
+                      setSecondHalfSubtopic('');
+                    }}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                  >
+                    <option value="">Select topic</option>
+                    {disciplineOptions.map((o) => (
+                      <option key={`sh-${o.name}`} value={o.name}>{o.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={secondHalfSubtopic}
+                    onChange={(e) => setSecondHalfSubtopic(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                  >
+                    <option value="">Select subtopic</option>
+                    {(disciplineOptions.find((o) => o.name === secondHalfTopic)?.subtopics || []).map((s) => (
+                      <option key={`sh-sub-${s}`} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={secondHalfActivity}
+                    onChange={(e) => setSecondHalfActivity(e.target.value as 'lecture' | 'assignment' | 'test')}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                  >
+                    <option value="lecture">Lecture</option>
+                    <option value="assignment">Assignment</option>
+                    <option value="test">Test</option>
+                  </select>
+                </div>
               </div>
 
               {saveMsg && (

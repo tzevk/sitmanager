@@ -3,6 +3,71 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { getTrainerSession } from '@/app/api/trainer-portal/auth/session/route';
 
+function normalizeText(v: unknown) {
+  const s = String(v ?? '').trim();
+  return s || null;
+}
+
+function activityFlags(activityType: unknown) {
+  const value = String(activityType ?? '').toLowerCase();
+  if (value === 'assignment') return { assignGiven: 1, testGiven: 0 };
+  if (value === 'test') return { assignGiven: 0, testGiven: 1 };
+  return { assignGiven: 0, testGiven: 0 };
+}
+
+async function syncLectureForSession(
+  pool: any,
+  input: {
+    facultyId: number;
+    batchId: number;
+    dateIso: string;
+    session: 'first_half' | 'second_half';
+    topic: string | null;
+    subtopic: string | null;
+    activityType: string | null;
+  }
+) {
+  const lectureStart = input.session === 'second_half' ? '02:00PM' : '09:00AM';
+  const displayTopic = [input.topic, input.subtopic ? `(${input.subtopic})` : ''].filter(Boolean).join(' ').trim() || null;
+  const { assignGiven, testGiven } = activityFlags(input.activityType);
+
+  const [batchRows] = await pool.query<any[]>(
+    `SELECT Course_Id FROM batch_mst WHERE Batch_Id = ? LIMIT 1`,
+    [input.batchId]
+  );
+  const courseId = batchRows?.[0]?.Course_Id ?? null;
+
+  const [existing] = await pool.query<any[]>(
+    `SELECT MAX(Take_Id) AS Take_Id
+     FROM lecture_taken_master
+     WHERE Batch_Id = ? AND Take_Dt = ? AND Lecture_Start = ?
+       AND (IsDelete = 0 OR IsDelete IS NULL)`,
+    [input.batchId, input.dateIso, lectureStart]
+  );
+
+  const takeId = Number(existing?.[0]?.Take_Id || 0);
+  if (takeId > 0) {
+    await pool.query(
+      `UPDATE lecture_taken_master
+       SET Faculty_Id = ?,
+           Lecture_Name = COALESCE(?, Lecture_Name),
+           Topic = COALESCE(?, Topic),
+           Assign_Given = ?,
+           Test_Given = ?
+       WHERE Take_Id = ?`,
+      [input.facultyId, input.topic, displayTopic, assignGiven, testGiven, takeId]
+    );
+    return;
+  }
+
+  await pool.query(
+    `INSERT INTO lecture_taken_master
+      (Course_Id, Batch_Id, Faculty_Id, Take_Dt, Lecture_Start, Lecture_Name, Topic, Assign_Given, Test_Given, IsActive, IsDelete)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+    [courseId, input.batchId, input.facultyId, input.dateIso, lectureStart, input.topic, displayTopic, assignGiven, testGiven]
+  );
+}
+
 /* GET — Trainer's own attendance history */
 /* POST — Mark today's attendance (check-in or check-out) */
 export async function GET(req: NextRequest) {
@@ -69,7 +134,7 @@ export async function POST(req: NextRequest) {
 
     const pool = getPool();
     const body = await req.json();
-    const { action, remarks } = body; // action: 'check_in' | 'check_out'
+    const { action, remarks, batchId, sessions } = body; // action: 'check_in' | 'check_out'
     const facultyId = session.facultyId;
 
     if (!action || !['check_in', 'check_out'].includes(action)) {
@@ -106,6 +171,35 @@ export async function POST(req: NextRequest) {
          WHERE Faculty_Id = ? AND Attend_Date = CURDATE()`,
         [remarks || null, facultyId]
       );
+
+      const normalizedBatchId = Number(batchId);
+      if (Number.isFinite(normalizedBatchId) && normalizedBatchId > 0 && sessions && typeof sessions === 'object') {
+        const todayIso = new Date().toISOString().slice(0, 10);
+
+        const fh = sessions.first_half || {};
+        const sh = sessions.second_half || {};
+
+        await syncLectureForSession(pool, {
+          facultyId,
+          batchId: normalizedBatchId,
+          dateIso: todayIso,
+          session: 'first_half',
+          topic: normalizeText(fh.topic),
+          subtopic: normalizeText(fh.subtopic),
+          activityType: normalizeText(fh.activityType),
+        });
+
+        await syncLectureForSession(pool, {
+          facultyId,
+          batchId: normalizedBatchId,
+          dateIso: todayIso,
+          session: 'second_half',
+          topic: normalizeText(sh.topic),
+          subtopic: normalizeText(sh.subtopic),
+          activityType: normalizeText(sh.activityType),
+        });
+      }
+
       return NextResponse.json({ success: true, action: 'check_out' });
     }
 

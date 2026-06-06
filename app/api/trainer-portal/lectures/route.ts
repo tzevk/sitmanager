@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { getTrainerSession } from '@/app/api/trainer-portal/auth/session/route';
 
-/* GET — Monthly lecture plan from batch_lecture_master */
+/* GET — Monthly lecture plan from Standard Lecture Plan (batch_slecture_master), fallback to batch_lecture_master */
 export async function GET(req: NextRequest) {
   try {
     const session = await getTrainerSession(req);
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ batches });
     }
 
-    // Get planned lectures for month
+    // Get planned lectures for month from Standard Lecture Plan first
     let dateFilter = '';
     const params: any[] = [batchId];
 
@@ -40,24 +40,48 @@ export async function GET(req: NextRequest) {
       params.push(`${month}%`);
     }
 
-    const [lecturesRaw] = await pool.query<any[]>(
+    const [stdLecturesRaw] = await pool.query<any[]>(
+      `SELECT id, lecture_no, subject_topic, subject, faculty_name, date,
+              starttime, endtime, duration, class_room, assignment, unit_test,
+              module, planned, status, marks,
+              lecturecontent
+       FROM batch_slecture_master
+       WHERE batch_id = ? AND (deleted = '0' OR deleted IS NULL OR deleted = 0)${dateFilter}
+       ORDER BY date ASC, lecture_no ASC`,
+      params
+    );
+
+    const stdLectures = (stdLecturesRaw || []).map((l: any) => ({
+      ...l,
+      lecturecontent: l.lecturecontent ?? l.lecture_content ?? null,
+    }));
+
+    const hasStandardData = stdLectures.some((l: any) =>
+      String(l?.lecturecontent ?? l?.subject ?? l?.subject_topic ?? '').trim()
+    );
+
+    if (hasStandardData) {
+      return NextResponse.json({ lectures: stdLectures, source: 'standard' });
+    }
+
+    // Fallback to lecture plan only when standard lecture plan has no usable rows.
+    const [legacyLecturesRaw] = await pool.query<any[]>(
       `SELECT id, lecture_no, subject_topic, subject, faculty_name, date,
               starttime, endtime, duration, class_room, assignment, unit_test,
               module, planned, status, marks,
               lecturecontent
        FROM batch_lecture_master
-       WHERE batch_id = ? AND (deleted = '0' OR deleted IS NULL)${dateFilter}
+       WHERE batch_id = ? AND (deleted = '0' OR deleted IS NULL OR deleted = 0)${dateFilter}
        ORDER BY date ASC, lecture_no ASC`,
       params
     );
 
-    // Normalize lecture content field (DB may return `lecturecontent` or `lecture_content`)
-    const lectures = (lecturesRaw || []).map((l: any) => ({
+    const lectures = (legacyLecturesRaw || []).map((l: any) => ({
       ...l,
       lecturecontent: l.lecturecontent ?? l.lecture_content ?? null,
     }));
 
-    return NextResponse.json({ lectures });
+    return NextResponse.json({ lectures, source: 'fallback-lecture-plan' });
   } catch (err: unknown) {
     console.error('Lecture plan error:', err);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

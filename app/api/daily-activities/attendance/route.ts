@@ -3,6 +3,37 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
+type DisciplineGroup = { name: string; subtopics: string[] };
+
+function uniqNonEmpty(values: Array<string | null | undefined>) {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const s = String(value ?? '').trim();
+    if (!s) continue;
+    const key = s.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
+}
+
+function toActivityFlags(activityType: string | null | undefined) {
+  if (activityType === 'assignment') return { assignGiven: 1, testGiven: 0 };
+  if (activityType === 'test') return { assignGiven: 0, testGiven: 1 };
+  return { assignGiven: null, testGiven: null };
+}
+
+function buildTopicSummary(topics: string[], subtopics: string[]) {
+  const topicText = topics.join(', ');
+  const subtopicText = subtopics.join(', ');
+  return [
+    topicText ? `Topic: ${topicText}` : '',
+    subtopicText ? `Subtopic: ${subtopicText}` : '',
+  ].filter(Boolean).join(' | ') || null;
+}
+
 // Auto-create attendance table on first use
 let tableReady = false;
 async function ensureAttendanceTable(pool: any) {
@@ -142,6 +173,53 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    if (options === 'lecture-topics') {
+      if (!batchId) return NextResponse.json({ disciplines: [] });
+
+      const [stdRows] = await pool.query<any[]>(
+        `SELECT lecturecontent, subject, subject_topic
+         FROM batch_slecture_master
+         WHERE batch_id = ? AND (deleted IS NULL OR deleted = '0' OR deleted = 0)
+         ORDER BY lecture_no ASC, date ASC, id ASC`,
+        [Number(batchId)]
+      );
+
+      let rows = Array.isArray(stdRows) ? stdRows : [];
+      const hasAnySubjects = rows.some((r) => ((r?.lecturecontent ?? r?.subject) ?? '').trim());
+
+      if (!hasAnySubjects) {
+        const [fallbackRows] = await pool.query<any[]>(
+          `SELECT lecturecontent, subject, subject_topic
+           FROM batch_lecture_master
+           WHERE batch_id = ? AND (deleted IS NULL OR deleted = '0' OR deleted = 0)
+           ORDER BY lecture_no ASC, date ASC, id ASC`,
+          [Number(batchId)]
+        );
+        rows = Array.isArray(fallbackRows) ? fallbackRows : [];
+      }
+
+      const groups = new Map<string, { display: string; subtopics: string[] }>();
+
+      for (const row of rows) {
+        const discipline = uniqNonEmpty([row?.lecturecontent, row?.subject])[0];
+        if (!discipline) continue;
+        const key = discipline.toLowerCase();
+        if (!groups.has(key)) groups.set(key, { display: discipline, subtopics: [] });
+
+        const subtopic = String(row?.subject_topic ?? '').trim();
+        if (subtopic) groups.get(key)!.subtopics.push(subtopic);
+      }
+
+      const disciplines: DisciplineGroup[] = Array.from(groups.values()).map((group) => ({
+        name: group.display,
+        subtopics: uniqNonEmpty(group.subtopics),
+      }));
+
+      return NextResponse.json({ disciplines }, {
+        headers: { 'Cache-Control': 'private, max-age=60' },
+      });
+    }
+
     // Schema check only runs for the student+attendance query, not for dropdowns
     await ensureAttendanceTable(pool);
 
@@ -221,7 +299,7 @@ export async function POST(req: NextRequest) {
     await ensureAttendanceTable(pool);
 
     const body = await req.json();
-    const { batchId, date, session: sessionRaw, records, trainerId, trainerTimeFrom, trainerTimeTo } = body as {
+    const { batchId, date, session: sessionRaw, records, trainerId, trainerTimeFrom, trainerTimeTo, topics, subtopics, activityType } = body as {
       batchId: number;
       date: string;
       session?: 'first_half' | 'second_half';
@@ -229,11 +307,22 @@ export async function POST(req: NextRequest) {
       trainerId?: number | string | null;
       trainerTimeFrom?: string | null;
       trainerTimeTo?: string | null;
+      topics?: string[];
+      subtopics?: string[];
+      activityType?: 'lecture' | 'assignment' | 'test';
     };
     const session = sessionRaw === 'second_half' ? 'second_half' : 'first_half';
     const normalizedTrainerId = Number.isFinite(Number(trainerId)) && Number(trainerId) > 0 ? Number(trainerId) : null;
     const normalizedTrainerTimeFrom = trainerTimeFrom || null;
     const normalizedTrainerTimeTo = trainerTimeTo || null;
+    const normalizedTopics = uniqNonEmpty(Array.isArray(topics) ? topics : []);
+    const normalizedSubtopics = uniqNonEmpty(Array.isArray(subtopics) ? subtopics : []);
+    const normalizedActivityType = activityType === 'assignment' || activityType === 'test' || activityType === 'lecture'
+      ? activityType
+      : null;
+    const { assignGiven, testGiven } = toActivityFlags(normalizedActivityType);
+    const topicSummary = buildTopicSummary(normalizedTopics, normalizedSubtopics);
+    const lectureName = normalizedTopics.join(', ') || null;
 
     if (!batchId || !date || !Array.isArray(records) || records.length === 0) {
       return NextResponse.json({ error: 'batchId, date and records are required' }, { status: 400 });
@@ -284,9 +373,9 @@ export async function POST(req: NextRequest) {
       if (!takeId) {
         const [ins] = await conn.query<any>(
           `INSERT INTO lecture_taken_master
-             (Course_Id, Batch_Id, Faculty_Id, Take_Dt, Lecture_Start, Faculty_Start, Faculty_End, IsActive, IsDelete)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0)`,
-          [courseId, batchId, normalizedTrainerId, date, lectureStart, normalizedTrainerTimeFrom, normalizedTrainerTimeTo]
+             (Course_Id, Batch_Id, Faculty_Id, Take_Dt, Lecture_Start, Faculty_Start, Faculty_End, Lecture_Name, Topic, Assign_Given, Test_Given, IsActive, IsDelete)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+          [courseId, batchId, normalizedTrainerId, date, lectureStart, normalizedTrainerTimeFrom, normalizedTrainerTimeTo, lectureName, topicSummary, assignGiven, testGiven]
         );
         takeId = ins.insertId;
       } else {
@@ -294,9 +383,13 @@ export async function POST(req: NextRequest) {
           `UPDATE lecture_taken_master
            SET Faculty_Id = ?,
                Faculty_Start = ?,
-               Faculty_End = ?
+               Faculty_End = ?,
+               Lecture_Name = COALESCE(?, Lecture_Name),
+               Topic = COALESCE(?, Topic),
+               Assign_Given = COALESCE(?, Assign_Given),
+               Test_Given = COALESCE(?, Test_Given)
            WHERE Take_Id = ?`,
-          [normalizedTrainerId, normalizedTrainerTimeFrom, normalizedTrainerTimeTo, takeId]
+          [normalizedTrainerId, normalizedTrainerTimeFrom, normalizedTrainerTimeTo, lectureName, topicSummary, assignGiven, testGiven, takeId]
         );
       }
 

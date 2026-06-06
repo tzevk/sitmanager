@@ -18,6 +18,16 @@ interface Student {
   mobile: string;
 }
 
+interface AttendanceStudentRow {
+  Admission_Id: number;
+  Student_Id: number;
+  Student_Code: string;
+  studentName: string;
+  rollNo: string;
+  mobile: string;
+  attendanceStatus?: AttStatus;
+}
+
 type AttStatus = 'P' | 'A' | 'L' | '';
 type StatusMap  = Record<number, AttStatus>;
 type FeedbackEntry = { rating: number; comments: string | null };
@@ -252,9 +262,18 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
             url: String(link.url),
             expiresAt: link.expiresAt ? String(link.expiresAt) : (data.expiresAt ? String(data.expiresAt) : ''),
           })));
-          if (!trainerId && data.trainerId != null) setTrainerId(String(data.trainerId));
-          if (!trainerTimeFrom && data.trainerTimeFrom) setTrainerTimeFrom(String(data.trainerTimeFrom).slice(0, 5));
-          if (!trainerTimeTo && data.trainerTimeTo) setTrainerTimeTo(String(data.trainerTimeTo).slice(0, 5));
+          if (data.trainerId != null) {
+            const nextTrainerId = String(data.trainerId);
+            setTrainerId((prev) => prev || nextTrainerId);
+          }
+          if (data.trainerTimeFrom) {
+            const nextTimeFrom = String(data.trainerTimeFrom).slice(0, 5);
+            setTrainerTimeFrom((prev) => prev || nextTimeFrom);
+          }
+          if (data.trainerTimeTo) {
+            const nextTimeTo = String(data.trainerTimeTo).slice(0, 5);
+            setTrainerTimeTo((prev) => prev || nextTimeTo);
+          }
         } else {
           setFeedbackLinks([]);
         }
@@ -285,7 +304,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
       if (!r2.ok) throw new Error(d2.error || 'Failed to load second half');
 
       /* students list comes from first half (same roster for both) */
-      const s: Student[] = (d1.students ?? []).map((st: any) => ({
+      const s: Student[] = (d1.students ?? []).map((st: AttendanceStudentRow) => ({
         Admission_Id: st.Admission_Id,
         Student_Id:   st.Student_Id,
         Student_Code: st.Student_Code,
