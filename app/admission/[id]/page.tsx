@@ -73,6 +73,13 @@ export default function PublicAdmissionFormPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  // Razorpay payment state
+  const [razorpayPaid, setRazorpayPaid] = useState(false);
+  const [razorpayPaymentId, setRazorpayPaymentId] = useState('');
+  const [razorpayOrderId, setRazorpayOrderId] = useState('');
+  const [razorpaySignature, setRazorpaySignature] = useState('');
+  const [paymentLoading, setPaymentLoading] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [showAddUniversityModal, setShowAddUniversityModal] = useState(false);
   const [newUniversityData, setNewUniversityData] = useState({ name: '', country: '', city: '', fieldType: 'grad' });
@@ -318,6 +325,84 @@ export default function PublicAdmissionFormPage() {
     saveDraft();
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
   }, [formData, loading, submitted, saveDraft]);
+
+  // Load Razorpay checkout.js once on mount
+  useEffect(() => {
+    if (document.getElementById('razorpay-checkout-js')) return;
+    const script = document.createElement('script');
+    script.id  = 'razorpay-checkout-js';
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    document.body.appendChild(script);
+  }, []);
+
+  const handleRazorpayPayment = async () => {
+    if (!formData.modeOfPayment) {
+      alert('Please select a payment mode first');
+      return;
+    }
+    const baseFees = batchFees ?? 0;
+    if (baseFees <= 0) {
+      alert('Fee amount is not available. Please ensure a batch is selected in Step 4.');
+      return;
+    }
+
+    const installmentTotal = batchFeesInstallment ?? baseFees;
+    const amountPaise =
+      formData.modeOfPayment === 'Full Payment'
+        ? Math.round(baseFees * 0.95) * 100
+        : Math.round(installmentTotal / 2) * 100;
+
+    setPaymentLoading(true);
+    try {
+      const res = await fetch('/api/razorpay/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId:     studentId,
+          amountPaise,
+          modeOfPayment: formData.modeOfPayment,
+          studentName:   [formData.firstName, formData.lastName].filter(Boolean).join(' '),
+          email:         formData.email,
+        }),
+      });
+      const order = await res.json();
+      if (!res.ok) { alert(order.error || 'Could not create payment order'); setPaymentLoading(false); return; }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rzp = new (window as any).Razorpay({
+        key:         order.keyId,
+        amount:      order.amount,
+        currency:    order.currency,
+        name:        'SIT — School of Inspection Technology',
+        description: `${formData.modeOfPayment} — ${formData.trainingProgrammeName || 'Training Programme'}`,
+        order_id:    order.orderId,
+        prefill: {
+          name:    [formData.firstName, formData.lastName].filter(Boolean).join(' '),
+          email:   formData.email,
+          contact: formData.mobile,
+        },
+        theme:   { color: '#2E3093' },
+        handler: (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
+          setRazorpayPaid(true);
+          setRazorpayPaymentId(response.razorpay_payment_id);
+          setRazorpayOrderId(response.razorpay_order_id);
+          setRazorpaySignature(response.razorpay_signature);
+          setPaymentLoading(false);
+        },
+        modal: { ondismiss: () => setPaymentLoading(false) },
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rzp.on('payment.failed', (resp: any) => {
+        alert(`Payment failed: ${resp.error?.description || 'Please try again.'}`);
+        setPaymentLoading(false);
+      });
+      rzp.open();
+    } catch {
+      alert('Network error. Please try again.');
+      setPaymentLoading(false);
+    }
+  };
 
   // Sync batch fees whenever batch selection or available batches change
   useEffect(() => {
@@ -641,6 +726,10 @@ export default function PublicAdmissionFormPage() {
           alert('Please select a Mode of Payment');
           return false;
         }
+        if (!razorpayPaid) {
+          alert('Please complete the online payment before proceeding.');
+          return false;
+        }
         break;
       case 6:
         if (!allSectionsChecked) {
@@ -800,6 +889,16 @@ export default function PublicAdmissionFormPage() {
         consentChecks: consentChecks,
         consentData: consentData,
         termsAgreed: formData.termsAgreed,
+        // Razorpay payment details (populated if student paid online)
+        razorpayPaid,
+        razorpayPaymentId:  razorpayPaymentId  || null,
+        razorpayOrderId:    razorpayOrderId    || null,
+        razorpaySignature:  razorpaySignature  || null,
+        razorpayAmount:     razorpayPaid ? (
+          formData.modeOfPayment === 'Full Payment'
+            ? Math.round((batchFees ?? 0) * 0.95)
+            : Math.round((batchFeesInstallment ?? batchFees ?? 0) / 2)
+        ) : null,
       };
 
       const requestBody = new FormData();
@@ -2566,6 +2665,56 @@ export default function PublicAdmissionFormPage() {
                           </div>
                         </div>
                       )}
+
+                      {/* ── Razorpay payment (mandatory) ── */}
+                      {formData.modeOfPayment && (
+                        <div className={`rounded-xl p-4 space-y-3 border-2 ${razorpayPaid ? 'border-emerald-400 bg-emerald-50' : 'border-[#2E3093] bg-[#2E3093]/5'}`}>
+                          {razorpayPaid ? (
+                            <div className="flex items-center gap-3">
+                              <i className="fas fa-check-circle text-emerald-600 text-2xl flex-shrink-0"></i>
+                              <div>
+                                <p className="text-sm font-bold text-emerald-800">Payment Confirmed!</p>
+                                <p className="text-xs text-emerald-700 mt-0.5">
+                                  &#8377;{fmt(formData.modeOfPayment === 'Full Payment' ? fullPayAmount : firstInstallmentAmount)} paid successfully.
+                                </p>
+                                <p className="text-[11px] text-emerald-600 font-mono mt-0.5">Ref: {razorpayPaymentId}</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="text-xs font-semibold text-[#2E3093] flex items-center gap-2">
+                                <i className="fas fa-exclamation-circle"></i>
+                                Payment required to proceed
+                              </p>
+                              <p className="text-xs text-gray-600">
+                                Complete the payment to unlock Step 6. You must pay online before submitting your application.
+                              </p>
+                              {!hasFees && (
+                                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                  Please select a batch in Step 4 first — fee amount is not yet available.
+                                </p>
+                              )}
+                              {hasFees && (
+                                <button
+                                  type="button"
+                                  onClick={handleRazorpayPayment}
+                                  disabled={paymentLoading}
+                                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-bold text-sm bg-[#2E3093] text-white hover:bg-[#252780] disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-md"
+                                >
+                                  {paymentLoading ? (
+                                    <><i className="fas fa-spinner fa-spin"></i> Opening Payment…</>
+                                  ) : (
+                                    <>
+                                      <i className="fas fa-lock"></i>
+                                      Pay &#8377;{fmt(formData.modeOfPayment === 'Full Payment' ? fullPayAmount : firstInstallmentAmount)} with Razorpay
+                                    </>
+                                  )}
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
                     );
                   })()}
@@ -2683,7 +2832,13 @@ export default function PublicAdmissionFormPage() {
                     )}
 
                     {currentStep < 6 ? (
-                      <button type="button" onClick={() => nextStep(currentStep + 1)} className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#FAE452] to-[#FDD835] text-[#2E3093] rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all">
+                      <button
+                        type="button"
+                        onClick={() => nextStep(currentStep + 1)}
+                        disabled={currentStep === 5 && (!formData.modeOfPayment || !razorpayPaid)}
+                        title={currentStep === 5 && !razorpayPaid ? 'Complete payment to continue' : undefined}
+                        className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#FAE452] to-[#FDD835] text-[#2E3093] rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
+                      >
                         <span className="hidden sm:inline">Continue</span><span className="sm:hidden">Next</span> <i className="fas fa-arrow-right ml-1 sm:ml-2"></i>
                       </button>
                     ) : (

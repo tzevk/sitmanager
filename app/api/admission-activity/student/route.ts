@@ -84,11 +84,11 @@ export async function GET(req: NextRequest) {
          s.Present_Mobile,
          s.Present_City,
          s.Qualification,
-         s.Course_Id,
+         COALESCE(NULLIF(s.Course_Id, 0), am.Course_Id) AS Course_Id,
          s.Sex,
          s.Batch_Code                  AS Batch_Code,
-         s.Batch_Code                  AS Batch_code_resolved,
-         s.Admission_Dt                AS Admission_Date,
+         COALESCE(NULLIF(TRIM(s.Batch_Code), ''), b.Batch_code) AS Batch_code_resolved,
+         COALESCE(s.Admission_Dt, am.Admission_Date) AS Admission_Date,
          c.Course_Name,
          am.Student_Code,
          am.Payment_Type,
@@ -97,7 +97,6 @@ export async function GET(req: NextRequest) {
          b.SDate                       AS Batch_SDate,
          b.EDate                       AS Batch_EDate
        FROM student_master s
-       LEFT JOIN course_mst c ON c.Course_Id = s.Course_Id
        LEFT JOIN admission_master am
          ON am.Admission_Id = (
            SELECT MAX(am2.Admission_Id)
@@ -106,6 +105,7 @@ export async function GET(req: NextRequest) {
              AND (am2.IsDelete = 0 OR am2.IsDelete IS NULL)
              AND (am2.Cancel   = 0 OR am2.Cancel   IS NULL)
          )
+       LEFT JOIN course_mst c ON c.Course_Id = COALESCE(NULLIF(s.Course_Id, 0), am.Course_Id)
        LEFT JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
        WHERE ${where}
        ORDER BY s.Student_Id DESC

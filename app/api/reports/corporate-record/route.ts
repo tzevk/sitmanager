@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/api-auth';
 
 type CorporateRecordStatus = 'Follow Up' | 'CV Send' | 'Candidate Shortlisted' | 'Candidate Placed';
 type PeriodMode = 'range' | 'month' | 'year';
+type FollowUpFilterMode = 'all' | 'due' | 'upcoming';
 
 const FOLLOWUP_STATUS_VALUES: CorporateRecordStatus[] = [
   'Follow Up',
@@ -241,7 +242,10 @@ export async function GET(req: NextRequest) {
     const companyIdRaw = (searchParams.get('companyId') || '').trim();
     const courseIdRaw = (searchParams.get('courseId') || '').trim();
     const purposeRaw = (searchParams.get('purpose') || '').trim();
+    const followUpFilterRaw = (searchParams.get('followUpFilter') || 'all').trim().toLowerCase();
     const status = (searchParams.get('status') || '').trim() as CorporateRecordStatus;
+    const followUpFilter: FollowUpFilterMode =
+      followUpFilterRaw === 'due' || followUpFilterRaw === 'upcoming' ? followUpFilterRaw : 'all';
 
     const companyId = Number(companyIdRaw);
     const courseId = Number(courseIdRaw);
@@ -315,6 +319,17 @@ export async function GET(req: NextRequest) {
            AND (? = 1 OR cm.Const_Id = ?)
            AND ${followupDateSortExpr} IS NOT NULL
            AND DATE(${followupDateSortExpr}) BETWEEN ? AND ?
+           AND (
+             ? = 'all'
+             OR (
+               ? = 'due'
+               AND ${followupDateSortExpr} <= CURDATE()
+             )
+             OR (
+               ? = 'upcoming'
+               AND ${followupDateSortExpr} > CURDATE()
+             )
+           )
            AND (? = 1 OR LOWER(TRIM(COALESCE(f.Purpose, ''))) = LOWER(?))
            AND (
              ? = 1
@@ -324,7 +339,27 @@ export async function GET(req: NextRequest) {
              OR cm.Course_Id4 = ? OR cm.Course_Id5 = ? OR cm.Course_Id6 = ?
            )
          ORDER BY ${followupDateSortExpr} DESC, f.ID DESC`,
-          [courseName, includeAllCompanies ? 1 : 0, companyIdFilter, fromDate, toDate, includeAllPurposes ? 1 : 0, purposeName, includeAllCourses ? 1 : 0, courseIdFilter, courseName, courseIdFilter, courseIdFilter, courseIdFilter, courseIdFilter, courseIdFilter, courseIdFilter]
+          [
+            courseName,
+            includeAllCompanies ? 1 : 0,
+            companyIdFilter,
+            fromDate,
+            toDate,
+            followUpFilter,
+            followUpFilter,
+            followUpFilter,
+            includeAllPurposes ? 1 : 0,
+            purposeName,
+            includeAllCourses ? 1 : 0,
+            courseIdFilter,
+            courseName,
+            courseIdFilter,
+            courseIdFilter,
+            courseIdFilter,
+            courseIdFilter,
+            courseIdFilter,
+            courseIdFilter,
+          ]
       );
       rows = result;
     } else {

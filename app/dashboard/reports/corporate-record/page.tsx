@@ -13,6 +13,7 @@ interface Option {
 
 type CorporateRecordStatus = 'Follow Up' | 'CV Send' | 'Candidate Shortlisted' | 'Candidate Placed';
 type PeriodMode = 'range' | 'month' | 'year';
+type FollowUpFilterMode = 'all' | 'due' | 'upcoming';
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 
@@ -47,6 +48,7 @@ export default function CorporateRecordReportPage() {
   const [companyId, setCompanyId] = useState('all');
   const [courseId, setCourseId] = useState('all');
   const [purpose, setPurpose] = useState('all');
+  const [followUpFilter, setFollowUpFilter] = useState<FollowUpFilterMode>('all');
   const [periodMode, setPeriodMode] = useState<PeriodMode>('range');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -112,6 +114,7 @@ export default function CorporateRecordReportPage() {
         companyId,
         courseId,
         purpose,
+        followUpFilter,
         status,
         periodMode,
       });
@@ -223,6 +226,12 @@ export default function CorporateRecordReportPage() {
         <select value={purpose} onChange={(e) => setPurpose(e.target.value)} className={`${ctrl} w-[170px]`}>
           <option value="all">All Purposes</option>
           {purposes.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+
+        <select value={followUpFilter} onChange={(e) => setFollowUpFilter(e.target.value as FollowUpFilterMode)} className={`${ctrl} w-[150px]`}>
+          <option value="all">All Follow Ups</option>
+          <option value="due">Due Follow Ups</option>
+          <option value="upcoming">Upcoming Follow Ups</option>
         </select>
       </FilterBar>
 
