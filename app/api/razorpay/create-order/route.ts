@@ -3,14 +3,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import Razorpay from 'razorpay';
 import { apiRateLimiter } from '@/lib/rate-limit';
 
-const razorpay = new Razorpay({
-  key_id:     process.env.RAZORPAY_KEY!,
-  key_secret: process.env.RAZORPAY_SECRET!,
-});
-
 // POST /api/razorpay/create-order
 // Public endpoint — called by the admission form (students are not authenticated).
 export async function POST(req: NextRequest) {
+  // Instantiated inside the handler so env vars are read at request time, not build time.
+  const razorpay = new Razorpay({
+    key_id:     process.env.RAZORPAY_KEY!,
+    key_secret: process.env.RAZORPAY_SECRET!,
+  });
   try {
     const rateLimited = await apiRateLimiter(req);
     if (rateLimited) return rateLimited;

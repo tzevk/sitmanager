@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 /**
- * Reimport student/admission records from legacy DB into current DB.
+ * Backfill missing fields for student/admission records from legacy DB.
  *
- * This script is intentionally scoped to tables that power the Student page:
- * - student_master
- * - admission_master
+ * Only updates rows that ALREADY EXIST in the new DB (matched by primary key).
+ * Never inserts new rows from legacy. Only fills columns that are currently
+ * NULL or empty-string — existing values are NEVER overwritten.
+ *
+ * Tables:
+ *   - student_master  (PK: Student_Id)
+ *   - admission_master (PK: Admission_Id)
  *
  * Usage:
  *   node scripts/db/reimport-student-admission-from-legacy.mjs --dry-run
@@ -21,6 +25,12 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes('--dry-run');
 const BATCH_SIZE = 500;
+
+// Tables and their primary key column names
+const TABLE_PK = {
+  student_master:   'Student_Id',
+  admission_master: 'Admission_Id',
+};
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -64,39 +74,71 @@ async function getSharedColumns(oldPool, newPool, oldTable, newTable) {
   return oldCols.filter((c) => newLower.has(c.toLowerCase()));
 }
 
-function buildUpsert(table, columns) {
-  const colSql = columns.map((c) => `\`${c}\``).join(', ');
-  const updateSql = columns.map((c) => `\`${c}\`=VALUES(\`${c}\`)`).join(', ');
-  return `INSERT INTO \`${table}\` (${colSql}) VALUES ? ON DUPLICATE KEY UPDATE ${updateSql}`;
-}
-
-async function upsertAllRows({ oldPool, newPool, oldTable, newTable }) {
+/**
+ * For each legacy row whose PK exists in the new DB, UPDATE only the columns
+ * that are currently NULL (or empty string for text columns) in the new DB.
+ * Rows whose PK does not exist in the new DB are silently skipped.
+ */
+async function backfillExistingRows({ oldPool, newPool, oldTable, newTable, pkCol }) {
   const sharedColumns = await getSharedColumns(oldPool, newPool, oldTable, newTable);
   if (!sharedColumns.length) {
     console.log(`No shared columns for ${oldTable} -> ${newTable}, skipping.`);
-    return { sourceRows: 0, written: 0, sharedColumns: 0 };
+    return { sourceRows: 0, updated: 0, skipped: 0, sharedColumns: 0 };
+  }
+
+  // Non-PK columns to potentially fill
+  const fillColumns = sharedColumns.filter((c) => c.toLowerCase() !== pkCol.toLowerCase());
+  if (!fillColumns.length) {
+    console.log(`Only PK shared — nothing to fill.`);
+    return { sourceRows: 0, updated: 0, skipped: 0, sharedColumns: sharedColumns.length };
   }
 
   const selectCols = sharedColumns.map((c) => `\`${c}\``).join(', ');
-  const [sourceRows] = await oldPool.query(`SELECT ${selectCols} FROM \`${oldTable}\``);
+  const [legacyRows] = await oldPool.query(
+    `SELECT ${selectCols} FROM \`${oldTable}\` ORDER BY \`${pkCol}\``
+  );
 
-  if (DRY_RUN) {
-    return { sourceRows: sourceRows.length, written: sourceRows.length, sharedColumns: sharedColumns.length };
+  console.log(`  ${oldTable}: ${legacyRows.length} legacy rows — fetching existing PKs from new DB...`);
+
+  // Load all PKs that exist in the new DB
+  const [newPkRows] = await newPool.query(
+    `SELECT \`${pkCol}\` FROM \`${newTable}\``
+  );
+  const existingPks = new Set(newPkRows.map((r) => String(r[pkCol])));
+  console.log(`  ${newTable}: ${existingPks.size} existing rows in new DB`);
+
+  // Filter to only legacy rows whose PK already exists
+  const toUpdate = legacyRows.filter((r) => existingPks.has(String(r[pkCol])));
+  const skipped = legacyRows.length - toUpdate.length;
+  console.log(`  Matching: ${toUpdate.length} | Not in new DB (skipped): ${skipped}`);
+
+  if (!toUpdate.length || DRY_RUN) {
+    return { sourceRows: legacyRows.length, updated: DRY_RUN ? toUpdate.length : 0, skipped, sharedColumns: sharedColumns.length };
   }
 
-  const upsertSql = buildUpsert(newTable, sharedColumns);
-  let written = 0;
-  for (let i = 0; i < sourceRows.length; i += BATCH_SIZE) {
-    const chunk = sourceRows.slice(i, i + BATCH_SIZE);
-    const values = chunk.map((row) => sharedColumns.map((col) => row[col] ?? null));
-    await newPool.query(upsertSql, [values]);
-    written += chunk.length;
-    if (written % 5000 === 0 || written === sourceRows.length) {
-      console.log(`  ${newTable}: ${written}/${sourceRows.length}`);
+  // Build a single UPDATE per row using COALESCE so existing values are preserved
+  let updated = 0;
+  const SET_PARTS = fillColumns
+    .map((c) => `\`${c}\` = CASE WHEN (\`${c}\` IS NULL OR TRIM(CAST(\`${c}\` AS CHAR)) = '') THEN ? ELSE \`${c}\` END`)
+    .join(', ');
+
+  for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
+    const chunk = toUpdate.slice(i, i + BATCH_SIZE);
+    for (const row of chunk) {
+      const params = fillColumns.map((c) => row[c] ?? null);
+      params.push(row[pkCol]); // WHERE clause
+      await newPool.query(
+        `UPDATE \`${newTable}\` SET ${SET_PARTS} WHERE \`${pkCol}\` = ?`,
+        params
+      );
+      updated++;
+    }
+    if (updated % 5000 === 0 || updated === toUpdate.length) {
+      console.log(`  ${newTable}: updated ${updated}/${toUpdate.length}`);
     }
   }
 
-  return { sourceRows: sourceRows.length, written, sharedColumns: sharedColumns.length };
+  return { sourceRows: legacyRows.length, updated, skipped, sharedColumns: sharedColumns.length };
 }
 
 async function main() {
@@ -136,20 +178,22 @@ async function main() {
     console.log(`Target student table   : ${newStudent}`);
     console.log(`Target admission table : ${newAdmission}`);
 
-    console.log('\n[1/2] Reimport student_master ...');
-    const studentStats = await upsertAllRows({
+    console.log('\n[1/2] Backfill student_master (existing IDs only, fill nulls) ...');
+    const studentStats = await backfillExistingRows({
       oldPool,
       newPool,
       oldTable: oldStudent,
       newTable: newStudent,
+      pkCol: TABLE_PK.student_master,
     });
 
-    console.log('\n[2/2] Reimport admission_master ...');
-    const admissionStats = await upsertAllRows({
+    console.log('\n[2/2] Backfill admission_master (existing IDs only, fill nulls) ...');
+    const admissionStats = await backfillExistingRows({
       oldPool,
       newPool,
       oldTable: oldAdmission,
       newTable: newAdmission,
+      pkCol: TABLE_PK.admission_master,
     });
 
     console.log('\n=== Done ===');
