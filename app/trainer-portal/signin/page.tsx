@@ -53,12 +53,12 @@ export default function TrainerSignIn() {
           </div>
           <h1 className="text-4xl font-bold text-white mb-4">Trainer Portal</h1>
           <p className="text-lg text-blue-100 max-w-md leading-relaxed">
-            Manage your lectures, track assignments, and mark your attendance — all in one place.
+            Manage your lectures, track assignments, and log your day — all in one place.
           </p>
 
           {/* Feature pills */}
           <div className="flex flex-wrap justify-center gap-3 mt-10">
-            {['Lecture Plan', 'Daily Updates', 'Assignments', 'Attendance'].map(f => (
+            {['My Schedule', 'Daily Log', 'Assignments', 'Sign In & Out'].map(f => (
               <span
                 key={f}
                 className="px-4 py-2 rounded-full text-sm font-medium"

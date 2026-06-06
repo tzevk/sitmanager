@@ -42,7 +42,7 @@ interface PlannedLecture {
   subject?: string;
   lecturecontent?: string | null;
   faculty_name?: string;
-  date: string; // YYYY-MM-DD
+  date: string;
   starttime?: string;
   endtime?: string;
   duration?: string;
@@ -62,40 +62,30 @@ function parseTimeToMinutes(t?: string | null): number | null {
   if (!t) return null;
   const raw = t.trim();
   if (!raw) return null;
-
-  // Supports: HH:mm, HH:mm:ss, h:mm am/pm, h:mma, h:mmA (legacy-like)
   const m = raw
     .replace(/\./g, '')
     .trim()
     .match(/^\s*(\d{1,2})\s*:\s*(\d{2})(?:\s*:\s*(\d{2}))?\s*([aApP])?\s*([mM])?\s*$/);
-
   if (!m) return null;
-
   let hh = Number(m[1]);
-  const mm = Number(m[2]);
-  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
-  if (mm < 0 || mm > 59) return null;
-
+  const mm2 = Number(m[2]);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm2)) return null;
+  if (mm2 < 0 || mm2 > 59) return null;
   const hasMeridiem = Boolean(m[4]);
   if (hasMeridiem) {
     const ap = String(m[4]).toLowerCase();
     if (hh < 1 || hh > 12) return null;
-    if (ap === 'a') {
-      if (hh === 12) hh = 0;
-    } else if (ap === 'p') {
-      if (hh !== 12) hh += 12;
-    }
+    if (ap === 'a') { if (hh === 12) hh = 0; }
+    else if (ap === 'p') { if (hh !== 12) hh += 12; }
   }
-
   if (hh < 0 || hh > 23) return null;
-  return hh * 60 + mm;
+  return hh * 60 + mm2;
 }
 
 function formatTimeAmPm(t?: string | null): string {
   if (!t) return '—';
   const minutes = parseTimeToMinutes(t);
   if (minutes == null) {
-    // Fallback: best-effort insert space before AM/PM and lower-case.
     const compact = String(t).trim();
     const normalized = compact
       .replace(/\s+/g, '')
@@ -104,10 +94,10 @@ function formatTimeAmPm(t?: string | null): string {
     return normalized || '—';
   }
   const hh24 = Math.floor(minutes / 60);
-  const mm = minutes % 60;
+  const mm2 = minutes % 60;
   const suffix = hh24 >= 12 ? 'pm' : 'am';
   const hh12 = (hh24 % 12) || 12;
-  return `${hh12}:${String(mm).padStart(2, '0')} ${suffix}`;
+  return `${hh12}:${String(mm2).padStart(2, '0')} ${suffix}`;
 }
 
 function formatHmFromMinutes(totalMinutes: number) {
@@ -128,33 +118,24 @@ function computeMinutesMinusBreak(startMin: number, endMin: number, breakMinutes
   return Math.max(0, total - overlap);
 }
 
+function formatDate(raw: string) {
+  const d = new Date(raw);
+  if (!Number.isFinite(d.getTime())) return raw;
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 export default function TrainerDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [plannedLectures, setPlannedLectures] = useState<PlannedLecture[]>([]);
-  const [plannedLoading, setPlannedLoading] = useState(false);
 
-  const [attendanceOpen, setAttendanceOpen] = useState(false);
-  const [attendanceSaving, setAttendanceSaving] = useState(false);
-  const [attendanceMsg, setAttendanceMsg] = useState<string>('');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string>('');
   const [nowTime, setNowTime] = useState<Date>(() => new Date());
   const [disciplineOptions, setDisciplineOptions] = useState<DisciplineOption[]>([]);
   const [topicLoading, setTopicLoading] = useState(false);
-  const [subtopicOpen, setSubtopicOpen] = useState(false);
-  const [attendanceForm, setAttendanceForm] = useState({
-    discipline: '',
-    subTopics: [] as string[],
-    firstHalf: {
-      lecture: false,
-      assignment: false,
-      unitTest: false,
-    },
-    secondHalf: {
-      lecture: false,
-      assignment: false,
-      unitTest: false,
-    },
-  });
+  const [selectedTopic, setSelectedTopic] = useState('');
 
   useEffect(() => {
     fetch('/api/trainer-portal/dashboard')
@@ -174,139 +155,49 @@ export default function TrainerDashboardPage() {
   useEffect(() => {
     if (!currentBatch?.Batch_Id) return;
     const m = monthKey(new Date());
-    setPlannedLoading(true);
     fetch(`/api/trainer-portal/lectures?batchId=${currentBatch.Batch_Id}&month=${m}`)
       .then(r => r.json())
       .then(d => setPlannedLectures(Array.isArray(d?.lectures) ? d.lectures : []))
-      .catch(() => setPlannedLectures([]))
-      .finally(() => setPlannedLoading(false));
+      .catch(() => setPlannedLectures([]));
   }, [currentBatch?.Batch_Id]);
 
   useEffect(() => {
-    if (!attendanceOpen) return;
-    if (!currentBatch?.Batch_Id) return;
+    if (!modalOpen || !currentBatch?.Batch_Id) return;
     setTopicLoading(true);
     fetch(`/api/trainer-portal/lecture-topics?batchId=${currentBatch.Batch_Id}`)
       .then(r => r.json())
       .then(d => {
-        const opts = Array.isArray(d?.disciplines) ? d.disciplines : [];
+        const opts: DisciplineOption[] = Array.isArray(d?.disciplines) ? d.disciplines : [];
         setDisciplineOptions(opts);
-        setAttendanceForm(f => {
-          const has = f.discipline && opts.some((o: DisciplineOption) => o.name === f.discipline);
-          const nextDiscipline = has ? f.discipline : (opts[0]?.name || '');
-          return { ...f, discipline: nextDiscipline, subTopics: [] };
+        setSelectedTopic(prev => {
+          const has = prev && opts.some(o => o.name === prev);
+          return has ? prev : (opts[0]?.name || '');
         });
       })
       .catch(() => setDisciplineOptions([]))
       .finally(() => setTopicLoading(false));
-  }, [attendanceOpen, currentBatch?.Batch_Id]);
+  }, [modalOpen, currentBatch?.Batch_Id]);
 
   if (loading) {
     return (
-      <div className="space-y-6 animate-pulse">
-        <div className="h-32 bg-gray-200 rounded-2xl" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1,2,3,4].map(i => <div key={i} className="h-28 bg-gray-200 rounded-xl" />)}
+      <div className="space-y-5 animate-pulse">
+        <div className="h-40 bg-gray-200 rounded-3xl" />
+        <div className="grid grid-cols-2 gap-4">
+          <div className="h-28 bg-gray-200 rounded-2xl" />
+          <div className="h-28 bg-gray-200 rounded-2xl" />
         </div>
         <div className="h-64 bg-gray-200 rounded-2xl" />
       </div>
     );
   }
 
-  if (!data) return <p className="text-gray-500">Failed to load dashboard.</p>;
+  if (!data) return <p className="text-gray-500 text-lg">Failed to load. Please refresh.</p>;
 
-  const stats = [
-    {
-      label: 'Total Lectures',
-      value: data.total_lectures,
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-        </svg>
-      ),
-      bg: '#2E3093',
-    },
-    {
-      label: 'This Month Attendance',
-      value: `${data.this_month_attendance} days`,
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
-      bg: '#16a34a',
-    },
-    {
-      label: 'Attendance',
-      value: data.today_attendance
-        ? (data.today_attendance.Check_Out ? 'Day complete' : 'Working')
-        : 'Schedule not marked',
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
-      bg: '#2E3093',
-    },
-  ];
-
-  const canCheckIn = !data.today_attendance;
-  const canCheckOut = !!data.today_attendance && !data.today_attendance.Check_Out;
+  const canSignIn = !data.today_attendance;
+  const canSignOut = !!data.today_attendance && !data.today_attendance.Check_Out;
   const dayComplete = !!data.today_attendance && !!data.today_attendance.Check_Out;
 
-  function buildRemarks() {
-    const first: string[] = [];
-    if (attendanceForm.firstHalf.lecture) first.push('Lecture');
-    if (attendanceForm.firstHalf.assignment) first.push('Assignment');
-    if (attendanceForm.firstHalf.unitTest) first.push('Unit Test');
-    const second: string[] = [];
-    if (attendanceForm.secondHalf.lecture) second.push('Lecture');
-    if (attendanceForm.secondHalf.assignment) second.push('Assignment');
-    if (attendanceForm.secondHalf.unitTest) second.push('Unit Test');
-
-    const parts: string[] = [];
-    if (attendanceForm.discipline.trim()) parts.push(`Main Topic: ${attendanceForm.discipline.trim()}`);
-    if (attendanceForm.subTopics.length) parts.push(`Sub Topic: ${attendanceForm.subTopics.join(', ')}`);
-    if (first.length) parts.push(`1st Half: ${first.join(', ')}`);
-    if (second.length) parts.push(`2nd Half: ${second.join(', ')}`);
-    return parts.join(' | ') || null;
-  }
-
-  async function submitAttendance() {
-    if (!data) return;
-    setAttendanceSaving(true);
-    setAttendanceMsg('');
-    try {
-      const action = canCheckIn ? 'check_in' : (canCheckOut ? 'check_out' : null);
-      if (!action) {
-        setAttendanceMsg('Attendance already completed for today.');
-        return;
-      }
-      const res = await fetch('/api/trainer-portal/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, remarks: buildRemarks() }),
-      });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setAttendanceMsg(d?.error || 'Failed to mark attendance');
-        return;
-      }
-      setAttendanceMsg(action === 'check_in' ? 'Schedule marked successfully.' : 'Checked out successfully.');
-      // refresh dashboard data
-      const r = await fetch('/api/trainer-portal/dashboard');
-      const nd = await r.json();
-      setData(nd);
-      setTimeout(() => setAttendanceOpen(false), 700);
-    } catch {
-      setAttendanceMsg('Network error');
-    } finally {
-      setAttendanceSaving(false);
-    }
-  }
-
   const breakMinutes = Math.max(0, Math.round(Number(data.faculty.breakTimeMinutes ?? 60)));
-  const breakLabel = breakMinutes === 0 ? 'No break deduction' : `Break overlap deducts ${breakMinutes} min max (from 1:00 PM)`;
 
   const recentLectureRows = data.recent_lectures.map(l => {
     const startMin = parseTimeToMinutes(l.Faculty_Start);
@@ -316,498 +207,272 @@ export default function TrainerDashboardPage() {
       ...l,
       _in: formatTimeAmPm(l.Faculty_Start),
       _out: formatTimeAmPm(l.Faculty_End),
-      _hours: minutes == null ? '-' : formatHmFromMinutes(minutes),
+      _hours: minutes == null ? '—' : formatHmFromMinutes(minutes),
       _summary: (l.Topic || l.Lecture_Name || '—').trim(),
-      _date: new Date(l.Take_Dt),
     };
   });
 
+  async function submitDay() {
+    if (!data) return;
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      const action = canSignIn ? 'check_in' : (canSignOut ? 'check_out' : null);
+      if (!action) { setSaveMsg('Already done for today.'); return; }
+      const remarks = selectedTopic.trim() ? `Main Topic: ${selectedTopic.trim()}` : null;
+      const res = await fetch('/api/trainer-portal/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, remarks }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setSaveMsg(d?.error || 'Something went wrong. Try again.'); return; }
+      setSaveMsg(action === 'check_in' ? 'You\'re signed in for today!' : 'Day ended. See you tomorrow!');
+      const r = await fetch('/api/trainer-portal/dashboard');
+      const nd = await r.json();
+      setData(nd);
+      setTimeout(() => setModalOpen(false), 900);
+    } catch {
+      setSaveMsg('Network error. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const todayLabel = nowTime.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
+
   return (
-    <div className="space-y-6">
-      {/* Mobile: compact, phone-first */}
-      <div className="sm:hidden space-y-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-800">Today</h2>
-            <button
-              onClick={() => { setAttendanceMsg(''); setAttendanceOpen(true); }}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
-              style={{ background: '#2A6BB5' }}
-              disabled={dayComplete}
-            >
-              {dayComplete ? 'Attendance Done' : 'Attendance'}
-            </button>
-          </div>
+    <div className="space-y-5 max-w-2xl mx-auto">
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-xs">
-              <tbody className="divide-y divide-gray-100">
-                <tr>
-                  <td className="px-4 py-2 text-gray-500 font-semibold whitespace-nowrap">Batch No</td>
-                  <td className="px-4 py-2 text-gray-800 font-medium">{toBatchNumber(currentBatch?.Batch_code)}</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-2 text-gray-500 font-semibold whitespace-nowrap">Batch Name</td>
-                  <td className="px-4 py-2 text-gray-800 font-medium">{currentBatch?.Course_Name || '—'}</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-2 text-gray-500 font-semibold whitespace-nowrap">Planned Lectures</td>
-                  <td className="px-4 py-2 text-gray-800 font-medium">
-                    {plannedLoading ? 'Loading…' : `${plannedLectures.length} (this month)`}
-                    <a
-                      href="/trainer-portal/dashboard/lecture-plan"
-                      className="ml-2 text-xs font-semibold"
-                      style={{ color: '#2A6BB5' }}
-                    >
-                      View
-                    </a>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-800">Recent Lectures</h2>
-          </div>
-
-          {recentLectureRows.length === 0 ? (
-            <div className="p-4 text-center text-sm text-gray-400">No lectures found</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-xs">
-                <thead className="bg-gray-50">
-                  <tr className="text-left text-gray-500">
-                    <th className="px-3 py-2 font-semibold">Date</th>
-                    <th className="px-3 py-2 font-semibold">Summary</th>
-                    <th className="px-3 py-2 font-semibold">In</th>
-                    <th className="px-3 py-2 font-semibold">Out</th>
-                    <th className="px-3 py-2 font-semibold">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {recentLectureRows.map(l => (
-                    <tr key={l.Take_Id} className="align-top">
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-700">
-                        {Number.isFinite(l._date.getTime()) ? l._date.toLocaleDateString() : l.Take_Dt}
-                      </td>
-                      <td className="px-3 py-2 text-gray-800">
-                        <div className="max-w-[14rem]">
-                          <p className="font-medium truncate">{l._summary}</p>
-                          <p className="text-[11px] text-gray-500 truncate">{toBatchNumber(l.Batch_code)}</p>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-700">{l._in}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-700">{l._out}</td>
-                      <td className="px-3 py-2 whitespace-nowrap font-semibold text-gray-800">{l._hours}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <div className="px-4 py-3 border-t border-gray-100">
-            <p className="text-[11px] text-gray-500">{breakLabel}.</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Desktop/tablet: existing layout */}
-      <div className="hidden sm:block space-y-6">
-      {/* Welcome banner */}
+      {/* Hero: Today's status + big action */}
       <div
-        className="rounded-2xl p-5 md:p-6 text-white relative overflow-hidden"
+        className="rounded-3xl p-6 text-white relative overflow-hidden"
         style={{ background: 'linear-gradient(135deg, #2E3093 0%, #2A6BB5 100%)' }}
       >
-        <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full opacity-10 bg-white" />
-        <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full opacity-10" style={{ background: '#FAE452' }} />
+        <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full opacity-10 bg-white" />
         <div className="relative z-10">
-          <h1 className="text-xl md:text-2xl font-bold mb-1">Welcome, {data.faculty.name}</h1>
-          <p className="text-blue-100 text-sm">
-            {data.faculty.specialization && <span>{data.faculty.specialization} &bull; </span>}
-            {data.faculty.email}
-          </p>
-          {data.today_attendance && (
-            <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 text-sm">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              Checked in at {formatTimeAmPm(data.today_attendance.Check_In)}
-              {data.today_attendance.Check_Out && ` — Out at ${formatTimeAmPm(data.today_attendance.Check_Out)}`}
+          <p className="text-blue-200 text-base font-medium">{todayLabel}</p>
+          <h1 className="text-2xl font-bold mt-1 mb-1">Hello, {data.faculty.name.split(' ')[0]}</h1>
+          {data.faculty.specialization && (
+            <p className="text-blue-200 text-sm mb-4">{data.faculty.specialization}</p>
+          )}
+
+          {/* Day status */}
+          {dayComplete && (
+            <div className="mt-2 flex items-center gap-2 px-4 py-3 rounded-2xl bg-white/15">
+              <svg className="w-6 h-6 text-green-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p className="font-semibold text-white">Day complete</p>
+                <p className="text-sm text-blue-200">
+                  In: {formatTimeAmPm(data.today_attendance!.Check_In)} &nbsp;·&nbsp; Out: {formatTimeAmPm(data.today_attendance!.Check_Out)}
+                </p>
+              </div>
             </div>
+          )}
+
+          {canSignOut && (
+            <div className="mt-2 flex items-center gap-2 px-4 py-3 rounded-2xl bg-white/15">
+              <span className="w-3 h-3 rounded-full bg-green-400 animate-pulse shrink-0" />
+              <div>
+                <p className="font-semibold text-white">You signed in today</p>
+                <p className="text-sm text-blue-200">
+                  Started at {formatTimeAmPm(data.today_attendance!.Check_In)}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {canSignIn && (
+            <div className="mt-2 px-4 py-3 rounded-2xl bg-white/10">
+              <p className="text-sm text-blue-200">You haven't started your day yet.</p>
+            </div>
+          )}
+
+          {/* Big action button */}
+          {!dayComplete && (
+            <button
+              onClick={() => { setSaveMsg(''); setModalOpen(true); }}
+              className="mt-4 w-full py-4 rounded-2xl font-bold text-lg transition-all active:scale-95"
+              style={{
+                background: canSignIn ? '#16a34a' : '#ea580c',
+                color: 'white',
+                boxShadow: canSignIn ? '0 4px 20px rgba(22,163,74,0.4)' : '0 4px 20px rgba(234,88,12,0.4)',
+              }}
+            >
+              {canSignIn ? '▶  Start My Day' : '■  End My Day'}
+            </button>
           )}
         </div>
       </div>
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Current Batch card (inline, before Total Lectures) */}
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white" style={{ background: '#2A6BB5' }}>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      {/* Stats row */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col gap-1">
+          <p className="text-3xl font-bold" style={{ color: '#2E3093' }}>{data.total_lectures}</p>
+          <p className="text-base text-gray-500 font-medium">Total Lectures</p>
+        </div>
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col gap-1">
+          <p className="text-3xl font-bold" style={{ color: '#16a34a' }}>{data.this_month_attendance}</p>
+          <p className="text-base text-gray-500 font-medium">Days This Month</p>
+        </div>
+      </div>
+
+      {/* Current batch */}
+      {currentBatch && (
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4">
+          <div
+            className="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0"
+            style={{ background: '#2A6BB5' }}
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs text-gray-500">Current Batch</p>
-            <p className="text-lg font-bold text-gray-800 leading-tight truncate">{toBatchNumber(currentBatch?.Batch_code)}</p>
-            <p className="text-[11px] text-gray-500 truncate">{currentBatch?.Course_Name || '—'}</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Current Batch</p>
+            <p className="text-lg font-bold text-gray-800 leading-tight">{toBatchNumber(currentBatch.Batch_code)}</p>
+            <p className="text-sm text-gray-500 truncate">{currentBatch.Course_Name || '—'}</p>
           </div>
-          <span
-            className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
-            style={{ background: 'rgba(42,107,181,0.10)', color: '#2A6BB5' }}
+          <div className="text-right shrink-0">
+            <p className="text-sm text-gray-500">{plannedLectures.length} planned</p>
+            <p className="text-xs text-gray-400">this month</p>
+          </div>
+        </div>
+      )}
+
+      {/* Recent lectures */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-800">Recent Lectures</h2>
+          <a
+            href="/trainer-portal/dashboard/lecture-plan"
+            className="text-sm font-semibold px-3 py-1.5 rounded-lg"
+            style={{ color: '#2A6BB5', background: 'rgba(42,107,181,0.08)' }}
           >
-            Latest
-          </span>
+            See All
+          </a>
         </div>
 
-        {stats.map(s => {
-          const isAttendance = s.label === 'Attendance';
-          if (!isAttendance) {
-            return (
-              <div key={s.label} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white" style={{ background: s.bg }}>
-                  {s.icon}
+        {recentLectureRows.length === 0 ? (
+          <div className="p-8 text-center text-gray-400 text-base">No lectures recorded yet.</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {recentLectureRows.map(l => (
+              <div key={l.Take_Id} className="px-5 py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-800 text-base leading-snug">{l._summary}</p>
+                    <p className="text-sm text-gray-500 mt-0.5">{formatDate(l.Take_Dt)} &nbsp;·&nbsp; {toBatchNumber(l.Batch_code)}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-bold text-gray-700">{l._hours}</p>
+                    <p className="text-xs text-gray-400">{l._in} – {l._out}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-lg font-bold text-gray-800 leading-tight">{s.value}</p>
-                  <p className="text-xs text-gray-500">{s.label}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <span
+                    className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                    style={{ background: 'rgba(42,107,181,0.10)', color: '#2A6BB5' }}
+                  >
+                    {l.students_present} students present
+                  </span>
                 </div>
               </div>
-            );
-          }
+            ))}
+          </div>
+        )}
 
-          return (
-            <div key={s.label} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white" style={{ background: s.bg }}>
-                  {s.icon}
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs text-gray-500">{s.label}</p>
-                  <p className="text-sm font-bold text-gray-800">{s.value}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => { setAttendanceMsg(''); setAttendanceOpen(true); }}
-                className="mt-3 w-full px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: '#2A6BB5' }}
-                disabled={dayComplete}
-              >
-                {dayComplete ? 'Attendance Completed' : (canCheckIn ? 'Mark Schedule' : 'Check Out')}
-              </button>
-              {data.today_attendance && (
-                <p className="mt-2 text-xs text-gray-500">
-                  In: {formatTimeAmPm(data.today_attendance.Check_In)}
-                  {data.today_attendance.Check_Out ? ` | Out: ${formatTimeAmPm(data.today_attendance.Check_Out)}` : ''}
-                </p>
-              )}
-            </div>
-          );
-        })}
+        {breakMinutes > 0 && (
+          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50">
+            <p className="text-xs text-gray-400">Break of {breakMinutes} min deducted from total hours (1:00 PM overlap).</p>
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent lectures */}
-        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-800">Recent Lectures</h2>
-          </div>
-          {recentLectureRows.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">No lectures found</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    <th className="px-6 py-3">Date</th>
-                    <th className="px-6 py-3">Lecture Summary</th>
-                    <th className="px-6 py-3">In</th>
-                    <th className="px-6 py-3">Out</th>
-                    <th className="px-6 py-3">Total Hours</th>
-                    <th className="px-6 py-3 text-right">Present</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {recentLectureRows.map(l => (
-                    <tr key={l.Take_Id} className="hover:bg-gray-50 transition-colors align-top">
-                      <td className="px-6 py-3 whitespace-nowrap text-gray-700 font-medium">
-                        {Number.isFinite(l._date.getTime()) ? l._date.toLocaleDateString() : l.Take_Dt}
-                      </td>
-                      <td className="px-6 py-3 text-gray-800">
-                        <div className="max-w-[28rem]">
-                          <p className="font-semibold truncate">{l._summary}</p>
-                          <p className="text-xs text-gray-500 truncate">{toBatchNumber(l.Batch_code)}</p>
-                        </div>
-                      </td>
-                      <td className="px-6 py-3 whitespace-nowrap text-gray-700">{l._in}</td>
-                      <td className="px-6 py-3 whitespace-nowrap text-gray-700">{l._out}</td>
-                      <td className="px-6 py-3 whitespace-nowrap font-semibold text-gray-800">{l._hours}</td>
-                      <td className="px-6 py-3 whitespace-nowrap text-right">
-                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: 'rgba(42,107,181,0.1)', color: '#2A6BB5' }}>
-                          {l.students_present}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <div className="px-6 py-3 border-t border-gray-100">
-            <p className="text-xs text-gray-500">{breakLabel}.</p>
-          </div>
-        </div>
-
-        {/* Planned lectures (this month) — only for latest batch */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-800">Planned Lectures</h2>
-              <p className="text-sm text-gray-500">This month • {toBatchNumber(currentBatch?.Batch_code)}</p>
-            </div>
-            <a href="/trainer-portal/dashboard/lecture-plan" className="text-sm font-medium" style={{ color: '#2A6BB5' }}>View</a>
-          </div>
-
-          {plannedLoading ? (
-            <div className="p-8 text-center text-gray-400">Loading…</div>
-          ) : plannedLectures.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">No planned lectures found</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    <th className="px-6 py-3">Date</th>
-                    <th className="px-6 py-3">Topic</th>
-                    <th className="px-6 py-3">Time</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {plannedLectures.slice(0, 8).map(p => (
-                    <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-3 whitespace-nowrap text-gray-700 font-medium">{p.date}</td>
-                      <td className="px-6 py-3 text-gray-800">
-                        <p className="font-medium truncate max-w-xs">{(p.subject_topic || p.subject || '—').trim()}</p>
-                        {p.lecturecontent ? (
-                          <p className="text-xs text-gray-500 truncate max-w-xs">Subject: {String(p.lecturecontent).trim()}</p>
-                        ) : null}
-                        <p className="text-xs text-gray-500 truncate">Lecture {p.lecture_no}</p>
-                      </td>
-                      <td className="px-6 py-3 whitespace-nowrap text-gray-700">
-                        {formatTimeAmPm(p.starttime)}{p.endtime ? `–${formatTimeAmPm(p.endtime)}` : ''}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-      </div>
-
-      {/* Attendance Modal */}
-      {attendanceOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setAttendanceOpen(false)}>
+      {/* Sign-in / Sign-out modal */}
+      {modalOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setModalOpen(false)}
+        >
           <div
-            className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[calc(100dvh-2rem)] flex flex-col min-h-0"
+            className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col"
             onClick={e => e.stopPropagation()}
           >
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            {/* Drag handle on mobile */}
+            <div className="flex justify-center pt-3 pb-1 sm:hidden">
+              <div className="w-10 h-1 rounded-full bg-gray-300" />
+            </div>
+
+            <div className="px-6 pt-4 pb-2 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-gray-800">Mark Attendance</h3>
-                <p className="text-sm text-gray-500">
-                  {nowTime.toLocaleDateString()} &bull; {nowTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                <h3 className="text-xl font-bold text-gray-800">
+                  {canSignIn ? 'Start My Day' : 'End My Day'}
+                </h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {nowTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} &nbsp;·&nbsp; {todayLabel}
                 </p>
               </div>
-              <button onClick={() => setAttendanceOpen(false)} className="text-gray-400 hover:text-gray-600">
+              <button
+                onClick={() => setModalOpen(false)}
+                className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 text-gray-500"
+              >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            <div className="p-6 space-y-4 overflow-y-auto min-h-0">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Main Topic</label>
+            <div className="px-6 py-4 space-y-5">
+              {/* Topic selector */}
+              <div>
+                <label className="block text-base font-semibold text-gray-700 mb-2">
+                  What topic did you cover today?
+                </label>
+                {topicLoading ? (
+                  <div className="h-12 bg-gray-100 rounded-xl animate-pulse" />
+                ) : disciplineOptions.length === 0 ? (
+                  <p className="text-sm text-gray-400 italic">No topics found for this batch.</p>
+                ) : (
                   <select
-                    value={attendanceForm.discipline}
-                    onChange={e => {
-                      setAttendanceForm(f => ({ ...f, discipline: e.target.value, subTopics: [] }));
-                      setSubtopicOpen(false);
-                    }}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5] bg-white"
-                    disabled={topicLoading || disciplineOptions.length === 0}
+                    value={selectedTopic}
+                    onChange={e => setSelectedTopic(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-base focus:outline-none focus:border-[#2A6BB5] bg-white"
                   >
-                    {topicLoading ? (
-                      <option value="">Loading…</option>
-                    ) : disciplineOptions.length === 0 ? (
-                      <option value="">No topics found</option>
-                    ) : (
-                      disciplineOptions.map(o => (
-                        <option key={o.name} value={o.name}>{o.name}</option>
-                      ))
-                    )}
+                    {disciplineOptions.map(o => (
+                      <option key={o.name} value={o.name}>{o.name}</option>
+                    ))}
                   </select>
-                  <p className="mt-1 text-[11px] text-gray-500">Derived from the batch standard lecture plan.</p>
-                </div>
-
-                <div className="relative">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Sub Topic</label>
-                  <button
-                    type="button"
-                    onClick={() => setSubtopicOpen(o => !o)}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-left bg-white focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]"
-                    disabled={topicLoading || disciplineOptions.length === 0}
-                  >
-                    {attendanceForm.subTopics.length ? `${attendanceForm.subTopics.length} selected` : 'Select sub topics'}
-                  </button>
-
-                  {subtopicOpen && (
-                    <div className="absolute z-20 mt-2 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-56 overflow-auto p-3">
-                      {(() => {
-                        const d = disciplineOptions.find(o => o.name === attendanceForm.discipline);
-                        const subs = d?.subtopics || [];
-                        if (subs.length === 0) {
-                          return <p className="text-xs text-gray-500">No subtopics for this topic.</p>;
-                        }
-                        return (
-                          <div className="space-y-2">
-                            {subs.map((s, i) => {
-                              const checked = attendanceForm.subTopics.includes(s);
-                              return (
-                                <label key={s} className="flex items-start gap-2 text-sm text-gray-700">
-                                  <input
-                                    type="checkbox"
-                                    className="mt-0.5"
-                                    checked={checked}
-                                    onChange={e => {
-                                      setAttendanceForm(f => {
-                                        const next = new Set(f.subTopics);
-                                        if (e.target.checked) next.add(s);
-                                        else next.delete(s);
-                                        return { ...f, subTopics: Array.from(next) };
-                                      });
-                                    }}
-                                  />
-                                  <span className="leading-snug">{i + 1}. {s}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        );
-                      })()}
-
-                      <div className="mt-3 flex items-center justify-between">
-                        <button
-                          type="button"
-                          className="text-xs font-semibold"
-                          style={{ color: '#2A6BB5' }}
-                          onClick={() => setAttendanceForm(f => ({ ...f, subTopics: [] }))}
-                        >
-                          Clear
-                        </button>
-                        <button
-                          type="button"
-                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
-                          style={{ background: '#2A6BB5' }}
-                          onClick={() => setSubtopicOpen(false)}
-                        >
-                          Done
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  <p className="mt-1 text-[11px] text-gray-500">Select one or more.</p>
-                </div>
+                )}
+                <p className="mt-1.5 text-xs text-gray-400">Optional — you can skip this.</p>
               </div>
 
-              <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
-                <p className="text-[11px] font-semibold text-gray-500">Selected</p>
-                <p className="mt-1 text-sm text-gray-800">
-                  <span className="font-semibold">Topic:</span> {attendanceForm.discipline?.trim() || '—'}
-                </p>
-                <p className="mt-1 text-sm text-gray-800">
-                  <span className="font-semibold">Sub Topic:</span>{' '}
-                  {attendanceForm.subTopics.length ? attendanceForm.subTopics.join(', ') : '—'}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="border border-gray-200 rounded-2xl p-4">
-                  <p className="text-sm font-semibold text-gray-800">1st Half</p>
-                  <p className="text-xs text-gray-500">(checkboxes saved as notes)</p>
-                  <div className="mt-3 space-y-2">
-                    {([
-                      { key: 'lecture', label: 'Lecture' },
-                      { key: 'assignment', label: 'Assignment' },
-                      { key: 'unitTest', label: 'Unit Test' },
-                    ] as const).map(opt => (
-                      <label key={opt.key} className="flex items-center gap-2 text-sm text-gray-700">
-                        <input
-                          type="checkbox"
-                          checked={attendanceForm.firstHalf[opt.key]}
-                          onChange={e => setAttendanceForm(f => ({
-                            ...f,
-                            firstHalf: { ...f.firstHalf, [opt.key]: e.target.checked },
-                          }))}
-                        />
-                        {opt.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="border border-gray-200 rounded-2xl p-4">
-                  <p className="text-sm font-semibold text-gray-800">2nd Half</p>
-                  <p className="text-xs text-gray-500">(checkboxes saved as notes)</p>
-                  <div className="mt-3 space-y-2">
-                    {([
-                      { key: 'lecture', label: 'Lecture' },
-                      { key: 'assignment', label: 'Assignment' },
-                      { key: 'unitTest', label: 'Unit Test' },
-                    ] as const).map(opt => (
-                      <label key={opt.key} className="flex items-center gap-2 text-sm text-gray-700">
-                        <input
-                          type="checkbox"
-                          checked={attendanceForm.secondHalf[opt.key]}
-                          onChange={e => setAttendanceForm(f => ({
-                            ...f,
-                            secondHalf: { ...f.secondHalf, [opt.key]: e.target.checked },
-                          }))}
-                        />
-                        {opt.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-xs text-gray-500">
-                  {dayComplete
-                    ? 'Already checked out today.'
-                    : (canCheckIn ? 'Will mark schedule now (time is automatic).' : 'Will check out now (time is automatic).')}
-                </div>
-                <button
-                  onClick={submitAttendance}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
-                  style={{ background: '#2A6BB5' }}
-                  disabled={attendanceSaving || dayComplete}
+              {saveMsg && (
+                <p
+                  className="text-sm font-medium px-4 py-3 rounded-xl"
+                  style={{
+                    color: saveMsg.toLowerCase().includes('error') || saveMsg.toLowerCase().includes('wrong') ? '#dc2626' : '#16a34a',
+                    background: saveMsg.toLowerCase().includes('error') || saveMsg.toLowerCase().includes('wrong') ? '#fef2f2' : '#f0fdf4',
+                  }}
                 >
-                  {attendanceSaving ? 'Saving…' : (canCheckIn ? 'Mark Schedule' : 'Check Out')}
-                </button>
-              </div>
-
-              {attendanceMsg && (
-                <p className="text-sm" style={{ color: attendanceMsg.toLowerCase().includes('success') ? '#16a34a' : '#dc2626' }}>
-                  {attendanceMsg}
+                  {saveMsg}
                 </p>
               )}
+
+              <button
+                onClick={submitDay}
+                disabled={saving || dayComplete}
+                className="w-full py-4 rounded-2xl font-bold text-lg text-white transition-all active:scale-95 disabled:opacity-50"
+                style={{ background: canSignIn ? '#16a34a' : '#ea580c' }}
+              >
+                {saving ? 'Please wait…' : (canSignIn ? 'Confirm — Start My Day' : 'Confirm — End My Day')}
+              </button>
+
+              <p className="text-center text-xs text-gray-400 pb-2">
+                Time is recorded automatically.
+              </p>
             </div>
           </div>
         </div>
