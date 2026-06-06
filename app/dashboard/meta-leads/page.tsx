@@ -614,6 +614,12 @@ export default function MetaLeadsPage() {
   }, []);
 
   const doSearch = () => { setPage(1); setFetchTrigger((t) => t + 1); };
+  const applyQuickSource = (keyword: 'instagram' | 'facebook') => {
+    const matched = filters.sources.find((item) => item.toLowerCase().includes(keyword));
+    setSource(matched || (keyword === 'instagram' ? 'Instagram Leads' : 'Facebook Leads'));
+    setPage(1);
+    setFetchTrigger((t) => t + 1);
+  };
   const doClear = () => {
     setSearch(''); setSource(''); setStatus(''); setDateFrom(''); setDateTo(''); setTraining(''); setDuplicatesOnly(false);
     setPage(1); setFetchTrigger((t) => t + 1);
@@ -1132,6 +1138,20 @@ export default function MetaLeadsPage() {
                   <option value="">All Sources</option>
                   {filters.sources.map((item) => <option key={item} value={item}>{item}</option>)}
                 </select>
+                <button
+                  type="button"
+                  onClick={() => applyQuickSource('instagram')}
+                  className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${source.toLowerCase().includes('instagram') ? 'border-fuchsia-300 bg-fuchsia-50 text-fuchsia-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                >
+                  Instagram
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyQuickSource('facebook')}
+                  className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${source.toLowerCase().includes('facebook') ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                >
+                  Facebook
+                </button>
                 <select value={status} onChange={(e) => setStatus(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] transition-colors w-[130px]">
                   <option value="">All Statuses</option>
                   {filters.statusOptions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
