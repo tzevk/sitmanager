@@ -1011,19 +1011,27 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       ${metaJoin}
       ${puneListJoin}
        LEFT JOIN (
+         SELECT d.Inquiry_id as InquiryId, MAX(d.id) as max_id
+         FROM awt_inquirydiscussion d
+         WHERE d.deleted = 0
+           AND d.Inquiry_id IN (${ph})
+         GROUP BY d.Inquiry_id
+       ) tld_primary ON tld_primary.InquiryId = si.Inquiry_Id
+       LEFT JOIN (
          SELECT si_map.Inquiry_Id as InquiryId, MAX(d.id) as max_id
          FROM \`${inquiryTable}\` si_map
-         INNER JOIN awt_inquirydiscussion d ON d.deleted = 0 AND (
-           d.Inquiry_id = si_map.Inquiry_Id OR d.Inquiry_id = si_map.Student_Id OR d.student_id = si_map.Student_Id
-         )
+         INNER JOIN awt_inquirydiscussion d
+           ON d.deleted = 0
+          AND si_map.Student_Id IS NOT NULL
+          AND (d.Inquiry_id = si_map.Student_Id OR d.student_id = si_map.Student_Id)
          WHERE si_map.Inquiry_Id IN (${ph})
          GROUP BY si_map.Inquiry_Id
-       ) tld ON tld.InquiryId = si.Inquiry_Id
-       LEFT JOIN awt_inquirydiscussion ld ON ld.id = tld.max_id
+       ) tld_legacy ON tld_legacy.InquiryId = si.Inquiry_Id
+       LEFT JOIN awt_inquirydiscussion ld ON ld.id = COALESCE(tld_primary.max_id, tld_legacy.max_id)
        LEFT JOIN awt_adminuser au ON au.id = ld.created_by
        LEFT JOIN office_employee_mst oe ON oe.Emp_Id = ld.created_by
        WHERE si.Inquiry_Id IN (${ph})`,
-      [...pageIds, ...pageIds],
+      [...pageIds, ...pageIds, ...pageIds],
       10,
     );
     dataRows = (rows as any[]).sort(
