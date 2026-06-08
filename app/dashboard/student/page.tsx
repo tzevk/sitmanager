@@ -25,6 +25,7 @@ interface StudentRow {
   Batch_code_resolved: string | null;
   Batch_SDate: string | null;
   Batch_EDate: string | null;
+  _legacy?: boolean;
 }
 
 interface Course { Course_Id: number; Course_Name: string }
@@ -222,7 +223,12 @@ export default function StudentPage() {
 
                   {/* Name + Code + Mobile */}
                   <td className="py-1.5 px-3 max-w-[180px]">
-                    <span className="block text-xs font-semibold text-slate-900 truncate">{r.Student_Name || '—'}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="block text-xs font-semibold text-slate-900 truncate">{r.Student_Name || '—'}</span>
+                      {r._legacy && (
+                        <span className="inline-block px-1 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 whitespace-nowrap flex-shrink-0">Legacy</span>
+                      )}
+                    </div>
                     {r.Student_Code && (
                       <span className="text-[11px] font-mono text-slate-400">{r.Student_Code}</span>
                     )}

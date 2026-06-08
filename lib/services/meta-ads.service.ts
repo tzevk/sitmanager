@@ -137,7 +137,7 @@ const FALLBACK_STATUSES: Record<number, string> = {
   17: 'Demo Scheduled', 19: 'Online Inquiry', 23: 'Document Pending',
   24: 'Fees Pending', 25: 'Transfer', 26: 'Need Based Training',
   27: 'Duplicate', 29: 'Corporate', 34: 'Assessment Done',
-  35: 'Refund', 40: 'Counselling Done',
+  35: 'Refund', 40: 'Counselling Done', 41: 'Call Not Picked Up',
 };
 
 export interface MetaLeadListParams {
@@ -173,6 +173,7 @@ export interface MetaLeadListRow {
   IsDuplicateLead: boolean;
   ApplicantEmailSentAt: string | null;
   City: string | null;
+  LeadFields: Record<string, string | null>;
 }
 
 export interface MetaLeadListResult {
@@ -2714,9 +2715,12 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
       OR LOWER(COALESCE(m.mobile,'')) LIKE ?
       OR LOWER(COALESCE(m.email,'')) LIKE ?
       OR CAST(COALESCE(m.inquiry_id, 0) AS CHAR) LIKE ?
+      OR LOWER(COALESCE(m.course_name,'')) LIKE ?
+      OR LOWER(COALESCE(m.campaign_name,'')) LIKE ?
+      OR LOWER(COALESCE(m.form_name,'')) LIKE ?
     )`);
     const like = `%${search.toLowerCase()}%`;
-    queryParams.push(like, like, like, like);
+    queryParams.push(like, like, like, like, like, like, like);
   }
   if (leadTag) {
     conditions.push(`(
@@ -2748,8 +2752,8 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
       )`);
       queryParams.push('%facebook%', '%facebook%', '%source:facebook%', '%facebook%', '%facebook%');
     } else {
-      conditions.push(`LOWER(COALESCE(m.source_label,'')) = ?`);
-      queryParams.push(normalizedSource);
+      conditions.push(`LOWER(COALESCE(m.source_label,'')) LIKE ?`);
+      queryParams.push(`%${normalizedSource}%`);
     }
   }
   if (statusId) {
@@ -2765,8 +2769,8 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
     queryParams.push(dateTo);
   }
   if (training) {
-    conditions.push(`LOWER(COALESCE(m.course_name,'')) = ?`);
-    queryParams.push(training.toLowerCase());
+    conditions.push(`LOWER(COALESCE(m.course_name,'')) LIKE ?`);
+    queryParams.push(`%${training.toLowerCase()}%`);
   }
   if (duplicatesOnly) {
     conditions.push(`m.duplicate_of_inquiry_id IS NOT NULL`);
@@ -2795,7 +2799,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
          COALESCE(m.inquiry_id, 0) AS Student_Id,
          COALESCE(CAST(si.Student_Id AS UNSIGNED), 0) AS StudentMaster_Id,
          COALESCE(NULLIF(TRIM(m.student_name),''), NULLIF(TRIM(si.Student_Name),''), 'Meta Lead') AS Student_Name,
-         COALESCE(NULLIF(TRIM(m.course_name),''), NULLIF(TRIM(m.form_name),'')) AS CourseName,
+         NULLIF(TRIM(m.course_name),'') AS CourseName,
          COALESCE(NULLIF(TRIM(m.lead_created_time),''), CAST(m.created_at AS CHAR)) AS Inquiry_Dt,
          NULLIF(TRIM(m.mobile),'') AS Present_Mobile,
          NULLIF(TRIM(m.email),'') AS Email,
@@ -2862,7 +2866,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
              COALESCE(m.inquiry_id, 0) AS Student_Id,
              COALESCE(CAST(si.Student_Id AS UNSIGNED), 0) AS StudentMaster_Id,
              COALESCE(NULLIF(TRIM(m.student_name),''), NULLIF(TRIM(si.Student_Name),''), 'Meta Lead') AS Student_Name,
-             COALESCE(NULLIF(TRIM(m.course_name),''), NULLIF(TRIM(m.form_name),'')) AS CourseName,
+             NULLIF(TRIM(m.course_name),'') AS CourseName,
              COALESCE(NULLIF(TRIM(m.lead_created_time),''), CAST(m.created_at AS CHAR)) AS Inquiry_Dt,
              NULLIF(TRIM(m.mobile),'') AS Present_Mobile,
              NULLIF(TRIM(m.email),'') AS Email,
@@ -2950,12 +2954,21 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
 
     const statusIdNum = row.Status_id == null ? null : Number(row.Status_id);
     const discussion = row.Discussion ?? null;
+    const qualification =
+      (fields['qualification'] as string | null) ||
+      (fields['educational_qualification'] as string | null) ||
+      (fields['highest_qualification'] as string | null) ||
+      (fields['education_level'] as string | null) ||
+      (fields['education'] as string | null) ||
+      (row.CourseName as string | null) ||
+      null;
+
     return {
       MetaLead_Id: String(row.MetaLead_Id || ''),
       Student_Id: Number(row.Student_Id || 0),
       StudentMaster_Id: Number(row.StudentMaster_Id || 0),
       Student_Name: String(row.Student_Name || 'Meta Lead'),
-      CourseName: row.CourseName ?? null,
+      CourseName: qualification,
       Inquiry_Dt: row.Inquiry_Dt ?? null,
       Present_Mobile: row.Present_Mobile ?? null,
       Email: row.Email ?? null,
@@ -2970,6 +2983,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
       IsDuplicateLead: Boolean(row.IsDuplicateLead),
       ApplicantEmailSentAt: row.ApplicantEmailSentAt ?? null,
       City: city ? String(city).trim() || null : null,
+      LeadFields: fields,
     };
   });
 

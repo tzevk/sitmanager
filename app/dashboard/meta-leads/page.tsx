@@ -26,6 +26,7 @@ interface InquiryRow {
   IsDuplicateLead?: boolean;
   ApplicantEmailSentAt?: string | null;
   City?: string | null;
+  LeadFields?: Record<string, string | null>;
 }
 
 interface MetaPerformanceRow {
@@ -198,8 +199,8 @@ function statusColor(id: number | null, label: string): 'emerald' | 'blue' | 'or
     if ([0, 13, 15, 19, 26, 29].includes(id)) return 'blue';
     // Interested / hot / batch started
     if ([2, 5].includes(id)) return 'orange';
-    // Follow up / on hold / fees pending / document pending
-    if ([1, 10, 23, 24].includes(id)) return 'amber';
+    // Follow up / on hold / fees pending / document pending / call not picked up
+    if ([1, 10, 23, 24, 41].includes(id)) return 'amber';
     // Cancelled / not interested / left / refund
     if ([4, 7, 9, 35].includes(id)) return 'red';
     // Demo / prospective / walk-in demo
@@ -430,6 +431,48 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
 }
 
 // --- Meta Data Modal ---
+interface CapturedFieldsModalProps { row: InquiryRow; onClose: () => void; }
+
+function CapturedFieldsModal({ row, onClose }: CapturedFieldsModalProps) {
+  const fields = row.LeadFields ?? {};
+  const entries = Object.entries(fields).filter(([, v]) => v != null && String(v).trim() !== '');
+  const fmt = (key: string) =>
+    key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#2A6BB5]/60">Captured Form Fields</p>
+            <h3 className="text-sm font-bold text-slate-900">{formatName(row.Student_Name)}</h3>
+          </div>
+          <button type="button" onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div className="px-5 py-4 max-h-[65vh] overflow-y-auto">
+          {entries.length === 0 ? (
+            <p className="text-xs text-slate-400 text-center py-6">No captured form fields available for this lead.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {entries.map(([key, value]) => (
+                <div key={key} className="flex items-start gap-3 py-2 border-b border-slate-100 last:border-0">
+                  <span className="w-36 shrink-0 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400 pt-0.5 leading-4">{fmt(key)}</span>
+                  <span className="text-xs text-slate-800 leading-5 break-words flex-1">{String(value)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="border-t border-slate-100 px-5 py-3 flex items-center justify-between">
+          <span className="text-[10px] text-slate-400">{entries.length} field{entries.length !== 1 ? 's' : ''} captured</span>
+          <button type="button" onClick={onClose} className="px-4 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface MetaDataModalProps { row: InquiryRow; onClose: () => void; }
 
 function MetaDataModal({ row, onClose }: MetaDataModalProps) {
@@ -519,6 +562,7 @@ export default function MetaLeadsPage() {
   const [untouchedExpanded, setUntouchedExpanded] = useState(false);
   const [followUpModalLeadId, setFollowUpModalLeadId] = useState<string | null>(null);
   const [metaDataModalLeadId, setMetaDataModalLeadId] = useState<string | null>(null);
+  const [capturedFieldsModalLeadId, setCapturedFieldsModalLeadId] = useState<string | null>(null);
 
   const oauthStatus = searchParams.get('metaOAuth');
   const oauthMessage = searchParams.get('metaOAuthMessage');
@@ -1152,6 +1196,10 @@ export default function MetaLeadsPage() {
                 >
                   Facebook
                 </button>
+                <select value={training} onChange={(e) => { setTraining(e.target.value); setPage(1); setFetchTrigger((t) => t + 1); }} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] transition-colors w-[160px]">
+                  <option value="">All Courses</option>
+                  {filters.trainings.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
                 <select value={status} onChange={(e) => setStatus(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] transition-colors w-[130px]">
                   <option value="">All Statuses</option>
                   {filters.statusOptions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -1323,14 +1371,26 @@ export default function MetaLeadsPage() {
                               </button>
                             </td>
                             <td className={`${tdBase} text-center`}>
-                              <button
-                                type="button"
-                                onClick={() => setMetaDataModalLeadId(row.MetaLead_Id)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
-                              >
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                Info
-                              </button>
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setMetaDataModalLeadId(row.MetaLead_Id)}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                  Info
+                                </button>
+                                {Object.keys(row.LeadFields ?? {}).length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setCapturedFieldsModalLeadId(row.MetaLead_Id)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-[10px] font-semibold text-violet-700 hover:bg-violet-100 transition-colors"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                                    Fields
+                                  </button>
+                                )}
+                              </div>
                             </td>
                             <td className={`${tdBase} text-center`}>
                               <select
@@ -1416,6 +1476,10 @@ export default function MetaLeadsPage() {
           {metaDataModalLeadId && metaDataModalRow && (
             <MetaDataModal row={metaDataModalRow} onClose={() => setMetaDataModalLeadId(null)} />
           )}
+          {capturedFieldsModalLeadId && (() => {
+            const capturedRow = rows.find((r) => r.MetaLead_Id === capturedFieldsModalLeadId) ?? null;
+            return capturedRow ? <CapturedFieldsModal row={capturedRow} onClose={() => setCapturedFieldsModalLeadId(null)} /> : null;
+          })()}
         </>
       )}
     </div>
