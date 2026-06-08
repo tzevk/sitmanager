@@ -753,9 +753,36 @@ export default function MetaLeadsPage() {
     updateRowDraft(leadId, { [field]: value });
   }, [updateRowDraft]);
 
-  const updateRowDraftStatus = useCallback((leadId: string, value: number | null) => {
-    updateRowDraft(leadId, { statusId: value });
-  }, [updateRowDraft]);
+  const saveStatusOnly = useCallback(async (row: InquiryRow, statusId: number | null) => {
+    if (!row.MetaLead_Id || !canUpdate) return;
+    updateRowDraft(row.MetaLead_Id, { statusId });
+    setSavingLeadId(row.MetaLead_Id);
+    try {
+      const res = await fetch(`/api/meta-ads/leads/${encodeURIComponent(row.MetaLead_Id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentName: rowDrafts[row.MetaLead_Id]?.studentName ?? row.Student_Name ?? '',
+          courseName:  rowDrafts[row.MetaLead_Id]?.courseName  ?? row.CourseName  ?? '',
+          mobile:      rowDrafts[row.MetaLead_Id]?.mobile      ?? row.Present_Mobile ?? '',
+          email:       rowDrafts[row.MetaLead_Id]?.email       ?? row.Email        ?? '',
+          city:        rowDrafts[row.MetaLead_Id]?.city        ?? row.City         ?? '',
+          discussion:  fromBulletEditorValue(rowDrafts[row.MetaLead_Id]?.discussion ?? ''),
+          statusId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to save status');
+      const updated = data?.lead as InquiryRow | undefined;
+      if (updated) {
+        setRows((prev) => prev.map((r) => r.MetaLead_Id === row.MetaLead_Id ? { ...r, ...updated } : r));
+      }
+    } catch (error: unknown) {
+      setConvertError(error instanceof Error ? error.message : 'Failed to save status');
+    } finally {
+      setSavingLeadId(null);
+    }
+  }, [canUpdate, rowDrafts, updateRowDraft]);
 
   const saveRow = useCallback(async (row: InquiryRow) => {
     if (!row.MetaLead_Id) return;
@@ -1396,8 +1423,11 @@ export default function MetaLeadsPage() {
                             <td className={`${tdBase} text-center`}>
                               <select
                                 value={draft.statusId ?? ''}
-                                onChange={(e) => updateRowDraftStatus(row.MetaLead_Id, e.target.value ? Number(e.target.value) : null)}
-                                disabled={inputDisabled}
+                                onChange={(e) => {
+                                  const val = e.target.value ? Number(e.target.value) : null;
+                                  void saveStatusOnly(row, val);
+                                }}
+                                disabled={!canUpdate || isSaving}
                                 className="w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
                               >
                                 <option value="">— Status</option>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -99,6 +99,10 @@ interface FacultyRow {
 }
 
 interface FacultyOption { Faculty_Id: number; Faculty_Name: string; }
+interface CourseOption  { Course_Id: number; Course_Name: string; }
+interface BatchOption   { Batch_Id: number; Batch_code: string; }
+
+const AMOUNT_TYPES = ['Cash', 'Cheque', 'NEFT', 'PDC', 'Online', 'DD'];
 
 type Tab    = 'cheque-pdc' | 'fees-details' | 'faculty-payment';
 type SubTab = 'batch-wise-fees' | 'fees-record' | 'batch-wise-faculty';
@@ -153,6 +157,11 @@ function FeesReportContent() {
   const [printDetails, setPrintDetails]   = useState(false);
   const [facultyId, setFacultyId]         = useState('');
   const [faculties, setFaculties]         = useState<FacultyOption[]>([]);
+  const [courseId,  setCourseId]          = useState('');
+  const [batchId,   setBatchId]           = useState('');
+  const [amountType, setAmountType]       = useState('');
+  const [courses,   setCourses]           = useState<CourseOption[]>([]);
+  const [batches,   setBatches]           = useState<BatchOption[]>([]);
 
   const [feesRows,           setFeesRows]           = useState<FeesRow[]>([]);
   const [batchWiseFeesRows,  setBatchWiseFeesRows]  = useState<BatchWiseFeesRow[]>([]);
@@ -164,6 +173,20 @@ function FeesReportContent() {
 
   const abortRef = useRef<AbortController | null>(null);
   const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
+
+  // Load courses once
+  useEffect(() => {
+    fetch('/api/reports/fees?tab=fees-details&action=courses')
+      .then(r => r.json()).then(d => setCourses(d.courses ?? [])).catch(() => {});
+  }, []);
+
+  // Reload batches when course changes
+  useEffect(() => {
+    setBatchId('');
+    if (!courseId) { setBatches([]); return; }
+    fetch(`/api/reports/fees?tab=fees-details&action=batches&courseId=${courseId}`)
+      .then(r => r.json()).then(d => setBatches(d.batches ?? [])).catch(() => {});
+  }, [courseId]);
 
   const clearResults = () => {
     setFeesRows([]); setBatchWiseFeesRows([]); setBatchWiseFacRows([]); setFacultyRows([]);
@@ -183,6 +206,11 @@ function FeesReportContent() {
       if (toDate)   p.set('toDate',   toDate);
       if (printDetails && tab !== 'faculty-payment') p.set('printDetails', '1');
       if (tab === 'faculty-payment' && facultyId) p.set('facultyId', facultyId);
+      if (tab === 'fees-details') {
+        if (courseId)   p.set('courseId',   courseId);
+        if (batchId)    p.set('batchId',    batchId);
+        if (amountType) p.set('amountType', amountType);
+      }
 
       const res  = await fetch(`/api/reports/fees?${p}`, { signal: controller.signal });
       const data = await res.json();
@@ -201,7 +229,7 @@ function FeesReportContent() {
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, printDetails, facultyId]);
+  }, [fromDate, toDate, printDetails, facultyId, courseId, batchId, amountType]);
 
   const handleShow = () => fetchData(activeTab, subTab);
 
@@ -228,7 +256,38 @@ function FeesReportContent() {
   const totalFacNet   = facultyRows.reduce((s, r) => s + (r.Net_Payment ?? 0), 0);
 
   const showPrintToggle = activeTab !== 'faculty-payment' &&
-    !(activeTab === 'fees-details' && subTab === 'batch-wise-faculty');
+    activeTab !== 'fees-details';
+
+  /* Excel export for fees-details */
+  const exportExcel = () => {
+    const buildCsv = (headers: string[], rowsFn: () => string[][]): string =>
+      [headers.join(','), ...rowsFn().map(r => r.map(c => `"${String(c ?? '').replace(/"/g,'""')}"`).join(','))].join('\n');
+
+    let csv = '';
+    const fname = `fees-${subTab}-${new Date().toISOString().slice(0,10)}.csv`;
+
+    if (subTab === 'batch-wise-fees') {
+      csv = buildCsv(['#','Batch Code','Course Name','Batch Start','Batch End','Receipts','Students','Amount','Tax','Total Collected'],
+        () => batchWiseFeesRows.map((r,i) => [String(i+1), r.Batch_Code, r.Course_Name, fmtDate(r.Batch_Start), fmtDate(r.Batch_End),
+          String(r.Receipt_Count), String(r.Student_Count), String(r.Total_Amount ?? ''), String(r.Total_Tax ?? ''), String(r.Total_Collected ?? '')]));
+    } else if (subTab === 'fees-record') {
+      csv = buildCsv(['#','Receipt No','Date','Student Name','Mobile','Course','Batch','Payment Type','Month/Year','Amount','Tax','Total','Notes'],
+        () => feesRows.map((r,i) => [String(i+1), r.Fees_Code ?? '', fmtDate(r.RDate || r.Date_Added), r.Student_Name, r.Present_Mobile,
+          r.Course_Name, r.Batch_Code, r.Payment_Type ?? '', r.FeesMonth && r.FeesYear ? `${r.FeesMonth}/${r.FeesYear}` : '',
+          String(r.Amount ?? ''), String(r.Service_Tax ?? ''), String(r.Total_Amt ?? ''), r.Notes ?? '']));
+    } else if (subTab === 'batch-wise-faculty') {
+      csv = buildCsv(['#','Batch Code','Course Name','Faculty Name','Type','Month/Year','Hours','Rate','Gross','TDS','Deductions','Net Payment','Payment Type','Cheque/NEFT','Payment Date'],
+        () => batchWiseFacRows.map((r,i) => [String(i+1), r.Batch_Code, r.Course_Name, r.Faculty_Name, r.Faculty_Type ?? '',
+          r.Sal_Month && r.Sal_Year ? `${r.Sal_Month} ${r.Sal_Year}` : '', String(r.Total_Hours ?? ''), String(r.Rate ?? ''),
+          String(r.Salary ?? ''), String(r.TDS ?? ''), String(r.Total_Ded ?? ''), String(r.Net_Payment ?? ''),
+          r.Payment_Type ?? '', r.NEFT_No || String(r.Cheque_No ?? ''), fmtDate(r.Payment_Dt)]));
+    }
+    if (!csv) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = fname; a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -292,61 +351,88 @@ function FeesReportContent() {
 
         {/* Filters */}
         <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/60">
-          <div className="flex flex-wrap items-end gap-4">
-            {/* From Date */}
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                From Date <span className="text-red-500">*</span>
-              </label>
-              <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className={`${ctrl} w-[140px]`} placeholder="dd/mm/yyyy" />
-            </div>
-
-            {/* To Date */}
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                To Date <span className="text-red-500">*</span>
-              </label>
-              <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className={`${ctrl} w-[140px]`} placeholder="dd/mm/yyyy" />
-            </div>
-
-            {/* Faculty dropdown — only for faculty-payment tab */}
-            {activeTab === 'faculty-payment' && (
+          {activeTab === 'fees-details' ? (
+            /* ── Fees Details filter bar ── */
+            <div className="flex flex-wrap items-end gap-4">
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Select Faculty <span className="text-red-500">*</span>
-                </label>
-                <select value={facultyId} onChange={e => setFacultyId(e.target.value)} className={`${ctrl} w-[200px]`}>
-                  <option value="">All Faculties</option>
-                  {faculties.map(f => (
-                    <option key={f.Faculty_Id} value={f.Faculty_Id}>{f.Faculty_Name}</option>
-                  ))}
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Course <span className="text-red-500">*</span></label>
+                <select value={courseId} onChange={e => setCourseId(e.target.value)} className={`${ctrl} w-[200px]`}>
+                  <option value="">Select Course</option>
+                  {courses.map(c => <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>)}
                 </select>
               </div>
-            )}
 
-            {/* Print Receipt Details toggle — not for faculty tab */}
-            {showPrintToggle && (
-              <label className="flex items-center gap-2 cursor-pointer pb-1.5">
-                <div onClick={() => setPrintDetails(v => !v)}
-                  className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${printDetails ? 'bg-[#2E3093]' : 'bg-slate-200'}`}
-                >
-                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${printDetails ? 'translate-x-4' : 'translate-x-0'}`} />
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Select Batch <span className="text-red-500">*</span></label>
+                <select value={batchId} onChange={e => setBatchId(e.target.value)} className={`${ctrl} w-[150px]`} disabled={!courseId}>
+                  <option value="">Select Batch</option>
+                  {batches.map(b => <option key={b.Batch_Id} value={b.Batch_Id}>{b.Batch_code}</option>)}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Select Amount Type</label>
+                <select value={amountType} onChange={e => setAmountType(e.target.value)} className={`${ctrl} w-[150px]`}>
+                  <option value="">All</option>
+                  {AMOUNT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+
+              <button onClick={exportExcel} disabled={!searched || loading}
+                className="flex items-center gap-1.5 bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors self-end"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Excel
+              </button>
+
+              <button onClick={handleShow} disabled={loading}
+                className="flex items-center gap-1.5 bg-[#2E3093] text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-[#252880] disabled:opacity-60 disabled:cursor-not-allowed transition-colors self-end"
+              >
+                {loading ? <><span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" /> Loading…</> : <>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg> Show</>}
+              </button>
+            </div>
+          ) : (
+            /* ── Generic filter bar (cheque-pdc & faculty-payment) ── */
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">From Date <span className="text-red-500">*</span></label>
+                <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className={`${ctrl} w-[140px]`} />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">To Date <span className="text-red-500">*</span></label>
+                <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className={`${ctrl} w-[140px]`} />
+              </div>
+
+              {activeTab === 'faculty-payment' && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Select Faculty <span className="text-red-500">*</span></label>
+                  <select value={facultyId} onChange={e => setFacultyId(e.target.value)} className={`${ctrl} w-[200px]`}>
+                    <option value="">All Faculties</option>
+                    {faculties.map(f => <option key={f.Faculty_Id} value={f.Faculty_Id}>{f.Faculty_Name}</option>)}
+                  </select>
                 </div>
-                <span className="text-xs font-medium text-slate-700 select-none">Print Receipt Details</span>
-              </label>
-            )}
-
-            {/* Show button */}
-            <button onClick={handleShow} disabled={loading}
-              className="flex items-center gap-1.5 bg-[#2E3093] text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-[#252880] disabled:opacity-60 disabled:cursor-not-allowed transition-colors self-end"
-            >
-              {loading ? (
-                <><span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" /> Loading…</>
-              ) : (
-                <><svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg> Show</>
               )}
-            </button>
-          </div>
+
+              {showPrintToggle && (
+                <label className="flex items-center gap-2 cursor-pointer pb-1.5">
+                  <div onClick={() => setPrintDetails(v => !v)}
+                    className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${printDetails ? 'bg-[#2E3093]' : 'bg-slate-200'}`}>
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${printDetails ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </div>
+                  <span className="text-xs font-medium text-slate-700 select-none">Print Receipt Details</span>
+                </label>
+              )}
+
+              <button onClick={handleShow} disabled={loading}
+                className="flex items-center gap-1.5 bg-[#2E3093] text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-[#252880] disabled:opacity-60 disabled:cursor-not-allowed transition-colors self-end"
+              >
+                {loading ? <><span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" /> Loading…</> : <>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg> Show</>}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Error */}

@@ -18,6 +18,31 @@ export async function GET(req: NextRequest) {
     const fromDate     = searchParams.get('fromDate') || '';
     const toDate       = searchParams.get('toDate') || '';
     const printDetails = searchParams.get('printDetails') === '1';
+    const courseId     = searchParams.get('courseId') || '';
+    const batchId      = searchParams.get('batchId') || '';
+    const amountType   = searchParams.get('amountType') || '';
+
+    // ── Lookup endpoints ──────────────────────────────────────────
+    if (searchParams.get('action') === 'courses') {
+      const [rows] = await pool.query(
+        `SELECT Course_Id, Course_Name FROM course_mst
+         WHERE (IsDelete = 0 OR IsDelete IS NULL)
+         ORDER BY Course_Name`
+      );
+      return NextResponse.json({ courses: rows });
+    }
+
+    if (searchParams.get('action') === 'batches') {
+      const cId = searchParams.get('courseId') || '';
+      const conditions = ['(IsDelete = 0 OR IsDelete IS NULL)'];
+      const params: any[] = [];
+      if (cId) { conditions.push('Course_Id = ?'); params.push(Number(cId)); }
+      const [rows] = await pool.query(
+        `SELECT Batch_Id, Batch_code FROM batch_mst WHERE ${conditions.join(' AND ')} ORDER BY Batch_code DESC`,
+        params
+      );
+      return NextResponse.json({ batches: rows });
+    }
 
     if (tab === 'cheque-pdc') {
       const conditions = [`sfm.IsDelete = 0`, `sfm.TypeR = 'C'`,
@@ -56,9 +81,12 @@ export async function GET(req: NextRequest) {
       if (subTab === 'batch-wise-fees') {
         const conditions = [`sfm.IsDelete = 0`, `sfm.TypeR = 'C'`];
         const params: any[] = [];
-        if (fromDate) { conditions.push(`sfm.Date_Added >= ?`); params.push(fromDate); }
-        if (toDate)   { conditions.push(`sfm.Date_Added <= ?`); params.push(toDate); }
+        if (fromDate)   { conditions.push(`sfm.Date_Added >= ?`);    params.push(fromDate); }
+        if (toDate)     { conditions.push(`sfm.Date_Added <= ?`);    params.push(toDate); }
         if (printDetails) { conditions.push(`sfm.Print = 1`); }
+        if (courseId)   { conditions.push(`sfm.Course_Id = ?`);      params.push(Number(courseId)); }
+        if (batchId)    { conditions.push(`sfm.Batch_Id = ?`);       params.push(Number(batchId)); }
+        if (amountType) { conditions.push(`sfm.Payment_Type = ?`);   params.push(amountType); }
 
         const [rows] = await pool.query(
           `SELECT
@@ -86,9 +114,12 @@ export async function GET(req: NextRequest) {
       if (subTab === 'fees-record') {
         const conditions = [`sfm.IsDelete = 0`, `sfm.TypeR = 'C'`];
         const params: any[] = [];
-        if (fromDate) { conditions.push(`sfm.Date_Added >= ?`); params.push(fromDate); }
-        if (toDate)   { conditions.push(`sfm.Date_Added <= ?`); params.push(toDate); }
+        if (fromDate)   { conditions.push(`sfm.Date_Added >= ?`);    params.push(fromDate); }
+        if (toDate)     { conditions.push(`sfm.Date_Added <= ?`);    params.push(toDate); }
         if (printDetails) { conditions.push(`sfm.Print = 1`); }
+        if (courseId)   { conditions.push(`sfm.Course_Id = ?`);      params.push(Number(courseId)); }
+        if (batchId)    { conditions.push(`sfm.Batch_Id = ?`);       params.push(Number(batchId)); }
+        if (amountType) { conditions.push(`sfm.Payment_Type = ?`);   params.push(amountType); }
 
         const [rows] = await pool.query(
           `SELECT
@@ -119,8 +150,10 @@ export async function GET(req: NextRequest) {
       if (subTab === 'batch-wise-faculty') {
         const conditions = [`fs.IsDelete = 0`];
         const params: any[] = [];
-        if (fromDate) { conditions.push(`fs.Date_Added >= ?`); params.push(fromDate); }
-        if (toDate)   { conditions.push(`fs.Date_Added <= ?`); params.push(toDate); }
+        if (fromDate)  { conditions.push(`fs.Date_Added >= ?`);               params.push(fromDate); }
+        if (toDate)    { conditions.push(`fs.Date_Added <= ?`);               params.push(toDate); }
+        if (courseId)  { conditions.push(`bm.Course_Id = ?`);                 params.push(Number(courseId)); }
+        if (batchId)   { conditions.push(`CAST(fw.batch AS UNSIGNED) = ?`);   params.push(Number(batchId)); }
 
         const [rows] = await pool.query(
           `SELECT
