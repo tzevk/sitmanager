@@ -1305,10 +1305,10 @@ export default function MetaLeadsPage() {
                     <tbody>
                       {loading ? (
                         Array.from({ length: 8 }).map((_, i) => (
-                          <tr key={i}>{Array.from({ length: 12 }).map((__, j) => <td key={j} className="py-2.5 px-3 border-b border-slate-100 border-r border-slate-100"><div className="h-3 bg-slate-50 rounded animate-pulse" /></td>)}</tr>
+                          <tr key={i}>{Array.from({ length: 13 }).map((__, j) => <td key={j} className="py-2.5 px-3 border-b border-slate-100 border-r border-slate-100"><div className="h-3 bg-slate-50 rounded animate-pulse" /></td>)}</tr>
                         ))
                       ) : rows.length === 0 ? (
-                        <tr><td colSpan={12} className="py-16 text-center">
+                        <tr><td colSpan={13} className="py-16 text-center">
                           <div className="text-slate-300 text-2xl mb-2">○</div>
                           <div className="text-xs text-slate-400 font-medium">No Meta leads found</div>
                           <div className="text-xs text-slate-300 mt-1">Try adjusting your filters</div>
