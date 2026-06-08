@@ -657,6 +657,10 @@ export async function listOnlineAdmissions(
 
   await ensurePayloadTable(pool);
 
+  const ACCEPTED_IDS = [8, 9, 10];
+  const CLOSED_IDS   = [5, 11, 13, 27];
+  const normalizedCategory = statusCategory.trim().toLowerCase();
+
   // New entries (have a payload record)
   const newConds: string[] = ['(si.IsDelete = 0 OR si.IsDelete IS NULL)'];
   const newParams: any[] = [];
@@ -669,6 +673,16 @@ export async function listOnlineAdmissions(
   }
   if (dateFrom) { newConds.push('oap.Created_At >= ?'); newParams.push(dateFrom); }
   if (dateTo)   { newConds.push('oap.Created_At <= ?'); newParams.push(dateTo); }
+  const smStatusIdExpr = studentMasterTable
+    ? `COALESCE(sm.Status_id, si.OnlineState)`
+    : `si.OnlineState`;
+  if (normalizedCategory === 'accepted') {
+    newConds.push(`${smStatusIdExpr} IN (${ACCEPTED_IDS.join(',')})`);
+  } else if (normalizedCategory === 'closed') {
+    newConds.push(`${smStatusIdExpr} IN (${CLOSED_IDS.join(',')})`);
+  } else if (normalizedCategory === 'open') {
+    newConds.push(`(${smStatusIdExpr} NOT IN (${[...ACCEPTED_IDS, ...CLOSED_IDS].join(',')}) OR ${smStatusIdExpr} IS NULL)`);
+  }
 
   let newRows: any[] = [];
   try {
@@ -727,11 +741,6 @@ export async function listOnlineAdmissions(
       StatusCategory: resolveCategory(Number(r.Status_id), label),
     };
   });
-
-  const normalizedCategory = statusCategory.trim().toLowerCase();
-  if (normalizedCategory) {
-    allRows = allRows.filter((r) => r.StatusCategory === normalizedCategory);
-  }
 
   allRows.sort((a, b) => {
     const da = a.Admission_Date ? new Date(a.Admission_Date).getTime() : 0;

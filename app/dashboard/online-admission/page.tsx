@@ -52,9 +52,13 @@ export default function OnlineAdmissionPage() {
   const [showFilters, setShowFilters] = useState(false);
 
   const searchRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const [fetchTrigger, setFetchTrigger] = useState(0);
 
   const fetchData = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -65,17 +69,17 @@ export default function OnlineAdmissionPage() {
       if (dateFrom) params.set('dateFrom', dateFrom);
       if (dateTo) params.set('dateTo', dateTo);
 
-      const res = await fetch(`/api/online-admission?${params.toString()}`);
+      const res = await fetch(`/api/online-admission?${params.toString()}`, { signal: controller.signal });
       const data = await res.json();
       setRows(data.rows ?? []);
       setPagination(data.pagination ?? { page: 1, limit: 25, total: 0, totalPages: 0 });
-    } catch (e) {
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name === 'AbortError') return;
       console.error('Failed to fetch admissions', e);
     } finally {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, fetchTrigger]);
+  }, [page, fetchTrigger, search, status, dateFrom, dateTo]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -158,7 +162,7 @@ export default function OnlineAdmissionPage() {
           onKeyDown={e => e.key === 'Enter' && handleSearch()}
           className={`${ctrl} flex-1 min-w-[180px]`}
         />
-        <select value={status} onChange={e => setStatus(e.target.value)} className={`${ctrl} w-[130px]`}>
+        <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); setFetchTrigger((t) => t + 1); }} className={`${ctrl} w-[130px]`}>
           <option value="">Status</option>
           {statusCategoryOptions.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
