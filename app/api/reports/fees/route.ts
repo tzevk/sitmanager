@@ -93,18 +93,20 @@ export async function GET(req: NextRequest) {
              COALESCE(bm.Batch_code,'') AS Batch_Code,
              COALESCE(cm.Course_Name,'') AS Course_Name,
              bm.SDate AS Batch_Start, bm.EDate AS Batch_End,
-             COUNT(sfm.Fees_Id) AS Receipt_Count,
-             COUNT(DISTINCT sfm.Student_Id) AS Student_Count,
-             SUM(sfm.Amount) AS Total_Amount,
-             SUM(COALESCE(sfm.Service_Tax,0)) AS Total_Tax,
-             SUM(sfm.Total_Amt) AS Total_Collected
+             COALESCE(sm.Student_Name, CONCAT_WS(' ', sm.FName, sm.MName, sm.LName), '') AS Student_Name,
+             COALESCE(sm.Present_Mobile,'') AS Present_Mobile,
+             sfm.Fees_Id, sfm.Fees_Code, sfm.Date_Added, sfm.RDate,
+             sfm.Payment_Type, sfm.Cheque_No, sfm.Cheque_Bank, sfm.Cheque_Branch,
+             sfm.Cheque_Date, sfm.Amount, sfm.Service_Tax, sfm.Total_Amt,
+             sfm.UnPaid_Amt, sfm.Amt_Word, sfm.Notes,
+             sfm.FeesMonth, sfm.FeesYear, sfm.Print
            FROM s_fees_mst sfm
+           LEFT JOIN student_master sm ON sm.Student_Id = sfm.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
            LEFT JOIN course_mst cm ON cm.Course_Id = sfm.Course_Id
            LEFT JOIN batch_mst bm ON bm.Batch_Id = sfm.Batch_Id
            WHERE ${conditions.join(' AND ')}
-           GROUP BY sfm.Batch_Id, bm.Batch_code, cm.Course_Name, bm.SDate, bm.EDate
-           ORDER BY bm.Batch_code DESC
-           LIMIT 500`,
+           ORDER BY bm.Batch_code DESC, sm.Student_Name ASC, sfm.Date_Added DESC
+           LIMIT 1000`,
           params
         );
         return NextResponse.json({ rows });

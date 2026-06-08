@@ -38,11 +38,26 @@ interface BatchWiseFeesRow {
   Course_Name: string;
   Batch_Start: string | null;
   Batch_End: string | null;
-  Receipt_Count: number;
-  Student_Count: number;
-  Total_Amount: number | null;
-  Total_Tax: number | null;
-  Total_Collected: number | null;
+  Student_Name: string;
+  Present_Mobile: string;
+  Fees_Id: number;
+  Fees_Code: string | null;
+  Date_Added: string | null;
+  RDate: string | null;
+  Payment_Type: string | null;
+  Cheque_No: string | null;
+  Cheque_Bank: string | null;
+  Cheque_Branch: string | null;
+  Cheque_Date: string | null;
+  Amount: number | null;
+  Service_Tax: number | null;
+  Total_Amt: number | null;
+  UnPaid_Amt: number | null;
+  Amt_Word: string | null;
+  Notes: string | null;
+  FeesMonth: number | null;
+  FeesYear: number | null;
+  Print: number | null;
 }
 
 interface BatchWiseFacultyRow {
@@ -251,7 +266,7 @@ function FeesReportContent() {
   const totalAmt      = feesRows.reduce((s, r) => s + (r.Amount ?? 0), 0);
   const totalTax      = feesRows.reduce((s, r) => s + (r.Service_Tax ?? 0), 0);
   const totalNet      = feesRows.reduce((s, r) => s + (r.Total_Amt ?? 0), 0);
-  const totalBwNet    = batchWiseFeesRows.reduce((s, r) => s + (r.Total_Collected ?? 0), 0);
+  const totalBwNet    = batchWiseFeesRows.reduce((s, r) => s + (r.Total_Amt ?? 0), 0);
   const totalBwFacNet = batchWiseFacRows.reduce((s, r) => s + (r.Net_Payment ?? 0), 0);
   const totalFacNet   = facultyRows.reduce((s, r) => s + (r.Net_Payment ?? 0), 0);
 
