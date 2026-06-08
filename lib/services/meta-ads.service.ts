@@ -159,6 +159,7 @@ export interface MetaLeadListRow {
   StudentMaster_Id: number;
   Student_Name: string;
   CourseName: string | null;
+  TrainingProgramme: string | null;
   Inquiry_Dt: string | null;
   Present_Mobile: string | null;
   Email: string | null;
@@ -2799,7 +2800,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
          COALESCE(m.inquiry_id, 0) AS Student_Id,
          COALESCE(CAST(si.Student_Id AS UNSIGNED), 0) AS StudentMaster_Id,
          COALESCE(NULLIF(TRIM(m.student_name),''), NULLIF(TRIM(si.Student_Name),''), 'Meta Lead') AS Student_Name,
-         NULLIF(TRIM(m.course_name),'') AS CourseName,
+         NULLIF(TRIM(m.course_name),'') AS TrainingProgramme,
          NULLIF(TRIM(si.Qualification),'') AS InquiryQualification,
          COALESCE(NULLIF(TRIM(m.lead_created_time),''), CAST(m.created_at AS CHAR)) AS Inquiry_Dt,
          NULLIF(TRIM(m.mobile),'') AS Present_Mobile,
