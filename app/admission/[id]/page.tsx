@@ -374,7 +374,7 @@ export default function PublicAdmissionFormPage() {
         key:         order.keyId,
         amount:      order.amount,
         currency:    order.currency,
-        name:        'SIT — School of Inspection Technology',
+        name:        'Suvidya Institute of Technology Pvt. Ltd.',
         description: `${formData.modeOfPayment} — ${formData.trainingProgrammeName || 'Training Programme'}`,
         order_id:    order.orderId,
         prefill: {
