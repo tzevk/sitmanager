@@ -1292,6 +1292,7 @@ export default function MetaLeadsPage() {
                         <th className="text-left font-bold border-r border-slate-200 py-2.5 px-3 min-w-[75px]">Time</th>
                         <th className="text-left font-bold border-r border-slate-200 py-2.5 px-3 min-w-[160px]">Full Name</th>
                         <th className="text-left font-bold border-r border-slate-200 py-2.5 px-3 min-w-[140px]">Qualification</th>
+                        <th className="text-left font-bold border-r border-slate-200 py-2.5 px-3 min-w-[160px]">Training Programme</th>
                         <th className="text-left font-bold border-r border-slate-200 py-2.5 px-3 min-w-[120px]">Phone Number</th>
                         <th className="text-left font-bold border-r border-slate-200 py-2.5 px-3 min-w-[100px]">City</th>
                         <th className="text-left font-bold border-r border-slate-200 py-2.5 px-3 min-w-[180px]">Email</th>
@@ -1347,6 +1348,9 @@ export default function MetaLeadsPage() {
                             </td>
                             <td className={tdBase}>
                               <InlineCell value={draft.courseName} leadId={row.MetaLead_Id} field="courseName" disabled={inputDisabled} placeholder="Course / qualification" onDraftChange={updateRowDraftTextField} />
+                            </td>
+                            <td className={tdBase}>
+                              <span className="text-[11px] text-slate-700 leading-snug">{row.TrainingProgramme || <span className="text-slate-300">—</span>}</span>
                             </td>
                             <td className={tdBase}>
                               <InlineCell value={draft.mobile} leadId={row.MetaLead_Id} field="mobile" disabled={inputDisabled} onDraftChange={updateRowDraftTextField} />
