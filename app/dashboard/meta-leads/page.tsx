@@ -224,38 +224,38 @@ function statusColor(id: number | null, label: string): 'emerald' | 'blue' | 'or
 
 function statusPill(id: number | null, label: string) {
   const c = statusColor(id, label);
-  if (c === 'emerald') return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
-  if (c === 'blue')    return 'bg-blue-100 text-blue-700 border border-blue-200';
-  if (c === 'orange')  return 'bg-orange-100 text-orange-700 border border-orange-200';
-  if (c === 'amber')   return 'bg-amber-100 text-amber-700 border border-amber-200';
-  if (c === 'red')     return 'bg-red-100 text-red-600 border border-red-200';
-  if (c === 'purple')  return 'bg-purple-100 text-purple-700 border border-purple-200';
-  if (c === 'slate')   return 'bg-slate-100 text-slate-500 border border-slate-200';
-  return 'bg-gray-100 text-gray-500 border border-gray-200';
+  if (c === 'emerald') return 'bg-emerald-200 text-emerald-900 border border-emerald-400';
+  if (c === 'blue')    return 'bg-blue-200 text-blue-900 border border-blue-400';
+  if (c === 'orange')  return 'bg-orange-200 text-orange-900 border border-orange-400';
+  if (c === 'amber')   return 'bg-amber-200 text-amber-900 border border-amber-400';
+  if (c === 'red')     return 'bg-red-200 text-red-900 border border-red-400';
+  if (c === 'purple')  return 'bg-purple-200 text-purple-900 border border-purple-400';
+  if (c === 'slate')   return 'bg-slate-200 text-slate-800 border border-slate-400';
+  return 'bg-gray-200 text-gray-800 border border-gray-400';
 }
 
 function statusBar(id: number | null, label: string) {
   const c = statusColor(id, label);
-  if (c === 'emerald') return 'bg-emerald-400';
-  if (c === 'blue')    return 'bg-blue-400';
-  if (c === 'orange')  return 'bg-orange-400';
-  if (c === 'amber')   return 'bg-amber-400';
-  if (c === 'red')     return 'bg-red-400';
-  if (c === 'purple')  return 'bg-purple-400';
-  if (c === 'slate')   return 'bg-slate-400';
-  return 'bg-slate-300';
+  if (c === 'emerald') return 'bg-emerald-600';
+  if (c === 'blue')    return 'bg-blue-600';
+  if (c === 'orange')  return 'bg-orange-600';
+  if (c === 'amber')   return 'bg-amber-600';
+  if (c === 'red')     return 'bg-red-600';
+  if (c === 'purple')  return 'bg-purple-600';
+  if (c === 'slate')   return 'bg-slate-600';
+  return 'bg-slate-500';
 }
 
 function rowBg(id: number | null, label: string) {
   const c = statusColor(id, label);
-  if (c === 'emerald') return 'bg-emerald-50/60 hover:bg-emerald-100/70';
-  if (c === 'blue')    return 'bg-blue-50/60 hover:bg-blue-100/70';
-  if (c === 'orange')  return 'bg-orange-50/60 hover:bg-orange-100/70';
-  if (c === 'amber')   return 'bg-amber-50/60 hover:bg-amber-100/70';
-  if (c === 'red')     return 'bg-red-50/60 hover:bg-red-100/70';
-  if (c === 'purple')  return 'bg-purple-50/60 hover:bg-purple-100/70';
-  if (c === 'slate')   return 'bg-slate-50/60 hover:bg-slate-100/70';
-  return 'hover:bg-slate-50/70';
+  if (c === 'emerald') return 'bg-emerald-100/90 hover:bg-emerald-200/90';
+  if (c === 'blue')    return 'bg-blue-100/90 hover:bg-blue-200/90';
+  if (c === 'orange')  return 'bg-orange-100/90 hover:bg-orange-200/90';
+  if (c === 'amber')   return 'bg-amber-100/90 hover:bg-amber-200/90';
+  if (c === 'red')     return 'bg-red-100/90 hover:bg-red-200/90';
+  if (c === 'purple')  return 'bg-purple-100/90 hover:bg-purple-200/90';
+  if (c === 'slate')   return 'bg-slate-100/90 hover:bg-slate-200/90';
+  return 'hover:bg-slate-100/90';
 }
 
 function campaignTier(cpl: number | null, avgCpl: number): { label: string; bg: string; text: string; border: string; bar: string } {
@@ -294,11 +294,11 @@ function leadAge(dateStr: string | null): { label: string; cls: string } {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return { label: '—', cls: 'text-slate-300' };
   const hours = (Date.now() - d.getTime()) / 3600000;
-  if (hours < 1) return { label: `${Math.round(hours * 60)}m`, cls: 'bg-emerald-100 text-emerald-700' };
-  if (hours < 4) return { label: `${Math.round(hours)}h`, cls: 'bg-emerald-100 text-emerald-700' };
-  if (hours < 24) return { label: `${Math.round(hours)}h`, cls: 'bg-amber-100 text-amber-700' };
+  if (hours < 1) return { label: `${Math.round(hours * 60)}m`, cls: 'bg-emerald-200 text-emerald-900' };
+  if (hours < 4) return { label: `${Math.round(hours)}h`, cls: 'bg-emerald-200 text-emerald-900' };
+  if (hours < 24) return { label: `${Math.round(hours)}h`, cls: 'bg-amber-200 text-amber-900' };
   const days = Math.floor(hours / 24);
-  return { label: `${days}d`, cls: days < 7 ? 'bg-red-100 text-red-600' : 'bg-red-200 text-red-700' };
+  return { label: `${days}d`, cls: days < 7 ? 'bg-red-200 text-red-900' : 'bg-red-300 text-red-900' };
 }
 
 function waLink(mobile: string | null, name: string | null, course: string | null): string {
@@ -321,18 +321,19 @@ interface InlineCellProps {
   value: string;
   leadId: string;
   field: DraftTextField;
+  isEditing: boolean;
   disabled: boolean;
   placeholder?: string;
   onDraftChange: (leadId: string, field: DraftTextField, value: string) => void;
 }
-const InlineCell = memo(function InlineCell({ value, leadId, field, disabled, placeholder, onDraftChange }: InlineCellProps) {
+const InlineCell = memo(function InlineCell({ value, leadId, field, isEditing, disabled, placeholder, onDraftChange }: InlineCellProps) {
   return (
     <input
       value={value}
       onChange={(e) => onDraftChange(leadId, field, e.target.value)}
       disabled={disabled}
       placeholder={placeholder}
-      className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+      className={`w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 ${isEditing ? 'text-blue-700 font-medium' : 'text-black'}`}
     />
   );
 });
@@ -374,6 +375,11 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
     const updated = draft.discussion ? `${draft.discussion}\n${entry}` : entry;
     onDraftChange(row.MetaLead_Id, 'discussion', updated);
     setNewNote('');
+  }
+
+  function removeBullet(index: number) {
+    const next = bullets.filter((_, i) => i !== index).join('\n');
+    onDraftChange(row.MetaLead_Id, 'discussion', next);
   }
 
   async function handleSave() {
@@ -421,6 +427,17 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
                     {date && <span className="inline-block mb-1 rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600">{date}</span>}
                     <p className="text-xs text-slate-700 leading-5">{text}</p>
                   </div>
+                  {canUpdate && (
+                    <button
+                      type="button"
+                      onClick={() => removeBullet(i)}
+                      disabled={saving}
+                      title="Delete note"
+                      className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:text-slate-300 transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16" /></svg>
+                    </button>
+                  )}
                 </div>
               );
             })
@@ -1367,9 +1384,10 @@ export default function MetaLeadsPage() {
                       ) : rows.map((row, index) => {
                         const draft = rowDrafts[row.MetaLead_Id] ?? { studentName: row.Student_Name || '', courseName: row.CourseName || '', mobile: row.Present_Mobile || '', email: row.Email || '', city: row.City || '', discussion: toBulletEditorValue(row.Discussion), statusId: row.Status_id };
                         const sentEmail = Boolean(row.ApplicantEmailSentAt);
-                        const bgCls = sentEmail ? 'bg-blue-50/80 hover:bg-blue-100/80' : rowBg(row.Status_id, row.StatusLabel);
+                        const baseBgCls = sentEmail ? 'bg-blue-100/90 hover:bg-blue-200/90' : rowBg(row.Status_id, row.StatusLabel);
                         const hasFollowUp = hasLatestFollowUp(row);
                         const isPending = isPendingFollowUp(row);
+                        const bgCls = hasFollowUp ? 'bg-purple-100/90 hover:bg-purple-200/90' : baseBgCls;
                         const age = leadAge(row.Inquiry_Dt);
                         const wa = waLink(row.Present_Mobile, row.Student_Name, row.CourseName);
                         const isSaving = savingLeadId === row.MetaLead_Id;
@@ -1378,7 +1396,7 @@ export default function MetaLeadsPage() {
                         const tdBase = 'py-1.5 px-2 border-b border-r border-slate-100';
 
                         return (
-                          <tr key={`${row.MetaLead_Id}-${index}`} className={`transition-colors group ${bgCls} ${isPending ? '[&>td]:text-purple-700' : hasFollowUp ? '' : '[&>td]:text-red-500'}`}>
+                          <tr key={`${row.MetaLead_Id}-${index}`} className={`transition-colors group ${bgCls} ${isPending ? '[&>td]:text-purple-900' : hasFollowUp ? '' : '[&>td]:text-red-700'}`}>
                             <td className={`${tdBase} pl-4 relative`}>
                               <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${statusBar(row.Status_id, row.StatusLabel)} rounded-r`} />
                               <span className="font-mono tabular-nums text-[10px] text-slate-400">{(pagination.page - 1) * pagination.limit + index + 1}</span>
@@ -1393,21 +1411,21 @@ export default function MetaLeadsPage() {
                             <td className={tdBase}>
                               <div className="flex items-center gap-1.5">
                                 <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 ${sentEmail ? 'bg-blue-100 text-blue-700' : avatarColor(row.Student_Name)}`}>{getInitials(row.Student_Name)}</div>
-                                <InlineCell value={draft.studentName} leadId={row.MetaLead_Id} field="studentName" disabled={inputDisabled} onDraftChange={updateRowDraftTextField} />
+                                <InlineCell value={draft.studentName} leadId={row.MetaLead_Id} field="studentName" isEditing={isEditing} disabled={inputDisabled} onDraftChange={updateRowDraftTextField} />
                               </div>
                               {row.Student_Id > 0 && <div className="mt-0.5 text-[9px] text-slate-400 pl-6">Inq #{row.Student_Id}</div>}
                             </td>
                             <td className={tdBase}>
-                              <InlineCell value={draft.courseName} leadId={row.MetaLead_Id} field="courseName" disabled={inputDisabled} placeholder="Course / qualification" onDraftChange={updateRowDraftTextField} />
+                              <InlineCell value={draft.courseName} leadId={row.MetaLead_Id} field="courseName" isEditing={isEditing} disabled={inputDisabled} placeholder="Course / qualification" onDraftChange={updateRowDraftTextField} />
                             </td>
                             <td className={tdBase}>
                               <span className="text-[11px] text-slate-700 leading-snug">{row.TrainingProgramme || <span className="text-slate-300">—</span>}</span>
                             </td>
                             <td className={tdBase}>
-                              <InlineCell value={draft.mobile} leadId={row.MetaLead_Id} field="mobile" disabled={inputDisabled} onDraftChange={updateRowDraftTextField} />
+                              <InlineCell value={draft.mobile} leadId={row.MetaLead_Id} field="mobile" isEditing={isEditing} disabled={inputDisabled} onDraftChange={updateRowDraftTextField} />
                             </td>
                             <td className={tdBase}>
-                              <InlineCell value={draft.city} leadId={row.MetaLead_Id} field="city" disabled={inputDisabled} placeholder="City" onDraftChange={updateRowDraftTextField} />
+                              <InlineCell value={draft.city} leadId={row.MetaLead_Id} field="city" isEditing={isEditing} disabled={inputDisabled} placeholder="City" onDraftChange={updateRowDraftTextField} />
                             </td>
                             <td className={`${tdBase} text-center`}>
                               <button
@@ -1415,7 +1433,7 @@ export default function MetaLeadsPage() {
                                 onClick={() => setFollowUpModalLeadId(row.MetaLead_Id)}
                                 className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-semibold transition-colors border ${
                                   hasFollowUp
-                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                    ? 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100'
                                     : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
                                 }`}
                               >
