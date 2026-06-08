@@ -27,6 +27,7 @@ interface InquiryRow {
   ApplicantEmailSentAt?: string | null;
   City?: string | null;
   LeadFields?: Record<string, string | null>;
+  TrainingProgramme?: string | null;
 }
 
 interface MetaPerformanceRow {

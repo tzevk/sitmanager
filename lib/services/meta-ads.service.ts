@@ -2974,6 +2974,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
       StudentMaster_Id: Number(row.StudentMaster_Id || 0),
       Student_Name: String(row.Student_Name || 'Meta Lead'),
       CourseName: qualification,
+      TrainingProgramme: (row.TrainingProgramme as string | null) ?? null,
       Inquiry_Dt: row.Inquiry_Dt ?? null,
       Present_Mobile: row.Present_Mobile ?? null,
       Email: row.Email ?? null,
