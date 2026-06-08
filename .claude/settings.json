@@ -37,7 +37,12 @@
       "Bash(npm ci *)",
       "Bash(node -e \"console.log\\(require\\('./node_modules/next/package.json'\\).version\\)\")",
       "Bash(find /Users/tanvikadam/Downloads -name \"*.docx\" | head -5)",
-      "Read(//Users/tanvikadam/Downloads/**)"
+      "Read(//Users/tanvikadam/Downloads/**)",
+      "Bash(mysql -h 94.103.163.250 -P 3306 -u sitadmin -ppasswordadmin sit -e \"SELECT fields_json FROM meta_leads WHERE fields_json IS NOT NULL AND fields_json != '{}' LIMIT 3;\")",
+      "Bash(mysql -h 94.103.163.250 -P 3306 -u sitadmin -ppasswordadmin --protocol=TCP sit -e \"SELECT fields_json FROM meta_leads WHERE fields_json IS NOT NULL AND fields_json NOT IN \\('{}',''\\) LIMIT 3;\")",
+      "Bash(MYSQL_PWD=\"passwordadmin\" mysql -h 94.103.163.250 -P 3306 -u sitadmin --protocol=TCP sit -e \"SELECT fields_json FROM meta_leads WHERE fields_json IS NOT NULL AND fields_json NOT IN \\('{}',''\\) LIMIT 3;\")",
+      "Read(//usr/local/bin/**)",
+      "Read(//opt/homebrew/opt/**)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

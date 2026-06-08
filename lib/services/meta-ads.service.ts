@@ -2328,7 +2328,7 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
   const email = normalizeEmail(firstValue(fields, ['email', 'email_address']));
   const mobile = normalizeDigits(firstValue(fields, ['phone_number', 'phone', 'mobile', 'whatsapp_number', 'whatsapp']));
   const courseName = firstValue(fields, ['course', 'course_name', 'interested_course', 'training_programme', 'training_program']);
-  const qualification = firstValue(fields, ['qualification', 'highest_qualification']);
+  const qualification = firstValue(fields, ['educational_qualification', 'qualification_', 'qualification', 'highest_qualification', 'education_level', 'education']);
   const discipline = firstValue(fields, ['discipline', 'stream']);
   const percentage = parseNumber(firstValue(fields, ['percentage', 'marks_percentage']));
   const inquiryDate = normalizeDateOnly(lead.created_time || event.created_time) || new Date().toISOString().slice(0, 10);
@@ -2868,6 +2868,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
              COALESCE(CAST(si.Student_Id AS UNSIGNED), 0) AS StudentMaster_Id,
              COALESCE(NULLIF(TRIM(m.student_name),''), NULLIF(TRIM(si.Student_Name),''), 'Meta Lead') AS Student_Name,
              NULLIF(TRIM(m.course_name),'') AS CourseName,
+             NULLIF(TRIM(si.Qualification),'') AS InquiryQualification,
              COALESCE(NULLIF(TRIM(m.lead_created_time),''), CAST(m.created_at AS CHAR)) AS Inquiry_Dt,
              NULLIF(TRIM(m.mobile),'') AS Present_Mobile,
              NULLIF(TRIM(m.email),'') AS Email,
@@ -2957,8 +2958,9 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
     const discussion = row.Discussion ?? null;
     const qualification =
       (row.InquiryQualification as string | null) ||
-      (fields['qualification'] as string | null) ||
       (fields['educational_qualification'] as string | null) ||
+      (fields['qualification_'] as string | null) ||
+      (fields['qualification'] as string | null) ||
       (fields['highest_qualification'] as string | null) ||
       (fields['education_level'] as string | null) ||
       (fields['education'] as string | null) ||
@@ -3394,7 +3396,7 @@ export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<Meta
     ?? normalizeDigits(firstValue(fields, ['phone_number', 'phone', 'mobile', 'whatsapp_number', 'whatsapp']));
   const email = normalizeEmail(row.email)
     ?? normalizeEmail(firstValue(fields, ['email', 'email_address']));
-  const qualification = firstValue(fields, ['qualification', 'highest_qualification']);
+  const qualification = firstValue(fields, ['educational_qualification', 'qualification_', 'qualification', 'highest_qualification', 'education_level', 'education']);
   const discipline = firstValue(fields, ['discipline', 'stream']);
   const percentage = parseNumber(firstValue(fields, ['percentage', 'marks_percentage']));
   const inquiryDate = normalizeDateOnly(row.lead_created_time) || new Date().toISOString().slice(0, 10);
