@@ -815,6 +815,7 @@ export default function MetaLeadsPage() {
     setConvertError('');
     setSavingLeadId(row.MetaLead_Id);
     try {
+      const savedDiscussion = fromBulletEditorValue(draft.discussion);
       const res = await fetch(`/api/meta-ads/leads/${encodeURIComponent(row.MetaLead_Id)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -824,7 +825,7 @@ export default function MetaLeadsPage() {
           mobile: draft.mobile,
           email: draft.email,
           city: draft.city,
-          discussion: fromBulletEditorValue(draft.discussion),
+          discussion: savedDiscussion,
           statusId: draft.statusId,
         }),
       });
@@ -839,6 +840,8 @@ export default function MetaLeadsPage() {
           ...item,
           ...updated,
           City: cityFromFields ?? item.City,
+          // Keep follow-up UI in sync even if API omits Discussion in response payload.
+          Discussion: savedDiscussion,
         };
       }));
       setEditingLeadId((cur) => (cur === row.MetaLead_Id ? null : cur));
@@ -1417,7 +1420,7 @@ export default function MetaLeadsPage() {
                                 }`}
                               >
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
-                                {hasFollowUp ? 'View' : 'Add'}
+                                {hasFollowUp ? 'Notes' : 'Add'}
                               </button>
                             </td>
                             <td className={`${tdBase} text-center`}>
