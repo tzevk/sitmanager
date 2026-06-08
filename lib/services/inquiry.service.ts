@@ -210,6 +210,39 @@ function isSystemGeneratedDiscussionChunk(value: string): boolean {
   const text = value.trim().toLowerCase();
   if (!text) return true;
 
+  const compact = text.replace(/[\s._-]+/g, ' ').trim();
+  const lettersOnly = text.replace(/[^a-z]/g, '');
+  const digitsOnly = text.replace(/\D/g, '');
+
+  // Ignore placeholders/noise so untouched inquiries keep their visual coding.
+  if (
+    compact === 'null'
+    || compact === 'nil'
+    || compact === 'n/a'
+    || compact === 'na'
+    || compact === 'none'
+    || compact === 'no discussion'
+    || compact === 'no remarks'
+    || compact === 'wa number not provided'
+    || compact === 'whatsapp number not provided'
+    || compact === 'number not provided'
+    || compact === 'duplicate enquiry'
+    || compact === 'duplicate inquiry'
+  ) {
+    return true;
+  }
+
+  // JSON blobs, URLs, or mostly numeric payloads are not counselor discussions.
+  if (text.startsWith('{') || text.startsWith('[') || text.includes('http://') || text.includes('https://')) {
+    return true;
+  }
+  if (digitsOnly.length >= 10 && lettersOnly.length <= 6) {
+    return true;
+  }
+  if (lettersOnly.length === 0 && digitsOnly.length > 0) {
+    return true;
+  }
+
   if (
     text.startsWith('imported from suvidya')
     || text.startsWith('imported from meta')
@@ -256,7 +289,8 @@ function toManualDiscussion(value: string | null | undefined): string | null {
   const manualChunks = chunks.filter((chunk) => !isSystemGeneratedDiscussionChunk(chunk));
   if (manualChunks.length === 0) return null;
 
-  return manualChunks.join(' | ');
+  const merged = manualChunks.join(' | ').trim();
+  return merged || null;
 }
 
 interface InquiryFilterOptions {
