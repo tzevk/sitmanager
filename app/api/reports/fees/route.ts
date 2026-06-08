@@ -79,15 +79,6 @@ export async function GET(req: NextRequest) {
 
       // ── Batch Wise Fees Details ──────────────────────────────────
       if (subTab === 'batch-wise-fees') {
-        const conditions = [`sfm.IsDelete = 0`, `sfm.TypeR = 'C'`];
-        const params: any[] = [];
-        if (fromDate)   { conditions.push(`sfm.Date_Added >= ?`);    params.push(fromDate); }
-        if (toDate)     { conditions.push(`sfm.Date_Added <= ?`);    params.push(toDate); }
-        if (printDetails) { conditions.push(`sfm.Print = 1`); }
-        if (courseId)   { conditions.push(`sfm.Course_Id = ?`);      params.push(Number(courseId)); }
-        if (batchId)    { conditions.push(`sfm.Batch_Id = ?`);       params.push(Number(batchId)); }
-        if (amountType) { conditions.push(`sfm.Payment_Type = ?`);   params.push(amountType); }
-
         // Start from admission_master so all enrolled students appear,
         // even those who have not yet made a payment.
         const amConditions: string[] = [

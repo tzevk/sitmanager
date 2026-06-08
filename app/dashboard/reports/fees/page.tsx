@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -569,9 +569,6 @@ function ChequePdcTable({ rows, totalAmt, totalTax, totalNet }: {
 function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; totalNet: number }) {
   if (!rows.length) return <EmptyState />;
 
-  /* Group rows by batch for visual separation */
-  let lastBatch = '';
-
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
@@ -600,12 +597,11 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
         </thead>
         <tbody>
           {rows.map((r, i) => {
-            const isNewBatch = r.Batch_Code !== lastBatch;
-            lastBatch = r.Batch_Code;
+            const isNewBatch = i === 0 || rows[i - 1].Batch_Code !== r.Batch_Code;
             return (
-              <>
+              <React.Fragment key={`${r.Batch_Code}-${r.Fees_Id ?? 'np'}-${i}`}>
                 {isNewBatch && (
-                  <tr key={`batch-${r.Batch_Code}-${i}`} className="bg-[#2E3093]/5 border-y border-[#2E3093]/10">
+                  <tr className="bg-[#2E3093]/5 border-y border-[#2E3093]/10">
                     <td colSpan={19} className="py-1.5 px-3">
                       <div className="flex items-center gap-3">
                         <span className="text-[11px] font-bold text-[#2E3093] font-mono">{r.Batch_Code || '—'}</span>
@@ -615,7 +611,7 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
                     </td>
                   </tr>
                 )}
-                <tr key={r.Fees_Id ?? `np-${i}`} className={`hover:bg-slate-50/60 transition-colors ${!r.Fees_Id ? 'bg-red-50/40' : ''}`}>
+                <tr className={`hover:bg-slate-50/60 transition-colors ${!r.Fees_Id ? 'bg-red-50/40' : ''}`}>
                   <td className={`${TD} text-slate-400`}>{i + 1}</td>
                   <td className={TD}><span className="font-mono text-[11px] text-[#2E3093]">{r.Batch_Code || '—'}</span></td>
                   <td className={`${TD} max-w-[140px] truncate`}>{r.Course_Name || '—'}</td>
@@ -651,7 +647,7 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
                     </>
                   )}
                 </tr>
-              </>
+              </React.Fragment>
             );
           })}
         </tbody>
