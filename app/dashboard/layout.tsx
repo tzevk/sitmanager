@@ -51,6 +51,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Reports > Corporate Record': '/dashboard/reports/corporate-record',
   'Reports > Student Search for Interview': '/dashboard/reports/student-interview',
   'Reports > Final Exam': '/dashboard/reports/final-exam',
+  'Reports > Fees Report': '/dashboard/reports/fees',
   'Role Right > Roles & Permissions': '/dashboard/role-right',
   'Role Right > Create User': '/dashboard/role-right?tab=create-user',
   'Role Right > Add Employee': '/dashboard/masters/employee/add',
