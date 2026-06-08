@@ -2728,8 +2728,29 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
     queryParams.push(like, like, like);
   }
   if (source) {
-    conditions.push(`LOWER(COALESCE(m.source_label,'')) = ?`);
-    queryParams.push(source.toLowerCase());
+    const normalizedSource = source.toLowerCase().trim();
+    if (normalizedSource.includes('instagram') || normalizedSource.includes('insta')) {
+      conditions.push(`(
+        LOWER(COALESCE(m.source_label,'')) LIKE ?
+        OR LOWER(COALESCE(m.contact_source,'')) LIKE ?
+        OR LOWER(COALESCE(m.tags_json,'')) LIKE ?
+        OR LOWER(COALESCE(m.campaign_name,'')) LIKE ?
+        OR LOWER(COALESCE(m.form_name,'')) LIKE ?
+      )`);
+      queryParams.push('%instagram%', '%instagram%', '%source:instagram%', '%instagram%', '%instagram%');
+    } else if (normalizedSource.includes('facebook') || normalizedSource === 'fb') {
+      conditions.push(`(
+        LOWER(COALESCE(m.source_label,'')) LIKE ?
+        OR LOWER(COALESCE(m.contact_source,'')) LIKE ?
+        OR LOWER(COALESCE(m.tags_json,'')) LIKE ?
+        OR LOWER(COALESCE(m.campaign_name,'')) LIKE ?
+        OR LOWER(COALESCE(m.form_name,'')) LIKE ?
+      )`);
+      queryParams.push('%facebook%', '%facebook%', '%source:facebook%', '%facebook%', '%facebook%');
+    } else {
+      conditions.push(`LOWER(COALESCE(m.source_label,'')) = ?`);
+      queryParams.push(normalizedSource);
+    }
   }
   if (statusId) {
     conditions.push(`CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) = ?`);
@@ -2756,10 +2777,10 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
 
   // Run count, main data, and filter-option queries in parallel.
   const [
-    [countRows],
-    [rows],
-    [trainingRows],
-    [sourceRows],
+    [countRowsRaw],
+    [rowsRaw],
+    [trainingRowsRaw],
+    [sourceRowsRaw],
   ] = await Promise.all([
     pool.query(
       `SELECT COUNT(*) AS total
@@ -2809,7 +2830,68 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
     ),
   ]);
 
-  const total = Number((countRows as any[])[0]?.total || 0);
+  let countRows = countRowsRaw as any[];
+  let rows = rowsRaw as any[];
+  const trainingRows = trainingRowsRaw as any[];
+  const sourceRows = sourceRowsRaw as any[];
+  let total = Number(countRows[0]?.total || 0);
+
+  const normalizedSource = source.toLowerCase().trim();
+  const platformFilterSelected =
+    normalizedSource.includes('instagram')
+    || normalizedSource.includes('insta')
+    || normalizedSource.includes('facebook')
+    || normalizedSource === 'fb';
+
+  if (total === 0 && platformFilterSelected) {
+    try {
+      await backfillStoredMetaLeadSources();
+      await syncLiveMetaLeadsToDb();
+
+      const [[retryCountRows], [retryRows]] = await Promise.all([
+        pool.query(
+          `SELECT COUNT(*) AS total
+           FROM ${META_LEADS_TABLE} m
+           LEFT JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
+           ${whereClause}`,
+          queryParams
+        ),
+        pool.query(
+          `SELECT
+             m.meta_lead_id AS MetaLead_Id,
+             COALESCE(m.inquiry_id, 0) AS Student_Id,
+             COALESCE(CAST(si.Student_Id AS UNSIGNED), 0) AS StudentMaster_Id,
+             COALESCE(NULLIF(TRIM(m.student_name),''), NULLIF(TRIM(si.Student_Name),''), 'Meta Lead') AS Student_Name,
+             COALESCE(NULLIF(TRIM(m.course_name),''), NULLIF(TRIM(m.form_name),'')) AS CourseName,
+             COALESCE(NULLIF(TRIM(m.lead_created_time),''), CAST(m.created_at AS CHAR)) AS Inquiry_Dt,
+             NULLIF(TRIM(m.mobile),'') AS Present_Mobile,
+             NULLIF(TRIM(m.email),'') AS Email,
+             m.contact_source AS Inquiry_From,
+             m.source_label AS Inquiry_Type,
+             CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) AS Status_id,
+             si.Discussion AS Discussion,
+             COALESCE(NULLIF(TRIM(m.campaign_name),''), NULLIF(TRIM(m.campaign_id),'')) AS MetaCampaignName,
+             NULLIF(TRIM(m.form_name),'') AS MetaFormName,
+             m.tags_json AS LeadTagsJson,
+             m.fields_json AS FieldsJson,
+             m.duplicate_of_inquiry_id IS NOT NULL AS IsDuplicateLead,
+             CAST(m.applicant_email_sent_at AS CHAR) AS ApplicantEmailSentAt
+           FROM ${META_LEADS_TABLE} m
+           LEFT JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
+           ${whereClause}
+           ORDER BY COALESCE(NULLIF(m.lead_created_time,''), CAST(m.created_at AS CHAR)) DESC, m.id DESC
+           LIMIT ? OFFSET ?`,
+          [...queryParams, limit, offset]
+        ),
+      ]);
+
+      countRows = retryCountRows as any[];
+      rows = retryRows as any[];
+      total = Number(countRows[0]?.total || 0);
+    } catch {
+      // Best-effort recovery for stale platform labels/sync; keep current empty result on failure.
+    }
+  }
 
   // Backfill and live-sync are maintenance tasks — run them in the background
   // so they never block the response.
@@ -2895,8 +2977,8 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
     rows: mappedRows,
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     filters: {
-      trainings: (trainingRows as any[]).map((row: any) => String(row.course_name).trim()).filter(Boolean),
-      sources: (sourceRows as any[]).map((row: any) => String(row.source_label).trim()).filter(Boolean),
+      trainings: trainingRows.map((row: any) => String(row.course_name).trim()).filter(Boolean),
+      sources: sourceRows.map((row: any) => String(row.source_label).trim()).filter(Boolean),
       statusOptions,
     },
   };

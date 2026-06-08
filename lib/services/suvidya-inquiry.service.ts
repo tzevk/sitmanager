@@ -18,7 +18,7 @@ interface SuvidyaInquiryRecord {
   id?: unknown;
   first_name?: unknown;
   email_id?: unknown;
-  // The API uses different field names across form types — try all of them
+  // Phone — many field names observed across Suvidya form types
   phone?: unknown;
   mobile?: unknown;
   phone_number?: unknown;
@@ -26,11 +26,26 @@ interface SuvidyaInquiryRecord {
   contact_number?: unknown;
   whatsapp?: unknown;
   whatsapp_number?: unknown;
+  your_mobile?: unknown;
+  your_phone?: unknown;
+  your_number?: unknown;
+  mobile_no?: unknown;
+  phone_no?: unknown;
+  mob_no?: unknown;
+  mob?: unknown;
+  tel?: unknown;
+  telephone?: unknown;
+  cell?: unknown;
+  cellphone?: unknown;
+  student_mobile?: unknown;
+  student_phone?: unknown;
+  number?: unknown;
   select_qualification?: unknown;
   your_location?: unknown;
   select_course?: unknown;
   page_source?: unknown;
   created_date?: unknown;
+  [key: string]: unknown;
 }
 
 interface SuvidyaInquiryApiResponse {
@@ -52,6 +67,7 @@ export interface SyncSuvidyaInquirySummary {
   fetched: number;
   considered: number;
   created: number;
+  createdWithoutPhone: number;
   skippedExisting: number;
   skippedInvalid: number;
   skippedOld: number;
@@ -92,27 +108,55 @@ function normalizePhoneText(value: unknown): string | null {
   return normalized;
 }
 
+// Ordered list of field names to try when extracting a phone number.
+// More specific names come first so we don't accidentally pick up a
+// "contact" field that stores free-text rather than a number.
+const PHONE_FIELD_CANDIDATES = [
+  'phone', 'mobile', 'phone_number', 'mobile_number',
+  'your_mobile', 'your_phone', 'your_number',
+  'mobile_no', 'phone_no', 'mob_no', 'mob',
+  'tel', 'telephone', 'cell', 'cellphone',
+  'student_mobile', 'student_phone',
+  'contact_number', 'contact', 'whatsapp', 'whatsapp_number',
+  'number',
+] as const;
+
 function pickRawPhoneText(record: SuvidyaInquiryRecord): string | null {
-  return normalizeText(
-    record.phone || record.mobile || record.phone_number ||
-    record.contact || record.contact_number ||
-    record.whatsapp || record.whatsapp_number
-  );
+  // 1. Try known field names in priority order
+  for (const field of PHONE_FIELD_CANDIDATES) {
+    const value = normalizeText(record[field]);
+    if (value) return value;
+  }
+
+  // 2. Generic fallback: scan every value in the payload for a phone-shaped string.
+  //    This catches any field name the API might introduce in the future.
+  for (const [key, raw] of Object.entries(record)) {
+    if (key === 'id' || key === 'table_name' || key === 'first_name' ||
+        key === 'email_id' || key === 'select_qualification' ||
+        key === 'your_location' || key === 'select_course' ||
+        key === 'page_source' || key === 'created_date') continue;
+
+    const text = normalizeText(raw);
+    if (!text) continue;
+    // Must look like a phone: mostly digits, at least 10 of them
+    const digits = text.replace(/[\s\-\+\(\)\.]/g, '');
+    if (/^\d{10,15}$/.test(digits)) return text;
+  }
+
+  return null;
 }
 
-function extractPhoneForSync(record: SuvidyaInquiryRecord, tableName: string): string | null {
+function extractPhoneForSync(record: SuvidyaInquiryRecord): string | null {
   const raw = pickRawPhoneText(record);
   if (!raw) return null;
 
   const normalized = normalizePhoneText(raw);
   if (normalized) return normalized;
 
-  // quick_enquiry_form on source occasionally emits truncated values.
-  // Keep numeric fallback so phone is not dropped entirely.
-  if (tableName === 'quick_enquiry_form') {
-    const digits = raw.replace(/\D/g, '');
-    if (digits.length >= 9 && digits.length <= 15) return digits;
-  }
+  // Both form types can emit slightly truncated values (9 digits instead of 10).
+  // Keep the raw digits rather than silently dropping the phone entirely.
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length >= 9 && digits.length <= 15) return digits;
 
   return null;
 }
@@ -384,6 +428,7 @@ export async function syncSuvidyaInquiries(
     fetched: 0,
     considered: 0,
     created: 0,
+    createdWithoutPhone: 0,
     skippedExisting: 0,
     skippedInvalid: 0,
     skippedOld: 0,
@@ -487,7 +532,7 @@ export async function syncSuvidyaInquiries(
       if (existing) {
         // Repair path: if an existing synced row has empty mobile, try updating it from latest source payload.
         if (!existing.mobile) {
-          const repairedMobile = extractPhoneForSync(record, tableName);
+          const repairedMobile = extractPhoneForSync(record);
           if (repairedMobile) {
             try {
               await syncConnection.query(
@@ -519,7 +564,7 @@ export async function syncSuvidyaInquiries(
       }
 
       const email = normalizeText(record.email_id);
-      const mobile = extractPhoneForSync(record, tableName);
+      const mobile = extractPhoneForSync(record);
       const qualification = normalizeText(record.select_qualification);
       const location = normalizeText(record.your_location);
       const courseName = normalizeText(record.select_course);
@@ -577,6 +622,7 @@ export async function syncSuvidyaInquiries(
         );
 
         summary.created += 1;
+        if (!mobile) summary.createdWithoutPhone += 1;
       } catch (error) {
         summary.failed += 1;
         console.error('Suvidya inquiry sync record failed:', {

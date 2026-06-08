@@ -10,6 +10,7 @@ export interface LegacyInquirySyncSummary {
   configured: boolean;
   inquiriesFetched: number;
   inquiriesUpserted: number;
+  inquiriesSkippedWebDuplicate: number;
   discussionsFetched: number;
   discussionsUpserted: number;
   errors: string[];
@@ -80,6 +81,87 @@ async function getSharedColumns(
   return oldCols.filter((c) => newLower.has(c.toLowerCase()));
 }
 
+function normalizeMobileForDedup(value: unknown): string | null {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  if (digits.length < 10) return null;
+  // Use last 10 digits to handle country-code variants
+  return digits.slice(-10);
+}
+
+function normalizeEmailForDedup(value: unknown): string | null {
+  const text = String(value ?? '').trim().toLowerCase();
+  return text.includes('@') ? text : null;
+}
+
+/**
+ * Returns the set of Inquiry_Ids from the new DB that already exist,
+ * plus a set of normalized phone/email contact keys for inquiries that
+ * were NOT synced from the legacy DB (i.e. came from the website or public form).
+ * These are the records the legacy sync must not overwrite with a duplicate insert.
+ */
+async function loadExistingContactKeys(
+  newPool: any,
+  dstTable: string,
+  legacyIds: number[],
+  phones: string[],
+  emails: string[],
+): Promise<{ existingIds: Set<number>; websiteContactKeys: Set<string> }> {
+  const existingIds = new Set<number>();
+
+  // Check which Inquiry_Ids already exist in the new DB
+  for (let i = 0; i < legacyIds.length; i += 500) {
+    const chunk = legacyIds.slice(i, i + 500);
+    const ph = chunk.map(() => '?').join(', ');
+    const [rows] = await newPool.query(
+      `SELECT Inquiry_Id FROM \`${dstTable}\` WHERE Inquiry_Id IN (${ph})`,
+      chunk,
+    );
+    for (const row of rows as any[]) existingIds.add(Number(row.Inquiry_Id));
+  }
+
+  // Among records NOT in the new DB yet (true new inserts), check if
+  // phone/email already belongs to a record that was captured from the website.
+  // We consider any existing inquiry whose Inquiry_Id is NOT in legacyIds set
+  // as a website-origin record (Suvidya API sync gives new auto-increment IDs).
+  const websiteContactKeys = new Set<string>();
+  if (phones.length === 0 && emails.length === 0) return { existingIds, websiteContactKeys };
+
+  const legacyIdSet = new Set(legacyIds);
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  if (phones.length > 0) {
+    const phonePh = phones.map(() => '?').join(', ');
+    conditions.push(`RIGHT(REGEXP_REPLACE(COALESCE(Present_Mobile,''),'[^0-9]',''), 10) IN (${phonePh})`);
+    params.push(...phones);
+  }
+  if (emails.length > 0) {
+    const emailPh = emails.map(() => '?').join(', ');
+    conditions.push(`LOWER(TRIM(COALESCE(Email,''))) IN (${emailPh})`);
+    params.push(...emails);
+  }
+
+  const [contactRows] = await newPool.query(
+    `SELECT Inquiry_Id, Present_Mobile, Email
+     FROM \`${dstTable}\`
+     WHERE (IsDelete = 0 OR IsDelete IS NULL)
+       AND (${conditions.join(' OR ')})`,
+    params,
+  );
+
+  for (const row of contactRows as any[]) {
+    const id = Number(row.Inquiry_Id);
+    // Only flag as website-origin if this inquiry_id is NOT one the legacy DB owns
+    if (legacyIdSet.has(id)) continue;
+    const phone = normalizeMobileForDedup(row.Present_Mobile);
+    const email = normalizeEmailForDedup(row.Email);
+    if (phone) websiteContactKeys.add(`phone:${phone}`);
+    if (email) websiteContactKeys.add(`email:${email}`);
+  }
+
+  return { existingIds, websiteContactKeys };
+}
+
 async function upsertBatched(
   newPool: any,
   table: string,
@@ -123,6 +205,7 @@ export async function syncLegacyInquiries(
     configured: false,
     inquiriesFetched: 0,
     inquiriesUpserted: 0,
+    inquiriesSkippedWebDuplicate: 0,
     discussionsFetched: 0,
     discussionsUpserted: 0,
     errors: [],
@@ -167,7 +250,47 @@ export async function syncLegacyInquiries(
     summary.inquiriesFetched = rows.length;
 
     if (rows.length > 0) {
-      summary.inquiriesUpserted = await upsertBatched(newPool, INQUIRY_DST, inquiryColumns, rows, batchSize);
+      // ── 3a. Dedup: website leads are primary; legacy is fallback ─────────────
+      // Collect identifiers needed for the overlap check
+      const legacyIds = rows
+        .map((r: any) => Number(r['Inquiry_Id']))
+        .filter((id) => Number.isFinite(id) && id > 0);
+
+      const rawPhones = rows.map((r: any) => normalizeMobileForDedup(r['Present_Mobile'])).filter(Boolean) as string[];
+      const rawEmails = rows.map((r: any) => normalizeEmailForDedup(r['Email'])).filter(Boolean) as string[];
+      const uniquePhones = [...new Set(rawPhones)];
+      const uniqueEmails = [...new Set(rawEmails)];
+
+      const { existingIds, websiteContactKeys } = await loadExistingContactKeys(
+        newPool, INQUIRY_DST, legacyIds, uniquePhones, uniqueEmails,
+      );
+
+      // Split rows: safe to upsert vs. blocked new-inserts
+      const rowsToUpsert: any[] = [];
+      for (const row of rows) {
+        const id = Number(row['Inquiry_Id']);
+        if (existingIds.has(id)) {
+          // Record already in new DB from a previous legacy sync — safe to update
+          rowsToUpsert.push(row);
+          continue;
+        }
+        // New insert candidate: skip if phone or email is owned by a website-origin record
+        const phone = normalizeMobileForDedup(row['Present_Mobile']);
+        const email = normalizeEmailForDedup(row['Email']);
+        const isWebDuplicate =
+          (phone && websiteContactKeys.has(`phone:${phone}`)) ||
+          (email && websiteContactKeys.has(`email:${email}`));
+
+        if (isWebDuplicate) {
+          summary.inquiriesSkippedWebDuplicate += 1;
+        } else {
+          rowsToUpsert.push(row);
+        }
+      }
+
+      if (rowsToUpsert.length > 0) {
+        summary.inquiriesUpserted = await upsertBatched(newPool, INQUIRY_DST, inquiryColumns, rowsToUpsert, batchSize);
+      }
     }
 
     // ── 4. Fetch & upsert associated discussions ─────────────────────────────

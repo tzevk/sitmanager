@@ -446,11 +446,11 @@ async function ensureMetaLeadSchema(pool: ReturnType<typeof getPool>): Promise<v
 const DISCIPLINE_NAME_EXPR =
   `COALESCE(NULLIF(TRIM(md.Deciplin),''), NULLIF(TRIM(si.Discipline),''))`;
 
-const PRIMARY_INQUIRY_MOBILE_EXPR =
+const DEFAULT_PRIMARY_INQUIRY_MOBILE_EXPR =
   `NULLIF(TRIM(si.Present_Mobile),'')`;
 
-const SEARCHABLE_INQUIRY_MOBILE_EXPR =
-  `COALESCE(${PRIMARY_INQUIRY_MOBILE_EXPR}, NULLIF(TRIM(si.Present_Mobile2),''))`;
+const DEFAULT_SEARCHABLE_INQUIRY_MOBILE_EXPR =
+  `COALESCE(${DEFAULT_PRIMARY_INQUIRY_MOBILE_EXPR}, NULLIF(TRIM(si.Present_Mobile2),''))`;
 
 const FALLBACK_STATUSES: Record<number, string> = {
   1: 'New', 2: 'Contacted', 3: 'Inquiry', 4: 'Follow Up', 5: 'Interested',
@@ -465,20 +465,38 @@ function normalizeInquiryMobile(value: unknown): string | null {
   const text = String(value ?? '').trim();
   if (!text) return null;
 
-  const digits = text.replace(/\D/g, '');
-  if (!digits) return null;
+  const rawCandidates = [
+    text,
+    ...text.split(/[|,;\/]+/).map((part) => part.trim()).filter(Boolean),
+    ...Array.from(text.matchAll(/\+?\d[\d\s().-]{8,20}\d/g), (match) => String(match[0] || '').trim()).filter(Boolean),
+  ];
 
-  // Upstream Suvidya payloads sometimes overflow phone numbers into int32 max.
-  if (digits === '2147483647') return null;
+  const seen = new Set<string>();
+  for (const candidate of rawCandidates) {
+    if (!candidate || seen.has(candidate)) continue;
+    seen.add(candidate);
 
-  if (digits.length < 10 || digits.length > 15) return null;
+    const digits = candidate.replace(/\D/g, '');
+    if (!digits) continue;
 
-  return /^\+?[0-9]+$/.test(text) ? text : digits;
+    // Upstream Suvidya payloads sometimes overflow phone numbers into int32 max.
+    if (digits === '2147483647') continue;
+
+    if (digits.length === 11 && digits.startsWith('0')) {
+      return digits.slice(1);
+    }
+    if (digits.length >= 10 && digits.length <= 15) {
+      return digits;
+    }
+  }
+
+  return null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 let locationColumnCache: Map<string, string | null> | null = null;
+let mobileExprCache: Map<string, { primary: string; searchable: string }> | null = null;
 
 /** Detect which column on the inquiry table stores the branch/city. Cached for the lifetime of the process. */
 async function resolveLocationColumn(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<string | null> {
@@ -500,6 +518,55 @@ async function resolveLocationColumn(pool: ReturnType<typeof getPool>, inquiryTa
   } catch { /* best-effort */ }
   locationColumnCache.set(inquiryTable, null);
   return null;
+}
+
+async function resolveInquiryMobileExpressions(
+  pool: ReturnType<typeof getPool>,
+  inquiryTable: string,
+): Promise<{ primary: string; searchable: string }> {
+  if (!mobileExprCache) mobileExprCache = new Map();
+  const cachedExpr = mobileExprCache.get(inquiryTable);
+  if (cachedExpr) return cachedExpr;
+
+  const preferredColumns = [
+    'Present_Mobile',
+    'Present_Mobile2',
+    'Father_Mobile',
+    'Mother_Mobile',
+    'Sibling_Mobile',
+  ];
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = ?`,
+      [inquiryTable]
+    );
+    const existing = new Set((rows as any[]).map((row: any) => String(row.COLUMN_NAME || '').trim()));
+    const mobileParts = preferredColumns
+      .filter((column) => existing.has(column))
+      .map((column) => `NULLIF(TRIM(si.\`${column}\`),'')`);
+
+    if (mobileParts.length > 0) {
+      const resolved = {
+        primary: `COALESCE(${mobileParts.join(', ')})`,
+        searchable: `COALESCE(${mobileParts.join(', ')})`,
+      };
+      mobileExprCache.set(inquiryTable, resolved);
+      return resolved;
+    }
+  } catch {
+    // Fall back to default expression if schema inspection fails.
+  }
+
+  const fallback = {
+    primary: DEFAULT_PRIMARY_INQUIRY_MOBILE_EXPR,
+    searchable: DEFAULT_SEARCHABLE_INQUIRY_MOBILE_EXPR,
+  };
+  mobileExprCache.set(inquiryTable, fallback);
+  return fallback;
 }
 
 async function loadStatusOptions(pool: ReturnType<typeof getPool>): Promise<StatusOption[]> {
@@ -710,6 +777,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   }
 
   const locationColumn = await resolveLocationColumn(pool, inquiryTable);
+  const mobileExpressions = await resolveInquiryMobileExpressions(pool, inquiryTable);
   const inquiryDateColumnAvailable = await hasInquiryDateColumn(pool, inquiryTable);
   const puneSyncAggregate = `(
     SELECT
@@ -752,7 +820,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   if (search) {
     const resolvedBatchCodeExpr = `NULLIF(TRIM(CAST(si.Batch_Code AS CHAR)),'')`;
     conditions.push(
-      `(si.Student_Name LIKE ? OR si.Email LIKE ? OR ${SEARCHABLE_INQUIRY_MOBILE_EXPR} LIKE ? OR c.Course_Name LIKE ? OR ${resolvedBatchCodeExpr} LIKE ?)`
+      `(si.Student_Name LIKE ? OR si.Email LIKE ? OR ${mobileExpressions.searchable} LIKE ? OR c.Course_Name LIKE ? OR ${resolvedBatchCodeExpr} LIKE ?)`
     );
     const s = `%${search}%`;
     queryParams.push(s, s, s, s, s);
@@ -988,7 +1056,18 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       `SELECT
          si.Inquiry_Id as Student_Id, si.Student_Id as SourceStudentId,
          si.Student_Name, c.Course_Name as CourseName, si.Inquiry_Dt,
-        ${SEARCHABLE_INQUIRY_MOBILE_EXPR} as Present_Mobile, si.Email, ${locationSelect}
+        COALESCE(
+          ${mobileExpressions.primary},
+          NULLIF(TRIM((
+            SELECT meta_m.mobile
+            FROM meta_ads_lead_sync meta_m
+            WHERE meta_m.inquiry_id = si.Inquiry_Id
+              AND NULLIF(TRIM(meta_m.mobile), '') IS NOT NULL
+            ORDER BY meta_m.id DESC
+            LIMIT 1
+          )), '')
+        ) as Present_Mobile,
+        si.Email, ${locationSelect}
         si.Discipline, ${disciplineExpr} as DisciplineName,
          si.Inquiry_From, si.Inquiry_Type,
          si.OnlineState as OnlineStateRaw,

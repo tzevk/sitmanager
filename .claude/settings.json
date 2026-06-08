@@ -35,7 +35,9 @@
       "Bash(npm audit *)",
       "Bash(git checkout *)",
       "Bash(npm ci *)",
-      "Bash(node -e \"console.log\\(require\\('./node_modules/next/package.json'\\).version\\)\")"
+      "Bash(node -e \"console.log\\(require\\('./node_modules/next/package.json'\\).version\\)\")",
+      "Bash(find /Users/tanvikadam/Downloads -name \"*.docx\" | head -5)",
+      "Read(//Users/tanvikadam/Downloads/**)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
