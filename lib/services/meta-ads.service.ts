@@ -3502,15 +3502,27 @@ export async function getMetaLeadDiscussions(metaLeadId: string): Promise<Discus
   const hasStudentIdColumn = await hasTableColumn(pool, 'awt_inquirydiscussion', 'student_id');
   const hasNextDateColumn = await hasTableColumn(pool, 'awt_inquirydiscussion', 'nextdate');
   const nextDateSelect = hasNextDateColumn ? 'd.nextdate AS nextDate' : 'NULL AS nextDate';
-  const studentJoin = hasStudentIdColumn ? 'OR (d.student_id IS NOT NULL AND d.student_id = si.Student_Id)' : '';
+  const canonicalInquiryByStudentIdSubquery = `
+    SELECT si2.Inquiry_Id
+    FROM \`${inquiryTable}\` si2
+    WHERE si2.Student_Id = m.inquiry_id
+    ORDER BY si2.Inquiry_Id DESC
+    LIMIT 1
+  `;
+  const studentJoin = hasStudentIdColumn
+    ? 'OR (d.student_id IS NOT NULL AND (d.student_id = si.Student_Id OR d.student_id = m.inquiry_id))'
+    : '';
   const [rows] = await pool.query(
     `SELECT d.id, d.date, ${nextDateSelect}, d.discussion AS note, d.created_date AS createdAt
-     FROM awt_inquirydiscussion d
-     INNER JOIN ${META_LEADS_TABLE} m ON m.inquiry_id = d.Inquiry_id
+     FROM ${META_LEADS_TABLE} m
      LEFT JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
+     INNER JOIN awt_inquirydiscussion d ON (
+       d.Inquiry_id = m.inquiry_id
+       OR d.Inquiry_id = (${canonicalInquiryByStudentIdSubquery})
+       ${studentJoin}
+     )
      WHERE m.meta_lead_id = ?
        AND (d.deleted = 0 OR d.deleted IS NULL)
-       AND (d.Inquiry_id = m.inquiry_id ${studentJoin})
      ORDER BY d.id DESC`,
     [metaLeadId]
   );
