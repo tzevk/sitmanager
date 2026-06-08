@@ -726,7 +726,7 @@ export default function PublicAdmissionFormPage() {
           alert('Please select a Mode of Payment');
           return false;
         }
-        if (!razorpayPaid) {
+        if (formData.modeOfPayment !== 'Pay at Office' && !razorpayPaid) {
           alert('Please complete the online payment before proceeding.');
           return false;
         }
@@ -2649,6 +2649,47 @@ export default function PublicAdmissionFormPage() {
                             </button>
                           );
                         })()}
+
+                        {/* Option 3: Pay at Office */}
+                        {(() => {
+                          const isSelected = formData.modeOfPayment === 'Pay at Office';
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleChange('modeOfPayment', 'Pay at Office')}
+                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+                                isSelected
+                                  ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-200 shadow-md'
+                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                  isSelected ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-400'
+                                }`}>
+                                  <i className="fas fa-building text-lg"></i>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <span className={`text-sm font-bold ${isSelected ? 'text-amber-800' : 'text-gray-800'}`}>Pay at Office</span>
+                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-amber-600' : 'text-gray-500'}`}>
+                                    Visit our office and pay by cash, cheque, or DD — no online payment required
+                                  </div>
+                                </div>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                  isSelected ? 'border-amber-500 bg-amber-50' : 'border-gray-300'
+                                }`}>
+                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />}
+                                </div>
+                              </div>
+                              {isSelected && (
+                                <div className="mt-3 ml-[52px] bg-amber-100/50 rounded-lg px-3 py-2.5 flex items-start gap-2">
+                                  <i className="fas fa-info-circle text-amber-500 text-xs mt-0.5 flex-shrink-0"></i>
+                                  <p className="text-xs text-amber-800">Your application will be submitted without online payment. Please complete the fee payment at the SIT office to confirm your admission.</p>
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })()}
                       </div>
 
                       {/* Selected summary */}
@@ -2661,13 +2702,14 @@ export default function PublicAdmissionFormPage() {
                               You have selected <span className="font-bold">{formData.modeOfPayment}</span>
                               {formData.modeOfPayment === 'Full Payment' && <> — you pay <span className="font-bold">&#8377;{fmt(fullPayAmount)}</span> (5% discount applied)</>}
                               {formData.modeOfPayment === '50% Installment' && <> — &#8377;{fmt(firstInstallmentAmount)} now + &#8377;{fmt(secondInstallmentAmount)} later</>}
+                              {formData.modeOfPayment === 'Pay at Office' && <> — payment to be made at the SIT office</>}
                             </p>
                           </div>
                         </div>
                       )}
 
-                      {/* ── Razorpay payment (mandatory) ── */}
-                      {formData.modeOfPayment && (
+                      {/* ── Razorpay payment (mandatory for online modes) ── */}
+                      {formData.modeOfPayment && formData.modeOfPayment !== 'Pay at Office' && (
                         <div className={`rounded-xl p-4 space-y-3 border-2 ${razorpayPaid ? 'border-emerald-400 bg-emerald-50' : 'border-[#2E3093] bg-[#2E3093]/5'}`}>
                           {razorpayPaid ? (
                             <div className="flex items-center gap-3">
