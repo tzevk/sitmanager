@@ -39,10 +39,9 @@ export async function POST(req: NextRequest) {
         'Content-Type':  'application/json',
       },
       body: JSON.stringify({
-        amount:      Math.round(Number(amountPaise)),
-        currency:    'INR',
-        receipt:     `sit_${inquiryId}_${Date.now()}`.slice(0, 40),
-        fee_bearer:  'business',
+        amount:   Math.round(Number(amountPaise)),
+        currency: 'INR',
+        receipt:  `sit_${inquiryId}_${Date.now()}`.slice(0, 40),
         notes: {
           inquiryId:     String(inquiryId),
           modeOfPayment: String(modeOfPayment),

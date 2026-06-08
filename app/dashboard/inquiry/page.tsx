@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -131,7 +131,11 @@ export default function InquiryPage() {
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const fetchData = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     try {
       setError('');
@@ -144,7 +148,7 @@ export default function InquiryPage() {
       if (dateTo) p.set('dateTo', dateTo);
       if (training) p.set('training', training);
       if (puneOnly) p.set('puneOnly', puneOnly);
-      const res = await fetch(`/api/inquiry?${p}`);
+      const res = await fetch(`/api/inquiry?${p}`, { signal: controller.signal });
       const ct = res.headers.get('content-type') || '';
       const data = ct.includes('application/json') ? await res.json() : {};
       if (!res.ok) throw new Error(data?.details || data?.error || 'Failed to fetch inquiries');
@@ -156,7 +160,8 @@ export default function InquiryPage() {
       setRows(data.rows ?? []);
       setPagination(nextPagination);
       if (data.filters) setFilters(data.filters);
-    } catch (e) {
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name === 'AbortError') return;
       console.error(e);
       setRows([]);
       setPagination({ page: 1, limit: 25, total: 0, totalPages: 0 });
