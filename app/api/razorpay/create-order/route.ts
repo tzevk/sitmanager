@@ -18,12 +18,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Payment gateway not configured' }, { status: 503 });
     }
 
-    const { inquiryId, amountRaw, modeOfPayment, studentName, email } = await req.json();
+    const { inquiryId, amountPaise, modeOfPayment, studentName, email } = await req.json();
 
     if (!inquiryId) {
       return NextResponse.json({ error: 'inquiryId is required' }, { status: 400 });
     }
-    if (!amountRaw || Number(amountRaw) < 100) {
+    if (!amountPaise || Number(amountPaise) < 100) {
       return NextResponse.json({ error: 'Amount must be at least ₹1' }, { status: 400 });
     }
     if (!['Full Payment', '50% Installment'].includes(modeOfPayment)) {
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
         'Content-Type':  'application/json',
       },
       body: JSON.stringify({
-        amount:   Math.round(Number(amountRaw)),
+        amount:   Math.round(Number(amountPaise)),
         currency: 'INR',
         receipt:  `sit_${inquiryId}_${Date.now()}`.slice(0, 40),
         notes: {
