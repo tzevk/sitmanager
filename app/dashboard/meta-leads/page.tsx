@@ -358,7 +358,7 @@ interface FollowUpModalProps {
   canUpdate: boolean;
   saving: boolean;
   onDraftChange: (leadId: string, field: DraftTextField, value: string) => void;
-  onSave: (row: InquiryRow) => void;
+  onSave: (row: InquiryRow, draftOverride?: LeadRowDraft) => Promise<boolean>;
   onClose: () => void;
 }
 
@@ -374,6 +374,24 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
     const updated = draft.discussion ? `${draft.discussion}\n${entry}` : entry;
     onDraftChange(row.MetaLead_Id, 'discussion', updated);
     setNewNote('');
+  }
+
+  async function handleSave() {
+    const pending = newNote.trim();
+    const today = formatDate(new Date().toISOString());
+    const pendingEntry = pending ? `[${today}] ${pending}` : null;
+    const discussion = pendingEntry
+      ? (draft.discussion ? `${draft.discussion}\n${pendingEntry}` : pendingEntry)
+      : draft.discussion;
+    const draftToSave: LeadRowDraft = { ...draft, discussion };
+
+    if (pendingEntry) {
+      onDraftChange(row.MetaLead_Id, 'discussion', discussion);
+      setNewNote('');
+    }
+
+    const ok = await onSave(row, draftToSave);
+    if (ok) onClose();
   }
 
   return (
@@ -417,7 +435,7 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
             </div>
             <div className="flex justify-end gap-2">
               <button type="button" onClick={onClose} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
-              <button type="button" onClick={() => { onSave(row); onClose(); }} disabled={saving} className="px-4 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:bg-slate-200 transition-colors">{saving ? 'Saving…' : 'Save Notes'}</button>
+              <button type="button" onClick={() => void handleSave()} disabled={saving} className="px-4 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:bg-slate-200 transition-colors">{saving ? 'Saving…' : 'Save Notes'}</button>
             </div>
           </div>
         )}
@@ -786,14 +804,14 @@ export default function MetaLeadsPage() {
     }
   }, [canUpdate, rowDrafts, updateRowDraft]);
 
-  const saveRow = useCallback(async (row: InquiryRow) => {
-    if (!row.MetaLead_Id) return;
+  const saveRow = useCallback(async (row: InquiryRow, draftOverride?: LeadRowDraft): Promise<boolean> => {
+    if (!row.MetaLead_Id) return false;
     if (!canUpdate) {
       setConvertError('You do not have permission to update Meta leads.');
-      return;
+      return false;
     }
-    const draft = rowDrafts[row.MetaLead_Id];
-    if (!draft) return;
+    const draft = draftOverride ?? rowDrafts[row.MetaLead_Id];
+    if (!draft) return false;
     setConvertError('');
     setSavingLeadId(row.MetaLead_Id);
     try {
@@ -824,8 +842,10 @@ export default function MetaLeadsPage() {
         };
       }));
       setEditingLeadId((cur) => (cur === row.MetaLead_Id ? null : cur));
+      return true;
     } catch (error: unknown) {
       setConvertError(error instanceof Error ? error.message : 'Failed to save lead changes');
+      return false;
     } finally {
       setSavingLeadId(null);
     }
