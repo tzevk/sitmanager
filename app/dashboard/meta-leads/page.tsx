@@ -755,29 +755,31 @@ export default function MetaLeadsPage() {
 
   const saveStatusOnly = useCallback(async (row: InquiryRow, statusId: number | null) => {
     if (!row.MetaLead_Id || !canUpdate) return;
+    // Optimistic update — apply status immediately to both draft and row so there's no visual revert
     updateRowDraft(row.MetaLead_Id, { statusId });
+    setRows((prev) => prev.map((r) => r.MetaLead_Id === row.MetaLead_Id ? { ...r, Status_id: statusId } : r));
     setSavingLeadId(row.MetaLead_Id);
     try {
+      const draft = rowDrafts[row.MetaLead_Id];
       const res = await fetch(`/api/meta-ads/leads/${encodeURIComponent(row.MetaLead_Id)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          studentName: rowDrafts[row.MetaLead_Id]?.studentName ?? row.Student_Name ?? '',
-          courseName:  rowDrafts[row.MetaLead_Id]?.courseName  ?? row.CourseName  ?? '',
-          mobile:      rowDrafts[row.MetaLead_Id]?.mobile      ?? row.Present_Mobile ?? '',
-          email:       rowDrafts[row.MetaLead_Id]?.email       ?? row.Email        ?? '',
-          city:        rowDrafts[row.MetaLead_Id]?.city        ?? row.City         ?? '',
-          discussion:  fromBulletEditorValue(rowDrafts[row.MetaLead_Id]?.discussion ?? ''),
+          studentName: draft?.studentName ?? row.Student_Name ?? '',
+          courseName:  draft?.courseName  ?? row.CourseName   ?? '',
+          mobile:      draft?.mobile      ?? row.Present_Mobile ?? '',
+          email:       draft?.email       ?? row.Email          ?? '',
+          city:        draft?.city        ?? row.City           ?? '',
+          discussion:  fromBulletEditorValue(draft?.discussion ?? ''),
           statusId,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Failed to save status');
-      const updated = data?.lead as InquiryRow | undefined;
-      if (updated) {
-        setRows((prev) => prev.map((r) => r.MetaLead_Id === row.MetaLead_Id ? { ...r, ...updated } : r));
-      }
     } catch (error: unknown) {
+      // Revert optimistic update on failure
+      updateRowDraft(row.MetaLead_Id, { statusId: row.Status_id ?? null });
+      setRows((prev) => prev.map((r) => r.MetaLead_Id === row.MetaLead_Id ? { ...r, Status_id: row.Status_id ?? null } : r));
       setConvertError(error instanceof Error ? error.message : 'Failed to save status');
     } finally {
       setSavingLeadId(null);

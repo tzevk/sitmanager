@@ -43,7 +43,7 @@ export async function PATCH(
       discussion: typeof body?.discussion === 'string' ? body.discussion : null,
       fields: body?.fields && typeof body.fields === 'object' ? body.fields : undefined,
       utm: body?.utm && typeof body.utm === 'object' ? body.utm : undefined,
-      statusId: typeof body?.statusId === 'number' ? body.statusId : undefined,
+      statusId: body?.statusId === null ? null : (typeof body?.statusId === 'number' ? body.statusId : undefined),
     });
 
     if (!detail) {

@@ -88,6 +88,16 @@ export async function GET(req: NextRequest) {
         if (batchId)    { conditions.push(`sfm.Batch_Id = ?`);       params.push(Number(batchId)); }
         if (amountType) { conditions.push(`sfm.Payment_Type = ?`);   params.push(amountType); }
 
+        // Start from admission_master so all enrolled students appear,
+        // even those who have not yet made a payment.
+        const amConditions: string[] = [
+          '(am.IsDelete = 0 OR am.IsDelete IS NULL)',
+          '(am.Cancel = 0 OR am.Cancel IS NULL)',
+        ];
+        const amParams: any[] = [];
+        if (courseId) { amConditions.push('bm.Course_Id = ?');  amParams.push(Number(courseId)); }
+        if (batchId)  { amConditions.push('am.Batch_Id = ?');   amParams.push(Number(batchId)); }
+
         const [rows] = await pool.query(
           `SELECT
              COALESCE(bm.Batch_code,'') AS Batch_Code,
@@ -100,14 +110,30 @@ export async function GET(req: NextRequest) {
              sfm.Cheque_Date, sfm.Amount, sfm.Service_Tax, sfm.Total_Amt,
              sfm.UnPaid_Amt, sfm.Amt_Word, sfm.Notes,
              sfm.FeesMonth, sfm.FeesYear, sfm.Print
-           FROM s_fees_mst sfm
-           LEFT JOIN student_master sm ON sm.Student_Id = sfm.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-           LEFT JOIN course_mst cm ON cm.Course_Id = sfm.Course_Id
-           LEFT JOIN batch_mst bm ON bm.Batch_Id = sfm.Batch_Id
-           WHERE ${conditions.join(' AND ')}
+           FROM admission_master am
+           LEFT JOIN student_master sm
+             ON sm.Student_Id = am.Student_Id
+             AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+           LEFT JOIN batch_mst bm ON bm.Batch_Id = am.Batch_Id
+           LEFT JOIN course_mst cm ON cm.Course_Id = bm.Course_Id
+           LEFT JOIN s_fees_mst sfm
+             ON sfm.Student_Id = am.Student_Id
+             AND sfm.Batch_Id  = am.Batch_Id
+             AND sfm.IsDelete  = 0
+             AND sfm.TypeR     = 'C'
+             ${amountType ? 'AND sfm.Payment_Type = ?' : ''}
+             ${fromDate   ? 'AND sfm.Date_Added >= ?' : ''}
+             ${toDate     ? 'AND sfm.Date_Added <= ?' : ''}
+             ${printDetails ? 'AND sfm.Print = 1' : ''}
+           WHERE ${amConditions.join(' AND ')}
            ORDER BY bm.Batch_code DESC, sm.Student_Name ASC, sfm.Date_Added DESC
            LIMIT 1000`,
-          params
+          [
+            ...amParams,
+            ...(amountType ? [amountType] : []),
+            ...(fromDate   ? [fromDate]   : []),
+            ...(toDate     ? [toDate]     : []),
+          ]
         );
         return NextResponse.json({ rows });
       }

@@ -718,6 +718,7 @@ async function ensureMetaLeadTables() {
   await Promise.all([
     pool.query(`ALTER TABLE ${META_LEADS_TABLE} ADD COLUMN IF NOT EXISTS applicant_email_sent_at TIMESTAMP NULL`),
     pool.query(`ALTER TABLE ${META_LEADS_TABLE} ADD COLUMN IF NOT EXISTS applicant_email_last_error TEXT NULL`),
+    pool.query(`ALTER TABLE ${META_LEADS_TABLE} ADD COLUMN IF NOT EXISTS online_state INT NULL`),
   ]);
   metaTablesReady = true;
 }
@@ -2807,7 +2808,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
          NULLIF(TRIM(m.email),'') AS Email,
          m.contact_source AS Inquiry_From,
          m.source_label AS Inquiry_Type,
-         CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) AS Status_id,
+         COALESCE(CAST(NULLIF(si.OnlineState,'') AS UNSIGNED), m.online_state) AS Status_id,
          si.Discussion AS Discussion,
          COALESCE(NULLIF(TRIM(m.campaign_name),''), NULLIF(TRIM(m.campaign_id),'')) AS MetaCampaignName,
          NULLIF(TRIM(m.form_name),'') AS MetaFormName,
@@ -2875,7 +2876,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
              NULLIF(TRIM(m.email),'') AS Email,
              m.contact_source AS Inquiry_From,
              m.source_label AS Inquiry_Type,
-             CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) AS Status_id,
+             COALESCE(CAST(NULLIF(si.OnlineState,'') AS UNSIGNED), m.online_state) AS Status_id,
              si.Discussion AS Discussion,
              COALESCE(NULLIF(TRIM(m.campaign_name),''), NULLIF(TRIM(m.campaign_id),'')) AS MetaCampaignName,
              NULLIF(TRIM(m.form_name),'') AS MetaFormName,
@@ -3211,7 +3212,8 @@ export async function updateMetaLeadDetail(metaLeadId: string, input: MetaLeadUp
          email = ?,
          fields_json = ?,
          utm_json = ?,
-         tags_json = ?
+         tags_json = ?,
+         online_state = ?
      WHERE meta_lead_id = ?`,
     [
       studentName,
@@ -3221,6 +3223,7 @@ export async function updateMetaLeadDetail(metaLeadId: string, input: MetaLeadUp
       JSON.stringify(nextFields),
       JSON.stringify(nextUtm),
       JSON.stringify(tags),
+      input.statusId !== undefined ? (input.statusId ?? null) : null,
       metaLeadId,
     ]
   );
