@@ -53,7 +53,7 @@ function groupRows<T extends string>(
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requirePermission(req, 'inquiry.view');
+    const auth = await requirePermission(req, 'report_suvidya_pune.view');
     if (auth instanceof NextResponse) return auth;
 
     const pool = getPool();

@@ -194,6 +194,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       ...createPermissions('report_annual_batch_plan', 'Annual Batch Plan Report', ['view', 'export']),
       ...createPermissions('report_final_exam', 'Final Exam Report', ['view', 'export']),
       ...createPermissions('report_fees', 'Fees Report', ['view', 'export']),
+      ...createPermissions('report_suvidya_pune', 'Pune Inquiries Report', ['view', 'export']),
       ...createPermissions('report_sms_email', 'SMS/Email Report', ['view', 'export']),
       ...createPermissions('report_service_tax', 'Service Tax Report', ['view', 'export']),
       ...createPermissions('report_lecture', 'Lecture Report', ['view', 'export']),

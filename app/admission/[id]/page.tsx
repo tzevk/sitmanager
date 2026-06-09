@@ -1002,19 +1002,25 @@ export default function PublicAdmissionFormPage() {
         razorpayPaymentId:  razorpayPaymentId  || null,
         razorpayOrderId:    razorpayOrderId    || null,
         razorpaySignature:  razorpaySignature  || null,
-        razorpayAmount:     razorpayPaid ? (
-          formData.modeOfPayment === 'Full Payment'
+        razorpayAmount:     razorpayPaid ? (() => {
+          const isProcessWeekend = /process\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '');
+          const is75kLoan = (
+            (/piping\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '')) ||
+            (/engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') && /full.?time/i.test(formData.trainingCategory || '')) ||
+            /piping\s+design.*drafting/i.test(formData.trainingProgrammeName || '')
+          );
+          return formData.modeOfPayment === 'Full Payment'
             ? Math.round((batchFees ?? 0) * 0.95)
             : formData.modeOfPayment === '3-Installment Plan'
-            ? 25000
+            ? (isProcessWeekend ? 15000 : 25000)
             : formData.modeOfPayment === '2-Payment Plan'
-            ? 25000
+            ? 15000
             : formData.modeOfPayment === '6-Installment Plan'
             ? 15000
             : formData.modeOfPayment === 'Loan (0% Interest)'
-            ? (((/piping\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '')) || (/engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') && /full.?time/i.test(formData.trainingCategory || '')) || /piping\s+design.*drafting/i.test(formData.trainingProgrammeName || '')) ? 15000 : 12000)
-            : Math.round((batchFeesInstallment ?? batchFees ?? 0) / 2)
-        ) : null,
+            ? ((is75kLoan || isProcessWeekend) ? 15000 : 12000)
+            : Math.round((batchFeesInstallment ?? batchFees ?? 0) / 2);
+        })() : null,
       };
 
       const requestBody = new FormData();
@@ -2651,6 +2657,7 @@ export default function PublicAdmissionFormPage() {
                       /engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') &&
                       /full.?time/i.test(formData.trainingCategory || '');
                     const isPDD = /piping\s+design.*drafting/i.test(formData.trainingProgrammeName || '');
+                    const isProcessWeekend = /process\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '');
                     const is75kPlan = isPipingWeekend || isEDDFulltime || isPDD;
 
                     return (
@@ -2724,8 +2731,8 @@ export default function PublicAdmissionFormPage() {
                           );
                         })()}
 
-                        {/* PDD-only: 2-Payment Plan (shown between Full Payment and 6-Installment) */}
-                        {isPDD && (() => {
+                        {/* Process Engineering Weekend only: 2-Payment Plan */}
+                        {isProcessWeekend && (() => {
                           const isSelected = formData.modeOfPayment === '2-Payment Plan';
                           return (
                             <button
@@ -2746,7 +2753,7 @@ export default function PublicAdmissionFormPage() {
                                 <div className="flex-1 min-w-0">
                                   <span className={`text-sm font-bold ${isSelected ? 'text-teal-800' : 'text-gray-800'}`}>2-Payment Plan</span>
                                   <div className={`text-xs mt-0.5 ${isSelected ? 'text-teal-600' : 'text-gray-500'}`}>
-                                    &#8377;25,000 at admission + &#8377;50,000 on first day of batch
+                                    &#8377;15,000 at admission + &#8377;35,000 on first day of batch
                                   </div>
                                 </div>
                                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
@@ -2759,15 +2766,15 @@ export default function PublicAdmissionFormPage() {
                                 <div className="mt-3 ml-[52px] bg-teal-100/50 rounded-lg p-3 space-y-2">
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-teal-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-teal-400"></i>At Admission (pay now)</span>
-                                    <span className="font-bold text-teal-800">&#8377;25,000</span>
+                                    <span className="font-bold text-teal-800">&#8377;15,000</span>
                                   </div>
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-teal-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-teal-400"></i>On first day of batch starting</span>
-                                    <span className="font-bold text-teal-800">&#8377;50,000</span>
+                                    <span className="font-bold text-teal-800">&#8377;35,000</span>
                                   </div>
                                   <div className="border-t border-teal-200 pt-2 flex items-center justify-between text-xs">
                                     <span className="text-teal-800 font-bold">Total</span>
-                                    <span className="font-extrabold text-teal-900">&#8377;75,000</span>
+                                    <span className="font-extrabold text-teal-900">&#8377;50,000</span>
                                   </div>
                                   <div className="flex items-start gap-1.5 pt-1">
                                     <i className="fas fa-exclamation-circle text-teal-400 text-[10px] mt-0.5 flex-shrink-0"></i>
@@ -2780,7 +2787,63 @@ export default function PublicAdmissionFormPage() {
                         })()}
 
                         {/* Option 2/3: Installment Plan */}
-                        {is75kPlan ? (() => {
+                        {isProcessWeekend ? (() => {
+                          const isSelected = formData.modeOfPayment === '3-Installment Plan';
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleChange('modeOfPayment', '3-Installment Plan')}
+                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+                                isSelected
+                                  ? 'bg-violet-50 border-violet-500 ring-2 ring-violet-200 shadow-md'
+                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                  isSelected ? 'bg-violet-100 text-violet-600' : 'bg-gray-100 text-gray-400'
+                                }`}>
+                                  <i className="fas fa-calendar-check text-lg"></i>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <span className={`text-sm font-bold ${isSelected ? 'text-violet-800' : 'text-gray-800'}`}>3-Installment Plan</span>
+                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-violet-600' : 'text-gray-500'}`}>
+                                    &#8377;15,000 at admission + &#8377;17,500 × 2 — total &#8377;50,000
+                                  </div>
+                                </div>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                  isSelected ? 'border-violet-500 bg-violet-50' : 'border-gray-300'
+                                }`}>
+                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-violet-500" />}
+                                </div>
+                              </div>
+                              {isSelected && (
+                                <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>At Admission (pay now)</span>
+                                    <span className="font-bold text-violet-800">&#8377;15,000</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>1st Instalment (30 days from batch start)</span>
+                                    <span className="font-bold text-violet-800">&#8377;17,500</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>2nd Instalment (60 days from batch start)</span>
+                                    <span className="font-bold text-violet-800">&#8377;17,500</span>
+                                  </div>
+                                  <div className="border-t border-violet-200 pt-2 flex items-center justify-between text-xs">
+                                    <span className="text-violet-800 font-bold">Total</span>
+                                    <span className="font-extrabold text-violet-900">&#8377;50,000</span>
+                                  </div>
+                                  <div className="flex items-start gap-1.5 pt-1">
+                                    <i className="fas fa-exclamation-circle text-violet-400 text-[10px] mt-0.5 flex-shrink-0"></i>
+                                    <p className="text-[10px] text-violet-700">Delay charges of &#8377;2,500 apply per instalment if payment is not made on time.</p>
+                                  </div>
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })() : is75kPlan ? (() => {
                           const isSelected = formData.modeOfPayment === '6-Installment Plan';
                           return (
                             <button
@@ -2954,12 +3017,12 @@ export default function PublicAdmissionFormPage() {
                           );
                         })()}
 
-                        {/* Option 3: Loan (Piping) */}
-                        {(isPipingFulltime || is75kPlan) && (() => {
+                        {/* Option 3/4: Loan (Piping / EDD / PDD / Process Weekend) */}
+                        {(isPipingFulltime || is75kPlan || isProcessWeekend) && (() => {
                           const isSelected = formData.modeOfPayment === 'Loan (0% Interest)';
-                          const loanAdmission = is75kPlan ? 15000 : 12000;
-                          const loanAmount = is75kPlan ? 60000 : 100000;
-                          const loanTotal = is75kPlan ? 75000 : 112000;
+                          const loanAdmission = 15000;
+                          const loanAmount = isProcessWeekend ? 35000 : is75kPlan ? 60000 : 100000;
+                          const loanTotal = isProcessWeekend ? 50000 : is75kPlan ? 75000 : 112000;
                           const fmtLoan = (n: number) => n.toLocaleString('en-IN');
                           return (
                             <button
@@ -3027,10 +3090,10 @@ export default function PublicAdmissionFormPage() {
                               You have selected <span className="font-bold">{formData.modeOfPayment}</span>
                               {formData.modeOfPayment === 'Full Payment' && <> — you pay <span className="font-bold">&#8377;{fmt(fullPayAmount)}</span> (5% discount applied)</>}
                               {formData.modeOfPayment === '50% Installment' && <> — &#8377;{fmt(firstInstallmentAmount)} now + &#8377;{fmt(secondInstallmentAmount)} later</>}
-                              {formData.modeOfPayment === '3-Installment Plan' && <> — &#8377;25,000 now + &#8377;43,500 × 2 instalments</>}
-                              {formData.modeOfPayment === '2-Payment Plan' && <> — &#8377;25,000 now + &#8377;50,000 on first day of batch</>}
+                              {formData.modeOfPayment === '3-Installment Plan' && <> — {isProcessWeekend ? '₹15,000 now + ₹17,500 × 2 instalments' : '₹25,000 now + ₹43,500 × 2 instalments'}</>}
+                              {formData.modeOfPayment === '2-Payment Plan' && <> — &#8377;15,000 now + &#8377;35,000 on first day of batch</>}
                               {formData.modeOfPayment === '6-Installment Plan' && <> — &#8377;15,000 now + &#8377;12,000 × 5 instalments</>}
-                              {formData.modeOfPayment === 'Loan (0% Interest)' && <> — &#8377;{is75kPlan ? '15,000' : '12,000'} at admission + &#8377;{is75kPlan ? '60,000' : '1,00,000'} loan via financial institution</>}
+                              {formData.modeOfPayment === 'Loan (0% Interest)' && <> — &#8377;15,000 at admission + &#8377;{isProcessWeekend ? '35,000' : is75kPlan ? '60,000' : '1,00,000'} loan via financial institution</>}
                             </p>
                           </div>
                         </div>
@@ -3047,10 +3110,10 @@ export default function PublicAdmissionFormPage() {
                                 <p className="text-xs text-emerald-700 mt-0.5">
                                   &#8377;{fmt(
                                     formData.modeOfPayment === 'Full Payment' ? fullPayAmount
-                                    : formData.modeOfPayment === '3-Installment Plan' ? 25000
-                                    : formData.modeOfPayment === '2-Payment Plan' ? 25000
+                                    : formData.modeOfPayment === '3-Installment Plan' ? (isProcessWeekend ? 15000 : 25000)
+                                    : formData.modeOfPayment === '2-Payment Plan' ? 15000
                                     : formData.modeOfPayment === '6-Installment Plan' ? 15000
-                                    : formData.modeOfPayment === 'Loan (0% Interest)' ? (is75kPlan ? 15000 : 12000)
+                                    : formData.modeOfPayment === 'Loan (0% Interest)' ? (isProcessWeekend || is75kPlan ? 15000 : 12000)
                                     : firstInstallmentAmount
                                   )} paid successfully.
                                 </p>

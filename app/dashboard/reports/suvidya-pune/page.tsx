@@ -64,7 +64,7 @@ function downloadCsv(filename: string, headers: string[], rows: string[][]) {
 
 export default function SuvidyaPuneReportPage() {
   return (
-    <PermissionGate resource="inquiry" deniedMessage="You do not have permission to view Pune inquiry reports.">
+    <PermissionGate resource="report_suvidya_pune" deniedMessage="You do not have permission to view Pune inquiry reports.">
       {() => <SuvidyaPuneReportContent />}
     </PermissionGate>
   );
