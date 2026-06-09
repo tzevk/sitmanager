@@ -40,6 +40,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Admission Activity > Inquiry': '/dashboard/inquiry',
   'Admission Activity > Meta Leads': '/dashboard/meta-leads',
   'Admission Activity > Online Admission': '/dashboard/online-admission',
+  'Admission Activity > Pending Admission': '/dashboard/online-admission/pending',
   'Admission Activity > Student': '/dashboard/student',
   'Corporate Training > Corporate Inquiry': '/dashboard/corporate-inquiry',
   'Corporate Training > Training Execution': '/dashboard/corporate-inquiry/execution',
@@ -116,6 +117,7 @@ const SUB_MENUS: Record<string, string[]> = {
     'Inquiry',
     'Meta Leads',
     'Online Admission',
+    'Pending Admission',
     'Student',
   ],
   'Daily Activities': [
@@ -242,6 +244,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Admission Activity > Inquiry': ['inquiry.view'],
   'Admission Activity > Meta Leads': ['inquiry.view'],
   'Admission Activity > Online Admission': ['online_admission.view'],
+  'Admission Activity > Pending Admission': ['online_admission.view'],
   'Admission Activity > Student': ['student.view'],
   'Corporate Training > Corporate Inquiry': ['corporate_inquiry.view'],
   'Corporate Training > Training Execution': ['corporate_inquiry.view'],
