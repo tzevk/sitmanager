@@ -1484,9 +1484,9 @@ export default function MetaLeadsPage() {
                         const draft = rowDrafts[row.MetaLead_Id] ?? { studentName: row.Student_Name || '', courseName: row.CourseName || '', mobile: row.Present_Mobile || '', email: row.Email || '', city: row.City || '', discussion: toBulletEditorValue(row.Discussion), statusId: row.Status_id };
                         const sentEmail = Boolean(row.ApplicantEmailSentAt);
                         const baseBgCls = rowBg(row.Status_id, row.StatusLabel);
-                        const hasFollowUp = hasLatestFollowUp(row);
+                        const hasFollowUp = normalizedFollowUpLines(draft.discussion).length > 0 || hasLatestFollowUp(row);
                         const isPending = isPendingFollowUp(row);
-                        const bgCls = baseBgCls;
+                        const bgCls = hasFollowUp ? 'bg-purple-800 hover:bg-purple-900' : baseBgCls;
                         const age = leadAge(row.Inquiry_Dt);
                         const wa = waLink(row.Present_Mobile, row.Student_Name, row.CourseName);
                         const isSaving = savingLeadId === row.MetaLead_Id;
@@ -1495,7 +1495,7 @@ export default function MetaLeadsPage() {
                         const tdBase = 'py-1.5 px-2 border-b border-r border-slate-100';
 
                         return (
-                          <tr key={`${row.MetaLead_Id}-${index}`} className={`transition-colors group ${bgCls} ${isPending ? '[&>td]:text-purple-900' : hasFollowUp ? '' : '[&>td]:text-red-700'}`}>
+                          <tr key={`${row.MetaLead_Id}-${index}`} className={`transition-colors group ${bgCls} ${hasFollowUp ? '[&>td]:text-purple-50' : isPending ? '[&>td]:text-purple-900' : '[&>td]:text-red-700'}`}>
                             <td className={`${tdBase} pl-4 relative`}>
                               <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${statusBar(row.Status_id, row.StatusLabel)} rounded-r`} />
                               <span className="font-mono tabular-nums text-[10px] text-slate-400">{(pagination.page - 1) * pagination.limit + index + 1}</span>
@@ -1537,7 +1537,7 @@ export default function MetaLeadsPage() {
                                 }`}
                               >
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
-                                {hasFollowUp ? 'Notes' : 'Add'}
+                                Add
                               </button>
                             </td>
                             <td className={`${tdBase} text-center`}>
