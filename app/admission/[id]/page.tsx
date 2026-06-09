@@ -530,6 +530,9 @@ export default function PublicAdmissionFormPage() {
     const isPipingEngineeringFulltimeMode =
       /piping\s+engineering/i.test(formData.trainingProgrammeName || '') &&
       /full.?time/i.test(formData.trainingCategory || '');
+    const isEngineeringDesignDraftingFulltimeMode =
+      /engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') &&
+      /full.?time/i.test(formData.trainingCategory || '');
     const isLoanAdmission15000Mode = (
       (/engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') && /full.?time/i.test(formData.trainingCategory || '')) ||
       /piping\s+design.*drafting/i.test(formData.trainingProgrammeName || '')
@@ -545,7 +548,7 @@ export default function PublicAdmissionFormPage() {
         : formData.modeOfPayment === '6-Installment Plan'
         ? 15000 * 100
         : formData.modeOfPayment === 'Loan (0% Interest)'
-        ? (isPipingEngineeringFulltimeMode ? 12000 : ((isLoanAdmission15000Mode || isProcessWeekendMode) ? 15000 : 12000)) * 100
+        ? ((isPipingEngineeringFulltimeMode || isEngineeringDesignDraftingFulltimeMode) ? 12000 : ((isLoanAdmission15000Mode || isProcessWeekendMode) ? 15000 : 12000)) * 100
         : Math.round(installmentTotal / 2) * 100;
 
     setPaymentLoading(true);
@@ -2783,6 +2786,9 @@ export default function PublicAdmissionFormPage() {
                     const isPipingEngineeringFulltime =
                       /piping\s+engineering/i.test(formData.trainingProgrammeName || '') &&
                       /full.?time/i.test(formData.trainingCategory || '');
+                    const isEngineeringDesignDraftingFulltime =
+                      /engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') &&
+                      /full.?time/i.test(formData.trainingCategory || '');
                     const isPipingWeekend =
                       /piping\s+engineering/i.test(formData.trainingProgrammeName || '') &&
                       /weekend/i.test(formData.trainingCategory || '');
@@ -2802,7 +2808,7 @@ export default function PublicAdmissionFormPage() {
                         : formData.modeOfPayment === '6-Installment Plan'
                         ? 15000
                         : formData.modeOfPayment === 'Loan (0% Interest)'
-                        ? (isPipingEngineeringFulltime ? 12000 : ((isProcessWeekend || is75kPlan) ? 15000 : 12000))
+                        ? ((isPipingEngineeringFulltime || isEngineeringDesignDraftingFulltime) ? 12000 : ((isProcessWeekend || is75kPlan) ? 15000 : 12000))
                         : firstInstallmentAmount;
 
                     return (
@@ -3165,7 +3171,7 @@ export default function PublicAdmissionFormPage() {
                         {/* Option 3/4: Loan (Piping / EDD / PDD / Process Weekend) */}
                         {(isPipingFulltime || is75kPlan || isProcessWeekend) && (() => {
                           const isSelected = formData.modeOfPayment === 'Loan (0% Interest)';
-                          const loanAdmission = isPipingEngineeringFulltime ? 12000 : ((isProcessWeekend || is75kPlan) ? 15000 : 12000);
+                          const loanAdmission = (isPipingEngineeringFulltime || isEngineeringDesignDraftingFulltime) ? 12000 : ((isProcessWeekend || is75kPlan) ? 15000 : 12000);
                           const loanAmount = isProcessWeekend ? 35000 : is75kPlan ? 60000 : 100000;
                           const loanTotal = loanAdmission + loanAmount;
                           const fmtLoan = (n: number) => n.toLocaleString('en-IN');
@@ -3292,7 +3298,7 @@ export default function PublicAdmissionFormPage() {
                               {formData.modeOfPayment === '3-Installment Plan' && <> — {isProcessWeekend ? '₹15,000 now + ₹17,500 × 2 instalments' : '₹25,000 now + ₹43,500 × 2 instalments'}</>}
                               {formData.modeOfPayment === '2-Payment Plan' && <> — &#8377;15,000 now + &#8377;35,000 on first day of batch</>}
                               {formData.modeOfPayment === '6-Installment Plan' && <> — &#8377;15,000 now + &#8377;12,000 × 5 instalments</>}
-                              {formData.modeOfPayment === 'Loan (0% Interest)' && <> — &#8377;{isPipingEngineeringFulltime ? '12,000' : (isProcessWeekend || is75kPlan ? '15,000' : '12,000')} at admission + &#8377;{isProcessWeekend ? '35,000' : is75kPlan ? '60,000' : '1,00,000'} loan via financial institution</>}
+                              {formData.modeOfPayment === 'Loan (0% Interest)' && <> — &#8377;{(isPipingEngineeringFulltime || isEngineeringDesignDraftingFulltime) ? '12,000' : (isProcessWeekend || is75kPlan ? '15,000' : '12,000')} at admission + &#8377;{isProcessWeekend ? '35,000' : is75kPlan ? '60,000' : '1,00,000'} loan via financial institution</>}
                             </p>
                           </div>
                         </div>
@@ -3335,7 +3341,7 @@ export default function PublicAdmissionFormPage() {
                                     : formData.modeOfPayment === '3-Installment Plan' ? (isProcessWeekend ? 15000 : 25000)
                                     : formData.modeOfPayment === '2-Payment Plan' ? 15000
                                     : formData.modeOfPayment === '6-Installment Plan' ? 15000
-                                    : formData.modeOfPayment === 'Loan (0% Interest)' ? (isPipingEngineeringFulltime ? 12000 : (isProcessWeekend || is75kPlan ? 15000 : 12000))
+                                    : formData.modeOfPayment === 'Loan (0% Interest)' ? ((isPipingEngineeringFulltime || isEngineeringDesignDraftingFulltime) ? 12000 : (isProcessWeekend || is75kPlan ? 15000 : 12000))
                                     : firstInstallmentAmount
                                   )} paid successfully.
                                 </p>
