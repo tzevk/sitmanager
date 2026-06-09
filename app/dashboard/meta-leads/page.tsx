@@ -282,7 +282,15 @@ function ctrCls(ctr: number): string {
   return 'text-red-500';
 }
 
-function hasLatestFollowUp(r: InquiryRow) { return Boolean(r.Discussion && r.Discussion !== 'NULL' && r.Discussion.trim()); }
+function normalizedFollowUpLines(raw: string | null | undefined): string[] {
+  const placeholders = new Set(['null', 'n/a', 'na', 'none', '-', 'saved']);
+  return toBulletEditorValue(raw)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !placeholders.has(line.toLowerCase()));
+}
+
+function hasLatestFollowUp(r: InquiryRow) { return normalizedFollowUpLines(r.Discussion).length > 0; }
 function isPendingFollowUp(r: InquiryRow) {
   if (r.Status_id != null && [4, 12, 15].includes(r.Status_id)) return true;
   const l = String(r.StatusLabel || '').toLowerCase();
@@ -364,7 +372,7 @@ interface FollowUpModalProps {
 }
 
 function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, onClose }: FollowUpModalProps) {
-  const bullets = draft.discussion.split('\n').map((l) => l.trim()).filter(Boolean);
+  const bullets = normalizedFollowUpLines(draft.discussion);
   const [newNote, setNewNote] = useState('');
 
   function addBullet() {
@@ -788,11 +796,18 @@ export default function MetaLeadsPage() {
     updateRowDraft(leadId, { [field]: value });
   }, [updateRowDraft]);
 
+  const statusLabelById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const option of filters.statusOptions) map.set(option.id, option.label);
+    return map;
+  }, [filters.statusOptions]);
+
   const saveStatusOnly = useCallback(async (row: InquiryRow, statusId: number | null) => {
     if (!row.MetaLead_Id || !canUpdate) return;
     // Optimistic update — apply status immediately to both draft and row so there's no visual revert
+    const nextLabel = statusId != null ? (statusLabelById.get(statusId) ?? row.StatusLabel) : row.StatusLabel;
     updateRowDraft(row.MetaLead_Id, { statusId });
-    setRows((prev) => prev.map((r) => r.MetaLead_Id === row.MetaLead_Id ? { ...r, Status_id: statusId } : r));
+    setRows((prev) => prev.map((r) => r.MetaLead_Id === row.MetaLead_Id ? { ...r, Status_id: statusId, StatusLabel: nextLabel } : r));
     setSavingLeadId(row.MetaLead_Id);
     try {
       const draft = rowDrafts[row.MetaLead_Id];
@@ -805,7 +820,7 @@ export default function MetaLeadsPage() {
           mobile:      draft?.mobile      ?? row.Present_Mobile ?? '',
           email:       draft?.email       ?? row.Email          ?? '',
           city:        draft?.city        ?? row.City           ?? '',
-          discussion:  fromBulletEditorValue(draft?.discussion ?? ''),
+          discussion:  fromBulletEditorValue(draft?.discussion ?? toBulletEditorValue(row.Discussion)),
           statusId,
         }),
       });
@@ -814,12 +829,12 @@ export default function MetaLeadsPage() {
     } catch (error: unknown) {
       // Revert optimistic update on failure
       updateRowDraft(row.MetaLead_Id, { statusId: row.Status_id ?? null });
-      setRows((prev) => prev.map((r) => r.MetaLead_Id === row.MetaLead_Id ? { ...r, Status_id: row.Status_id ?? null } : r));
+      setRows((prev) => prev.map((r) => r.MetaLead_Id === row.MetaLead_Id ? { ...r, Status_id: row.Status_id ?? null, StatusLabel: row.StatusLabel } : r));
       setConvertError(error instanceof Error ? error.message : 'Failed to save status');
     } finally {
       setSavingLeadId(null);
     }
-  }, [canUpdate, rowDrafts, updateRowDraft]);
+  }, [canUpdate, rowDrafts, statusLabelById, updateRowDraft]);
 
   const saveRow = useCallback(async (row: InquiryRow, draftOverride?: LeadRowDraft): Promise<boolean> => {
     if (!row.MetaLead_Id) return false;
@@ -1384,10 +1399,10 @@ export default function MetaLeadsPage() {
                       ) : rows.map((row, index) => {
                         const draft = rowDrafts[row.MetaLead_Id] ?? { studentName: row.Student_Name || '', courseName: row.CourseName || '', mobile: row.Present_Mobile || '', email: row.Email || '', city: row.City || '', discussion: toBulletEditorValue(row.Discussion), statusId: row.Status_id };
                         const sentEmail = Boolean(row.ApplicantEmailSentAt);
-                        const baseBgCls = sentEmail ? 'bg-blue-100/90 hover:bg-blue-200/90' : rowBg(row.Status_id, row.StatusLabel);
+                        const baseBgCls = rowBg(row.Status_id, row.StatusLabel);
                         const hasFollowUp = hasLatestFollowUp(row);
                         const isPending = isPendingFollowUp(row);
-                        const bgCls = hasFollowUp ? 'bg-purple-100/90 hover:bg-purple-200/90' : baseBgCls;
+                        const bgCls = baseBgCls;
                         const age = leadAge(row.Inquiry_Dt);
                         const wa = waLink(row.Present_Mobile, row.Student_Name, row.CourseName);
                         const isSaving = savingLeadId === row.MetaLead_Id;
