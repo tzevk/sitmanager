@@ -12,6 +12,12 @@ interface KTDetail {
 }
 interface Course { Course_Id: number; Course_Name: string }
 interface BatchInfo { batchCode: string; timings: string | null; totalFees: number | null }
+interface PayAtOfficeAudit {
+  enabledAt?: string;
+  enabledByUserId?: number;
+  enabledByName?: string;
+  enabledByEmail?: string;
+}
 
 type EduTab = 'SSC' | 'HSC' | 'Diploma' | 'Graduation' | 'Post-Grad';
 type MainTab = 'personal' | 'academic' | 'occupational' | 'training' | 'payment' | 'terms';
@@ -110,6 +116,10 @@ export default function EditOnlineAdmissionPage() {
   const [activeEduTab, setActiveEduTab]     = useState<EduTab>('SSC');
   const [photoUrl, setPhotoUrl]             = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showProgressModal, setShowProgressModal] = useState(false);
+  const [progressLoading, setProgressLoading] = useState(false);
+  const [draftProgressMeta, setDraftProgressMeta] = useState<Record<string, unknown> | null>(null);
+  const [payAtOfficeAudit, setPayAtOfficeAudit] = useState<PayAtOfficeAudit | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   // Training cascade
@@ -190,6 +200,7 @@ export default function EditOnlineAdmissionPage() {
     const restore = async () => {
       setLoadingCategories(true);
       try {
+      setPayAtOfficeAudit(d.payAtOfficeAudit && typeof d.payAtOfficeAudit === 'object' ? d.payAtOfficeAudit : null);
         const cr = await fetch(`/api/public/batches?courseId=${progId}`);
         const cd = await cr.json();
         if (cd.success) setBatchCategories(cd.categories);
@@ -382,6 +393,24 @@ export default function EditOnlineAdmissionPage() {
     finally { setSubmitting(false); setActionType(null); }
   };
 
+  const openProgressModal = async () => {
+    setShowProgressModal(true);
+    setProgressLoading(true);
+    try {
+      const res = await fetch(`/api/online-admission/${studentId}?draft=1`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.draftMeta && typeof data.draftMeta === 'object') {
+        setDraftProgressMeta(data.draftMeta);
+      } else {
+        setDraftProgressMeta(null);
+      }
+    } catch {
+      setDraftProgressMeta(null);
+    } finally {
+      setProgressLoading(false);
+    }
+  };
+
   if (permLoading || loading) return <PermissionLoading />;
   if (!canUpdate) return <AccessDenied />;
 
@@ -450,6 +479,43 @@ export default function EditOnlineAdmissionPage() {
     payment:      !!formData.modeOfPayment,
     terms:        formData.termsAgreed,
   };
+
+  const studentStepProgress = [
+    {
+      id: 1,
+      label: 'Personal Info',
+      done: Boolean(formData.firstName && formData.lastName && formData.email && formData.mobile && formData.dob),
+    },
+    {
+      id: 2,
+      label: 'Academic',
+      done: Object.values(eduFilled).some(Boolean),
+    },
+    {
+      id: 3,
+      label: 'Occupational',
+      done: Boolean(formData.occupationalStatus),
+    },
+    {
+      id: 4,
+      label: 'Training',
+      done: Boolean(formData.trainingProgrammeId && formData.batchCode),
+    },
+    {
+      id: 5,
+      label: 'Payment Mode',
+      done: Boolean(formData.modeOfPayment),
+    },
+    {
+      id: 6,
+      label: 'Terms & Consent',
+      done: Boolean(formData.termsAgreed),
+    },
+  ];
+  const completedStepCount = studentStepProgress.filter((s) => s.done).length;
+  const studentProgressPercent = Math.round((completedStepCount / studentStepProgress.length) * 100);
+  const lastAutosavedAt = typeof draftProgressMeta?.autosavedAt === 'string' ? draftProgressMeta.autosavedAt : null;
+  const studentCurrentStep = Number(draftProgressMeta?.currentStep || 0);
 
   /* ═══════════════════════════════════════════════════════════════════════
      RENDER
@@ -1001,7 +1067,7 @@ export default function EditOnlineAdmissionPage() {
       ══════════════════════════════════════════════ */}
       {activeTab === 'payment' && (
         <SectionCard title="Mode of Payment">
-          <p className="text-xs text-gray-500 mb-4">Payment preference selected by the candidate during admission.</p>
+          <p className="text-xs text-gray-500 mb-4">Payment preference selected by the candidate during admission. Pay at Office can only be set here by staff.</p>
 
           {/* Payment option cards */}
           <div className="space-y-3 max-w-md">
@@ -1018,15 +1084,23 @@ export default function EditOnlineAdmissionPage() {
                 sub: 'Pay 50% now and 50% later',
                 color: 'violet',
               },
+              {
+                value: 'Pay at Office',
+                label: 'Pay at Office (Staff Only)',
+                sub: 'Allow offline payment collection at office counter',
+                color: 'amber',
+              },
             ].map(opt => {
               const isSelected = formData.modeOfPayment === opt.value;
               const colors: Record<string, string> = {
                 emerald: isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:border-emerald-300',
                 violet:  isSelected ? 'border-violet-500 bg-violet-50'  : 'border-gray-200 hover:border-violet-300',
+                amber:   isSelected ? 'border-amber-500 bg-amber-50'   : 'border-gray-200 hover:border-amber-300',
               };
               const dotColors: Record<string, string> = {
                 emerald: 'border-emerald-500 bg-emerald-500',
                 violet:  'border-violet-500 bg-violet-500',
+                amber:   'border-amber-500 bg-amber-500',
               };
               return (
                 <button
@@ -1052,6 +1126,21 @@ export default function EditOnlineAdmissionPage() {
 
             {!formData.modeOfPayment && (
               <p className="text-[11px] text-amber-600 italic">No payment mode was selected by the candidate.</p>
+            )}
+
+            {formData.modeOfPayment === 'Pay at Office' && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                {payAtOfficeAudit?.enabledAt ? (
+                  <>
+                    <span className="font-semibold">Audit:</span> Enabled by{' '}
+                    <span className="font-semibold">{payAtOfficeAudit.enabledByName || `User ${payAtOfficeAudit.enabledByUserId || ''}`.trim()}</span>
+                    {payAtOfficeAudit.enabledByEmail ? ` (${payAtOfficeAudit.enabledByEmail})` : ''}
+                    {' '}on {new Date(payAtOfficeAudit.enabledAt).toLocaleString('en-IN')}.
+                  </>
+                ) : (
+                  <>Audit will be recorded when you save this update.</>
+                )}
+              </div>
             )}
           </div>
 
@@ -1173,6 +1262,58 @@ export default function EditOnlineAdmissionPage() {
         </div>
       )}
 
+      {showProgressModal && (
+        <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4">
+          <div className="w-full max-w-xl rounded-xl bg-white shadow-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">Student Progress</h3>
+                <p className="text-[11px] text-slate-500">Completion snapshot from latest saved draft</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowProgressModal(false)}
+                className="w-7 h-7 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <svg className="w-4 h-4 mx-auto" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="px-4 py-4 space-y-4">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-600">Overall completion</span>
+                  <span className="text-xs font-bold text-[#2E3093]">{completedStepCount}/{studentStepProgress.length} ({studentProgressPercent}%)</span>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-slate-200 overflow-hidden">
+                  <div className="h-full rounded-full bg-gradient-to-r from-[#2E3093] to-[#2A6BB5]" style={{ width: `${studentProgressPercent}%` }} />
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
+                  <span>Current step: {studentCurrentStep >= 1 && studentCurrentStep <= 6 ? studentCurrentStep : 'Unknown'}</span>
+                  <span>•</span>
+                  <span>Last autosave: {lastAutosavedAt ? new Date(lastAutosavedAt).toLocaleString('en-IN') : 'Not available'}</span>
+                </div>
+              </div>
+
+              {progressLoading ? (
+                <p className="text-xs text-slate-500">Loading latest draft metadata…</p>
+              ) : (
+                <div className="space-y-2">
+                  {studentStepProgress.map((step) => (
+                    <div key={step.id} className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
+                      <span className="text-xs font-medium text-slate-700">Step {step.id}: {step.label}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${step.done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {step.done ? 'Done' : 'Pending'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Sticky action bar ── */}
       <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur border-t border-gray-200 shadow-lg px-4 py-3 flex items-center justify-between gap-3 md:left-64">
         <button
@@ -1190,6 +1331,13 @@ export default function EditOnlineAdmissionPage() {
         </button>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void openProgressModal()}
+            className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-all"
+          >
+            Student Progress
+          </button>
           <button type="button" onClick={() => router.push('/dashboard/online-admission')}
             className="px-4 py-2 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">
             Cancel

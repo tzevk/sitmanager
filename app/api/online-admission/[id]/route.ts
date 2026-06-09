@@ -116,6 +116,15 @@ async function getPayload(pool: any, inquiryId: number): Promise<Record<string, 
   }
 }
 
+async function inquiryExists(pool: any, inquiryId: number): Promise<boolean> {
+  const inquiryTable = await resolveInquiryTableName(pool);
+  const [rows] = await pool.query(
+    `SELECT Inquiry_Id FROM \`${inquiryTable}\` WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+    [inquiryId]
+  ) as [any[], any];
+  return (rows as any[]).length > 0;
+}
+
 /* ─── GET — load edit form ──────────────────────────────────────────────── */
 export async function GET(
   req: NextRequest,
@@ -125,12 +134,36 @@ export async function GET(
     const rateLimited = await apiRateLimiter(req);
     if (rateLimited) return rateLimited;
 
+    const { id } = await params;
+    const inquiryId = Number(id);
+    if (!Number.isFinite(inquiryId) || inquiryId <= 0) {
+      return NextResponse.json({ error: 'Invalid inquiry id' }, { status: 400 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const draftOnly = searchParams.get('draft') === '1';
+
+    // Public draft endpoint used by the student form autosave.
+    if (draftOnly) {
+      const pool = getPool();
+      const exists = await inquiryExists(pool, inquiryId);
+      if (!exists) {
+        return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
+      }
+      const payload = await getPayload(pool, inquiryId);
+      const draftMeta = payload?.__draftProgress ?? null;
+      return NextResponse.json({
+        success: true,
+        inquiryId,
+        draft: payload,
+        draftMeta,
+      });
+    }
+
     const auth = await requirePermission(req, 'online_admission.view');
     if (auth instanceof NextResponse) return auth;
 
     const pool = getPool();
-    const { id } = await params;
-    const inquiryId = Number(id);
 
     const [inquiryTable, statusTable, studentMasterTable] = await Promise.all([
       resolveInquiryTableName(pool),
@@ -367,6 +400,7 @@ export async function GET(
 
       // payment & terms
       modeOfPayment:         payload.modeOfPayment || '',
+      payAtOfficeAudit:      payload.payAtOfficeAudit || null,
       idProofType:           payload.idProofType   || '',
       photo:                 payload.photo         || '',
       termsAgreed:           Boolean(payload.termsAgreed),
@@ -374,10 +408,62 @@ export async function GET(
       experiencedConsentAcknowledged: Boolean(payload.experiencedConsentAcknowledged),
       consentChecks:         Array.isArray(payload.consentChecks) ? payload.consentChecks : [],
       consentData:           payload.consentData || { eligibility: '', qualification: '', candidateRemark: '' },
+      draftMeta:             payload.__draftProgress || null,
     });
   } catch (err: unknown) {
     console.error('Online Admission [id] GET error:', err);
     const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/* ─── POST — public draft autosave ─────────────────────────────────────── */
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const rateLimited = await apiRateLimiter(req);
+    if (rateLimited) return rateLimited;
+
+    const { id } = await params;
+    const inquiryId = Number(id);
+    if (!Number.isFinite(inquiryId) || inquiryId <= 0) {
+      return NextResponse.json({ error: 'Invalid inquiry id' }, { status: 400 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const payload = body?.payload;
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return NextResponse.json({ error: 'payload is required' }, { status: 400 });
+    }
+
+    const pool = getPool();
+    const exists = await inquiryExists(pool, inquiryId);
+    if (!exists) {
+      return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
+    }
+
+    const currentPayload = await getPayload(pool, inquiryId);
+    const nextPayload = {
+      ...currentPayload,
+      ...payload,
+      __draftProgress: {
+        ...(currentPayload?.__draftProgress || {}),
+        ...(payload?.__draftProgress || {}),
+        autosavedAt: new Date().toISOString(),
+      },
+    };
+
+    await savePayload(pool, inquiryId, nextPayload);
+
+    return NextResponse.json({
+      success: true,
+      inquiryId,
+      autosavedAt: nextPayload.__draftProgress?.autosavedAt,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to save draft';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -437,6 +523,8 @@ export async function PUT(
     }
 
     // Save updated payload
+    const existingPayload = await getPayload(pool, inquiryId);
+
     const stripFiles = (arr: any[]) =>
       Array.isArray(arr) ? arr.map(({ marksheetFile: _f, ...rest }: any) => rest) : arr;
     const cleanBody = {
@@ -447,6 +535,25 @@ export async function PUT(
       grad_ktDetails:     stripFiles(body.grad_ktDetails),
       postgrad_ktDetails: stripFiles(body.postgrad_ktDetails),
     };
+
+    const prevModeOfPayment = String(existingPayload?.modeOfPayment || '').trim();
+    const nextModeOfPayment = String(cleanBody?.modeOfPayment || '').trim();
+    let payAtOfficeAudit = (existingPayload?.payAtOfficeAudit && typeof existingPayload.payAtOfficeAudit === 'object')
+      ? existingPayload.payAtOfficeAudit
+      : null;
+
+    if (nextModeOfPayment === 'Pay at Office' && (prevModeOfPayment !== 'Pay at Office' || !payAtOfficeAudit)) {
+      const byName = [auth.session.firstName, auth.session.lastName].filter(Boolean).join(' ').trim();
+      payAtOfficeAudit = {
+        enabledAt: new Date().toISOString(),
+        enabledByUserId: auth.session.userId,
+        enabledByName: byName || auth.session.email || `User ${auth.session.userId}`,
+        enabledByEmail: auth.session.email || null,
+      };
+    }
+
+    cleanBody.payAtOfficeAudit = payAtOfficeAudit;
+
     await savePayload(pool, inquiryId, cleanBody);
     await syncOnlineAdmissionIntoCurrentDb(inquiryId, cleanBody, { statusAction: body.statusAction || 'update' });
 

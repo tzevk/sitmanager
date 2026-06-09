@@ -264,33 +264,90 @@ export default function PublicAdmissionFormPage() {
     setFormData((prev) => ({ ...prev, modeOfPayment: '' }));
   }, [formData.modeOfPayment]);
 
-  // Restore draft from localStorage after server data loads
+  // Restore draft from localStorage/server after server data loads
   useEffect(() => {
     if (loading) return;
-    try {
-      const raw = localStorage.getItem(draftKey);
-      if (!raw) return;
-      const { data } = JSON.parse(raw) as { data: typeof formData };
-      if (data) {
-        const normalizeDateForInput = (v: any) => {
-          if (!v && v !== 0) return '';
-          const s = String(v).trim();
-          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-          if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
-          if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
-            const [dd, mm, yyyy] = s.split('/');
-            return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
-          }
-          const dt = new Date(s);
-          if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
-          return '';
-        };
-        const patched = { ...data, dob: normalizeDateForInput((data as any).dob) };
-        setFormData(prev => ({ ...prev, ...patched }));
+    type DraftProgress = {
+      currentStep?: number;
+      completedSteps?: unknown[];
+      sectionChecks?: unknown[];
+      autosavedAt?: string;
+    };
+
+    type DraftPayload = Partial<typeof formData> & {
+      __draftProgress?: DraftProgress;
+    };
+
+    const normalizeDateForInput = (v: unknown) => {
+      if (!v && v !== 0) return '';
+      const s = String(v).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+        const [dd, mm, yyyy] = s.split('/');
+        return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
       }
-    } catch { /* ignore corrupt draft */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
+      const dt = new Date(s);
+      if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
+      return '';
+    };
+
+    const restoreDraft = async () => {
+      let localData: DraftPayload | null = null;
+      let localSavedAt = 0;
+      let localProgress: DraftProgress | null = null;
+
+      try {
+        const raw = localStorage.getItem(draftKey);
+        if (raw) {
+          const parsed = JSON.parse(raw) as { data?: DraftPayload; progress?: DraftProgress; savedAt?: number };
+          localData = parsed?.data ?? null;
+          localProgress = parsed?.progress ?? null;
+          localSavedAt = Number(parsed?.savedAt || 0);
+        }
+      } catch {
+        localData = null;
+      }
+
+      let serverData: DraftPayload | null = null;
+      let serverProgress: DraftProgress | null = null;
+      let serverSavedAt = 0;
+      try {
+        const res = await fetch(`/api/online-admission/${encodeURIComponent(studentId)}?draft=1`);
+        const data = await res.json().catch(() => ({} as Record<string, unknown>));
+        if (res.ok && data?.draft && typeof data.draft === 'object') {
+          serverData = data.draft as DraftPayload;
+          serverProgress = (data.draftMeta as DraftProgress | null) ?? ((serverData as DraftPayload).__draftProgress ?? null);
+          serverSavedAt = serverProgress?.autosavedAt ? Date.parse(String(serverProgress.autosavedAt)) : 0;
+        }
+      } catch {
+        serverData = null;
+      }
+
+      const useServer = serverSavedAt > localSavedAt;
+      const bestData = useServer ? serverData : localData;
+      const bestProgress = useServer ? serverProgress : localProgress;
+      if (!bestData) return;
+
+      const dataWithoutMeta = Object.fromEntries(
+        Object.entries(bestData).filter(([k]) => k !== '__draftProgress')
+      ) as Partial<typeof formData>;
+      const patched = { ...dataWithoutMeta, dob: normalizeDateForInput(bestData.dob) };
+      setFormData(prev => ({ ...prev, ...patched }));
+      if (bestProgress && Number.isFinite(Number(bestProgress.currentStep))) {
+        const s = Number(bestProgress.currentStep);
+        if (s >= 1 && s <= 6) setCurrentStep(s);
+      }
+      if (Array.isArray(bestProgress?.completedSteps)) {
+        setCompletedSteps(bestProgress.completedSteps.filter((n: unknown) => Number.isFinite(Number(n))).map((n: unknown) => Number(n)));
+      }
+      if (Array.isArray(bestProgress?.sectionChecks) && bestProgress.sectionChecks.length === 15) {
+        setSectionChecks(bestProgress.sectionChecks.map(Boolean));
+      }
+    };
+
+    void restoreDraft();
+  }, [loading, draftKey, studentId]);
 
   // Debounced auto-save to localStorage whenever formData changes
   const saveDraft = useCallback(() => {
@@ -313,12 +370,49 @@ export default function PublicAdmissionFormPage() {
           grad_ktDetails:     formData.grad_ktDetails.map(d => ({ ...d, marksheetFile: null })),
           postgrad_ktDetails: formData.postgrad_ktDetails.map(d => ({ ...d, marksheetFile: null })),
         };
-        localStorage.setItem(draftKey, JSON.stringify({ data: serialisable, savedAt: Date.now() }));
+
+        const progress = {
+          currentStep,
+          completedSteps,
+          sectionChecks,
+          consentChecks,
+          termsAgreed: formData.termsAgreed,
+          consentAcknowledged,
+          experiencedConsentAcknowledged,
+        };
+
+        localStorage.setItem(draftKey, JSON.stringify({ data: serialisable, progress, savedAt: Date.now() }));
+
+        void fetch(`/api/online-admission/${encodeURIComponent(studentId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            payload: {
+              ...serialisable,
+              __draftProgress: {
+                ...progress,
+                source: 'public-admission-form',
+              },
+            },
+          }),
+        }).catch(() => {
+          // Non-blocking: local autosave is the primary fallback.
+        });
+
         setAutoSaveStatus('saved');
       } catch { setAutoSaveStatus('idle'); }
     }, 1500);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData, draftKey]);
+  }, [
+    completedSteps,
+    consentAcknowledged,
+    consentChecks,
+    currentStep,
+    draftKey,
+    experiencedConsentAcknowledged,
+    formData,
+    sectionChecks,
+    studentId,
+  ]);
 
   useEffect(() => {
     if (loading || submitted) return;
@@ -353,17 +447,18 @@ export default function PublicAdmissionFormPage() {
       (/engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') && /full.?time/i.test(formData.trainingCategory || '')) ||
       /piping\s+design.*drafting/i.test(formData.trainingProgrammeName || '')
     );
+    const isProcessWeekendMode = /process\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '');
     const amountPaise =
       formData.modeOfPayment === 'Full Payment'
         ? Math.round(baseFees * 0.95) * 100
         : formData.modeOfPayment === '3-Installment Plan'
-        ? 25000 * 100
+        ? (isProcessWeekendMode ? 15000 : 25000) * 100
         : formData.modeOfPayment === '2-Payment Plan'
-        ? 25000 * 100
+        ? 15000 * 100
         : formData.modeOfPayment === '6-Installment Plan'
         ? 15000 * 100
         : formData.modeOfPayment === 'Loan (0% Interest)'
-        ? (isPipingWeekendMode ? 15000 : 12000) * 100
+        ? ((isPipingWeekendMode || isProcessWeekendMode) ? 15000 : 12000) * 100
         : Math.round(installmentTotal / 2) * 100;
 
     setPaymentLoading(true);
@@ -2629,7 +2724,62 @@ export default function PublicAdmissionFormPage() {
                           );
                         })()}
 
-                        {/* Option 2: Installment Plan */}
+                        {/* PDD-only: 2-Payment Plan (shown between Full Payment and 6-Installment) */}
+                        {isPDD && (() => {
+                          const isSelected = formData.modeOfPayment === '2-Payment Plan';
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleChange('modeOfPayment', '2-Payment Plan')}
+                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+                                isSelected
+                                  ? 'bg-teal-50 border-teal-500 ring-2 ring-teal-200 shadow-md'
+                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                  isSelected ? 'bg-teal-100 text-teal-600' : 'bg-gray-100 text-gray-400'
+                                }`}>
+                                  <i className="fas fa-hand-holding-usd text-lg"></i>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <span className={`text-sm font-bold ${isSelected ? 'text-teal-800' : 'text-gray-800'}`}>2-Payment Plan</span>
+                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-teal-600' : 'text-gray-500'}`}>
+                                    &#8377;25,000 at admission + &#8377;50,000 on first day of batch
+                                  </div>
+                                </div>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                  isSelected ? 'border-teal-500 bg-teal-50' : 'border-gray-300'
+                                }`}>
+                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-teal-500" />}
+                                </div>
+                              </div>
+                              {isSelected && (
+                                <div className="mt-3 ml-[52px] bg-teal-100/50 rounded-lg p-3 space-y-2">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-teal-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-teal-400"></i>At Admission (pay now)</span>
+                                    <span className="font-bold text-teal-800">&#8377;25,000</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-teal-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-teal-400"></i>On first day of batch starting</span>
+                                    <span className="font-bold text-teal-800">&#8377;50,000</span>
+                                  </div>
+                                  <div className="border-t border-teal-200 pt-2 flex items-center justify-between text-xs">
+                                    <span className="text-teal-800 font-bold">Total</span>
+                                    <span className="font-extrabold text-teal-900">&#8377;75,000</span>
+                                  </div>
+                                  <div className="flex items-start gap-1.5 pt-1">
+                                    <i className="fas fa-exclamation-circle text-teal-400 text-[10px] mt-0.5 flex-shrink-0"></i>
+                                    <p className="text-[10px] text-teal-700">Delay charges of &#8377;2,500 apply if the second payment is not made on time.</p>
+                                  </div>
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })()}
+
+                        {/* Option 2/3: Installment Plan */}
                         {is75kPlan ? (() => {
                           const isSelected = formData.modeOfPayment === '6-Installment Plan';
                           return (
@@ -2878,6 +3028,7 @@ export default function PublicAdmissionFormPage() {
                               {formData.modeOfPayment === 'Full Payment' && <> — you pay <span className="font-bold">&#8377;{fmt(fullPayAmount)}</span> (5% discount applied)</>}
                               {formData.modeOfPayment === '50% Installment' && <> — &#8377;{fmt(firstInstallmentAmount)} now + &#8377;{fmt(secondInstallmentAmount)} later</>}
                               {formData.modeOfPayment === '3-Installment Plan' && <> — &#8377;25,000 now + &#8377;43,500 × 2 instalments</>}
+                              {formData.modeOfPayment === '2-Payment Plan' && <> — &#8377;25,000 now + &#8377;50,000 on first day of batch</>}
                               {formData.modeOfPayment === '6-Installment Plan' && <> — &#8377;15,000 now + &#8377;12,000 × 5 instalments</>}
                               {formData.modeOfPayment === 'Loan (0% Interest)' && <> — &#8377;{is75kPlan ? '15,000' : '12,000'} at admission + &#8377;{is75kPlan ? '60,000' : '1,00,000'} loan via financial institution</>}
                             </p>
@@ -2897,6 +3048,7 @@ export default function PublicAdmissionFormPage() {
                                   &#8377;{fmt(
                                     formData.modeOfPayment === 'Full Payment' ? fullPayAmount
                                     : formData.modeOfPayment === '3-Installment Plan' ? 25000
+                                    : formData.modeOfPayment === '2-Payment Plan' ? 25000
                                     : formData.modeOfPayment === '6-Installment Plan' ? 15000
                                     : formData.modeOfPayment === 'Loan (0% Interest)' ? (is75kPlan ? 15000 : 12000)
                                     : firstInstallmentAmount
