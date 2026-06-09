@@ -101,6 +101,7 @@ export default function PublicAdmissionFormPage() {
   const allSectionsChecked = checkedCount === 15;
   const [academicTab, setAcademicTab] = useState<'ssc' | 'hsc' | 'diploma' | 'graduation' | 'postgrad'>('ssc');
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [manualSaving, setManualSaving] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftKey = `sit_admission_draft_${studentId}`;
 
@@ -275,6 +276,19 @@ export default function PublicAdmissionFormPage() {
       currentStep?: number;
       completedSteps?: unknown[];
       sectionChecks?: unknown[];
+      consentChecks?: unknown[];
+      consentAcknowledged?: boolean;
+      experiencedConsentAcknowledged?: boolean;
+      razorpayPaid?: boolean;
+      razorpayPaymentId?: string;
+      razorpayOrderId?: string;
+      razorpaySignature?: string;
+      payAtOfficeVerified?: boolean;
+      consentData?: {
+        eligibility?: string;
+        qualification?: string;
+        candidateRemark?: string;
+      };
       autosavedAt?: string;
     };
 
@@ -348,75 +362,142 @@ export default function PublicAdmissionFormPage() {
       if (Array.isArray(bestProgress?.sectionChecks) && bestProgress.sectionChecks.length === 15) {
         setSectionChecks(bestProgress.sectionChecks.map(Boolean));
       }
+      if (Array.isArray(bestProgress?.consentChecks) && bestProgress.consentChecks.length === 5) {
+        setConsentChecks(bestProgress.consentChecks.map(Boolean));
+      }
+      if (typeof bestProgress?.consentAcknowledged === 'boolean') {
+        setConsentAcknowledged(bestProgress.consentAcknowledged);
+      }
+      if (typeof bestProgress?.experiencedConsentAcknowledged === 'boolean') {
+        setExperiencedConsentAcknowledged(bestProgress.experiencedConsentAcknowledged);
+      }
+      if (typeof bestProgress?.razorpayPaid === 'boolean') {
+        setRazorpayPaid(bestProgress.razorpayPaid);
+      }
+      if (typeof bestProgress?.razorpayPaymentId === 'string') {
+        setRazorpayPaymentId(bestProgress.razorpayPaymentId);
+      }
+      if (typeof bestProgress?.razorpayOrderId === 'string') {
+        setRazorpayOrderId(bestProgress.razorpayOrderId);
+      }
+      if (typeof bestProgress?.razorpaySignature === 'string') {
+        setRazorpaySignature(bestProgress.razorpaySignature);
+      }
+      if (typeof bestProgress?.payAtOfficeVerified === 'boolean') {
+        setPayAtOfficeVerified(bestProgress.payAtOfficeVerified);
+      }
+      if (bestProgress?.consentData && typeof bestProgress.consentData === 'object') {
+        setConsentData(prev => ({
+          ...prev,
+          eligibility: typeof bestProgress.consentData?.eligibility === 'string' ? bestProgress.consentData.eligibility : prev.eligibility,
+          qualification: typeof bestProgress.consentData?.qualification === 'string' ? bestProgress.consentData.qualification : prev.qualification,
+          candidateRemark: typeof bestProgress.consentData?.candidateRemark === 'string' ? bestProgress.consentData.candidateRemark : prev.candidateRemark,
+        }));
+      }
     };
 
     void restoreDraft();
   }, [loading, draftKey, studentId]);
 
-  // Debounced auto-save to localStorage whenever formData changes
-  const saveDraft = useCallback(() => {
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    setAutoSaveStatus('saving');
-    autoSaveTimer.current = setTimeout(() => {
-      try {
-        // Strip File objects — they can't be serialised
-        const serialisable = {
-          ...formData,
-          photoFile: null,
-          ssc_marksheetFile: null,
-          hsc_marksheetFile: null,
-          diploma_marksheetFile: null,
-          grad_marksheetFile: null,
-          postgrad_marksheetFile: null,
-          ssc_ktDetails:      formData.ssc_ktDetails.map(d => ({ ...d, marksheetFile: null })),
-          hsc_ktDetails:      formData.hsc_ktDetails.map(d => ({ ...d, marksheetFile: null })),
-          diploma_ktDetails:  formData.diploma_ktDetails.map(d => ({ ...d, marksheetFile: null })),
-          grad_ktDetails:     formData.grad_ktDetails.map(d => ({ ...d, marksheetFile: null })),
-          postgrad_ktDetails: formData.postgrad_ktDetails.map(d => ({ ...d, marksheetFile: null })),
-        };
+  const persistDraftNow = useCallback(async (): Promise<boolean> => {
+    try {
+      setAutoSaveStatus('saving');
 
-        const progress = {
-          currentStep,
-          completedSteps,
-          sectionChecks,
-          consentChecks,
-          termsAgreed: formData.termsAgreed,
-          consentAcknowledged,
-          experiencedConsentAcknowledged,
-        };
+      // Strip File objects — they can't be serialised
+      const serialisable = {
+        ...formData,
+        photoFile: null,
+        ssc_marksheetFile: null,
+        hsc_marksheetFile: null,
+        diploma_marksheetFile: null,
+        grad_marksheetFile: null,
+        postgrad_marksheetFile: null,
+        ssc_ktDetails:      formData.ssc_ktDetails.map(d => ({ ...d, marksheetFile: null })),
+        hsc_ktDetails:      formData.hsc_ktDetails.map(d => ({ ...d, marksheetFile: null })),
+        diploma_ktDetails:  formData.diploma_ktDetails.map(d => ({ ...d, marksheetFile: null })),
+        grad_ktDetails:     formData.grad_ktDetails.map(d => ({ ...d, marksheetFile: null })),
+        postgrad_ktDetails: formData.postgrad_ktDetails.map(d => ({ ...d, marksheetFile: null })),
+      };
 
-        localStorage.setItem(draftKey, JSON.stringify({ data: serialisable, progress, savedAt: Date.now() }));
+      const progress = {
+        currentStep,
+        completedSteps,
+        sectionChecks,
+        consentChecks,
+        termsAgreed: formData.termsAgreed,
+        consentAcknowledged,
+        experiencedConsentAcknowledged,
+        razorpayPaid,
+        razorpayPaymentId,
+        razorpayOrderId,
+        razorpaySignature,
+        payAtOfficeVerified,
+        consentData,
+      };
 
-        void fetch(`/api/online-admission/${encodeURIComponent(studentId)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            payload: {
-              ...serialisable,
-              __draftProgress: {
-                ...progress,
-                source: 'public-admission-form',
-              },
+      localStorage.setItem(draftKey, JSON.stringify({ data: serialisable, progress, savedAt: Date.now() }));
+
+      const res = await fetch(`/api/online-admission/${encodeURIComponent(studentId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payload: {
+            ...serialisable,
+            __draftProgress: {
+              ...progress,
+              source: 'public-admission-form',
             },
-          }),
-        }).catch(() => {
-          // Non-blocking: local autosave is the primary fallback.
-        });
+          },
+        }),
+      });
 
-        setAutoSaveStatus('saved');
-      } catch { setAutoSaveStatus('idle'); }
-    }, 1500);
+      if (!res.ok) {
+        setAutoSaveStatus('idle');
+        return false;
+      }
+
+      setAutoSaveStatus('saved');
+      return true;
+    } catch {
+      setAutoSaveStatus('idle');
+      return false;
+    }
   }, [
     completedSteps,
     consentAcknowledged,
+    consentData,
     consentChecks,
     currentStep,
     draftKey,
     experiencedConsentAcknowledged,
     formData,
+    payAtOfficeVerified,
+    razorpayOrderId,
+    razorpayPaid,
+    razorpayPaymentId,
+    razorpaySignature,
     sectionChecks,
     studentId,
   ]);
+
+  // Debounced auto-save to localStorage + server whenever form data/state changes
+  const saveDraft = useCallback(() => {
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      void persistDraftNow();
+    }, 1500);
+  }, [persistDraftNow]);
+
+  const handleManualSaveDraft = async () => {
+    if (manualSaving) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    setManualSaving(true);
+    const ok = await persistDraftNow();
+    setManualSaving(false);
+    if (!ok) {
+      alert('Could not save draft right now. Please check your internet connection and try again.');
+    }
+  };
 
   useEffect(() => {
     if (loading || submitted) return;
@@ -3383,37 +3464,53 @@ export default function PublicAdmissionFormPage() {
                 {/* Navigation buttons */}
                 <div className="flex-shrink-0 bg-white border-t border-gray-200 px-3 sm:px-6 py-2 sm:py-3 shadow-lg">
                   <div className="flex justify-between items-center gap-2 sm:gap-3">
-                    {currentStep === 1 ? (
-                      <div className="text-[10px] sm:text-xs text-gray-400 flex items-center gap-1">
-                        <i className="fas fa-lock"></i>
-                        <span className="hidden sm:inline">Your information is secure</span>
-                        <span className="sm:hidden">Secure</span>
-                      </div>
-                    ) : (
-                      <button type="button" onClick={() => nextStep(currentStep - 1)} className="px-3 sm:px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg text-xs sm:text-sm font-semibold hover:bg-gray-50 transition-all">
-                        <i className="fas fa-arrow-left mr-1 sm:mr-2"></i><span className="hidden sm:inline">Back</span><span className="sm:hidden">Back</span>
-                      </button>
-                    )}
+                    <div>
+                      {currentStep === 1 ? (
+                        <div className="text-[10px] sm:text-xs text-gray-400 flex items-center gap-1">
+                          <i className="fas fa-lock"></i>
+                          <span className="hidden sm:inline">Your information is secure</span>
+                          <span className="sm:hidden">Secure</span>
+                        </div>
+                      ) : (
+                        <button type="button" onClick={() => nextStep(currentStep - 1)} className="px-3 sm:px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg text-xs sm:text-sm font-semibold hover:bg-gray-50 transition-all">
+                          <i className="fas fa-arrow-left mr-1 sm:mr-2"></i><span className="hidden sm:inline">Back</span><span className="sm:hidden">Back</span>
+                        </button>
+                      )}
+                    </div>
 
-                    {currentStep < 6 ? (
+                    <div className="flex items-center gap-2 sm:gap-3">
                       <button
                         type="button"
-                        onClick={() => nextStep(currentStep + 1)}
-                        disabled={currentStep === 5 && (!formData.modeOfPayment || (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : !razorpayPaid))}
-                        title={currentStep === 5 && (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : !razorpayPaid) ? (formData.modeOfPayment === 'Pay at Office' ? 'Enter override password to continue' : 'Complete payment to continue') : undefined}
-                        className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#FAE452] to-[#FDD835] text-[#2E3093] rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
+                        onClick={() => { void handleManualSaveDraft(); }}
+                        disabled={manualSaving || submitting}
+                        className="px-3 sm:px-4 py-2 bg-white border border-[#2A6BB5]/30 text-[#2E3093] rounded-lg text-xs sm:text-sm font-semibold hover:bg-[#2A6BB5]/5 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                        title="Save current progress for this admission link"
                       >
-                        <span className="hidden sm:inline">Continue</span><span className="sm:hidden">Next</span> <i className="fas fa-arrow-right ml-1 sm:ml-2"></i>
+                        {manualSaving || autoSaveStatus === 'saving'
+                          ? <><i className="fas fa-spinner fa-spin mr-1.5"></i><span className="hidden sm:inline">Saving...</span><span className="sm:hidden">Saving</span></>
+                          : <><i className="fas fa-save mr-1.5"></i><span className="hidden sm:inline">Save Draft</span><span className="sm:hidden">Save</span></>}
                       </button>
-                    ) : (
-                      <button type="submit" disabled={submitting} className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                        {submitting ? (
-                          <><i className="fas fa-spinner fa-spin mr-1 sm:mr-2"></i><span className="hidden sm:inline">Submitting...</span><span className="sm:hidden">Wait...</span></>
-                        ) : (
-                          <><i className="fas fa-check-circle mr-1 sm:mr-2"></i><span className="hidden sm:inline">Submit Application</span><span className="sm:hidden">Submit</span></>
-                        )}
-                      </button>
-                    )}
+
+                      {currentStep < 6 ? (
+                        <button
+                          type="button"
+                          onClick={() => nextStep(currentStep + 1)}
+                          disabled={currentStep === 5 && (!formData.modeOfPayment || (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : !razorpayPaid))}
+                          title={currentStep === 5 && (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : !razorpayPaid) ? (formData.modeOfPayment === 'Pay at Office' ? 'Enter override password to continue' : 'Complete payment to continue') : undefined}
+                          className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#FAE452] to-[#FDD835] text-[#2E3093] rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
+                        >
+                          <span className="hidden sm:inline">Continue</span><span className="sm:hidden">Next</span> <i className="fas fa-arrow-right ml-1 sm:ml-2"></i>
+                        </button>
+                      ) : (
+                        <button type="submit" disabled={submitting} className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                          {submitting ? (
+                            <><i className="fas fa-spinner fa-spin mr-1 sm:mr-2"></i><span className="hidden sm:inline">Submitting...</span><span className="sm:hidden">Wait...</span></>
+                          ) : (
+                            <><i className="fas fa-check-circle mr-1 sm:mr-2"></i><span className="hidden sm:inline">Submit Application</span><span className="sm:hidden">Submit</span></>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </form>
