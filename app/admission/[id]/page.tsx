@@ -80,6 +80,10 @@ export default function PublicAdmissionFormPage() {
   const [razorpayOrderId, setRazorpayOrderId] = useState('');
   const [razorpaySignature, setRazorpaySignature] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [payAtOfficeVerified, setPayAtOfficeVerified] = useState(false);
+  const [showPayAtOfficeModal, setShowPayAtOfficeModal] = useState(false);
+  const [payAtOfficePassword, setPayAtOfficePassword] = useState('');
+  const [payAtOfficeVerifying, setPayAtOfficeVerifying] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [showAddUniversityModal, setShowAddUniversityModal] = useState(false);
   const [newUniversityData, setNewUniversityData] = useState({ name: '', country: '', city: '', fieldType: 'grad' });
@@ -512,6 +516,39 @@ export default function PublicAdmissionFormPage() {
     }
   };
 
+  const handlePayAtOfficeOverride = async () => {
+    if (!payAtOfficePassword.trim()) {
+      alert('Please enter override password');
+      return;
+    }
+    setPayAtOfficeVerifying(true);
+    try {
+      const res = await fetch('/api/public/pay-at-office-override', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: payAtOfficePassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        alert(data?.error || 'Invalid override password');
+        return;
+      }
+
+      setPayAtOfficeVerified(true);
+      setPayAtOfficePassword('');
+      setShowPayAtOfficeModal(false);
+      setFormData(prev => ({ ...prev, modeOfPayment: 'Pay at Office' }));
+      setRazorpayPaid(false);
+      setRazorpayPaymentId('');
+      setRazorpayOrderId('');
+      setRazorpaySignature('');
+    } catch {
+      alert('Could not verify override password. Please try again.');
+    } finally {
+      setPayAtOfficeVerifying(false);
+    }
+  };
+
   // Sync batch fees whenever batch selection or available batches change
   useEffect(() => {
     if (!formData.batchCode) {
@@ -834,7 +871,11 @@ export default function PublicAdmissionFormPage() {
           alert('Please select a Mode of Payment');
           return false;
         }
-        if (!razorpayPaid) {
+        if (formData.modeOfPayment === 'Pay at Office' && !payAtOfficeVerified) {
+          alert('Pay at Office requires password override approval.');
+          return false;
+        }
+        if (formData.modeOfPayment !== 'Pay at Office' && !razorpayPaid) {
           alert('Please complete the online payment before proceeding.');
           return false;
         }
@@ -896,6 +937,11 @@ export default function PublicAdmissionFormPage() {
     }
     if (!formData.modeOfPayment) {
       alert('Please complete Step 5: Select a Mode of Payment');
+      setCurrentStep(5);
+      return;
+    }
+    if (formData.modeOfPayment === 'Pay at Office' && !payAtOfficeVerified) {
+      alert('Please complete Pay at Office override verification in Step 5.');
       setCurrentStep(5);
       return;
     }
@@ -991,6 +1037,7 @@ export default function PublicAdmissionFormPage() {
         trainingCategory: formData.trainingCategory,
         batchCode: formData.batchCode,
         modeOfPayment: formData.modeOfPayment,
+        payAtOfficeOverrideUsed: formData.modeOfPayment === 'Pay at Office' ? payAtOfficeVerified : false,
         sameAsPresent: formData.sameAsPresent,
         consentAcknowledged: consentAcknowledged,
         experiencedConsentAcknowledged: experiencedConsentAcknowledged,
@@ -3078,6 +3125,60 @@ export default function PublicAdmissionFormPage() {
                             </button>
                           );
                         })()}
+
+                        {/* Option: Pay at Office (Password Override) */}
+                        {(() => {
+                          const isSelected = formData.modeOfPayment === 'Pay at Office';
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (payAtOfficeVerified) {
+                                  setFormData(prev => ({ ...prev, modeOfPayment: 'Pay at Office' }));
+                                  setRazorpayPaid(false);
+                                  setRazorpayPaymentId('');
+                                  setRazorpayOrderId('');
+                                  setRazorpaySignature('');
+                                } else {
+                                  setShowPayAtOfficeModal(true);
+                                }
+                              }}
+                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+                                isSelected
+                                  ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-200 shadow-md'
+                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                  isSelected ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400'
+                                }`}>
+                                  <i className="fas fa-building text-lg"></i>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`text-sm font-bold ${isSelected ? 'text-amber-900' : 'text-gray-800'}`}>Pay at Office</span>
+                                    <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Override</span>
+                                  </div>
+                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-amber-700' : 'text-gray-500'}`}>
+                                    Offline payment at office counter. Requires password approval.
+                                  </div>
+                                  {!payAtOfficeVerified && (
+                                    <div className="text-[10px] mt-1 text-amber-700">Click to enter override password.</div>
+                                  )}
+                                  {payAtOfficeVerified && (
+                                    <div className="text-[10px] mt-1 text-green-700 font-semibold">Override verified.</div>
+                                  )}
+                                </div>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                  isSelected ? 'border-amber-500 bg-amber-50' : 'border-gray-300'
+                                }`}>
+                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })()}
                       </div>
 
                       {/* Selected summary */}
@@ -3100,13 +3201,36 @@ export default function PublicAdmissionFormPage() {
                       )}
 
                       {/* ── Razorpay payment (mandatory for online modes) ── */}
-                      {formData.modeOfPayment && (
+                      {formData.modeOfPayment && formData.modeOfPayment !== 'Pay at Office' && (
                         <div className={`rounded-xl p-4 space-y-3 border-2 ${razorpayPaid ? 'border-emerald-400 bg-emerald-50' : 'border-[#2E3093] bg-[#2E3093]/5'}`}>
                           {razorpayPaid ? (
                             <div className="flex items-center gap-3">
                               <i className="fas fa-check-circle text-emerald-600 text-2xl flex-shrink-0"></i>
                               <div>
                                 <p className="text-sm font-bold text-emerald-800">Payment Confirmed!</p>
+
+                            {formData.modeOfPayment === 'Pay at Office' && (
+                              <div className={`rounded-xl p-4 space-y-2 border-2 ${payAtOfficeVerified ? 'border-emerald-400 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
+                                <p className={`text-xs font-semibold flex items-center gap-2 ${payAtOfficeVerified ? 'text-emerald-800' : 'text-amber-800'}`}>
+                                  <i className={`fas ${payAtOfficeVerified ? 'fa-check-circle' : 'fa-shield-alt'}`}></i>
+                                  {payAtOfficeVerified ? 'Pay at Office override approved' : 'Override approval required'}
+                                </p>
+                                <p className="text-xs text-gray-700">
+                                  {payAtOfficeVerified
+                                    ? 'This application can proceed without online payment. Fees will be collected at office.'
+                                    : 'Enter the override password to allow offline payment and continue to Terms & Conditions.'}
+                                </p>
+                                {!payAtOfficeVerified && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowPayAtOfficeModal(true)}
+                                    className="w-full sm:w-auto px-4 py-2 rounded-lg text-xs font-bold bg-amber-500 text-white hover:bg-amber-600 transition-all"
+                                  >
+                                    Enter Override Password
+                                  </button>
+                                )}
+                              </div>
+                            )}
                                 <p className="text-xs text-emerald-700 mt-0.5">
                                   &#8377;{fmt(
                                     formData.modeOfPayment === 'Full Payment' ? fullPayAmount
@@ -3275,8 +3399,8 @@ export default function PublicAdmissionFormPage() {
                       <button
                         type="button"
                         onClick={() => nextStep(currentStep + 1)}
-                        disabled={currentStep === 5 && (!formData.modeOfPayment || !razorpayPaid)}
-                        title={currentStep === 5 && !razorpayPaid ? 'Complete payment to continue' : undefined}
+                        disabled={currentStep === 5 && (!formData.modeOfPayment || (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : !razorpayPaid))}
+                        title={currentStep === 5 && (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : !razorpayPaid) ? (formData.modeOfPayment === 'Pay at Office' ? 'Enter override password to continue' : 'Complete payment to continue') : undefined}
                         className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#FAE452] to-[#FDD835] text-[#2E3093] rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
                       >
                         <span className="hidden sm:inline">Continue</span><span className="sm:hidden">Next</span> <i className="fas fa-arrow-right ml-1 sm:ml-2"></i>
@@ -3751,7 +3875,6 @@ export default function PublicAdmissionFormPage() {
                 </div>
               </div>
             </div>
-
             <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 bg-gradient-to-b from-gray-50 to-white">
               {/* Candidate Information Card */}
               <div className="bg-white border-2 border-[#2E3093]/20 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm">
@@ -3920,6 +4043,56 @@ export default function PublicAdmissionFormPage() {
               >
                 <i className="fas fa-check-double mr-1 sm:mr-2 text-base sm:text-lg"></i><span className="hidden sm:inline">Confirm &amp; Acknowledge</span><span className="sm:hidden">Confirm</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pay at Office Override Modal */}
+      {showPayAtOfficeModal && (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-amber-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-4 text-white">
+              <div className="flex items-center gap-2">
+                <i className="fas fa-shield-alt"></i>
+                <h3 className="text-sm font-bold">Pay at Office Override</h3>
+              </div>
+              <p className="text-xs text-amber-100 mt-1">Enter authorization password to enable offline payment mode.</p>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Override Password</label>
+                <input
+                  type="password"
+                  value={payAtOfficePassword}
+                  onChange={(e) => setPayAtOfficePassword(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handlePayAtOfficeOverride(); } }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-200"
+                  placeholder="Enter password"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPayAtOfficeModal(false);
+                    setPayAtOfficePassword('');
+                  }}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold border border-gray-300 text-gray-700 hover:bg-gray-50"
+                  disabled={payAtOfficeVerifying}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void handlePayAtOfficeOverride(); }}
+                  disabled={payAtOfficeVerifying}
+                  className="px-4 py-2 rounded-lg text-xs font-bold bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60"
+                >
+                  {payAtOfficeVerifying ? 'Verifying...' : 'Verify & Allow'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
