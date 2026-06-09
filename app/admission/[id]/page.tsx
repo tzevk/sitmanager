@@ -348,9 +348,22 @@ export default function PublicAdmissionFormPage() {
     }
 
     const installmentTotal = batchFeesInstallment ?? baseFees;
+    const isPipingWeekendMode = (
+      (/piping\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '')) ||
+      (/engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') && /full.?time/i.test(formData.trainingCategory || '')) ||
+      /piping\s+design.*drafting/i.test(formData.trainingProgrammeName || '')
+    );
     const amountPaise =
       formData.modeOfPayment === 'Full Payment'
         ? Math.round(baseFees * 0.95) * 100
+        : formData.modeOfPayment === '3-Installment Plan'
+        ? 25000 * 100
+        : formData.modeOfPayment === '2-Payment Plan'
+        ? 25000 * 100
+        : formData.modeOfPayment === '6-Installment Plan'
+        ? 15000 * 100
+        : formData.modeOfPayment === 'Loan (0% Interest)'
+        ? (isPipingWeekendMode ? 15000 : 12000) * 100
         : Math.round(installmentTotal / 2) * 100;
 
     setPaymentLoading(true);
@@ -726,7 +739,7 @@ export default function PublicAdmissionFormPage() {
           alert('Please select a Mode of Payment');
           return false;
         }
-        if (formData.modeOfPayment !== 'Pay at Office' && !razorpayPaid) {
+        if (!razorpayPaid) {
           alert('Please complete the online payment before proceeding.');
           return false;
         }
@@ -897,6 +910,14 @@ export default function PublicAdmissionFormPage() {
         razorpayAmount:     razorpayPaid ? (
           formData.modeOfPayment === 'Full Payment'
             ? Math.round((batchFees ?? 0) * 0.95)
+            : formData.modeOfPayment === '3-Installment Plan'
+            ? 25000
+            : formData.modeOfPayment === '2-Payment Plan'
+            ? 25000
+            : formData.modeOfPayment === '6-Installment Plan'
+            ? 15000
+            : formData.modeOfPayment === 'Loan (0% Interest)'
+            ? (((/piping\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '')) || (/engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') && /full.?time/i.test(formData.trainingCategory || '')) || /piping\s+design.*drafting/i.test(formData.trainingProgrammeName || '')) ? 15000 : 12000)
             : Math.round((batchFeesInstallment ?? batchFees ?? 0) / 2)
         ) : null,
       };
@@ -2525,6 +2546,17 @@ export default function PublicAdmissionFormPage() {
                     const firstInstallmentAmount = Math.round(installmentPlanTotal / 2);
                     const secondInstallmentAmount = Math.max(installmentPlanTotal - firstInstallmentAmount, 0);
                     const fmt = (n: number) => n.toLocaleString('en-IN');
+                    const isPipingFulltime =
+                      /piping\s+engineering/i.test(formData.trainingProgrammeName || '') &&
+                      /full.?time/i.test(formData.trainingCategory || '');
+                    const isPipingWeekend =
+                      /piping\s+engineering/i.test(formData.trainingProgrammeName || '') &&
+                      /weekend/i.test(formData.trainingCategory || '');
+                    const isEDDFulltime =
+                      /engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') &&
+                      /full.?time/i.test(formData.trainingCategory || '');
+                    const isPDD = /piping\s+design.*drafting/i.test(formData.trainingProgrammeName || '');
+                    const is75kPlan = isPipingWeekend || isEDDFulltime || isPDD;
 
                     return (
                     <div className="space-y-4 sm:space-y-5" style={stepEnterStyle}>
@@ -2597,8 +2629,132 @@ export default function PublicAdmissionFormPage() {
                           );
                         })()}
 
-                        {/* Option 2: 50% in 2 Installments */}
-                        {(() => {
+                        {/* Option 2: Installment Plan */}
+                        {is75kPlan ? (() => {
+                          const isSelected = formData.modeOfPayment === '6-Installment Plan';
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleChange('modeOfPayment', '6-Installment Plan')}
+                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+                                isSelected
+                                  ? 'bg-violet-50 border-violet-500 ring-2 ring-violet-200 shadow-md'
+                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                  isSelected ? 'bg-violet-100 text-violet-600' : 'bg-gray-100 text-gray-400'
+                                }`}>
+                                  <i className="fas fa-calendar-check text-lg"></i>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <span className={`text-sm font-bold ${isSelected ? 'text-violet-800' : 'text-gray-800'}`}>6-Installment Plan</span>
+                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-violet-600' : 'text-gray-500'}`}>
+                                    &#8377;15,000 at admission + &#8377;12,000 × 5 — total &#8377;75,000
+                                  </div>
+                                </div>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                  isSelected ? 'border-violet-500 bg-violet-50' : 'border-gray-300'
+                                }`}>
+                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-violet-500" />}
+                                </div>
+                              </div>
+                              {isSelected && (
+                                <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>At Admission (pay now)</span>
+                                    <span className="font-bold text-violet-800">&#8377;15,000</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>1st Instalment (30 days from batch start)</span>
+                                    <span className="font-bold text-violet-800">&#8377;12,000</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>2nd Instalment (60 days from batch start)</span>
+                                    <span className="font-bold text-violet-800">&#8377;12,000</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>3rd Instalment (90 days from batch start)</span>
+                                    <span className="font-bold text-violet-800">&#8377;12,000</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>4th Instalment (120 days from batch start)</span>
+                                    <span className="font-bold text-violet-800">&#8377;12,000</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>5th Instalment (150 days from batch start)</span>
+                                    <span className="font-bold text-violet-800">&#8377;12,000</span>
+                                  </div>
+                                  <div className="border-t border-violet-200 pt-2 flex items-center justify-between text-xs">
+                                    <span className="text-violet-800 font-bold">Total</span>
+                                    <span className="font-extrabold text-violet-900">&#8377;75,000</span>
+                                  </div>
+                                  <div className="flex items-start gap-1.5 pt-1">
+                                    <i className="fas fa-exclamation-circle text-violet-400 text-[10px] mt-0.5 flex-shrink-0"></i>
+                                    <p className="text-[10px] text-violet-700">Delay charges of &#8377;2,500 apply per instalment if payment is not made on time.</p>
+                                  </div>
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })() : isPipingFulltime ? (() => {
+                          const isSelected = formData.modeOfPayment === '3-Installment Plan';
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleChange('modeOfPayment', '3-Installment Plan')}
+                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+                                isSelected
+                                  ? 'bg-violet-50 border-violet-500 ring-2 ring-violet-200 shadow-md'
+                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                  isSelected ? 'bg-violet-100 text-violet-600' : 'bg-gray-100 text-gray-400'
+                                }`}>
+                                  <i className="fas fa-calendar-check text-lg"></i>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <span className={`text-sm font-bold ${isSelected ? 'text-violet-800' : 'text-gray-800'}`}>3-Installment Plan</span>
+                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-violet-600' : 'text-gray-500'}`}>
+                                    &#8377;25,000 at admission + &#8377;43,500 × 2 — total &#8377;1,12,000
+                                  </div>
+                                </div>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                  isSelected ? 'border-violet-500 bg-violet-50' : 'border-gray-300'
+                                }`}>
+                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-violet-500" />}
+                                </div>
+                              </div>
+                              {isSelected && (
+                                <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>At Admission (pay now)</span>
+                                    <span className="font-bold text-violet-800">&#8377;25,000</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>1st Instalment (30 days from batch start)</span>
+                                    <span className="font-bold text-violet-800">&#8377;43,500</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>2nd Instalment (60 days from batch start)</span>
+                                    <span className="font-bold text-violet-800">&#8377;43,500</span>
+                                  </div>
+                                  <div className="border-t border-violet-200 pt-2 flex items-center justify-between text-xs">
+                                    <span className="text-violet-800 font-bold">Total</span>
+                                    <span className="font-extrabold text-violet-900">&#8377;1,12,000</span>
+                                  </div>
+                                  <div className="flex items-start gap-1.5 pt-1">
+                                    <i className="fas fa-exclamation-circle text-violet-400 text-[10px] mt-0.5 flex-shrink-0"></i>
+                                    <p className="text-[10px] text-violet-700">Delay charges of &#8377;2,500 apply per instalment if payment is not made on time.</p>
+                                  </div>
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })() : (() => {
                           const isSelected = formData.modeOfPayment === '50% Installment';
                           return (
                             <button
@@ -2628,8 +2784,6 @@ export default function PublicAdmissionFormPage() {
                                   {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-violet-500" />}
                                 </div>
                               </div>
-
-                              {/* Installment breakdown */}
                               {isSelected && (
                                 <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
                                   <div className="flex items-center justify-between text-xs">
@@ -2650,41 +2804,62 @@ export default function PublicAdmissionFormPage() {
                           );
                         })()}
 
-                        {/* Option 3: Pay at Office */}
-                        {(() => {
-                          const isSelected = formData.modeOfPayment === 'Pay at Office';
+                        {/* Option 3: Loan (Piping) */}
+                        {(isPipingFulltime || is75kPlan) && (() => {
+                          const isSelected = formData.modeOfPayment === 'Loan (0% Interest)';
+                          const loanAdmission = is75kPlan ? 15000 : 12000;
+                          const loanAmount = is75kPlan ? 60000 : 100000;
+                          const loanTotal = is75kPlan ? 75000 : 112000;
+                          const fmtLoan = (n: number) => n.toLocaleString('en-IN');
                           return (
                             <button
                               type="button"
-                              onClick={() => handleChange('modeOfPayment', 'Pay at Office')}
+                              onClick={() => handleChange('modeOfPayment', 'Loan (0% Interest)')}
                               className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
                                 isSelected
-                                  ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-200 shadow-md'
+                                  ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-200 shadow-md'
                                   : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
                               }`}
                             >
                               <div className="flex items-start gap-3">
                                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                                  isSelected ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-400'
+                                  isSelected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'
                                 }`}>
-                                  <i className="fas fa-building text-lg"></i>
+                                  <i className="fas fa-university text-lg"></i>
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <span className={`text-sm font-bold ${isSelected ? 'text-amber-800' : 'text-gray-800'}`}>Pay at Office</span>
-                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-amber-600' : 'text-gray-500'}`}>
-                                    Visit our office and pay by cash, cheque, or DD — no online payment required
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`text-sm font-bold ${isSelected ? 'text-blue-800' : 'text-gray-800'}`}>0% Interest Loan</span>
+                                    <span className="bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">0% Interest</span>
+                                  </div>
+                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-blue-600' : 'text-gray-500'}`}>
+                                    Pay &#8377;{fmtLoan(loanAdmission)} at admission + &#8377;{fmtLoan(loanAmount)} via financial institution loan
                                   </div>
                                 </div>
                                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                                  isSelected ? 'border-amber-500 bg-amber-50' : 'border-gray-300'
+                                  isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
                                 }`}>
-                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />}
+                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />}
                                 </div>
                               </div>
                               {isSelected && (
-                                <div className="mt-3 ml-[52px] bg-amber-100/50 rounded-lg px-3 py-2.5 flex items-start gap-2">
-                                  <i className="fas fa-info-circle text-amber-500 text-xs mt-0.5 flex-shrink-0"></i>
-                                  <p className="text-xs text-amber-800">Your application will be submitted without online payment. Please complete the fee payment at the SIT office to confirm your admission.</p>
+                                <div className="mt-3 ml-[52px] bg-blue-100/50 rounded-lg p-3 space-y-2">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-blue-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-blue-400"></i>At Admission (pay now)</span>
+                                    <span className="font-bold text-blue-800">&#8377;{fmtLoan(loanAdmission)}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-blue-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-blue-400"></i>Loan (via financial institution)</span>
+                                    <span className="font-bold text-blue-800">&#8377;{fmtLoan(loanAmount)}</span>
+                                  </div>
+                                  <div className="border-t border-blue-200 pt-2 flex items-center justify-between text-xs">
+                                    <span className="text-blue-800 font-bold">Total</span>
+                                    <span className="font-extrabold text-blue-900">&#8377;{fmtLoan(loanTotal)}</span>
+                                  </div>
+                                  <div className="flex items-start gap-1.5 pt-1">
+                                    <i className="fas fa-info-circle text-blue-400 text-[10px] mt-0.5 flex-shrink-0"></i>
+                                    <p className="text-[10px] text-blue-700">Loan approval is subject to the financial institution. If the loan is not approved, the student must pay the remaining fees independently. No refund will be made if the student leaves the batch during the training programme.</p>
+                                  </div>
                                 </div>
                               )}
                             </button>
@@ -2702,14 +2877,16 @@ export default function PublicAdmissionFormPage() {
                               You have selected <span className="font-bold">{formData.modeOfPayment}</span>
                               {formData.modeOfPayment === 'Full Payment' && <> — you pay <span className="font-bold">&#8377;{fmt(fullPayAmount)}</span> (5% discount applied)</>}
                               {formData.modeOfPayment === '50% Installment' && <> — &#8377;{fmt(firstInstallmentAmount)} now + &#8377;{fmt(secondInstallmentAmount)} later</>}
-                              {formData.modeOfPayment === 'Pay at Office' && <> — payment to be made at the SIT office</>}
+                              {formData.modeOfPayment === '3-Installment Plan' && <> — &#8377;25,000 now + &#8377;43,500 × 2 instalments</>}
+                              {formData.modeOfPayment === '6-Installment Plan' && <> — &#8377;15,000 now + &#8377;12,000 × 5 instalments</>}
+                              {formData.modeOfPayment === 'Loan (0% Interest)' && <> — &#8377;{is75kPlan ? '15,000' : '12,000'} at admission + &#8377;{is75kPlan ? '60,000' : '1,00,000'} loan via financial institution</>}
                             </p>
                           </div>
                         </div>
                       )}
 
                       {/* ── Razorpay payment (mandatory for online modes) ── */}
-                      {formData.modeOfPayment && formData.modeOfPayment !== 'Pay at Office' && (
+                      {formData.modeOfPayment && (
                         <div className={`rounded-xl p-4 space-y-3 border-2 ${razorpayPaid ? 'border-emerald-400 bg-emerald-50' : 'border-[#2E3093] bg-[#2E3093]/5'}`}>
                           {razorpayPaid ? (
                             <div className="flex items-center gap-3">
@@ -2717,7 +2894,13 @@ export default function PublicAdmissionFormPage() {
                               <div>
                                 <p className="text-sm font-bold text-emerald-800">Payment Confirmed!</p>
                                 <p className="text-xs text-emerald-700 mt-0.5">
-                                  &#8377;{fmt(formData.modeOfPayment === 'Full Payment' ? fullPayAmount : firstInstallmentAmount)} paid successfully.
+                                  &#8377;{fmt(
+                                    formData.modeOfPayment === 'Full Payment' ? fullPayAmount
+                                    : formData.modeOfPayment === '3-Installment Plan' ? 25000
+                                    : formData.modeOfPayment === '6-Installment Plan' ? 15000
+                                    : formData.modeOfPayment === 'Loan (0% Interest)' ? (is75kPlan ? 15000 : 12000)
+                                    : firstInstallmentAmount
+                                  )} paid successfully.
                                 </p>
                                 <p className="text-[11px] text-emerald-600 font-mono mt-0.5">Ref: {razorpayPaymentId}</p>
                               </div>
