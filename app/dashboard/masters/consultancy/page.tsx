@@ -537,7 +537,7 @@ export default function ConsultancyPage() {
                         <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Status</span><span className="text-gray-900">{viewValue(viewRow.Company_Status)}</span></div>
                         <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Country</span><span className="text-gray-900">{viewValue(viewRow.Country)}</span></div>
                         <div><span className="block text-[11px] font-semibold text-gray-500 mb-1">Active</span><span className="text-gray-900">{String(viewRow.IsActive) === '1' ? 'Yes' : String(viewRow.IsActive) === '0' ? 'No' : viewValue(viewRow.IsActive)}</span></div>
-                        <div className="md:col-span-2"><span className="block text-[11px] font-semibold text-gray-500 mb-1">Comment</span><span className="text-gray-900 whitespace-pre-wrap">{viewValue(viewRow.Remark)}</span></div>
+                        <div className="md:col-span-2"><span className="block text-[11px] font-semibold text-gray-500 mb-1">Company Business</span><span className="text-gray-900 whitespace-pre-wrap">{viewValue(viewRow.Remark)}</span></div>
                       </div>
                     </div>
 

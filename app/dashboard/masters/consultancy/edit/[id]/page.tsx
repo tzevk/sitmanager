@@ -508,18 +508,28 @@ export default function EditConsultancyPage() {
                   <label className={labelCls}>Industry</label>
                   <select className={selectCls} value={form.Industry} onChange={e => handleChange('Industry', e.target.value)}>
                     <option value="">Select...</option>
-                    <option value="IT">IT</option>
-                    <option value="Manufacturing">Manufacturing</option>
-                    <option value="Finance">Finance</option>
-                    <option value="Healthcare">Healthcare</option>
-                    <option value="Education">Education</option>
-                    <option value="Retail">Retail</option>
-                    <option value="Other">Other</option>
+                    <option>Oil &amp; Gas</option>
+                    <option>Petrochemicals</option>
+                    <option>Chemicals</option>
+                    <option>Power &amp; Utilities</option>
+                    <option>Renewable Energy</option>
+                    <option>Water &amp; Wastewater</option>
+                    <option>Infrastructure</option>
+                    <option>Transportation</option>
+                    <option>Mining &amp; Metals</option>
+                    <option>Industrial Manufacturing</option>
+                    <option>Pharmaceuticals</option>
+                    <option>Food &amp; Beverage</option>
+                    <option>Data Centers</option>
+                    <option>Buildings &amp; Cities</option>
+                    <option>Environmental Services</option>
+                    <option>Marine &amp; Offshore</option>
+                    <option>Other</option>
                   </select>
                 </div>
                 <div className="md:col-span-3">
-                  <label className={labelCls}>Comment</label>
-                  <textarea className={textareaCls} rows={2} value={form.Remark} onChange={e => handleChange('Remark', e.target.value)} placeholder="Comment" />
+                  <label className={labelCls}>Nature of Business</label>
+                  <textarea className={textareaCls} rows={2} value={form.Remark} onChange={e => handleChange('Remark', e.target.value)} placeholder="Nature of Business" />
                 </div>
                 <div className="md:col-span-2">
                   <label className={labelCls}>Address <span className="text-red-500">*</span></label>
