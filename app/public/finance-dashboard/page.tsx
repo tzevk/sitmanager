@@ -1,275 +1,280 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import FinanceFullDashboard from '../../dashboard/components/FinanceFullDashboard';
 
-type FinanceTab = 'overview' | 'collections' | 'expenses' | 'outstanding' | 'reconciliation';
+type AnyRow = Record<string, unknown> & { id: number };
 
-const TABS: Array<{ id: FinanceTab; label: string }> = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'collections', label: 'Collections' },
-  { id: 'expenses', label: 'Expenses' },
-  { id: 'outstanding', label: 'Outstanding' },
-  { id: 'reconciliation', label: 'Reconciliation' },
-];
+function createMockDb() {
+  return {
+    loans: [
+      { id: 1, bank_name: 'HDFC OD', outstanding: 1200000, paid: 420000 },
+      { id: 2, bank_name: 'ICICI Term Loan', outstanding: 850000, paid: 310000 },
+      { id: 3, bank_name: 'NBFC Bridge', outstanding: 460000, paid: 120000 },
+    ],
+    deptPerformance: [
+      { id: 1, month_year: '2026-01', department: 'CBD / Inhouse', amount_achieved: 642000, target_amount: 700000, expense_actual: 310000, expense_target: 350000 },
+      { id: 2, month_year: '2026-01', department: 'Corporate Training', amount_achieved: 395000, target_amount: 420000, expense_actual: 210000, expense_target: 220000 },
+      { id: 3, month_year: '2026-01', department: 'Accent Deputation', amount_achieved: 210000, target_amount: 240000, expense_actual: 139000, expense_target: 160000 },
+      { id: 4, month_year: '2026-01', department: 'Accent Projects', amount_achieved: 320000, target_amount: 360000, expense_actual: 190000, expense_target: 220000 },
+      { id: 5, month_year: '2026-02', department: 'CBD / Inhouse', amount_achieved: 618500, target_amount: 700000, expense_actual: 304000, expense_target: 350000 },
+      { id: 6, month_year: '2026-02', department: 'Corporate Training', amount_achieved: 286000, target_amount: 420000, expense_actual: 170000, expense_target: 220000 },
+      { id: 7, month_year: '2026-03', department: 'CBD / Inhouse', amount_achieved: 701000, target_amount: 700000, expense_actual: 328000, expense_target: 350000 },
+      { id: 8, month_year: '2026-03', department: 'Corporate Training', amount_achieved: 231000, target_amount: 420000, expense_actual: 144000, expense_target: 220000 },
+      { id: 9, month_year: '2026-04', department: 'CBD / Inhouse', amount_achieved: 655000, target_amount: 700000, expense_actual: 315000, expense_target: 350000 },
+      { id: 10, month_year: '2026-04', department: 'Accent Deputation', amount_achieved: 208000, target_amount: 240000, expense_actual: 140000, expense_target: 160000 },
+      { id: 11, month_year: '2026-04', department: 'Accent Projects', amount_achieved: 270000, target_amount: 360000, expense_actual: 165000, expense_target: 220000 },
+      { id: 12, month_year: '2026-04', department: 'Corporate Training', amount_achieved: 178000, target_amount: 420000, expense_actual: 118000, expense_target: 220000 },
+    ],
+    ctPerformance: [
+      { id: 1, month_year: '2026-01', training_name: 'Piping Orientation', company: 'L&T Process', cost_from_company: 395000, trainer_cost: 210000, travelling_expenses: 38000 },
+      { id: 2, month_year: '2026-02', training_name: 'BIM Fundamentals', company: 'Atlas Copco', cost_from_company: 286000, trainer_cost: 162000, travelling_expenses: 26000 },
+      { id: 3, month_year: '2026-03', training_name: 'P&ID Discipline', company: 'Thermax', cost_from_company: 231000, trainer_cost: 136000, travelling_expenses: 22000 },
+      { id: 4, month_year: '2026-04', training_name: 'Drafting Refresh', company: 'Cummins', cost_from_company: 178000, trainer_cost: 103000, travelling_expenses: 18000 },
+    ],
+    deputation: [
+      { id: 1, month: '2026-01', actual_cost: 210000, target_cost: 240000 },
+      { id: 2, month: '2026-02', actual_cost: 196000, target_cost: 240000 },
+      { id: 3, month: '2026-03', actual_cost: 222000, target_cost: 240000 },
+      { id: 4, month: '2026-04', actual_cost: 208000, target_cost: 240000 },
+    ],
+    projects: [
+      { id: 1, month: '2026-01', actual_cost: 320000, target_cost: 360000 },
+      { id: 2, month: '2026-02', actual_cost: 245000, target_cost: 360000 },
+      { id: 3, month: '2026-03', actual_cost: 188000, target_cost: 360000 },
+      { id: 4, month: '2026-04', actual_cost: 270000, target_cost: 360000 },
+    ],
+    cbdMonthly: [
+      { id: 1, month: '2026-01', actual_cost: 642000, target_cost: 700000 },
+      { id: 2, month: '2026-02', actual_cost: 618500, target_cost: 700000 },
+      { id: 3, month: '2026-03', actual_cost: 701000, target_cost: 700000 },
+      { id: 4, month: '2026-04', actual_cost: 655000, target_cost: 700000 },
+    ],
+    ctMonthly: [
+      { id: 1, month: '2026-01', actual_cost: 395000, target_cost: 420000 },
+      { id: 2, month: '2026-02', actual_cost: 286000, target_cost: 420000 },
+      { id: 3, month: '2026-03', actual_cost: 231000, target_cost: 420000 },
+      { id: 4, month: '2026-04', actual_cost: 178000, target_cost: 420000 },
+    ],
+    debtPlan: [
+      { id: 1, bank_name: 'HDFC OD', emi_amount: 118000, planned_date: '2026-06-15', actual_paid: 118000, actual_date: '2026-06-15', status: 'Paid' },
+      { id: 2, bank_name: 'ICICI Term Loan', emi_amount: 76000, planned_date: '2026-06-21', actual_paid: 0, actual_date: null, status: 'Pending' },
+      { id: 3, bank_name: 'NBFC Bridge', emi_amount: 58000, planned_date: '2026-06-10', actual_paid: 0, actual_date: null, status: 'Overdue' },
+    ],
+    cashflowProjection: [
+      { id: 1, month: '2026-01', revenue: 1540000, expenses: 980000, loan_repayment: 176000 },
+      { id: 2, month: '2026-02', revenue: 1480000, expenses: 955000, loan_repayment: 176000 },
+      { id: 3, month: '2026-03', revenue: 1620000, expenses: 1010000, loan_repayment: 176000 },
+      { id: 4, month: '2026-04', revenue: 1510000, expenses: 992000, loan_repayment: 176000 },
+    ],
+    pendingInvoices: [
+      { id: 1, client_name: 'L&T Process', invoice_no: 'INV-CT-1001', amount: 75000, invoice_date: '2026-04-10', due_date: '2026-05-10', status: 'Overdue', description: 'Balance after phase-1', department: 'Corporate Training' },
+      { id: 2, client_name: 'Atlas Copco', invoice_no: 'INV-CT-1002', amount: 42000, invoice_date: '2026-04-15', due_date: '2026-05-20', status: 'Pending', description: 'Pending clearance', department: 'Corporate Training' },
+      { id: 3, client_name: 'Accent Client A', invoice_no: 'INV-DEP-201', amount: 38000, invoice_date: '2026-04-20', due_date: '2026-05-25', status: 'Pending', description: 'Staff deputation cycle', department: 'Deputation' },
+      { id: 4, client_name: 'Accent Client B', invoice_no: 'INV-PROJ-301', amount: 95000, invoice_date: '2026-04-12', due_date: '2026-05-12', status: 'Overdue', description: 'Milestone 2', department: 'Projects' },
+      { id: 5, client_name: 'Thermax', invoice_no: 'INV-CT-1003', amount: 41000, invoice_date: '2026-04-26', due_date: '2026-05-30', status: 'Paid', description: 'Final settlement', department: 'Corporate Training' },
+    ],
+    cashflow: [
+      { id: 1, date: '2026-01-03', type: 'Receipt', category: 'Tution Fees', description: 'Admissions receipts', payment: 0, receipt: 186000, ref_no: 'RCPT-1', company: 'Suvidya', department: 'CBD' },
+      { id: 2, date: '2026-01-05', type: 'Payment', category: 'Employee Salary', description: 'Monthly salaries', payment: 126000, receipt: 0, ref_no: 'PAY-1', company: 'Suvidya', department: 'ADMIN ACCOUNTS' },
+      { id: 3, date: '2026-02-07', type: 'Receipt', category: 'Corporate Training', description: 'Invoice receipt', payment: 0, receipt: 92000, ref_no: 'RCPT-2', company: 'Accent', department: 'CORPORATE TRAINING' },
+      { id: 4, date: '2026-02-09', type: 'Payment', category: 'Marketing - Accent', description: 'Ads spend', payment: 98000, receipt: 0, ref_no: 'PAY-2', company: 'Accent', department: 'MARKETING - ACCENT' },
+      { id: 5, date: '2026-03-04', type: 'Payment', category: 'Trainers Payment', description: 'Trainer payout', payment: 83000, receipt: 0, ref_no: 'PAY-3', company: 'Suvidya', department: 'TRAINERS' },
+      { id: 6, date: '2026-03-11', type: 'Payment', category: 'Deputation', description: 'Deputation cycle cost', payment: 139000, receipt: 0, ref_no: 'PAY-4', company: 'Accent', department: 'DEPUTATION ACCENT' },
+      { id: 7, date: '2026-04-12', type: 'Payment', category: 'Projects', description: 'Projects cycle cost', payment: 190000, receipt: 0, ref_no: 'PAY-5', company: 'Accent', department: 'PROJECT ACCENT' },
+      { id: 8, date: '2026-04-15', type: 'Payment', category: 'OD Interest / Loan EMI', description: 'Loan servicing', payment: 176000, receipt: 0, ref_no: 'PAY-6', company: 'Suvidya', department: 'LOAN REPAYMENT' },
+      { id: 9, date: '2026-04-18', type: 'Receipt', category: 'Deputation', description: 'Client release', payment: 0, receipt: 110000, ref_no: 'RCPT-3', company: 'Accent', department: 'DEPUTATION ACCENT' },
+      { id: 10, date: '2026-04-20', type: 'Receipt', category: 'Projects', description: 'Milestone receipt', payment: 0, receipt: 140000, ref_no: 'RCPT-4', company: 'Accent', department: 'PROJECT ACCENT' },
+      { id: 11, date: '2026-04-25', type: 'Payment', category: 'Corporate Training', description: 'CT execution costs', payment: 118000, receipt: 0, ref_no: 'PAY-7', company: 'Accent', department: 'CORPORATE TRAINING' },
+      { id: 12, date: '2026-04-28', type: 'Payment', category: 'CBD', description: 'CBD operating cost', payment: 315000, receipt: 0, ref_no: 'PAY-8', company: 'Suvidya', department: 'CBD' },
+    ],
+  };
+}
 
-const collectionRows = [
-  { stream: 'Online Admission', txns: 148, gross: 1749600, scholarship: 148500, refunds: 32500 },
-  { stream: 'Walk-in Enrollment', txns: 59, gross: 708000, scholarship: 42000, refunds: 12000 },
-  { stream: 'Corporate Tie-up', txns: 19, gross: 512000, scholarship: 28000, refunds: 21000 },
-  { stream: 'Installment Carry Forward', txns: 43, gross: 279500, scholarship: 0, refunds: 0 },
-];
+function jsonResponse(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
-const expenseRows = [
-  { head: 'Faculty Payout', amount: 634000 },
-  { head: 'Digital Marketing', amount: 182500 },
-  { head: 'Center Operations', amount: 127800 },
-  { head: 'Placement & Events', amount: 96800 },
-  { head: 'Refund Bank Charges', amount: 4600 },
-  { head: 'Software & Tools', amount: 56800 },
-];
-
-const outstandingRows = [
-  { bucket: '0-30 Days', students: 38, amount: 286000 },
-  { bucket: '31-60 Days', students: 21, amount: 214500 },
-  { bucket: '61-90 Days', students: 14, amount: 167000 },
-  { bucket: '90+ Days', students: 9, amount: 133000 },
-];
-
-const bankStatementCredits = 3039500;
-const inTransit = 23500;
-const priorPending = -12000;
-
-function inr(value: number): string {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
+function getCollection(db: ReturnType<typeof createMockDb>, resource: string): AnyRow[] | null {
+  if (resource === 'loans') return db.loans as AnyRow[];
+  if (resource === 'dept-performance') return db.deptPerformance as AnyRow[];
+  if (resource === 'ct-performance') return db.ctPerformance as AnyRow[];
+  if (resource === 'deputation') return db.deputation as AnyRow[];
+  if (resource === 'projects') return db.projects as AnyRow[];
+  if (resource === 'cbd-monthly') return db.cbdMonthly as AnyRow[];
+  if (resource === 'ct-monthly') return db.ctMonthly as AnyRow[];
+  if (resource === 'debt-plan') return db.debtPlan as AnyRow[];
+  if (resource === 'cashflow-projection') return db.cashflowProjection as AnyRow[];
+  if (resource === 'pending-invoices') return db.pendingInvoices as AnyRow[];
+  if (resource === 'cashflow') return db.cashflow as AnyRow[];
+  return null;
 }
 
 export default function PublicFinanceDashboardPage() {
-  const [activeTab, setActiveTab] = useState<FinanceTab>('overview');
+  const [ready, setReady] = useState(false);
+  const originalFetchRef = useRef<typeof fetch | null>(null);
+  const dbRef = useRef(createMockDb());
 
-  const collectionSummary = useMemo(() => {
-    const gross = collectionRows.reduce((s, r) => s + r.gross, 0);
-    const scholarship = collectionRows.reduce((s, r) => s + r.scholarship, 0);
-    const refunds = collectionRows.reduce((s, r) => s + r.refunds, 0);
-    const net = gross - scholarship - refunds;
-    return { gross, scholarship, refunds, net };
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!originalFetchRef.current) originalFetchRef.current = window.fetch.bind(window);
+    const realFetch = originalFetchRef.current;
+
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const urlString = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      const method = (init?.method || 'GET').toUpperCase();
+
+      const normalized = (() => {
+        try {
+          return new URL(urlString, window.location.origin);
+        } catch {
+          return null;
+        }
+      })();
+
+      if (!normalized) return realFetch(input, init);
+      const { pathname, searchParams } = normalized;
+      const db = dbRef.current;
+
+      if (pathname === '/api/masters/annual-batch/plan') {
+        return jsonResponse({
+          rows: [
+            { Plan_Id: 1, Training_Program_Name: 'Piping Design and Drafting', Target_Frequency: 4, Min_Students_Per_Batch: 25, Students_Admitted: 88, Yearly_Students_Target: 100, Frequency_Conducted: 4, Percentage: 88, Fees: 75000 },
+            { Plan_Id: 2, Training_Program_Name: 'Engineering Design and Drafting', Target_Frequency: 4, Min_Students_Per_Batch: 20, Students_Admitted: 72, Yearly_Students_Target: 80, Frequency_Conducted: 4, Percentage: 90, Fees: 75000 },
+            { Plan_Id: 3, Training_Program_Name: 'Process Engineering Weekend', Target_Frequency: 6, Min_Students_Per_Batch: 18, Students_Admitted: 95, Yearly_Students_Target: 108, Frequency_Conducted: 6, Percentage: 88, Fees: 50000 },
+          ],
+        });
+      }
+
+      if (pathname === '/api/finance/pending-fees-live') {
+        const q = (searchParams.get('q') || '').toLowerCase().trim();
+        const rows = [
+          { id: 1, student_name: 'Aarav Patil', batch: 'PDD-2026-WE-04', total_fees: 75000, paid: 62500, due_date: '2026-06-20' },
+          { id: 2, student_name: 'Neha Ghadge', batch: 'EDD-2026-FT-07', total_fees: 75000, paid: 57000, due_date: '2026-06-28' },
+          { id: 3, student_name: 'Pranav Kulkarni', batch: 'PE-2026-WE-02', total_fees: 50000, paid: 40500, due_date: '2026-06-18' },
+          { id: 4, student_name: 'Sakshi Jadhav', batch: 'PDD-2026-FT-06', total_fees: 75000, paid: 54000, due_date: '2026-07-02' },
+        ].filter((r) => !q || `${r.student_name} ${r.batch}`.toLowerCase().includes(q));
+        return jsonResponse({ rows });
+      }
+
+      if (pathname === '/api/finance/salary-cashflow') {
+        const monthYear = searchParams.get('month_year') || '2026-06';
+        return jsonResponse({
+          row: {
+            id: 1,
+            month_year: monthYear,
+            total_payable: 482000,
+            salary_paid: 426000,
+            salary_pending: 56000,
+            next_payout: '2026-06-30',
+          },
+        });
+      }
+
+      if (pathname.startsWith('/api/finance/')) {
+        const afterBase = pathname.replace('/api/finance/', '');
+        const [resource, idPart] = afterBase.split('/');
+        const collection = getCollection(db, resource);
+
+        if (!collection) {
+          return jsonResponse({ error: `Unknown mock resource: ${resource}` }, 404);
+        }
+
+        if (method === 'GET') {
+          let rows = [...collection];
+          if (resource === 'dept-performance') {
+            const monthYear = searchParams.get('month_year');
+            const year = searchParams.get('year');
+            if (monthYear) rows = rows.filter((r) => String(r.month_year || '').startsWith(monthYear));
+            if (year) rows = rows.filter((r) => String(r.month_year || '').startsWith(`${year}-`));
+          }
+          if (resource === 'pending-invoices') {
+            const dept = searchParams.get('department');
+            if (dept) rows = rows.filter((r) => String(r.department || '') === dept);
+          }
+          if (resource === 'cashflow') {
+            const type = searchParams.get('type');
+            const category = searchParams.get('category');
+            const department = searchParams.get('department');
+            const company = searchParams.get('company');
+            const dateFrom = searchParams.get('dateFrom');
+            const dateTo = searchParams.get('dateTo');
+            rows = rows.filter((r) => {
+              if (type && String(r.type || '') !== type) return false;
+              if (category && String(r.category || '') !== category) return false;
+              if (department && String(r.department || '') !== department) return false;
+              if (company && String(r.company || '') !== company) return false;
+              if (dateFrom && String(r.date || '') < dateFrom) return false;
+              if (dateTo && String(r.date || '') > dateTo) return false;
+              return true;
+            });
+          }
+          if (idPart) {
+            const id = Number(idPart);
+            const row = rows.find((r) => Number(r.id) === id) || null;
+            return jsonResponse({ row });
+          }
+          return jsonResponse({ rows });
+        }
+
+        if (method === 'POST') {
+          const payload = init?.body ? JSON.parse(String(init.body)) : {};
+          const nextId = collection.length ? Math.max(...collection.map((r) => Number(r.id))) + 1 : 1;
+          const row = { id: nextId, ...payload } as AnyRow;
+          collection.push(row);
+          return jsonResponse({ row }, 201);
+        }
+
+        if (method === 'PUT') {
+          const payload = init?.body ? JSON.parse(String(init.body)) : {};
+          if (idPart) {
+            const id = Number(idPart);
+            const idx = collection.findIndex((r) => Number(r.id) === id);
+            if (idx < 0) return jsonResponse({ error: 'Not found' }, 404);
+            collection[idx] = { ...collection[idx], ...payload, id };
+            return jsonResponse({ row: collection[idx] });
+          }
+          // Singleton update path (salary-cashflow style fallback)
+          const row = { id: 1, ...payload } as AnyRow;
+          return jsonResponse({ row });
+        }
+
+        if (method === 'DELETE' && idPart) {
+          const id = Number(idPart);
+          const idx = collection.findIndex((r) => Number(r.id) === id);
+          if (idx < 0) return jsonResponse({ error: 'Not found' }, 404);
+          collection.splice(idx, 1);
+          return jsonResponse({ success: true });
+        }
+      }
+
+      return realFetch(input, init);
+    };
+
+    setReady(true);
+
+    return () => {
+      if (originalFetchRef.current) {
+        window.fetch = originalFetchRef.current;
+      }
+    };
   }, []);
 
-  const totalExpense = useMemo(() => expenseRows.reduce((s, r) => s + r.amount, 0), []);
-  const totalOutstanding = useMemo(() => outstandingRows.reduce((s, r) => s + r.amount, 0), []);
-  const operatingSurplus = collectionSummary.net - totalExpense;
-  const reconDifference = collectionSummary.net - (bankStatementCredits - inTransit + priorPending);
-
-  return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl space-y-5">
-        <header className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Public Auditor View</p>
-          <h1 className="mt-1 text-2xl font-bold text-slate-900">Finance Dashboard (Dummy Data)</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            This page uses sample mixed figures for demonstration. No live or student-sensitive financial records are shown.
-          </p>
-        </header>
-
-        <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="flex flex-wrap gap-2">
-            {TABS.map((tab) => {
-              const selected = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`rounded-md border px-4 py-2 text-sm font-semibold transition-colors ${
-                    selected
-                      ? 'border-blue-700 bg-blue-700 text-white'
-                      : 'border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
+  if (!ready) {
+    return (
+      <main className="min-h-screen bg-slate-50 px-4 py-5 sm:px-6">
+        <div className="mx-auto max-w-7xl">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6">
+            <div className="h-5 w-56 bg-slate-200 rounded animate-pulse" />
+            <div className="mt-3 h-4 w-80 bg-slate-100 rounded animate-pulse" />
           </div>
-        </section>
+        </div>
+      </main>
+    );
+  }
 
-        {activeTab === 'overview' && (
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-emerald-700">Net Collection</p>
-              <p className="mt-1 text-2xl font-bold text-emerald-900">{inr(collectionSummary.net)}</p>
-              <p className="mt-2 text-xs text-emerald-800">
-                Working: {inr(collectionSummary.gross)} - {inr(collectionSummary.scholarship)} - {inr(collectionSummary.refunds)}
-              </p>
-            </div>
-            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-rose-700">Total Expense</p>
-              <p className="mt-1 text-2xl font-bold text-rose-900">{inr(totalExpense)}</p>
-              <p className="mt-2 text-xs text-rose-800">Working: Sum of all expense heads</p>
-            </div>
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700">Operating Surplus</p>
-              <p className="mt-1 text-2xl font-bold text-amber-900">{inr(operatingSurplus)}</p>
-              <p className="mt-2 text-xs text-amber-800">Working: {inr(collectionSummary.net)} - {inr(totalExpense)}</p>
-            </div>
-            <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-violet-700">Receivables Outstanding</p>
-              <p className="mt-1 text-2xl font-bold text-violet-900">{inr(totalOutstanding)}</p>
-              <p className="mt-2 text-xs text-violet-800">Working: Sum of aging buckets</p>
-            </div>
-          </section>
-        )}
-
-        {activeTab === 'collections' && (
-          <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 p-4">
-              <h2 className="text-lg font-semibold text-slate-900">Collections</h2>
-              <p className="text-sm text-slate-600">Net = Gross - Scholarship - Refunds</p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-sm">
-                <thead className="bg-slate-50 text-slate-700">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold">Revenue Stream</th>
-                    <th className="px-4 py-3 text-right font-semibold">Transactions</th>
-                    <th className="px-4 py-3 text-right font-semibold">Gross</th>
-                    <th className="px-4 py-3 text-right font-semibold">Scholarship</th>
-                    <th className="px-4 py-3 text-right font-semibold">Refunds</th>
-                    <th className="px-4 py-3 text-right font-semibold">Net</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {collectionRows.map((row) => {
-                    const net = row.gross - row.scholarship - row.refunds;
-                    return (
-                      <tr key={row.stream} className="border-t border-slate-100">
-                        <td className="px-4 py-3 text-slate-900">{row.stream}</td>
-                        <td className="px-4 py-3 text-right text-slate-700">{row.txns}</td>
-                        <td className="px-4 py-3 text-right text-slate-700">{inr(row.gross)}</td>
-                        <td className="px-4 py-3 text-right text-slate-700">{inr(row.scholarship)}</td>
-                        <td className="px-4 py-3 text-right text-slate-700">{inr(row.refunds)}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-emerald-700">{inr(net)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
-                  <tr>
-                    <td className="px-4 py-3">Total Working</td>
-                    <td className="px-4 py-3 text-right">{collectionRows.reduce((s, r) => s + r.txns, 0)}</td>
-                    <td className="px-4 py-3 text-right">{inr(collectionSummary.gross)}</td>
-                    <td className="px-4 py-3 text-right">{inr(collectionSummary.scholarship)}</td>
-                    <td className="px-4 py-3 text-right">{inr(collectionSummary.refunds)}</td>
-                    <td className="px-4 py-3 text-right text-emerald-700">{inr(collectionSummary.net)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {activeTab === 'expenses' && (
-          <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 p-4">
-              <h2 className="text-lg font-semibold text-slate-900">Expense Ledger</h2>
-              <p className="text-sm text-slate-600">All values are sample monthly figures.</p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] text-sm">
-                <thead className="bg-slate-50 text-slate-700">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold">Expense Head</th>
-                    <th className="px-4 py-3 text-right font-semibold">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {expenseRows.map((row) => (
-                    <tr key={row.head} className="border-t border-slate-100">
-                      <td className="px-4 py-3 text-slate-900">{row.head}</td>
-                      <td className="px-4 py-3 text-right text-slate-700">{inr(row.amount)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
-                  <tr>
-                    <td className="px-4 py-3">Total Working</td>
-                    <td className="px-4 py-3 text-right text-rose-700">{inr(totalExpense)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {activeTab === 'outstanding' && (
-          <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 p-4">
-              <h2 className="text-lg font-semibold text-slate-900">Receivables Aging</h2>
-              <p className="text-sm text-slate-600">Outstanding = Sum of all aging buckets</p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] text-sm">
-                <thead className="bg-slate-50 text-slate-700">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold">Aging Bucket</th>
-                    <th className="px-4 py-3 text-right font-semibold">Students</th>
-                    <th className="px-4 py-3 text-right font-semibold">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {outstandingRows.map((row) => (
-                    <tr key={row.bucket} className="border-t border-slate-100">
-                      <td className="px-4 py-3 text-slate-900">{row.bucket}</td>
-                      <td className="px-4 py-3 text-right text-slate-700">{row.students}</td>
-                      <td className="px-4 py-3 text-right text-slate-700">{inr(row.amount)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
-                  <tr>
-                    <td className="px-4 py-3">Total Working</td>
-                    <td className="px-4 py-3 text-right">{outstandingRows.reduce((s, r) => s + r.students, 0)}</td>
-                    <td className="px-4 py-3 text-right text-violet-700">{inr(totalOutstanding)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {activeTab === 'reconciliation' && (
-          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900">Bank Reconciliation (Working)</h2>
-            <div className="mt-4 grid gap-3 text-sm sm:max-w-2xl">
-              <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                <span>Ledger Net Collection (A)</span>
-                <span className="font-semibold">{inr(collectionSummary.net)}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                <span>Bank Statement Credits (B)</span>
-                <span className="font-semibold">{inr(bankStatementCredits)}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                <span>Less: In Transit Deposits</span>
-                <span className="font-semibold">{inr(inTransit)}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                <span>Add: Prior Pending Adjustment</span>
-                <span className="font-semibold">{inr(priorPending)}</span>
-              </div>
-              <div className="rounded-md border border-blue-300 bg-blue-50 px-3 py-3 text-blue-900">
-                <p className="font-semibold">
-                  Reconciliation Difference = A - (B - In Transit + Prior Pending)
-                </p>
-                <p className="mt-1 text-lg font-bold">{inr(reconDifference)}</p>
-              </div>
-            </div>
-          </section>
-        )}
-      </div>
-    </main>
-  );
+  return <FinanceFullDashboard />;
 }
