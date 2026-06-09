@@ -99,8 +99,8 @@ async function buildWorkbook(params: {
 
   const isFollowUp = status === 'Follow Up';
   const headers = isFollowUp
-    ? ['Date', 'Discipline', 'Company Name', 'Contact Person', 'Mobile', 'E-mail', 'DirectLine', 'Designation', 'Purpose', 'Remark', 'WebSite', 'Mobile1', 'Status']
-    : ['Date', 'Discipline', 'BatchNo', 'CandidateName', 'CompanyName', 'Remark'];
+    ? ['Date', 'Discipline', 'Company Name', 'Contact Person', 'Mobile', 'E-mail', 'DirectLine', 'Designation', 'Purpose', 'Remark', 'WebSite', 'Mobile1', 'Status', 'Added/Edited By']
+    : ['Date', 'Discipline', 'BatchNo', 'CandidateName', 'CompanyName', 'Remark', 'Added/Edited By'];
 
   const thin: ExcelJS.Border = { style: 'thin', color: { argb: 'FFB0B0B0' } };
   const allBorders: Partial<ExcelJS.Borders> = { top: thin, bottom: thin, left: thin, right: thin };
@@ -156,6 +156,7 @@ async function buildWorkbook(params: {
             row.WebSite || '',
             row.Mobile1 || '',
             row.Status || '',
+            row.AddedEditedBy || '',
           ]
         : [
             formatDisplayDate(row.Date),
@@ -164,6 +165,7 @@ async function buildWorkbook(params: {
             row.CandidateName || '',
             row.CompanyName || '',
             row.Remark || '',
+            row.AddedEditedBy || '',
           ];
 
       values.forEach((value, valueIndex) => {
@@ -182,8 +184,8 @@ async function buildWorkbook(params: {
   }
 
   const widths = isFollowUp
-    ? [14, 22, 28, 22, 16, 28, 18, 18, 18, 42, 28, 16, 16]
-    : [14, 22, 18, 28, 28, 40];
+    ? [14, 22, 28, 22, 16, 28, 18, 18, 18, 42, 28, 16, 16, 24]
+    : [14, 22, 18, 28, 28, 40, 24];
   widths.forEach((width, index) => {
     worksheet.getColumn(index + 1).width = width;
   });
@@ -310,10 +312,22 @@ export async function GET(req: NextRequest) {
            COALESCE(f.Remark, '') AS Remark,
            COALESCE(cm.Website, '') AS WebSite,
            COALESCE(cm.Mobile, '') AS Mobile1,
-           COALESCE(cm.Company_Status, '') AS Status
+           COALESCE(cm.Company_Status, '') AS Status,
+           COALESCE(
+             NULLIF(TRIM(CONCAT(COALESCE(au.firstname, ''), ' ', COALESCE(au.lastname, ''))), ''),
+             NULLIF(TRIM(au.username), ''),
+             NULLIF(TRIM(au.email), ''),
+             NULLIF(TRIM(oe.Employee_Name), ''),
+             NULLIF(TRIM(f.CreatedBy), ''),
+             'System'
+           ) AS AddedEditedBy
          FROM consultant_follows f
          INNER JOIN consultant_mst cm
            ON CAST(NULLIF(TRIM(f.Consultant_Id), '') AS UNSIGNED) = cm.Const_Id
+         LEFT JOIN awt_adminuser au
+           ON au.id = CAST(NULLIF(TRIM(f.CreatedBy), '') AS UNSIGNED)
+         LEFT JOIN office_employee_mst oe
+           ON oe.Emp_Id = CAST(NULLIF(TRIM(f.CreatedBy), '') AS UNSIGNED)
          WHERE (f.IsDelete = 0 OR f.IsDelete IS NULL OR f.IsDelete = '' OR f.IsDelete = '0' OR f.IsDelete = 'N' OR f.IsDelete = 'No')
            AND (cm.IsDelete = 0 OR cm.IsDelete IS NULL)
            AND (? = 1 OR cm.Const_Id = ?)
@@ -377,7 +391,8 @@ export async function GET(req: NextRequest) {
            COALESCE(b.Batch_Code, '') AS BatchNo,
            COALESCE(cc.Student_Name, '') AS CandidateName,
            COALESCE(NULLIF(TRIM(cv.CompanyName), ''), cm.Comp_Name, ?) AS CompanyName,
-           COALESCE(cc.Remark, '') AS Remark
+           COALESCE(cc.Remark, '') AS Remark,
+           COALESCE(NULLIF(TRIM(cc.PlacedBy), ''), 'System') AS AddedEditedBy
          FROM cv_shortlisted cv
          INNER JOIN cvchild cc
            ON cc.CV_Id = cv.id

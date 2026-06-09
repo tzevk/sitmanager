@@ -96,6 +96,7 @@ export async function GET(req: NextRequest) {
         };
       })
       .filter((item) => item.studentName)
+      .filter((item) => item.currentStep > 1)
       .filter((item) => {
         if (!search) return true;
         return (
