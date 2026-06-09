@@ -283,7 +283,7 @@ function ctrCls(ctr: number): string {
 }
 
 function normalizedFollowUpLines(raw: string | null | undefined): string[] {
-  const placeholders = new Set(['null', 'n/a', 'na', 'none', '-', 'saved']);
+  const placeholders = new Set(['null', 'n/a', 'na', 'none', '-']);
   return toBulletEditorValue(raw)
     .split('\n')
     .map((line) => line.trim())
@@ -371,9 +371,55 @@ interface FollowUpModalProps {
   onClose: () => void;
 }
 
+interface FollowUpDiscussionEntry {
+  id: number;
+  date: string | null;
+  nextDate: string | null;
+  note: string;
+  createdAt: string | null;
+}
+
 function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, onClose }: FollowUpModalProps) {
-  const bullets = normalizedFollowUpLines(draft.discussion);
+  const fallbackBullets = normalizedFollowUpLines(draft.discussion);
   const [newNote, setNewNote] = useState('');
+  const [entries, setEntries] = useState<FollowUpDiscussionEntry[]>([]);
+  const [entriesLoading, setEntriesLoading] = useState(true);
+  const [noteError, setNoteError] = useState('');
+
+  const loadEntries = useCallback(async () => {
+    if (!row.MetaLead_Id) return;
+    setEntriesLoading(true);
+    try {
+      const res = await fetch(`/api/meta-ads/leads/${encodeURIComponent(row.MetaLead_Id)}/discussions`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to load follow-up notes');
+      const nextEntries = Array.isArray(data?.entries) ? data.entries : [];
+      setEntries(nextEntries);
+
+      // Safety fallback: some legacy leads have latest text in inquiry Discussion
+      // even when discussion history rows are missing.
+      if (nextEntries.length === 0) {
+        const detailRes = await fetch(`/api/meta-ads/leads/${encodeURIComponent(row.MetaLead_Id)}`);
+        const detailData = await detailRes.json().catch(() => ({}));
+        if (detailRes.ok) {
+          const detailDiscussion = toBulletEditorValue(detailData?.lead?.Discussion);
+          if (detailDiscussion) {
+            onDraftChange(row.MetaLead_Id, 'discussion', detailDiscussion);
+          }
+        }
+      }
+      setNoteError('');
+    } catch (error: unknown) {
+      setEntries([]);
+      setNoteError(error instanceof Error ? error.message : 'Failed to load follow-up notes');
+    } finally {
+      setEntriesLoading(false);
+    }
+  }, [onDraftChange, row.MetaLead_Id]);
+
+  useEffect(() => { void loadEntries(); }, [loadEntries]);
+
+  const usesServerEntries = entries.length > 0;
 
   function addBullet() {
     const note = newNote.trim();
@@ -386,7 +432,7 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
   }
 
   function removeBullet(index: number) {
-    const next = bullets.filter((_, i) => i !== index).join('\n');
+    const next = fallbackBullets.filter((_, i) => i !== index).join('\n');
     onDraftChange(row.MetaLead_Id, 'discussion', next);
   }
 
@@ -404,7 +450,27 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
       setNewNote('');
     }
 
-    const ok = await onSave(row, draftToSave);
+    let ok = true;
+    if (pending && canUpdate && row.MetaLead_Id) {
+      try {
+        const res = await fetch(`/api/meta-ads/leads/${encodeURIComponent(row.MetaLead_Id)}/discussions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note: pending, nextDate: null }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || 'Failed to save follow-up note');
+        await loadEntries();
+      } catch (error: unknown) {
+        setNoteError(error instanceof Error ? error.message : 'Failed to save follow-up note');
+        ok = false;
+      }
+    }
+
+    // Keep legacy text discussion path for deployments where follow-up history isn't available yet.
+    if (!usesServerEntries) {
+      ok = ok && await onSave(row, draftToSave);
+    }
     if (ok) onClose();
   }
 
@@ -421,10 +487,25 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
           </button>
         </div>
         <div className="px-5 py-4 max-h-[46vh] overflow-y-auto space-y-2">
-          {bullets.length === 0 ? (
+          {entriesLoading ? (
+            <p className="text-xs text-slate-400 text-center py-6">Loading follow-up notes…</p>
+          ) : usesServerEntries ? (
+            entries.map((entry) => {
+              const date = entry.date || entry.createdAt;
+              return (
+                <div key={entry.id} className="flex items-start gap-2.5 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#2E3093] shrink-0 mt-1.5" />
+                  <div className="min-w-0 flex-1">
+                    {date && <span className="inline-block mb-1 rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600">{formatDate(date)}</span>}
+                    <p className="text-xs text-slate-700 leading-5">{entry.note}</p>
+                  </div>
+                </div>
+              );
+            })
+          ) : fallbackBullets.length === 0 ? (
             <p className="text-xs text-slate-400 text-center py-6">No follow-up notes yet. Add one below.</p>
           ) : (
-            bullets.map((bullet, i) => {
+            fallbackBullets.map((bullet, i) => {
               const dateMatch = bullet.match(/^\[([^\]]+)\]\s*(.*)/);
               const date = dateMatch?.[1] ?? null;
               const text = dateMatch?.[2] ?? bullet;
@@ -435,7 +516,7 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
                     {date && <span className="inline-block mb-1 rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600">{date}</span>}
                     <p className="text-xs text-slate-700 leading-5">{text}</p>
                   </div>
-                  {canUpdate && (
+                  {canUpdate && !usesServerEntries && (
                     <button
                       type="button"
                       onClick={() => removeBullet(i)}
@@ -449,6 +530,9 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
                 </div>
               );
             })
+          )}
+          {noteError && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-700">{noteError}</p>
           )}
         </div>
         {canUpdate && (
