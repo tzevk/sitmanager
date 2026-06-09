@@ -200,7 +200,6 @@ export default function EditOnlineAdmissionPage() {
     const restore = async () => {
       setLoadingCategories(true);
       try {
-      setPayAtOfficeAudit(d.payAtOfficeAudit && typeof d.payAtOfficeAudit === 'object' ? d.payAtOfficeAudit : null);
         const cr = await fetch(`/api/public/batches?courseId=${progId}`);
         const cd = await cr.json();
         if (cd.success) setBatchCategories(cd.categories);
@@ -233,6 +232,7 @@ export default function EditOnlineAdmissionPage() {
       setStatusCategory(d.statusCategory || 'open');
       setStudentName([d.firstName, d.middleName, d.lastName].filter(Boolean).join(' '));
       setPhotoUrl(d.photo || '');
+      setPayAtOfficeAudit(d.payAtOfficeAudit && typeof d.payAtOfficeAudit === 'object' ? d.payAtOfficeAudit : null);
 
       const nd = (v: unknown) => {
         if (!v && v !== 0) return '';
