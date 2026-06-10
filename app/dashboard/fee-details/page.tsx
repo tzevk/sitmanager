@@ -126,6 +126,13 @@ export default function FeeDetailsPage() {
           >
             {loading ? 'Searching…' : 'Search'}
           </button>
+          <Link
+            href="/dashboard/fee-details/add"
+            className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 self-end"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Add
+          </Link>
         </div>
 
         <div className="overflow-x-auto">
