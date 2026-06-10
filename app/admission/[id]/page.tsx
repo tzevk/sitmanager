@@ -3368,12 +3368,12 @@ export default function PublicAdmissionFormPage() {
                             <p className="text-sm font-semibold text-green-800">Payment Method Selected</p>
                             <p className="text-xs text-green-700 mt-0.5">
                               You have selected <span className="font-bold">{formData.modeOfPayment}</span>
-                              {formData.modeOfPayment === 'Full Payment' && <> — you pay <span className="font-bold">&#8377;{fmt(fullPayAmount)}</span> (5% discount applied)</>}
-                              {formData.modeOfPayment === '50% Installment' && <> — &#8377;{fmt(firstInstallmentAmount)} now + &#8377;{fmt(secondInstallmentAmount)} later</>}
-                              {formData.modeOfPayment === '3-Installment Plan' && <> — {isProcessWeekend ? '₹15,000 now + ₹17,500 × 2 instalments' : '₹25,000 now + ₹43,500 × 2 instalments'}</>}
-                              {formData.modeOfPayment === '2-Payment Plan' && <> — &#8377;15,000 now + &#8377;35,000 on first day of batch</>}
-                              {formData.modeOfPayment === '6-Installment Plan' && <> — &#8377;15,000 now + &#8377;12,000 × 5 instalments</>}
-                              {formData.modeOfPayment === 'Loan (0% Interest)' && <> — &#8377;{(isPipingEngineeringFulltime || isEngineeringDesignDraftingFulltime) ? '12,000' : (isProcessWeekend || is75kPlan ? '15,000' : '12,000')} at admission + &#8377;{isProcessWeekend ? '35,000' : is75kPlan ? '60,000' : '1,00,000'} loan via financial institution</>}
+                              {formData.modeOfPayment === 'Full Payment' && <> — you pay <span className="font-bold">&#8377;{fmt(payableNow)}</span> (5% discount applied on Tuition Fee, plus &#8377;{ALUMNI_MEMBERSHIP_FEE} Membership Fee)</>}
+                              {formData.modeOfPayment === '50% Installment' && <> — &#8377;{fmt(payableNow)} now + &#8377;{fmt(secondInstallmentAmount)} later</>}
+                              {formData.modeOfPayment === '3-Installment Plan' && <> — {isProcessWeekend ? `₹${fmt(payableNow)} now + ₹17,500 × 2 instalments` : `₹${fmt(payableNow)} now + ₹43,500 × 2 instalments`}</>}
+                              {formData.modeOfPayment === '2-Payment Plan' && <> — &#8377;{fmt(payableNow)} now + &#8377;35,000 on first day of batch</>}
+                              {formData.modeOfPayment === '6-Installment Plan' && <> — &#8377;{fmt(payableNow)} now + &#8377;12,000 × 5 instalments</>}
+                              {formData.modeOfPayment === 'Loan (0% Interest)' && <> — &#8377;{fmt(payableNow)} at admission + &#8377;{isProcessWeekend ? '35,000' : is75kPlan ? '60,000' : '1,00,000'} loan via financial institution</>}
                             </p>
                           </div>
                         </div>
