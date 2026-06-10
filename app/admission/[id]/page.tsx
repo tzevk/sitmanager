@@ -42,6 +42,9 @@ const STEP_GUIDANCE: Record<number, { focus: string; tip: string }> = {
 
 const stepEnterStyle = { animation: 'stepEnter 320ms ease-out' };
 
+// One Time Membership Fee - Sitians Alumni Association — mandatory for every training course
+const ALUMNI_MEMBERSHIP_FEE = 899;
+
 // Training Program Eligibility Map (based on educational background)
 const COURSE_ELIGIBILITY: { [key: string]: string[] } = {
   'Piping Engineering': ['Mechanical', 'Production', 'Chemical', 'Petrochemical'],
@@ -539,17 +542,18 @@ export default function PublicAdmissionFormPage() {
     );
     const isProcessWeekendMode = /process\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '');
     const amountPaise =
-      formData.modeOfPayment === 'Full Payment'
-        ? Math.round(baseFees * 0.95) * 100
+      (formData.modeOfPayment === 'Full Payment'
+        ? Math.round(baseFees * 0.95)
         : formData.modeOfPayment === '3-Installment Plan'
-        ? (isProcessWeekendMode ? 15000 : 25000) * 100
+        ? (isProcessWeekendMode ? 15000 : 25000)
         : formData.modeOfPayment === '2-Payment Plan'
-        ? 15000 * 100
+        ? 15000
         : formData.modeOfPayment === '6-Installment Plan'
-        ? 15000 * 100
+        ? 15000
         : formData.modeOfPayment === 'Loan (0% Interest)'
-        ? (isPipingEngineeringFulltimeMode ? 12000 : ((isEngineeringDesignDraftingFulltimeMode || isLoanAdmission15000Mode || isProcessWeekendMode) ? 15000 : 12000)) * 100
-        : Math.round(installmentTotal / 2) * 100;
+        ? (isPipingEngineeringFulltimeMode ? 12000 : ((isEngineeringDesignDraftingFulltimeMode || isLoanAdmission15000Mode || isProcessWeekendMode) ? 15000 : 12000))
+        : Math.round(installmentTotal / 2)) * 100
+      + ALUMNI_MEMBERSHIP_FEE * 100;
 
     setPaymentLoading(true);
     try {
@@ -1142,7 +1146,7 @@ export default function PublicAdmissionFormPage() {
             (/engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') && /full.?time/i.test(formData.trainingCategory || '')) ||
             /piping\s+design.*drafting/i.test(formData.trainingProgrammeName || '')
           );
-          return formData.modeOfPayment === 'Full Payment'
+          return (formData.modeOfPayment === 'Full Payment'
             ? Math.round((batchFees ?? 0) * 0.95)
             : formData.modeOfPayment === '3-Installment Plan'
             ? (isProcessWeekend ? 15000 : 25000)
@@ -1152,7 +1156,7 @@ export default function PublicAdmissionFormPage() {
             ? 15000
             : formData.modeOfPayment === 'Loan (0% Interest)'
             ? ((is75kLoan || isProcessWeekend) ? 15000 : 12000)
-            : Math.round((batchFeesInstallment ?? batchFees ?? 0) / 2);
+            : Math.round((batchFeesInstallment ?? batchFees ?? 0) / 2)) + ALUMNI_MEMBERSHIP_FEE;
         })() : null,
       };
 
@@ -2799,7 +2803,7 @@ export default function PublicAdmissionFormPage() {
                     const isProcessWeekend = /process\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '');
                     const is75kPlan = isPipingWeekend || isEDDFulltime || isPDD;
                     const payableNow =
-                      formData.modeOfPayment === 'Full Payment'
+                      (formData.modeOfPayment === 'Full Payment'
                         ? fullPayAmount
                         : formData.modeOfPayment === '3-Installment Plan'
                         ? (isProcessWeekend ? 15000 : 25000)
@@ -2809,7 +2813,7 @@ export default function PublicAdmissionFormPage() {
                         ? 15000
                         : formData.modeOfPayment === 'Loan (0% Interest)'
                         ? (isPipingEngineeringFulltime ? 12000 : ((isEngineeringDesignDraftingFulltime || isProcessWeekend || is75kPlan) ? 15000 : 12000))
-                        : firstInstallmentAmount;
+                        : firstInstallmentAmount) + (formData.modeOfPayment ? ALUMNI_MEMBERSHIP_FEE : 0);
 
                     return (
                     <div className="space-y-4 sm:space-y-5" style={stepEnterStyle}>
@@ -2827,6 +2831,7 @@ export default function PublicAdmissionFormPage() {
                           <div>
                             <p className="text-xs text-white/70 font-medium">Total Fees — {formData.batchCode}</p>
                             <p className="text-2xl font-extrabold mt-0.5">&#8377;{fmt(baseFees)}</p>
+                            <p className="text-[11px] text-white/70 mt-1">+ &#8377;{ALUMNI_MEMBERSHIP_FEE} One Time Membership Fee (Sitians Alumni Association) — included at admission</p>
                           </div>
                           <div className="w-12 h-12 bg-white/15 rounded-xl flex items-center justify-center">
                             <i className="fas fa-rupee-sign text-xl text-[#FAE452]"></i>
@@ -2869,7 +2874,10 @@ export default function PublicAdmissionFormPage() {
                                     {discount > 0 && <span className="bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{baseFees > 0 ? Math.round((discount / baseFees) * 100) : 0}% OFF</span>}
                                   </div>
                                   <div className={`text-xs mt-0.5 ${isSelected ? 'text-emerald-600' : 'text-gray-500'}`}>
-                                    Pay &#8377;{fmt(fullPayAmount)} in one go <span className="line-through text-gray-400">&#8377;{fmt(baseFees)}</span> — save &#8377;{fmt(discount)}
+                                    Pay &#8377;{fmt(fullPayAmount + ALUMNI_MEMBERSHIP_FEE)} in one go <span className="line-through text-gray-400">&#8377;{fmt(baseFees)}</span> — save &#8377;{fmt(discount)}
+                                  </div>
+                                  <div className={`text-[10px] mt-0.5 ${isSelected ? 'text-emerald-500' : 'text-gray-400'}`}>
+                                    (Includes &#8377;{ALUMNI_MEMBERSHIP_FEE} One Time Membership Fee — Sitians Alumni Association)
                                   </div>
                                 </div>
                                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
@@ -2904,7 +2912,7 @@ export default function PublicAdmissionFormPage() {
                                 <div className="flex-1 min-w-0">
                                   <span className={`text-sm font-bold ${isSelected ? 'text-teal-800' : 'text-gray-800'}`}>2-Payment Plan</span>
                                   <div className={`text-xs mt-0.5 ${isSelected ? 'text-teal-600' : 'text-gray-500'}`}>
-                                    &#8377;15,000 at admission + &#8377;35,000 on first day of batch
+                                    &#8377;{fmt(15000 + ALUMNI_MEMBERSHIP_FEE)} at admission + &#8377;35,000 on first day of batch
                                   </div>
                                 </div>
                                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
@@ -2917,7 +2925,7 @@ export default function PublicAdmissionFormPage() {
                                 <div className="mt-3 ml-[52px] bg-teal-100/50 rounded-lg p-3 space-y-2">
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-teal-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-teal-400"></i>At Admission (pay now)</span>
-                                    <span className="font-bold text-teal-800">&#8377;15,000</span>
+                                    <span className="font-bold text-teal-800">&#8377;{fmt(15000 + ALUMNI_MEMBERSHIP_FEE)}</span>
                                   </div>
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-teal-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-teal-400"></i>On first day of batch starting</span>
@@ -2925,7 +2933,7 @@ export default function PublicAdmissionFormPage() {
                                   </div>
                                   <div className="border-t border-teal-200 pt-2 flex items-center justify-between text-xs">
                                     <span className="text-teal-800 font-bold">Total</span>
-                                    <span className="font-extrabold text-teal-900">&#8377;50,000</span>
+                                    <span className="font-extrabold text-teal-900">&#8377;{fmt(50000 + ALUMNI_MEMBERSHIP_FEE)}</span>
                                   </div>
                                   <div className="flex items-start gap-1.5 pt-1">
                                     <i className="fas fa-exclamation-circle text-teal-400 text-[10px] mt-0.5 flex-shrink-0"></i>
@@ -2959,7 +2967,7 @@ export default function PublicAdmissionFormPage() {
                                 <div className="flex-1 min-w-0">
                                   <span className={`text-sm font-bold ${isSelected ? 'text-violet-800' : 'text-gray-800'}`}>3-Installment Plan</span>
                                   <div className={`text-xs mt-0.5 ${isSelected ? 'text-violet-600' : 'text-gray-500'}`}>
-                                    &#8377;15,000 at admission + &#8377;17,500 × 2 — total &#8377;50,000
+                                    &#8377;{fmt(15000 + ALUMNI_MEMBERSHIP_FEE)} at admission + &#8377;17,500 × 2 — total &#8377;{fmt(50000 + ALUMNI_MEMBERSHIP_FEE)}
                                   </div>
                                 </div>
                                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
@@ -2972,7 +2980,7 @@ export default function PublicAdmissionFormPage() {
                                 <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>At Admission (pay now)</span>
-                                    <span className="font-bold text-violet-800">&#8377;15,000</span>
+                                    <span className="font-bold text-violet-800">&#8377;{fmt(15000 + ALUMNI_MEMBERSHIP_FEE)}</span>
                                   </div>
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>1st Instalment (30 days from batch start)</span>
@@ -2984,7 +2992,7 @@ export default function PublicAdmissionFormPage() {
                                   </div>
                                   <div className="border-t border-violet-200 pt-2 flex items-center justify-between text-xs">
                                     <span className="text-violet-800 font-bold">Total</span>
-                                    <span className="font-extrabold text-violet-900">&#8377;50,000</span>
+                                    <span className="font-extrabold text-violet-900">&#8377;{fmt(50000 + ALUMNI_MEMBERSHIP_FEE)}</span>
                                   </div>
                                   <div className="flex items-start gap-1.5 pt-1">
                                     <i className="fas fa-exclamation-circle text-violet-400 text-[10px] mt-0.5 flex-shrink-0"></i>
@@ -3015,7 +3023,7 @@ export default function PublicAdmissionFormPage() {
                                 <div className="flex-1 min-w-0">
                                   <span className={`text-sm font-bold ${isSelected ? 'text-violet-800' : 'text-gray-800'}`}>6-Installment Plan</span>
                                   <div className={`text-xs mt-0.5 ${isSelected ? 'text-violet-600' : 'text-gray-500'}`}>
-                                    &#8377;15,000 at admission + &#8377;12,000 × 5 — total &#8377;75,000
+                                    &#8377;{fmt(15000 + ALUMNI_MEMBERSHIP_FEE)} at admission + &#8377;12,000 × 5 — total &#8377;{fmt(75000 + ALUMNI_MEMBERSHIP_FEE)}
                                   </div>
                                 </div>
                                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
@@ -3028,7 +3036,7 @@ export default function PublicAdmissionFormPage() {
                                 <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>At Admission (pay now)</span>
-                                    <span className="font-bold text-violet-800">&#8377;15,000</span>
+                                    <span className="font-bold text-violet-800">&#8377;{fmt(15000 + ALUMNI_MEMBERSHIP_FEE)}</span>
                                   </div>
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>1st Instalment (30 days from batch start)</span>
@@ -3052,7 +3060,7 @@ export default function PublicAdmissionFormPage() {
                                   </div>
                                   <div className="border-t border-violet-200 pt-2 flex items-center justify-between text-xs">
                                     <span className="text-violet-800 font-bold">Total</span>
-                                    <span className="font-extrabold text-violet-900">&#8377;75,000</span>
+                                    <span className="font-extrabold text-violet-900">&#8377;{fmt(75000 + ALUMNI_MEMBERSHIP_FEE)}</span>
                                   </div>
                                   <div className="flex items-start gap-1.5 pt-1">
                                     <i className="fas fa-exclamation-circle text-violet-400 text-[10px] mt-0.5 flex-shrink-0"></i>
@@ -3083,7 +3091,7 @@ export default function PublicAdmissionFormPage() {
                                 <div className="flex-1 min-w-0">
                                   <span className={`text-sm font-bold ${isSelected ? 'text-violet-800' : 'text-gray-800'}`}>3-Installment Plan</span>
                                   <div className={`text-xs mt-0.5 ${isSelected ? 'text-violet-600' : 'text-gray-500'}`}>
-                                    &#8377;25,000 at admission + &#8377;43,500 × 2 — total &#8377;1,12,000
+                                    &#8377;{fmt(25000 + ALUMNI_MEMBERSHIP_FEE)} at admission + &#8377;43,500 × 2 — total &#8377;{fmt(112000 + ALUMNI_MEMBERSHIP_FEE)}
                                   </div>
                                 </div>
                                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
@@ -3096,7 +3104,7 @@ export default function PublicAdmissionFormPage() {
                                 <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>At Admission (pay now)</span>
-                                    <span className="font-bold text-violet-800">&#8377;25,000</span>
+                                    <span className="font-bold text-violet-800">&#8377;{fmt(25000 + ALUMNI_MEMBERSHIP_FEE)}</span>
                                   </div>
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>1st Instalment (30 days from batch start)</span>
@@ -3108,7 +3116,7 @@ export default function PublicAdmissionFormPage() {
                                   </div>
                                   <div className="border-t border-violet-200 pt-2 flex items-center justify-between text-xs">
                                     <span className="text-violet-800 font-bold">Total</span>
-                                    <span className="font-extrabold text-violet-900">&#8377;1,12,000</span>
+                                    <span className="font-extrabold text-violet-900">&#8377;{fmt(112000 + ALUMNI_MEMBERSHIP_FEE)}</span>
                                   </div>
                                   <div className="flex items-start gap-1.5 pt-1">
                                     <i className="fas fa-exclamation-circle text-violet-400 text-[10px] mt-0.5 flex-shrink-0"></i>
@@ -3139,7 +3147,7 @@ export default function PublicAdmissionFormPage() {
                                 <div className="flex-1 min-w-0">
                                   <span className={`text-sm font-bold ${isSelected ? 'text-violet-800' : 'text-gray-800'}`}>50% Payment in 2 Installments</span>
                                   <div className={`text-xs mt-0.5 ${isSelected ? 'text-violet-600' : 'text-gray-500'}`}>
-                                    Pay &#8377;{fmt(firstInstallmentAmount)} now + &#8377;{fmt(secondInstallmentAmount)} later — total &#8377;{fmt(installmentPlanTotal)}
+                                    Pay &#8377;{fmt(firstInstallmentAmount + ALUMNI_MEMBERSHIP_FEE)} now + &#8377;{fmt(secondInstallmentAmount)} later — total &#8377;{fmt(installmentPlanTotal + ALUMNI_MEMBERSHIP_FEE)}
                                   </div>
                                 </div>
                                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
@@ -3152,7 +3160,7 @@ export default function PublicAdmissionFormPage() {
                                 <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>1st Installment (now)</span>
-                                    <span className="font-bold text-violet-800">&#8377;{fmt(firstInstallmentAmount)}</span>
+                                    <span className="font-bold text-violet-800">&#8377;{fmt(firstInstallmentAmount + ALUMNI_MEMBERSHIP_FEE)}</span>
                                   </div>
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>2nd Installment</span>
@@ -3160,7 +3168,7 @@ export default function PublicAdmissionFormPage() {
                                   </div>
                                   <div className="border-t border-violet-200 pt-2 flex items-center justify-between text-xs">
                                     <span className="text-violet-800 font-bold">Total</span>
-                                    <span className="font-extrabold text-violet-900">&#8377;{fmt(installmentPlanTotal)}</span>
+                                    <span className="font-extrabold text-violet-900">&#8377;{fmt(installmentPlanTotal + ALUMNI_MEMBERSHIP_FEE)}</span>
                                   </div>
                                 </div>
                               )}
@@ -3171,7 +3179,7 @@ export default function PublicAdmissionFormPage() {
                         {/* Option 3/4: Loan (Piping / EDD / PDD / Process Weekend) */}
                         {(isPipingFulltime || is75kPlan || isProcessWeekend) && (() => {
                           const isSelected = formData.modeOfPayment === 'Loan (0% Interest)';
-                          const loanAdmission = isPipingEngineeringFulltime ? 12000 : ((isEngineeringDesignDraftingFulltime || isProcessWeekend || is75kPlan) ? 15000 : 12000);
+                          const loanAdmission = (isPipingEngineeringFulltime ? 12000 : ((isEngineeringDesignDraftingFulltime || isProcessWeekend || is75kPlan) ? 15000 : 12000)) + ALUMNI_MEMBERSHIP_FEE;
                           const loanAmount = isProcessWeekend ? 35000 : is75kPlan ? 60000 : 100000;
                           const loanTotal = loanAdmission + loanAmount;
                           const fmtLoan = (n: number) => n.toLocaleString('en-IN');
@@ -3222,7 +3230,7 @@ export default function PublicAdmissionFormPage() {
                                   </div>
                                   <div className="flex items-start gap-1.5 pt-1">
                                     <i className="fas fa-info-circle text-blue-400 text-[10px] mt-0.5 flex-shrink-0"></i>
-                                    <p className="text-[10px] text-blue-700">Loan approval is subject to the financial institution. If the loan is not approved, the student must pay the remaining fees independently. No refund will be made if the student leaves the batch during the training programme.</p>
+                                    <p className="text-[10px] text-blue-700">Includes &#8377;{ALUMNI_MEMBERSHIP_FEE} One Time Membership Fee (Sitians Alumni Association). Loan approval is subject to the financial institution. If the loan is not approved, the student must pay the remaining fees independently. No refund will be made if the student leaves the batch during the training programme.</p>
                                   </div>
                                 </div>
                               )}
@@ -3336,14 +3344,7 @@ export default function PublicAdmissionFormPage() {
                               </div>
                             )}
                                 <p className="text-xs text-emerald-700 mt-0.5">
-                                  &#8377;{fmt(
-                                    formData.modeOfPayment === 'Full Payment' ? fullPayAmount
-                                    : formData.modeOfPayment === '3-Installment Plan' ? (isProcessWeekend ? 15000 : 25000)
-                                    : formData.modeOfPayment === '2-Payment Plan' ? 15000
-                                    : formData.modeOfPayment === '6-Installment Plan' ? 15000
-                                    : formData.modeOfPayment === 'Loan (0% Interest)' ? (isPipingEngineeringFulltime ? 12000 : (isEngineeringDesignDraftingFulltime || isProcessWeekend || is75kPlan ? 15000 : 12000))
-                                    : firstInstallmentAmount
-                                  )} paid successfully.
+                                  &#8377;{fmt(payableNow)} paid successfully.
                                 </p>
                                 <p className="text-[11px] text-emerald-600 font-mono mt-0.5">Ref: {razorpayPaymentId}</p>
                               </div>
