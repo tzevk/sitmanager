@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import { extname, join } from 'path';
 import { getPool } from '@/lib/db';
 import { getTableCols } from '@/lib/db-schema';
+import { writeStorageFile } from '@/lib/storage-api';
 
 const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
@@ -25,12 +26,6 @@ function sanitizeSegment(value: string): string {
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 80) || 'file';
-}
-
-function resolveDocumentUploadsRoot(): string {
-  const configured = process.env.UPLOADS_DIR?.trim();
-  if (configured) return configured;
-  return join(process.cwd(), 'public', 'uploads', 'student_document');
 }
 
 function resolvePhotoUploadsRoot(): string {
@@ -66,10 +61,6 @@ export async function saveAdmissionAssetsForStudent(studentId: number, bundle?: 
   const pool = getPool();
 
   if (bundle.documents.length > 0) {
-    const uploadsRoot = resolveDocumentUploadsRoot();
-    const studentDir = join(uploadsRoot, String(studentId));
-    await mkdir(studentDir, { recursive: true });
-
     await pool.query(`DELETE FROM documents WHERE Student_id = ? AND doc_name LIKE ?`, [studentId, `${MANAGED_DOC_PREFIX}%`]);
 
     for (const doc of bundle.documents) {
@@ -83,7 +74,7 @@ export async function saveAdmissionAssetsForStudent(studentId: number, bundle?: 
       const extension = normaliseExtension(doc.file, '.pdf');
       const filename = `${sanitizeSegment(doc.key)}-${Date.now()}${extension}`;
       const bytes = await doc.file.arrayBuffer();
-      await writeFile(join(studentDir, filename), Buffer.from(bytes));
+      await writeStorageFile(`${studentId}/${filename}`, Buffer.from(bytes));
 
       await pool.query(
         `INSERT INTO documents (upload_image, doc_name, Student_id) VALUES (?, ?, ?)`,

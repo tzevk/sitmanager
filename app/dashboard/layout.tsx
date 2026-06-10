@@ -37,6 +37,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Admin/Accounts > Account Head': '/dashboard/account-master/account-head',
   'Admin/Accounts > Assets': '/dashboard/account-master/assets',
   'Admin/Accounts > Asset Category': '/dashboard/account-master/asset-category',
+  'Admin/Accounts > Fees Details': '/dashboard/fee-details',
   'Admission Activity > Inquiry': '/dashboard/inquiry',
   'Admission Activity > Meta Leads': '/dashboard/meta-leads',
   'Admission Activity > Online Admission': '/dashboard/online-admission',
@@ -241,6 +242,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Admin/Accounts > Account Head': ['account_head.view'],
   'Admin/Accounts > Assets': ['assets.view'],
   'Admin/Accounts > Asset Category': ['asset_category.view'],
+  'Admin/Accounts > Fees Details': ['finance.view'],
   'Admission Activity > Inquiry': ['inquiry.view'],
   'Admission Activity > Meta Leads': ['inquiry.view'],
   'Admission Activity > Online Admission': ['online_admission.view'],
@@ -411,6 +413,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     if (path.startsWith('/dashboard/daily-activities')) return 'Daily Activities';
     if (path.startsWith('/dashboard/account-master')) return 'Admin/Accounts';
     if (path.startsWith('/dashboard/finance')) return 'Admin/Accounts';
+    if (path.startsWith('/dashboard/fee-details')) return 'Admin/Accounts';
     if (path.startsWith('/dashboard/reports')) return 'Reports';
     if (path.startsWith('/dashboard/role-right')) return 'Role Right';
     if (path.startsWith('/dashboard/portal-accounts')) return 'Role Right';

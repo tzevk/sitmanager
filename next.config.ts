@@ -29,6 +29,12 @@ const nextConfig: NextConfig = {
   // Keep mysql2 as external — don't bundle native Node modules
   serverExternalPackages: ['mysql2'],
 
+  // pdfkit loads its standard-font .afm files from disk at runtime —
+  // make sure they're included in the serverless function bundle.
+  outputFileTracingIncludes: {
+    '/api/reports/fees/pdf/route': ['./node_modules/pdfkit/js/data/**/*'],
+  },
+
   experimental: {
     // optimizeCss (critters) does fs.readFile calls that break Turbopack's NFT tracer on Vercel.
     // Disabled — the CSS savings are marginal and the build crash is not worth it.

@@ -2,35 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
-import { createReadStream, statSync } from 'fs';
-import { join, basename } from 'path';
-import { Readable } from 'stream';
-
-function getUploadsRoot(): string {
-  const dir = process.env.UPLOADS_DIR?.trim();
-  if (!dir) throw new Error('UPLOADS_DIR is not set. Run scripts/db/migrate-student-documents.mjs first.');
-  return dir;
-}
-
-function mimeType(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
-  const map: Record<string, string> = {
-    jpg: 'image/jpeg', jpeg: 'image/jpeg',
-    png: 'image/png', webp: 'image/webp', gif: 'image/gif',
-    pdf: 'application/pdf',
-    doc: 'application/msword',
-    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    xls: 'application/vnd.ms-excel',
-    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  };
-  return map[ext] ?? 'application/octet-stream';
-}
-
-// turbopackIgnore: filesystem calls below use a fully dynamic runtime path
-// (UPLOADS_DIR env var). The comments suppress NFT whole-project tracing.
-function tryStatFile(p: string): { size: number } | null {
-  try { return statSync(/*turbopackIgnore: true*/ p); } catch { return null; }
-}
+import { basename } from 'path';
+import { readStorageFile } from '@/lib/storage-api';
 
 export async function GET(
   req: NextRequest,
@@ -75,51 +48,35 @@ export async function GET(
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
-    let uploadsRoot: string;
+    const candidates = [
+      `${safeStudentId}/${fileBasename}`,
+      fileBasename,
+      matchedUploadImage,
+      `${safeStudentId}/${matchedUploadImage}`,
+    ];
+
+    let file: Awaited<ReturnType<typeof readStorageFile>> = null;
     try {
-      uploadsRoot = getUploadsRoot();
+      for (const candidate of candidates) {
+        file = await readStorageFile(candidate);
+        if (file) break;
+      }
     } catch (e: any) {
       return NextResponse.json({ error: e.message }, { status: 503 });
     }
 
-    // turbopackIgnore comments prevent NFT from tracing the entire project when
-    // it encounters path.join with a fully dynamic runtime-configured base dir.
-    const candidates = [
-      join(/*turbopackIgnore: true*/ uploadsRoot, safeStudentId, fileBasename),
-      join(/*turbopackIgnore: true*/ uploadsRoot, fileBasename),
-      join(/*turbopackIgnore: true*/ uploadsRoot, matchedUploadImage),
-      join(/*turbopackIgnore: true*/ uploadsRoot, safeStudentId, matchedUploadImage),
-    ];
-
-    let filePath: string | null = null;
-    let stat: { size: number } | null = null;
-    for (const candidate of candidates) {
-      const s = tryStatFile(candidate);
-      if (s) { filePath = candidate; stat = s; break; }
-    }
-
-    if (!filePath || !stat) {
+    if (!file) {
       return NextResponse.json({ error: 'File not found on server' }, { status: 404 });
     }
 
-    const stream = createReadStream(/*turbopackIgnore: true*/ filePath);
-    const nodeReadable = Readable.from(stream);
-    const webStream = new ReadableStream({
-      start(controller) {
-        nodeReadable.on('data', (chunk) => controller.enqueue(chunk));
-        nodeReadable.on('end', () => controller.close());
-        nodeReadable.on('error', (err) => controller.error(err));
-      },
-    });
+    const headers: Record<string, string> = {
+      'Content-Type': file.contentType,
+      'Cache-Control': 'private, max-age=3600',
+      'Content-Disposition': `inline; filename="${fileBasename}"`,
+    };
+    if (file.contentLength) headers['Content-Length'] = file.contentLength;
 
-    return new Response(webStream, {
-      headers: {
-        'Content-Type': mimeType(fileBasename),
-        'Content-Length': String(stat.size),
-        'Cache-Control': 'private, max-age=3600',
-        'Content-Disposition': `inline; filename="${fileBasename}"`,
-      },
-    });
+    return new Response(file.body, { headers });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('Student document GET error:', message);

@@ -7,6 +7,7 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 /* ── Types ─────────────────────────────────────────────────────────── */
 interface FeesRow {
   Fees_Id: number;
+  Student_Id?: number;
   Fees_Code: string | null;
   Date_Added: string | null;
   RDate: string | null;
@@ -38,6 +39,8 @@ interface BatchWiseFeesRow {
   Course_Name: string;
   Batch_Start: string | null;
   Batch_End: string | null;
+  Fees_Full_Payment?: number | null;
+  Student_Id?: number | null;
   Student_Name: string;
   Present_Mobile: string;
   Fees_Id: number;
@@ -58,30 +61,6 @@ interface BatchWiseFeesRow {
   FeesMonth: number | null;
   FeesYear: number | null;
   Print: number | null;
-}
-
-interface BatchWiseFacultyRow {
-  Batch_Code: string;
-  Course_Name: string;
-  Batch_Start: string | null;
-  Batch_End: string | null;
-  Faculty_Name: string;
-  Faculty_Type: string | null;
-  Salary_struct: string | null;
-  Sal_Month: string | null;
-  Sal_Year: string | null;
-  Total_Hours: number | null;
-  Rate: number | null;
-  Salary: number | null;
-  Tot_Inc: number | null;
-  TDS: number | null;
-  Total_Ded: number | null;
-  Net_Payment: number | null;
-  Payment_Type: string | null;
-  Cheque_No: number | null;
-  NEFT_No: string | null;
-  Payment_Dt: string | null;
-  Date_Added: string | null;
 }
 
 interface FacultyRow {
@@ -120,7 +99,7 @@ interface BatchOption   { Batch_Id: number; Batch_code: string; }
 const AMOUNT_TYPES = ['Cash', 'Cheque', 'NEFT', 'PDC', 'Online', 'DD'];
 
 type Tab    = 'cheque-pdc' | 'fees-details' | 'faculty-payment';
-type SubTab = 'batch-wise-fees' | 'fees-record' | 'batch-wise-faculty';
+type SubTab = 'batch-wise-fees';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'cheque-pdc',      label: 'Cheque / PDC and Receipts' },
@@ -130,8 +109,6 @@ const TABS: { id: Tab; label: string }[] = [
 
 const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: 'batch-wise-fees',     label: 'Batch Wise Fees Details New' },
-  { id: 'fees-record',         label: 'Fees Record New' },
-  { id: 'batch-wise-faculty',  label: 'Batch Wise Faculty Payment' },
 ];
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
@@ -180,7 +157,6 @@ function FeesReportContent() {
 
   const [feesRows,           setFeesRows]           = useState<FeesRow[]>([]);
   const [batchWiseFeesRows,  setBatchWiseFeesRows]  = useState<BatchWiseFeesRow[]>([]);
-  const [batchWiseFacRows,   setBatchWiseFacRows]   = useState<BatchWiseFacultyRow[]>([]);
   const [facultyRows,        setFacultyRows]        = useState<FacultyRow[]>([]);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
@@ -204,7 +180,7 @@ function FeesReportContent() {
   }, [courseId]);
 
   const clearResults = () => {
-    setFeesRows([]); setBatchWiseFeesRows([]); setBatchWiseFacRows([]); setFacultyRows([]);
+    setFeesRows([]); setBatchWiseFeesRows([]); setFacultyRows([]);
     setSearched(false); setError('');
   };
 
@@ -213,7 +189,7 @@ function FeesReportContent() {
     const controller = new AbortController();
     abortRef.current = controller;
     setLoading(true); setError('');
-    setFeesRows([]); setBatchWiseFeesRows([]); setBatchWiseFacRows([]); setFacultyRows([]);
+    setFeesRows([]); setBatchWiseFeesRows([]); setFacultyRows([]);
     try {
       const p = new URLSearchParams({ tab });
       if (tab === 'fees-details') p.set('subTab', st);
@@ -234,7 +210,6 @@ function FeesReportContent() {
       const rows = data.rows ?? [];
       if (tab === 'faculty-payment')                                   setFacultyRows(rows);
       else if (tab === 'fees-details' && st === 'batch-wise-fees')     setBatchWiseFeesRows(rows);
-      else if (tab === 'fees-details' && st === 'batch-wise-faculty')  setBatchWiseFacRows(rows);
       else setFeesRows(rows);
 
       setSearched(true);
@@ -267,7 +242,6 @@ function FeesReportContent() {
   const totalTax      = feesRows.reduce((s, r) => s + (r.Service_Tax ?? 0), 0);
   const totalNet      = feesRows.reduce((s, r) => s + (r.Total_Amt ?? 0), 0);
   const totalBwNet    = batchWiseFeesRows.reduce((s, r) => s + (r.Total_Amt ?? 0), 0);
-  const totalBwFacNet = batchWiseFacRows.reduce((s, r) => s + (r.Net_Payment ?? 0), 0);
   const totalFacNet   = facultyRows.reduce((s, r) => s + (r.Net_Payment ?? 0), 0);
 
   const showPrintToggle = activeTab !== 'faculty-payment' &&
@@ -282,23 +256,13 @@ function FeesReportContent() {
     const fname = `fees-${subTab}-${new Date().toISOString().slice(0,10)}.csv`;
 
     if (subTab === 'batch-wise-fees') {
-      csv = buildCsv(['#','Batch Code','Course Name','Batch Start','Batch End','Student Name','Mobile','Receipt No','Date','Payment Type','Cheque No','Bank/Branch','Month/Year','Amount','Tax','Total','Unpaid','Notes'],
-        () => batchWiseFeesRows.map((r,i) => [String(i+1), r.Batch_Code, r.Course_Name, fmtDate(r.Batch_Start), fmtDate(r.Batch_End),
-          r.Student_Name, r.Present_Mobile, r.Fees_Code ?? '', fmtDate(r.RDate || r.Date_Added),
-          r.Payment_Type ?? '', r.Cheque_No ?? '', [r.Cheque_Bank, r.Cheque_Branch].filter(Boolean).join(' / '),
-          r.FeesMonth && r.FeesYear ? `${r.FeesMonth}/${r.FeesYear}` : '',
-          String(r.Amount ?? ''), String(r.Service_Tax ?? ''), String(r.Total_Amt ?? ''), String(r.UnPaid_Amt ?? ''), r.Notes ?? '']));
-    } else if (subTab === 'fees-record') {
-      csv = buildCsv(['#','Receipt No','Date','Student Name','Mobile','Course','Batch','Payment Type','Month/Year','Amount','Tax','Total','Notes'],
-        () => feesRows.map((r,i) => [String(i+1), r.Fees_Code ?? '', fmtDate(r.RDate || r.Date_Added), r.Student_Name, r.Present_Mobile,
-          r.Course_Name, r.Batch_Code, r.Payment_Type ?? '', r.FeesMonth && r.FeesYear ? `${r.FeesMonth}/${r.FeesYear}` : '',
-          String(r.Amount ?? ''), String(r.Service_Tax ?? ''), String(r.Total_Amt ?? ''), r.Notes ?? '']));
-    } else if (subTab === 'batch-wise-faculty') {
-      csv = buildCsv(['#','Batch Code','Course Name','Faculty Name','Type','Month/Year','Hours','Rate','Gross','TDS','Deductions','Net Payment','Payment Type','Cheque/NEFT','Payment Date'],
-        () => batchWiseFacRows.map((r,i) => [String(i+1), r.Batch_Code, r.Course_Name, r.Faculty_Name, r.Faculty_Type ?? '',
-          r.Sal_Month && r.Sal_Year ? `${r.Sal_Month} ${r.Sal_Year}` : '', String(r.Total_Hours ?? ''), String(r.Rate ?? ''),
-          String(r.Salary ?? ''), String(r.TDS ?? ''), String(r.Total_Ded ?? ''), String(r.Net_Payment ?? ''),
-          r.Payment_Type ?? '', r.NEFT_No || String(r.Cheque_No ?? ''), fmtDate(r.Payment_Dt)]));
+      const transactionDetails = (r: BatchWiseFeesRow) =>
+        r.Payment_Type && ['cheque','dd','pdc'].includes(r.Payment_Type.toLowerCase())
+          ? [r.Cheque_No, r.Cheque_Bank, r.Cheque_Branch].filter(Boolean).join(' / ')
+          : (r.Payment_Type ?? '');
+      csv = buildCsv(['Sr No','Receipt Date','Receipt Number','Name of Student','Amount','Payment Type','Transaction Details'],
+        () => batchWiseFeesRows.filter(r => r.Fees_Id).map((r,i) => [String(i+1), fmtDate(r.RDate || r.Date_Added), r.Fees_Code ?? '',
+          r.Student_Name, String(r.Amount ?? ''), r.Payment_Type ?? '', transactionDetails(r)]));
     }
     if (!csv) return;
     const a = document.createElement('a');
@@ -403,6 +367,25 @@ function FeesReportContent() {
                 Excel
               </button>
 
+              {activeTab === 'fees-details' && subTab === 'batch-wise-fees' && (
+                <button
+                  onClick={() => {
+                    const p = new URLSearchParams();
+                    if (courseId) p.set('courseId', courseId);
+                    if (batchId)  p.set('batchId',  batchId);
+                    if (fromDate) p.set('fromDate', fromDate);
+                    if (toDate)   p.set('toDate',   toDate);
+                    window.open(`/api/reports/fees/pdf?${p.toString()}`, '_blank');
+                  }}
+                  disabled={!batchId}
+                  className="flex items-center gap-1.5 bg-rose-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors self-end"
+                  title={!batchId ? 'Select a batch to generate the PDF' : 'Generate PDF'}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                  Generate PDF
+                </button>
+              )}
+
               <button onClick={handleShow} disabled={loading}
                 className="flex items-center gap-1.5 bg-[#2E3093] text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-[#252880] disabled:opacity-60 disabled:cursor-not-allowed transition-colors self-end"
               >
@@ -479,12 +462,6 @@ function FeesReportContent() {
             )}
             {activeTab === 'fees-details' && subTab === 'batch-wise-fees' && (
               <BatchWiseFeesTable rows={batchWiseFeesRows} totalNet={totalBwNet} />
-            )}
-            {activeTab === 'fees-details' && subTab === 'fees-record' && (
-              <FeesDetailsTable rows={feesRows} totalAmt={totalAmt} totalTax={totalTax} totalNet={totalNet} />
-            )}
-            {activeTab === 'fees-details' && subTab === 'batch-wise-faculty' && (
-              <BatchWiseFacultyTable rows={batchWiseFacRows} totalNet={totalBwFacNet} />
             )}
             {activeTab === 'faculty-payment' && (
               <FacultyPaymentTable rows={facultyRows} totalNet={totalFacNet} />
@@ -574,35 +551,26 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
       <table className="w-full">
         <thead>
           <tr className="border-b border-slate-200">
-            <th className={TH}>#</th>
-            <th className={TH}>Batch Code</th>
-            <th className={TH}>Course Name</th>
-            <th className={TH}>Batch Start</th>
-            <th className={TH}>Batch End</th>
-            <th className={TH}>Student Name</th>
-            <th className={TH}>Mobile</th>
-            <th className={TH}>Receipt No</th>
-            <th className={TH}>Date</th>
-            <th className={TH}>Payment Type</th>
-            <th className={TH}>Cheque No</th>
-            <th className={TH}>Bank / Branch</th>
-            <th className={TH}>Month / Year</th>
+            <th className={TH}>Sr No</th>
+            <th className={TH}>Receipt Date</th>
+            <th className={TH}>Receipt Number</th>
+            <th className={TH}>Name of Student</th>
             <th className={THR}>Amount</th>
-            <th className={THR}>Tax</th>
-            <th className={THR}>Total</th>
-            <th className={THR}>Unpaid</th>
-            <th className={TH}>Notes</th>
-            <th className="text-center py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap">Printed</th>
+            <th className={TH}>Payment Type</th>
+            <th className={TH}>Transaction Details</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r, i) => {
             const isNewBatch = i === 0 || rows[i - 1].Batch_Code !== r.Batch_Code;
+            const transactionDetails = r.Payment_Type && ['cheque','dd','pdc'].includes(r.Payment_Type.toLowerCase())
+              ? [r.Cheque_No, r.Cheque_Bank, r.Cheque_Branch].filter(Boolean).join(' / ') || '—'
+              : (r.Payment_Type || '—');
             return (
               <React.Fragment key={`${r.Batch_Code}-${r.Fees_Id ?? 'np'}-${i}`}>
                 {isNewBatch && (
                   <tr className="bg-[#2E3093]/5 border-y border-[#2E3093]/10">
-                    <td colSpan={19} className="py-1.5 px-3">
+                    <td colSpan={7} className="py-1.5 px-3">
                       <div className="flex items-center gap-3">
                         <span className="text-[11px] font-bold text-[#2E3093] font-mono">{r.Batch_Code || '—'}</span>
                         <span className="text-[11px] text-slate-600">{r.Course_Name}</span>
@@ -613,37 +581,21 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
                 )}
                 <tr className={`hover:bg-slate-50/60 transition-colors ${!r.Fees_Id ? 'bg-red-50/40' : ''}`}>
                   <td className={`${TD} text-slate-400`}>{i + 1}</td>
-                  <td className={TD}><span className="font-mono text-[11px] text-[#2E3093]">{r.Batch_Code || '—'}</span></td>
-                  <td className={`${TD} max-w-[140px] truncate`}>{r.Course_Name || '—'}</td>
-                  <td className={TD}>{fmtDate(r.Batch_Start)}</td>
-                  <td className={TD}>{fmtDate(r.Batch_End)}</td>
-                  <td className={`${TD} font-medium max-w-[160px] truncate`}>{r.Student_Name || '—'}</td>
-                  <td className={TD}>{r.Present_Mobile || '—'}</td>
                   {!r.Fees_Id ? (
-                    <td colSpan={12} className="py-2 px-3 text-xs text-center border-b border-slate-100">
+                    <td colSpan={6} className="py-2 px-3 text-xs text-center border-b border-slate-100">
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-[10px] font-semibold border border-red-200">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        No Payment Recorded
+                        {r.Student_Name} — No Payment Recorded
                       </span>
                     </td>
                   ) : (
                     <>
-                      <td className={TD}><span className="font-mono text-[11px] font-semibold text-[#2E3093]">{r.Fees_Code || '—'}</span></td>
                       <td className={TD}>{fmtDate(r.RDate || r.Date_Added)}</td>
+                      <td className={TD}><span className="font-mono text-[11px] font-semibold text-[#2E3093]">{r.Fees_Code || '—'}</span></td>
+                      <td className={`${TD} font-medium max-w-[180px] truncate`}>{r.Student_Name || '—'}</td>
+                      <td className={`${TD} text-right font-mono font-semibold`}>{fmt(r.Amount)}</td>
                       <td className={TD}><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${payBadge(r.Payment_Type)}`}>{r.Payment_Type || '—'}</span></td>
-                      <td className={`${TD} font-mono`}>{r.Cheque_No || '—'}</td>
-                      <td className={TD}>{[r.Cheque_Bank, r.Cheque_Branch].filter(Boolean).join(' / ') || '—'}</td>
-                      <td className={TD}>{r.FeesMonth && r.FeesYear ? `${r.FeesMonth}/${r.FeesYear}` : '—'}</td>
-                      <td className={`${TD} text-right font-mono`}>{fmt(r.Amount)}</td>
-                      <td className={`${TD} text-right font-mono`}>{r.Service_Tax ? fmt(r.Service_Tax) : '—'}</td>
-                      <td className={`${TD} text-right font-mono font-semibold text-emerald-700`}>{fmt(r.Total_Amt)}</td>
-                      <td className={`${TD} text-right font-mono text-amber-600`}>{r.UnPaid_Amt ? fmt(r.UnPaid_Amt) : '—'}</td>
-                      <td className={`${TD} max-w-[160px] truncate text-slate-500`}>{r.Notes || '—'}</td>
-                      <td className="py-2 px-3 text-xs text-center border-b border-slate-100">
-                        {r.Print
-                          ? <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-semibold border border-emerald-200"><svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Yes</span>
-                          : <span className="text-slate-300 text-[10px]">No</span>}
-                      </td>
+                      <td className={`${TD} max-w-[200px] truncate text-slate-500`}>{transactionDetails}</td>
                     </>
                   )}
                 </tr>
@@ -653,9 +605,9 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
         </tbody>
         <tfoot>
           <tr className="bg-slate-50 border-t-2 border-slate-200">
-            <td colSpan={15} className="py-2 px-3 text-xs text-slate-600 text-right font-bold">Total ({rows.length} records)</td>
+            <td colSpan={4} className="py-2 px-3 text-xs text-slate-600 text-right font-bold">Total ({rows.length} records)</td>
             <td className="py-2 px-3 text-xs text-right font-mono font-bold text-[#2E3093]">{fmt(totalNet)}</td>
-            <td colSpan={3} />
+            <td colSpan={2} />
           </tr>
         </tfoot>
       </table>
@@ -663,128 +615,6 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
   );
 }
 
-/* ── Fees Record table ───────────────────────────────────────────────── */
-function FeesDetailsTable({ rows, totalAmt, totalTax, totalNet }: {
-  rows: FeesRow[]; totalAmt: number; totalTax: number; totalNet: number;
-}) {
-  if (!rows.length) return <EmptyState />;
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-slate-200">
-            <th className={TH}>#</th><th className={TH}>Receipt No</th><th className={TH}>Date</th>
-            <th className={TH}>Student Name</th><th className={TH}>Mobile</th><th className={TH}>Course</th>
-            <th className={TH}>Batch</th><th className={TH}>Payment Type</th><th className={TH}>Month/Year</th>
-            <th className={THR}>Amount</th><th className={THR}>Tax</th><th className={THR}>Total</th>
-            <th className={THR}>Unpaid</th><th className={TH}>Notes</th>
-            <th className="text-center py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap">Printed</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={r.Fees_Id} className="hover:bg-slate-50/60 transition-colors">
-              <td className={`${TD} text-slate-400`}>{i + 1}</td>
-              <td className={TD}><span className="font-mono text-[11px] font-semibold text-[#2E3093]">{r.Fees_Code || '—'}</span></td>
-              <td className={TD}>{fmtDate(r.RDate || r.Date_Added)}</td>
-              <td className={`${TD} font-medium max-w-[160px] truncate`}>{r.Student_Name || '—'}</td>
-              <td className={TD}>{r.Present_Mobile || '—'}</td>
-              <td className={`${TD} max-w-[140px] truncate`}>{r.Course_Name || '—'}</td>
-              <td className={TD}><span className="font-mono text-[11px]">{r.Batch_Code || '—'}</span></td>
-              <td className={TD}><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${payBadge(r.Payment_Type)}`}>{r.Payment_Type || '—'}</span></td>
-              <td className={TD}>{r.FeesMonth && r.FeesYear ? `${r.FeesMonth}/${r.FeesYear}` : '—'}</td>
-              <td className={`${TD} text-right font-mono`}>{fmt(r.Amount)}</td>
-              <td className={`${TD} text-right font-mono`}>{r.Service_Tax ? fmt(r.Service_Tax) : '—'}</td>
-              <td className={`${TD} text-right font-mono font-semibold`}>{fmt(r.Total_Amt)}</td>
-              <td className={`${TD} text-right font-mono text-amber-600`}>{r.UnPaid_Amt ? fmt(r.UnPaid_Amt) : '—'}</td>
-              <td className={`${TD} max-w-[160px] truncate text-slate-500`}>{r.Notes || '—'}</td>
-              <td className="py-2 px-3 text-xs text-center border-b border-slate-100">
-                {r.Print
-                  ? <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-semibold border border-emerald-200"><svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Yes</span>
-                  : <span className="text-slate-300 text-[10px]">No</span>}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr className="bg-slate-50 border-t-2 border-slate-200">
-            <td colSpan={9} className="py-2 px-3 text-xs text-slate-600 text-right font-bold">Total ({rows.length} records)</td>
-            <td className="py-2 px-3 text-xs text-right font-mono font-bold">{fmt(totalAmt)}</td>
-            <td className="py-2 px-3 text-xs text-right font-mono font-bold">{fmt(totalTax)}</td>
-            <td className="py-2 px-3 text-xs text-right font-mono font-bold text-[#2E3093]">{fmt(totalNet)}</td>
-            <td colSpan={3} />
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  );
-}
-
-/* ── Batch Wise Faculty Payment table ────────────────────────────────── */
-function BatchWiseFacultyTable({ rows, totalNet }: { rows: BatchWiseFacultyRow[]; totalNet: number }) {
-  if (!rows.length) return <EmptyState />;
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-slate-200">
-            <th className={TH}>#</th>
-            <th className={TH}>Batch Code</th>
-            <th className={TH}>Course Name</th>
-            <th className={TH}>Faculty Name</th>
-            <th className={TH}>Type</th>
-            <th className={TH}>Month / Year</th>
-            <th className={THR}>Hours</th>
-            <th className={THR}>Rate</th>
-            <th className={THR}>Gross</th>
-            <th className={THR}>TDS</th>
-            <th className={THR}>Deductions</th>
-            <th className={THR}>Net Payment</th>
-            <th className={TH}>Payment Type</th>
-            <th className={TH}>Cheque / NEFT</th>
-            <th className={TH}>Payment Date</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} className="hover:bg-slate-50/60 transition-colors">
-              <td className={`${TD} text-slate-400`}>{i + 1}</td>
-              <td className={TD}><span className="font-mono text-[11px] font-semibold text-[#2E3093]">{r.Batch_Code || '—'}</span></td>
-              <td className={`${TD} max-w-[160px] truncate`}>{r.Course_Name || '—'}</td>
-              <td className={`${TD} font-medium`}>{r.Faculty_Name || '—'}</td>
-              <td className={TD}>
-                <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                  r.Faculty_Type === 'Permanent' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-slate-50 text-slate-600 border border-slate-200'
-                }`}>{r.Faculty_Type || '—'}</span>
-              </td>
-              <td className={TD}>{r.Sal_Month && r.Sal_Year ? `${r.Sal_Month} ${r.Sal_Year}` : '—'}</td>
-              <td className={`${TD} text-right font-mono`}>{r.Total_Hours ?? '—'}</td>
-              <td className={`${TD} text-right font-mono`}>{r.Rate != null ? `₹${Number(r.Rate).toLocaleString('en-IN')}` : '—'}</td>
-              <td className={`${TD} text-right font-mono`}>{fmt(r.Salary)}</td>
-              <td className={`${TD} text-right font-mono text-red-600`}>{r.TDS ? fmt(r.TDS) : '—'}</td>
-              <td className={`${TD} text-right font-mono text-red-600`}>{r.Total_Ded ? fmt(r.Total_Ded) : '—'}</td>
-              <td className={`${TD} text-right font-mono font-bold text-emerald-700`}>{fmt(r.Net_Payment)}</td>
-              <td className={TD}>
-                {r.Payment_Type && r.Payment_Type !== 'Select Type'
-                  ? <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${payBadge(r.Payment_Type)}`}>{r.Payment_Type}</span>
-                  : <span className="text-slate-300 text-[10px]">—</span>}
-              </td>
-              <td className={`${TD} font-mono text-[11px]`}>{r.NEFT_No || (r.Cheque_No ? String(r.Cheque_No) : '—')}</td>
-              <td className={TD}>{fmtDate(r.Payment_Dt)}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr className="bg-slate-50 border-t-2 border-slate-200">
-            <td colSpan={11} className="py-2 px-3 text-xs text-slate-600 text-right font-bold">Net Total ({rows.length} records)</td>
-            <td className="py-2 px-3 text-xs text-right font-mono font-bold text-[#2E3093]">{fmt(totalNet)}</td>
-            <td colSpan={3} />
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  );
-}
 
 /* ── Faculty Payment Detail Report table ─────────────────────────────── */
 function FacultyPaymentTable({ rows, totalNet }: { rows: FacultyRow[]; totalNet: number }) {

@@ -93,7 +93,8 @@ export async function GET(req: NextRequest) {
           `SELECT
              COALESCE(bm.Batch_code,'') AS Batch_Code,
              COALESCE(cm.Course_Name,'') AS Course_Name,
-             bm.SDate AS Batch_Start, bm.EDate AS Batch_End,
+             bm.SDate AS Batch_Start, bm.EDate AS Batch_End, bm.Fees_Full_Payment,
+             am.Student_Id AS Student_Id,
              COALESCE(sm.Student_Name, CONCAT_WS(' ', sm.FName, sm.MName, sm.LName), '') AS Student_Name,
              COALESCE(sm.Present_Mobile,'') AS Present_Mobile,
              sfm.Fees_Id, sfm.Fees_Code, sfm.Date_Added, sfm.RDate,
@@ -142,7 +143,7 @@ export async function GET(req: NextRequest) {
 
         const [rows] = await pool.query(
           `SELECT
-             sfm.Fees_Id, sfm.Fees_Code, sfm.Date_Added, sfm.RDate,
+             sfm.Fees_Id, sfm.Fees_Code, sfm.Date_Added, sfm.RDate, sfm.Student_Id,
              sfm.Payment_Type, sfm.Cheque_No, sfm.Cheque_Bank, sfm.Cheque_Branch,
              sfm.Cheque_Date, sfm.Amount, sfm.Service_Tax, sfm.Total_Amt,
              sfm.UnPaid_Amt, sfm.Amt_Word, sfm.Notes,
