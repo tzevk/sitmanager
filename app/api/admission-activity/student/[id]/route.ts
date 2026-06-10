@@ -176,7 +176,6 @@ export async function GET(
          s.Admission_Dt,
          s.Refered_By,
          s.SitPerformance, s.PlacementRemark,
-         s.Photo, s.Student_Photo, s.PhotoPath,
          a.Admission_Id, a.Batch_Id, a.Admission_Date,
          COALESCE(b.Batch_code, b2.Batch_code) AS Batch_code,
          COALESCE(b.SDate, b2.SDate)           AS Batch_StartDate,
@@ -254,14 +253,6 @@ export async function GET(
       [inquiryId ?? -1, id]
     ) as [any[], any];
 
-    // Documents
-    const [documents] = await pool.query(
-      `SELECT id, doc_name, upload_image FROM documents
-       WHERE Student_id = ?
-       ORDER BY id ASC`,
-      [id]
-    ) as [any[], any];
-
     // Dropdown options
     const [courses] = await pool.query(
       `SELECT Course_Id, Course_Name FROM course_mst
@@ -285,7 +276,7 @@ export async function GET(
       student: overlayStudentFromPayload(rows[0], payload, onlineAdmissionDate),
       placement,
       discussions,
-      documents,
+      documents: [],
       inquiryId,
       courses,
       batches,

@@ -123,13 +123,7 @@ export default function EditStudentPage() {
   const [placement, setPlacement] = useState<PlacementRow[]>([]);
 
   /* documents */
-  const [documents, setDocuments] = useState<DocumentRow[]>([]);
-  const [docsLoading, setDocsLoading] = useState(false);
-  const [docsError, setDocsError] = useState('');
-
-  /* photo */
-  const [photo, setPhoto] = useState<string>('');
-  const [photoUploading, setPhotoUploading] = useState(false);
+  const [documents] = useState<DocumentRow[]>([]);
 
   /* sidebar stats */
   const [batchStartDate, setBatchStartDate] = useState('');
@@ -236,9 +230,6 @@ export default function EditStudentPage() {
         setBatchCategories(data.batchCategories ?? []);
         setDiscussions(data.discussions ?? []);
         setPlacement(data.placement    ?? []);
-        setDocuments(data.documents    ?? []);
-        // Photo — accept common column name variants from student_master
-        setPhoto(s.Photo || s.Student_Photo || s.PhotoPath || s.Photo_Path || '');
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed to load student');
       } finally {
@@ -272,30 +263,6 @@ export default function EditStudentPage() {
     }
   }, [activeTab, studentId, fetchDiscussions]);
 
-  /* ------------------------------------------------------------------ */
-  /*  Fetch documents                                                     */
-  /* ------------------------------------------------------------------ */
-  const fetchDocuments = useCallback(async () => {
-    if (!studentId) return;
-    setDocsLoading(true);
-    setDocsError('');
-    try {
-      const res  = await fetch(`/api/admission-activity/student/${studentId}/documents`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      setDocuments(data.documents ?? []);
-    } catch (e: unknown) {
-      setDocsError(e instanceof Error ? e.message : 'Failed to load documents');
-    }
-    setDocsLoading(false);
-  }, [studentId]);
-
-  // Refresh documents whenever the Documents tab is opened
-  useEffect(() => {
-    if (activeTab === 'documents' && studentId) {
-      fetchDocuments();
-    }
-  }, [activeTab, studentId, fetchDocuments]);
 
   /* ------------------------------------------------------------------ */
   /*  Save                                                                */
@@ -414,55 +381,6 @@ export default function EditStudentPage() {
                   }
                 >
                   <div className="flex flex-col gap-3">
-                    {/* Photo */}
-                    <div className="flex items-center gap-3">
-                      {photo ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={photo.startsWith('http') || photo.startsWith('/') ? photo : `/uploads/students/${photo}`}
-                          alt="Student photo"
-                          className="w-16 h-16 rounded-lg object-cover border border-gray-200 shadow-sm shrink-0"
-                          onError={() => setPhoto('')}
-                        />
-                      ) : (
-                        <div className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 flex flex-col items-center justify-center gap-0.5 shrink-0">
-                          <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                          </svg>
-                          <span className="text-[9px] text-gray-400">No photo</span>
-                        </div>
-                      )}
-                      <label className="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#2E3093]/10 hover:bg-[#2E3093]/20 text-[#2E3093] text-[11px] font-semibold transition-colors">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                        </svg>
-                        {photoUploading ? 'Uploading…' : 'Change Photo'}
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          className="hidden"
-                          disabled={photoUploading}
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            if (file.size > 2 * 1024 * 1024) { setError('Photo must be smaller than 2 MB'); return; }
-                            setPhotoUploading(true);
-                            try {
-                              const fd = new FormData();
-                              fd.append('photo', file);
-                              fd.append('studentId', studentId);
-                              const res = await fetch(`/api/admission-activity/student/${studentId}/photo`, { method: 'POST', body: fd });
-                              const data = await res.json();
-                              if (!res.ok) throw new Error(data.error || 'Upload failed');
-                              setPhoto(data.photoUrl ?? data.photo ?? '');
-                            } catch (err: unknown) {
-                              setError(err instanceof Error ? err.message : 'Photo upload failed');
-                            } finally { setPhotoUploading(false); }
-                          }}
-                        />
-                      </label>
-                    </div>
-
                     {/* B.M. ID */}
                     <div>
                       <label className={labelCls}>B.M. ID</label>
@@ -1107,13 +1025,7 @@ export default function EditStudentPage() {
                   </svg>
                 }
               >
-                {docsLoading ? (
-                  <div className="flex justify-center py-8">
-                    <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
-                  </div>
-                ) : docsError ? (
-                  <p className="text-xs text-red-500 text-center py-8">{docsError}</p>
-                ) : documents.length === 0 ? (
+                {documents.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 text-center">
                     <svg className="w-10 h-10 text-slate-200 mb-2" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
