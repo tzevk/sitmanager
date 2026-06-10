@@ -2876,9 +2876,6 @@ export default function PublicAdmissionFormPage() {
                                   <div className={`text-xs mt-0.5 ${isSelected ? 'text-emerald-600' : 'text-gray-500'}`}>
                                     Pay &#8377;{fmt(fullPayAmount + ALUMNI_MEMBERSHIP_FEE)} in one go <span className="line-through text-gray-400">&#8377;{fmt(baseFees)}</span> — save &#8377;{fmt(discount)}
                                   </div>
-                                  <div className={`text-[10px] mt-0.5 ${isSelected ? 'text-emerald-500' : 'text-gray-400'}`}>
-                                    (Includes &#8377;{ALUMNI_MEMBERSHIP_FEE} One Time Membership Fee — Sitians Alumni Association)
-                                  </div>
                                 </div>
                                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
                                   isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-gray-300'
@@ -2886,6 +2883,26 @@ export default function PublicAdmissionFormPage() {
                                   {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />}
                                 </div>
                               </div>
+                              {isSelected && (
+                                <div className="mt-3 ml-[52px] bg-emerald-100/50 rounded-lg p-3 space-y-2">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-emerald-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-emerald-400"></i>Tuition Fee</span>
+                                    <span className="font-bold text-emerald-800">&#8377;{fmt(baseFees)}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-emerald-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-emerald-400"></i>Discount (5% on Tuition Fee)</span>
+                                    <span className="font-bold text-emerald-800">-&#8377;{fmt(discount)}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-emerald-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-emerald-400"></i>One Time Membership Fee (Sitians Alumni Association)</span>
+                                    <span className="font-bold text-emerald-800">&#8377;{fmt(ALUMNI_MEMBERSHIP_FEE)}</span>
+                                  </div>
+                                  <div className="border-t border-emerald-200 pt-2 flex items-center justify-between text-xs">
+                                    <span className="text-emerald-800 font-bold">Total (pay now)</span>
+                                    <span className="font-extrabold text-emerald-900">&#8377;{fmt(fullPayAmount + ALUMNI_MEMBERSHIP_FEE)}</span>
+                                  </div>
+                                </div>
+                              )}
                             </button>
                           );
                         })()}
@@ -2923,6 +2940,14 @@ export default function PublicAdmissionFormPage() {
                               </div>
                               {isSelected && (
                                 <div className="mt-3 ml-[52px] bg-teal-100/50 rounded-lg p-3 space-y-2">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-teal-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-teal-400"></i>Tuition Fee</span>
+                                    <span className="font-bold text-teal-800">&#8377;50,000</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-teal-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-teal-400"></i>One Time Membership Fee (Sitians Alumni Association)</span>
+                                    <span className="font-bold text-teal-800">&#8377;{fmt(ALUMNI_MEMBERSHIP_FEE)}</span>
+                                  </div>
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-teal-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-teal-400"></i>At Admission (pay now)</span>
                                     <span className="font-bold text-teal-800">&#8377;{fmt(15000 + ALUMNI_MEMBERSHIP_FEE)}</span>
@@ -2979,6 +3004,14 @@ export default function PublicAdmissionFormPage() {
                               {isSelected && (
                                 <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
                                   <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>Tuition Fee</span>
+                                    <span className="font-bold text-violet-800">&#8377;50,000</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>One Time Membership Fee (Sitians Alumni Association)</span>
+                                    <span className="font-bold text-violet-800">&#8377;{fmt(ALUMNI_MEMBERSHIP_FEE)}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
                                     <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>At Admission (pay now)</span>
                                     <span className="font-bold text-violet-800">&#8377;{fmt(15000 + ALUMNI_MEMBERSHIP_FEE)}</span>
                                   </div>
@@ -3034,6 +3067,14 @@ export default function PublicAdmissionFormPage() {
                               </div>
                               {isSelected && (
                                 <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>Tuition Fee</span>
+                                    <span className="font-bold text-violet-800">&#8377;75,000</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>One Time Membership Fee (Sitians Alumni Association)</span>
+                                    <span className="font-bold text-violet-800">&#8377;{fmt(ALUMNI_MEMBERSHIP_FEE)}</span>
+                                  </div>
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>At Admission (pay now)</span>
                                     <span className="font-bold text-violet-800">&#8377;{fmt(15000 + ALUMNI_MEMBERSHIP_FEE)}</span>
@@ -3103,6 +3144,14 @@ export default function PublicAdmissionFormPage() {
                               {isSelected && (
                                 <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
                                   <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>Tuition Fee</span>
+                                    <span className="font-bold text-violet-800">&#8377;1,12,000</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>One Time Membership Fee (Sitians Alumni Association)</span>
+                                    <span className="font-bold text-violet-800">&#8377;{fmt(ALUMNI_MEMBERSHIP_FEE)}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
                                     <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>At Admission (pay now)</span>
                                     <span className="font-bold text-violet-800">&#8377;{fmt(25000 + ALUMNI_MEMBERSHIP_FEE)}</span>
                                   </div>
@@ -3159,6 +3208,14 @@ export default function PublicAdmissionFormPage() {
                               {isSelected && (
                                 <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
                                   <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>Tuition Fee</span>
+                                    <span className="font-bold text-violet-800">&#8377;{fmt(installmentPlanTotal)}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>One Time Membership Fee (Sitians Alumni Association)</span>
+                                    <span className="font-bold text-violet-800">&#8377;{fmt(ALUMNI_MEMBERSHIP_FEE)}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
                                     <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>1st Installment (now)</span>
                                     <span className="font-bold text-violet-800">&#8377;{fmt(firstInstallmentAmount + ALUMNI_MEMBERSHIP_FEE)}</span>
                                   </div>
@@ -3179,8 +3236,10 @@ export default function PublicAdmissionFormPage() {
                         {/* Option 3/4: Loan (Piping / EDD / PDD / Process Weekend) */}
                         {(isPipingFulltime || is75kPlan || isProcessWeekend) && (() => {
                           const isSelected = formData.modeOfPayment === 'Loan (0% Interest)';
-                          const loanAdmission = (isPipingEngineeringFulltime ? 12000 : ((isEngineeringDesignDraftingFulltime || isProcessWeekend || is75kPlan) ? 15000 : 12000)) + ALUMNI_MEMBERSHIP_FEE;
+                          const loanAdmissionBase = isPipingEngineeringFulltime ? 12000 : ((isEngineeringDesignDraftingFulltime || isProcessWeekend || is75kPlan) ? 15000 : 12000);
+                          const loanAdmission = loanAdmissionBase + ALUMNI_MEMBERSHIP_FEE;
                           const loanAmount = isProcessWeekend ? 35000 : is75kPlan ? 60000 : 100000;
+                          const loanTuitionFee = loanAdmissionBase + loanAmount;
                           const loanTotal = loanAdmission + loanAmount;
                           const fmtLoan = (n: number) => n.toLocaleString('en-IN');
                           return (
@@ -3216,6 +3275,14 @@ export default function PublicAdmissionFormPage() {
                               </div>
                               {isSelected && (
                                 <div className="mt-3 ml-[52px] bg-blue-100/50 rounded-lg p-3 space-y-2">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-blue-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-blue-400"></i>Tuition Fee</span>
+                                    <span className="font-bold text-blue-800">&#8377;{fmtLoan(loanTuitionFee)}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-blue-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-blue-400"></i>One Time Membership Fee (Sitians Alumni Association)</span>
+                                    <span className="font-bold text-blue-800">&#8377;{fmtLoan(ALUMNI_MEMBERSHIP_FEE)}</span>
+                                  </div>
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-blue-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-blue-400"></i>At Admission (pay now)</span>
                                     <span className="font-bold text-blue-800">&#8377;{fmtLoan(loanAdmission)}</span>
