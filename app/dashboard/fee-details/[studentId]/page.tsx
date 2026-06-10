@@ -81,6 +81,7 @@ export default function FeeDetailsEditPage() {
   const [data, setData] = useState<FeeDetailsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [emailing, setEmailing] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -167,6 +168,23 @@ export default function FeeDetailsEditPage() {
       await load();
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleEmailReceipt = async () => {
+    if (!data?.record) return;
+    setEmailing(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await fetch(`/api/fee-details/${params.studentId}/${data.record.Fees_Id}/email`, {
+        method: 'POST',
+      });
+      const d = await res.json();
+      if (!res.ok) { setError(d.error ?? 'Failed to send email'); return; }
+      setMessage(`Receipt emailed to ${d.email}`);
+    } finally {
+      setEmailing(false);
     }
   };
 
@@ -373,6 +391,16 @@ export default function FeeDetailsEditPage() {
           <button onClick={() => handlePrint('Invoice')} className="h-9 px-4 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50">
             Invoice
           </button>
+          {data.record && (
+            <button
+              onClick={handleEmailReceipt}
+              disabled={emailing || !data.student.Email}
+              title={!data.student.Email ? 'Student does not have an email address on file' : undefined}
+              className="h-9 px-4 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {emailing ? 'Sending…' : 'Email Receipt'}
+            </button>
+          )}
           <button onClick={() => router.push('/dashboard/fee-details')} className="h-9 px-4 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50">
             Close
           </button>

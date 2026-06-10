@@ -623,6 +623,88 @@ export async function sendPublicInquirySubmissionEmail(params: {
   });
 }
 
+export function buildFeeReceiptMailContent(params: {
+  studentName?: string;
+  studentId: string | number;
+  courseName?: string | null;
+  batchCode?: string | null;
+  receiptNo: string;
+  receiptDate: string;
+  particular: string;
+  paymentType: string;
+  amount: number;
+  taxType?: string | null;
+}) {
+  const safeName = (params.studentName || '').trim() || 'Student';
+  const subject = `Fee Receipt ${params.receiptNo} - Suvidya Institute of Technology`;
+  const fmtAmount = (n: number) =>
+    `₹ ${(Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const text = [
+    `Dear ${safeName},`,
+    '',
+    'Thank you for your payment. Please find your fee receipt details below:',
+    '',
+    `Receipt No   : ${params.receiptNo}`,
+    `Receipt Date : ${params.receiptDate}`,
+    `Student ID   : ${params.studentId}`,
+    params.courseName ? `Course       : ${params.courseName}` : '',
+    params.batchCode ? `Batch Code   : ${params.batchCode}` : '',
+    `Particular   : ${params.particular}`,
+    `Payment Type : ${params.paymentType}`,
+    params.taxType ? `Tax Type     : ${params.taxType}` : '',
+    `Amount       : ${fmtAmount(params.amount)}`,
+    '',
+    'This is a system-generated receipt for your records.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const safeNameHtml = escapeHtml(safeName);
+  const html = withEmailSignature(`
+    <p>Dear <strong>${safeNameHtml}</strong>,</p>
+    <p>Thank you for your payment. Please find your fee receipt details below:</p>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+      <tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;width:160px;">Receipt No</td><td style="padding:6px 10px;border:1px solid #e5e7eb;font-weight:bold;font-family:monospace;">${escapeHtml(params.receiptNo)}</td></tr>
+      <tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Receipt Date</td><td style="padding:6px 10px;border:1px solid #e5e7eb;">${escapeHtml(params.receiptDate)}</td></tr>
+      <tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Student ID</td><td style="padding:6px 10px;border:1px solid #e5e7eb;">${escapeHtml(String(params.studentId))}</td></tr>
+      ${params.courseName ? `<tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Course</td><td style="padding:6px 10px;border:1px solid #e5e7eb;">${escapeHtml(params.courseName)}</td></tr>` : ''}
+      ${params.batchCode ? `<tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Batch Code</td><td style="padding:6px 10px;border:1px solid #e5e7eb;">${escapeHtml(params.batchCode)}</td></tr>` : ''}
+      <tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Particular</td><td style="padding:6px 10px;border:1px solid #e5e7eb;">${escapeHtml(params.particular)}</td></tr>
+      <tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Payment Type</td><td style="padding:6px 10px;border:1px solid #e5e7eb;">${escapeHtml(params.paymentType)}</td></tr>
+      ${params.taxType ? `<tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Tax Type</td><td style="padding:6px 10px;border:1px solid #e5e7eb;">${escapeHtml(params.taxType)}</td></tr>` : ''}
+      <tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Amount</td><td style="padding:6px 10px;border:1px solid #e5e7eb;font-weight:bold;">${fmtAmount(params.amount)}</td></tr>
+    </table>
+    <p>This is a system-generated receipt for your records.</p>
+  `);
+
+  return { safeName, subject, text, html };
+}
+
+export async function sendFeeReceiptEmail(params: {
+  toEmail: string;
+  studentName?: string;
+  studentId: string | number;
+  courseName?: string | null;
+  batchCode?: string | null;
+  receiptNo: string;
+  receiptDate: string;
+  particular: string;
+  paymentType: string;
+  amount: number;
+  taxType?: string | null;
+}) {
+  const built = buildFeeReceiptMailContent(params);
+  await sendAdmissionFormEmail({
+    toEmail: params.toEmail,
+    studentName: params.studentName,
+    admissionFormUrl: '#',
+    subject: built.subject,
+    text: built.text,
+    html: built.html,
+  });
+}
+
 export async function sendMetaLeadThankYouEmail(params: {
   toEmail: string;
   studentName?: string;

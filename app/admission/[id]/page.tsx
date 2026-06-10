@@ -548,7 +548,7 @@ export default function PublicAdmissionFormPage() {
         : formData.modeOfPayment === '6-Installment Plan'
         ? 15000 * 100
         : formData.modeOfPayment === 'Loan (0% Interest)'
-        ? ((isPipingEngineeringFulltimeMode || isEngineeringDesignDraftingFulltimeMode) ? 12000 : ((isLoanAdmission15000Mode || isProcessWeekendMode) ? 15000 : 12000)) * 100
+        ? (isPipingEngineeringFulltimeMode ? 12000 : ((isEngineeringDesignDraftingFulltimeMode || isLoanAdmission15000Mode || isProcessWeekendMode) ? 15000 : 12000)) * 100
         : Math.round(installmentTotal / 2) * 100;
 
     setPaymentLoading(true);
@@ -2808,7 +2808,7 @@ export default function PublicAdmissionFormPage() {
                         : formData.modeOfPayment === '6-Installment Plan'
                         ? 15000
                         : formData.modeOfPayment === 'Loan (0% Interest)'
-                        ? ((isPipingEngineeringFulltime || isEngineeringDesignDraftingFulltime) ? 12000 : ((isProcessWeekend || is75kPlan) ? 15000 : 12000))
+                        ? (isPipingEngineeringFulltime ? 12000 : ((isEngineeringDesignDraftingFulltime || isProcessWeekend || is75kPlan) ? 15000 : 12000))
                         : firstInstallmentAmount;
 
                     return (
@@ -3171,7 +3171,7 @@ export default function PublicAdmissionFormPage() {
                         {/* Option 3/4: Loan (Piping / EDD / PDD / Process Weekend) */}
                         {(isPipingFulltime || is75kPlan || isProcessWeekend) && (() => {
                           const isSelected = formData.modeOfPayment === 'Loan (0% Interest)';
-                          const loanAdmission = (isPipingEngineeringFulltime || isEngineeringDesignDraftingFulltime) ? 12000 : ((isProcessWeekend || is75kPlan) ? 15000 : 12000);
+                          const loanAdmission = isPipingEngineeringFulltime ? 12000 : ((isEngineeringDesignDraftingFulltime || isProcessWeekend || is75kPlan) ? 15000 : 12000);
                           const loanAmount = isProcessWeekend ? 35000 : is75kPlan ? 60000 : 100000;
                           const loanTotal = loanAdmission + loanAmount;
                           const fmtLoan = (n: number) => n.toLocaleString('en-IN');
@@ -3341,7 +3341,7 @@ export default function PublicAdmissionFormPage() {
                                     : formData.modeOfPayment === '3-Installment Plan' ? (isProcessWeekend ? 15000 : 25000)
                                     : formData.modeOfPayment === '2-Payment Plan' ? 15000
                                     : formData.modeOfPayment === '6-Installment Plan' ? 15000
-                                    : formData.modeOfPayment === 'Loan (0% Interest)' ? ((isPipingEngineeringFulltime || isEngineeringDesignDraftingFulltime) ? 12000 : (isProcessWeekend || is75kPlan ? 15000 : 12000))
+                                    : formData.modeOfPayment === 'Loan (0% Interest)' ? (isPipingEngineeringFulltime ? 12000 : (isEngineeringDesignDraftingFulltime || isProcessWeekend || is75kPlan ? 15000 : 12000))
                                     : firstInstallmentAmount
                                   )} paid successfully.
                                 </p>

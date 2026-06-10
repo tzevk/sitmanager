@@ -17,18 +17,13 @@ function parseNotes(notes: string | null): { particular: string; taxType: string
 
 async function generateReceiptNo(): Promise<string> {
   const [rows] = await getPool().query<any[]>(
-    `SELECT RIGHT(Fees_Code, 3) AS Cnt
-     FROM s_fees_mst
-     WHERE MONTH(Date_Added) = MONTH(CURRENT_DATE())
-       AND YEAR(Date_Added) = YEAR(CURRENT_DATE())
-       AND Fees_Code IS NOT NULL
-     ORDER BY Fees_Code DESC
-     LIMIT 1`
+    `SELECT AUTO_INCREMENT AS nextId FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 's_fees_mst'`
   );
-  const count = rows.length ? Number(rows[0].Cnt) + 1 : 1;
+  const nextId = Number(rows[0]?.nextId ?? 1);
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0');
-  const padded = String(count).padStart(3, '0');
+  const padded = String(nextId).padStart(3, '0');
   return `R-${month}/${padded}`;
 }
 
@@ -96,6 +91,18 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
     const totalDebit = Number(student.Admission_Fees ?? student.Fees_Full_Payment ?? 0);
     const totalCredit = ledger.reduce((s, r) => s + r.Credit, 0);
     const balance = totalDebit - totalCredit;
+
+    if (totalDebit > 0) {
+      ledger.unshift({
+        Fees_Id: 0,
+        Date: dueDate,
+        Particular: `Tuition Fees - ${student.Course_Name ?? ''}${student.Batch_Code ? `, ${student.Batch_Code}` : ''}`,
+        Payment_Type: null,
+        Fees_Code: null,
+        Debit: totalDebit,
+        Credit: 0,
+      });
+    }
 
     const particulars = [
       {

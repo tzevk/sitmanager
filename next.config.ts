@@ -26,8 +26,11 @@ const nextConfig: NextConfig = {
   // Turbopack config (required for Next.js 16+)
   turbopack: {},
 
-  // Keep mysql2 as external — don't bundle native Node modules
-  serverExternalPackages: ['mysql2'],
+  // Keep mysql2 and pdfkit external — don't bundle native Node modules.
+  // pdfkit resolves its AFM font data files relative to __dirname at runtime;
+  // bundling it (Turbopack/webpack) rewrites __dirname and breaks that lookup,
+  // causing ENOENT on Helvetica.afm.
+  serverExternalPackages: ['mysql2', 'pdfkit'],
 
   // pdfkit loads its standard-font .afm files from disk at runtime —
   // make sure they're included in the serverless function bundle.
