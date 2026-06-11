@@ -258,7 +258,8 @@ function FeesReportContent() {
     if (subTab === 'batch-wise-fees') {
       csv = buildCsv(['Sr No','Receipt Date','Receipt Number','Name of Student','Total Amount','Amount Paid','Remaining Amount','Payment Type'],
         () => batchWiseFeesRows.filter(r => r.Fees_Id).map((r,i) => [String(i+1), fmtDate(r.RDate || r.Date_Added), r.Fees_Code ?? '',
-          r.Student_Name, String(r.Total_Amt ?? ''), String(r.Amount ?? ''), String(r.UnPaid_Amt ?? ''), r.Payment_Type ?? '']));
+          r.Student_Name, String(r.Total_Amt ?? ''), String(r.Amount ?? ''),
+          String((r.Total_Amt ?? 0) - (r.Amount ?? 0)), r.Payment_Type ?? '']));
     }
     if (!csv) return;
     const a = document.createElement('a');

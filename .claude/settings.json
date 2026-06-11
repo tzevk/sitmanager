@@ -54,7 +54,9 @@
       "Bash(kill -9 58345 58344 58321 58421 58420 58397)",
       "Bash(node scripts/check-not-found-rolls.mjs)",
       "Bash(node scripts/probe-fees-master.mjs)",
-      "Bash(node scripts/check-fees-collisions.mjs)"
+      "Bash(node scripts/check-fees-collisions.mjs)",
+      "Bash(node /tmp/check_unpaid.mjs)",
+      "Bash(node scripts/check_unpaid_tmp.mjs)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
