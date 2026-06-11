@@ -261,14 +261,23 @@ function FeesReportContent() {
         if (!r.Fees_Id || r.Student_Id == null) continue;
         paidByStudent.set(r.Student_Id, (paidByStudent.get(r.Student_Id) ?? 0) + (r.Amount ?? 0));
       }
+      let sumTotal = 0, sumPaid = 0, sumRemaining = 0;
       csv = buildCsv(['Sr No','Receipt Date','Receipt Number','Name of Student','Total Amount','Amount Paid','Remaining Amount','Payment Type'],
-        () => batchWiseFeesRows.filter(r => r.Fees_Id).map((r,i) => {
-          const totalFees = r.Fees_Full_Payment ?? 0;
-          const paid = r.Student_Id != null ? (paidByStudent.get(r.Student_Id) ?? 0) : 0;
-          return [String(i+1), fmtDate(r.RDate || r.Date_Added), r.Fees_Code ?? '',
-            r.Student_Name, String(totalFees), String(r.Amount ?? ''),
-            String(totalFees - paid), r.Payment_Type ?? ''];
-        }));
+        () => {
+          const rows = batchWiseFeesRows.filter(r => r.Fees_Id).map((r,i) => {
+            const totalFees = r.Fees_Full_Payment ?? 0;
+            const paid = r.Student_Id != null ? (paidByStudent.get(r.Student_Id) ?? 0) : 0;
+            const remaining = totalFees - paid;
+            sumTotal += totalFees;
+            sumPaid += r.Amount ?? 0;
+            sumRemaining += remaining;
+            return [String(i+1), fmtDate(r.RDate || r.Date_Added), r.Fees_Code ?? '',
+              r.Student_Name, String(totalFees), String(r.Amount ?? ''),
+              String(remaining), r.Payment_Type ?? ''];
+          });
+          rows.push(['', '', '', 'Total', String(sumTotal), String(sumPaid), String(sumRemaining), '']);
+          return rows;
+        });
     }
     if (!csv) return;
     const a = document.createElement('a');
