@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
 
     const search = searchParams.get('search')?.trim() || '';
     const category = searchParams.get('category')?.trim() || '';
+    const courseId = searchParams.get('courseId')?.trim() || '';
 
     /* ---- Build WHERE ---- */
     const conditions: string[] = [
@@ -34,6 +35,11 @@ export async function GET(req: NextRequest) {
     if (category) {
       conditions.push('b.Category = ?');
       params.push(category);
+    }
+
+    if (courseId) {
+      conditions.push('b.Course_Id = ?');
+      params.push(Number(courseId));
     }
 
     const where = conditions.join(' AND ');

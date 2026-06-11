@@ -10,6 +10,7 @@ async function ensureFeedbackTable() {
       id INT NOT NULL AUTO_INCREMENT,
       stage_percent INT NOT NULL,
       training_program VARCHAR(255) NULL,
+      batch_id INT NULL,
       batch_no VARCHAR(100) NULL,
       feedback_date DATE NULL,
 
@@ -24,15 +25,27 @@ async function ensureFeedbackTable() {
       INDEX idx_stage_percent (stage_percent),
       INDEX idx_published (published),
       INDEX idx_deleted (deleted),
-      INDEX idx_feedback_date (feedback_date)
+      INDEX idx_feedback_date (feedback_date),
+      INDEX idx_batch_id (batch_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+
+  const [cols] = await pool.query<RowDataPacket[]>(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'training_feedback_forms'`
+  );
+  const colNames = new Set(cols.map((c) => String(c.COLUMN_NAME)));
+  if (!colNames.has('batch_id')) {
+    await pool.query(`ALTER TABLE training_feedback_forms ADD COLUMN batch_id INT NULL AFTER training_program`);
+    await pool.query(`ALTER TABLE training_feedback_forms ADD INDEX idx_batch_id (batch_id)`);
+  }
 }
 
 type TrainingFeedbackRow = RowDataPacket & {
   id: number;
   stage_percent: number;
   training_program: string | null;
+  batch_id: number | null;
   batch_no: string | null;
   feedback_date: string | null;
   published: 0 | 1;
@@ -58,7 +71,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const pool = getPool();
     const [rows] = await pool.query<TrainingFeedbackRow[]>(
-      `SELECT id, stage_percent, training_program, batch_no, feedback_date,
+      `SELECT id, stage_percent, training_program, batch_id, batch_no, feedback_date,
               schema_json,
               published, created_at, updated_at
        FROM training_feedback_forms
@@ -93,6 +106,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const trainingProgram = typeof body.trainingProgram === 'string' ? body.trainingProgram.trim() : '';
+    const batchId = Number(body.batchId);
     const batchNo = typeof body.batchNo === 'string' ? body.batchNo.trim() : '';
     const feedbackDate = body.date || null;
 
@@ -104,13 +118,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const pool = getPool();
     await pool.query<ResultSetHeader>(
       `UPDATE training_feedback_forms
-       SET stage_percent = ?, training_program = ?, batch_no = ?, feedback_date = ?,
+       SET stage_percent = ?, training_program = ?, batch_id = ?, batch_no = ?, feedback_date = ?,
            schema_json = ?,
            updated_at = NOW()
        WHERE id = ? AND deleted = 0`,
       [
         stagePercent,
         trainingProgram || null,
+        Number.isFinite(batchId) && batchId > 0 ? batchId : null,
         batchNo || null,
         feedbackDate,
         schemaJson,

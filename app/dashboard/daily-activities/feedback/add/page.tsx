@@ -202,11 +202,15 @@ export default function FeedbackAddPage() {
   const [loading, setLoading] = useState(false);
   const [stagePercent, setStagePercent] = useState<StagePercent>(30);
   const [trainingProgram, setTrainingProgram] = useState('');
+  const [batchId, setBatchId] = useState('');
   const [batchNo, setBatchNo] = useState('');
   const [date, setDate] = useState('');
   const [schema, setSchema] = useState<FeedbackFormSchema>(() => defaultSchema());
   const [facultyOptions, setFacultyOptions] = useState<Array<{ id: number; name: string }>>([]);
   const [programOptions, setProgramOptions] = useState<Array<{ id: number; name: string }>>([]);
+  const [batchOptions, setBatchOptions] = useState<Array<{ id: number; batchNo: string }>>([]);
+  const [formLink, setFormLink] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
   const [previewTrainerColumns, setPreviewTrainerColumns] = useState<Array<{ key: string; facultyId: string }>>(() => [
     { key: newId(), facultyId: '' },
   ]);
@@ -228,8 +232,12 @@ export default function FeedbackAddPage() {
 
       setStagePercent((r.stage_percent as StagePercent) || 30);
       setTrainingProgram(r.training_program || '');
+      setBatchId(r.batch_id ? String(r.batch_id) : '');
       setBatchNo(r.batch_no || '');
       setDate(r.feedback_date ? String(r.feedback_date).slice(0, 10) : '');
+      if (r.published) {
+        setFormLink(`${window.location.origin}/public/training-feedback/${r.id}`);
+      }
 
       const parsed = safeJsonParse<FeedbackFormSchema>(r.schema_json, defaultSchema());
       setSchema(normalizeSchema(parsed));
@@ -319,6 +327,33 @@ export default function FeedbackAddPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        // Populate Batch dropdown from Batch master, scoped to the selected Training Program (course).
+        const courseId = programOptions.find((o) => o.name === trainingProgram)?.id;
+        const qs = new URLSearchParams({ limit: '100', page: '1' });
+        if (courseId) qs.set('courseId', String(courseId));
+
+        const res = await fetch(`/api/masters/batch?${qs.toString()}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        const rows = Array.isArray(json?.rows) ? json.rows : [];
+        const options = rows
+          .filter((r: { id?: number; batchNo?: string }) => r?.id)
+          .map((r: { id: number; batchNo?: string }) => ({ id: Number(r.id), batchNo: String(r?.batchNo || '').trim() }));
+
+        if (!cancelled) setBatchOptions(options);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [trainingProgram, programOptions]);
+
   const save = async () => {
     if (!canEditPage) return;
     setLoading(true);
@@ -326,6 +361,7 @@ export default function FeedbackAddPage() {
       const payload = {
         stagePercent,
         trainingProgram,
+        batchId: batchId ? Number(batchId) : null,
         batchNo,
         date: date || null,
         schema,
@@ -340,7 +376,10 @@ export default function FeedbackAddPage() {
       });
 
       if (res.ok) {
-        router.push('/dashboard/daily-activities/feedback');
+        const j = await res.json().catch(() => ({}));
+        const id = editId || j.id;
+        if (id) setFormLink(`${window.location.origin}/public/training-feedback/${id}`);
+        if (!editId && j.id) router.replace(`/dashboard/daily-activities/feedback/add?id=${j.id}`);
       } else {
         const j = await res.json().catch(() => ({}));
         alert(j.error || 'Failed to save');
@@ -349,6 +388,16 @@ export default function FeedbackAddPage() {
       alert('Failed to save');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const copyFormLink = async () => {
+    try {
+      await navigator.clipboard.writeText(formLink);
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 3000);
+    } catch {
+      // ignore
     }
   };
 
@@ -425,6 +474,33 @@ export default function FeedbackAddPage() {
                   )}
                 </div>
                 <div>
+                  <label className={labelCls}>Batch No.</label>
+                  <select
+                    className={inputCls}
+                    value={batchId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setBatchId(id);
+                      const opt = batchOptions.find((o) => String(o.id) === id);
+                      setBatchNo(opt?.batchNo || '');
+                    }}
+                    disabled={!canEditPage}
+                  >
+                    <option value="">Select Batch</option>
+                    {batchId && !batchOptions.some((o) => String(o.id) === batchId) && (
+                      <option value={batchId}>Current: {batchNo || batchId}</option>
+                    )}
+                    {batchOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.batchNo}
+                      </option>
+                    ))}
+                  </select>
+                  {batchOptions.length === 0 && (
+                    <div className="text-[11px] text-slate-400 mt-1">No batches loaded</div>
+                  )}
+                </div>
+                <div>
                   <label className={labelCls}>Date</label>
                   <input
                     className={inputCls}
@@ -434,17 +510,29 @@ export default function FeedbackAddPage() {
                     disabled={!canEditPage}
                   />
                 </div>
-                <div>
-                  <label className={labelCls}>Batch No.</label>
-                  <input
-                    className={inputCls}
-                    value={batchNo}
-                    onChange={(e) => setBatchNo(e.target.value)}
-                    placeholder="Batch No."
-                    disabled={!canEditPage}
-                  />
-                </div>
               </div>
+
+              {formLink && (
+                <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/60">
+                  <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-2">Student Feedback Link</div>
+                  <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+                    <div className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 break-all">
+                      {formLink}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={copyFormLink}
+                      className="px-4 py-2 rounded-lg bg-[#2E3093] text-white text-xs font-bold hover:bg-[#252780] transition-colors shrink-0"
+                    >
+                      {linkCopied ? 'Copied!' : 'Copy Link'}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-2">
+                    Students open this link and enter the last 3 digits of their student code to fill the form.
+                    Publish this form from the feedback list to make the link active.
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
                 {/* BUILDER */}
