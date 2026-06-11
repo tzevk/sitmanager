@@ -23,6 +23,10 @@
       "schedule": "*/10 * * * *"
     },
     {
+      "path": "/api/cron/legacy-student-sync",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cron/suvidya-inquiry-sync",
       "schedule": "*/2 * * * *"
     },
