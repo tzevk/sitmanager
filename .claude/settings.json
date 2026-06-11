@@ -45,14 +45,22 @@
       "Read(//opt/homebrew/opt/**)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(cat > *)",
+      "Bash(node --env-file=.env.local -r tsx/cjs ./check_tables_tmp.mjs)",
+      "Bash(kill 56965 56964 56941)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('vercel.json','utf8'\\)\\); console.log\\('vercel.json ok'\\)\")",
+      "Bash(node scripts/probe-student-master.mjs)",
+      "Bash(kill -9 58345 58344 58321 58421 58420 58397)",
+      "Bash(node scripts/check-not-found-rolls.mjs)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/finance/ct-yearly",
       "/Users/tanvikadam/Desktop/SIT/sitmanager",
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/finance/pending-invoices",
-      "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/meta-ads/leads/[leadId]"
+      "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/meta-ads/leads/[leadId]",
+      "/tmp"
     ]
   }
 }
