@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -41,6 +43,7 @@ interface BatchWiseFeesRow {
   Batch_End: string | null;
   Fees_Full_Payment?: number | null;
   Student_Id?: number | null;
+  Roll_No?: string | null;
   Cancel?: string | null;
   Transfered?: string | null;
   Student_Name: string;
@@ -261,62 +264,209 @@ function FeesReportContent() {
   const showPrintToggle = activeTab !== 'faculty-payment' &&
     activeTab !== 'fees-details';
 
-  /* Excel export for fees-details */
-  const exportExcel = () => {
-    let csv = '';
-    const fname = `fees-${subTab}-${new Date().toISOString().slice(0,10)}.csv`;
+  /* Excel export for fees-details (.xlsx via ExcelJS — color-coded & styled) */
+  const exportExcel = async () => {
+    if (subTab !== 'batch-wise-fees') return;
+    if (!batchWiseFeesRows.length) return;
 
-    if (subTab === 'batch-wise-fees') {
-      const paidByStudent = new Map<number, number>();
-      for (const r of batchWiseFeesRows) {
-        if (!r.Fees_Id || r.Student_Id == null) continue;
-        paidByStudent.set(r.Student_Id, (paidByStudent.get(r.Student_Id) ?? 0) + (r.Amount ?? 0));
+    const paidByStudent = new Map<number, number>();
+    for (const r of batchWiseFeesRows) {
+      if (!r.Fees_Id || r.Student_Id == null) continue;
+      paidByStudent.set(r.Student_Id, (paidByStudent.get(r.Student_Id) ?? 0) + (r.Amount ?? 0));
+    }
+
+    const statusBg: Record<string, string> = {
+      Active: 'FFFFFFFF', Cancelled: 'FFFEE2E2', Transferred: 'FFFEF3C7',
+    };
+    const statusFont: Record<string, string> = {
+      Active: 'FF111827', Cancelled: 'FFB91C1C', Transferred: 'FFA16207',
+    };
+
+    const border = (color: string): ExcelJS.Border => ({ style: 'thin', color: { argb: color } });
+    const borders = (c: string) => ({ top: border(c), bottom: border(c), left: border(c), right: border(c) });
+    const fill = (argb: string): ExcelJS.Fill => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+
+    const colCount = 8; // Sr, Student ID, Student Code, Name, Total, Paid, Remaining, Payment Type
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'SIT Manager';
+    wb.created = new Date();
+    const ws = wb.addWorksheet('Batch Wise Fees', {
+      views: [{ state: 'frozen', ySplit: 5 }],
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+    });
+
+    /* ── Row 1: Institute name bar ── */
+    ws.mergeCells(1, 1, 1, colCount);
+    ws.getRow(1).height = 30;
+    const c1 = ws.getCell('A1');
+    c1.value = 'SUVIDYA INSTITUTE OF TECHNOLOGY';
+    c1.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+    c1.fill = fill('FF2E3093');
+    c1.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    /* ── Row 2: Report title bar ── */
+    ws.mergeCells(2, 1, 2, colCount);
+    ws.getRow(2).height = 22;
+    const c2 = ws.getCell('A2');
+    c2.value = 'Batch Wise Fees Report';
+    c2.font = { name: 'Calibri', size: 11, italic: true, color: { argb: 'FFFFFFFF' } };
+    c2.fill = fill('FF3D4DB5');
+    c2.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    /* ── Row 3: Filter summary bar ── */
+    ws.mergeCells(3, 1, 3, colCount);
+    ws.getRow(3).height = 18;
+    const fromLabel = fromDate ? fmtDate(fromDate) : '—';
+    const toLabel = toDate ? fmtDate(toDate) : '—';
+    const c3 = ws.getCell('A3');
+    c3.value = `Period: ${fromLabel} – ${toLabel}   ·   Generated: ${new Date().toLocaleString('en-IN')}`;
+    c3.font = { name: 'Calibri', size: 9, color: { argb: 'FF374151' } };
+    c3.fill = fill('FFEBECF5');
+    c3.alignment = { horizontal: 'center', vertical: 'middle' };
+    c3.border = { bottom: border('FFCCCCDD') };
+
+    /* ── Row 4: Spacer ── */
+    ws.getRow(4).height = 4;
+
+    /* ── Row 5: Column headers ── */
+    const headers = ['Sr No', 'Student ID', 'Student Code', 'Name of Student', 'Total Amount', 'Amount Paid', 'Remaining Amount', 'Payment Type'];
+    const headerRow = ws.getRow(5);
+    headerRow.height = 26;
+    headers.forEach((h, ci) => {
+      const cell = headerRow.getCell(ci + 1);
+      cell.value = h;
+      cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = fill('FF2A6BB5');
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = borders('FF1A5A9E');
+    });
+
+    /* ── Data rows, grouped by batch ── */
+    let rowIdx = 6;
+    let sumTotal = 0, sumPaid = 0, sumRemaining = 0;
+    let srNo = 1;
+    const filteredRows = batchWiseFeesRows.filter(r => r.Fees_Id);
+
+    filteredRows.forEach((r, i) => {
+      const isNewBatch = i === 0 || filteredRows[i - 1].Batch_Code !== r.Batch_Code;
+      if (isNewBatch) {
+        ws.mergeCells(rowIdx, 1, rowIdx, colCount);
+        const groupRow = ws.getRow(rowIdx);
+        groupRow.height = 20;
+        const dateRange = r.Batch_Start ? ` (${fmtDate(r.Batch_Start)} – ${fmtDate(r.Batch_End)})` : '';
+        const gCell = ws.getCell(rowIdx, 1);
+        gCell.value = `${r.Batch_Code || '—'}  —  ${r.Course_Name || ''}${dateRange}`;
+        gCell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF2E3093' } };
+        gCell.fill = fill('FFE8EAFB');
+        gCell.alignment = { vertical: 'middle' };
+        gCell.border = { bottom: border('FFCBD2F0') };
+        rowIdx++;
       }
 
-      const headers = ['Sr No','Batch Code','Course','Batch Start','Batch End','Receipt Date','Receipt Number','Name of Student','Status','Total Amount','Amount Paid','Remaining Amount','Payment Type'];
-      let sumTotal = 0, sumPaid = 0, sumRemaining = 0;
-      const dataRows = batchWiseFeesRows.filter(r => r.Fees_Id).map((r, i) => {
-        const totalFees = r.Fees_Full_Payment ?? 0;
-        const paid = r.Student_Id != null ? (paidByStudent.get(r.Student_Id) ?? 0) : 0;
-        const remaining = totalFees - paid;
-        sumTotal += totalFees;
-        sumPaid += r.Amount ?? 0;
-        sumRemaining += remaining;
-        return [
-          String(i + 1), r.Batch_Code || '', r.Course_Name || '',
-          fmtDate(r.Batch_Start), fmtDate(r.Batch_End),
-          fmtDate(r.RDate || r.Date_Added), r.Fees_Code ?? '',
-          r.Student_Name, studentStatus(r),
-          String(totalFees), String(r.Amount ?? ''), String(remaining), r.Payment_Type ?? '',
-        ];
-      });
-      const totalsRow = ['', '', '', '', '', '', '', '', 'GRAND TOTAL', String(sumTotal), String(sumPaid), String(sumRemaining), ''];
+      const totalFees = r.Fees_Full_Payment ?? 0;
+      const paid = r.Student_Id != null ? (paidByStudent.get(r.Student_Id) ?? 0) : 0;
+      const remaining = totalFees - paid;
+      sumTotal += totalFees;
+      sumPaid += r.Amount ?? 0;
+      sumRemaining += remaining;
 
-      const fromLabel = fromDate ? fmtDate(fromDate) : '—';
-      const toLabel = toDate ? fmtDate(toDate) : '—';
-      const titleRows = [
-        ['Suvidya Institute of Technology'],
-        ['Batch Wise Fees Report'],
-        [`Period: ${fromLabel} to ${toLabel}`],
-        [`Generated: ${new Date().toLocaleString('en-IN')}`],
-        [],
+      const status = studentStatus(r);
+      const sBg = statusBg[status];
+      const sFont = statusFont[status];
+      const stripeBg = i % 2 === 0 ? sBg : (status === 'Active' ? 'FFF7F8FD' : sBg);
+
+      const isFirstForStudent = isNewBatch || filteredRows[i - 1].Student_Id !== r.Student_Id;
+
+      const vals: (string | number)[] = [
+        srNo++,
+        isFirstForStudent ? (r.Student_Id ?? '') : '',
+        isFirstForStudent ? (r.Roll_No || '') : '',
+        isFirstForStudent ? (r.Student_Name || '—') : '',
+        isFirstForStudent ? totalFees : '',
+        r.Amount ?? 0,
+        isFirstForStudent ? remaining : '',
+        r.Payment_Type || '—',
       ];
 
-      csv = [
-        ...titleRows,
-        headers,
-        ...dataRows,
-        [],
-        totalsRow,
-      ]
-        .map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
-        .join('\n');
-    }
-    if (!csv) return;
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
-    a.download = fname; a.click();
-    URL.revokeObjectURL(a.href);
+      const dataRow = ws.getRow(rowIdx);
+      dataRow.height = 20;
+      vals.forEach((v, ci) => {
+        const cell = dataRow.getCell(ci + 1);
+        cell.value = v;
+        cell.border = borders('FFE5E7EB');
+        cell.font = { name: 'Calibri', size: 9, color: { argb: sFont } };
+        cell.fill = fill(stripeBg);
+        cell.alignment = { vertical: 'middle' };
+
+        if (ci === 0) {
+          cell.font = { name: 'Calibri', size: 8, color: { argb: 'FF9CA3AF' } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        } else if (ci === 1 || ci === 2) {
+          cell.font = { name: 'Calibri', size: 9, color: { argb: 'FF6B7280' } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        } else if (ci === 3) {
+          cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: sFont } };
+          if (isFirstForStudent && status !== 'Active') {
+            cell.value = `${r.Student_Name || '—'}  (${status})`;
+          }
+        } else if (ci === 4) {
+          if (isFirstForStudent) cell.numFmt = '₹#,##0';
+          cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        } else if (ci === 5) {
+          cell.numFmt = '₹#,##0';
+          cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        } else if (ci === 6) {
+          if (isFirstForStudent) {
+            cell.numFmt = '₹#,##0';
+            cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: remaining > 0 ? 'FFB91C1C' : 'FF15803D' } };
+            cell.fill = fill(remaining > 0 ? 'FFFEF3C7' : 'FFDCFCE7');
+          }
+          cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        } else if (ci === 7) {
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+      });
+      rowIdx++;
+    });
+
+    /* ── Totals row ── */
+    const totalsRow = ws.getRow(rowIdx);
+    totalsRow.height = 24;
+    const totalLabelCell = ws.getCell(rowIdx, 1);
+    ws.mergeCells(rowIdx, 1, rowIdx, 4);
+    totalLabelCell.value = `GRAND TOTAL  (${filteredRows.length} records)`;
+    totalLabelCell.alignment = { horizontal: 'right', vertical: 'middle' };
+    [1, 2, 3, 4, 5, 6, 7, 8].forEach(ci => {
+      const cell = ws.getCell(rowIdx, ci);
+      cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = fill('FF1E3A5F');
+      cell.border = borders('FF1E3A5F');
+      cell.alignment = cell.alignment || { vertical: 'middle' };
+    });
+    const tTotal = ws.getCell(rowIdx, 5); tTotal.value = sumTotal; tTotal.numFmt = '₹#,##0'; tTotal.alignment = { horizontal: 'right', vertical: 'middle' };
+    const tPaid = ws.getCell(rowIdx, 6); tPaid.value = sumPaid; tPaid.numFmt = '₹#,##0'; tPaid.alignment = { horizontal: 'right', vertical: 'middle' };
+    const tRem = ws.getCell(rowIdx, 7); tRem.value = sumRemaining; tRem.numFmt = '₹#,##0'; tRem.alignment = { horizontal: 'right', vertical: 'middle' };
+
+    /* ── Column widths ── */
+    ws.columns = [
+      { width: 6 },   // Sr No
+      { width: 12 },  // Student ID
+      { width: 16 },  // Student Code
+      { width: 32 },  // Name of Student
+      { width: 16 },  // Total Amount
+      { width: 16 },  // Amount Paid
+      { width: 18 },  // Remaining Amount
+      { width: 16 },  // Payment Type
+    ];
+
+    /* ── Auto-filter on header row ── */
+    ws.autoFilter = { from: { row: 5, column: 1 }, to: { row: 5, column: colCount } };
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const label = `${fromLabel.replace(/ /g, '_')}_to_${toLabel.replace(/ /g, '_')}`;
+    saveAs(blob, `Batch_Wise_Fees_${label}.xlsx`);
   };
 
   return (

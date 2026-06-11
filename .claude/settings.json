@@ -56,7 +56,8 @@
       "Bash(node scripts/probe-fees-master.mjs)",
       "Bash(node scripts/check-fees-collisions.mjs)",
       "Bash(node /tmp/check_unpaid.mjs)",
-      "Bash(node scripts/check_unpaid_tmp.mjs)"
+      "Bash(node scripts/check_unpaid_tmp.mjs)",
+      "Bash(grep -n \"colCount = 7\\\\|headers = \\\\[\\\\|const vals\\\\|ci === \\\\|ci + 1\\\\|ws.columns = \\\\[\\\\|to: { row: 5, column: colCount\" app/dashboard/reports/fees/page.tsx)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

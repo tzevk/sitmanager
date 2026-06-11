@@ -94,6 +94,7 @@ export async function GET(req: NextRequest) {
              COALESCE(cm.Course_Name,'') AS Course_Name,
              bm.SDate AS Batch_Start, bm.EDate AS Batch_End, bm.Fees_Full_Payment,
              am.Student_Id AS Student_Id,
+             am.Roll_No AS Roll_No,
              am.Cancel AS Cancel, am.Transfered AS Transfered,
              COALESCE(sm.Student_Name, CONCAT_WS(' ', sm.FName, sm.MName, sm.LName), '') AS Student_Name,
              COALESCE(sm.Present_Mobile,'') AS Present_Mobile,
