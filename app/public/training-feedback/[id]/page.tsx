@@ -34,6 +34,7 @@ type FeedbackFormSchema = {
     questions: Array<{ id: string; label: string }>;
     viewsOnTrainerLabel: string;
     viewsOnSiteVisitLabel: string;
+    selectedTrainers: Array<{ facultyId: number; name: string }>;
   };
 };
 
@@ -50,15 +51,13 @@ type Student = { studentId: number; studentCode: string; studentName: string };
 type TrainerEntry = {
   trainerName: string;
   ratings: Record<string, string>;
-  viewsOnTrainer: string;
-  viewsOnSiteVisit: string;
 };
 
 const inputCls =
   'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]';
 
-function newTrainerEntry(): TrainerEntry {
-  return { trainerName: '', ratings: {}, viewsOnTrainer: '', viewsOnSiteVisit: '' };
+function newTrainerEntry(name: string): TrainerEntry {
+  return { trainerName: name, ratings: {} };
 }
 
 export default function TrainingFeedbackPublicPage() {
@@ -80,6 +79,8 @@ export default function TrainingFeedbackPublicPage() {
   const [executiveRatings, setExecutiveRatings] = useState<Record<string, string>>({});
   const [otherSuggestions, setOtherSuggestions] = useState('');
   const [trainers, setTrainers] = useState<TrainerEntry[]>([]);
+  const [trainersViewsOnTrainer, setTrainersViewsOnTrainer] = useState('');
+  const [trainersViewsOnSiteVisit, setTrainersViewsOnSiteVisit] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -93,7 +94,8 @@ export default function TrainingFeedbackPublicPage() {
         if (d.error) { setLoadError(d.error); return; }
         setMeta(d as FormMeta);
         const cols = Math.max(1, Number(d?.schema?.trainers?.trainerColumns) || 1);
-        setTrainers(Array.from({ length: cols }, () => newTrainerEntry()));
+        const selected = d?.schema?.trainers?.selectedTrainers ?? [];
+        setTrainers(Array.from({ length: cols }, (_, i) => newTrainerEntry(selected[i]?.name || '')));
       })
       .catch(() => setLoadError('Unable to load feedback form.'));
   }, [id]);
@@ -137,9 +139,10 @@ export default function TrainingFeedbackPublicPage() {
       }
     }
     for (const trainer of trainers) {
+      if (!trainer.trainerName) continue;
       for (const q of meta.schema.trainers.questions) {
         if (!trainer.ratings[q.id]) {
-          setSubmitError('Please rate all items in the Trainers section.');
+          setSubmitError('Please rate all trainers for every item in the Trainers section.');
           return;
         }
       }
@@ -158,7 +161,11 @@ export default function TrainingFeedbackPublicPage() {
           answers: {
             trainingProgram: trainingProgramAnswers,
             trainingExecutive: { ratings: executiveRatings, otherSuggestions },
-            trainers,
+            trainers: {
+              entries: trainers,
+              viewsOnTrainer: trainersViewsOnTrainer,
+              viewsOnSiteVisit: trainersViewsOnSiteVisit,
+            },
           },
         }),
       });
@@ -379,83 +386,68 @@ export default function TrainingFeedbackPublicPage() {
                   </div>
 
                   {/* Trainers */}
-                  <div className="space-y-4">
-                    {trainers.map((trainer, idx) => (
-                      <div key={idx} className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">
-                            {meta.schema.trainers.title}{trainers.length > 1 ? ` ${idx + 1}` : ''}
-                          </p>
-                          {meta.schema.trainers.allowMultiple && trainers.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => setTrainers((p) => p.filter((_, i) => i !== idx))}
-                              className="text-[11px] font-semibold text-red-500 hover:text-red-600"
-                            >
-                              Remove
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-gray-500">{meta.schema.trainers.ratingHint}</p>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">{meta.schema.trainers.trainerNameLabel}</label>
-                          <input
-                            type="text"
-                            className={inputCls}
-                            value={trainer.trainerName}
-                            onChange={(e) => setTrainers((p) => p.map((t, i) => i === idx ? { ...t, trainerName: e.target.value } : t))}
-                          />
-                        </div>
-                        {meta.schema.trainers.questions.map((q) => (
-                          <div key={q.id}>
-                            <label className="block text-xs font-semibold text-gray-700 mb-1">{q.label}</label>
-                            <div className="flex flex-wrap gap-2">
-                              {ratingOptions.map((n) => (
-                                <button
-                                  key={n}
-                                  type="button"
-                                  onClick={() => setTrainers((p) => p.map((t, i) => i === idx ? { ...t, ratings: { ...t.ratings, [q.id]: n } } : t))}
-                                  className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                                    trainer.ratings[q.id] === n
-                                      ? 'bg-[#2E3093] border-[#2E3093] text-white'
-                                      : 'bg-white border-gray-200 text-gray-700 hover:border-[#2E3093]/40'
-                                  }`}
-                                >
-                                  {n}
-                                </button>
+                  <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">{meta.schema.trainers.title}</p>
+                    <p className="text-[11px] text-gray-500">{meta.schema.trainers.ratingHint}</p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs border border-gray-200 rounded-lg overflow-hidden">
+                        <thead>
+                          <tr className="bg-gray-100">
+                            <th className="text-left px-3 py-2 font-semibold text-gray-700 border-b border-gray-200"> </th>
+                            {trainers.map((trainer, idx) => (
+                              <th key={idx} className="px-3 py-2 font-semibold text-gray-700 border-b border-gray-200 min-w-[140px]">
+                                {trainer.trainerName || `Trainer ${idx + 1}`}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {meta.schema.trainers.questions.map((q) => (
+                            <tr key={q.id} className="border-b border-gray-200 last:border-b-0">
+                              <td className="px-3 py-2 text-gray-700 font-medium">{q.label}</td>
+                              {trainers.map((trainer, idx) => (
+                                <td key={idx} className="px-3 py-2">
+                                  <select
+                                    className={inputCls + ' text-xs'}
+                                    value={trainer.ratings[q.id] || ''}
+                                    onChange={(e) =>
+                                      setTrainers((p) =>
+                                        p.map((t, i) => (i === idx ? { ...t, ratings: { ...t.ratings, [q.id]: e.target.value } } : t))
+                                      )
+                                    }
+                                  >
+                                    <option value="">-</option>
+                                    {ratingOptions.map((n) => (
+                                      <option key={n} value={n}>
+                                        {n}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
                               ))}
-                            </div>
-                          </div>
-                        ))}
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">{meta.schema.trainers.viewsOnTrainerLabel}</label>
-                          <textarea
-                            rows={2}
-                            className={inputCls + ' resize-none'}
-                            value={trainer.viewsOnTrainer}
-                            onChange={(e) => setTrainers((p) => p.map((t, i) => i === idx ? { ...t, viewsOnTrainer: e.target.value } : t))}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">{meta.schema.trainers.viewsOnSiteVisitLabel}</label>
-                          <textarea
-                            rows={2}
-                            className={inputCls + ' resize-none'}
-                            value={trainer.viewsOnSiteVisit}
-                            onChange={(e) => setTrainers((p) => p.map((t, i) => i === idx ? { ...t, viewsOnSiteVisit: e.target.value } : t))}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                    {meta.schema.trainers.allowMultiple && (
-                      <button
-                        type="button"
-                        onClick={() => setTrainers((p) => [...p, newTrainerEntry()])}
-                        className="w-full py-2 rounded-xl border border-dashed border-gray-300 text-xs font-semibold text-gray-500 hover:border-[#2E3093]/40 hover:text-[#2E3093] transition-colors"
-                      >
-                        + Add another trainer
-                      </button>
-                    )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">{meta.schema.trainers.viewsOnTrainerLabel}</label>
+                      <textarea
+                        rows={2}
+                        className={inputCls + ' resize-none'}
+                        value={trainersViewsOnTrainer}
+                        onChange={(e) => setTrainersViewsOnTrainer(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">{meta.schema.trainers.viewsOnSiteVisitLabel}</label>
+                      <textarea
+                        rows={2}
+                        className={inputCls + ' resize-none'}
+                        value={trainersViewsOnSiteVisit}
+                        onChange={(e) => setTrainersViewsOnSiteVisit(e.target.value)}
+                      />
+                    </div>
                   </div>
 
                   {submitError && <p className="text-xs text-red-500">{submitError}</p>}

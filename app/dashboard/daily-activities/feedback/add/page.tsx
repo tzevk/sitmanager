@@ -417,15 +417,15 @@ export default function FeedbackAddPage() {
       ) : (
         <>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.03)] overflow-hidden">
-            <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
+            <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
               <div>
-                <h2 className="text-lg font-black text-white">{editId ? 'Edit' : 'Create'} Training Feedback Form</h2>
+                <h2 className="text-base sm:text-lg font-black text-white">{editId ? 'Edit' : 'Create'} Training Feedback Form</h2>
                 <p className="text-xs text-white/80 mt-0.5">Form builder (add/remove questions and options)</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => router.push('/dashboard/daily-activities/feedback')}
-                  className="px-4 py-2 rounded-xl bg-white/10 text-white text-sm font-bold hover:bg-white/15 transition-colors"
+                  className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-white/10 text-white text-sm font-bold hover:bg-white/15 transition-colors"
                   type="button"
                 >
                   Back
@@ -433,7 +433,7 @@ export default function FeedbackAddPage() {
                 <button
                   onClick={save}
                   disabled={!canEditPage || loading}
-                  className="px-4 py-2 rounded-xl bg-[#FAE452] text-[#2E3093] text-sm font-black disabled:opacity-50"
+                  className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-[#FAE452] text-[#2E3093] text-sm font-black disabled:opacity-50"
                   type="button"
                 >
                   {loading ? 'Saving...' : 'Save'}
@@ -441,8 +441,8 @@ export default function FeedbackAddPage() {
               </div>
             </div>
 
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-[160px_1fr_180px_180px] gap-4">
+            <div className="p-4 sm:p-6 space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[160px_1fr_180px_180px] gap-4">
                 <div>
                   <label className={labelCls}>Completed %</label>
                   <select
@@ -541,7 +541,7 @@ export default function FeedbackAddPage() {
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
                 {/* BUILDER */}
-                <div className="form-card p-5 space-y-6">
+                <div className="form-card p-3 sm:p-5 space-y-6">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="section-title">Builder</div>
@@ -583,7 +583,7 @@ export default function FeedbackAddPage() {
                       <div className="space-y-3">
                         {schema.trainingProgram.questions.map((q, idx) => (
                           <div key={q.id} className="border border-slate-200 rounded-xl p-3 bg-white">
-                            <div className="flex items-start gap-2">
+                            <div className="flex flex-col sm:flex-row gap-2">
                               <input
                                 className={inputCls}
                                 value={q.label}
@@ -598,7 +598,7 @@ export default function FeedbackAddPage() {
                                 }
                                 disabled={!canEditPage}
                               />
-                              <div className="flex items-center gap-1 pt-0.5">
+                              <div className="flex items-center gap-1 sm:pt-0.5">
                                 <MiniIconButton
                                   title="Move up"
                                   disabled={!canEditPage || idx === 0}
@@ -806,7 +806,7 @@ export default function FeedbackAddPage() {
 
                       <div className="space-y-3">
                         {schema.trainingExecutive.questions.map((q, idx) => (
-                          <div key={q.id} className="flex items-start gap-2">
+                          <div key={q.id} className="flex flex-col sm:flex-row gap-2">
                             <input
                               className={inputCls}
                               value={q.label}
@@ -821,7 +821,7 @@ export default function FeedbackAddPage() {
                               }
                               disabled={!canEditPage}
                             />
-                            <div className="flex items-center gap-1 pt-0.5">
+                            <div className="flex items-center gap-1 sm:pt-0.5">
                               <MiniIconButton
                                 title="Move up"
                                 disabled={!canEditPage || idx === 0}
@@ -1005,7 +1005,7 @@ export default function FeedbackAddPage() {
 
                       <div className="space-y-2">
                         {schema.trainers.questions.map((q, idx) => (
-                          <div key={q.id} className="flex items-start gap-2">
+                          <div key={q.id} className="flex flex-col sm:flex-row gap-2">
                             <input
                               className={inputCls}
                               value={q.label}
@@ -1020,7 +1020,7 @@ export default function FeedbackAddPage() {
                               }
                               disabled={!canEditPage}
                             />
-                            <div className="flex items-center gap-1 pt-0.5">
+                            <div className="flex items-center gap-1 sm:pt-0.5">
                               <MiniIconButton
                                 title="Move up"
                                 disabled={!canEditPage || idx === 0}
@@ -1128,7 +1128,7 @@ export default function FeedbackAddPage() {
                     <div className="text-xs text-slate-500 mt-1">This is what users will fill</div>
                   </div>
 
-                  <div className="p-5 space-y-5">
+                  <div className="p-3 sm:p-5 space-y-5">
                     <div className="border border-slate-300 rounded-xl overflow-hidden">
                       <div className="bg-slate-100 px-4 py-2 text-center">
                         <div className="text-sm font-black text-slate-900 tracking-wide">TRAINING FEEDBACK</div>
@@ -1141,8 +1141,8 @@ export default function FeedbackAddPage() {
                         </div>
                         <div className="divide-y divide-slate-300">
                           {schema.trainingProgram.questions.map((q) => (
-                            <div key={q.id} className="grid grid-cols-[220px_1fr]">
-                              <div className="p-3 text-xs font-semibold text-slate-800 border-r border-slate-300">{q.label}</div>
+                            <div key={q.id} className="grid grid-cols-1 sm:grid-cols-[220px_1fr]">
+                              <div className="p-3 text-xs font-semibold text-slate-800 border-r-0 sm:border-r border-b sm:border-b-0 border-slate-300">{q.label}</div>
                               <div className="p-3">
                                 {q.type === 'textarea' ? (
                                   <textarea className={inputCls + ' min-h-[70px]'} disabled placeholder="" />
