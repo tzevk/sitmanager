@@ -83,7 +83,6 @@ export async function GET(req: NextRequest) {
         // even those who have not yet made a payment.
         const amConditions: string[] = [
           '(am.IsDelete = 0 OR am.IsDelete IS NULL)',
-          '(am.Cancel = 0 OR am.Cancel IS NULL)',
         ];
         const amParams: any[] = [];
         if (courseId) { amConditions.push('bm.Course_Id = ?');  amParams.push(Number(courseId)); }
@@ -95,6 +94,7 @@ export async function GET(req: NextRequest) {
              COALESCE(cm.Course_Name,'') AS Course_Name,
              bm.SDate AS Batch_Start, bm.EDate AS Batch_End, bm.Fees_Full_Payment,
              am.Student_Id AS Student_Id,
+             am.Cancel AS Cancel, am.Transfered AS Transfered,
              COALESCE(sm.Student_Name, CONCAT_WS(' ', sm.FName, sm.MName, sm.LName), '') AS Student_Name,
              COALESCE(sm.Present_Mobile,'') AS Present_Mobile,
              sfm.Fees_Id, sfm.Fees_Code, sfm.Date_Added, sfm.RDate,

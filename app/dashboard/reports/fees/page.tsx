@@ -41,6 +41,8 @@ interface BatchWiseFeesRow {
   Batch_End: string | null;
   Fees_Full_Payment?: number | null;
   Student_Id?: number | null;
+  Cancel?: string | null;
+  Transfered?: string | null;
   Student_Name: string;
   Present_Mobile: string;
   Fees_Id: number;
@@ -114,6 +116,18 @@ const SUB_TABS: { id: SubTab; label: string }[] = [
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 const fmt = (n: number | null | undefined) =>
   n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
+
+const studentStatus = (r: { Cancel?: string | null; Transfered?: string | null }): 'Cancelled' | 'Transferred' | 'Active' => {
+  if (String(r.Cancel ?? '').trim().toLowerCase() === 'yes') return 'Cancelled';
+  if (String(r.Transfered ?? '').trim().toLowerCase() === 'yes') return 'Transferred';
+  return 'Active';
+};
+
+const statusBadge = (status: 'Cancelled' | 'Transferred' | 'Active') => {
+  if (status === 'Cancelled') return 'bg-red-100 text-red-700 border border-red-200';
+  if (status === 'Transferred') return 'bg-amber-100 text-amber-700 border border-amber-200';
+  return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+};
 
 const fmtDate = (d: string | null | undefined) => {
   if (!d) return '—';
@@ -249,9 +263,6 @@ function FeesReportContent() {
 
   /* Excel export for fees-details */
   const exportExcel = () => {
-    const buildCsv = (headers: string[], rowsFn: () => string[][]): string =>
-      [headers.join(','), ...rowsFn().map(r => r.map(c => `"${String(c ?? '').replace(/"/g,'""')}"`).join(','))].join('\n');
-
     let csv = '';
     const fname = `fees-${subTab}-${new Date().toISOString().slice(0,10)}.csv`;
 
@@ -261,27 +272,48 @@ function FeesReportContent() {
         if (!r.Fees_Id || r.Student_Id == null) continue;
         paidByStudent.set(r.Student_Id, (paidByStudent.get(r.Student_Id) ?? 0) + (r.Amount ?? 0));
       }
+
+      const headers = ['Sr No','Batch Code','Course','Receipt Date','Receipt Number','Name of Student','Status','Total Amount','Amount Paid','Remaining Amount','Payment Type'];
       let sumTotal = 0, sumPaid = 0, sumRemaining = 0;
-      csv = buildCsv(['Sr No','Receipt Date','Receipt Number','Name of Student','Total Amount','Amount Paid','Remaining Amount','Payment Type'],
-        () => {
-          const rows = batchWiseFeesRows.filter(r => r.Fees_Id).map((r,i) => {
-            const totalFees = r.Fees_Full_Payment ?? 0;
-            const paid = r.Student_Id != null ? (paidByStudent.get(r.Student_Id) ?? 0) : 0;
-            const remaining = totalFees - paid;
-            sumTotal += totalFees;
-            sumPaid += r.Amount ?? 0;
-            sumRemaining += remaining;
-            return [String(i+1), fmtDate(r.RDate || r.Date_Added), r.Fees_Code ?? '',
-              r.Student_Name, String(totalFees), String(r.Amount ?? ''),
-              String(remaining), r.Payment_Type ?? ''];
-          });
-          rows.push(['', '', '', 'Total', String(sumTotal), String(sumPaid), String(sumRemaining), '']);
-          return rows;
-        });
+      const dataRows = batchWiseFeesRows.filter(r => r.Fees_Id).map((r, i) => {
+        const totalFees = r.Fees_Full_Payment ?? 0;
+        const paid = r.Student_Id != null ? (paidByStudent.get(r.Student_Id) ?? 0) : 0;
+        const remaining = totalFees - paid;
+        sumTotal += totalFees;
+        sumPaid += r.Amount ?? 0;
+        sumRemaining += remaining;
+        return [
+          String(i + 1), r.Batch_Code || '', r.Course_Name || '',
+          fmtDate(r.RDate || r.Date_Added), r.Fees_Code ?? '',
+          r.Student_Name, studentStatus(r),
+          String(totalFees), String(r.Amount ?? ''), String(remaining), r.Payment_Type ?? '',
+        ];
+      });
+      const totalsRow = ['', '', '', '', '', '', 'GRAND TOTAL', String(sumTotal), String(sumPaid), String(sumRemaining), ''];
+
+      const fromLabel = fromDate ? fmtDate(fromDate) : '—';
+      const toLabel = toDate ? fmtDate(toDate) : '—';
+      const titleRows = [
+        ['Suvidya Institute of Technology'],
+        ['Batch Wise Fees Report'],
+        [`Period: ${fromLabel} to ${toLabel}`],
+        [`Generated: ${new Date().toLocaleString('en-IN')}`],
+        [],
+      ];
+
+      csv = [
+        ...titleRows,
+        headers,
+        ...dataRows,
+        [],
+        totalsRow,
+      ]
+        .map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
+        .join('\n');
     }
     if (!csv) return;
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
     a.download = fname; a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -570,6 +602,7 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
             <th className={TH}>Receipt Date</th>
             <th className={TH}>Receipt Number</th>
             <th className={TH}>Name of Student</th>
+            <th className={TH}>Status</th>
             <th className={THR}>Amount</th>
             <th className={TH}>Payment Type</th>
             <th className={TH}>Transaction Details</th>
@@ -581,11 +614,12 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
             const transactionDetails = r.Payment_Type && ['cheque','dd','pdc'].includes(r.Payment_Type.toLowerCase())
               ? [r.Cheque_No, r.Cheque_Bank, r.Cheque_Branch].filter(Boolean).join(' / ') || '—'
               : (r.Payment_Type || '—');
+            const status = studentStatus(r);
             return (
               <React.Fragment key={`${r.Batch_Code}-${r.Fees_Id ?? 'np'}-${i}`}>
                 {isNewBatch && (
                   <tr className="bg-[#2E3093]/5 border-y border-[#2E3093]/10">
-                    <td colSpan={7} className="py-1.5 px-3">
+                    <td colSpan={8} className="py-1.5 px-3">
                       <div className="flex items-center gap-3">
                         <span className="text-[11px] font-bold text-[#2E3093] font-mono">{r.Batch_Code || '—'}</span>
                         <span className="text-[11px] text-slate-600">{r.Course_Name}</span>
@@ -597,17 +631,22 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
                 <tr className={`hover:bg-slate-50/60 transition-colors ${!r.Fees_Id ? 'bg-red-50/40' : ''}`}>
                   <td className={`${TD} text-slate-400`}>{i + 1}</td>
                   {!r.Fees_Id ? (
-                    <td colSpan={6} className="py-2 px-3 text-xs text-center border-b border-slate-100">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-[10px] font-semibold border border-red-200">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        {r.Student_Name} — No Payment Recorded
-                      </span>
-                    </td>
+                    <>
+                      <td colSpan={3} className="py-2 px-3 text-xs text-center border-b border-slate-100">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-[10px] font-semibold border border-red-200">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                          {r.Student_Name} — No Payment Recorded
+                        </span>
+                      </td>
+                      <td className={TD}><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusBadge(status)}`}>{status}</span></td>
+                      <td colSpan={3} />
+                    </>
                   ) : (
                     <>
                       <td className={TD}>{fmtDate(r.RDate || r.Date_Added)}</td>
                       <td className={TD}><span className="font-mono text-[11px] font-semibold text-[#2E3093]">{r.Fees_Code || '—'}</span></td>
                       <td className={`${TD} font-medium max-w-[180px] truncate`}>{r.Student_Name || '—'}</td>
+                      <td className={TD}><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusBadge(status)}`}>{status}</span></td>
                       <td className={`${TD} text-right font-mono font-semibold`}>{fmt(r.Amount)}</td>
                       <td className={TD}><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${payBadge(r.Payment_Type)}`}>{r.Payment_Type || '—'}</span></td>
                       <td className={`${TD} max-w-[200px] truncate text-slate-500`}>{transactionDetails}</td>
@@ -620,7 +659,7 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
         </tbody>
         <tfoot>
           <tr className="bg-slate-50 border-t-2 border-slate-200">
-            <td colSpan={4} className="py-2 px-3 text-xs text-slate-600 text-right font-bold">Total ({rows.length} records)</td>
+            <td colSpan={5} className="py-2 px-3 text-xs text-slate-600 text-right font-bold">Total ({rows.length} records)</td>
             <td className="py-2 px-3 text-xs text-right font-mono font-bold text-[#2E3093]">{fmt(totalNet)}</td>
             <td colSpan={2} />
           </tr>
