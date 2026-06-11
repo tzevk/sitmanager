@@ -27,6 +27,10 @@
       "schedule": "*/10 * * * *"
     },
     {
+      "path": "/api/cron/legacy-fees-sync",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cron/suvidya-inquiry-sync",
       "schedule": "*/2 * * * *"
     },

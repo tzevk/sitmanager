@@ -256,13 +256,9 @@ function FeesReportContent() {
     const fname = `fees-${subTab}-${new Date().toISOString().slice(0,10)}.csv`;
 
     if (subTab === 'batch-wise-fees') {
-      const transactionDetails = (r: BatchWiseFeesRow) =>
-        r.Payment_Type && ['cheque','dd','pdc'].includes(r.Payment_Type.toLowerCase())
-          ? [r.Cheque_No, r.Cheque_Bank, r.Cheque_Branch].filter(Boolean).join(' / ')
-          : (r.Payment_Type ?? '');
-      csv = buildCsv(['Sr No','Receipt Date','Receipt Number','Name of Student','Amount','Payment Type','Transaction Details'],
+      csv = buildCsv(['Sr No','Receipt Date','Receipt Number','Name of Student','Total Amount','Amount Paid','Remaining Amount','Payment Type'],
         () => batchWiseFeesRows.filter(r => r.Fees_Id).map((r,i) => [String(i+1), fmtDate(r.RDate || r.Date_Added), r.Fees_Code ?? '',
-          r.Student_Name, String(r.Amount ?? ''), r.Payment_Type ?? '', transactionDetails(r)]));
+          r.Student_Name, String(r.Total_Amt ?? ''), String(r.Amount ?? ''), String(r.UnPaid_Amt ?? ''), r.Payment_Type ?? '']));
     }
     if (!csv) return;
     const a = document.createElement('a');

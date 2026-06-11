@@ -52,7 +52,9 @@
       "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('vercel.json','utf8'\\)\\); console.log\\('vercel.json ok'\\)\")",
       "Bash(node scripts/probe-student-master.mjs)",
       "Bash(kill -9 58345 58344 58321 58421 58420 58397)",
-      "Bash(node scripts/check-not-found-rolls.mjs)"
+      "Bash(node scripts/check-not-found-rolls.mjs)",
+      "Bash(node scripts/probe-fees-master.mjs)",
+      "Bash(node scripts/check-fees-collisions.mjs)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
