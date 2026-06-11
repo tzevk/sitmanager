@@ -39,6 +39,7 @@ type FeedbackFormSchema = {
     questions: Array<{ id: string; label: string }>; // rating grid implied
     viewsOnTrainerLabel: string;
     viewsOnSiteVisitLabel: string;
+    selectedTrainers: Array<{ facultyId: number; name: string }>; // trainers picked for the trainerColumns
   };
 };
 
@@ -96,6 +97,7 @@ const defaultSchema = (): FeedbackFormSchema => ({
     ],
     viewsOnTrainerLabel: 'i. Your views on Trainer',
     viewsOnSiteVisitLabel: 'j. Your views on Site Visit',
+    selectedTrainers: [],
   },
 });
 
@@ -132,6 +134,9 @@ function normalizeSchema(raw: unknown): FeedbackFormSchema {
         Array.isArray(s.trainers?.questions) && s.trainers?.questions?.length
           ? (s.trainers.questions as Array<{ id: string; label: string }>)
           : d.trainers.questions,
+      selectedTrainers: Array.isArray(s.trainers?.selectedTrainers)
+        ? (s.trainers.selectedTrainers as Array<{ facultyId: number; name: string }>)
+        : d.trainers.selectedTrainers,
     },
   };
 }
@@ -211,9 +216,11 @@ export default function FeedbackAddPage() {
   const [batchOptions, setBatchOptions] = useState<Array<{ id: number; batchNo: string }>>([]);
   const [formLink, setFormLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
-  const [previewTrainerColumns, setPreviewTrainerColumns] = useState<Array<{ key: string; facultyId: string }>>(() => [
-    { key: newId(), facultyId: '' },
-  ]);
+
+  const previewTrainerColumns = useMemo(() => {
+    const desired = clampInt(schema.trainers.trainerColumns, 1, 6, 1);
+    return Array.from({ length: desired }, (_, idx) => schema.trainers.selectedTrainers[idx] ?? { facultyId: 0, name: '' });
+  }, [schema.trainers.trainerColumns, schema.trainers.selectedTrainers]);
 
   const trainingProgramOptionNames = useMemo(() => new Set(programOptions.map((o) => o.name)), [programOptions]);
 
@@ -253,37 +260,35 @@ export default function FeedbackAddPage() {
   }, [loadForEdit]);
 
   useEffect(() => {
-    // Keep local preview trainer selectors in sync with desired column count.
-    const desired = clampInt(schema.trainers.trainerColumns, 1, 6, 1);
-    setPreviewTrainerColumns((prev) => {
-      if (prev.length === desired) return prev;
-      if (prev.length > desired) return prev.slice(0, desired);
-      const extra = Array.from({ length: desired - prev.length }, () => ({ key: newId(), facultyId: '' }));
-      return [...prev, ...extra];
-    });
-  }, [schema.trainers.trainerColumns]);
-
-  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         // Best-effort: populate trainer dropdown from faculty master.
         // If current user lacks `faculty.view`, API may 403 — we just fall back to empty.
-        const res = await fetch('/api/masters/faculty?limit=100&page=1');
-        if (!res.ok) return;
-        const json = await res.json();
-        const rows = Array.isArray(json?.rows) ? json.rows : [];
+        // The API caps `limit` at 100, so page through all results to get the full list.
+        const rows: Array<{ Faculty_Id?: number; Faculty_Name?: string; IsActive?: number | boolean }> = [];
+        let page = 1;
+        let totalPages = 1;
+        do {
+          const res = await fetch(`/api/masters/faculty?limit=100&page=${page}`);
+          if (!res.ok) return;
+          const json = await res.json();
+          rows.push(...(Array.isArray(json?.rows) ? json.rows : []));
+          totalPages = Number(json?.pagination?.totalPages) || 1;
+          page += 1;
+        } while (page <= totalPages);
+
         const options = rows
-          .filter((r: { Faculty_Id?: number; Faculty_Name?: string; IsActive?: number | boolean }) => {
+          .filter((r) => {
             if (!r?.Faculty_Id) return false;
             if (r?.IsActive === 0) return false;
             return true;
           })
-          .map((r: { Faculty_Id: number; Faculty_Name?: string }) => ({
+          .map((r) => ({
             id: Number(r.Faculty_Id),
             name: String(r?.Faculty_Name || '').trim(),
           }))
-          .filter((o: { id: number; name: string }) => o.id && o.name);
+          .filter((o) => o.id && o.name);
 
         if (!cancelled) setFacultyOptions(options);
       } catch {
@@ -1242,14 +1247,20 @@ export default function FeedbackAddPage() {
                             <tr className="bg-slate-100">
                               <th className="text-left px-3 py-2 font-black text-slate-700 border-b border-slate-300 w-[280px]"> </th>
                               {previewTrainerColumns.map((col, idx) => (
-                                <th key={col.key} className="px-3 py-2 border-b border-slate-300 min-w-[220px]">
+                                <th key={idx} className="px-3 py-2 border-b border-slate-300 min-w-[220px]">
                                   <div className="text-xs font-black text-slate-700">Trainer {idx + 1}</div>
                                   <select
                                     className={inputCls + ' mt-1 text-xs'}
-                                    value={col.facultyId}
+                                    value={col.facultyId || ''}
+                                    disabled={!canEditPage}
                                     onChange={(e) => {
-                                      const next = e.target.value;
-                                      setPreviewTrainerColumns((p) => p.map((x) => (x.key === col.key ? { ...x, facultyId: next } : x)));
+                                      const facultyId = Number(e.target.value);
+                                      const opt = facultyOptions.find((o) => o.id === facultyId);
+                                      setSchema((p) => {
+                                        const next = previewTrainerColumns.map((c) => ({ ...c }));
+                                        next[idx] = { facultyId, name: opt?.name || '' };
+                                        return { ...p, trainers: { ...p.trainers, selectedTrainers: next } };
+                                      });
                                     }}
                                   >
                                     <option value="">Select trainer</option>
@@ -1274,8 +1285,8 @@ export default function FeedbackAddPage() {
                             {schema.trainers.questions.map((q) => (
                               <tr key={q.id} className="border-b border-slate-300">
                                 <td className="px-3 py-2 text-slate-800 font-semibold">{q.label}</td>
-                                {previewTrainerColumns.map((col) => (
-                                  <td key={col.key} className="px-3 py-2">
+                                {previewTrainerColumns.map((_, idx) => (
+                                  <td key={idx} className="px-3 py-2">
                                     <select className={inputCls + ' text-xs'} disabled value="">
                                       <option value="">-</option>
                                       {schema.ratingOptions.map((n) => (
@@ -1290,16 +1301,16 @@ export default function FeedbackAddPage() {
                             ))}
                             <tr className="border-b border-slate-300">
                               <td className="px-3 py-2 text-slate-800 font-semibold">{schema.trainers.viewsOnTrainerLabel}</td>
-                              {previewTrainerColumns.map((col) => (
-                                <td key={col.key} className="px-3 py-2">
+                              {previewTrainerColumns.map((_, idx) => (
+                                <td key={idx} className="px-3 py-2">
                                   <input className={inputCls + ' text-xs'} disabled placeholder="" />
                                 </td>
                               ))}
                             </tr>
                             <tr>
                               <td className="px-3 py-2 text-slate-800 font-semibold">{schema.trainers.viewsOnSiteVisitLabel}</td>
-                              {previewTrainerColumns.map((col) => (
-                                <td key={col.key} className="px-3 py-2">
+                              {previewTrainerColumns.map((_, idx) => (
+                                <td key={idx} className="px-3 py-2">
                                   <input className={inputCls + ' text-xs'} disabled placeholder="" />
                                 </td>
                               ))}
