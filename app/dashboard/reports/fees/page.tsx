@@ -256,10 +256,19 @@ function FeesReportContent() {
     const fname = `fees-${subTab}-${new Date().toISOString().slice(0,10)}.csv`;
 
     if (subTab === 'batch-wise-fees') {
+      const paidByStudent = new Map<number, number>();
+      for (const r of batchWiseFeesRows) {
+        if (!r.Fees_Id || r.Student_Id == null) continue;
+        paidByStudent.set(r.Student_Id, (paidByStudent.get(r.Student_Id) ?? 0) + (r.Amount ?? 0));
+      }
       csv = buildCsv(['Sr No','Receipt Date','Receipt Number','Name of Student','Total Amount','Amount Paid','Remaining Amount','Payment Type'],
-        () => batchWiseFeesRows.filter(r => r.Fees_Id).map((r,i) => [String(i+1), fmtDate(r.RDate || r.Date_Added), r.Fees_Code ?? '',
-          r.Student_Name, String(r.Total_Amt ?? ''), String(r.Amount ?? ''),
-          String((r.Total_Amt ?? 0) - (r.Amount ?? 0)), r.Payment_Type ?? '']));
+        () => batchWiseFeesRows.filter(r => r.Fees_Id).map((r,i) => {
+          const totalFees = r.Fees_Full_Payment ?? 0;
+          const paid = r.Student_Id != null ? (paidByStudent.get(r.Student_Id) ?? 0) : 0;
+          return [String(i+1), fmtDate(r.RDate || r.Date_Added), r.Fees_Code ?? '',
+            r.Student_Name, String(totalFees), String(r.Amount ?? ''),
+            String(totalFees - paid), r.Payment_Type ?? ''];
+        }));
     }
     if (!csv) return;
     const a = document.createElement('a');
