@@ -42,7 +42,9 @@
       "Bash(mysql -h 94.103.163.250 -P 3306 -u sitadmin -ppasswordadmin --protocol=TCP sit -e \"SELECT fields_json FROM meta_leads WHERE fields_json IS NOT NULL AND fields_json NOT IN \\('{}',''\\) LIMIT 3;\")",
       "Bash(MYSQL_PWD=\"passwordadmin\" mysql -h 94.103.163.250 -P 3306 -u sitadmin --protocol=TCP sit -e \"SELECT fields_json FROM meta_leads WHERE fields_json IS NOT NULL AND fields_json NOT IN \\('{}',''\\) LIMIT 3;\")",
       "Read(//usr/local/bin/**)",
-      "Read(//opt/homebrew/opt/**)"
+      "Read(//opt/homebrew/opt/**)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
