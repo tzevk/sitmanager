@@ -342,21 +342,45 @@ function FeesReportContent() {
       cell.border = borders('FF1A5A9E');
     });
 
+    /* ── Group rows by batch + student (one row per student, payments summed) ── */
+    type StudentGroup = {
+      batchCode: string; courseName: string; batchStart: string | null; batchEnd: string | null;
+      first: BatchWiseFeesRow; totalPaid: number; paymentTypes: Set<string>;
+    };
+    const filteredRows = batchWiseFeesRows.filter(r => r.Fees_Id);
+    const groups: StudentGroup[] = [];
+    for (const r of filteredRows) {
+      const last = groups[groups.length - 1];
+      if (last && last.batchCode === (r.Batch_Code || '') && last.first.Student_Id === r.Student_Id) {
+        last.totalPaid += r.Amount ?? 0;
+        if (r.Payment_Type) last.paymentTypes.add(r.Payment_Type);
+      } else {
+        groups.push({
+          batchCode: r.Batch_Code || '',
+          courseName: r.Course_Name || '',
+          batchStart: r.Batch_Start,
+          batchEnd: r.Batch_End,
+          first: r,
+          totalPaid: r.Amount ?? 0,
+          paymentTypes: new Set(r.Payment_Type ? [r.Payment_Type] : []),
+        });
+      }
+    }
+
     /* ── Data rows, grouped by batch ── */
     let rowIdx = 6;
     let sumTotal = 0, sumPaid = 0, sumRemaining = 0;
     let srNo = 1;
-    const filteredRows = batchWiseFeesRows.filter(r => r.Fees_Id);
 
-    filteredRows.forEach((r, i) => {
-      const isNewBatch = i === 0 || filteredRows[i - 1].Batch_Code !== r.Batch_Code;
+    groups.forEach((g, i) => {
+      const isNewBatch = i === 0 || groups[i - 1].batchCode !== g.batchCode;
       if (isNewBatch) {
         ws.mergeCells(rowIdx, 1, rowIdx, colCount);
         const groupRow = ws.getRow(rowIdx);
         groupRow.height = 20;
-        const dateRange = r.Batch_Start ? ` (${fmtDate(r.Batch_Start)} – ${fmtDate(r.Batch_End)})` : '';
+        const dateRange = g.batchStart ? ` (${fmtDate(g.batchStart)} – ${fmtDate(g.batchEnd)})` : '';
         const gCell = ws.getCell(rowIdx, 1);
-        gCell.value = `${r.Batch_Code || '—'}  —  ${r.Course_Name || ''}${dateRange}`;
+        gCell.value = `${g.batchCode || '—'}  —  ${g.courseName}${dateRange}`;
         gCell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF2E3093' } };
         gCell.fill = fill('FFE8EAFB');
         gCell.alignment = { vertical: 'middle' };
@@ -364,11 +388,11 @@ function FeesReportContent() {
         rowIdx++;
       }
 
+      const r = g.first;
       const totalFees = r.Fees_Full_Payment ?? 0;
-      const paid = r.Student_Id != null ? (paidByStudent.get(r.Student_Id) ?? 0) : 0;
-      const remaining = totalFees - paid;
+      const remaining = totalFees - g.totalPaid;
       sumTotal += totalFees;
-      sumPaid += r.Amount ?? 0;
+      sumPaid += g.totalPaid;
       sumRemaining += remaining;
 
       const status = studentStatus(r);
@@ -376,17 +400,13 @@ function FeesReportContent() {
       const sFont = statusFont[status];
       const stripeBg = i % 2 === 0 ? sBg : (status === 'Active' ? 'FFF7F8FD' : sBg);
 
-      const isFirstForStudent = isNewBatch || filteredRows[i - 1].Student_Id !== r.Student_Id;
+      const paymentTypeLabel = g.paymentTypes.size > 1
+        ? Array.from(g.paymentTypes).join(' / ')
+        : (Array.from(g.paymentTypes)[0] || '—');
 
       const vals: (string | number)[] = [
-        srNo++,
-        isFirstForStudent ? (r.Student_Id ?? '') : '',
-        isFirstForStudent ? (r.Roll_No || '') : '',
-        isFirstForStudent ? (r.Student_Name || '—') : '',
-        isFirstForStudent ? totalFees : '',
-        r.Amount ?? 0,
-        isFirstForStudent ? remaining : '',
-        r.Payment_Type || '—',
+        srNo++, r.Student_Id ?? '', r.Roll_No || '', r.Student_Name || '—',
+        totalFees, g.totalPaid, remaining, paymentTypeLabel,
       ];
 
       const dataRow = ws.getRow(rowIdx);
@@ -407,21 +427,16 @@ function FeesReportContent() {
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
         } else if (ci === 3) {
           cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: sFont } };
-          if (isFirstForStudent && status !== 'Active') {
+          if (status !== 'Active') {
             cell.value = `${r.Student_Name || '—'}  (${status})`;
           }
-        } else if (ci === 4) {
-          if (isFirstForStudent) cell.numFmt = '₹#,##0';
-          cell.alignment = { horizontal: 'right', vertical: 'middle' };
-        } else if (ci === 5) {
+        } else if (ci === 4 || ci === 5) {
           cell.numFmt = '₹#,##0';
           cell.alignment = { horizontal: 'right', vertical: 'middle' };
         } else if (ci === 6) {
-          if (isFirstForStudent) {
-            cell.numFmt = '₹#,##0';
-            cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: remaining > 0 ? 'FFB91C1C' : 'FF15803D' } };
-            cell.fill = fill(remaining > 0 ? 'FFFEF3C7' : 'FFDCFCE7');
-          }
+          cell.numFmt = '₹#,##0';
+          cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: remaining > 0 ? 'FFB91C1C' : 'FF15803D' } };
+          cell.fill = fill(remaining > 0 ? 'FFFEF3C7' : 'FFDCFCE7');
           cell.alignment = { horizontal: 'right', vertical: 'middle' };
         } else if (ci === 7) {
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -435,7 +450,7 @@ function FeesReportContent() {
     totalsRow.height = 24;
     const totalLabelCell = ws.getCell(rowIdx, 1);
     ws.mergeCells(rowIdx, 1, rowIdx, 4);
-    totalLabelCell.value = `GRAND TOTAL  (${filteredRows.length} records)`;
+    totalLabelCell.value = `GRAND TOTAL  (${groups.length} students)`;
     totalLabelCell.alignment = { horizontal: 'right', vertical: 'middle' };
     [1, 2, 3, 4, 5, 6, 7, 8].forEach(ci => {
       const cell = ws.getCell(rowIdx, ci);
