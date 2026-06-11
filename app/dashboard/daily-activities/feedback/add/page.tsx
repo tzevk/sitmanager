@@ -242,7 +242,7 @@ export default function FeedbackAddPage() {
       setBatchId(r.batch_id ? String(r.batch_id) : '');
       setBatchNo(r.batch_no || '');
       setDate(r.feedback_date ? String(r.feedback_date).slice(0, 10) : '');
-      if (r.published) {
+      if (r.id) {
         setFormLink(`${window.location.origin}/public/training-feedback/${r.id}`);
       }
 
