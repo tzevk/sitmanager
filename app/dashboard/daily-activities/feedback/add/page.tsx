@@ -216,6 +216,8 @@ export default function FeedbackAddPage() {
   const [batchOptions, setBatchOptions] = useState<Array<{ id: number; batchNo: string }>>([]);
   const [formLink, setFormLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+  const [published, setPublished] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const previewTrainerColumns = useMemo(() => {
     const desired = clampInt(schema.trainers.trainerColumns, 1, 6, 1);
@@ -245,6 +247,7 @@ export default function FeedbackAddPage() {
       if (r.id) {
         setFormLink(`${window.location.origin}/public/training-feedback/${r.id}`);
       }
+      setPublished(!!r.published);
 
       const parsed = safeJsonParse<FeedbackFormSchema>(r.schema_json, defaultSchema());
       setSchema(normalizeSchema(parsed));
@@ -396,6 +399,29 @@ export default function FeedbackAddPage() {
     }
   };
 
+  const togglePublish = async () => {
+    if (!editId) return;
+    setPublishing(true);
+    try {
+      const next = !published;
+      const res = await fetch(`/api/daily-activities/feedback/${editId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ published: next }),
+      });
+      if (res.ok) {
+        setPublished(next);
+      } else {
+        const j = await res.json().catch(() => ({}));
+        alert(j.error || 'Failed to update publish status');
+      }
+    } catch {
+      alert('Failed to update publish status');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   const copyFormLink = async () => {
     try {
       await navigator.clipboard.writeText(formLink);
@@ -519,7 +545,21 @@ export default function FeedbackAddPage() {
 
               {formLink && (
                 <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/60">
-                  <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-2">Student Feedback Link</div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Student Feedback Link</div>
+                    <button
+                      type="button"
+                      onClick={togglePublish}
+                      disabled={!canEditPage || publishing}
+                      className={`px-3 py-1 rounded-full text-[11px] font-black transition-colors disabled:opacity-50 ${
+                        published
+                          ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                          : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                      }`}
+                    >
+                      {publishing ? 'Updating...' : published ? 'Published' : 'Unpublished'}
+                    </button>
+                  </div>
                   <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
                     <div className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 break-all">
                       {formLink}
@@ -533,8 +573,10 @@ export default function FeedbackAddPage() {
                     </button>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-2">
-                    Students open this link and enter the last 3 digits of their student code to fill the form.
-                    Publish this form from the feedback list to make the link active.
+                    Students open this link and enter the last 3 digits of their student code to fill the form.{' '}
+                    {published
+                      ? 'This form is published — the link is active.'
+                      : 'Click "Unpublished" above to publish and activate the link.'}
                   </p>
                 </div>
               )}
