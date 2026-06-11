@@ -273,7 +273,7 @@ function FeesReportContent() {
         paidByStudent.set(r.Student_Id, (paidByStudent.get(r.Student_Id) ?? 0) + (r.Amount ?? 0));
       }
 
-      const headers = ['Sr No','Batch Code','Course','Receipt Date','Receipt Number','Name of Student','Status','Total Amount','Amount Paid','Remaining Amount','Payment Type'];
+      const headers = ['Sr No','Batch Code','Course','Batch Start','Batch End','Receipt Date','Receipt Number','Name of Student','Status','Total Amount','Amount Paid','Remaining Amount','Payment Type'];
       let sumTotal = 0, sumPaid = 0, sumRemaining = 0;
       const dataRows = batchWiseFeesRows.filter(r => r.Fees_Id).map((r, i) => {
         const totalFees = r.Fees_Full_Payment ?? 0;
@@ -284,12 +284,13 @@ function FeesReportContent() {
         sumRemaining += remaining;
         return [
           String(i + 1), r.Batch_Code || '', r.Course_Name || '',
+          fmtDate(r.Batch_Start), fmtDate(r.Batch_End),
           fmtDate(r.RDate || r.Date_Added), r.Fees_Code ?? '',
           r.Student_Name, studentStatus(r),
           String(totalFees), String(r.Amount ?? ''), String(remaining), r.Payment_Type ?? '',
         ];
       });
-      const totalsRow = ['', '', '', '', '', '', 'GRAND TOTAL', String(sumTotal), String(sumPaid), String(sumRemaining), ''];
+      const totalsRow = ['', '', '', '', '', '', '', '', 'GRAND TOTAL', String(sumTotal), String(sumPaid), String(sumRemaining), ''];
 
       const fromLabel = fromDate ? fmtDate(fromDate) : '—';
       const toLabel = toDate ? fmtDate(toDate) : '—';
