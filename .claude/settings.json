@@ -57,7 +57,16 @@
       "Bash(node scripts/check-fees-collisions.mjs)",
       "Bash(node /tmp/check_unpaid.mjs)",
       "Bash(node scripts/check_unpaid_tmp.mjs)",
-      "Bash(grep -n \"colCount = 7\\\\|headers = \\\\[\\\\|const vals\\\\|ci === \\\\|ci + 1\\\\|ws.columns = \\\\[\\\\|to: { row: 5, column: colCount\" app/dashboard/reports/fees/page.tsx)"
+      "Bash(grep -n \"colCount = 7\\\\|headers = \\\\[\\\\|const vals\\\\|ci === \\\\|ci + 1\\\\|ws.columns = \\\\[\\\\|to: { row: 5, column: colCount\" app/dashboard/reports/fees/page.tsx)",
+      "Bash(find /Users/tanvikadam/Desktop/SIT -iname \"app.js\" -not -path \"*/node_modules/*\" 2>/dev/null)",
+      "Read(//Users/tanvikadam/Desktop/SIT/**)",
+      "Bash(find /Users/tanvikadam/Desktop -maxdepth 5 -iname \"app.js\" -not -path \"*/node_modules/*\" 2>/dev/null)",
+      "Read(//Users/tanvikadam/Desktop/**)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" \"https://accentapp.in/storage-api.php?path=test\")",
+      "Bash(curl -sk -o /dev/null -w \"%{http_code}\\\\n\" \"https://accentapp.in/storage-api.php?path=test\" --max-time 10)",
+      "Bash(cat /var/folders/27/jgbq3r8n3kn2wzjystgv8yhw0000gn/T/next-panic-6514cef6130134c14b247a5ca4d062f5.log 2>/dev/null | head -100)",
+      "Read(//private/var/folders/27/jgbq3r8n3kn2wzjystgv8yhw0000gn/T/**)",
+      "Bash(git show *)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

@@ -123,7 +123,10 @@ export default function EditStudentPage() {
   const [placement, setPlacement] = useState<PlacementRow[]>([]);
 
   /* documents */
-  const [documents] = useState<DocumentRow[]>([]);
+  const [documents, setDocuments] = useState<DocumentRow[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [docsError, setDocsError] = useState('');
+  const [docsLoaded, setDocsLoaded] = useState(false);
 
   /* sidebar stats */
   const [batchStartDate, setBatchStartDate] = useState('');
@@ -263,6 +266,30 @@ export default function EditStudentPage() {
     }
   }, [activeTab, studentId, fetchDiscussions]);
 
+  /* ------------------------------------------------------------------ */
+  /*  Fetch documents (lazy — only when the Documents tab is opened)      */
+  /* ------------------------------------------------------------------ */
+  const fetchDocuments = useCallback(async () => {
+    if (!studentId) return;
+    setDocsLoading(true);
+    setDocsError('');
+    try {
+      const res  = await fetch(`/api/admission-activity/student/${studentId}/documents`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setDocuments(data.documents ?? []);
+      setDocsLoaded(true);
+    } catch (e: unknown) {
+      setDocsError(e instanceof Error ? e.message : 'Failed to load documents');
+    }
+    setDocsLoading(false);
+  }, [studentId]);
+
+  useEffect(() => {
+    if (activeTab === 'documents' && studentId && !docsLoaded) {
+      fetchDocuments();
+    }
+  }, [activeTab, studentId, docsLoaded, fetchDocuments]);
 
   /* ------------------------------------------------------------------ */
   /*  Save                                                                */
@@ -1025,7 +1052,13 @@ export default function EditStudentPage() {
                   </svg>
                 }
               >
-                {documents.length === 0 ? (
+                {docsLoading ? (
+                  <div className="flex justify-center py-8">
+                    <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : docsError ? (
+                  <p className="text-xs text-red-500 text-center py-8">{docsError}</p>
+                ) : documents.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 text-center">
                     <svg className="w-10 h-10 text-slate-200 mb-2" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -1054,6 +1087,7 @@ export default function EditStudentPage() {
                             <img
                               src={fileUrl}
                               alt={label}
+                              loading="lazy"
                               className="w-full h-16 object-cover rounded-md border border-slate-100"
                               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                             />

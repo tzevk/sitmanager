@@ -9,23 +9,13 @@ interface StudentRow {
   Student_Id: number;
   Student_Code: string | null;
   Student_Name: string | null;
-  DOB: string | null;
-  Present_City: string | null;
-  Email: string | null;
   Present_Mobile: string | null;
-  Qualification: string | null;
-  Course_Id: number | null;
   Course_Name: string | null;
-  Sex: string | null;
   IsActive: number | null;
   Admission_Date: string | null;
   Payment_Type: string | null;
   Amount: number | null;
   Batch_Code: string | null;
-  Batch_code_resolved: string | null;
-  Batch_SDate: string | null;
-  Batch_EDate: string | null;
-  _legacy?: boolean;
 }
 
 interface Course { Course_Id: number; Course_Name: string }
@@ -56,7 +46,6 @@ export default function StudentPage() {
       const p = new URLSearchParams();
       p.set('page', String(page));
       p.set('limit', '25');
-      p.set('admittedOnly', '1');
       if (search)    p.set('search',    search);
       if (courseId)  p.set('courseId',  courseId);
       if (batchCode) p.set('batchCode', batchCode);
@@ -95,7 +84,7 @@ export default function StudentPage() {
     const fmt     = (v: string | null | undefined) => `"${(v || '').replace(/"/g, '""')}"`;
     const fmtDate = (v: string | null) => v ? new Date(v).toLocaleDateString('en-IN') : '';
     const headers = [
-      'Student Code', 'Student Name', 'DOB', 'Email', 'Mobile',
+      'Student Code', 'Student Name', 'Mobile',
       'Course', 'Batch', 'Admission Date', 'Payment Type', 'Amount', 'Status',
     ];
     const csv = [
@@ -103,11 +92,9 @@ export default function StudentPage() {
       ...rows.map(r => [
         fmt(r.Student_Code),
         fmt(r.Student_Name),
-        fmtDate(r.DOB),
-        fmt(r.Email),
         r.Present_Mobile || '',
         fmt(r.Course_Name),
-        fmt(r.Batch_code_resolved || r.Batch_Code),
+        fmt(r.Batch_Code),
         fmtDate(r.Admission_Date),
         fmt(r.Payment_Type),
         r.Amount ?? '',
@@ -223,12 +210,7 @@ export default function StudentPage() {
 
                   {/* Name + Code + Mobile */}
                   <td className="py-1.5 px-3 max-w-[180px]">
-                    <div className="flex items-center gap-1.5">
-                      <span className="block text-xs font-semibold text-slate-900 truncate">{r.Student_Name || '—'}</span>
-                      {r._legacy && (
-                        <span className="inline-block px-1 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 whitespace-nowrap flex-shrink-0">Legacy</span>
-                      )}
-                    </div>
+                    <span className="block text-xs font-semibold text-slate-900 truncate">{r.Student_Name || '—'}</span>
                     {r.Student_Code && (
                       <span className="text-[11px] font-mono text-slate-400">{r.Student_Code}</span>
                     )}
@@ -251,7 +233,7 @@ export default function StudentPage() {
 
                   {/* Batch */}
                   <td className="py-1.5 px-3 text-xs font-mono text-slate-700 whitespace-nowrap">
-                    {r.Batch_code_resolved || r.Batch_Code || '—'}
+                    {r.Batch_Code || '—'}
                   </td>
 
                   {/* Payment Type */}

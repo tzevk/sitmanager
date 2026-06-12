@@ -1,44 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { cached, getPool, getLegacyPool } from '@/lib/db';
+import { cached, getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
 const COURSE_CACHE_TTL_MS = 10 * 60_000;
 
-const STUDENT_SQL = (where: string) => `
-  SELECT
-    s.Student_Id,
-    COALESCE(NULLIF(TRIM(s.Student_Name), ''), CONCAT_WS(' ', s.FName, s.MName, s.LName)) AS Student_Name,
-    s.DOB,
-    s.Email,
-    s.Present_Mobile,
-    s.Present_City,
-    s.Qualification,
-    COALESCE(NULLIF(s.Course_Id, 0), am.Course_Id) AS Course_Id,
-    s.Sex,
-    s.Batch_Code                  AS Batch_Code,
-    COALESCE(NULLIF(TRIM(s.Batch_Code), ''), b.Batch_code) AS Batch_code_resolved,
-    COALESCE(s.Admission_Dt, am.Admission_Date) AS Admission_Date,
-    c.Course_Name,
-    am.Student_Code,
-    am.Payment_Type,
-    am.Amount,
-    am.IsActive,
-    b.SDate                       AS Batch_SDate,
-    b.EDate                       AS Batch_EDate
-  FROM student_master s
-  LEFT JOIN admission_master am
-    ON am.Admission_Id = (
-      SELECT MAX(am2.Admission_Id)
-      FROM admission_master am2
-      WHERE am2.Student_Id = s.Student_Id
-        AND (am2.IsDelete = 0 OR am2.IsDelete IS NULL)
-        AND (am2.Cancel   = 0 OR am2.Cancel   IS NULL)
-    )
+const ADMISSION_JOIN = `
+  INNER JOIN admission_master am ON am.Admission_Id = (
+    SELECT MAX(am2.Admission_Id)
+    FROM admission_master am2
+    WHERE am2.Student_Id = s.Student_Id
+      AND (am2.IsDelete = 0 OR am2.IsDelete IS NULL)
+      AND (am2.Cancel   = 0 OR am2.Cancel   IS NULL)
+  )
   LEFT JOIN course_mst c ON c.Course_Id = COALESCE(NULLIF(s.Course_Id, 0), am.Course_Id)
   LEFT JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
-  WHERE ${where}
-  ORDER BY s.Student_Id DESC`;
+`;
 
 function buildConditions(search: string, courseId: string, batchCode: string, sex: string) {
   const conditions: string[] = [
@@ -84,47 +61,53 @@ export async function GET(req: NextRequest) {
 
     const { where, params } = buildConditions(search, courseId, batchCode, sex);
 
-    // ── Fetch new DB rows + legacy rows in parallel ───────────────────────
-    const legacyPool = getLegacyPool();
-
-    const [newRowsRaw, legacyRowsRaw] = await Promise.all([
-      pool.query<any[]>(`${STUDENT_SQL(where)} LIMIT 5000`, params).then(([r]) => r),
-      legacyPool
-        ? legacyPool.query<any[]>(`${STUDENT_SQL(where)} LIMIT 5000`, params).then(([r]) => r).catch(() => [] as any[])
-        : Promise.resolve([] as any[]),
+    const [rows, [countRows], courses] = await Promise.all([
+      pool.query<any[]>(
+        `SELECT
+           s.Student_Id,
+           COALESCE(NULLIF(TRIM(s.Student_Name), ''), CONCAT_WS(' ', s.FName, s.MName, s.LName)) AS Student_Name,
+           s.Present_Mobile,
+           am.Student_Code,
+           c.Course_Name,
+           COALESCE(s.Admission_Dt, am.Admission_Date) AS Admission_Date,
+           COALESCE(NULLIF(TRIM(s.Batch_Code), ''), b.Batch_code) AS Batch_Code,
+           am.Payment_Type,
+           am.Amount,
+           am.IsActive
+         FROM student_master s
+         ${ADMISSION_JOIN}
+         WHERE ${where}
+         ORDER BY s.Student_Id DESC
+         LIMIT ? OFFSET ?`,
+        [...params, limit, offset]
+      ).then(([r]) => r),
+      pool.query<any[]>(
+        `SELECT COUNT(*) AS total
+         FROM student_master s
+         ${ADMISSION_JOIN}
+         WHERE ${where}`,
+        params
+      ),
+      cached(
+        'student:courses',
+        COURSE_CACHE_TTL_MS,
+        async () => {
+          const [r] = await pool.query<any[]>(
+            `SELECT Course_Id, Course_Name FROM course_mst
+             WHERE (IsDelete = 0 OR IsDelete IS NULL)
+             ORDER BY Course_Name`
+          );
+          return r as any[];
+        }
+      ),
     ]);
 
-    // ── Deduplicate: legacy rows whose mobile already exists in new DB ─────
-    const newMobiles = new Set(
-      (newRowsRaw as any[]).map((r: any) => r.Present_Mobile).filter(Boolean)
-    );
-    const legacyOnly = (legacyRowsRaw as any[])
-      .filter((r: any) => !r.Present_Mobile || !newMobiles.has(r.Present_Mobile))
-      .map((r: any) => ({ ...r, _legacy: true }));
-
-    // ── Merge: new DB first (already sorted DESC), then legacy-only ───────
-    const allRows: any[] = [...(newRowsRaw as any[]), ...legacyOnly];
-    const total = allRows.length;
-    const rows  = allRows.slice(offset, offset + limit);
-
-    // ── COURSES dropdown (cached) ─────────────────────────────────────────
-    const courses = await cached(
-      'student:courses',
-      COURSE_CACHE_TTL_MS,
-      async () => {
-        const [r] = await pool.query<any[]>(
-          `SELECT Course_Id, Course_Name FROM course_mst
-           WHERE (IsDelete = 0 OR IsDelete IS NULL)
-           ORDER BY Course_Name`
-        );
-        return r as any[];
-      }
-    );
+    const total = (countRows as any[])[0]?.total || 0;
 
     return NextResponse.json({
       rows,
       courses,
-      pagination: { page, limit, total, totalPages: Math.ceil(total / limit), totalIsEstimate: false },
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (err: unknown) {
     console.error('Student API error:', err);
