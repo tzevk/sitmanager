@@ -66,7 +66,8 @@
       "Bash(curl -sk -o /dev/null -w \"%{http_code}\\\\n\" \"https://accentapp.in/storage-api.php?path=test\" --max-time 10)",
       "Bash(cat /var/folders/27/jgbq3r8n3kn2wzjystgv8yhw0000gn/T/next-panic-6514cef6130134c14b247a5ca4d062f5.log 2>/dev/null | head -100)",
       "Read(//private/var/folders/27/jgbq3r8n3kn2wzjystgv8yhw0000gn/T/**)",
-      "Bash(git show *)"
+      "Bash(git show *)",
+      "Bash(node ./_tmp_test_merge.js)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

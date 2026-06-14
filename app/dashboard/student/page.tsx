@@ -7,33 +7,40 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 
 interface StudentRow {
   Student_Id: number;
-  Student_Code: string | null;
-  Student_Name: string | null;
-  Present_Mobile: string | null;
-  Course_Name: string | null;
-  IsActive: number | null;
-  Admission_Date: string | null;
-  Payment_Type: string | null;
-  Amount: number | null;
   Batch_Code: string | null;
+  Student_Name: string | null;
+  Present_Address: string | null;
+  Email: string | null;
+  Present_Mobile: string | null;
+  IsActive: number | null;
+  Payment_Type: string | null;
+  Total_Fees: number | null;
+  Paid_Fees: number | null;
+  Balance_Fees: number | null;
 }
 
-interface Course { Course_Id: number; Course_Name: string }
 interface Pagination { page: number; limit: number; total: number; totalPages: number }
+
+const SEARCH_OPTIONS = [
+  { value: '',          label: 'Select Search' },
+  { value: 'studentId', label: 'Student Id' },
+  { value: 'batchCode', label: 'Batch Code' },
+  { value: 'name',      label: 'Student Name' },
+  { value: 'email',     label: 'Email' },
+  { value: 'mobile',    label: 'Mobile' },
+];
 
 export default function StudentPage() {
   const router = useRouter();
   const { canView, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('student');
   const [rows, setRows]             = useState<StudentRow[]>([]);
-  const [courses, setCourses]       = useState<Course[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
   const [loading, setLoading]       = useState(true);
+  const [busyId, setBusyId]         = useState<number | null>(null);
 
-  const [search,    setSearch]    = useState('');
-  const [courseId,  setCourseId]  = useState('');
-  const [batchCode, setBatchCode] = useState('');
-  const [sex,       setSex]       = useState('');
-  const [page,      setPage]      = useState(1);
+  const [field,  setField]  = useState('');
+  const [search, setSearch] = useState('');
+  const [page,   setPage]   = useState(1);
 
   const searchRef      = useRef<HTMLInputElement>(null);
   const [fetchTrigger, setFetchTrigger] = useState(0);
@@ -46,15 +53,12 @@ export default function StudentPage() {
       const p = new URLSearchParams();
       p.set('page', String(page));
       p.set('limit', '25');
-      if (search)    p.set('search',    search);
-      if (courseId)  p.set('courseId',  courseId);
-      if (batchCode) p.set('batchCode', batchCode);
-      if (sex)       p.set('sex',       sex);
+      if (field)  p.set('field',  field);
+      if (search) p.set('search', search);
 
       const res  = await fetch(`/api/admission-activity/student?${p.toString()}`);
       const data = await res.json();
       setRows(data.rows ?? []);
-      setCourses(data.courses ?? []);
       setPagination(data.pagination ?? { page: 1, limit: 25, total: 0, totalPages: 0 });
     } catch (e) {
       console.error('Failed to fetch students', e);
@@ -68,36 +72,58 @@ export default function StudentPage() {
 
   const handleSearch = () => { setPage(1); setFetchTrigger(t => t + 1); };
   const handleClear  = () => {
-    setSearch(''); setCourseId(''); setBatchCode(''); setSex('');
+    setField(''); setSearch('');
     setPage(1); setFetchTrigger(t => t + 1);
   };
 
+  const handleToggle = async (r: StudentRow) => {
+    if (!canUpdate) return;
+    const next = r.IsActive ? 0 : 1;
+    setBusyId(r.Student_Id);
+    // optimistic
+    setRows(prev => prev.map(x => x.Student_Id === r.Student_Id ? { ...x, IsActive: next } : x));
+    try {
+      const res = await fetch('/api/admission-activity/student', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: r.Student_Id, isActive: next }),
+      });
+      if (!res.ok) throw new Error('toggle failed');
+    } catch {
+      // revert
+      setRows(prev => prev.map(x => x.Student_Id === r.Student_Id ? { ...x, IsActive: r.IsActive } : x));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const handleDelete = async (id: number) => {
-    if (!confirm('Delete this student?')) return;
+    if (!confirm('Are you sure you want to delete this student?')) return;
     try {
       const res = await fetch(`/api/admission-activity/student?id=${id}`, { method: 'DELETE' });
       if (res.ok) fetchData();
     } catch { /* ignore */ }
   };
 
+  const fmtMoney = (v: number | null) =>
+    v == null ? '—' : `₹${Number(v).toLocaleString('en-IN')}`;
+
   const handleExport = () => {
-    const fmt     = (v: string | null | undefined) => `"${(v || '').replace(/"/g, '""')}"`;
-    const fmtDate = (v: string | null) => v ? new Date(v).toLocaleDateString('en-IN') : '';
-    const headers = [
-      'Student Code', 'Student Name', 'Mobile',
-      'Course', 'Batch', 'Admission Date', 'Payment Type', 'Amount', 'Status',
-    ];
+    const fmt = (v: string | null | undefined) => `"${(v || '').replace(/"/g, '""')}"`;
+    const headers = ['Student Id', 'Batch Code', 'Student Name', 'Address', 'Email', 'Mobile', 'Payment Type', 'Total Fees', 'Paid', 'Balance', 'Status'];
     const csv = [
       headers.join(','),
       ...rows.map(r => [
-        fmt(r.Student_Code),
-        fmt(r.Student_Name),
-        r.Present_Mobile || '',
-        fmt(r.Course_Name),
+        r.Student_Id,
         fmt(r.Batch_Code),
-        fmtDate(r.Admission_Date),
+        fmt(r.Student_Name),
+        fmt(r.Present_Address),
+        fmt(r.Email),
+        r.Present_Mobile || '',
         fmt(r.Payment_Type),
-        r.Amount ?? '',
+        r.Total_Fees ?? '',
+        r.Paid_Fees ?? '',
+        r.Balance_Fees ?? '',
         r.IsActive ? 'Active' : 'Inactive',
       ].join(',')),
     ].join('\n');
@@ -106,12 +132,6 @@ export default function StudentPage() {
     a.download = `students-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
   };
-
-  const fmtDate = (v: string | null) =>
-    v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-
-  const fmtAmount = (v: number | null) =>
-    v ? `₹${Number(v).toLocaleString('en-IN')}` : '';
 
   return (
     <div className="flex flex-col gap-2">
@@ -124,8 +144,8 @@ export default function StudentPage() {
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
         <div className="flex items-center justify-between relative z-10">
           <div>
-            <h2 className="text-sm font-black text-white tracking-tight leading-none">Students</h2>
-            <p className="text-[11px] text-white/60 mt-0.5">{pagination.total.toLocaleString()} total</p>
+            <h2 className="text-sm font-black text-white tracking-tight leading-none">Student</h2>
+            <p className="text-[11px] text-white/60 mt-0.5">Total Student: {pagination.total.toLocaleString()}</p>
           </div>
           <button onClick={handleExport}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white/15 text-white border border-white/20 hover:bg-white/25 transition-all">
@@ -137,37 +157,28 @@ export default function StudentPage() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters — "Select Search" dropdown + input, matching legacy */}
       <div className="bg-white rounded-xl border border-slate-200 px-3 py-2 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[180px]">
+          <select value={field} onChange={e => setField(e.target.value)} className={`${ctrl} min-w-[150px]`}>
+            {SEARCH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <div className="relative flex-1 min-w-[200px]">
             <input ref={searchRef} type="text" value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSearch()}
-              placeholder="Search name, email, mobile, code…"
+              placeholder="Enter…"
               className={`${ctrl} w-full pl-7`} />
             <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
-          <select value={courseId} onChange={e => setCourseId(e.target.value)} className={ctrl}>
-            <option value="">All Courses</option>
-            {courses.map(c => <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>)}
-          </select>
-          <input type="text" value={batchCode} onChange={e => setBatchCode(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSearch()}
-            placeholder="Batch code…" className={`${ctrl} w-[110px]`} />
-          <select value={sex} onChange={e => setSex(e.target.value)} className={ctrl}>
-            <option value="">All Genders</option>
-            <option value="Male">Male</option>
-            <option value="Female">Female</option>
-          </select>
           <button onClick={handleSearch}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#2E3093] text-white hover:bg-[#252880] transition-colors">
+            className="px-4 py-1.5 rounded-lg text-xs font-bold bg-[#2E3093] text-white hover:bg-[#252880] transition-colors">
             Search
           </button>
           <button onClick={handleClear}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:border-slate-300 transition-colors">
+            className="px-4 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:border-slate-300 transition-colors">
             Clear
           </button>
         </div>
@@ -179,93 +190,63 @@ export default function StudentPage() {
           <table className="dashboard-table w-full">
             <thead>
               <tr className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 border-b border-slate-200">
-                <th className="text-left py-1.5 px-3 font-bold">#</th>
+                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Student Id</th>
+                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Batch Code</th>
                 <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Student Name</th>
-                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Course</th>
-                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Admission Date</th>
-                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Batch</th>
+                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Address</th>
+                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Email</th>
+                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Mobile</th>
                 <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Payment</th>
-                <th className="text-right py-1.5 px-3 font-bold whitespace-nowrap">Amount</th>
-                <th className="text-center py-1.5 px-3 font-bold whitespace-nowrap">Status</th>
-                <th className="text-center py-1.5 px-3 font-bold">Action</th>
+                <th className="text-right py-1.5 px-3 font-bold whitespace-nowrap">Total Fees</th>
+                <th className="text-right py-1.5 px-3 font-bold whitespace-nowrap">Paid</th>
+                <th className="text-right py-1.5 px-3 font-bold whitespace-nowrap">Balance</th>
+                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Status</th>
+                <th className="text-center py-1.5 px-3 font-bold whitespace-nowrap">Action</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={9} className="py-10 text-center">
+                <tr><td colSpan={12} className="py-10 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <div className="w-6 h-6 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                     <span className="text-xs text-slate-500">Loading students…</span>
                   </div>
                 </td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={9} className="py-10 text-center text-xs text-slate-400">No students found</td></tr>
-              ) : rows.map((r, i) => (
+                <tr><td colSpan={12} className="py-10 text-center text-xs text-slate-400">No students found</td></tr>
+              ) : rows.map(r => (
                 <tr key={r.Student_Id} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
-
-                  {/* # */}
-                  <td className="py-1.5 px-3 text-xs text-slate-400 whitespace-nowrap">
-                    {(pagination.page - 1) * pagination.limit + i + 1}
+                  <td className="py-1.5 px-3 text-xs text-slate-700 font-mono whitespace-nowrap">{r.Student_Id}</td>
+                  <td className="py-1.5 px-3 text-slate-500 font-mono text-xs whitespace-nowrap">{r.Batch_Code || '—'}</td>
+                  <td className="py-1.5 px-3 font-semibold text-slate-900 text-xs max-w-[180px]">
+                    <span className="truncate block">{r.Student_Name || '—'}</span>
                   </td>
-
-                  {/* Name + Code + Mobile */}
-                  <td className="py-1.5 px-3 max-w-[180px]">
-                    <span className="block text-xs font-semibold text-slate-900 truncate">{r.Student_Name || '—'}</span>
-                    {r.Student_Code && (
-                      <span className="text-[11px] font-mono text-slate-400">{r.Student_Code}</span>
-                    )}
-                    {r.Present_Mobile && (
-                      <span className="block text-[11px] text-slate-400">{r.Present_Mobile}</span>
-                    )}
+                  <td className="py-1.5 px-3 text-slate-600 text-xs max-w-[220px]">
+                    <span className="truncate block">{r.Present_Address || '—'}</span>
                   </td>
-
-                  {/* Course */}
-                  <td className="py-1.5 px-3 whitespace-nowrap">
-                    {r.Course_Name
-                      ? <span className="inline-block px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 text-[11px] font-semibold max-w-[160px] truncate">{r.Course_Name}</span>
-                      : <span className="text-slate-300 text-xs">—</span>}
+                  <td className="py-1.5 px-3 text-slate-600 text-xs max-w-[200px]">
+                    <span className="truncate block">{r.Email || '—'}</span>
                   </td>
-
-                  {/* Admission Date */}
-                  <td className="py-1.5 px-3 text-xs text-slate-600 whitespace-nowrap">
-                    {fmtDate(r.Admission_Date)}
-                  </td>
-
-                  {/* Batch */}
-                  <td className="py-1.5 px-3 text-xs font-mono text-slate-700 whitespace-nowrap">
-                    {r.Batch_Code || '—'}
-                  </td>
-
-                  {/* Payment Type */}
+                  <td className="py-1.5 px-3 text-slate-600 font-mono text-xs whitespace-nowrap">{r.Present_Mobile || '—'}</td>
                   <td className="py-1.5 px-3 whitespace-nowrap">
                     {r.Payment_Type
                       ? <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[11px] font-semibold">{r.Payment_Type}</span>
                       : <span className="text-slate-300 text-xs">—</span>}
                   </td>
-
-                  {/* Amount */}
-                  <td className="py-1.5 px-3 text-xs text-slate-700 text-right whitespace-nowrap font-mono">
-                    {fmtAmount(r.Amount)}
-                  </td>
-
-                  {/* Status */}
-                  <td className="py-1.5 px-3 text-center">
+                  <td className="py-1.5 px-3 text-xs text-slate-700 text-right font-mono whitespace-nowrap">{fmtMoney(r.Total_Fees)}</td>
+                  <td className="py-1.5 px-3 text-xs text-green-700 text-right font-mono whitespace-nowrap">{fmtMoney(r.Paid_Fees)}</td>
+                  <td className={`py-1.5 px-3 text-xs text-right font-mono whitespace-nowrap ${
+                    (r.Balance_Fees ?? 0) > 0 ? 'text-red-600 font-semibold' : 'text-slate-500'
+                  }`}>{fmtMoney(r.Balance_Fees)}</td>
+                  <td className="py-1.5 px-3 whitespace-nowrap">
                     <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
                       r.IsActive ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'
                     }`}>
                       {r.IsActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-
-                  {/* Actions */}
                   <td className="py-1.5 px-3 text-center">
-                    <div className="flex items-center justify-center gap-0.5">
-                      <button title="View" className="p-1 rounded hover:bg-blue-50 text-slate-400 hover:text-[#2A6BB5] transition-colors">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                      </button>
+                    <div className="flex items-center justify-center gap-1.5">
                       {canUpdate && (
                         <button title="Edit"
                           onClick={() => router.push(`/dashboard/student/edit/${r.Student_Id}`)}
@@ -275,6 +256,19 @@ export default function StudentPage() {
                           </svg>
                         </button>
                       )}
+                      {/* Active toggle */}
+                      <button
+                        type="button"
+                        title={r.IsActive ? 'Set Inactive' : 'Set Active'}
+                        onClick={() => handleToggle(r)}
+                        disabled={!canUpdate || busyId === r.Student_Id}
+                        className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+                          r.IsActive ? 'bg-[#7C3AED]' : 'bg-slate-300'
+                        }`}>
+                        <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${
+                          r.IsActive ? 'translate-x-3.5' : 'translate-x-0.5'
+                        }`} />
+                      </button>
                       {canDelete && (
                         <button title="Delete"
                           onClick={() => handleDelete(r.Student_Id)}

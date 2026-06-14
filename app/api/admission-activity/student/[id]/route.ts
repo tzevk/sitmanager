@@ -180,6 +180,7 @@ export async function GET(
          COALESCE(b.Batch_code, b2.Batch_code) AS Batch_code,
          COALESCE(b.SDate, b2.SDate)           AS Batch_StartDate,
          COALESCE(b.EDate, b2.EDate)           AS Batch_EndDate,
+         COALESCE(b.Fees_Full_Payment, b2.Fees_Full_Payment) AS Total_Fees,
          c.Course_Name,
          st.Status AS Status_name
        FROM student_master s
@@ -218,14 +219,32 @@ export async function GET(
       [id]
     ) as [any[], any];
 
-    // Inquiry_Id for this student (needed for discussions)
+    // Fees paid = sum of credit (TypeR='C') entries in the fees ledger
+    const [feeRows] = await pool.query(
+      `SELECT COALESCE(SUM(Amount), 0) AS Paid
+       FROM s_fees_mst
+       WHERE Student_Id = ? AND TypeR = 'C' AND IsDelete = 0`,
+      [id]
+    ) as [any[], any];
+    const totalFees = Number(rows[0].Total_Fees) || 0;
+    const paidFees  = Number(feeRows[0]?.Paid) || 0;
+    const fees = {
+      total: totalFees,
+      paid: paidFees,
+      balance: totalFees - paidFees,
+    };
+
+    // Inquiry_Id for this student (needed for discussions) + education fallback fields.
+    // For most admitted students the academic info lives on the inquiry row, not student_master.
     const [inqRows] = await pool.query(
-      `SELECT Inquiry_Id FROM ${inquiryTable}
+      `SELECT Inquiry_Id, Qualification, Discipline, Percentage, Institute, Year, Marks
+       FROM ${inquiryTable}
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
        ORDER BY Inquiry_Id DESC LIMIT 1`,
       [id]
     ) as [any[], any];
     const inquiryId = inqRows[0]?.Inquiry_Id ?? null;
+    const inquiry = inqRows[0] ?? {};
 
     let payload: Record<string, any> = {};
     let onlineAdmissionDate: string | null = null;
@@ -272,8 +291,17 @@ export async function GET(
        ORDER BY Category`
     ) as [any[], any];
 
+    // Fall back to inquiry-row education fields when student_master is empty
+    const studentBase = {
+      ...rows[0],
+      Qualification: firstNonEmpty(rows[0].Qualification, inquiry.Qualification),
+      Discipline:    firstNonEmpty(rows[0].Discipline, inquiry.Discipline),
+      Percentage:    firstNonEmpty(rows[0].Percentage, inquiry.Percentage),
+    };
+
     return NextResponse.json({
-      student: overlayStudentFromPayload(rows[0], payload, onlineAdmissionDate),
+      student: overlayStudentFromPayload(studentBase, payload, onlineAdmissionDate),
+      fees,
       placement,
       discussions,
       documents: [],

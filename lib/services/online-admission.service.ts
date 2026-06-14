@@ -16,6 +16,8 @@ export interface OnlineAdmissionListParams {
   statusCategory?: string;
   dateFrom?: string;
   dateTo?: string;
+  /** Only include fully-submitted forms (exclude draft autosaves). */
+  submittedOnly?: boolean;
 }
 
 type StatusCategory = 'open' | 'accepted' | 'closed';
@@ -614,7 +616,7 @@ export async function listOnlineAdmissions(
   const inquiryTable = await resolveInquiryTableName(pool);
   const statusTable = await resolveStatusTableName(pool);
   const studentMasterTable = await resolveStudentMasterTableName(pool);
-  const { page, limit, search = '', statusCategory = '', dateFrom = '', dateTo = '' } = params;
+  const { page, limit, search = '', statusCategory = '', dateFrom = '', dateTo = '', submittedOnly = false } = params;
   const offset = (page - 1) * limit;
   const fetchCap = Math.min(2000, offset + limit * 4);
 
@@ -673,6 +675,8 @@ export async function listOnlineAdmissions(
   }
   if (dateFrom) { newConds.push('oap.Created_At >= ?'); newParams.push(dateFrom); }
   if (dateTo)   { newConds.push('oap.Created_At <= ?'); newParams.push(dateTo); }
+  // Exclude draft autosaves — only forms that were actually submitted.
+  if (submittedOnly) { newConds.push("oap.Payload NOT LIKE '%__draftProgress%'"); }
   const smStatusIdExpr = studentMasterTable
     ? `COALESCE(sm.Status_id, si.OnlineState)`
     : `si.OnlineState`;

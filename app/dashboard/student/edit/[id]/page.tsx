@@ -122,6 +122,9 @@ export default function EditStudentPage() {
   /* placement */
   const [placement, setPlacement] = useState<PlacementRow[]>([]);
 
+  /* fees */
+  const [fees, setFees] = useState<{ total: number; paid: number; balance: number }>({ total: 0, paid: 0, balance: 0 });
+
   /* documents */
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
@@ -233,6 +236,7 @@ export default function EditStudentPage() {
         setBatchCategories(data.batchCategories ?? []);
         setDiscussions(data.discussions ?? []);
         setPlacement(data.placement    ?? []);
+        setFees(data.fees ?? { total: 0, paid: 0, balance: 0 });
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed to load student');
       } finally {
@@ -659,19 +663,39 @@ export default function EditStudentPage() {
                     </h3>
                   </div>
                   <div className="px-4 py-3 space-y-2.5">
-                    {[
-                      { label: 'Balance Fees',    value: '—' },
-                      { label: 'Assignment Avg',  value: '—' },
-                      { label: 'Unit Test Avg',   value: '—' },
-                      { label: 'Final Exam',      value: '—' },
-                      { label: 'Attendance (%)',  value: '—' },
-                      { label: 'Final Total',     value: '—' },
-                    ].map((item) => (
-                      <div key={item.label} className="flex items-center justify-between">
-                        <span className="text-[11px] text-slate-500 font-medium">{item.label}</span>
-                        <span className="text-[11px] font-bold text-slate-700">{item.value}</span>
+                    {/* Fees */}
+                    <p className="text-[10px] font-black text-[#2E3093] uppercase tracking-widest mb-1">Fees</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-slate-500 font-medium">Total Fees</span>
+                      <span className="text-[11px] font-bold text-slate-700 font-mono">{fees.total ? `₹${fees.total.toLocaleString('en-IN')}` : '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-slate-500 font-medium">Paid</span>
+                      <span className="text-[11px] font-bold text-green-700 font-mono">{`₹${(fees.paid || 0).toLocaleString('en-IN')}`}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-slate-500 font-medium">Balance Fees</span>
+                      <span className={`text-[11px] font-bold font-mono ${fees.balance > 0 ? 'text-red-600' : 'text-slate-700'}`}>{`₹${(fees.balance || 0).toLocaleString('en-IN')}`}</span>
+                    </div>
+
+                    <div className="border-t border-slate-200 pt-2.5 mt-1">
+                      <p className="text-[10px] font-black text-[#2E3093] uppercase tracking-widest mb-2">Performance</p>
+                      <div className="space-y-1.5">
+                        {[
+                          { label: 'Assignment Avg',  value: '—' },
+                          { label: 'Unit Test Avg',   value: '—' },
+                          { label: 'Final Exam',      value: '—' },
+                          { label: 'Attendance (%)',  value: '—' },
+                          { label: 'Final Total',     value: '—' },
+                        ].map((item) => (
+                          <div key={item.label} className="flex items-center justify-between">
+                            <span className="text-[11px] text-slate-500 font-medium">{item.label}</span>
+                            <span className="text-[11px] font-bold text-slate-700">{item.value}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
+
                     <div className="border-t border-slate-200 pt-2.5 mt-1">
                       <p className="text-[10px] font-black text-[#2E3093] uppercase tracking-widest mb-2">Batch Details</p>
                       <div className="space-y-1.5">
