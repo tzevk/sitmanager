@@ -14,6 +14,7 @@ type PendingDraftRow = {
   autosavedAt: string;
   draftUrl: string;
   details?: Record<string, unknown>;
+  onlineState?: number | null;
 };
 
 // Turn a camelCase / snake_case key into a readable label
@@ -111,7 +112,7 @@ export default function PendingAdmissionsPage() {
           <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-2.5 flex items-center justify-between relative overflow-hidden">
             <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
             <div className="relative z-10 flex items-center gap-3">
-              <h2 className="text-sm font-black text-white tracking-tight">Pending Admission Drafts</h2>
+              <h2 className="text-sm font-black text-white tracking-tight">Pending Admissions</h2>
               <span className="text-[11px] text-white/60">{visibleRows.length.toLocaleString()} records</span>
             </div>
             <button
@@ -168,10 +169,10 @@ export default function PendingAdmissionsPage() {
                     <Fragment key={row.inquiryId}>
                     <tr className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                       <td className="py-1.5 px-3 font-mono text-slate-700">{row.inquiryId}</td>
-                      <td className="py-1.5 px-3 font-semibold text-slate-700">{row.studentName}</td>
+                      <td className="py-1.5 px-3 font-semibold text-slate-700">{row.studentName || `Inquiry #${row.inquiryId}`}</td>
                       <td className="py-1.5 px-3 text-slate-700">{row.email || '—'}</td>
                       <td className="py-1.5 px-3 text-slate-700">{row.mobile || '—'}</td>
-                      <td className="py-1.5 px-3 text-slate-700">Step {row.currentStep || 1}</td>
+                      <td className="py-1.5 px-3 text-slate-700">{row.currentStep > 1 ? `Step ${row.currentStep}` : 'Filled form'}</td>
                       <td className="py-1.5 px-3 text-slate-700 whitespace-nowrap">
                         {row.autosavedAt ? new Date(row.autosavedAt).toLocaleString('en-IN') : '—'}
                       </td>

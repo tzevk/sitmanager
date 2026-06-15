@@ -618,7 +618,6 @@ export async function listOnlineAdmissions(
   const studentMasterTable = await resolveStudentMasterTableName(pool);
   const { page, limit, search = '', statusCategory = '', dateFrom = '', dateTo = '', submittedOnly = false } = params;
   const offset = (page - 1) * limit;
-  const fetchCap = Math.min(2000, offset + limit * 4);
 
   const buildNewQuery = (withStatus: boolean) => {
     const effectiveStatusTable = withStatus ? statusTable : null;
@@ -626,7 +625,7 @@ export async function listOnlineAdmissions(
       ? `LEFT JOIN \`${studentMasterTable}\` sm ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)`
       : '';
     const statusTextExpr = effectiveStatusTable
-      ? `COALESCE(stm_sm.Status, stm_si.Status, '')`
+      ? `COALESCE(stm_si.Status, stm_sm.Status, '')`
       : `''`;
     const statusJoins = effectiveStatusTable && studentMasterTable
       ? `LEFT JOIN \`${effectiveStatusTable}\` stm_sm ON stm_sm.Id = sm.Status_id
@@ -636,7 +635,10 @@ export async function listOnlineAdmissions(
         : '';
     const smBatchCode = studentMasterTable ? `COALESCE(sm.Batch_Code, si.Batch_Code, '')` : `COALESCE(si.Batch_Code, '')`;
     const smAdmissionDt = studentMasterTable ? `COALESCE(sm.Admission_Dt, oap.Created_At)` : `oap.Created_At`;
-    const smStatusId = studentMasterTable ? `COALESCE(sm.Status_id, si.OnlineState)` : `si.OnlineState`;
+    // Online admission state (OnlineState) is authoritative for this listing — it reflects
+    // grant/reject decisions. Fall back to the student master status when it is unset
+    // (NULL or empty string).
+    const smStatusId = studentMasterTable ? `COALESCE(NULLIF(TRIM(si.OnlineState), ''), sm.Status_id)` : `NULLIF(TRIM(si.OnlineState), '')`;
     return `SELECT
        si.Inquiry_Id AS Inquiry_Id,
        ${studentMasterTable ? `COALESCE(si.Student_Name, sm.Student_Name, '')` : `COALESCE(si.Student_Name, '')`} AS Student_Name,
@@ -678,8 +680,8 @@ export async function listOnlineAdmissions(
   // Exclude draft autosaves — only forms that were actually submitted.
   if (submittedOnly) { newConds.push("oap.Payload NOT LIKE '%__draftProgress%'"); }
   const smStatusIdExpr = studentMasterTable
-    ? `COALESCE(sm.Status_id, si.OnlineState)`
-    : `si.OnlineState`;
+    ? `COALESCE(NULLIF(TRIM(si.OnlineState), ''), sm.Status_id)`
+    : `NULLIF(TRIM(si.OnlineState), '')`;
   if (normalizedCategory === 'accepted') {
     newConds.push(`${smStatusIdExpr} IN (${ACCEPTED_IDS.join(',')})`);
   } else if (normalizedCategory === 'closed') {
@@ -688,18 +690,31 @@ export async function listOnlineAdmissions(
     newConds.push(`(${smStatusIdExpr} NOT IN (${[...ACCEPTED_IDS, ...CLOSED_IDS].join(',')}) OR ${smStatusIdExpr} IS NULL)`);
   }
 
+  let total = 0;
   let newRows: any[] = [];
   try {
+    const [countRows] = await pool.query(
+      `SELECT COUNT(*) AS total FROM (${buildNewQuery(true)} WHERE ${newConds.join(' AND ')}) AS q`,
+      newParams
+    ) as [any[], any];
+    total = Number((countRows as any[])[0]?.total || 0);
+
     [newRows] = await pool.query(
-      `${buildNewQuery(true)} WHERE ${newConds.join(' AND ')} ORDER BY oap.Created_At DESC LIMIT ?`,
-      [...newParams, fetchCap]
+      `${buildNewQuery(true)} WHERE ${newConds.join(' AND ')} ORDER BY COALESCE(${studentMasterTable ? 'sm.Admission_Dt' : 'oap.Created_At'}, oap.Created_At) DESC, si.Inquiry_Id DESC LIMIT ? OFFSET ?`,
+      [...newParams, limit, offset]
     ) as [any[], any];
   } catch (e: any) {
     console.warn('[OnlineAdmission] new query with status joins failed, retrying without:', e?.message);
     try {
+      const [countRows] = await pool.query(
+        `SELECT COUNT(*) AS total FROM (${buildNewQuery(false)} WHERE ${newConds.join(' AND ')}) AS q`,
+        newParams
+      ) as [any[], any];
+      total = Number((countRows as any[])[0]?.total || 0);
+
       [newRows] = await pool.query(
-        `${buildNewQuery(false)} WHERE ${newConds.join(' AND ')} ORDER BY oap.Created_At DESC LIMIT ?`,
-        [...newParams, fetchCap]
+        `${buildNewQuery(false)} WHERE ${newConds.join(' AND ')} ORDER BY oap.Created_At DESC, si.Inquiry_Id DESC LIMIT ? OFFSET ?`,
+        [...newParams, limit, offset]
       ) as [any[], any];
     } catch (e2: any) {
       console.warn('[OnlineAdmission] new query skipped:', e2?.message);
@@ -733,7 +748,7 @@ export async function listOnlineAdmissions(
 
   const statusLabelMap = Object.fromEntries(statusOptions.map((s) => [s.id, s.label]));
 
-  let allRows: any[] = [
+  const rows: any[] = [
     ...(newRows as any[]).map((r) => ({ ...r, Admission_Id: r.Inquiry_Id, IsLegacy: 0 })),
   ].map((r) => {
     const label = String(r.StatusText || statusLabelMap[r.Status_id] || '').trim() || 'Open';
@@ -745,16 +760,8 @@ export async function listOnlineAdmissions(
       StatusCategory: resolveCategory(Number(r.Status_id), label),
     };
   });
-
-  allRows.sort((a, b) => {
-    const da = a.Admission_Date ? new Date(a.Admission_Date).getTime() : 0;
-    const db = b.Admission_Date ? new Date(b.Admission_Date).getTime() : 0;
-    return db - da;
-  });
-
-  const total = allRows.length;
   return {
-    rows: allRows.slice(offset, offset + limit),
+    rows,
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     statusOptions,
   };

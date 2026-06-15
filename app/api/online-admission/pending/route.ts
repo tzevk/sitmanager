@@ -84,6 +84,11 @@ export async function GET(req: NextRequest) {
 
         const autosavedAt = normalizeText(draftMeta.autosavedAt) || (row.Updated_At ? new Date(row.Updated_At).toISOString() : '');
         const currentStep = Number(draftMeta.currentStep || 1);
+          const hasAnyFilledFields = Object.entries(payload).some(([k, v]) => {
+            if (k === '__draftProgress' || k === 'payAtOfficeAudit') return false;
+            if (/file$/i.test(k)) return false;
+            return v !== null && v !== undefined && v !== '';
+          });
 
         // Full submitted form details (everything the student filled), minus internal/file keys.
         const details: Record<string, unknown> = {};
@@ -99,14 +104,14 @@ export async function GET(req: NextRequest) {
           studentName,
           email,
           mobile,
-          currentStep: Number.isFinite(currentStep) ? currentStep : 1,
+          currentStep: Number.isFinite(currentStep) ? currentStep : (hasAnyFilledFields ? 1 : 0),
           autosavedAt,
           draftUrl: `/admission/${Number(row.Inquiry_Id)}`,
           details,
+          onlineState: Number(row.OnlineState ?? 0) || null,
         };
       })
-      .filter((item) => item.studentName)
-      .filter((item) => item.currentStep > 1)
+      .filter((item) => item.currentStep > 0)
       .filter((item) => {
         if (!search) return true;
         return (
