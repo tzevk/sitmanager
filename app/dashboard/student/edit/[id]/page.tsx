@@ -35,6 +35,66 @@ interface DocumentRow {
   upload_image: string;
 }
 
+interface OnlineAdmissionSnapshot {
+  inquiryId?: number | null;
+  admissionId?: number | null;
+  studentId?: number | null;
+  statusLabel?: string;
+  statusCategory?: string;
+  onlineAdmissionDate?: string;
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  shortName?: string;
+  dob?: string;
+  gender?: string;
+  nationality?: string;
+  email?: string;
+  mobile?: string;
+  telephone?: string;
+  familyContact?: string;
+  presentAddress?: string;
+  presentCity?: string;
+  presentDistrict?: string;
+  presentState?: string;
+  presentPin?: string;
+  presentCountry?: string;
+  permanentAddress?: string;
+  permanentCity?: string;
+  permanentDistrict?: string;
+  permanentState?: string;
+  permanentPin?: string;
+  permanentCountry?: string;
+  qualification?: string;
+  discipline?: string;
+  percentage?: string;
+  trainingProgrammeId?: string | number;
+  trainingProgrammeName?: string;
+  trainingCategory?: string;
+  batchCode?: string;
+  modeOfPayment?: string;
+  occupationalStatus?: string;
+  jobOrganisation?: string;
+  jobDesignation?: string;
+  jobDescription?: string;
+  totalOccupationYears?: string;
+  termsAgreed?: boolean;
+  consentAcknowledged?: boolean;
+  experiencedConsentAcknowledged?: boolean;
+  consentData?: {
+    eligibility?: string;
+    qualification?: string;
+    candidateRemark?: string;
+  };
+  consentChecks?: boolean[];
+  payAtOfficeAudit?: {
+    enabledAt?: string;
+    enabledByName?: string;
+    enabledByEmail?: string;
+  } | null;
+  photo?: string;
+}
+
 function buildStudentDocumentUrl(studentId: string, uploadImage: string): string {
   const safePath = String(uploadImage || '')
     .replace(/\\/g, '/')
@@ -130,6 +190,8 @@ export default function EditStudentPage() {
   const [docsLoading, setDocsLoading] = useState(false);
   const [docsError, setDocsError] = useState('');
   const [docsLoaded, setDocsLoaded] = useState(false);
+
+  const [onlineAdmission, setOnlineAdmission] = useState<OnlineAdmissionSnapshot | null>(null);
 
   /* sidebar stats */
   const [batchStartDate, setBatchStartDate] = useState('');
@@ -229,6 +291,57 @@ export default function EditStudentPage() {
         setBatchStartDate(s.Batch_StartDate ? String(s.Batch_StartDate).slice(0, 10) : '');
         setBatchEndDate(s.Batch_EndDate ? String(s.Batch_EndDate).slice(0, 10) : '');
         setOnlineAdmissionDate(s.OnlineAdmission_Date ? String(s.OnlineAdmission_Date).slice(0, 10) : '');
+        setOnlineAdmission({
+          inquiryId: data.inquiryId ?? null,
+          admissionId: s.Admission_Id ?? null,
+          studentId: s.Student_Id ?? null,
+          statusLabel: s.Status_name || s.StatusLabel || '',
+          statusCategory: s.StatusCategory || '',
+          onlineAdmissionDate: s.OnlineAdmission_Date ? String(s.OnlineAdmission_Date).slice(0, 10) : '',
+          firstName: s.FName || '',
+          middleName: s.MName || '',
+          lastName: s.LName || '',
+          shortName: s.shortName || s.ShortName || '',
+          dob: s.DOB ? String(s.DOB).slice(0, 10) : '',
+          gender: s.Sex || '',
+          nationality: s.Nationality || 'Indian',
+          email: s.Email || '',
+          mobile: s.Present_Mobile || '',
+          telephone: s.Present_Mobile2 || '',
+          familyContact: s.familyContact || '',
+          presentAddress: s.Present_Address || '',
+          presentCity: s.Present_City || '',
+          presentDistrict: s.presentDistrict || '',
+          presentState: s.Present_State || '',
+          presentPin: s.Present_Pin != null ? String(s.Present_Pin) : '',
+          presentCountry: s.Present_Country || 'India',
+          permanentAddress: s.Permanent_Address || '',
+          permanentCity: s.Permanent_City || '',
+          permanentDistrict: s.permanentDistrict || '',
+          permanentState: s.Permanent_State || '',
+          permanentPin: s.Permanent_Pin != null ? String(s.Permanent_Pin) : '',
+          permanentCountry: s.Permanent_Country || 'India',
+          qualification: s.Qualification || '',
+          discipline: s.Discipline || '',
+          percentage: s.Percentage != null ? String(s.Percentage) : '',
+          trainingProgrammeId: s.Course_Id != null ? String(s.Course_Id) : '',
+          trainingProgrammeName: s.trainingProgrammeName || s.Course_Name || '',
+          trainingCategory: s.trainingCategory || '',
+          batchCode: s.Batch_Code || s.Batch_code || '',
+          modeOfPayment: s.modeOfPayment || '',
+          occupationalStatus: s.OccupationalStatus || '',
+          jobOrganisation: s.Organisation || s.Company || '',
+          jobDesignation: s.Designation || '',
+          jobDescription: s.JobDescription || '',
+          totalOccupationYears: s.TotalExperience != null ? String(s.TotalExperience) : '',
+          termsAgreed: Boolean(s.termsAgreed),
+          consentAcknowledged: Boolean(s.consentAcknowledged),
+          experiencedConsentAcknowledged: Boolean(s.experiencedConsentAcknowledged),
+          consentData: s.consentData || null,
+          consentChecks: Array.isArray(s.consentChecks) ? s.consentChecks : [],
+          payAtOfficeAudit: s.payAtOfficeAudit && typeof s.payAtOfficeAudit === 'object' ? s.payAtOfficeAudit : null,
+          photo: s.photo || '',
+        });
 
         setCourses(data.courses           ?? []);
         setBatches(data.batches           ?? []);
@@ -333,6 +446,13 @@ export default function EditStudentPage() {
   const filteredBatches = form.Course_Id
     ? batches.filter((b) => String(b.Course_Id) === form.Course_Id)
     : batches;
+
+  const snapshotField = (label: string, value: unknown) => (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{label}</div>
+      <div className="mt-0.5 text-xs font-medium text-slate-800 break-words">{value == null || value === '' ? '—' : String(value)}</div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -592,6 +712,52 @@ export default function EditStudentPage() {
                           <span className="text-xs text-slate-400 italic">No online admission form on record</span>
                         )}
                       </div>
+
+                      {onlineAdmission && (
+                        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                          {snapshotField('Full Name', [onlineAdmission.firstName, onlineAdmission.middleName, onlineAdmission.lastName].filter(Boolean).join(' '))}
+                          {snapshotField('Short Name', onlineAdmission.shortName)}
+                          {snapshotField('DOB', onlineAdmission.dob)}
+                          {snapshotField('Gender', onlineAdmission.gender)}
+                          {snapshotField('Nationality', onlineAdmission.nationality)}
+                          {snapshotField('Email', onlineAdmission.email)}
+                          {snapshotField('Mobile', onlineAdmission.mobile)}
+                          {snapshotField('Telephone', onlineAdmission.telephone)}
+                          {snapshotField('Family Contact', onlineAdmission.familyContact)}
+                          {snapshotField('Present Address', onlineAdmission.presentAddress)}
+                          {snapshotField('Present City', onlineAdmission.presentCity)}
+                          {snapshotField('Present District', onlineAdmission.presentDistrict)}
+                          {snapshotField('Present State', onlineAdmission.presentState)}
+                          {snapshotField('Present PIN', onlineAdmission.presentPin)}
+                          {snapshotField('Present Country', onlineAdmission.presentCountry)}
+                          {snapshotField('Permanent Address', onlineAdmission.permanentAddress)}
+                          {snapshotField('Permanent City', onlineAdmission.permanentCity)}
+                          {snapshotField('Permanent District', onlineAdmission.permanentDistrict)}
+                          {snapshotField('Permanent State', onlineAdmission.permanentState)}
+                          {snapshotField('Permanent PIN', onlineAdmission.permanentPin)}
+                          {snapshotField('Permanent Country', onlineAdmission.permanentCountry)}
+                          {snapshotField('Qualification', onlineAdmission.qualification)}
+                          {snapshotField('Discipline', onlineAdmission.discipline)}
+                          {snapshotField('Percentage', onlineAdmission.percentage)}
+                          {snapshotField('Programme', onlineAdmission.trainingProgrammeName || onlineAdmission.trainingProgrammeId)}
+                          {snapshotField('Category', onlineAdmission.trainingCategory)}
+                          {snapshotField('Batch Code', onlineAdmission.batchCode)}
+                          {snapshotField('Mode of Payment', onlineAdmission.modeOfPayment)}
+                          {snapshotField('Occupational Status', onlineAdmission.occupationalStatus)}
+                          {snapshotField('Organisation', onlineAdmission.jobOrganisation)}
+                          {snapshotField('Designation', onlineAdmission.jobDesignation)}
+                          {snapshotField('Job Description', onlineAdmission.jobDescription)}
+                          {snapshotField('Total Experience', onlineAdmission.totalOccupationYears)}
+                          {snapshotField('Terms Agreed', onlineAdmission.termsAgreed ? 'Yes' : 'No')}
+                          {snapshotField('Consent Acknowledged', onlineAdmission.consentAcknowledged ? 'Yes' : 'No')}
+                          {snapshotField('Experienced Consent', onlineAdmission.experiencedConsentAcknowledged ? 'Yes' : 'No')}
+                          {snapshotField('Consent Eligibility', onlineAdmission.consentData?.eligibility)}
+                          {snapshotField('Consent Qualification', onlineAdmission.consentData?.qualification)}
+                          {snapshotField('Consent Remark', onlineAdmission.consentData?.candidateRemark)}
+                          {snapshotField('Pay at Office Audit', onlineAdmission.payAtOfficeAudit?.enabledAt ? `${onlineAdmission.payAtOfficeAudit.enabledByName || 'Unknown'} @ ${new Date(onlineAdmission.payAtOfficeAudit.enabledAt).toLocaleString('en-IN')}` : '—')}
+                          {snapshotField('Photo Uploaded', onlineAdmission.photo ? 'Yes' : 'No')}
+                        </div>
+                      )}
                     </div>
                   </SectionCard>
 

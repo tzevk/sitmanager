@@ -421,7 +421,69 @@ export async function syncOnlineAdmissionIntoCurrentDb(
 
   let resolvedStudentId = studentId;
 
+  const createStudentMasterFromAdmission = async (): Promise<number> => {
+    const [insertResult] = await pool.query(
+      `INSERT INTO \\`${studentMasterTable}\\` (
+         Student_Name, FName, MName, LName,
+         DOB, Sex, Nationality,
+         Email, Present_Mobile, Present_Mobile2,
+         Present_Address, Present_City, Present_State, Present_Pin, Present_Country,
+         Permanent_Address, Permanent_City, Permanent_Pin, Permanent_State, Permanent_Country,
+         Qualification, Discipline, Percentage,
+         Course_Id, Batch_Code, Batch_Category_id,
+         Company, Designation, Occupation, Total_Exp, Remark,
+         Status_id, Status_date, Admission_Dt,
+         IsActive, IsDelete
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+      [
+        fullName || null,
+        normalizeText(input.firstName) || null,
+        normalizeText(input.middleName) || null,
+        normalizeText(input.lastName) || null,
+        normalizeText(input.dob) || null,
+        normalizeText(input.gender) || null,
+        normalizeText(input.nationality) || 'Indian',
+        firstNonEmpty(input.email, inquiry.Email) || null,
+        firstNonEmpty(input.mobile, inquiry.Present_Mobile) || null,
+        normalizeText(input.telephone) || null,
+        presentAddress,
+        normalizeText(input.presentCity) || null,
+        normalizeText(input.presentState) || null,
+        normalizeText(input.presentPin) || null,
+        normalizeText(input.presentCountry) || 'India',
+        permanentAddress,
+        normalizeText(input.permanentCity) || null,
+        normalizeText(input.permanentPin) || null,
+        normalizeText(input.permanentState) || null,
+        normalizeText(input.permanentCountry) || 'India',
+        academic.qualification,
+        academic.discipline,
+        academic.percentage,
+        courseId,
+        batchCode,
+        batchCategoryId,
+        normalizeText(input.jobOrganisation) || null,
+        normalizeText(input.jobDesignation) || null,
+        normalizeText(input.occupationalStatus) || null,
+        parseOptionalNumber(input.totalOccupationYears),
+        normalizeText(input.jobDescription) || null,
+        8,
+        new Date().toISOString().slice(0, 10),
+        admissionDate,
+      ]
+    ) as [any, any];
+
+    return Number((insertResult as any).insertId) || 0;
+  };
+
   if (studentId > 0) {
+    const [studentRows] = await pool.query(
+      `SELECT Student_Id FROM \\`${studentMasterTable}\\` WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+      [studentId]
+    ) as [any[], any];
+
+    const studentExists = (studentRows as any[]).length > 0;
+
     const studentUpdateValues = [
       fullName || null,
       normalizeText(input.firstName) || null,
@@ -460,8 +522,9 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       studentId,
     ];
 
-    await pool.query(
-      `UPDATE \`${studentMasterTable}\` SET
+    if (studentExists) {
+      await pool.query(
+        `UPDATE \\`${studentMasterTable}\\` SET
          Student_Name = COALESCE(?, Student_Name),
          FName = COALESCE(?, FName),
          MName = COALESCE(?, MName),
@@ -497,63 +560,22 @@ export async function syncOnlineAdmissionIntoCurrentDb(
          Status_date = COALESCE(?, Status_date),
          Admission_Dt = COALESCE(?, Admission_Dt)
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
-      studentUpdateValues
-    );
+        studentUpdateValues
+      );
+    } else {
+      const newStudentId = await createStudentMasterFromAdmission();
+      if (newStudentId > 0) {
+        resolvedStudentId = newStudentId;
+        await pool.query(
+          `UPDATE \\`${inquiryTable}\\` SET Student_Id = ? WHERE Inquiry_Id = ?`,
+          [newStudentId, inquiryId]
+        );
+      }
+    }
   } else if (statusAction === 'accept') {
     // No existing student linked — create one from the online admission form data
     try {
-      const [insertResult] = await pool.query(
-        `INSERT INTO \`${studentMasterTable}\` (
-           Student_Name, FName, MName, LName,
-           DOB, Sex, Nationality,
-           Email, Present_Mobile, Present_Mobile2,
-           Present_Address, Present_City, Present_State, Present_Pin, Present_Country,
-           Permanent_Address, Permanent_City, Permanent_Pin, Permanent_State, Permanent_Country,
-           Qualification, Discipline, Percentage,
-           Course_Id, Batch_Code, Batch_Category_id,
-           Company, Designation, Occupation, Total_Exp, Remark,
-           Status_id, Status_date, Admission_Dt,
-           IsActive, IsDelete
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
-        [
-          fullName || null,
-          normalizeText(input.firstName) || null,
-          normalizeText(input.middleName) || null,
-          normalizeText(input.lastName) || null,
-          normalizeText(input.dob) || null,
-          normalizeText(input.gender) || null,
-          normalizeText(input.nationality) || 'Indian',
-          firstNonEmpty(input.email, inquiry.Email) || null,
-          firstNonEmpty(input.mobile, inquiry.Present_Mobile) || null,
-          normalizeText(input.telephone) || null,
-          presentAddress,
-          normalizeText(input.presentCity) || null,
-          normalizeText(input.presentState) || null,
-          normalizeText(input.presentPin) || null,
-          normalizeText(input.presentCountry) || 'India',
-          permanentAddress,
-          normalizeText(input.permanentCity) || null,
-          normalizeText(input.permanentPin) || null,
-          normalizeText(input.permanentState) || null,
-          normalizeText(input.permanentCountry) || 'India',
-          academic.qualification,
-          academic.discipline,
-          academic.percentage,
-          courseId,
-          batchCode,
-          batchCategoryId,
-          normalizeText(input.jobOrganisation) || null,
-          normalizeText(input.jobDesignation) || null,
-          normalizeText(input.occupationalStatus) || null,
-          parseOptionalNumber(input.totalOccupationYears),
-          normalizeText(input.jobDescription) || null,
-          8, // Admitted
-          new Date().toISOString().slice(0, 10),
-          admissionDate,
-        ]
-      ) as [any, any];
-
-      const newStudentId = Number((insertResult as any).insertId);
+      const newStudentId = await createStudentMasterFromAdmission();
       if (newStudentId > 0) {
         resolvedStudentId = newStudentId;
         await pool.query(
