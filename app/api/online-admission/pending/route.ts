@@ -85,6 +85,15 @@ export async function GET(req: NextRequest) {
         const autosavedAt = normalizeText(draftMeta.autosavedAt) || (row.Updated_At ? new Date(row.Updated_At).toISOString() : '');
         const currentStep = Number(draftMeta.currentStep || 1);
 
+        // Full submitted form details (everything the student filled), minus internal/file keys.
+        const details: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(payload)) {
+          if (k === '__draftProgress' || k === 'payAtOfficeAudit') continue;
+          if (/file$/i.test(k)) continue;
+          if (v === null || v === undefined || v === '') continue;
+          details[k] = v;
+        }
+
         return {
           inquiryId: Number(row.Inquiry_Id),
           studentName,
@@ -93,6 +102,7 @@ export async function GET(req: NextRequest) {
           currentStep: Number.isFinite(currentStep) ? currentStep : 1,
           autosavedAt,
           draftUrl: `/admission/${Number(row.Inquiry_Id)}`,
+          details,
         };
       })
       .filter((item) => item.studentName)

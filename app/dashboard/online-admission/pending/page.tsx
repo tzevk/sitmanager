@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -13,7 +13,34 @@ type PendingDraftRow = {
   currentStep: number;
   autosavedAt: string;
   draftUrl: string;
+  details?: Record<string, unknown>;
 };
+
+// Turn a camelCase / snake_case key into a readable label
+function labelize(key: string): string {
+  return key
+    .replace(/_/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+}
+
+function renderValue(value: unknown): string {
+  if (value == null) return '—';
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => (v && typeof v === 'object' ? Object.values(v).filter(Boolean).join(' · ') : String(v)))
+      .filter(Boolean)
+      .join(' | ') || '—';
+  }
+  if (typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v != null && v !== '')
+      .map(([k, v]) => `${labelize(k)}: ${v}`)
+      .join(', ') || '—';
+  }
+  return String(value);
+}
 
 export default function PendingAdmissionsPage() {
   const router = useRouter();
@@ -24,6 +51,7 @@ export default function PendingAdmissionsPage() {
   const [search, setSearch] = useState('');
   const [busyId, setBusyId] = useState<number | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,7 +165,8 @@ export default function PendingAdmissionsPage() {
                       <td colSpan={7} className="py-10 text-center text-xs text-slate-400">No pending drafts found</td>
                     </tr>
                   ) : visibleRows.map((row) => (
-                    <tr key={row.inquiryId} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                    <Fragment key={row.inquiryId}>
+                    <tr className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                       <td className="py-1.5 px-3 font-mono text-slate-700">{row.inquiryId}</td>
                       <td className="py-1.5 px-3 font-semibold text-slate-700">{row.studentName}</td>
                       <td className="py-1.5 px-3 text-slate-700">{row.email || '—'}</td>
@@ -148,6 +177,13 @@ export default function PendingAdmissionsPage() {
                       </td>
                       <td className="py-1.5 px-3">
                         <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedId((id) => (id === row.inquiryId ? null : row.inquiryId))}
+                            className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors"
+                          >
+                            {expandedId === row.inquiryId ? 'Hide' : 'Details'}
+                          </button>
                           <button
                             type="button"
                             onClick={() => router.push(row.draftUrl)}
@@ -178,6 +214,25 @@ export default function PendingAdmissionsPage() {
                         </div>
                       </td>
                     </tr>
+                    {expandedId === row.inquiryId && (
+                      <tr className="bg-slate-50/70 border-b border-slate-200">
+                        <td colSpan={7} className="py-3 px-4">
+                          {row.details && Object.keys(row.details).length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1.5">
+                              {Object.entries(row.details).map(([k, v]) => (
+                                <div key={k} className="flex flex-col">
+                                  <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">{labelize(k)}</span>
+                                  <span className="text-xs text-slate-700 break-words">{renderValue(v)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-400 text-center">No details captured yet.</p>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

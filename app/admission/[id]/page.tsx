@@ -9,8 +9,8 @@ const STEPS = [
   { id: 2, title: 'Academic', icon: 'fa-graduation-cap', description: 'Educational background and documents' },
   { id: 3, title: 'Occupational Info', icon: 'fa-briefcase', description: 'Current occupational status' },
   { id: 4, title: 'Training', icon: 'fa-chalkboard-teacher', description: 'Training programme details' },
-  { id: 5, title: 'Mode of Payment', icon: 'fa-credit-card', description: 'Select your payment method' },
-  { id: 6, title: 'Terms & Conditions', icon: 'fa-scroll', description: 'Read & accept terms' },
+  { id: 5, title: 'Terms & Conditions', icon: 'fa-scroll', description: 'Read & accept terms' },
+  { id: 6, title: 'Mode of Payment', icon: 'fa-credit-card', description: 'Select your payment method' },
 ];
 
 const STEP_GUIDANCE: Record<number, { focus: string; tip: string }> = {
@@ -31,12 +31,12 @@ const STEP_GUIDANCE: Record<number, { focus: string; tip: string }> = {
     tip: 'Once a batch is selected, the linked fee details are pulled automatically from the current database.',
   },
   5: {
-    focus: 'Pick the payment mode the admissions team should follow for this application.',
-    tip: 'This step is short by design, so it is a good point to pause and verify the programme details above.',
+    focus: 'Review the declarations and accept the Terms & Conditions before moving on to payment.',
+    tip: 'Read and acknowledge each section — payment unlocks only after the terms are accepted.',
   },
   6: {
-    focus: 'Review the declarations one final time and confirm only after the information above is accurate.',
-    tip: 'Submitted forms stay editable only through admin-side follow-up, so use this step as the final review gate.',
+    focus: 'Pick the payment mode and complete payment to finish the application.',
+    tip: 'This is the final step — submit the application once payment is done.',
   },
 };
 
@@ -957,6 +957,16 @@ export default function PublicAdmissionFormPage() {
         }
         break;
       case 5:
+        if (!allSectionsChecked) {
+          alert('Please read and acknowledge all sections of the Terms & Conditions');
+          return false;
+        }
+        if (!formData.termsAgreed) {
+          alert('Please accept the Terms & Conditions declaration');
+          return false;
+        }
+        break;
+      case 6:
         if (!formData.modeOfPayment) {
           alert('Please select a Mode of Payment');
           return false;
@@ -967,16 +977,6 @@ export default function PublicAdmissionFormPage() {
         }
         if (formData.modeOfPayment !== 'Pay at Office' && !razorpayPaid) {
           alert('Please complete the online payment before proceeding.');
-          return false;
-        }
-        break;
-      case 6:
-        if (!allSectionsChecked) {
-          alert('Please read and acknowledge all sections of the Terms & Conditions');
-          return false;
-        }
-        if (!formData.termsAgreed) {
-          alert('Please accept the Terms & Conditions declaration');
           return false;
         }
         break;
@@ -993,7 +993,7 @@ export default function PublicAdmissionFormPage() {
   };
 
   const jumpToStep = (step: number) => {
-    // Step 6 (T&C) is locked until steps 1–5 are all completed
+    // Step 6 (Payment) is locked until steps 1–5 are all completed
     if (!isPreviewTermsMode && step === 6 && ![1, 2, 3, 4, 5].every((s) => completedSteps.includes(s))) return;
     setCurrentStep(step);
   };
@@ -1025,18 +1025,23 @@ export default function PublicAdmissionFormPage() {
       setShowConsentModal(true);
       return;
     }
-    if (!formData.modeOfPayment) {
-      alert('Please complete Step 5: Select a Mode of Payment');
+    if (!allSectionsChecked || !formData.termsAgreed) {
+      alert('Please complete Step 5: Read and accept the Terms & Conditions');
       setCurrentStep(5);
+      return;
+    }
+    if (!formData.modeOfPayment) {
+      alert('Please complete Step 6: Select a Mode of Payment');
+      setCurrentStep(6);
       return;
     }
     if (formData.modeOfPayment === 'Pay at Office' && !payAtOfficeVerified) {
-      alert('Please complete Pay at Office override verification in Step 5.');
-      setCurrentStep(5);
+      alert('Please complete Pay at Office override verification in Step 6.');
+      setCurrentStep(6);
       return;
     }
-    if (!allSectionsChecked || !formData.termsAgreed) {
-      alert('Please complete Step 6: Read and accept the Terms & Conditions');
+    if (formData.modeOfPayment !== 'Pay at Office' && !razorpayPaid) {
+      alert('Please complete the online payment in Step 6 before submitting.');
       setCurrentStep(6);
       return;
     }
@@ -2775,7 +2780,7 @@ export default function PublicAdmissionFormPage() {
                   )}
 
                   {/* ── STEP 5: Mode of Payment ── */}
-                  {currentStep === 5 && (() => {
+                  {currentStep === 6 && (() => {
                     const baseFees = batchFees ?? 0;
                     const hasFees = baseFees > 0;
                     const fullPayAmount = Math.round(baseFees * 0.95);
@@ -3423,7 +3428,7 @@ export default function PublicAdmissionFormPage() {
                                 Payment required to proceed
                               </p>
                               <p className="text-xs text-gray-600">
-                                Complete the payment to unlock Step 6. You must pay online before submitting your application.
+                                You must pay online before submitting your application.
                               </p>
                               {!hasFees && (
                                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -3456,7 +3461,7 @@ export default function PublicAdmissionFormPage() {
                   })()}
 
                   {/* ── STEP 6: Terms & Conditions ── */}
-                  {currentStep === 6 && (
+                  {currentStep === 5 && (
                     <div className="space-y-4 sm:space-y-5" style={stepEnterStyle}>
                       <div>
                         <h3 className="text-base font-bold text-gray-800 mb-1 pb-1.5 border-b border-gray-200 flex items-center gap-2">
@@ -3586,14 +3591,18 @@ export default function PublicAdmissionFormPage() {
                         <button
                           type="button"
                           onClick={() => nextStep(currentStep + 1)}
-                          disabled={currentStep === 5 && (!formData.modeOfPayment || (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : !razorpayPaid))}
-                          title={currentStep === 5 && (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : !razorpayPaid) ? (formData.modeOfPayment === 'Pay at Office' ? 'Enter override password to continue' : 'Complete payment to continue') : undefined}
+                          disabled={currentStep === 5 && (!allSectionsChecked || !formData.termsAgreed)}
+                          title={currentStep === 5 && (!allSectionsChecked || !formData.termsAgreed) ? 'Read and accept the Terms & Conditions to continue' : undefined}
                           className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#FAE452] to-[#FDD835] text-[#2E3093] rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
                         >
                           <span className="hidden sm:inline">Continue</span><span className="sm:hidden">Next</span> <i className="fas fa-arrow-right ml-1 sm:ml-2"></i>
                         </button>
                       ) : (
-                        <button type="submit" disabled={submitting} className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button
+                          type="submit"
+                          disabled={submitting || !formData.modeOfPayment || (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : !razorpayPaid)}
+                          title={(!formData.modeOfPayment || (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : !razorpayPaid)) ? (formData.modeOfPayment === 'Pay at Office' ? 'Enter override password to submit' : 'Complete payment to submit') : undefined}
+                          className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                           {submitting ? (
                             <><i className="fas fa-spinner fa-spin mr-1 sm:mr-2"></i><span className="hidden sm:inline">Submitting...</span><span className="sm:hidden">Wait...</span></>
                           ) : (
