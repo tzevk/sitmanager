@@ -528,6 +528,11 @@ export default function PublicAdmissionFormPage() {
       alert('Fee amount is not available. Please ensure a batch is selected in Step 4.');
       return;
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (typeof (window as any).Razorpay === 'undefined') {
+      alert('Payment gateway is still loading. Please wait a moment and try again.');
+      return;
+    }
 
     const installmentTotal = batchFeesInstallment ?? baseFees;
     const isPipingEngineeringFulltimeMode =

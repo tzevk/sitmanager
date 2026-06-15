@@ -26,7 +26,17 @@ export async function POST(req: NextRequest) {
     if (!amountPaise || Number(amountPaise) < 100) {
       return NextResponse.json({ error: 'Amount must be at least ₹1' }, { status: 400 });
     }
-    if (!['Full Payment', '50% Installment'].includes(modeOfPayment)) {
+    // All payment modes that are settled online via Razorpay. 'Pay at Office' is
+    // handled separately (password override) and never reaches this endpoint.
+    const ONLINE_PAYMENT_MODES = [
+      'Full Payment',
+      '50% Installment',
+      '2-Payment Plan',
+      '3-Installment Plan',
+      '6-Installment Plan',
+      'Loan (0% Interest)',
+    ];
+    if (!ONLINE_PAYMENT_MODES.includes(modeOfPayment)) {
       return NextResponse.json({ error: 'Invalid payment mode' }, { status: 400 });
     }
 
