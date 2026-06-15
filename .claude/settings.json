@@ -73,7 +73,11 @@
       "Bash(git diff *)",
       "Bash(xargs -I{} git show {}:app/api/online-admission/\\\\[id\\\\]/route.ts)",
       "Bash(lsof -iTCP -sTCP:LISTEN -P -n)",
-      "Bash(node scripts/_tmp_desc.mjs)"
+      "Bash(node scripts/_tmp_desc.mjs)",
+      "Bash(kill -0 7880)",
+      "Bash(kill -9 7880 7879 7856 7854)",
+      "Bash(kill -0 9558)",
+      "Bash(kill -9 9558 9557 9534 9532)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

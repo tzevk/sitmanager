@@ -607,7 +607,9 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       [resolvedStudentId]
     ) as [any[], any];
 
+    let admissionId: number | null = null;
     if (admissionRows.length) {
+      admissionId = Number(admissionRows[0].Admission_Id);
       await pool.query(
         `UPDATE admission_master SET
            Batch_Id = COALESCE(?, Batch_Id),
@@ -616,15 +618,52 @@ export async function syncOnlineAdmissionIntoCurrentDb(
            IsActive = 1,
            Cancel = 0
          WHERE Admission_Id = ?`,
-        [batchId, courseId, admissionDate, admissionRows[0].Admission_Id]
+        [batchId, courseId, admissionDate, admissionId]
       );
     } else {
-      await pool.query(
+      const [admInsert] = await pool.query(
         `INSERT INTO admission_master (
            Student_Id, Course_Id, Batch_Id, Admission_Date, IsActive, Cancel, IsDelete
          ) VALUES (?, ?, ?, ?, 1, 0, 0)`,
         [resolvedStudentId, courseId, batchId, admissionDate]
-      );
+      ) as [any, any];
+      admissionId = Number(admInsert.insertId);
+    }
+
+    // If the applicant paid online during the admission form, record it in the
+    // fees ledger so it shows up as "Paid" on the student page. Dedupe on
+    // PaymentId so re-granting / re-syncing doesn't create duplicate entries.
+    const razorpayPaid = input.razorpayPaid === true;
+    const razorpayAmount = parseOptionalNumber(input.razorpayAmount);
+    const razorpayPaymentId = normalizeText(input.razorpayPaymentId);
+    if (razorpayPaid && razorpayAmount && razorpayAmount > 0 && razorpayPaymentId) {
+      const [existingFee] = await pool.query(
+        `SELECT Fees_Id FROM s_fees_mst WHERE PaymentId = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+        [razorpayPaymentId]
+      ) as [any[], any];
+
+      if (!existingFee.length) {
+        const [feesCodeRows] = await pool.query(
+          `SELECT AUTO_INCREMENT AS nextId FROM information_schema.TABLES
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 's_fees_mst'`
+        ) as [any[], any];
+        const nextId = Number(feesCodeRows[0]?.nextId ?? 1);
+        const now = new Date();
+        const feesCode = `R-${String(now.getMonth() + 1).padStart(2, '0')}/${String(nextId).padStart(3, '0')}`;
+
+        await pool.query(
+          `INSERT INTO s_fees_mst (
+             Fees_Code, Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type,
+             Amount, Total_Amt, TypeR, Notes, RDate, Date_Added, FeesMonth, FeesYear,
+             PaymentId, IsActive, IsDelete
+           ) VALUES (?, ?, ?, ?, ?, 'Online', ?, ?, 'C', ?, ?, ?, ?, ?, ?, 1, 0)`,
+          [
+            feesCode, resolvedStudentId, courseId, batchId, admissionId,
+            razorpayAmount, razorpayAmount, 'Online Admission Payment (Razorpay)',
+            admissionDate, now, now.getMonth() + 1, now.getFullYear(), razorpayPaymentId,
+          ]
+        );
+      }
     }
   }
 }
