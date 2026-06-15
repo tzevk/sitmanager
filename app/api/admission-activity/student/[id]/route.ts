@@ -234,32 +234,47 @@ export async function GET(
       balance: totalFees - paidFees,
     };
 
-    // Inquiry_Id for this student (needed for discussions) + education fallback fields.
-    // For most admitted students the academic info lives on the inquiry row, not student_master.
+    // A student can have MULTIPLE online-admission inquiries/submissions, and the data they
+    // filled may be spread across them. Fetch them all and merge so nothing is lost in the
+    // edit view (newest non-empty value wins; older submissions backfill remaining gaps).
     const [inqRows] = await pool.query(
       `SELECT Inquiry_Id, Qualification, Discipline, Percentage, Institute, Year, Marks
        FROM ${inquiryTable}
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
-       ORDER BY Inquiry_Id DESC LIMIT 1`,
+       ORDER BY Inquiry_Id DESC`,
       [id]
     ) as [any[], any];
     const inquiryId = inqRows[0]?.Inquiry_Id ?? null;
-    const inquiry = inqRows[0] ?? {};
 
-    let payload: Record<string, any> = {};
+    const isEmpty = (v: unknown) => v == null || v === '';
+
+    // Merge education fallback fields across all inquiry rows.
+    const inquiry: Record<string, any> = {};
+    for (const r of inqRows as any[]) {
+      for (const k of ['Qualification', 'Discipline', 'Percentage', 'Institute', 'Year', 'Marks']) {
+        if (isEmpty(inquiry[k]) && !isEmpty(r[k])) inquiry[k] = r[k];
+      }
+    }
+
+    // Merge ALL online-admission payloads for this student's inquiries.
+    const payload: Record<string, any> = {};
     let onlineAdmissionDate: string | null = null;
-    if (inquiryId) {
+    const inquiryIds = (inqRows as any[]).map((r) => r.Inquiry_Id).filter((x) => x != null);
+    if (inquiryIds.length) {
       const [payloadRows] = await pool.query(
-        `SELECT Payload, Created_At FROM online_admission_payload WHERE Inquiry_Id = ? LIMIT 1`,
-        [inquiryId]
+        `SELECT Inquiry_Id, Payload, Created_At FROM online_admission_payload
+         WHERE Inquiry_Id IN (${inquiryIds.map(() => '?').join(',')})
+         ORDER BY Created_At DESC`,
+        inquiryIds
       ) as [any[], any];
-      if (payloadRows.length) {
-        try {
-          payload = payloadRows[0].Payload ? JSON.parse(String(payloadRows[0].Payload)) : {};
-        } catch {
-          payload = {};
+      for (const pr of payloadRows as any[]) {
+        let parsed: Record<string, any> = {};
+        try { parsed = pr.Payload ? JSON.parse(String(pr.Payload)) : {}; } catch { parsed = {}; }
+        for (const [k, v] of Object.entries(parsed)) {
+          if (k === '__draftProgress') continue;
+          if (isEmpty(payload[k]) && !isEmpty(v)) payload[k] = v;
         }
-        onlineAdmissionDate = payloadRows[0].Created_At ? String(payloadRows[0].Created_At).slice(0, 10) : null;
+        if (!onlineAdmissionDate && pr.Created_At) onlineAdmissionDate = String(pr.Created_At).slice(0, 10);
       }
     }
 

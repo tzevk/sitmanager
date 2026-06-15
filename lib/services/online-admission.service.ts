@@ -423,7 +423,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
 
   const createStudentMasterFromAdmission = async (): Promise<number> => {
     const [insertResult] = await pool.query(
-      `INSERT INTO \\`${studentMasterTable}\\` (
+      `INSERT INTO \`${studentMasterTable}\` (
          Student_Name, FName, MName, LName,
          DOB, Sex, Nationality,
          Email, Present_Mobile, Present_Mobile2,
@@ -478,7 +478,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
 
   if (studentId > 0) {
     const [studentRows] = await pool.query(
-      `SELECT Student_Id FROM \\`${studentMasterTable}\\` WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+      `SELECT Student_Id FROM \`${studentMasterTable}\` WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
       [studentId]
     ) as [any[], any];
 
@@ -524,7 +524,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
 
     if (studentExists) {
       await pool.query(
-        `UPDATE \\`${studentMasterTable}\\` SET
+        `UPDATE \`${studentMasterTable}\` SET
          Student_Name = COALESCE(?, Student_Name),
          FName = COALESCE(?, FName),
          MName = COALESCE(?, MName),
@@ -567,7 +567,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       if (newStudentId > 0) {
         resolvedStudentId = newStudentId;
         await pool.query(
-          `UPDATE \\`${inquiryTable}\\` SET Student_Id = ? WHERE Inquiry_Id = ?`,
+          `UPDATE \`${inquiryTable}\` SET Student_Id = ? WHERE Inquiry_Id = ?`,
           [newStudentId, inquiryId]
         );
       }
@@ -675,11 +675,6 @@ export async function listOnlineAdmissions(
      ${smJoin}
      ${statusJoins}`;
   };
-
-  const legacyStatusTextExpr = statusTable ? `COALESCE(stm.Status, '')` : `''`;
-  const legacyStatusJoin = statusTable && studentMasterTable
-    ? `LEFT JOIN \`${statusTable}\` stm ON stm.Id = sm.Status_id`
-    : '';
 
   await ensurePayloadTable(pool);
 

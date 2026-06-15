@@ -525,16 +525,56 @@ export async function PUT(
     // Save updated payload
     const existingPayload = await getPayload(pool, inquiryId);
 
-    const stripFiles = (arr: any[]) =>
-      Array.isArray(arr) ? arr.map(({ marksheetFile: _f, ...rest }: any) => rest) : arr;
-    // Merge over the existing payload so a status-only action (grant/reject from the
-    // pending list) keeps the student's submitted form data instead of wiping it.
-    const cleanBody: Record<string, any> = {
-      ...existingPayload,
-      ...body,
+    const isStatusOnlyAction = body.statusAction === 'accept' || body.statusAction === 'reject';
+
+    const stripFiles = (arr: any[]): any[] => {
+      if (!Array.isArray(arr)) return arr;
+      return arr.map((item: any) => { const c = { ...item }; delete c.marksheetFile; return c; });
     };
+
+    let cleanBody: Record<string, any>;
+
+    if (isStatusOnlyAction) {
+      // For grant / reject from the pending list, the body is ONLY { statusAction }.
+      // Never spread body fields over the stored form data — just stamp the action and
+      // copy any explicit non-empty scalar fields (name, email, mobile, dob, gender,
+      // batchCode) that came in from a richer request body.
+      cleanBody = { ...existingPayload };
+
+      // Stamp the action so downstream code knows how it was processed.
+      cleanBody.statusAction = body.statusAction;
+
+      // Apply only non-empty fields that were explicitly provided in the request body.
+      const safeMergeFields = ['firstName', 'middleName', 'lastName', 'email', 'mobile',
+        'dob', 'gender', 'batchCode', 'trainingProgrammeId', 'trainingProgrammeName',
+        'trainingCategory', 'modeOfPayment'] as const;
+      for (const field of safeMergeFields) {
+        const incoming = body[field];
+        if (incoming != null && String(incoming).trim() !== '') {
+          cleanBody[field] = incoming;
+        }
+      }
+    } else {
+      // Regular admin edit — merge incoming body over existing, preferring non-empty values.
+      cleanBody = { ...existingPayload };
+      for (const [key, value] of Object.entries(body)) {
+        // Arrays are always taken from body (they replace wholesale).
+        if (Array.isArray(value)) {
+          cleanBody[key] = value;
+          continue;
+        }
+        // For scalars: only overwrite an existing non-empty value when the incoming is also non-empty.
+        const existingVal = existingPayload[key];
+        const hasExisting = existingVal != null && String(existingVal).trim() !== '';
+        const hasIncoming = value != null && String(value as string).trim() !== '';
+        if (!hasExisting || hasIncoming) {
+          cleanBody[key] = value;
+        }
+      }
+    }
+
     for (const key of ['ssc_ktDetails', 'hsc_ktDetails', 'diploma_ktDetails', 'grad_ktDetails', 'postgrad_ktDetails']) {
-      if (Array.isArray(body[key])) cleanBody[key] = stripFiles(body[key]);
+      if (Array.isArray(cleanBody[key])) cleanBody[key] = stripFiles(cleanBody[key]);
     }
 
     const prevModeOfPayment = String(existingPayload?.modeOfPayment || '').trim();
@@ -555,7 +595,24 @@ export async function PUT(
 
     cleanBody.payAtOfficeAudit = payAtOfficeAudit;
 
-    await savePayload(pool, inquiryId, cleanBody);
+    // Count meaningful (non-empty, non-meta) fields in the payload we're about to save.
+    const metaKeys = new Set(['statusAction', 'payAtOfficeAudit', '__draftProgress']);
+    const countFields = (obj: Record<string, any>) =>
+      Object.entries(obj).filter(([k, v]) =>
+        !metaKeys.has(k) && v != null && String(v).trim() !== '' && !Array.isArray(v)
+      ).length;
+    const existingCount = countFields(existingPayload);
+    const newCount = countFields(cleanBody);
+
+    // Only persist if we are adding data or keeping at least as much as before.
+    // This prevents an empty-body grant from accidentally wiping a stored form.
+    if (newCount >= existingCount || !isStatusOnlyAction) {
+      await savePayload(pool, inquiryId, cleanBody);
+    } else {
+      // Data would be lost — stamp just the statusAction on the existing stored payload.
+      const safePayload = { ...existingPayload, statusAction: cleanBody.statusAction, payAtOfficeAudit };
+      await savePayload(pool, inquiryId, safePayload);
+    }
     await syncOnlineAdmissionIntoCurrentDb(inquiryId, cleanBody, { statusAction: body.statusAction || 'update' });
 
     return NextResponse.json({ success: true, message: 'Admission updated successfully' });

@@ -69,7 +69,11 @@
       "Bash(git show *)",
       "Bash(node ./_tmp_test_merge.js)",
       "Bash(sed -E 's/\\(=.{4}\\).*/\\\\1****/')",
-      "Bash(sed -n '55,100p' proxy.ts)"
+      "Bash(sed -n '55,100p' proxy.ts)",
+      "Bash(git diff *)",
+      "Bash(xargs -I{} git show {}:app/api/online-admission/\\\\[id\\\\]/route.ts)",
+      "Bash(lsof -iTCP -sTCP:LISTEN -P -n)",
+      "Bash(node scripts/_tmp_desc.mjs)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
