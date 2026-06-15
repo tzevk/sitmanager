@@ -17,11 +17,13 @@ type PendingDraftRow = {
 
 export default function PendingAdmissionsPage() {
   const router = useRouter();
-  const { canView, loading: permLoading } = useResourcePermissions('online_admission');
+  const { canView, canUpdate, loading: permLoading } = useResourcePermissions('online_admission');
 
   const [rows, setRows] = useState<PendingDraftRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,7 +48,31 @@ export default function PendingAdmissionsPage() {
 
     void load();
     return () => { cancelled = true; };
-  }, [search]);
+  }, [search, reloadKey]);
+
+  const handleDecision = async (inquiryId: number, action: 'accept' | 'reject') => {
+    const verb = action === 'accept' ? 'grant' : 'reject';
+    if (!confirm(`Are you sure you want to ${verb} this admission?`)) return;
+    setBusyId(inquiryId);
+    try {
+      const res = await fetch(`/api/online-admission/${inquiryId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statusAction: action }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to ${verb} admission`);
+      }
+      // Row leaves the pending list once decided — drop it locally and refresh.
+      setRows((prev) => prev.filter((r) => r.inquiryId !== inquiryId));
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : `Failed to ${verb} admission`);
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const visibleRows = useMemo(() => rows, [rows]);
 
@@ -120,14 +146,36 @@ export default function PendingAdmissionsPage() {
                       <td className="py-1.5 px-3 text-slate-700 whitespace-nowrap">
                         {row.autosavedAt ? new Date(row.autosavedAt).toLocaleString('en-IN') : '—'}
                       </td>
-                      <td className="py-1.5 px-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => router.push(row.draftUrl)}
-                          className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-[#2A6BB5]/30 text-[#2E3093] hover:bg-[#2A6BB5]/10 transition-colors"
-                        >
-                          Open Draft
-                        </button>
+                      <td className="py-1.5 px-3">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => router.push(row.draftUrl)}
+                            className="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-[#2A6BB5]/30 text-[#2E3093] hover:bg-[#2A6BB5]/10 transition-colors"
+                          >
+                            Open
+                          </button>
+                          {canUpdate && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={busyId === row.inquiryId}
+                                onClick={() => handleDecision(row.inquiryId, 'accept')}
+                                className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                              >
+                                Grant
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busyId === row.inquiryId}
+                                onClick={() => handleDecision(row.inquiryId, 'reject')}
+                                className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

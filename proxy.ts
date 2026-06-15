@@ -64,6 +64,7 @@ const PUBLIC_PREFIXES = [
   '/trainer-portal',
   '/api/trainer-portal',
   '/api/online-admission',
+  '/api/razorpay',
   '/api/colleges-by-city',
   '/api/search-universities',
   '/public',

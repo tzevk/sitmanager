@@ -527,14 +527,15 @@ export async function PUT(
 
     const stripFiles = (arr: any[]) =>
       Array.isArray(arr) ? arr.map(({ marksheetFile: _f, ...rest }: any) => rest) : arr;
-    const cleanBody = {
+    // Merge over the existing payload so a status-only action (grant/reject from the
+    // pending list) keeps the student's submitted form data instead of wiping it.
+    const cleanBody: Record<string, any> = {
+      ...existingPayload,
       ...body,
-      ssc_ktDetails:      stripFiles(body.ssc_ktDetails),
-      hsc_ktDetails:      stripFiles(body.hsc_ktDetails),
-      diploma_ktDetails:  stripFiles(body.diploma_ktDetails),
-      grad_ktDetails:     stripFiles(body.grad_ktDetails),
-      postgrad_ktDetails: stripFiles(body.postgrad_ktDetails),
     };
+    for (const key of ['ssc_ktDetails', 'hsc_ktDetails', 'diploma_ktDetails', 'grad_ktDetails', 'postgrad_ktDetails']) {
+      if (Array.isArray(body[key])) cleanBody[key] = stripFiles(body[key]);
+    }
 
     const prevModeOfPayment = String(existingPayload?.modeOfPayment || '').trim();
     const nextModeOfPayment = String(cleanBody?.modeOfPayment || '').trim();

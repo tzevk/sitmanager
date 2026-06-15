@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
        LEFT JOIN \`${inquiryTable}\` si
          ON si.Inquiry_Id = p.Inquiry_Id
        WHERE (si.IsDelete = 0 OR si.IsDelete IS NULL OR si.Inquiry_Id IS NULL)
-         AND (si.OnlineState IS NULL OR si.OnlineState <> 8)
+         AND (si.OnlineState IS NULL OR si.OnlineState NOT IN (7, 8))
        ORDER BY p.Updated_At DESC
        LIMIT 1000`
     ) as [any[], any];

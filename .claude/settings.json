@@ -67,7 +67,9 @@
       "Bash(cat /var/folders/27/jgbq3r8n3kn2wzjystgv8yhw0000gn/T/next-panic-6514cef6130134c14b247a5ca4d062f5.log 2>/dev/null | head -100)",
       "Read(//private/var/folders/27/jgbq3r8n3kn2wzjystgv8yhw0000gn/T/**)",
       "Bash(git show *)",
-      "Bash(node ./_tmp_test_merge.js)"
+      "Bash(node ./_tmp_test_merge.js)",
+      "Bash(sed -E 's/\\(=.{4}\\).*/\\\\1****/')",
+      "Bash(sed -n '55,100p' proxy.ts)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
