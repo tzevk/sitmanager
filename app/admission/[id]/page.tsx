@@ -3180,7 +3180,10 @@ export default function PublicAdmissionFormPage() {
                               )}
                             </button>
                           );
-                        })() : (() => {
+                        })() : null}
+
+                        {/* Pay in 2 Installments — available for ALL training programmes */}
+                        {(() => {
                           const isSelected = formData.modeOfPayment === '50% Installment';
                           return (
                             <button
@@ -3199,7 +3202,7 @@ export default function PublicAdmissionFormPage() {
                                   <i className="fas fa-calendar-check text-lg"></i>
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <span className={`text-sm font-bold ${isSelected ? 'text-violet-800' : 'text-gray-800'}`}>50% Payment in 2 Installments</span>
+                                  <span className={`text-sm font-bold ${isSelected ? 'text-violet-800' : 'text-gray-800'}`}>Pay in 2 Installments</span>
                                   <div className={`text-xs mt-0.5 ${isSelected ? 'text-violet-600' : 'text-gray-500'}`}>
                                     Pay &#8377;{fmt(firstInstallmentAmount + ALUMNI_MEMBERSHIP_FEE)} now + &#8377;{fmt(secondInstallmentAmount)} later — total &#8377;{fmt(installmentPlanTotal + ALUMNI_MEMBERSHIP_FEE)}
                                   </div>
