@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { ensureStudentTransferColumns } from '@/lib/student-transfer';
 
 async function resolveInquiryTableName(pool: any): Promise<string> {
   const [rows] = await pool.query(
@@ -153,6 +154,7 @@ export async function GET(
     if (auth instanceof NextResponse) return auth;
 
     const pool = getPool();
+    await ensureStudentTransferColumns(pool);
   const inquiryTable = await resolveInquiryTableName(pool);
     const { id } = await params;
 
@@ -166,6 +168,7 @@ export async function GET(
          s.Permanent_Address, s.Permanent_City, s.Permanent_State, s.Permanent_Pin, s.Permanent_Country,
          s.Qualification, s.Discipline, s.Percentage,
          s.Course_Id, s.Batch_Code, s.Batch_Category_id,
+         s.Transfered, s.Moved_To_Course_Id, s.Moved_To_Batch_Code,
          s.Company          AS Organisation,
          s.Designation,
          s.Occupation       AS OccupationalStatus,
@@ -178,6 +181,7 @@ export async function GET(
          s.SitPerformance, s.PlacementRemark,
          a.Admission_Id, a.Batch_Id, a.Admission_Date,
          COALESCE(b.Batch_code, b2.Batch_code) AS Batch_code,
+         COALESCE(mtc.Course_Name, '')        AS Moved_To_Course_Name,
          COALESCE(b.SDate, b2.SDate)           AS Batch_StartDate,
          COALESCE(b.EDate, b2.EDate)           AS Batch_EndDate,
          COALESCE(b.Fees_Full_Payment, b2.Fees_Full_Payment) AS Total_Fees,
@@ -196,6 +200,7 @@ export async function GET(
        LEFT JOIN batch_mst b  ON b.Batch_Id = a.Batch_Id
        LEFT JOIN batch_mst b2 ON b2.Batch_code = s.Batch_Code
                               AND (b2.IsDelete = 0 OR b2.IsDelete IS NULL)
+      LEFT JOIN course_mst mtc ON mtc.Course_Id = s.Moved_To_Course_Id
        LEFT JOIN course_mst c ON c.Course_Id = s.Course_Id
        LEFT JOIN status_master st ON st.Id = s.Status_id
        WHERE s.Student_Id = ? AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
@@ -343,6 +348,7 @@ export async function PUT(
     if (auth instanceof NextResponse) return auth;
 
     const pool = getPool();
+    await ensureStudentTransferColumns(pool);
     const { id } = await params;
     const body = await req.json();
 
@@ -356,8 +362,9 @@ export async function PUT(
       // Academic
       Qualification, Discipline, Percentage, Course_Id,
       Batch_Code, Batch_code, Batch_Category_id,
+      Transfered, Moved_To_Course_Id, Moved_To_Batch_Code,
       // Company / Occupational
-      Organisation, Designation, JobDescription, WorkingSince, TotalExperience, OccupationalStatus,
+      Organisation, Designation, JobDescription, TotalExperience, OccupationalStatus,
       // Inquiry meta
       Inquiry_From, Inquiry_Type, Inquiry_Dt,
       // Status
@@ -375,6 +382,9 @@ export async function PUT(
     const resolvedBatchCode = Batch_Code || Batch_code || null;
     const resolvedCourseId = Course_Id ? parseInt(Course_Id) : null;
     const resolvedBatchCategoryId = await resolveBatchCategoryId(pool, resolvedBatchCode, Batch_Category_id || null);
+    const resolvedTransfered = String(Transfered ?? '').trim().toLowerCase() === 'yes' ? 'Yes' : null;
+    const resolvedMovedToCourseId = Moved_To_Course_Id ? parseInt(Moved_To_Course_Id) : null;
+    const resolvedMovedToBatchCode = String(Moved_To_Batch_Code ?? '').trim() || null;
 
     // ── 1. Core UPDATE — columns guaranteed to exist in all deployments ───
     await pool.query(
@@ -398,6 +408,9 @@ export async function PUT(
          Course_Id        = ?,
          Batch_Code       = ?,
          Batch_Category_id = ?,
+         Transfered       = ?,
+         Moved_To_Course_Id = ?,
+         Moved_To_Batch_Code = ?,
          Qualification    = ?,
          Percentage       = ?,
          Company          = ?,
@@ -429,6 +442,9 @@ export async function PUT(
         resolvedCourseId,
         resolvedBatchCode,
         resolvedBatchCategoryId,
+        resolvedTransfered,
+        resolvedMovedToCourseId,
+        resolvedTransfered ? resolvedMovedToBatchCode : null,
         Qualification || null,
         Percentage ? parseFloat(Percentage) : null,
         Organisation || null,

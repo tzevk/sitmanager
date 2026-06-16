@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
+import { StudentTransferBadge } from '../../../../../components/ui/StudentTransferBadge';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
@@ -218,6 +219,8 @@ export default function EditStudentPage() {
     Inquiry_From: '', Inquiry_Type: '', Inquiry_Dt: '',
     /* Status */
     Status_id: '', Status_date: '',
+    /* Transfer / move-to */
+    Transfered: '', Moved_To_Course_Id: '', Moved_To_Batch_Code: '',
     /* Admission */
     Admission_Dt: '',
     /* Student portal / referral */
@@ -281,6 +284,9 @@ export default function EditStudentPage() {
           Inquiry_Dt:       s.Inquiry_Dt ? String(s.Inquiry_Dt).slice(0, 10) : '',
           Status_id:        s.Status_id != null ? String(s.Status_id) : '',
           Status_date:      s.Status_date ? String(s.Status_date).slice(0, 10) : '',
+          Transfered:       s.Transfered || '',
+          Moved_To_Course_Id: s.Moved_To_Course_Id != null ? String(s.Moved_To_Course_Id) : '',
+          Moved_To_Batch_Code: s.Moved_To_Batch_Code || '',
           Admission_Dt:     s.Admission_Dt ? String(s.Admission_Dt).slice(0, 10) : '',
           Login_Password:   s.Login_Password   || '',
           Refered_By:       s.Refered_By       || '',
@@ -416,6 +422,10 @@ export default function EditStudentPage() {
     setError('');
     setSubmitting(true);
     try {
+      const transfered = String(form.Transfered).trim().toLowerCase() === 'yes';
+      if (transfered && (!form.Moved_To_Course_Id || !form.Moved_To_Batch_Code)) {
+        throw new Error('Select both moved-to training programme and batch before saving the transfer.');
+      }
       const res  = await fetch(`/api/admission-activity/student/${studentId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -446,6 +456,12 @@ export default function EditStudentPage() {
   const filteredBatches = form.Course_Id
     ? batches.filter((b) => String(b.Course_Id) === form.Course_Id)
     : batches;
+
+  const movedToBatches = form.Moved_To_Course_Id
+    ? batches.filter((b) => String(b.Course_Id) === form.Moved_To_Course_Id)
+    : batches;
+
+  const isTransferred = String(form.Transfered).trim().toLowerCase() === 'yes';
 
   const snapshotField = (label: string, value: unknown) => (
     <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
@@ -873,6 +889,12 @@ export default function EditStudentPage() {
                           <span className="text-[11px] text-slate-500">Batch End</span>
                           <span className="text-[11px] font-semibold text-slate-700">{batchEndDate || '—'}</span>
                         </div>
+                        <StudentTransferBadge
+                          transferred={form.Transfered}
+                          movedToCourseName={courses.find((c) => String(c.Course_Id) === form.Moved_To_Course_Id)?.Course_Name}
+                          movedToBatchCode={form.Moved_To_Batch_Code}
+                          className="mt-1"
+                        />
                       </div>
                     </div>
                   </div>
@@ -1133,6 +1155,56 @@ export default function EditStudentPage() {
                 }
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>Transferred</label>
+                    <select
+                      value={form.Transfered}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        set('Transfered', next);
+                        if (next !== 'Yes') {
+                          set('Moved_To_Course_Id', '');
+                          set('Moved_To_Batch_Code', '');
+                        }
+                      }}
+                      className={selectCls}
+                    >
+                      <option value="">— Select —</option>
+                      <option value="Yes">Yes</option>
+                      <option value="No">No</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Moved To Training Programme</label>
+                    <select
+                      value={form.Moved_To_Course_Id}
+                      onChange={(e) => {
+                        set('Moved_To_Course_Id', e.target.value);
+                        set('Moved_To_Batch_Code', '');
+                      }}
+                      className={selectCls}
+                      disabled={!isTransferred}
+                    >
+                      <option value="">— Select Course —</option>
+                      {courses.map((c) => (
+                        <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Moved To Batch</label>
+                    <select
+                      value={form.Moved_To_Batch_Code}
+                      onChange={(e) => set('Moved_To_Batch_Code', e.target.value)}
+                      className={selectCls}
+                      disabled={!isTransferred || !form.Moved_To_Course_Id}
+                    >
+                      <option value="">— Select Batch —</option>
+                      {movedToBatches.map((b) => (
+                        <option key={b.Batch_Id} value={b.Batch_code}>{b.Batch_code}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <label className={labelCls}>SIT Performance (%)</label>
                     <input

@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
          LEFT JOIN course_mst cm ON cm.Course_Id = sm.Course_Id
          LEFT JOIN batch_mst bm  ON bm.Batch_code = sm.Batch_Code
          WHERE f.TypeR = 'C'
+           AND COALESCE(NULLIF(TRIM(f.Fees_Code), ''), '') <> ''
            AND (f.IsDelete = 0 OR f.IsDelete IS NULL)
            AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
          ORDER BY COALESCE(f.RDate, f.Date_Added) DESC, f.Fees_Id DESC

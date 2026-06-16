@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { ensureStudentTransferColumns } from '@/lib/student-transfer';
 
 // Columns the "Select Search" dropdown can target → safe column mapping
 const SEARCH_FIELDS: Record<string, string> = {
@@ -51,6 +52,7 @@ export async function GET(req: NextRequest) {
     const auth = await requirePermission(req, 'student.view');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
+    await ensureStudentTransferColumns(pool);
     const { searchParams } = new URL(req.url);
 
     const page   = Math.max(1, Number(searchParams.get('page'))  || 1);
@@ -70,6 +72,9 @@ export async function GET(req: NextRequest) {
            sm.Present_Address,
            sm.Email,
            sm.Present_Mobile,
+           sm.Transfered,
+           sm.Moved_To_Batch_Code,
+           COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name,
            sm.IsActive,
            am.Payment_Type,
            COALESCE(bm.Fees_Full_Payment, bm2.Fees_Full_Payment) AS Total_Fees,
@@ -79,6 +84,7 @@ export async function GET(req: NextRequest) {
          JOIN student_master sm ON sm.Student_Id = am.Student_Id
          LEFT JOIN batch_mst bm ON bm.Batch_Id = am.Batch_Id
          LEFT JOIN batch_mst bm2 ON bm2.Batch_code = sm.Batch_Code AND (bm2.IsDelete = 0 OR bm2.IsDelete IS NULL)
+         LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
          ${FEES_JOIN}
          WHERE ${BASE_WHERE} ${clause}
          ORDER BY am.Admission_Id DESC

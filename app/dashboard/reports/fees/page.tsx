@@ -5,6 +5,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
+import { StudentTransferBadge } from '@/components/ui/StudentTransferBadge';
 
 /* ── Types ─────────────────────────────────────────────────────────── */
 interface FeesRow {
@@ -34,6 +35,9 @@ interface FeesRow {
   Email: string;
   Course_Name: string;
   Batch_Code: string;
+  Transfered?: string | null;
+  Moved_To_Batch_Code?: string | null;
+  Moved_To_Course_Name?: string | null;
 }
 
 interface BatchWiseFeesRow {
@@ -46,6 +50,8 @@ interface BatchWiseFeesRow {
   Roll_No?: string | null;
   Cancel?: string | null;
   Transfered?: string | null;
+  Moved_To_Batch_Code?: string | null;
+  Moved_To_Course_Name?: string | null;
   Student_Name: string;
   Present_Mobile: string;
   Fees_Id: number;
@@ -726,7 +732,16 @@ function ChequePdcTable({ rows, totalAmt, totalTax, totalNet }: {
               <td className={`${TD} text-slate-400`}>{i + 1}</td>
               <td className={TD}><span className="font-mono text-[11px] font-semibold text-[#2E3093]">{r.Fees_Code || '—'}</span></td>
               <td className={TD}>{fmtDate(r.RDate || r.Date_Added)}</td>
-              <td className={`${TD} font-medium max-w-[160px] truncate`}>{r.Student_Name || '—'}</td>
+              <td className={`${TD} font-medium max-w-[160px]`}>
+                <div className="flex flex-col gap-1">
+                  <span className="truncate block">{r.Student_Name || '—'}</span>
+                  <StudentTransferBadge
+                    transferred={r.Transfered}
+                    movedToCourseName={r.Moved_To_Course_Name}
+                    movedToBatchCode={r.Moved_To_Batch_Code}
+                  />
+                </div>
+              </td>
               <td className={`${TD} max-w-[140px] truncate`}>{r.Course_Name || '—'}</td>
               <td className={TD}><span className="font-mono text-[11px]">{r.Batch_Code || '—'}</span></td>
               <td className={TD}><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${payBadge(r.Payment_Type)}`}>{r.Payment_Type || '—'}</span></td>
@@ -811,7 +826,16 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
                     <>
                       <td className={TD}>{fmtDate(r.RDate || r.Date_Added)}</td>
                       <td className={TD}><span className="font-mono text-[11px] font-semibold text-[#2E3093]">{r.Fees_Code || '—'}</span></td>
-                      <td className={`${TD} font-medium max-w-[180px] truncate`}>{r.Student_Name || '—'}</td>
+                      <td className={`${TD} font-medium max-w-[180px]`}>
+                        <div className="flex flex-col gap-1">
+                          <span className="truncate block">{r.Student_Name || '—'}</span>
+                          <StudentTransferBadge
+                            transferred={r.Transfered}
+                            movedToCourseName={r.Moved_To_Course_Name}
+                            movedToBatchCode={r.Moved_To_Batch_Code}
+                          />
+                        </div>
+                      </td>
                       <td className={TD}><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusBadge(status)}`}>{status}</span></td>
                       <td className={`${TD} text-right font-mono font-semibold`}>{fmt(r.Amount)}</td>
                       <td className={TD}><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${payBadge(r.Payment_Type)}`}>{r.Payment_Type || '—'}</span></td>

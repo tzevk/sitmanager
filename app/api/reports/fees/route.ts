@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
 import { getPool } from '@/lib/db';
+import { ensureStudentTransferColumns } from '@/lib/student-transfer';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -12,6 +13,7 @@ export async function GET(req: NextRequest) {
     if (auth instanceof NextResponse) return auth;
 
     const pool = getPool();
+    await ensureStudentTransferColumns(pool);
     const { searchParams } = new URL(req.url);
 
     const tab          = searchParams.get('tab') || 'cheque-pdc';
@@ -61,11 +63,15 @@ export async function GET(req: NextRequest) {
            COALESCE(sm.Student_Name,'') AS Student_Name,
            COALESCE(sm.Present_Mobile,'') AS Present_Mobile,
            COALESCE(cm.Course_Name,'') AS Course_Name,
-           COALESCE(bm.Batch_code,'') AS Batch_Code
+           COALESCE(bm.Batch_code,'') AS Batch_Code,
+           COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
+           COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
+           COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name
          FROM s_fees_mst sfm
          LEFT JOIN student_master sm ON sm.Student_Id = sfm.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
          LEFT JOIN course_mst cm ON cm.Course_Id = sfm.Course_Id
          LEFT JOIN batch_mst bm ON bm.Batch_Id = sfm.Batch_Id
+         LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
          WHERE ${conditions.join(' AND ')}
          ORDER BY sfm.Date_Added DESC, sfm.Fees_Id DESC
          LIMIT 1000`,
@@ -95,7 +101,9 @@ export async function GET(req: NextRequest) {
              bm.SDate AS Batch_Start, bm.EDate AS Batch_End, bm.Fees_Full_Payment,
              am.Student_Id AS Student_Id,
              am.Roll_No AS Roll_No,
-             am.Cancel AS Cancel, am.Transfered AS Transfered,
+               am.Cancel AS Cancel, COALESCE(NULLIF(TRIM(sm.Transfered), ''), am.Transfered) AS Transfered,
+               COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
+               COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name,
              COALESCE(sm.Student_Name, CONCAT_WS(' ', sm.FName, sm.MName, sm.LName), '') AS Student_Name,
              COALESCE(sm.Present_Mobile,'') AS Present_Mobile,
              sfm.Fees_Id, sfm.Fees_Code, sfm.Date_Added, sfm.RDate,
@@ -109,6 +117,7 @@ export async function GET(req: NextRequest) {
              AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
            LEFT JOIN batch_mst bm ON bm.Batch_Id = am.Batch_Id
            LEFT JOIN course_mst cm ON cm.Course_Id = bm.Course_Id
+             LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
            LEFT JOIN s_fees_mst sfm
              ON sfm.Student_Id = am.Student_Id
              AND sfm.Batch_Id  = am.Batch_Id
@@ -154,11 +163,15 @@ export async function GET(req: NextRequest) {
              COALESCE(sm.Present_Mobile,'') AS Present_Mobile,
              COALESCE(sm.Email,'') AS Email,
              COALESCE(cm.Course_Name,'') AS Course_Name,
-             COALESCE(bm.Batch_code,'') AS Batch_Code
+             COALESCE(bm.Batch_code,'') AS Batch_Code,
+             COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
+             COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
+             COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name
            FROM s_fees_mst sfm
            LEFT JOIN student_master sm ON sm.Student_Id = sfm.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
            LEFT JOIN course_mst cm ON cm.Course_Id = sfm.Course_Id
            LEFT JOIN batch_mst bm ON bm.Batch_Id = sfm.Batch_Id
+           LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
            WHERE ${conditions.join(' AND ')}
            ORDER BY sfm.Date_Added DESC, sfm.Fees_Id DESC
            LIMIT 1000`,

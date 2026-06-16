@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
 
+    const rawFormStatus = searchParams.get('formStatus') || '';
     const result = await listOnlineAdmissions({
       page: Math.max(1, Number(searchParams.get('page')) || 1),
       limit: Math.min(100, Math.max(10, Number(searchParams.get('limit')) || 25)),
@@ -57,6 +58,7 @@ export async function GET(req: NextRequest) {
       statusCategory: searchParams.get('statusCategory') || '',
       dateFrom: searchParams.get('dateFrom') || '',
       dateTo: searchParams.get('dateTo') || '',
+      formStatus: (rawFormStatus === 'filled' || rawFormStatus === 'filling') ? rawFormStatus : '',
     });
 
     return NextResponse.json(result);

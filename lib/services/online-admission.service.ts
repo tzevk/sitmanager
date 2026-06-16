@@ -18,6 +18,8 @@ export interface OnlineAdmissionListParams {
   dateTo?: string;
   /** Only include fully-submitted forms (exclude draft autosaves). */
   submittedOnly?: boolean;
+  /** 'filled' = OnlineState 23 (submitted); 'filling' = has payload but not yet submitted */
+  formStatus?: 'filled' | 'filling' | '';
 }
 
 type StatusCategory = 'open' | 'accepted' | 'closed';
@@ -60,6 +62,124 @@ export interface SubmitAdmissionInput {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PAYLOAD_TABLE = 'online_admission_payload';
+const KT_TABLE      = 'online_admission_kt_details';
+
+// All form fields that should live as proper DB columns (not just JSON blob).
+// Used by ensureExtendedColumns to migrate the table on first use.
+const FORM_COLUMNS: [string, string][] = [
+  // Personal
+  ['First_Name',        'VARCHAR(100) NULL'],
+  ['Middle_Name',       'VARCHAR(100) NULL'],
+  ['Last_Name',         'VARCHAR(100) NULL'],
+  ['Short_Name',        'VARCHAR(100) NULL'],
+  ['Student_Name',      'VARCHAR(300) NULL'],
+  ['DOB',               'DATE NULL'],
+  ['Sex',               'VARCHAR(20) NULL'],
+  ['Nationality',       'VARCHAR(100) NULL'],
+  ['Email',             'VARCHAR(200) NULL'],
+  ['Present_Mobile',    'VARCHAR(20) NULL'],
+  ['Telephone',         'VARCHAR(20) NULL'],
+  ['Family_Contact',    'VARCHAR(100) NULL'],
+  ['ID_Proof_Type',     'VARCHAR(100) NULL'],
+  // Present address
+  ['Present_Flat',      'VARCHAR(100) NULL'],
+  ['Present_Building',  'VARCHAR(200) NULL'],
+  ['Present_Street',    'VARCHAR(200) NULL'],
+  ['Present_Area',      'VARCHAR(200) NULL'],
+  ['Present_Landmark',  'VARCHAR(200) NULL'],
+  ['Present_Address',   'TEXT NULL'],
+  ['Present_City',      'VARCHAR(100) NULL'],
+  ['Present_District',  'VARCHAR(100) NULL'],
+  ['Present_State',     'VARCHAR(100) NULL'],
+  ['Present_Pin',       'VARCHAR(10) NULL'],
+  ['Present_Country',   'VARCHAR(100) NULL'],
+  // Permanent address
+  ['Same_As_Present',      'TINYINT(1) NULL DEFAULT 0'],
+  ['Permanent_Flat',       'VARCHAR(100) NULL'],
+  ['Permanent_Building',   'VARCHAR(200) NULL'],
+  ['Permanent_Street',     'VARCHAR(200) NULL'],
+  ['Permanent_Area',       'VARCHAR(200) NULL'],
+  ['Permanent_Landmark',   'VARCHAR(200) NULL'],
+  ['Permanent_Address',    'TEXT NULL'],
+  ['Permanent_City',       'VARCHAR(100) NULL'],
+  ['Permanent_District',   'VARCHAR(100) NULL'],
+  ['Permanent_State',      'VARCHAR(100) NULL'],
+  ['Permanent_Pin',        'VARCHAR(10) NULL'],
+  ['Permanent_Country',    'VARCHAR(100) NULL'],
+  // SSC
+  ['SSC_Board',            'VARCHAR(200) NULL'],
+  ['SSC_School_Name',      'VARCHAR(300) NULL'],
+  ['SSC_Year_Passing',     'VARCHAR(10) NULL'],
+  ['SSC_Percentage',       'DECIMAL(5,2) NULL'],
+  ['SSC_KT_Count',         'INT NULL DEFAULT 0'],
+  // HSC
+  ['HSC_Board',            'VARCHAR(200) NULL'],
+  ['HSC_College_Name',     'VARCHAR(300) NULL'],
+  ['HSC_Stream',           'VARCHAR(200) NULL'],
+  ['HSC_Year_Passing',     'VARCHAR(10) NULL'],
+  ['HSC_Percentage',       'DECIMAL(5,2) NULL'],
+  ['HSC_KT_Count',         'INT NULL DEFAULT 0'],
+  // Diploma
+  ['Diploma_Degree',         'VARCHAR(200) NULL'],
+  ['Diploma_Specialization', 'VARCHAR(200) NULL'],
+  ['Diploma_Institute',      'VARCHAR(300) NULL'],
+  ['Diploma_Year_Passing',   'VARCHAR(10) NULL'],
+  ['Diploma_Percentage',     'DECIMAL(5,2) NULL'],
+  ['Diploma_KT_Count',       'INT NULL DEFAULT 0'],
+  // Graduation
+  ['Grad_Degree',            'VARCHAR(200) NULL'],
+  ['Grad_Specialization',    'VARCHAR(200) NULL'],
+  ['Grad_University',        'VARCHAR(300) NULL'],
+  ['Grad_Year_Passing',      'VARCHAR(10) NULL'],
+  ['Grad_Percentage',        'DECIMAL(5,2) NULL'],
+  ['Grad_KT_Count',          'INT NULL DEFAULT 0'],
+  // Post-Graduation
+  ['PG_Degree',              'VARCHAR(200) NULL'],
+  ['PG_Specialization',      'VARCHAR(200) NULL'],
+  ['PG_University',          'VARCHAR(300) NULL'],
+  ['PG_Year_Passing',        'VARCHAR(10) NULL'],
+  ['PG_Percentage',          'DECIMAL(5,2) NULL'],
+  ['PG_KT_Count',            'INT NULL DEFAULT 0'],
+  // Education summary (resolved values)
+  ['Qualification',          'VARCHAR(200) NULL'],
+  ['Discipline',             'VARCHAR(200) NULL'],
+  ['Percentage',             'DECIMAL(5,2) NULL'],
+  ['Education_Remark',       'TEXT NULL'],
+  // Occupational
+  ['Occupational_Status',       'VARCHAR(200) NULL'],
+  ['Job_Organisation',          'VARCHAR(300) NULL'],
+  ['Job_Designation',           'VARCHAR(200) NULL'],
+  ['Total_Experience',          'VARCHAR(20) NULL'],
+  ['Job_Description',           'TEXT NULL'],
+  ['Self_Employment_Details',   'TEXT NULL'],
+  ['Working_From_Years',        'VARCHAR(10) NULL'],
+  ['Working_From_Months',       'VARCHAR(20) NULL'],
+  // Training
+  ['Course_Id',                 'INT NULL'],
+  ['Batch_Code',                'VARCHAR(100) NULL'],
+  ['Training_Programme_Name',   'VARCHAR(300) NULL'],
+  ['Training_Category',         'VARCHAR(200) NULL'],
+  // Payment
+  ['Mode_Of_Payment',           'VARCHAR(100) NULL'],
+  ['Razorpay_Paid',             'TINYINT(1) NULL DEFAULT 0'],
+  ['Razorpay_Payment_Id',       'VARCHAR(200) NULL'],
+  ['Razorpay_Order_Id',         'VARCHAR(200) NULL'],
+  ['Razorpay_Amount',           'DECIMAL(10,2) NULL'],
+  ['Razorpay_Signature',        'VARCHAR(500) NULL'],
+  ['Pay_At_Office_Audit',       'TEXT NULL'],
+  // Consent
+  ['Terms_Agreed',                      'TINYINT(1) NULL DEFAULT 0'],
+  ['Consent_Acknowledged',              'TINYINT(1) NULL DEFAULT 0'],
+  ['Experienced_Consent_Acknowledged',  'TINYINT(1) NULL DEFAULT 0'],
+  ['Consent_Data',                      'TEXT NULL'],
+  ['Consent_Checks',                    'TEXT NULL'],
+  // Draft progress
+  ['Draft_Step',                'INT NULL DEFAULT 0'],
+  ['Draft_Autosaved_At',        'DATETIME NULL'],
+];
+
+let extColumnsReady = false;
+let ktTableReady    = false;
 
 const FALLBACK_STATUSES: Record<number, string> = {
   0: 'New Inquiry', 1: 'Follow Up', 2: 'Interested', 3: 'Confirmed',
@@ -171,6 +291,228 @@ async function ensurePayloadTable(pool: ReturnType<typeof getPool>): Promise<voi
      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   );
   payloadTableReady = true;
+}
+
+async function ensureExtendedColumns(pool: ReturnType<typeof getPool>): Promise<void> {
+  if (extColumnsReady) return;
+  try {
+    const [existingCols] = await pool.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+      [PAYLOAD_TABLE]
+    ) as [any[], any];
+    const existing = new Set((existingCols as any[]).map((r) => String(r.COLUMN_NAME)));
+    const missing = FORM_COLUMNS.filter(([col]) => !existing.has(col));
+    if (missing.length) {
+      const addClauses = missing.map(([col, def]) => `ADD COLUMN \`${col}\` ${def}`).join(', ');
+      await pool.query(`ALTER TABLE \`${PAYLOAD_TABLE}\` ${addClauses}`);
+    }
+    extColumnsReady = true;
+  } catch (err) {
+    console.warn('[OnlineAdmission] ensureExtendedColumns failed:', err);
+  }
+}
+
+async function ensureKtTable(pool: ReturnType<typeof getPool>): Promise<void> {
+  if (ktTableReady) return;
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS \`${KT_TABLE}\` (
+       Id           INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+       Inquiry_Id   INT NOT NULL,
+       Level        VARCHAR(20) NOT NULL,
+       Subject_Name VARCHAR(255) NULL,
+       Year         VARCHAR(10) NULL,
+       Semester     VARCHAR(10) NULL,
+       Cleared_Year VARCHAR(10) NULL,
+       Marks        VARCHAR(50) NULL,
+       Sort_Order   INT NOT NULL DEFAULT 0,
+       INDEX idx_inquiry (Inquiry_Id)
+     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+  );
+  ktTableReady = true;
+}
+
+export async function saveStructuredAdmissionData(
+  inquiryId: number,
+  input: Record<string, any>
+): Promise<void> {
+  if (!Number.isFinite(inquiryId) || inquiryId <= 0) return;
+  const pool = getPool();
+  await ensurePayloadTable(pool);
+  await ensureExtendedColumns(pool);
+  await ensureKtTable(pool);
+
+  const n = (v: unknown): string | null => {
+    if (v == null) return null;
+    const s = String(v).trim();
+    return s || null;
+  };
+  const num = (v: unknown): number | null => {
+    if (v == null) return null;
+    const p = parseFloat(String(v));
+    return Number.isFinite(p) ? p : null;
+  };
+  const maybeBool = (v: unknown): 0 | 1 | null => {
+    if (v === undefined || v === null) return null;
+    return v === true || v === 1 || v === '1' || v === 'true' ? 1 : 0;
+  };
+  const jstr = (v: unknown): string | null => {
+    if (v == null) return null;
+    try { return typeof v === 'string' ? v : JSON.stringify(v); } catch { return null; }
+  };
+
+  const draftMeta = (input.__draftProgress && typeof input.__draftProgress === 'object')
+    ? input.__draftProgress as Record<string, unknown>
+    : null;
+
+  const academic = resolveAcademicProfile(input);
+  const fullName  = resolveFullName(input, null);
+  const presentAddr   = n(input.presentAddress)   || buildAddress(input, 'present');
+  const permanentAddr = n(input.permanentAddress)  || buildAddress(input, 'permanent');
+
+  const fields: [string, unknown][] = [
+    // Personal
+    ['First_Name',      n(input.firstName)],
+    ['Middle_Name',     n(input.middleName)],
+    ['Last_Name',       n(input.lastName)],
+    ['Short_Name',      n(input.shortName)],
+    ['Student_Name',    fullName || null],
+    ['DOB',             n(input.dob)],
+    ['Sex',             n(input.gender)],
+    ['Nationality',     n(input.nationality)],
+    ['Email',           n(input.email)],
+    ['Present_Mobile',  n(input.mobile)],
+    ['Telephone',       n(input.telephone)],
+    ['Family_Contact',  n(input.familyContact)],
+    ['ID_Proof_Type',   n(input.idProofType)],
+    // Present address
+    ['Present_Flat',      n(input.presentFlat)],
+    ['Present_Building',  n(input.presentBuilding)],
+    ['Present_Street',    n(input.presentStreet)],
+    ['Present_Area',      n(input.presentArea)],
+    ['Present_Landmark',  n(input.presentLandmark)],
+    ['Present_Address',   presentAddr],
+    ['Present_City',      n(input.presentCity)],
+    ['Present_District',  n(input.presentDistrict)],
+    ['Present_State',     n(input.presentState)],
+    ['Present_Pin',       n(input.presentPin)],
+    ['Present_Country',   n(input.presentCountry)],
+    // Permanent address
+    ['Same_As_Present',    maybeBool(input.sameAsPresent)],
+    ['Permanent_Flat',     n(input.permanentFlat)],
+    ['Permanent_Building', n(input.permanentBuilding)],
+    ['Permanent_Street',   n(input.permanentStreet)],
+    ['Permanent_Area',     n(input.permanentArea)],
+    ['Permanent_Landmark', n(input.permanentLandmark)],
+    ['Permanent_Address',  permanentAddr],
+    ['Permanent_City',     n(input.permanentCity)],
+    ['Permanent_District', n(input.permanentDistrict)],
+    ['Permanent_State',    n(input.permanentState)],
+    ['Permanent_Pin',      n(input.permanentPin)],
+    ['Permanent_Country',  n(input.permanentCountry)],
+    // SSC
+    ['SSC_Board',        n(input.ssc_board)],
+    ['SSC_School_Name',  n(input.ssc_schoolName)],
+    ['SSC_Year_Passing', n(input.ssc_yearOfPassing)],
+    ['SSC_Percentage',   num(input.ssc_percentage)],
+    ['SSC_KT_Count',     num(input.ssc_ktCount) ?? 0],
+    // HSC
+    ['HSC_Board',        n(input.hsc_board)],
+    ['HSC_College_Name', n(input.hsc_collegeName)],
+    ['HSC_Stream',       n(input.hsc_stream)],
+    ['HSC_Year_Passing', n(input.hsc_yearOfPassing)],
+    ['HSC_Percentage',   num(input.hsc_percentage)],
+    ['HSC_KT_Count',     num(input.hsc_ktCount) ?? 0],
+    // Diploma
+    ['Diploma_Degree',          n(input.diploma_degree)],
+    ['Diploma_Specialization',  n(input.diploma_specialization)],
+    ['Diploma_Institute',       n(input.diploma_institute)],
+    ['Diploma_Year_Passing',    n(input.diploma_yearOfPassing)],
+    ['Diploma_Percentage',      num(input.diploma_percentage)],
+    ['Diploma_KT_Count',        num(input.diploma_ktCount) ?? 0],
+    // Graduation
+    ['Grad_Degree',         n(input.grad_degree)],
+    ['Grad_Specialization', n(input.grad_specialization)],
+    ['Grad_University',     n(input.grad_university)],
+    ['Grad_Year_Passing',   n(input.grad_yearOfPassing)],
+    ['Grad_Percentage',     num(input.grad_percentage)],
+    ['Grad_KT_Count',       num(input.grad_ktCount) ?? 0],
+    // Post-Graduation
+    ['PG_Degree',         n(input.postgrad_degree)],
+    ['PG_Specialization', n(input.postgrad_specialization)],
+    ['PG_University',     n(input.postgrad_university)],
+    ['PG_Year_Passing',   n(input.postgrad_yearOfPassing)],
+    ['PG_Percentage',     num(input.postgrad_percentage)],
+    ['PG_KT_Count',       num(input.postgrad_ktCount) ?? 0],
+    // Education summary
+    ['Qualification',     academic.qualification],
+    ['Discipline',        academic.discipline],
+    ['Percentage',        academic.percentage],
+    ['Education_Remark',  n(input.educationRemark)],
+    // Occupational
+    ['Occupational_Status',     n(input.occupationalStatus)],
+    ['Job_Organisation',        n(input.jobOrganisation)],
+    ['Job_Designation',         n(input.jobDesignation)],
+    ['Total_Experience',        n(input.totalOccupationYears)],
+    ['Job_Description',         n(input.jobDescription)],
+    ['Self_Employment_Details', n(input.selfEmploymentDetails)],
+    ['Working_From_Years',      n(input.workingFromYears)],
+    ['Working_From_Months',     n(input.workingFromMonths)],
+    // Training
+    ['Course_Id',               num(input.trainingProgrammeId) ?? num(input.Course_Id)],
+    ['Batch_Code',              n(input.batchCode)],
+    ['Training_Programme_Name', n(input.trainingProgrammeName)],
+    ['Training_Category',       n(input.trainingCategory)],
+    // Payment
+    ['Mode_Of_Payment',    n(input.modeOfPayment)],
+    ['Razorpay_Paid',      maybeBool(input.razorpayPaid)],
+    ['Razorpay_Payment_Id', n(input.razorpayPaymentId)],
+    ['Razorpay_Order_Id',  n(input.razorpayOrderId)],
+    ['Razorpay_Amount',    num(input.razorpayAmount)],
+    ['Razorpay_Signature', n(input.razorpaySignature)],
+    ['Pay_At_Office_Audit', jstr(input.payAtOfficeAudit)],
+    // Consent
+    ['Terms_Agreed',                     maybeBool(input.termsAgreed)],
+    ['Consent_Acknowledged',             maybeBool(input.consentAcknowledged)],
+    ['Experienced_Consent_Acknowledged', maybeBool(input.experiencedConsentAcknowledged)],
+    ['Consent_Data',                     jstr(input.consentData)],
+    ['Consent_Checks',                   jstr(input.consentChecks)],
+    // Draft
+    ['Draft_Step',          draftMeta?.currentStep != null ? Number(draftMeta.currentStep) : null],
+    ['Draft_Autosaved_At',  draftMeta?.autosavedAt ? n(String(draftMeta.autosavedAt)) : null],
+  ];
+
+  const setClauses = fields.map(([col]) => `\`${col}\` = ?`).join(', ');
+  const values     = fields.map(([, v]) => v);
+  try {
+    await pool.query(
+      `UPDATE \`${PAYLOAD_TABLE}\` SET ${setClauses} WHERE Inquiry_Id = ?`,
+      [...values, inquiryId]
+    );
+  } catch (err) {
+    console.warn('[OnlineAdmission] saveStructuredAdmissionData UPDATE failed:', err);
+    return;
+  }
+
+  // KT details — only replace when at least one level array is present in the input
+  const ktLevels = ['ssc', 'hsc', 'diploma', 'grad', 'postgrad'] as const;
+  const hasKtData = ktLevels.some((l) => Array.isArray(input[`${l}_ktDetails`]));
+  if (!hasKtData) return;
+
+  await pool.query(`DELETE FROM \`${KT_TABLE}\` WHERE Inquiry_Id = ?`, [inquiryId]);
+  const ktRows: any[][] = [];
+  for (const level of ktLevels) {
+    const details: any[] = Array.isArray(input[`${level}_ktDetails`]) ? input[`${level}_ktDetails`] : [];
+    details.forEach((d: any, i: number) => {
+      ktRows.push([inquiryId, level, n(d.subjectName), n(d.year), n(d.semester), n(d.clearedYear), n(d.marks), i]);
+    });
+  }
+  if (ktRows.length) {
+    await pool.query(
+      `INSERT INTO \`${KT_TABLE}\` (Inquiry_Id, Level, Subject_Name, Year, Semester, Cleared_Year, Marks, Sort_Order) VALUES ?`,
+      [ktRows]
+    );
+  }
 }
 
 async function resolveStudentIdForInquiry(
@@ -680,7 +1022,7 @@ export async function listOnlineAdmissions(
   const inquiryTable = await resolveInquiryTableName(pool);
   const statusTable = await resolveStatusTableName(pool);
   const studentMasterTable = await resolveStudentMasterTableName(pool);
-  const { page, limit, search = '', statusCategory = '', dateFrom = '', dateTo = '', submittedOnly = false } = params;
+  const { page, limit, search = '', statusCategory = '', dateFrom = '', dateTo = '', submittedOnly = false, formStatus = '' } = params;
   const offset = (page - 1) * limit;
 
   const buildNewQuery = (withStatus: boolean) => {
@@ -739,6 +1081,12 @@ export async function listOnlineAdmissions(
   if (dateTo)   { newConds.push('oap.Created_At <= ?'); newParams.push(dateTo); }
   // Exclude draft autosaves — only forms that were actually submitted.
   if (submittedOnly) { newConds.push("oap.Payload NOT LIKE '%__draftProgress%'"); }
+  // formStatus filter: 'filled' = student submitted (OnlineState=23); 'filling' = draft in progress
+  if (formStatus === 'filled') {
+    newConds.push('si.OnlineState = 23');
+  } else if (formStatus === 'filling') {
+    newConds.push('(si.OnlineState IS NULL OR si.OnlineState NOT IN (7, 8, 23))');
+  }
   const smStatusIdExpr = studentMasterTable
     ? `COALESCE(NULLIF(TRIM(si.OnlineState), ''), sm.Status_id)`
     : `NULLIF(TRIM(si.OnlineState), '')`;
@@ -872,6 +1220,9 @@ export async function submitOnlineAdmission(
      VALUES (?, ?) ON DUPLICATE KEY UPDATE Payload=VALUES(Payload), Updated_At=NOW()`,
     [inquiryId, JSON.stringify(cleanBody)]
   );
+  try { await saveStructuredAdmissionData(inquiryId, cleanBody); } catch (e) {
+    console.warn('[OnlineAdmission] saveStructuredAdmissionData failed on submit:', e);
+  }
 
   const fullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
   try {

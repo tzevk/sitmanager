@@ -4,7 +4,7 @@ import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { apiRateLimiter } from '@/lib/rate-limit';
 import { resolveInquiryTableName } from '@/lib/services/inquiry.service';
-import { syncOnlineAdmissionIntoCurrentDb } from '@/lib/services/online-admission.service';
+import { syncOnlineAdmissionIntoCurrentDb, saveStructuredAdmissionData } from '@/lib/services/online-admission.service';
 
 const ONLINE_ADMISSION_PAYLOAD_TABLE = 'online_admission_payload';
 
@@ -460,6 +460,9 @@ export async function POST(
     };
 
     await savePayload(pool, inquiryId, nextPayload);
+    try { await saveStructuredAdmissionData(inquiryId, nextPayload); } catch (e) {
+      console.warn('[OnlineAdmission] saveStructuredAdmissionData failed on autosave:', e);
+    }
 
     return NextResponse.json({
       success: true,
@@ -610,12 +613,18 @@ export async function PUT(
 
     // Only persist if we are adding data or keeping at least as much as before.
     // This prevents an empty-body grant from accidentally wiping a stored form.
+    let savedPayload: Record<string, any>;
     if (newCount >= existingCount || !isStatusOnlyAction) {
       await savePayload(pool, inquiryId, cleanBody);
+      savedPayload = cleanBody;
     } else {
       // Data would be lost — stamp just the statusAction on the existing stored payload.
       const safePayload = { ...existingPayload, statusAction: cleanBody.statusAction, payAtOfficeAudit };
       await savePayload(pool, inquiryId, safePayload);
+      savedPayload = safePayload;
+    }
+    try { await saveStructuredAdmissionData(inquiryId, savedPayload); } catch (e) {
+      console.warn('[OnlineAdmission] saveStructuredAdmissionData failed on PUT:', e);
     }
     await syncOnlineAdmissionIntoCurrentDb(inquiryId, cleanBody, { statusAction: body.statusAction || 'update' });
 
