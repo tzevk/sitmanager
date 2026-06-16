@@ -23,6 +23,22 @@ type SubmissionRow = {
   submitted_at: string | null;
 };
 
+type ParsedAnswers = {
+  trainingProgram?: Record<string, unknown>;
+  trainingExecutive?: {
+    ratings?: Record<string, unknown>;
+    otherSuggestions?: unknown;
+  };
+  trainers?: {
+    entries?: Array<{
+      trainerName?: unknown;
+      ratings?: Record<string, unknown>;
+    }>;
+    viewsOnTrainer?: unknown;
+    viewsOnSiteVisit?: unknown;
+  };
+};
+
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
@@ -45,32 +61,11 @@ function prettifyKey(key: string): string {
     .replace(/^./, (ch) => ch.toUpperCase());
 }
 
-function collectAnswerLines(value: unknown, keyPrefix = '', output: string[] = []): string[] {
-  if (value == null) return output;
-
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    const text = String(value).trim();
-    if (!text) return output;
-    output.push(keyPrefix ? `${keyPrefix}: ${text}` : text);
-    return output;
-  }
-
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => {
-      const itemPrefix = keyPrefix ? `${keyPrefix} ${index + 1}` : `Item ${index + 1}`;
-      collectAnswerLines(item, itemPrefix, output);
-    });
-    return output;
-  }
-
-  if (typeof value === 'object') {
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      const nextPrefix = keyPrefix ? `${keyPrefix} • ${prettifyKey(k)}` : prettifyKey(k);
-      collectAnswerLines(v, nextPrefix, output);
-    }
-  }
-
-  return output;
+function displayValue(value: unknown): string {
+  if (value == null) return '—';
+  if (typeof value === 'string') return value.trim() || '—';
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '—';
 }
 
 export default function FeedbackResponsesPage() {
@@ -111,16 +106,15 @@ export default function FeedbackResponsesPage() {
 
   const parsedSubmissions = useMemo(() => {
     return submissions.map((s) => {
-      let lines: string[] = [];
+      let answers: ParsedAnswers | null = null;
       try {
-        const parsed = JSON.parse(s.answers_json || '{}');
-        lines = collectAnswerLines(parsed);
+        answers = JSON.parse(s.answers_json || '{}') as ParsedAnswers;
       } catch {
-        lines = [s.answers_json || '—'];
+        answers = null;
       }
       return {
         ...s,
-        lines,
+        answers,
       };
     });
   }, [submissions]);
@@ -183,17 +177,74 @@ export default function FeedbackResponsesPage() {
                   <td className="py-2.5 px-3 text-xs font-semibold text-slate-800">{s.student_name || '—'}</td>
                   <td className="py-2.5 px-3 text-xs font-mono text-slate-600">{s.student_code || '—'}</td>
                   <td className="py-2.5 px-3 text-xs text-slate-700">
-                    {s.lines.length ? (
+                    {s.answers ? (
                       <details>
                         <summary className="cursor-pointer text-[#2E3093] font-semibold">View Response</summary>
-                        <div className="mt-2 space-y-1.5">
-                          {s.lines.map((line, index) => (
-                            <p key={index} className="leading-5">{line}</p>
-                          ))}
+                        <div className="mt-2 space-y-2">
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                            <p className="text-[11px] font-bold text-slate-700 mb-1">Training Program</p>
+                            {Object.entries(s.answers.trainingProgram || {}).length ? (
+                              <div className="space-y-1">
+                                {Object.entries(s.answers.trainingProgram || {}).map(([k, v]) => (
+                                  <p key={k} className="leading-5">
+                                    <span className="font-semibold">{prettifyKey(k)}:</span> {displayValue(v)}
+                                  </p>
+                                ))}
+                              </div>
+                            ) : (
+                              <p>—</p>
+                            )}
+                          </div>
+
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                            <p className="text-[11px] font-bold text-slate-700 mb-1">Training Executive</p>
+                            {Object.entries(s.answers.trainingExecutive?.ratings || {}).length ? (
+                              <div className="space-y-1 mb-1">
+                                {Object.entries(s.answers.trainingExecutive?.ratings || {}).map(([k, v]) => (
+                                  <p key={k} className="leading-5">
+                                    <span className="font-semibold">{prettifyKey(k)}:</span> {displayValue(v)}
+                                  </p>
+                                ))}
+                              </div>
+                            ) : (
+                              <p>—</p>
+                            )}
+                            <p className="leading-5">
+                              <span className="font-semibold">Other Suggestions:</span> {displayValue(s.answers.trainingExecutive?.otherSuggestions)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                            <p className="text-[11px] font-bold text-slate-700 mb-1">Trainers</p>
+                            {(s.answers.trainers?.entries || []).length ? (
+                              <div className="space-y-1.5 mb-1">
+                                {(s.answers.trainers?.entries || []).map((entry, idx) => (
+                                  <div key={idx} className="rounded border border-slate-200 bg-white px-2 py-1.5">
+                                    <p className="font-semibold text-slate-800">{displayValue(entry.trainerName) || `Trainer ${idx + 1}`}</p>
+                                    <div className="mt-1 space-y-0.5">
+                                      {Object.entries(entry.ratings || {}).map(([k, v]) => (
+                                        <p key={k} className="leading-5">
+                                          <span className="font-semibold">{prettifyKey(k)}:</span> {displayValue(v)}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p>—</p>
+                            )}
+                            <p className="leading-5">
+                              <span className="font-semibold">Views On Trainer:</span> {displayValue(s.answers.trainers?.viewsOnTrainer)}
+                            </p>
+                            <p className="leading-5">
+                              <span className="font-semibold">Views On Site Visit:</span> {displayValue(s.answers.trainers?.viewsOnSiteVisit)}
+                            </p>
+                          </div>
                         </div>
                       </details>
                     ) : (
-                      '—'
+                      <pre className="whitespace-pre-wrap text-[11px]">{s.answers_json || '—'}</pre>
                     )}
                   </td>
                   <td className="py-2.5 px-3 text-xs text-slate-600 whitespace-nowrap">{formatDate(s.submitted_at)}</td>
