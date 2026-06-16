@@ -1,142 +1,228 @@
 #!/usr/bin/env node
+/**
+ * kill-noisy-connections.mjs
+ *
+ * Kills:
+ *   1. Idle / long-running / lock-wait MySQL connections
+ *   2. Stale Node.js / Next.js processes holding the app port (default 3000)
+ *   3. Blocked Redis clients via CLIENT KILL
+ *
+ * Usage:
+ *   node scripts/db/kill-noisy-connections.mjs               # dry-run, shows what would be killed
+ *   node scripts/db/kill-noisy-connections.mjs --execute     # actually kill
+ *   node scripts/db/kill-noisy-connections.mjs --execute --sleep-seconds=60 --include-long-running
+ *   node scripts/db/kill-noisy-connections.mjs --execute --skip-mysql --skip-redis
+ *   node scripts/db/kill-noisy-connections.mjs --execute --port=3001
+ */
 
 import fs from 'fs';
 import path from 'path';
+import { execSync, spawnSync } from 'child_process';
 import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
 
-const rootDir = process.cwd();
-const envPath = path.resolve(rootDir, '.env');
-const envLocalPath = path.resolve(rootDir, '.env.local');
+// ── Env ───────────────────────────────────────────────────────────────────────
 
-if (fs.existsSync(envPath)) {
-  dotenv.config({ path: envPath });
-}
-if (fs.existsSync(envLocalPath)) {
-  dotenv.config({ path: envLocalPath });
+const rootDir = process.cwd();
+for (const f of ['.env', '.env.local']) {
+  const p = path.resolve(rootDir, f);
+  if (fs.existsSync(p)) dotenv.config({ path: p });
 }
 
 function getArg(name, fallback = '') {
   const prefix = `--${name}=`;
-  const found = process.argv.find((arg) => arg.startsWith(prefix));
-  if (!found) return fallback;
-  return found.slice(prefix.length);
+  const found = process.argv.find((a) => a.startsWith(prefix));
+  return found ? found.slice(prefix.length) : fallback;
 }
-
-function hasFlag(name) {
-  return process.argv.includes(`--${name}`);
-}
-
+function hasFlag(name) { return process.argv.includes(`--${name}`); }
 function needEnv(name) {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing env var: ${name}`);
-  }
-  return value;
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing env var: ${name}`);
+  return v;
 }
-
-function toNum(value, fallback = 0) {
-  const n = Number(value);
+function toNum(v, fallback = 0) {
+  const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
 
-function shouldKill(row, opts) {
-  const command = String(row.Command || '').trim();
-  const state = String(row.State || '').trim();
-  const info = String(row.Info || '').replace(/\s+/g, ' ').trim();
-  const ageSec = toNum(row.Time, 0);
+// ── Flags ─────────────────────────────────────────────────────────────────────
 
-  if (command === 'Sleep' && ageSec >= opts.sleepSeconds) {
-    return `sleep>${opts.sleepSeconds}s`;
-  }
+const EXECUTE         = hasFlag('execute');
+const SLEEP_SEC       = toNum(getArg('sleep-seconds', '120'), 120);
+const ACTIVE_SEC      = toNum(getArg('active-seconds', '120'), 120);
+const INCL_LONG       = hasFlag('include-long-running');
+const SKIP_MYSQL      = hasFlag('skip-mysql');
+const SKIP_NODE       = hasFlag('skip-node');
+const SKIP_REDIS      = hasFlag('skip-redis');
+const APP_PORT        = toNum(getArg('port', '3000'), 3000);
 
-  if (/Waiting for table level lock|Waiting for table metadata lock|Locked/i.test(state)) {
-    return 'lock-wait';
-  }
+const DRY = !EXECUTE;
+if (DRY) console.log('⚠  Dry run — pass --execute to actually kill.\n');
 
-  if (opts.includeLongRunning && command !== 'Sleep' && ageSec >= opts.activeSeconds) {
-    return `active>${opts.activeSeconds}s`;
-  }
+// ── 1. MySQL ─────────────────────────────────────────────────────────────────
 
-  if (/SELECT COUNT\(\*\) AS total FROM student_master s WHERE/i.test(info) && ageSec >= 30) {
-    return 'slow-student-count';
-  }
+function mysqlShouldKill(row) {
+  const cmd   = String(row.Command || '').trim();
+  const state = String(row.State   || '').trim();
+  const info  = String(row.Info    || '').replace(/\s+/g, ' ').trim();
+  const age   = toNum(row.Time, 0);
 
+  if (cmd === 'Sleep' && age >= SLEEP_SEC)           return `sleep>${SLEEP_SEC}s`;
+  if (/Waiting for table.*(lock|metadata)/i.test(state)) return 'lock-wait';
+  if (INCL_LONG && cmd !== 'Sleep' && age >= ACTIVE_SEC) return `active>${ACTIVE_SEC}s`;
+  if (/SELECT COUNT\(\*\) AS total FROM student_master/i.test(info) && age >= 30)
+                                                      return 'slow-student-count';
   return null;
 }
 
-async function main() {
-  const execute = hasFlag('execute');
-  const sleepSeconds = toNum(getArg('sleep-seconds', '120'), 120);
-  const activeSeconds = toNum(getArg('active-seconds', '120'), 120);
-  const includeLongRunning = hasFlag('include-long-running');
-
-  const host = needEnv('DB_HOST');
-  const port = toNum(process.env.DB_PORT || '3306', 3306);
-  const user = needEnv('DB_USER');
+async function killMySQL() {
+  console.log('── MySQL connections ────────────────────────────────────────');
+  const host     = needEnv('DB_HOST');
+  const port     = toNum(process.env.DB_PORT || '3306', 3306);
+  const user     = needEnv('DB_USER');
   const password = needEnv('DB_PASSWORD');
   const database = needEnv('DB_NAME');
 
   const conn = await mysql.createConnection({ host, port, user, password, database });
-
   try {
     const [[self]] = await conn.query('SELECT CONNECTION_ID() AS id');
-    const selfId = toNum(self?.id, 0);
+    const selfId   = toNum(self?.id, 0);
+    const [rows]   = await conn.query('SHOW FULL PROCESSLIST');
 
-    const [rows] = await conn.query('SHOW FULL PROCESSLIST');
-    const candidates = [];
-
+    const targets = [];
     for (const row of rows) {
       const id = toNum(row.Id, 0);
-      const db = String(row.db || '').trim();
       if (!id || id === selfId) continue;
-      if (db !== database) continue;
-
-      const reason = shouldKill(row, { sleepSeconds, activeSeconds, includeLongRunning });
+      if (String(row.db || '').trim() !== database) continue;
+      const reason = mysqlShouldKill(row);
       if (!reason) continue;
-
-      candidates.push({
-        id,
-        user: String(row.User || ''),
-        command: String(row.Command || ''),
-        time: toNum(row.Time, 0),
-        state: String(row.State || ''),
-        reason,
-      });
+      targets.push({ id, user: row.User, command: row.Command, time: row.Time, state: row.State, reason });
     }
 
-    if (candidates.length === 0) {
-      console.log('No unnecessary connections found.');
-      return;
+    if (!targets.length) { console.log('  Nothing to kill.\n'); return; }
+    console.table(targets);
+
+    if (DRY) { console.log('  (dry run — skipped)\n'); return; }
+
+    let killed = 0, failed = 0;
+    for (const t of targets) {
+      try { await conn.query(`KILL ${t.id}`); killed++; }
+      catch (e) { failed++; console.error(`  KILL ${t.id} failed: ${e.message}`); }
     }
-
-    console.table(candidates);
-
-    if (!execute) {
-      console.log('\nDry run only. Re-run with --execute to kill listed connections.');
-      return;
-    }
-
-    let killed = 0;
-    let failed = 0;
-    for (const victim of candidates) {
-      try {
-        await conn.query(`KILL ${victim.id}`);
-        killed += 1;
-      } catch (error) {
-        failed += 1;
-        const msg = error instanceof Error ? error.message : String(error);
-        console.error(`Failed to kill ${victim.id}: ${msg}`);
-      }
-    }
-
-    console.log(`Killed ${killed} connection(s). Failed: ${failed}.`);
+    console.log(`  Killed ${killed}, failed ${failed}.\n`);
   } finally {
     await conn.end();
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
+// ── 2. Node.js / Next.js processes ───────────────────────────────────────────
+
+async function killNode() {
+  console.log(`── Node.js processes on port ${APP_PORT} ────────────────────`);
+
+  // lsof works on macOS and Linux
+  let pids = [];
+  try {
+    const out = execSync(`lsof -ti tcp:${APP_PORT} 2>/dev/null || true`, { encoding: 'utf8' });
+    pids = out.trim().split('\n').map(Number).filter(Boolean);
+  } catch {
+    // lsof not available
+  }
+
+  // Fallback: fuser (Linux only)
+  if (!pids.length) {
+    try {
+      const out = execSync(`fuser ${APP_PORT}/tcp 2>/dev/null || true`, { encoding: 'utf8' });
+      pids = out.trim().split(/\s+/).map(Number).filter(Boolean);
+    } catch { /* ignore */ }
+  }
+
+  if (!pids.length) { console.log('  No processes found on port.\n'); return; }
+
+  // Describe each pid
+  const rows = pids.map((pid) => {
+    try {
+      const cmd = execSync(`ps -p ${pid} -o comm= 2>/dev/null || true`, { encoding: 'utf8' }).trim();
+      return { pid, command: cmd };
+    } catch { return { pid, command: '?' }; }
+  });
+  console.table(rows);
+
+  if (DRY) { console.log('  (dry run — skipped)\n'); return; }
+
+  let killed = 0, failed = 0;
+  for (const { pid } of rows) {
+    const r = spawnSync('kill', ['-SIGTERM', String(pid)]);
+    if (r.status === 0) { killed++; console.log(`  Sent SIGTERM to ${pid}`); }
+    else { failed++; console.error(`  Failed to kill ${pid}`); }
+  }
+  console.log(`  Killed ${killed}, failed ${failed}.\n`);
+}
+
+// ── 3. Redis clients ──────────────────────────────────────────────────────────
+
+async function killRedis() {
+  console.log('── Redis idle clients ───────────────────────────────────────');
+  const url = process.env.REDIS_URL;
+  if (!url) { console.log('  REDIS_URL not set — skipping.\n'); return; }
+
+  let Redis;
+  try { ({ default: Redis } = await import('ioredis')); }
+  catch { console.log('  ioredis not installed — skipping.\n'); return; }
+
+  const client = new Redis(url, { lazyConnect: true, maxRetriesPerRequest: 1 });
+  try {
+    await client.connect();
+
+    // CLIENT LIST returns one line per connected client
+    const list = await client.call('CLIENT', 'LIST');
+    const lines = String(list).trim().split('\n').filter(Boolean);
+
+    // Parse each client line into key=value pairs
+    const clients = lines.map((line) => {
+      const obj = {};
+      for (const kv of line.split(' ')) {
+        const [k, v] = kv.split('=');
+        if (k) obj[k] = v ?? '';
+      }
+      return obj;
+    });
+
+    // Kill clients idle > 5 minutes (300 s) that are not the current connection
+    const selfAddr = await client.call('CLIENT', 'GETNAME').catch(() => null);
+    void selfAddr;
+    const IDLE_THRESHOLD = 300;
+    const targets = clients.filter((c) => toNum(c.idle, 0) >= IDLE_THRESHOLD);
+
+    if (!targets.length) { console.log('  No idle clients found.\n'); return; }
+
+    const display = targets.map((c) => ({ id: c.id, addr: c.addr, idle_s: c.idle, cmd: c.cmd }));
+    console.table(display);
+
+    if (DRY) { console.log('  (dry run — skipped)\n'); return; }
+
+    let killed = 0, failed = 0;
+    for (const c of targets) {
+      try {
+        await client.call('CLIENT', 'KILL', 'ID', c.id);
+        killed++;
+      } catch (e) { failed++; console.error(`  CLIENT KILL ID ${c.id} failed: ${e.message}`); }
+    }
+    console.log(`  Killed ${killed}, failed ${failed}.\n`);
+  } finally {
+    client.disconnect();
+  }
+}
+
+// ── Main ─────────────────────────────────────────────────────────────────────
+
+async function main() {
+  if (!SKIP_MYSQL) await killMySQL();
+  if (!SKIP_NODE)  await killNode();
+  if (!SKIP_REDIS) await killRedis();
+}
+
+main().catch((e) => {
+  console.error(e instanceof Error ? e.message : String(e));
   process.exit(1);
 });
