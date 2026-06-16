@@ -163,6 +163,7 @@ export default function EditOnlineAdmissionPage() {
     trainingCategory: '', batchCode: '',
     idProofType: '',
     modeOfPayment: '',
+    upiTransferConfirmed: false, upiTransferReference: '',
     razorpayPaid: false, razorpayPaymentId: '', razorpayOrderId: '',
     razorpayAmount: null as number | null,
     termsAgreed: false, consentAcknowledged: false,
@@ -306,6 +307,8 @@ export default function EditOnlineAdmissionPage() {
         batchCode: d.batchCode || '',
         idProofType: d.idProofType || '',
         modeOfPayment: d.modeOfPayment || '',
+        upiTransferConfirmed: Boolean(d.upiTransferConfirmed),
+        upiTransferReference: d.upiTransferReference || '',
         razorpayPaid: Boolean(d.razorpayPaid),
         razorpayPaymentId: d.razorpayPaymentId || '',
         razorpayOrderId: d.razorpayOrderId || '',
@@ -1213,6 +1216,31 @@ export default function EditOnlineAdmissionPage() {
                   />
                   <p className="text-[10px] text-slate-600 text-center">Account Ref: 037326012440007 | 54972698</p>
                 </div>
+              </div>
+            )}
+
+            {/* UPI / QR payment confirmation details */}
+            {(formData.upiTransferConfirmed || formData.upiTransferReference) && (
+              <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-3 text-[11px] text-sky-900 space-y-1.5">
+                <p className="font-semibold">QR / UPI Payment</p>
+                <div className="flex items-center gap-2">
+                  <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
+                    formData.upiTransferConfirmed ? 'bg-emerald-500' : 'bg-gray-200'
+                  }`}>
+                    {formData.upiTransferConfirmed && (
+                      <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                  <span>{formData.upiTransferConfirmed ? 'Student confirmed payment via QR' : 'Payment not yet confirmed'}</span>
+                </div>
+                {formData.upiTransferReference && (
+                  <div>
+                    <span className="font-semibold">UTR / Reference: </span>
+                    <span className="font-mono">{formData.upiTransferReference}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>

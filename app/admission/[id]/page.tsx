@@ -41,7 +41,7 @@ const STEP_GUIDANCE: Record<number, { focus: string; tip: string }> = {
 };
 
 const stepEnterStyle = { animation: 'stepEnter 320ms ease-out' };
-const DIRECT_UPI_MODE = 'Direct UPI Transfer';
+
 
 // One Time Membership Fee - Sitians Alumni Association — mandatory for every training course
 const ALUMNI_MEMBERSHIP_FEE = 899;
@@ -87,6 +87,7 @@ export default function PublicAdmissionFormPage() {
   const [payAtOfficeVerified, setPayAtOfficeVerified] = useState(false);
   const [upiTransferConfirmed, setUpiTransferConfirmed] = useState(false);
   const [upiTransferReference, setUpiTransferReference] = useState('');
+  const [paymentSubMethod, setPaymentSubMethod] = useState<'' | 'razorpay' | 'qr'>('');
   const [showPayAtOfficeModal, setShowPayAtOfficeModal] = useState(false);
   const [payAtOfficePassword, setPayAtOfficePassword] = useState('');
   const [payAtOfficeVerifying, setPayAtOfficeVerifying] = useState(false);
@@ -292,6 +293,7 @@ export default function PublicAdmissionFormPage() {
       payAtOfficeVerified?: boolean;
       upiTransferConfirmed?: boolean;
       upiTransferReference?: string;
+      paymentSubMethod?: '' | 'razorpay' | 'qr';
       consentData?: {
         eligibility?: string;
         qualification?: string;
@@ -400,6 +402,9 @@ export default function PublicAdmissionFormPage() {
       if (typeof bestProgress?.upiTransferReference === 'string') {
         setUpiTransferReference(bestProgress.upiTransferReference);
       }
+      if (bestProgress?.paymentSubMethod === 'razorpay' || bestProgress?.paymentSubMethod === 'qr') {
+        setPaymentSubMethod(bestProgress.paymentSubMethod);
+      }
       if (bestProgress?.consentData && typeof bestProgress.consentData === 'object') {
         setConsentData(prev => ({
           ...prev,
@@ -448,6 +453,7 @@ export default function PublicAdmissionFormPage() {
         payAtOfficeVerified,
         upiTransferConfirmed,
         upiTransferReference,
+        paymentSubMethod,
         consentData,
       };
 
@@ -488,6 +494,7 @@ export default function PublicAdmissionFormPage() {
     experiencedConsentAcknowledged,
     formData,
     payAtOfficeVerified,
+    paymentSubMethod,
     upiTransferConfirmed,
     upiTransferReference,
     razorpayOrderId,
@@ -907,6 +914,7 @@ export default function PublicAdmissionFormPage() {
     } else {
       setFormData(prev => ({ ...prev, [field]: value }));
     }
+    if (field === 'modeOfPayment') setPaymentSubMethod('');
   };
 
   const handleKtDetailChange = (level: 'ssc' | 'hsc' | 'diploma' | 'grad' | 'postgrad', index: number, field: string, value: string | File | null) => {
@@ -988,18 +996,22 @@ export default function PublicAdmissionFormPage() {
         break;
       case 6:
         if (!formData.modeOfPayment) {
-          alert('Please select a Mode of Payment');
+          alert('Please select a fee plan');
           return false;
         }
         if (formData.modeOfPayment === 'Pay at Office' && !payAtOfficeVerified) {
           alert('Pay at Office requires password override approval.');
           return false;
         }
-        if (formData.modeOfPayment === DIRECT_UPI_MODE && !upiTransferConfirmed) {
-          alert('Please confirm your Direct UPI transfer before proceeding.');
+        if (formData.modeOfPayment !== 'Pay at Office' && !paymentSubMethod) {
+          alert('Please select how you would like to pay — Pay Online or Pay by QR.');
           return false;
         }
-        if (formData.modeOfPayment !== 'Pay at Office' && formData.modeOfPayment !== DIRECT_UPI_MODE && !razorpayPaid) {
+        if (paymentSubMethod === 'qr' && !upiTransferConfirmed) {
+          alert('Please confirm your QR payment before proceeding.');
+          return false;
+        }
+        if (paymentSubMethod === 'razorpay' && !razorpayPaid) {
           alert('Please complete the online payment before proceeding.');
           return false;
         }
@@ -1055,7 +1067,7 @@ export default function PublicAdmissionFormPage() {
       return;
     }
     if (!formData.modeOfPayment) {
-      alert('Please complete Step 6: Select a Mode of Payment');
+      alert('Please complete Step 6: Select a fee plan');
       setCurrentStep(6);
       return;
     }
@@ -1064,12 +1076,17 @@ export default function PublicAdmissionFormPage() {
       setCurrentStep(6);
       return;
     }
-    if (formData.modeOfPayment === DIRECT_UPI_MODE && !upiTransferConfirmed) {
-      alert('Please confirm your Direct UPI transfer in Step 6 before submitting.');
+    if (formData.modeOfPayment !== 'Pay at Office' && !paymentSubMethod) {
+      alert('Please select a payment method (Pay Online or Pay by QR) in Step 6.');
       setCurrentStep(6);
       return;
     }
-    if (formData.modeOfPayment !== 'Pay at Office' && formData.modeOfPayment !== DIRECT_UPI_MODE && !razorpayPaid) {
+    if (paymentSubMethod === 'qr' && !upiTransferConfirmed) {
+      alert('Please confirm your QR payment in Step 6 before submitting.');
+      setCurrentStep(6);
+      return;
+    }
+    if (paymentSubMethod === 'razorpay' && !razorpayPaid) {
       alert('Please complete the online payment in Step 6 before submitting.');
       setCurrentStep(6);
       return;
@@ -1162,8 +1179,8 @@ export default function PublicAdmissionFormPage() {
         batchCode: formData.batchCode,
         modeOfPayment: formData.modeOfPayment,
         payAtOfficeOverrideUsed: formData.modeOfPayment === 'Pay at Office' ? payAtOfficeVerified : false,
-        upiTransferConfirmed: formData.modeOfPayment === DIRECT_UPI_MODE ? upiTransferConfirmed : false,
-        upiTransferReference: formData.modeOfPayment === DIRECT_UPI_MODE ? (upiTransferReference.trim() || null) : null,
+        upiTransferConfirmed: paymentSubMethod === 'qr' ? upiTransferConfirmed : false,
+        upiTransferReference: paymentSubMethod === 'qr' ? (upiTransferReference.trim() || null) : null,
         sameAsPresent: formData.sameAsPresent,
         consentAcknowledged: consentAcknowledged,
         experiencedConsentAcknowledged: experiencedConsentAcknowledged,
@@ -3272,49 +3289,66 @@ export default function PublicAdmissionFormPage() {
                           );
                         })()}
 
-                        {/* Option: Direct UPI Transfer (all admissions) */}
-                        {(() => {
-                          const isSelected = formData.modeOfPayment === DIRECT_UPI_MODE;
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setFormData(prev => ({ ...prev, modeOfPayment: DIRECT_UPI_MODE }));
-                                setRazorpayPaid(false);
-                                setRazorpayPaymentId('');
-                                setRazorpayOrderId('');
-                                setRazorpaySignature('');
-                              }}
-                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
-                                isSelected
-                                  ? 'bg-sky-50 border-sky-500 ring-2 ring-sky-200 shadow-md'
-                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                              }`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                                  isSelected ? 'bg-sky-100 text-sky-700' : 'bg-gray-100 text-gray-400'
-                                }`}>
-                                  <i className="fas fa-qrcode text-lg"></i>
+                        {/* Pay by QR sub-method choice — shown after any fee plan is selected (not Pay at Office) */}
+                        {formData.modeOfPayment && formData.modeOfPayment !== 'Pay at Office' && (
+                          <div className="mt-1 rounded-xl border-2 border-slate-200 bg-slate-50 p-4 space-y-3">
+                            <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                              <i className="fas fa-credit-card text-slate-400"></i>
+                              How would you like to pay?
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                              {/* Pay Online (Razorpay) */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPaymentSubMethod('razorpay');
+                                  setUpiTransferConfirmed(false);
+                                  setUpiTransferReference('');
+                                }}
+                                className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                                  paymentSubMethod === 'razorpay'
+                                    ? 'border-[#2E3093] bg-[#2E3093]/5 ring-2 ring-[#2E3093]/20'
+                                    : 'border-gray-200 bg-white hover:border-gray-300'
+                                }`}
+                              >
+                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${paymentSubMethod === 'razorpay' ? 'bg-[#2E3093]/10 text-[#2E3093]' : 'bg-gray-100 text-gray-400'}`}>
+                                  <i className="fas fa-credit-card text-base"></i>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className={`text-sm font-bold ${isSelected ? 'text-sky-900' : 'text-gray-800'}`}>Direct UPI Transfer</span>
-                                    <span className="bg-sky-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Another Option</span>
-                                  </div>
-                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-sky-700' : 'text-gray-500'}`}>
-                                    Scan institute QR and transfer directly via any UPI app.
-                                  </div>
+                                <div className="text-center">
+                                  <div className={`text-xs font-bold ${paymentSubMethod === 'razorpay' ? 'text-[#2E3093]' : 'text-gray-700'}`}>Pay Online</div>
+                                  <div className="text-[10px] text-gray-400 mt-0.5">Card / Net Banking / UPI</div>
                                 </div>
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                                  isSelected ? 'border-sky-500 bg-sky-50' : 'border-gray-300'
-                                }`}>
-                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-sky-500" />}
+                                {paymentSubMethod === 'razorpay' && <div className="w-4 h-4 rounded-full bg-[#2E3093] flex items-center justify-center"><i className="fas fa-check text-white text-[8px]"></i></div>}
+                              </button>
+
+                              {/* Pay by QR */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPaymentSubMethod('qr');
+                                  setRazorpayPaid(false);
+                                  setRazorpayPaymentId('');
+                                  setRazorpayOrderId('');
+                                  setRazorpaySignature('');
+                                }}
+                                className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                                  paymentSubMethod === 'qr'
+                                    ? 'border-sky-500 bg-sky-50 ring-2 ring-sky-200'
+                                    : 'border-gray-200 bg-white hover:border-gray-300'
+                                }`}
+                              >
+                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${paymentSubMethod === 'qr' ? 'bg-sky-100 text-sky-700' : 'bg-gray-100 text-gray-400'}`}>
+                                  <i className="fas fa-qrcode text-base"></i>
                                 </div>
-                              </div>
-                            </button>
-                          );
-                        })()}
+                                <div className="text-center">
+                                  <div className={`text-xs font-bold ${paymentSubMethod === 'qr' ? 'text-sky-900' : 'text-gray-700'}`}>Pay by QR</div>
+                                  <div className="text-[10px] text-gray-400 mt-0.5">Scan &amp; pay via UPI app</div>
+                                </div>
+                                {paymentSubMethod === 'qr' && <div className="w-4 h-4 rounded-full bg-sky-500 flex items-center justify-center"><i className="fas fa-check text-white text-[8px]"></i></div>}
+                              </button>
+                            </div>
+                          </div>
+                        )}
 
                         {/* Option 3/4: Loan (Piping / EDD / PDD / Process Weekend) */}
                         {(isPipingFulltime || is75kPlan || isProcessWeekend) && (() => {
@@ -3457,21 +3491,21 @@ export default function PublicAdmissionFormPage() {
                               {formData.modeOfPayment === '2-Payment Plan' && <> — &#8377;{fmt(payableNow)} now + &#8377;35,000 on first day of batch</>}
                               {formData.modeOfPayment === '6-Installment Plan' && <> — &#8377;{fmt(payableNow)} now + &#8377;12,000 × 5 instalments</>}
                               {formData.modeOfPayment === 'Loan (0% Interest)' && <> — &#8377;{fmt(payableNow)} at admission + &#8377;{isProcessWeekend ? '35,000' : is75kPlan ? '60,000' : '1,00,000'} loan via financial institution</>}
-                              {formData.modeOfPayment === DIRECT_UPI_MODE && <> — transfer &#8377;{fmt(payableNow)} using the Direct UPI QR.</>}
+                              {paymentSubMethod === 'qr' && <> — pay &#8377;{fmt(payableNow)} via QR code / UPI.</>}
                             </p>
                           </div>
                         </div>
                       )}
 
-                      {/* Direct UPI transfer confirmation */}
-                      {formData.modeOfPayment === DIRECT_UPI_MODE && (
+                      {/* Pay by QR confirmation */}
+                      {paymentSubMethod === 'qr' && (
                         <div className={`rounded-xl p-4 space-y-3 border-2 ${upiTransferConfirmed ? 'border-emerald-400 bg-emerald-50' : 'border-sky-300 bg-sky-50'}`}>
                           <p className="text-xs font-semibold text-sky-900 flex items-center gap-2">
                             <i className="fas fa-qrcode"></i>
-                            Direct UPI Transfer (another option for all admissions)
+                            Pay by QR — scan &amp; transfer &#8377;{fmt(payableNow)}
                           </p>
                           <p className="text-xs text-slate-700">
-                            Scan this QR from any UPI app and transfer the admission amount.
+                            Scan the QR code below from any UPI app and transfer the amount shown above.
                           </p>
                           <div className="rounded-xl border border-sky-200 bg-white p-3 flex flex-col items-center gap-3">
                             <Image
@@ -3507,8 +3541,8 @@ export default function PublicAdmissionFormPage() {
                         </div>
                       )}
 
-                      {/* ── Razorpay payment (mandatory for online modes) ── */}
-                      {formData.modeOfPayment && formData.modeOfPayment !== 'Pay at Office' && formData.modeOfPayment !== DIRECT_UPI_MODE && (
+                      {/* ── Razorpay payment ── */}
+                      {paymentSubMethod === 'razorpay' && (
                         <div className={`rounded-xl p-4 space-y-3 border-2 ${razorpayPaid ? 'border-emerald-400 bg-emerald-50' : 'border-[#2E3093] bg-[#2E3093]/5'}`}>
                           {razorpayPaid ? (
                             <div className="flex items-center gap-3">
