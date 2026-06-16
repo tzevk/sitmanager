@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -24,70 +24,6 @@ interface AdmissionRow {
   StatusCategory: 'open' | 'accepted' | 'closed';
 }
 
-interface KTDetail {
-  subjectName?: string;
-  year?: string;
-  semester?: string;
-  clearedYear?: string;
-  marks?: string;
-}
-
-interface DetailData {
-  inquiryId: number;
-  studentId: number | null;
-  statusLabel: string;
-  statusCategory: string;
-  // personal
-  firstName: string; middleName: string; lastName: string; shortName: string;
-  dob: string; gender: string; nationality: string;
-  email: string; mobile: string; telephone: string; familyContact: string;
-  // present address
-  presentFlat: string; presentBuilding: string; presentStreet: string;
-  presentArea: string; presentLandmark: string; presentAddress: string;
-  presentCity: string; presentDistrict: string; presentState: string;
-  presentPin: string; presentCountry: string;
-  // permanent address
-  permanentFlat: string; permanentBuilding: string; permanentStreet: string;
-  permanentArea: string; permanentLandmark: string; permanentAddress: string;
-  permanentCity: string; permanentDistrict: string; permanentState: string;
-  permanentPin: string; permanentCountry: string; sameAsPresent: boolean;
-  // education — SSC
-  ssc_board: string; ssc_schoolName: string; ssc_yearOfPassing: string; ssc_percentage: string;
-  ssc_ktCount: string; ssc_ktDetails: KTDetail[];
-  // education — HSC
-  hsc_board: string; hsc_collegeName: string; hsc_stream: string;
-  hsc_yearOfPassing: string; hsc_percentage: string;
-  hsc_ktCount: string; hsc_ktDetails: KTDetail[];
-  // education — Diploma
-  diploma_degree: string; diploma_specialization: string; diploma_institute: string;
-  diploma_yearOfPassing: string; diploma_percentage: string;
-  diploma_ktCount: string; diploma_ktDetails: KTDetail[];
-  // education — Graduation
-  grad_degree: string; grad_specialization: string; grad_university: string;
-  grad_yearOfPassing: string; grad_percentage: string;
-  grad_ktCount: string; grad_ktDetails: KTDetail[];
-  // education — Post-Graduation
-  postgrad_degree: string; postgrad_specialization: string; postgrad_university: string;
-  postgrad_yearOfPassing: string; postgrad_percentage: string;
-  postgrad_ktCount: string; postgrad_ktDetails: KTDetail[];
-  // education summary
-  qualification: string; discipline: string; percentage: string; educationRemark: string;
-  // occupational
-  occupationalStatus: string; jobOrganisation: string; jobDesignation: string;
-  totalOccupationYears: string; jobDescription: string;
-  workingFromYears: string; workingFromMonths: string; selfEmploymentDetails: string;
-  // training
-  trainingProgrammeId: string; trainingProgrammeName: string; trainingCategory: string; batchCode: string;
-  // payment
-  modeOfPayment: string; razorpayPaid: boolean; razorpayPaymentId: string;
-  razorpayOrderId: string; razorpayAmount: number | null; idProofType: string;
-  // consent
-  termsAgreed: boolean; consentAcknowledged: boolean; experiencedConsentAcknowledged: boolean;
-  consentData: { eligibility: string; qualification: string; candidateRemark: string };
-  payAtOfficeAudit: { enabledAt?: string; enabledByName?: string; enabledByEmail?: string } | null;
-  draftMeta: { currentStep?: number; autosavedAt?: string } | null;
-}
-
 interface Pagination { page: number; limit: number; total: number; totalPages: number }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -101,18 +37,6 @@ const STATUS_TABS: { id: StatusTab; label: string }[] = [
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function fmt(v: unknown): string {
-  if (v == null || v === '' || v === false) return '';
-  if (v === true) return 'Yes';
-  return String(v);
-}
-
-function fmtDate(s: string | null | undefined): string {
-  if (!s) return '';
-  try { return new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); }
-  catch { return s; }
-}
-
 function fmtDateTime(s: string | null | undefined): string {
   if (!s) return '—';
   try {
@@ -123,304 +47,7 @@ function fmtDateTime(s: string | null | undefined): string {
   } catch { return s; }
 }
 
-// ── Sub-components ─────────────────────────────────────────────────────────────
 
-function Field({ label, value }: { label: string; value: unknown }) {
-  const v = fmt(value);
-  if (!v) return null;
-  return (
-    <div className="flex flex-col gap-0.5 min-w-0">
-      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 leading-none">{label}</span>
-      <span className="text-[11px] text-slate-700 break-words leading-snug">{v}</span>
-    </div>
-  );
-}
-
-function Section({ title, color = 'blue', children }: { title: string; color?: 'blue' | 'green' | 'amber' | 'purple' | 'rose' | 'slate'; children: React.ReactNode }) {
-  const hdr: Record<string, string> = {
-    blue:   'bg-[#2E3093]/8 border-[#2E3093]/20 text-[#2E3093]',
-    green:  'bg-emerald-50 border-emerald-200 text-emerald-700',
-    amber:  'bg-amber-50 border-amber-200 text-amber-700',
-    purple: 'bg-purple-50 border-purple-200 text-purple-700',
-    rose:   'bg-rose-50 border-rose-200 text-rose-700',
-    slate:  'bg-slate-50 border-slate-200 text-slate-600',
-  };
-  // Check if any children would render (Field returns null for empty values)
-  // We render the section unconditionally — caller is responsible for gating
-  return (
-    <div className="rounded-lg border border-slate-200 overflow-hidden">
-      <div className={`border-b px-3 py-1.5 ${hdr[color]}`}>
-        <span className="text-[10px] font-bold uppercase tracking-wider">{title}</span>
-      </div>
-      <div className="px-3 py-2.5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-5 gap-y-2.5">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function KTBlock({ level, count, details }: { level: string; count: string; details: KTDetail[] }) {
-  const n = Number(count || 0);
-  if (!n || !details.length) return null;
-  return (
-    <div className="rounded border border-amber-200 bg-amber-50/60 px-3 py-2 mt-0.5">
-      <p className="text-[10px] font-bold text-amber-700 mb-1.5">{level} — {n} KT/Backlog subject{n > 1 ? 's' : ''}</p>
-      <div className="space-y-1">
-        {details.map((d, i) => (
-          <div key={i} className="flex flex-wrap gap-x-4 text-[10px] text-amber-800">
-            {d.subjectName && <span>Subject: <b>{d.subjectName}</b></span>}
-            {d.year && <span>Year: <b>{d.year}</b></span>}
-            {d.semester && <span>Sem: <b>{d.semester}</b></span>}
-            {d.clearedYear && <span>Cleared: <b>{d.clearedYear}</b></span>}
-            {d.marks && <span>Marks: <b>{d.marks}</b></span>}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DetailPanel({ inquiryId }: { inquiryId: number }) {
-  const [data, setData] = useState<DetailData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true); setError(''); setData(null);
-    (async () => {
-      try {
-        const res = await fetch(`/api/online-admission/${inquiryId}`);
-        const json = await res.json();
-        if (!cancelled) {
-          if (res.ok) setData(json);
-          else setError(json.error || 'Failed to load details');
-        }
-      } catch {
-        if (!cancelled) setError('Network error loading details');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [inquiryId]);
-
-  if (loading) return (
-    <div className="py-8 flex items-center justify-center gap-2">
-      <div className="w-4 h-4 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
-      <span className="text-xs text-slate-400">Loading all fields…</span>
-    </div>
-  );
-  if (error) return <p className="py-4 text-center text-xs text-red-500">{error}</p>;
-  if (!data) return null;
-
-  const d = data;
-
-  const hasSSC      = !!(d.ssc_board || d.ssc_schoolName || d.ssc_yearOfPassing || d.ssc_percentage);
-  const hasHSC      = !!(d.hsc_board || d.hsc_collegeName || d.hsc_stream || d.hsc_yearOfPassing || d.hsc_percentage);
-  const hasDiploma  = !!(d.diploma_degree || d.diploma_specialization || d.diploma_institute || d.diploma_yearOfPassing || d.diploma_percentage);
-  const hasGrad     = !!(d.grad_degree || d.grad_specialization || d.grad_university || d.grad_yearOfPassing || d.grad_percentage);
-  const hasPostgrad = !!(d.postgrad_degree || d.postgrad_specialization || d.postgrad_university || d.postgrad_yearOfPassing || d.postgrad_percentage);
-  const hasEduSummary = !!(d.qualification || d.discipline || d.percentage || d.educationRemark);
-  const hasOccupational = !!(d.occupationalStatus || d.jobOrganisation || d.jobDesignation || d.jobDescription);
-  const hasPayment  = !!(d.modeOfPayment || d.razorpayPaid || d.razorpayPaymentId);
-  const hasConsent  = !!(d.termsAgreed || d.consentAcknowledged || d.experiencedConsentAcknowledged);
-  const hasPermanent = !d.sameAsPresent && !!(d.permanentCity || d.permanentState || d.permanentAddress);
-
-  return (
-    <div className="space-y-2 px-4 py-3 bg-slate-50/40">
-
-      {/* Meta row */}
-      <div className="flex flex-wrap items-center gap-4 text-[10px] text-slate-500 pb-1 border-b border-slate-200">
-        <span>Inquiry ID: <b className="text-slate-700">#{d.inquiryId}</b></span>
-        {d.studentId ? <span>Student ID: <b className="text-emerald-700">#{d.studentId}</b></span> : <span className="text-amber-600">Not yet admitted</span>}
-        <span>Status: <b className="text-slate-700">{d.statusLabel}</b></span>
-        {d.draftMeta?.currentStep != null && (
-          <span>Form Progress: <b className="text-slate-700">Step {d.draftMeta.currentStep}/6</b></span>
-        )}
-        {d.draftMeta?.autosavedAt && (
-          <span>Last Saved: <b className="text-slate-700">{fmtDateTime(d.draftMeta.autosavedAt)}</b></span>
-        )}
-      </div>
-
-      {/* ── Personal ── */}
-      <Section title="Personal Information" color="blue">
-        <Field label="First Name"      value={d.firstName} />
-        <Field label="Middle Name"     value={d.middleName} />
-        <Field label="Last Name"       value={d.lastName} />
-        <Field label="Short Name"      value={d.shortName} />
-        <Field label="Date of Birth"   value={fmtDate(d.dob)} />
-        <Field label="Gender"          value={d.gender} />
-        <Field label="Nationality"     value={d.nationality} />
-        <Field label="Email"           value={d.email} />
-        <Field label="Mobile"          value={d.mobile} />
-        <Field label="Telephone"       value={d.telephone} />
-        <Field label="Family Contact"  value={d.familyContact} />
-        <Field label="ID Proof Type"   value={d.idProofType} />
-      </Section>
-
-      {/* ── Present Address ── */}
-      <Section title="Present Address" color="green">
-        <Field label="Flat / Room No."     value={d.presentFlat} />
-        <Field label="Building / Society"  value={d.presentBuilding} />
-        <Field label="Street"              value={d.presentStreet} />
-        <Field label="Area / Colony"       value={d.presentArea} />
-        <Field label="Landmark"            value={d.presentLandmark} />
-        <Field label="City"                value={d.presentCity} />
-        <Field label="District"            value={d.presentDistrict} />
-        <Field label="State"               value={d.presentState} />
-        <Field label="PIN Code"            value={d.presentPin} />
-        <Field label="Country"             value={d.presentCountry} />
-      </Section>
-
-      {/* ── Permanent Address ── */}
-      {d.sameAsPresent ? (
-        <div className="rounded-lg border border-slate-200 px-3 py-2 bg-white">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Permanent Address</span>
-          <p className="text-[11px] text-slate-400 mt-0.5">Same as present address</p>
-        </div>
-      ) : hasPermanent ? (
-        <Section title="Permanent / Native Address" color="green">
-          <Field label="Flat / Room No."     value={d.permanentFlat} />
-          <Field label="Building / Society"  value={d.permanentBuilding} />
-          <Field label="Street"              value={d.permanentStreet} />
-          <Field label="Area / Colony"       value={d.permanentArea} />
-          <Field label="Landmark"            value={d.permanentLandmark} />
-          <Field label="City"                value={d.permanentCity} />
-          <Field label="District"            value={d.permanentDistrict} />
-          <Field label="State"               value={d.permanentState} />
-          <Field label="PIN Code"            value={d.permanentPin} />
-          <Field label="Country"             value={d.permanentCountry} />
-        </Section>
-      ) : null}
-
-      {/* ── Education ── */}
-      {hasSSC && (
-        <>
-          <Section title="Education — SSC (10th Standard)" color="amber">
-            <Field label="Board"            value={d.ssc_board} />
-            <Field label="School Name"      value={d.ssc_schoolName} />
-            <Field label="Year of Passing"  value={d.ssc_yearOfPassing} />
-            <Field label="Percentage"       value={d.ssc_percentage} />
-          </Section>
-          <KTBlock level="SSC" count={d.ssc_ktCount} details={d.ssc_ktDetails} />
-        </>
-      )}
-
-      {hasHSC && (
-        <>
-          <Section title="Education — HSC (12th Standard)" color="amber">
-            <Field label="Board"            value={d.hsc_board} />
-            <Field label="College"          value={d.hsc_collegeName} />
-            <Field label="Stream"           value={d.hsc_stream} />
-            <Field label="Year of Passing"  value={d.hsc_yearOfPassing} />
-            <Field label="Percentage"       value={d.hsc_percentage} />
-          </Section>
-          <KTBlock level="HSC" count={d.hsc_ktCount} details={d.hsc_ktDetails} />
-        </>
-      )}
-
-      {hasDiploma && (
-        <>
-          <Section title="Education — Diploma" color="amber">
-            <Field label="Degree"           value={d.diploma_degree} />
-            <Field label="Specialization"   value={d.diploma_specialization} />
-            <Field label="Institute"        value={d.diploma_institute} />
-            <Field label="Year of Passing"  value={d.diploma_yearOfPassing} />
-            <Field label="Percentage"       value={d.diploma_percentage} />
-          </Section>
-          <KTBlock level="Diploma" count={d.diploma_ktCount} details={d.diploma_ktDetails} />
-        </>
-      )}
-
-      {hasGrad && (
-        <>
-          <Section title="Education — Graduation" color="amber">
-            <Field label="Degree"           value={d.grad_degree} />
-            <Field label="Specialization"   value={d.grad_specialization} />
-            <Field label="University"       value={d.grad_university} />
-            <Field label="Year of Passing"  value={d.grad_yearOfPassing} />
-            <Field label="Percentage"       value={d.grad_percentage} />
-          </Section>
-          <KTBlock level="Graduation" count={d.grad_ktCount} details={d.grad_ktDetails} />
-        </>
-      )}
-
-      {hasPostgrad && (
-        <>
-          <Section title="Education — Post-Graduation" color="amber">
-            <Field label="Degree"           value={d.postgrad_degree} />
-            <Field label="Specialization"   value={d.postgrad_specialization} />
-            <Field label="University"       value={d.postgrad_university} />
-            <Field label="Year of Passing"  value={d.postgrad_yearOfPassing} />
-            <Field label="Percentage"       value={d.postgrad_percentage} />
-          </Section>
-          <KTBlock level="Post-Graduation" count={d.postgrad_ktCount} details={d.postgrad_ktDetails} />
-        </>
-      )}
-
-      {hasEduSummary && (
-        <Section title="Education Summary (Synced to Student)" color="amber">
-          <Field label="Highest Qualification"   value={d.qualification} />
-          <Field label="Discipline / Stream"     value={d.discipline} />
-          <Field label="Overall Percentage"      value={d.percentage} />
-          <Field label="Education Remarks"       value={d.educationRemark} />
-        </Section>
-      )}
-
-      {/* ── Occupational ── */}
-      {hasOccupational && (
-        <Section title="Occupational Information" color="purple">
-          <Field label="Status"                    value={d.occupationalStatus} />
-          <Field label="Organisation / Company"    value={d.jobOrganisation} />
-          <Field label="Designation"               value={d.jobDesignation} />
-          <Field label="Total Experience (Years)"  value={d.totalOccupationYears} />
-          <Field label="Working Since — Year"      value={d.workingFromYears} />
-          <Field label="Working Since — Month"     value={d.workingFromMonths} />
-          <Field label="Job Description"           value={d.jobDescription} />
-          <Field label="Self-Employment Details"   value={d.selfEmploymentDetails} />
-        </Section>
-      )}
-
-      {/* ── Training ── */}
-      {(d.trainingProgrammeName || d.batchCode || d.trainingCategory) && (
-        <Section title="Training Programme" color="blue">
-          <Field label="Programme"     value={d.trainingProgrammeName} />
-          <Field label="Category"      value={d.trainingCategory} />
-          <Field label="Batch Code"    value={d.batchCode} />
-        </Section>
-      )}
-
-      {/* ── Payment ── */}
-      {hasPayment && (
-        <Section title="Payment Information" color="rose">
-          <Field label="Mode of Payment"   value={d.modeOfPayment} />
-          <Field label="Online Payment"    value={d.razorpayPaid ? 'Paid' : null} />
-          <Field label="Payment ID"        value={d.razorpayPaymentId} />
-          <Field label="Order ID"          value={d.razorpayOrderId} />
-          <Field label="Amount Paid"       value={d.razorpayAmount != null ? `₹${Number(d.razorpayAmount).toLocaleString('en-IN')}` : null} />
-          {d.payAtOfficeAudit && (
-            <Field
-              label="Pay-at-Office Auth"
-              value={`${d.payAtOfficeAudit.enabledByName || ''} — ${fmtDateTime(d.payAtOfficeAudit.enabledAt)}`}
-            />
-          )}
-        </Section>
-      )}
-
-      {/* ── Consent & Terms ── */}
-      {hasConsent && (
-        <Section title="Consent & Terms" color="slate">
-          <Field label="Terms Agreed"              value={d.termsAgreed} />
-          <Field label="Consent Acknowledged"      value={d.consentAcknowledged} />
-          <Field label="Experienced Consent"       value={d.experiencedConsentAcknowledged} />
-          <Field label="Eligibility Statement"     value={d.consentData?.eligibility} />
-          <Field label="Candidate Remark"          value={d.consentData?.candidateRemark} />
-        </Section>
-      )}
-    </div>
-  );
-}
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
@@ -431,7 +58,6 @@ export default function OnlineAdmissionPage() {
   const [rows, setRows]             = useState<AdmissionRow[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
   const [loading, setLoading]       = useState(true);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [busyId, setBusyId]         = useState<number | null>(null);
 
   // Filters
@@ -493,7 +119,6 @@ export default function OnlineAdmissionPage() {
         const d = await res.json().catch(() => ({}));
         throw new Error((d as { error?: string }).error || `Failed to ${verb}`);
       }
-      setExpandedId(null);
       refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : `Failed to ${verb}`);
@@ -658,12 +283,10 @@ export default function OnlineAdmissionPage() {
                       <td colSpan={8} className="py-10 text-center text-xs text-slate-400">No admissions found</td>
                     </tr>
                   ) : rows.map(r => {
-                    const isExpanded = expandedId === r.Inquiry_Id;
                     const isPending  = r.StatusCategory === 'open';
                     const busy       = busyId === r.Inquiry_Id;
                     return (
-                      <Fragment key={r.Inquiry_Id}>
-                        <tr className={`border-b border-slate-100 transition-colors ${isExpanded ? 'bg-blue-50/40' : 'hover:bg-slate-50'}`}>
+                      <tr key={r.Inquiry_Id} className="border-b border-slate-100 transition-colors hover:bg-slate-50">
                           <td className="py-1.5 px-3 font-mono text-slate-500 text-[11px]">{r.Inquiry_Id}</td>
                           <td className="py-1.5 px-3 font-semibold text-slate-700 max-w-[160px]">
                             <span className="truncate block">{r.Student_Name || '—'}</span>
@@ -684,11 +307,11 @@ export default function OnlineAdmissionPage() {
                           <td className="py-1.5 px-3">
                             <div className="flex items-center justify-center gap-0.5">
 
-                              {/* View / expand details */}
+                              {/* View — opens the filled admission form */}
                               <button
-                                title={isExpanded ? 'Hide details' : 'View all fields'}
-                                onClick={() => setExpandedId(isExpanded ? null : r.Inquiry_Id)}
-                                className={`p-1 rounded transition-colors ${isExpanded ? 'bg-blue-100 text-[#2E3093]' : 'text-slate-400 hover:bg-blue-50 hover:text-[#2E3093]'}`}
+                                title="View filled admission form"
+                                onClick={() => window.open(`/admission/${r.Inquiry_Id}`, '_blank')}
+                                className="p-1 rounded transition-colors text-slate-400 hover:bg-blue-50 hover:text-[#2E3093]"
                               >
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -757,16 +380,6 @@ export default function OnlineAdmissionPage() {
                             </div>
                           </td>
                         </tr>
-
-                        {/* Expanded detail row */}
-                        {isExpanded && (
-                          <tr className="border-b border-slate-200">
-                            <td colSpan={8} className="p-0">
-                              <DetailPanel inquiryId={r.Inquiry_Id} />
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
                     );
                   })}
                 </tbody>

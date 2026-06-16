@@ -119,6 +119,7 @@ const TABS = [
   { id: 'personal',     label: 'Personal Info' },
   { id: 'academic',     label: 'Academic Qualification' },
   { id: 'company',      label: 'Company Information' },
+  { id: 'transfer',     label: 'Transfer / Cancel' },
   { id: 'discussion',   label: 'Discussion' },
   { id: 'placement',    label: 'Placement' },
   { id: 'documents',    label: 'Documents' },
@@ -1091,6 +1092,128 @@ export default function EditStudentPage() {
             </div>
           )}
 
+          {/* ==== TRANSFER / CANCEL ==== */}
+          {activeTab === 'transfer' && (
+            <div className="space-y-3">
+              <SectionCard
+                title="Batch Transfer Flow"
+                icon={
+                  <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                }
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>Transferred</label>
+                    <select
+                      value={form.Transfered}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        set('Transfered', next);
+                        if (next !== 'Yes') {
+                          set('Moved_To_Course_Id', '');
+                          set('Moved_To_Batch_Code', '');
+                        }
+                      }}
+                      className={selectCls}
+                    >
+                      <option value="">— Select —</option>
+                      <option value="Yes">Yes</option>
+                      <option value="No">No</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Moved To Training Programme</label>
+                    <select
+                      value={form.Moved_To_Course_Id}
+                      onChange={(e) => {
+                        set('Moved_To_Course_Id', e.target.value);
+                        set('Moved_To_Batch_Code', '');
+                      }}
+                      className={selectCls}
+                      disabled={!isTransferred}
+                    >
+                      <option value="">— Select Course —</option>
+                      {courses.map((c) => (
+                        <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Moved To Batch</label>
+                    <select
+                      value={form.Moved_To_Batch_Code}
+                      onChange={(e) => set('Moved_To_Batch_Code', e.target.value)}
+                      className={selectCls}
+                      disabled={!isTransferred || !form.Moved_To_Course_Id}
+                    >
+                      <option value="">— Select Batch —</option>
+                      {movedToBatches.map((b) => (
+                        <option key={b.Batch_Id} value={b.Batch_code}>{b.Batch_code}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <StudentTransferBadge
+                      transferred={form.Transfered}
+                      movedToCourseName={courses.find((c) => String(c.Course_Id) === form.Moved_To_Course_Id)?.Course_Name}
+                      movedToBatchCode={form.Moved_To_Batch_Code}
+                    />
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard
+                title="Cancel Flow"
+                icon={
+                  <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                }
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>Status</label>
+                    <select value={form.Status_id} onChange={(e) => set('Status_id', e.target.value)} className={selectCls}>
+                      <option value="">— Select —</option>
+                      {statuses.map((s) => (
+                        <option key={s.id} value={s.id}>{s.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Status Date</label>
+                    <input type="date" value={form.Status_date} onChange={(e) => set('Status_date', e.target.value)} className={inputCls} />
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cancelStatus = statuses.find((s) => s.label.toLowerCase().includes('cancel'));
+                      if (cancelStatus) set('Status_id', String(cancelStatus.id));
+                      set('Status_date', new Date().toISOString().slice(0, 10));
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+                  >
+                    Mark As Cancelled
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      set('Status_id', '');
+                      set('Status_date', '');
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100"
+                  >
+                    Clear Status
+                  </button>
+                </div>
+              </SectionCard>
+            </div>
+          )}
+
           {/* ==== DISCUSSION ==== */}
           {activeTab === 'discussion' && (
             <div className="space-y-3">
@@ -1155,56 +1278,6 @@ export default function EditStudentPage() {
                 }
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelCls}>Transferred</label>
-                    <select
-                      value={form.Transfered}
-                      onChange={(e) => {
-                        const next = e.target.value;
-                        set('Transfered', next);
-                        if (next !== 'Yes') {
-                          set('Moved_To_Course_Id', '');
-                          set('Moved_To_Batch_Code', '');
-                        }
-                      }}
-                      className={selectCls}
-                    >
-                      <option value="">— Select —</option>
-                      <option value="Yes">Yes</option>
-                      <option value="No">No</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelCls}>Moved To Training Programme</label>
-                    <select
-                      value={form.Moved_To_Course_Id}
-                      onChange={(e) => {
-                        set('Moved_To_Course_Id', e.target.value);
-                        set('Moved_To_Batch_Code', '');
-                      }}
-                      className={selectCls}
-                      disabled={!isTransferred}
-                    >
-                      <option value="">— Select Course —</option>
-                      {courses.map((c) => (
-                        <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelCls}>Moved To Batch</label>
-                    <select
-                      value={form.Moved_To_Batch_Code}
-                      onChange={(e) => set('Moved_To_Batch_Code', e.target.value)}
-                      className={selectCls}
-                      disabled={!isTransferred || !form.Moved_To_Course_Id}
-                    >
-                      <option value="">— Select Batch —</option>
-                      {movedToBatches.map((b) => (
-                        <option key={b.Batch_Id} value={b.Batch_code}>{b.Batch_code}</option>
-                      ))}
-                    </select>
-                  </div>
                   <div>
                     <label className={labelCls}>SIT Performance (%)</label>
                     <input
