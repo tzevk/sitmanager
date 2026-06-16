@@ -46,9 +46,13 @@ function createClient(): Redis | null {
     client = new Redis(REDIS_URL, baseOptions);
   }
 
-  client.on('error', (err) => {
-    // Log but never throw — callers must handle Redis being unavailable
-    console.warn('[Redis] connection error:', err.message);
+  let lastRedisLog = 0;
+  client.on('error', () => {
+    const now = Date.now();
+    if (now - lastRedisLog > 30_000) {
+      lastRedisLog = now;
+      console.warn('[Redis] unavailable — falling back to in-memory cache');
+    }
   });
 
   return client;

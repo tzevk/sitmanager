@@ -46,9 +46,9 @@ export function getPool(): mysql.Pool {
 
     pool.on('connection', (conn) => {
       conn.on('error', (err) => {
-        console.error('[DB] connection error:', err.code);
-        if (err.code === 'PROTOCOL_CONNECTION_LOST' || err.code === 'ECONNRESET') {
-          console.warn('[DB] connection lost — pool will create a new one');
+        const expected = ['PROTOCOL_CONNECTION_LOST', 'ECONNRESET', 'ETIMEDOUT', 'PROTOCOL_SEQUENCE_TIMEOUT'];
+        if (!expected.includes(err.code)) {
+          console.error('[DB] connection error:', err.code);
         }
       });
     });
@@ -108,7 +108,10 @@ export function getLegacyPool(): mysql.Pool | null {
 
     legacyPool.on('connection', (conn) => {
       conn.on('error', (err) => {
-        console.error('[Legacy DB] connection error:', err.code);
+        const expected = ['PROTOCOL_CONNECTION_LOST', 'ECONNRESET', 'ETIMEDOUT'];
+        if (!expected.includes(err.code)) {
+          console.error('[Legacy DB] connection error:', err.code);
+        }
       });
     });
 

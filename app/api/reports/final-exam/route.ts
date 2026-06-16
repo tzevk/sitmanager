@@ -61,7 +61,6 @@ function parseClassBoundaries(passingCriteria: string | null): ClassBoundaries {
   };
 
   if (!passingCriteria || !passingCriteria.trim()) {
-    console.log('[Final Exam] No Passing_Criteria found, using defaults');
     return defaults;
   }
 
@@ -74,47 +73,34 @@ function parseClassBoundaries(passingCriteria: string | null): ClassBoundaries {
       if (typeof parsed === 'object' && parsed !== null) {
         const classes = Object.entries(parsed);
         if (classes.length > 0 && classes.every(([, val]) => typeof val === 'number')) {
-          console.log('[Final Exam] Parsed JSON Passing_Criteria:', parsed);
           return parsed as ClassBoundaries;
         }
       }
-    } catch (e) {
-      console.log('[Final Exam] Failed to parse JSON:', e);
+    } catch {
+      // fall through to CSV
     }
   }
 
   // Try CSV format: "A+:90,A:80,B+:70,B:60,C:50" or "A+ 90, A 80, B+ 70, B 60, C 50"
   try {
     const result: ClassBoundaries = {};
-    const pairs = criteria.split(/[,;]/); // Split by comma or semicolon
+    const pairs = criteria.split(/[,;]/);
 
     for (const pair of pairs) {
       const trimmed = pair.trim();
       if (!trimmed) continue;
-      
-      // Match patterns like "A+:90" or "A+ 90" or "A+=90"
       const match = trimmed.match(/^([ABC]\+?)\s*[:=\s]+\s*(\d+(?:\.\d+)?)$/);
       if (match) {
-        const className = match[1].trim();
         const threshold = parseFloat(match[2]);
-        if (!isNaN(threshold)) {
-          result[className] = threshold;
-          console.log(`[Final Exam] Parsed ${className} threshold: ${threshold}`);
-        }
-      } else {
-        console.log(`[Final Exam] Could not parse pair: "${trimmed}"`);
+        if (!isNaN(threshold)) result[match[1].trim()] = threshold;
       }
     }
 
-    if (Object.keys(result).length > 0) {
-      console.log('[Final Exam] Final parsed boundaries:', result);
-      return result;
-    }
-  } catch (e) {
-    console.log('[Final Exam] Failed to parse CSV format:', e);
+    if (Object.keys(result).length > 0) return result;
+  } catch {
+    // fall through to defaults
   }
 
-  console.log('[Final Exam] Falling back to default boundaries');
   return defaults;
 }
 
