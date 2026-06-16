@@ -155,12 +155,16 @@ export default function EditOnlineAdmissionPage() {
     postgrad_yearOfPassing: '', postgrad_percentage: '',
     postgrad_ktCount: '0', postgrad_ktDetails: [] as KTDetail[],
     educationRemark: '',
+    qualification: '', discipline: '', percentage: '',
     occupationalStatus: '', jobOrganisation: '', jobDescription: '',
     jobDesignation: '', workingFromYears: '', workingFromMonths: '',
     totalOccupationYears: '', selfEmploymentDetails: '',
     trainingProgrammeId: '', trainingProgrammeName: '',
     trainingCategory: '', batchCode: '',
-    modeOfPayment: '', idProofType: '',
+    idProofType: '',
+    modeOfPayment: '',
+    razorpayPaid: false, razorpayPaymentId: '', razorpayOrderId: '',
+    razorpayAmount: null as number | null,
     termsAgreed: false, consentAcknowledged: false,
     experiencedConsentAcknowledged: false,
     consentData: { eligibility: '', qualification: '', candidateRemark: '' },
@@ -287,6 +291,9 @@ export default function EditOnlineAdmissionPage() {
         postgrad_yearOfPassing: d.postgrad_yearOfPassing || '', postgrad_percentage: d.postgrad_percentage || '',
         postgrad_ktCount: d.postgrad_ktCount || '0', postgrad_ktDetails: d.postgrad_ktDetails || [],
         educationRemark: d.educationRemark || '',
+        qualification: d.qualification || '',
+        discipline: d.discipline || '',
+        percentage: d.percentage ? String(d.percentage) : '',
         occupationalStatus: d.occupationalStatus || '',
         jobOrganisation: d.jobOrganisation || '', jobDescription: d.jobDescription || '',
         jobDesignation: d.jobDesignation || '', workingFromYears: d.workingFromYears || '',
@@ -297,8 +304,12 @@ export default function EditOnlineAdmissionPage() {
         trainingProgrammeName: d.trainingProgrammeName || d.trainingProgram || '',
         trainingCategory: d.trainingCategory || '',
         batchCode: d.batchCode || '',
-        modeOfPayment: d.modeOfPayment || '',
         idProofType: d.idProofType || '',
+        modeOfPayment: d.modeOfPayment || '',
+        razorpayPaid: Boolean(d.razorpayPaid),
+        razorpayPaymentId: d.razorpayPaymentId || '',
+        razorpayOrderId: d.razorpayOrderId || '',
+        razorpayAmount: d.razorpayAmount != null ? Number(d.razorpayAmount) : null,
         termsAgreed: Boolean(d.termsAgreed),
         consentAcknowledged: Boolean(d.consentAcknowledged),
         experiencedConsentAcknowledged: Boolean(d.experiencedConsentAcknowledged),
@@ -375,9 +386,12 @@ export default function EditOnlineAdmissionPage() {
     if (action === 'reject' && !confirm('Reject this admission? Status will be set to Cancelled.')) return;
     setActionType(action); setSubmitting(true);
     try {
+      // Strip read-only Razorpay fields — never let the admin form overwrite payment records
+      const { razorpayPaid, razorpayPaymentId, razorpayOrderId, razorpayAmount, ...editableData } = formData;
+      void razorpayPaid; void razorpayPaymentId; void razorpayOrderId; void razorpayAmount;
       const payload = action === 'reject'
         ? { statusAction: 'reject' }
-        : { ...formData, statusAction: action };
+        : { ...editableData, statusAction: action };
       const res = await fetch(`/api/online-admission/${studentId}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -687,6 +701,18 @@ export default function EditOnlineAdmissionPage() {
                 <label className={lbl}>Family Contact</label>
                 <input type="tel" value={formData.familyContact} onChange={e => set('familyContact', e.target.value)} className={inp} />
               </div>
+              <div>
+                <label className={lbl}>ID Proof Type</label>
+                <select value={formData.idProofType} onChange={e => set('idProofType', e.target.value)} className={sel}>
+                  <option value="">— Select —</option>
+                  <option value="Aadhar Card">Aadhar Card</option>
+                  <option value="PAN Card">PAN Card</option>
+                  <option value="Passport">Passport</option>
+                  <option value="Voter ID">Voter ID</option>
+                  <option value="Driving Licence">Driving Licence</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
             </div>
           </SectionCard>
 
@@ -931,6 +957,29 @@ export default function EditOnlineAdmissionPage() {
             <label className={lbl}>Education Remarks</label>
             <textarea value={formData.educationRemark} onChange={e => set('educationRemark', e.target.value)} rows={2} className={txta} />
           </div>
+
+          {/* Education Summary — synced to student record on accept */}
+          <div className="mt-4 pt-3 border-t border-gray-100">
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">Education Summary (synced to student on accept)</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-2">
+              <div>
+                <label className={lbl}>Highest Qualification</label>
+                <select value={formData.qualification} onChange={e => set('qualification', e.target.value)} className={sel}>
+                  <option value="">— Select —</option>
+                  <option>SSC</option><option>HSC</option><option>Diploma</option>
+                  <option>Graduate</option><option>Post Graduate</option>
+                </select>
+              </div>
+              <div>
+                <label className={lbl}>Discipline / Stream</label>
+                <input type="text" value={formData.discipline} onChange={e => set('discipline', e.target.value)} className={inp} placeholder="e.g. Mechanical, Computers" />
+              </div>
+              <div>
+                <label className={lbl}>Overall Percentage</label>
+                <input type="text" value={formData.percentage} onChange={e => set('percentage', e.target.value)} className={inp} placeholder="e.g. 72.5" />
+              </div>
+            </div>
+          </div>
         </SectionCard>
       )}
 
@@ -1144,21 +1193,38 @@ export default function EditOnlineAdmissionPage() {
             )}
           </div>
 
-          {/* ID Proof */}
-          <div className="mt-5 pt-4 border-t border-gray-100">
-            <div className="max-w-xs">
-              <label className={lbl}>ID Proof Type</label>
-              <select value={formData.idProofType} onChange={e => set('idProofType', e.target.value)} className={sel}>
-                <option value="">— Select —</option>
-                <option value="Aadhar Card">Aadhar Card</option>
-                <option value="PAN Card">PAN Card</option>
-                <option value="Passport">Passport</option>
-                <option value="Voter ID">Voter ID</option>
-                <option value="Driving Licence">Driving Licence</option>
-                <option value="Other">Other</option>
-              </select>
+          {/* Razorpay payment details — read-only */}
+          {(formData.razorpayPaid || formData.razorpayPaymentId) && (
+            <div className="mt-5 pt-4 border-t border-gray-100">
+              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">Online Payment (Razorpay)</p>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 text-[11px]">
+                <div>
+                  <p className="font-semibold text-gray-500 mb-0.5">Status</p>
+                  <p className={`font-bold ${formData.razorpayPaid ? 'text-emerald-700' : 'text-amber-600'}`}>
+                    {formData.razorpayPaid ? 'Paid' : 'Not confirmed'}
+                  </p>
+                </div>
+                {formData.razorpayAmount != null && (
+                  <div>
+                    <p className="font-semibold text-gray-500 mb-0.5">Amount</p>
+                    <p className="font-bold text-gray-800">₹{Number(formData.razorpayAmount).toLocaleString('en-IN')}</p>
+                  </div>
+                )}
+                {formData.razorpayPaymentId && (
+                  <div className="md:col-span-2">
+                    <p className="font-semibold text-gray-500 mb-0.5">Payment ID</p>
+                    <p className="font-mono text-gray-700 break-all">{formData.razorpayPaymentId}</p>
+                  </div>
+                )}
+                {formData.razorpayOrderId && (
+                  <div className="md:col-span-2">
+                    <p className="font-semibold text-gray-500 mb-0.5">Order ID</p>
+                    <p className="font-mono text-gray-700 break-all">{formData.razorpayOrderId}</p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </SectionCard>
       )}
 
