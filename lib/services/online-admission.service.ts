@@ -33,10 +33,15 @@ export interface AdmissionRow {
   Batch_code: string;
   Admission_Date: string | null;
   PayloadUpdatedAt: string | null;
+  PayloadCreatedAt: string | null;
   Status_id: number | null;
   StatusText: string;
   StatusLabel: string;
   StatusCategory: StatusCategory;
+  RazorpayPaid: boolean;
+  RazorpayPaymentId: string;
+  RazorpayOrderId: string;
+  RazorpayAmount: number | null;
   IsLegacy: 0 | 1;
 }
 
@@ -1054,7 +1059,16 @@ export async function listOnlineAdmissions(
        ${smAdmissionDt} AS Admission_Date,
        ${smStatusId} AS Status_id,
        ${statusTextExpr} AS StatusText,
-       oap.Updated_At AS PayloadUpdatedAt
+       oap.Created_At AS PayloadCreatedAt,
+       oap.Updated_At AS PayloadUpdatedAt,
+       CASE
+         WHEN JSON_EXTRACT(oap.Payload, '$.razorpayPaid') = true THEN 1
+         WHEN LOWER(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.razorpayPaid'))) IN ('true', '1', 'yes', 'paid') THEN 1
+         ELSE 0
+       END AS RazorpayPaid,
+       COALESCE(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.razorpayPaymentId')), '') AS RazorpayPaymentId,
+       COALESCE(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.razorpayOrderId')), '') AS RazorpayOrderId,
+       CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.razorpayAmount')), '') AS DECIMAL(12,2)) AS RazorpayAmount
      FROM ${PAYLOAD_TABLE} oap
        JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = oap.Inquiry_Id
      ${smJoin}
@@ -1108,7 +1122,7 @@ export async function listOnlineAdmissions(
     total = Number((countRows as any[])[0]?.total || 0);
 
     [newRows] = await pool.query(
-      `${buildNewQuery(true)} WHERE ${newConds.join(' AND ')} ORDER BY COALESCE(${studentMasterTable ? 'sm.Admission_Dt' : 'oap.Created_At'}, oap.Created_At) DESC, si.Inquiry_Id DESC LIMIT ? OFFSET ?`,
+      `${buildNewQuery(true)} WHERE ${newConds.join(' AND ')} ORDER BY COALESCE(oap.Updated_At, oap.Created_At) DESC, oap.Created_At DESC, si.Inquiry_Id DESC LIMIT ? OFFSET ?`,
       [...newParams, limit, offset]
     ) as [any[], any];
   } catch (e: any) {
@@ -1121,7 +1135,7 @@ export async function listOnlineAdmissions(
       total = Number((countRows as any[])[0]?.total || 0);
 
       [newRows] = await pool.query(
-        `${buildNewQuery(false)} WHERE ${newConds.join(' AND ')} ORDER BY oap.Created_At DESC, si.Inquiry_Id DESC LIMIT ? OFFSET ?`,
+        `${buildNewQuery(false)} WHERE ${newConds.join(' AND ')} ORDER BY COALESCE(oap.Updated_At, oap.Created_At) DESC, oap.Created_At DESC, si.Inquiry_Id DESC LIMIT ? OFFSET ?`,
         [...newParams, limit, offset]
       ) as [any[], any];
     } catch (e2: any) {
@@ -1163,8 +1177,13 @@ export async function listOnlineAdmissions(
     return {
       ...r,
       Admission_Date: safeDate(r.Admission_Date),
+      PayloadCreatedAt: safeDate(r.PayloadCreatedAt),
       PayloadUpdatedAt: safeDate(r.PayloadUpdatedAt),
       DOB: safeDate(r.DOB),
+      RazorpayPaid: Boolean(r.RazorpayPaid),
+      RazorpayPaymentId: String(r.RazorpayPaymentId || ''),
+      RazorpayOrderId: String(r.RazorpayOrderId || ''),
+      RazorpayAmount: r.RazorpayAmount != null ? Number(r.RazorpayAmount) : null,
       StatusLabel: label,
       StatusCategory: resolveCategory(Number(r.Status_id), label),
     };

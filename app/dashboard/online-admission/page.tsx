@@ -19,9 +19,14 @@ interface AdmissionRow {
   Batch_code: string | null;
   Admission_Date: string | null;
   PayloadUpdatedAt: string | null;
+  PayloadCreatedAt: string | null;
   Status_id: number | null;
   StatusLabel: string;
   StatusCategory: 'open' | 'accepted' | 'closed';
+  RazorpayPaid: boolean;
+  RazorpayPaymentId: string;
+  RazorpayOrderId: string;
+  RazorpayAmount: number | null;
 }
 
 interface Pagination { page: number; limit: number; total: number; totalPages: number }
@@ -45,6 +50,11 @@ function fmtDateTime(s: string | null | undefined): string {
       hour: '2-digit', minute: '2-digit',
     });
   } catch { return s; }
+}
+
+function fmtCurrency(amount: number | null | undefined): string {
+  if (amount == null || Number.isNaN(Number(amount))) return '—';
+  return `₹${Number(amount).toLocaleString('en-IN')}`;
 }
 
 
@@ -128,7 +138,7 @@ export default function OnlineAdmissionPage() {
   };
 
   const handleExport = () => {
-    const headers = ['Inquiry Id', 'Name', 'Email', 'Mobile', 'Batch', 'Status', 'Last Updated'];
+    const headers = ['Inquiry Id', 'Name', 'Email', 'Mobile', 'Batch', 'Payment Status', 'Payment Amount', 'Payment ID', 'Status', 'Last Updated'];
     const csvRows = [
       headers.join(','),
       ...rows.map(r => [
@@ -137,6 +147,9 @@ export default function OnlineAdmissionPage() {
         `"${(r.Email || '').replace(/"/g, '""')}"`,
         r.Present_Mobile || '',
         r.Batch_code || '',
+        r.RazorpayPaid ? 'Paid' : (r.RazorpayPaymentId ? 'Payment Logged' : ''),
+        r.RazorpayAmount != null ? String(r.RazorpayAmount) : '',
+        `"${(r.RazorpayPaymentId || '').replace(/"/g, '""')}"`,
         `"${r.StatusLabel}"`,
         r.PayloadUpdatedAt ? new Date(r.PayloadUpdatedAt).toLocaleDateString('en-IN') : '',
       ].join(',')),
@@ -263,6 +276,7 @@ export default function OnlineAdmissionPage() {
                     <th className="text-left py-2 px-3 font-bold">Email</th>
                     <th className="text-left py-2 px-3 font-bold">Mobile</th>
                     <th className="text-left py-2 px-3 font-bold">Batch</th>
+                    <th className="text-left py-2 px-3 font-bold">Payment</th>
                     <th className="text-left py-2 px-3 font-bold">Status</th>
                     <th className="text-left py-2 px-3 font-bold whitespace-nowrap">Last Updated</th>
                     <th className="text-center py-2 px-3 font-bold">Actions</th>
@@ -271,7 +285,7 @@ export default function OnlineAdmissionPage() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="py-10 text-center">
+                      <td colSpan={9} className="py-10 text-center">
                         <div className="inline-flex flex-col items-center gap-1.5">
                           <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                           <span className="text-xs text-slate-400">Loading…</span>
@@ -280,7 +294,7 @@ export default function OnlineAdmissionPage() {
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-10 text-center text-xs text-slate-400">No admissions found</td>
+                      <td colSpan={9} className="py-10 text-center text-xs text-slate-400">No admissions found</td>
                     </tr>
                   ) : rows.map(r => {
                     const isPending  = r.StatusCategory === 'open';
@@ -297,12 +311,24 @@ export default function OnlineAdmissionPage() {
                           <td className="py-1.5 px-3 font-mono text-slate-600 whitespace-nowrap">{r.Present_Mobile || '—'}</td>
                           <td className="py-1.5 px-3 text-slate-600 whitespace-nowrap font-semibold">{r.Batch_code || '—'}</td>
                           <td className="py-1.5 px-3">
+                            {r.RazorpayPaid || r.RazorpayPaymentId ? (
+                              <div className="flex flex-col leading-tight">
+                                <span className={`inline-flex w-fit items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${r.RazorpayPaid ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                  {r.RazorpayPaid ? 'Paid' : 'Payment Logged'}
+                                </span>
+                                <span className="text-[10px] text-slate-500 mt-0.5">{fmtCurrency(r.RazorpayAmount)}</span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+                          <td className="py-1.5 px-3">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusBadgeCls(r.StatusCategory)}`}>
                               {r.StatusLabel}
                             </span>
                           </td>
                           <td className="py-1.5 px-3 text-slate-500 whitespace-nowrap text-[11px]">
-                            {fmtDateTime(r.PayloadUpdatedAt || r.Admission_Date)}
+                            {fmtDateTime(r.PayloadUpdatedAt || r.PayloadCreatedAt || r.Admission_Date)}
                           </td>
                           <td className="py-1.5 px-3">
                             <div className="flex items-center justify-center gap-0.5">
