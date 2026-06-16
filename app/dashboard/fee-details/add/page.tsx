@@ -12,7 +12,27 @@ interface StudentRow {
   Batch_code: string | null;
   Present_Mobile: string | null;
   Email: string | null;
+  Transfered: string;
+  Moved_To_Batch_Code: string;
+  Cancelled: number;
 }
+
+const StatusTag = ({ row }: { row: Pick<StudentRow, 'Transfered' | 'Moved_To_Batch_Code' | 'Cancelled'> }) => {
+  if (Number(row.Cancelled) === 1)
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 border border-red-200 px-1.5 py-0.5 text-[10px] font-bold text-red-700 whitespace-nowrap shrink-0">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />Cancelled
+      </span>
+    );
+  if (row.Transfered?.toLowerCase() === 'yes')
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 whitespace-nowrap shrink-0">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+        Transferred{row.Moved_To_Batch_Code ? <span className="font-mono">→ {row.Moved_To_Batch_Code}</span> : null}
+      </span>
+    );
+  return null;
+};
 
 interface Bank { Id: number; Bank_Name: string; }
 interface Particular { label: string; amount: number | null; fixed: boolean; }
@@ -74,6 +94,7 @@ export default function AddFeeDetailsPage() {
 
   // Selected student data
   const [studentId, setStudentId] = useState('');
+  const [selectedStudent, setSelectedStudent] = useState<StudentRow | null>(null);
   const [data, setData] = useState<FeeDetailsData | null>(null);
   const [loadingForm, setLoadingForm] = useState(false);
 
@@ -153,6 +174,7 @@ export default function AddFeeDetailsPage() {
 
   const selectStudent = (s: StudentRow) => {
     setStudentId(String(s.Student_Id));
+    setSelectedStudent(s);
     setSearch(`${s.Student_Name} (${s.Student_Id})`);
     setShowDropdown(false);
     loadFormData(String(s.Student_Id));
@@ -274,7 +296,10 @@ export default function AddFeeDetailsPage() {
                     className="w-full text-left px-3 py-2 text-xs hover:bg-[#2E3093]/5 flex items-center justify-between gap-3 border-b border-slate-100 last:border-0"
                   >
                     <span className="font-medium text-slate-800 truncate">{s.Student_Name}</span>
-                    <span className="text-slate-400 shrink-0">{s.Student_Id}{s.Batch_code ? ` · ${s.Batch_code}` : ''}</span>
+                    <span className="flex items-center gap-1.5 shrink-0">
+                      <StatusTag row={s} />
+                      <span className="text-slate-400">{s.Student_Id}{s.Batch_code ? ` · ${s.Batch_code}` : ''}</span>
+                    </span>
                   </button>
                 ))}
               </div>
@@ -294,7 +319,10 @@ export default function AddFeeDetailsPage() {
 
           {/* Row 1: Student Name | Student Id | Payment Type | Bank */}
           <div className="flex flex-col gap-1">
-            <label className={lbl}>Student Name</label>
+            <div className="flex items-center gap-2">
+              <label className={lbl}>Student Name</label>
+              {selectedStudent && <StatusTag row={selectedStudent} />}
+            </div>
             <input className={ctrlReadOnly} value={data?.student.Student_Name || ''} readOnly />
           </div>
           <div className="flex flex-col gap-1">
