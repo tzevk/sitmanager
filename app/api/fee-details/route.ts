@@ -46,18 +46,11 @@ export async function GET(req: NextRequest) {
            f.Amount,
            COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
            COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
-           COALESCE(am.Cancelled, 0) AS Cancelled
+           0 AS Cancelled
          FROM s_fees_mst f
          LEFT JOIN student_master sm ON sm.Student_Id = f.Student_Id
          LEFT JOIN course_mst cm ON cm.Course_Id = sm.Course_Id
          LEFT JOIN batch_mst bm  ON bm.Batch_code = sm.Batch_Code
-         LEFT JOIN (
-           SELECT Student_Id,
-             MAX(CASE WHEN LOWER(TRIM(CAST(COALESCE(Cancel,'') AS CHAR))) IN ('yes','1','true') THEN 1 ELSE 0 END) AS Cancelled
-           FROM admission_master
-           WHERE IsDelete = 0 OR IsDelete IS NULL
-           GROUP BY Student_Id
-         ) am ON am.Student_Id = f.Student_Id
          WHERE f.TypeR = 'C'
            AND COALESCE(NULLIF(TRIM(f.Fees_Code), ''), '') <> ''
            AND (f.IsDelete = 0 OR f.IsDelete IS NULL)
