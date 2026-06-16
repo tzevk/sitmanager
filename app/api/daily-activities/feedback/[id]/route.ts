@@ -78,126 +78,187 @@ function writeSectionTitle(ws: ExcelJS.Worksheet, rowNo: number, title: string, 
   return rowNo + 1;
 }
 
-function writeFormViewSheet(params: {
+function parseNumericRating(value: unknown, ratingOptions: string[]): number | null {
+  if (value == null) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const n = Number(trimmed);
+    if (Number.isFinite(n)) return n;
+    const idx = ratingOptions.findIndex((opt) => opt.trim().toLowerCase() === trimmed.toLowerCase());
+    if (idx >= 0) return idx + 1;
+    return null;
+  }
+  return null;
+}
+
+function formatAvg(sum: number, count: number): string {
+  if (!count) return '-';
+  return (sum / count).toFixed(2);
+}
+
+function writeFeedbackReportSheet(params: {
   ws: ExcelJS.Worksheet;
   row: TrainingFeedbackRow;
   submissions: FeedbackSubmissionRow[];
   schema: FeedbackSchemaForExport;
 }) {
   const { ws, row, submissions, schema } = params;
-  const maxTrainerColumns = submissions.reduce((max, s) => {
-    const parsed = parseAnswersJson(s.answers_json);
-    const count = Array.isArray(parsed?.trainers?.entries) ? parsed.trainers.entries.length : 0;
-    return Math.max(max, count);
-  }, 1);
-  const totalCols = Math.max(2, 1 + maxTrainerColumns);
+  const totalCols = 6;
+  ws.columns = [
+    { width: 38 },
+    { width: 16 },
+    { width: 14 },
+    { width: 28 },
+    { width: 18 },
+    { width: 40 },
+  ];
 
-  ws.columns = Array.from({ length: totalCols }, (_, idx) => ({
-    width: idx === 0 ? 42 : 20,
-  }));
+  const executiveTotals: Record<string, { sum: number; count: number }> = {};
+  const trainerTotals: Record<string, { sum: number; count: number }> = {};
+  const comments: Array<{ studentName: string; studentCode: string; section: string; commentType: string; comment: string }> = [];
+  const ratingOptions = (schema.ratingOptions || []).map((opt) => String(opt || ''));
+
+  for (const s of submissions) {
+    const parsed = parseAnswersJson(s.answers_json);
+
+    const executiveRatings = parsed?.trainingExecutive?.ratings && typeof parsed.trainingExecutive.ratings === 'object'
+      ? parsed.trainingExecutive.ratings
+      : {};
+    for (const q of schema.trainingExecutive?.questions || []) {
+      const qid = String(q?.id || '').trim();
+      if (!qid) continue;
+      const rating = parseNumericRating(executiveRatings[qid], ratingOptions);
+      if (rating == null) continue;
+      if (!executiveTotals[qid]) executiveTotals[qid] = { sum: 0, count: 0 };
+      executiveTotals[qid].sum += rating;
+      executiveTotals[qid].count += 1;
+    }
+
+    const trainerEntries = Array.isArray(parsed?.trainers?.entries) ? parsed.trainers.entries : [];
+    for (const entry of trainerEntries) {
+      const ratings = entry?.ratings && typeof entry.ratings === 'object' ? entry.ratings : {};
+      for (const q of schema.trainers?.questions || []) {
+        const qid = String(q?.id || '').trim();
+        if (!qid) continue;
+        const rating = parseNumericRating(ratings[qid], ratingOptions);
+        if (rating == null) continue;
+        if (!trainerTotals[qid]) trainerTotals[qid] = { sum: 0, count: 0 };
+        trainerTotals[qid].sum += rating;
+        trainerTotals[qid].count += 1;
+      }
+    }
+
+    const studentName = s.student_name || '';
+    const studentCode = s.student_code || '';
+    const executiveComment = String(parsed?.trainingExecutive?.otherSuggestions ?? '').trim();
+    if (executiveComment) {
+      comments.push({
+        studentName,
+        studentCode,
+        section: schema.trainingExecutive?.title || 'Training Executive',
+        commentType: schema.trainingExecutive?.otherSuggestionsLabel || 'Other Suggestions',
+        comment: executiveComment,
+      });
+    }
+    const trainerView = String(parsed?.trainers?.viewsOnTrainer ?? '').trim();
+    if (trainerView) {
+      comments.push({
+        studentName,
+        studentCode,
+        section: schema.trainers?.title || 'Trainers',
+        commentType: schema.trainers?.viewsOnTrainerLabel || 'Views on Trainer',
+        comment: trainerView,
+      });
+    }
+    const siteVisitView = String(parsed?.trainers?.viewsOnSiteVisit ?? '').trim();
+    if (siteVisitView) {
+      comments.push({
+        studentName,
+        studentCode,
+        section: schema.trainers?.title || 'Trainers',
+        commentType: schema.trainers?.viewsOnSiteVisitLabel || 'Views on Site Visit',
+        comment: siteVisitView,
+      });
+    }
+  }
 
   let rowNo = 1;
   ws.mergeCells(rowNo, 1, rowNo, totalCols);
   const titleCell = ws.getCell(rowNo, 1);
-  titleCell.value = `${row.training_program || 'Training Feedback'}${row.batch_no ? ` - Batch ${row.batch_no}` : ''}`;
+  titleCell.value = `${row.training_program || 'Training Feedback'} Report${row.batch_no ? ` - Batch ${row.batch_no}` : ''}`;
   titleCell.font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
   titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E3093' } };
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
   ws.getRow(rowNo).height = 24;
+  rowNo += 1;
+
+  ws.getCell(rowNo, 1).value = 'Stage %';
+  ws.getCell(rowNo, 2).value = row.stage_percent;
+  ws.getCell(rowNo, 3).value = 'Feedback Date';
+  ws.getCell(rowNo, 4).value = row.feedback_date || '';
+  ws.getCell(rowNo, 5).value = 'Total Responses';
+  ws.getCell(rowNo, 6).value = submissions.length;
   rowNo += 2;
 
-  submissions.forEach((submission, submissionIndex) => {
-    const parsed = parseAnswersJson(submission.answers_json);
-    const trainingProgram = parsed?.trainingProgram && typeof parsed.trainingProgram === 'object' ? parsed.trainingProgram : {};
-    const executiveRatings = parsed?.trainingExecutive?.ratings && typeof parsed.trainingExecutive.ratings === 'object'
-      ? parsed.trainingExecutive.ratings
-      : {};
-    const trainerEntries = Array.isArray(parsed?.trainers?.entries) ? parsed.trainers.entries : [];
+  rowNo = writeSectionTitle(ws, rowNo, schema.trainingExecutive?.title || 'Training Executive', totalCols);
+  ws.getCell(rowNo, 1).value = 'Question';
+  ws.getCell(rowNo, 2).value = 'Average Rating';
+  ws.getCell(rowNo, 3).value = 'Responses Count';
+  ws.getRow(rowNo).font = { bold: true };
+  rowNo += 1;
+  for (const q of schema.trainingExecutive?.questions || []) {
+    const qid = String(q?.id || '').trim();
+    if (!qid) continue;
+    const metric = executiveTotals[qid] || { sum: 0, count: 0 };
+    ws.getCell(rowNo, 1).value = String(q?.label || qid);
+    ws.getCell(rowNo, 2).value = formatAvg(metric.sum, metric.count);
+    ws.getCell(rowNo, 3).value = metric.count;
+    rowNo += 1;
+  }
+  rowNo += 1;
 
-    ws.mergeCells(rowNo, 1, rowNo, totalCols);
-    const blockTitle = ws.getCell(rowNo, 1);
-    blockTitle.value = `Response ${submissionIndex + 1}`;
-    blockTitle.font = { bold: true, color: { argb: 'FF1F2937' } };
-    blockTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+  rowNo = writeSectionTitle(ws, rowNo, schema.trainers?.title || 'Trainers', totalCols);
+  ws.getCell(rowNo, 1).value = 'Question';
+  ws.getCell(rowNo, 2).value = 'Average Rating';
+  ws.getCell(rowNo, 3).value = 'Ratings Count';
+  ws.getRow(rowNo).font = { bold: true };
+  rowNo += 1;
+  for (const q of schema.trainers?.questions || []) {
+    const qid = String(q?.id || '').trim();
+    if (!qid) continue;
+    const metric = trainerTotals[qid] || { sum: 0, count: 0 };
+    ws.getCell(rowNo, 1).value = String(q?.label || qid);
+    ws.getCell(rowNo, 2).value = formatAvg(metric.sum, metric.count);
+    ws.getCell(rowNo, 3).value = metric.count;
     rowNo += 1;
+  }
+  rowNo += 1;
 
-    const submittedDate = submission.submitted_at ? new Date(submission.submitted_at).toLocaleString('en-IN') : '';
-    ws.getCell(rowNo, 1).value = 'Student Name';
-    ws.getCell(rowNo, 2).value = submission.student_name || '';
-    rowNo += 1;
-    ws.getCell(rowNo, 1).value = 'Student Code';
-    ws.getCell(rowNo, 2).value = submission.student_code || '';
-    rowNo += 1;
-    ws.getCell(rowNo, 1).value = 'Student ID';
-    ws.getCell(rowNo, 2).value = submission.student_id;
-    rowNo += 1;
-    ws.getCell(rowNo, 1).value = 'Submitted At';
-    ws.getCell(rowNo, 2).value = submittedDate;
-    rowNo += 1;
+  rowNo = writeSectionTitle(ws, rowNo, 'Comments', totalCols);
+  ws.getCell(rowNo, 1).value = 'Student Name';
+  ws.getCell(rowNo, 2).value = 'Roll Number';
+  ws.getCell(rowNo, 3).value = 'Section';
+  ws.getCell(rowNo, 4).value = 'Comment Type';
+  ws.getCell(rowNo, 5).value = 'Comment';
+  ws.getRow(rowNo).font = { bold: true };
+  rowNo += 1;
 
-    rowNo = writeSectionTitle(ws, rowNo, 'Training Program', totalCols);
-    ws.getCell(rowNo, 1).value = 'Question';
-    ws.getCell(rowNo, 2).value = 'Response';
-    ws.getRow(rowNo).font = { bold: true };
+  if (!comments.length) {
+    ws.mergeCells(rowNo, 1, rowNo, 5);
+    ws.getCell(rowNo, 1).value = 'No comments submitted.';
     rowNo += 1;
-    for (const q of schema.trainingProgram?.questions || []) {
-      const qid = String(q?.id || '').trim();
-      if (!qid) continue;
-      ws.getCell(rowNo, 1).value = String(q?.label || qid);
-      ws.getCell(rowNo, 2).value = String(trainingProgram?.[qid] ?? '');
+  } else {
+    for (const c of comments) {
+      ws.getCell(rowNo, 1).value = c.studentName;
+      ws.getCell(rowNo, 2).value = c.studentCode;
+      ws.getCell(rowNo, 3).value = c.section;
+      ws.getCell(rowNo, 4).value = c.commentType;
+      ws.getCell(rowNo, 5).value = c.comment;
       rowNo += 1;
     }
-
-    rowNo = writeSectionTitle(
-      ws,
-      rowNo,
-      schema.trainingExecutive?.title || 'Training Executive',
-      totalCols,
-    );
-    ws.getCell(rowNo, 1).value = 'Question';
-    ws.getCell(rowNo, 2).value = 'Rating';
-    ws.getRow(rowNo).font = { bold: true };
-    rowNo += 1;
-    for (const q of schema.trainingExecutive?.questions || []) {
-      const qid = String(q?.id || '').trim();
-      if (!qid) continue;
-      ws.getCell(rowNo, 1).value = String(q?.label || qid);
-      ws.getCell(rowNo, 2).value = String(executiveRatings?.[qid] ?? '');
-      rowNo += 1;
-    }
-    ws.getCell(rowNo, 1).value = schema.trainingExecutive?.otherSuggestionsLabel || 'Other Suggestions';
-    ws.getCell(rowNo, 2).value = String(parsed?.trainingExecutive?.otherSuggestions ?? '');
-    rowNo += 1;
-
-    rowNo = writeSectionTitle(
-      ws,
-      rowNo,
-      schema.trainers?.title || 'Trainers',
-      totalCols,
-    );
-    ws.getCell(rowNo, 1).value = 'Question';
-    for (let i = 0; i < maxTrainerColumns; i += 1) {
-      ws.getCell(rowNo, 2 + i).value = String(trainerEntries?.[i]?.trainerName || `Trainer ${i + 1}`);
-    }
-    ws.getRow(rowNo).font = { bold: true };
-    rowNo += 1;
-    for (const q of schema.trainers?.questions || []) {
-      const qid = String(q?.id || '').trim();
-      if (!qid) continue;
-      ws.getCell(rowNo, 1).value = String(q?.label || qid);
-      for (let i = 0; i < maxTrainerColumns; i += 1) {
-        const rating = trainerEntries?.[i]?.ratings?.[qid];
-        ws.getCell(rowNo, 2 + i).value = String(rating ?? '');
-      }
-      rowNo += 1;
-    }
-    ws.getCell(rowNo, 1).value = schema.trainers?.viewsOnTrainerLabel || 'Views on Trainer';
-    ws.getCell(rowNo, 2).value = String(parsed?.trainers?.viewsOnTrainer ?? '');
-    rowNo += 1;
-    ws.getCell(rowNo, 1).value = schema.trainers?.viewsOnSiteVisitLabel || 'Views on Site Visit';
-    ws.getCell(rowNo, 2).value = String(parsed?.trainers?.viewsOnSiteVisit ?? '');
-    rowNo += 2;
-  });
+  }
 
   ws.eachRow((r) => {
     r.eachCell((cell, colNumber) => {
@@ -207,7 +268,8 @@ function writeFormViewSheet(params: {
         left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
         right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
       };
-      cell.alignment = { vertical: 'top', wrapText: true, horizontal: colNumber === 1 ? 'left' : 'center' };
+      const leftAlignedCols = new Set([1, 3, 4, 5]);
+      cell.alignment = { vertical: 'top', wrapText: true, horizontal: leftAlignedCols.has(colNumber) ? 'left' : 'center' };
     });
   });
 }
@@ -224,7 +286,7 @@ async function buildFeedbackWorkbook(params: {
   const schema = parseFeedbackSchema(row.schema_json);
 
   const ws = workbook.addWorksheet('Feedback Responses');
-  writeFormViewSheet({ ws, row, submissions, schema });
+  writeFeedbackReportSheet({ ws, row, submissions, schema });
 
   return workbook.xlsx.writeBuffer();
 }
