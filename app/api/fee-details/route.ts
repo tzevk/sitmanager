@@ -71,24 +71,12 @@ export async function GET(req: NextRequest) {
 
     if (mode === 'students') {
       const [studentRows] = await getPool().query<any[]>(
-        `SELECT
-           sm.Student_Id,
-           sm.Student_Name,
-           sm.Present_Mobile,
-           sm.Email,
-           cm.Course_Name,
-           bm.Batch_code,
-           COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
-           COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
-           COALESCE(am.Cancelled, 0) AS Cancelled
-         FROM student_master sm
-         LEFT JOIN course_mst cm ON cm.Course_Id = sm.Course_Id
-         LEFT JOIN batch_mst bm ON bm.Batch_code = sm.Batch_Code
-         ${amStatusJoin}
-         WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-           AND COALESCE(NULLIF(TRIM(sm.Student_Name), ''), '') <> ''
-         ORDER BY sm.Student_Id DESC
-         LIMIT 300`
+        `SELECT Student_Id, Student_Name, Batch_Code AS Batch_code
+         FROM student_master
+         WHERE (IsDelete = 0 OR IsDelete IS NULL)
+           AND COALESCE(NULLIF(TRIM(Student_Name), ''), '') <> ''
+         ORDER BY Student_Id DESC
+         LIMIT 500`
       );
       return NextResponse.json({ rows: studentRows });
     }
