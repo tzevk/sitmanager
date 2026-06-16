@@ -12,9 +12,36 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
+    const mode = (searchParams.get('mode') ?? '').trim();
     const q = (searchParams.get('q') ?? '').trim();
     const courseId = searchParams.get('courseId') ?? '';
     const batchId = searchParams.get('batchId') ?? '';
+
+    if (mode === 'recent') {
+      const [recentRows] = await getPool().query<any[]>(
+        `SELECT
+           f.Fees_Id,
+           f.Student_Id,
+           sm.Student_Name,
+           cm.Course_Name,
+           bm.Batch_code,
+           f.Fees_Code,
+           COALESCE(f.RDate, f.Date_Added) AS Receipt_Date,
+           f.Payment_Type,
+           f.Amount
+         FROM s_fees_mst f
+         LEFT JOIN student_master sm ON sm.Student_Id = f.Student_Id
+         LEFT JOIN course_mst cm ON cm.Course_Id = sm.Course_Id
+         LEFT JOIN batch_mst bm  ON bm.Batch_code = sm.Batch_Code
+         WHERE f.TypeR = 'C'
+           AND (f.IsDelete = 0 OR f.IsDelete IS NULL)
+           AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+         ORDER BY COALESCE(f.RDate, f.Date_Added) DESC, f.Fees_Id DESC
+         LIMIT 200`
+      );
+
+      return NextResponse.json({ rows: recentRows });
+    }
 
     const conditions = ['(sm.IsDelete = 0 OR sm.IsDelete IS NULL)'];
     const params: any[] = [];

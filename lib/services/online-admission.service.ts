@@ -30,6 +30,7 @@ export interface AdmissionRow {
   Present_Mobile: string;
   Batch_code: string;
   Admission_Date: string | null;
+  PayloadUpdatedAt: string | null;
   Status_id: number | null;
   StatusText: string;
   StatusLabel: string;
@@ -710,7 +711,8 @@ export async function listOnlineAdmissions(
        ${smBatchCode} AS Batch_code,
        ${smAdmissionDt} AS Admission_Date,
        ${smStatusId} AS Status_id,
-       ${statusTextExpr} AS StatusText
+       ${statusTextExpr} AS StatusText,
+       oap.Updated_At AS PayloadUpdatedAt
      FROM ${PAYLOAD_TABLE} oap
        JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = oap.Inquiry_Id
      ${smJoin}
@@ -813,6 +815,7 @@ export async function listOnlineAdmissions(
     return {
       ...r,
       Admission_Date: safeDate(r.Admission_Date),
+      PayloadUpdatedAt: safeDate(r.PayloadUpdatedAt),
       DOB: safeDate(r.DOB),
       StatusLabel: label,
       StatusCategory: resolveCategory(Number(r.Status_id), label),

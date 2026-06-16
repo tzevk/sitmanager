@@ -16,16 +16,38 @@ interface Row {
   Total_Paid: number | null;
 }
 
+interface RecentReceiptRow {
+  Fees_Id: number;
+  Student_Id: number;
+  Student_Name: string;
+  Course_Name: string | null;
+  Batch_code: string | null;
+  Fees_Code: string | null;
+  Receipt_Date: string | null;
+  Payment_Type: string | null;
+  Amount: number | null;
+}
+
 interface CourseOption { Course_Id: number; Course_Name: string; }
 interface BatchOption { Batch_Id: number; Batch_code: string; }
 
 const fmt = (n: number | null | undefined) =>
   (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+const fmtDate = (d: string | null | undefined) => {
+  if (!d) return '—';
+  const s = String(d).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '—';
+  const [y, m, day] = s.split('-');
+  return `${day}/${m}/${y}`;
+};
+
 export default function FeeDetailsPage() {
   const { canView, loading: permLoading } = useResourcePermissions('finance');
   const [q, setQ] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
+  const [recentRows, setRecentRows] = useState<RecentReceiptRow[]>([]);
+  const [recentLoading, setRecentLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
@@ -38,6 +60,20 @@ export default function FeeDetailsPage() {
     fetch('/api/reports/fees?tab=fees-details&action=courses')
       .then(r => r.json())
       .then(d => setCourses(d.courses ?? []));
+  }, []);
+
+  useEffect(() => {
+    const loadRecent = async () => {
+      setRecentLoading(true);
+      try {
+        const res = await fetch('/api/fee-details?mode=recent');
+        const data = await res.json();
+        setRecentRows(data.rows ?? []);
+      } finally {
+        setRecentLoading(false);
+      }
+    };
+    loadRecent();
   }, []);
 
   useEffect(() => {
@@ -85,6 +121,60 @@ export default function FeeDetailsPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-100 bg-[#f8fafc]">
+          <h3 className="text-xs font-bold text-slate-700">Recent Fee Receipts</h3>
+          <p className="text-[11px] text-slate-500 mt-0.5">Latest posted receipts across students</p>
+        </div>
+        <div className="overflow-x-auto border-b border-slate-100">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-200">
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">#</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Receipt No</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Date</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Student</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Course</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Batch</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Payment Type</th>
+                <th className="text-right py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Amount</th>
+                <th className="text-center py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentLoading && (
+                <tr>
+                  <td colSpan={9} className="py-6 text-center text-xs text-slate-400">Loading recent receipts…</td>
+                </tr>
+              )}
+              {!recentLoading && !recentRows.length && (
+                <tr>
+                  <td colSpan={9} className="py-6 text-center text-xs text-slate-400">No recent fee receipts found</td>
+                </tr>
+              )}
+              {!recentLoading && recentRows.map((r, i) => (
+                <tr key={r.Fees_Id} className="hover:bg-slate-50/60 transition-colors">
+                  <td className="py-2 px-3 text-xs text-slate-400 border-b border-slate-100">{i + 1}</td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Fees_Code || '—'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100">{fmtDate(r.Receipt_Date)}</td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100 font-medium">{r.Student_Name || '—'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Course_Name || '—'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Batch_code || '—'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Payment_Type || '—'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100 text-right font-mono">{fmt(r.Amount)}</td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100 text-center">
+                    <Link
+                      href={`/dashboard/fee-details/${r.Student_Id}?feesId=${r.Fees_Id}`}
+                      className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#2E3093]/10 text-[#2E3093] text-[11px] font-semibold hover:bg-[#2E3093]/20"
+                    >
+                      View
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
         <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/60 flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Training Programme</label>
