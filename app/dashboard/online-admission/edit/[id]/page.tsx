@@ -1139,17 +1139,25 @@ export default function EditOnlineAdmissionPage() {
                 sub: 'Allow offline payment collection at office counter',
                 color: 'amber',
               },
+              {
+                value: 'Direct UPI Transfer',
+                label: 'Direct UPI Transfer',
+                sub: 'Another option for all admissions using institute QR',
+                color: 'sky',
+              },
             ].map(opt => {
               const isSelected = formData.modeOfPayment === opt.value;
               const colors: Record<string, string> = {
                 emerald: isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:border-emerald-300',
                 violet:  isSelected ? 'border-violet-500 bg-violet-50'  : 'border-gray-200 hover:border-violet-300',
                 amber:   isSelected ? 'border-amber-500 bg-amber-50'   : 'border-gray-200 hover:border-amber-300',
+                sky:     isSelected ? 'border-sky-500 bg-sky-50'       : 'border-gray-200 hover:border-sky-300',
               };
               const dotColors: Record<string, string> = {
                 emerald: 'border-emerald-500 bg-emerald-500',
                 violet:  'border-violet-500 bg-violet-500',
                 amber:   'border-amber-500 bg-amber-500',
+                sky:     'border-sky-500 bg-sky-500',
               };
               return (
                 <button
@@ -1189,6 +1197,22 @@ export default function EditOnlineAdmissionPage() {
                 ) : (
                   <>Audit will be recorded when you save this update.</>
                 )}
+              </div>
+            )}
+
+            {formData.modeOfPayment === 'Direct UPI Transfer' && (
+              <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-3 text-[11px] text-sky-900 space-y-2">
+                <p className="font-semibold">Direct UPI Transfer enabled for this admission.</p>
+                <div className="rounded-lg border border-sky-200 bg-white p-2 flex flex-col items-center gap-2">
+                  <Image
+                    src="/direct-upi-transfer-qr.svg"
+                    alt="Direct UPI Transfer QR"
+                    width={200}
+                    height={250}
+                    className="rounded border border-slate-200"
+                  />
+                  <p className="text-[10px] text-slate-600 text-center">Account Ref: 037326012440007 | 54972698</p>
+                </div>
               </div>
             )}
           </div>
