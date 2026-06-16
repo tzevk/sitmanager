@@ -293,6 +293,7 @@ function buildAddress(input: Record<string, unknown>, prefix: 'present' | 'perma
     input[`${prefix}Street`],
     input[`${prefix}Area`],
     input[`${prefix}Landmark`],
+    input[`${prefix}District`],
   ].map(normalizeText).filter(Boolean);
 
   return parts.length ? parts.join(', ') : null;
@@ -408,6 +409,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
   pushInquiry('Course_Id', courseId);
   pushInquiry('Qualification', academic.qualification);
   pushInquiry('Discipline', academic.discipline);
+  pushInquiry('Percentage', academic.percentage);
   if (nextStatusId !== null) pushInquiry('OnlineState', nextStatusId);
 
   if (inquiryUpdateParts.length) {
