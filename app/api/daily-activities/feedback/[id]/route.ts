@@ -29,12 +29,6 @@ type FeedbackSchemaForExport = {
   };
 };
 
-type QuestionLabelMaps = {
-  trainingProgram: Record<string, string>;
-  trainingExecutive: Record<string, string>;
-  trainers: Record<string, string>;
-};
-
 type ParsedTrainerEntry = {
   trainerName?: string;
   ratings?: Record<string, string | number | boolean | null | undefined>;
@@ -53,121 +47,6 @@ type ParsedFeedbackAnswers = {
   };
 };
 
-function normalizeToken(input: string): string {
-  return input
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .replace(/[^A-Za-z0-9]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .toLowerCase();
-}
-
-function buildQuestionLabelMaps(schemaJson: string): QuestionLabelMaps {
-  let schema: FeedbackSchemaForExport = {};
-  try {
-    schema = JSON.parse(schemaJson || '{}') as FeedbackSchemaForExport;
-  } catch {
-    schema = {};
-  }
-
-  const toMap = (questions: Array<{ id?: string; label?: string }> | undefined): Record<string, string> => {
-    const out: Record<string, string> = {};
-    for (const q of questions || []) {
-      const id = String(q?.id || '').trim();
-      const label = String(q?.label || '').trim();
-      if (!id) continue;
-      out[id] = label || id;
-    }
-    return out;
-  };
-
-  return {
-    trainingProgram: toMap(schema.trainingProgram?.questions),
-    trainingExecutive: toMap(schema.trainingExecutive?.questions),
-    trainers: toMap(schema.trainers?.questions),
-  };
-}
-
-function setUniqueKey(target: Record<string, string>, key: string, value: string) {
-  const base = key || 'field';
-  let candidate = base;
-  let counter = 2;
-  while (Object.prototype.hasOwnProperty.call(target, candidate)) {
-    candidate = `${base}_${counter}`;
-    counter += 1;
-  }
-  target[candidate] = value;
-}
-
-function flattenAnswers(answersJson: string, maps: QuestionLabelMaps): Record<string, string> {
-  let parsed: ParsedFeedbackAnswers = {};
-  try {
-    parsed = JSON.parse(answersJson || '{}') as ParsedFeedbackAnswers;
-  } catch {
-    parsed = {};
-  }
-
-  const out: Record<string, string> = {};
-  const toText = (v: unknown): string => {
-    if (v == null) return '';
-    if (typeof v === 'string') return v.trim();
-    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-    return '';
-  };
-
-  const trainingProgram = parsed?.trainingProgram && typeof parsed.trainingProgram === 'object'
-    ? parsed.trainingProgram
-    : {};
-  for (const [k, v] of Object.entries(trainingProgram)) {
-    const label = maps.trainingProgram[k] || k;
-    setUniqueKey(out, `training_program_${normalizeToken(label)}`, toText(v));
-  }
-
-  const executiveRatings = parsed?.trainingExecutive?.ratings && typeof parsed.trainingExecutive.ratings === 'object'
-    ? parsed.trainingExecutive.ratings
-    : {};
-  for (const [k, v] of Object.entries(executiveRatings)) {
-    const label = maps.trainingExecutive[k] || k;
-    setUniqueKey(out, `training_executive_${normalizeToken(label)}`, toText(v));
-  }
-  out.training_executive_other_suggestions = toText(parsed?.trainingExecutive?.otherSuggestions);
-
-  const trainerEntries = Array.isArray(parsed?.trainers?.entries) ? parsed.trainers.entries : [];
-  trainerEntries.forEach((entry: ParsedTrainerEntry, idx: number) => {
-    const n = idx + 1;
-    const trainerName = toText(entry?.trainerName);
-    out[`trainer_${n}_name`] = trainerName;
-    const ratings = entry?.ratings && typeof entry.ratings === 'object' ? entry.ratings : {};
-    for (const [k, v] of Object.entries(ratings)) {
-      const label = maps.trainers[k] || k;
-      setUniqueKey(out, `trainer_${n}_${normalizeToken(label)}`, toText(v));
-    }
-  });
-
-  out.trainers_views_on_trainer = toText(parsed?.trainers?.viewsOnTrainer);
-  out.trainers_views_on_site_visit = toText(parsed?.trainers?.viewsOnSiteVisit);
-
-  return out;
-}
-
-function prettifyColumn(key: string): string {
-  const label = key
-    .replace(/_/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return label.replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function orderAnswerKey(key: string): [number, number, string] {
-  if (key.startsWith('training_program_')) return [1, 0, key];
-  if (key.startsWith('training_executive_')) return [2, 0, key];
-  const trainerMatch = key.match(/^trainer_(\d+)_/);
-  if (trainerMatch) {
-    return [3, Number(trainerMatch[1] || 0), key];
-  }
-  if (key.startsWith('trainers_views_')) return [4, 0, key];
-  return [9, 0, key];
-}
 
 function sanitizeFilePart(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'feedback';
@@ -344,90 +223,8 @@ async function buildFeedbackWorkbook(params: {
 
   const schema = parseFeedbackSchema(row.schema_json);
 
-  const ws = workbook.addWorksheet('Responses (Columns)', { views: [{ state: 'frozen', ySplit: 2 }] });
-
-  const flattened = submissions.map((s) => ({
-    ...s,
-    answers: flattenAnswers(s.answers_json, buildQuestionLabelMaps(row.schema_json)),
-  }));
-
-  const dynamicKeys = Array.from(new Set(flattened.flatMap((r) => Object.keys(r.answers)))).sort((a, b) => {
-    const [wa, ia, ka] = orderAnswerKey(a);
-    const [wb, ib, kb] = orderAnswerKey(b);
-    if (wa !== wb) return wa - wb;
-    if (ia !== ib) return ia - ib;
-    return ka.localeCompare(kb);
-  });
-  const columns = [
-    { key: 'form_id', header: 'Form ID' },
-    { key: 'feedback_stage_percent', header: 'Stage %' },
-    { key: 'feedback_training_program', header: 'Training Program' },
-    { key: 'feedback_batch_no', header: 'Batch No' },
-    { key: 'feedback_date', header: 'Feedback Date' },
-    { key: 'student_id', header: 'Student ID' },
-    { key: 'student_code', header: 'Student Code' },
-    { key: 'student_name', header: 'Student Name' },
-    { key: 'submitted_at', header: 'Submitted At' },
-    ...dynamicKeys.map((k) => ({ key: k, header: prettifyColumn(k) })),
-  ];
-
-  ws.columns = columns.map((c) => ({ key: c.key, header: c.header, width: Math.min(Math.max(c.header.length + 2, 14), 40) }));
-
-  const title = `${row.training_program || 'Training Feedback'}${row.batch_no ? ` - Batch ${row.batch_no}` : ''}`;
-  ws.mergeCells(1, 1, 1, columns.length);
-  const t = ws.getCell(1, 1);
-  t.value = title;
-  t.font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
-  t.alignment = { horizontal: 'center', vertical: 'middle' };
-  t.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E3093' } };
-  ws.getRow(1).height = 24;
-
-  const headerRow = ws.getRow(2);
-  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A6BB5' } };
-  headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-
-  flattened.forEach((entry) => {
-    const rowObj: Record<string, string | number | null> = {
-      form_id: row.id,
-      feedback_stage_percent: row.stage_percent,
-      feedback_training_program: row.training_program || '',
-      feedback_batch_no: row.batch_no || '',
-      feedback_date: row.feedback_date || '',
-      student_id: entry.student_id,
-      student_code: entry.student_code || '',
-      student_name: entry.student_name || '',
-      submitted_at: entry.submitted_at || '',
-    };
-    for (const k of dynamicKeys) {
-      rowObj[k] = entry.answers[k] || '';
-    }
-    ws.addRow(rowObj);
-  });
-
-  ws.getColumn('feedback_date').numFmt = 'yyyy-mm-dd';
-  ws.getColumn('submitted_at').numFmt = 'yyyy-mm-dd hh:mm:ss';
-  ws.autoFilter = {
-    from: { row: 2, column: 1 },
-    to: { row: 2, column: columns.length },
-  };
-  ws.eachRow((r, rowNumber) => {
-    if (rowNumber < 2) return;
-    r.eachCell((cell) => {
-      cell.border = {
-        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-      };
-      if (rowNumber > 2) {
-        cell.alignment = { vertical: 'top', wrapText: true };
-      }
-    });
-  });
-
-  const formView = workbook.addWorksheet('Responses (Form View)');
-  writeFormViewSheet({ ws: formView, row, submissions, schema });
+  const ws = workbook.addWorksheet('Feedback Responses');
+  writeFormViewSheet({ ws, row, submissions, schema });
 
   return workbook.xlsx.writeBuffer();
 }
