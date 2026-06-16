@@ -89,6 +89,26 @@ export default function FeedbackPage() {
     }
   };
 
+  const handleDownloadExcel = async (id: number) => {
+    try {
+      const res = await fetch(`/api/daily-activities/feedback/${id}?include=submissions&export=excel`);
+      if (!res.ok) throw new Error('Failed to download Excel');
+      const blob = await res.blob();
+      const disposition = res.headers.get('content-disposition') || '';
+      const nameMatch = disposition.match(/filename="?([^";]+)"?/i);
+      const fileName = nameMatch?.[1] || `feedback_${id}.xlsx`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Failed to download feedback excel', e);
+      alert('Failed to download feedback Excel.');
+    }
+  };
+
   const Section = ({ stage }: { stage: StagePercent }) => (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.03)] overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50/60">
@@ -150,13 +170,12 @@ export default function FeedbackPage() {
                   <td className="py-2.5 px-4 text-center">
                     <div className="flex items-center justify-center gap-1.5">
                       <button
-                        onClick={() => router.push(`/dashboard/daily-activities/feedback/${r.id}`)}
+                        onClick={() => handleDownloadExcel(r.id)}
                         className="p-2 rounded-xl hover:bg-indigo-50 transition-colors text-slate-500 hover:text-indigo-700"
-                        title="View Responses"
+                        title="Download Excel"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.27 2.943 9.542 7-1.273 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          <circle cx="12" cy="12" r="3" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l4-4m-4 4l-4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
                         </svg>
                       </button>
                       <button

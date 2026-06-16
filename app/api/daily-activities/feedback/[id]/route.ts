@@ -2,6 +2,148 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { ResultSetHeader, RowDataPacket } from 'mysql2';
+import ExcelJS from 'exceljs';
+
+type FeedbackSubmissionRow = RowDataPacket & {
+  id: number;
+  student_id: number;
+  student_code: string | null;
+  student_name: string | null;
+  answers_json: string;
+  submitted_at: string | null;
+};
+
+function flattenAnswers(answersJson: string): Record<string, string> {
+  let parsed: any = {};
+  try {
+    parsed = JSON.parse(answersJson || '{}');
+  } catch {
+    parsed = {};
+  }
+
+  const out: Record<string, string> = {};
+  const toText = (v: unknown): string => {
+    if (v == null) return '';
+    if (typeof v === 'string') return v.trim();
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+    return '';
+  };
+
+  const trainingProgram = parsed?.trainingProgram && typeof parsed.trainingProgram === 'object'
+    ? parsed.trainingProgram
+    : {};
+  for (const [k, v] of Object.entries(trainingProgram)) {
+    out[`training_program_${k}`] = toText(v);
+  }
+
+  const executiveRatings = parsed?.trainingExecutive?.ratings && typeof parsed.trainingExecutive.ratings === 'object'
+    ? parsed.trainingExecutive.ratings
+    : {};
+  for (const [k, v] of Object.entries(executiveRatings)) {
+    out[`training_executive_${k}`] = toText(v);
+  }
+  out.training_executive_other_suggestions = toText(parsed?.trainingExecutive?.otherSuggestions);
+
+  const trainerEntries = Array.isArray(parsed?.trainers?.entries) ? parsed.trainers.entries : [];
+  trainerEntries.forEach((entry: any, idx: number) => {
+    const n = idx + 1;
+    out[`trainer_${n}_name`] = toText(entry?.trainerName);
+    const ratings = entry?.ratings && typeof entry.ratings === 'object' ? entry.ratings : {};
+    for (const [k, v] of Object.entries(ratings)) {
+      out[`trainer_${n}_${k}`] = toText(v);
+    }
+  });
+
+  out.trainers_views_on_trainer = toText(parsed?.trainers?.viewsOnTrainer);
+  out.trainers_views_on_site_visit = toText(parsed?.trainers?.viewsOnSiteVisit);
+
+  return out;
+}
+
+function prettifyColumn(key: string): string {
+  return key
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
+function sanitizeFilePart(value: string): string {
+  return value.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'feedback';
+}
+
+async function buildFeedbackWorkbook(params: {
+  row: TrainingFeedbackRow;
+  submissions: FeedbackSubmissionRow[];
+}) {
+  const { row, submissions } = params;
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'SIT Manager';
+  workbook.created = new Date();
+
+  const ws = workbook.addWorksheet('Feedback Responses', { views: [{ state: 'frozen', ySplit: 2 }] });
+
+  const flattened = submissions.map((s) => ({
+    ...s,
+    answers: flattenAnswers(s.answers_json),
+  }));
+
+  const dynamicKeys = Array.from(new Set(flattened.flatMap((r) => Object.keys(r.answers)))).sort();
+  const columns = [
+    { key: 'student_id', header: 'Student ID' },
+    { key: 'student_code', header: 'Student Code' },
+    { key: 'student_name', header: 'Student Name' },
+    { key: 'submitted_at', header: 'Submitted At' },
+    ...dynamicKeys.map((k) => ({ key: k, header: prettifyColumn(k) })),
+  ];
+
+  ws.columns = columns.map((c) => ({ key: c.key, header: c.header, width: Math.min(Math.max(c.header.length + 2, 14), 40) }));
+
+  const title = `${row.training_program || 'Training Feedback'}${row.batch_no ? ` - Batch ${row.batch_no}` : ''}`;
+  ws.mergeCells(1, 1, 1, columns.length);
+  const t = ws.getCell(1, 1);
+  t.value = title;
+  t.font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
+  t.alignment = { horizontal: 'center', vertical: 'middle' };
+  t.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E3093' } };
+  ws.getRow(1).height = 24;
+
+  const headerRow = ws.getRow(2);
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A6BB5' } };
+  headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+
+  flattened.forEach((entry) => {
+    const rowObj: Record<string, string | number | null> = {
+      student_id: entry.student_id,
+      student_code: entry.student_code || '',
+      student_name: entry.student_name || '',
+      submitted_at: entry.submitted_at || '',
+    };
+    for (const k of dynamicKeys) {
+      rowObj[k] = entry.answers[k] || '';
+    }
+    ws.addRow(rowObj);
+  });
+
+  ws.getColumn('submitted_at').numFmt = 'yyyy-mm-dd hh:mm:ss';
+  ws.eachRow((r, rowNumber) => {
+    if (rowNumber < 2) return;
+    r.eachCell((cell) => {
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      };
+      if (rowNumber > 2) {
+        cell.alignment = { vertical: 'top', wrapText: true };
+      }
+    });
+  });
+
+  return workbook.xlsx.writeBuffer();
+}
 
 async function ensureFeedbackTable() {
   const pool = getPool();
@@ -88,6 +230,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!id) return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
 
     const includeSubmissions = req.nextUrl.searchParams.get('include') === 'submissions';
+    const exportExcel = req.nextUrl.searchParams.get('export') === 'excel';
     const pool = getPool();
     const [rows] = await pool.query<TrainingFeedbackRow[]>(
       `SELECT id, stage_percent, training_program, batch_id, batch_no, feedback_date,
@@ -101,18 +244,31 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    if (!includeSubmissions) {
+    if (!includeSubmissions && !exportExcel) {
       return NextResponse.json({ row: rows[0] });
     }
 
     await ensureSubmissionsTable();
-    const [submissions] = await pool.query<RowDataPacket[]>(
+    const [submissions] = await pool.query<FeedbackSubmissionRow[]>(
       `SELECT id, student_id, student_code, student_name, answers_json, submitted_at
        FROM training_feedback_submissions
        WHERE form_id = ?
        ORDER BY submitted_at DESC, id DESC`,
       [id]
     );
+
+    if (exportExcel) {
+      const buffer = await buildFeedbackWorkbook({ row: rows[0], submissions });
+      const fileName = `Feedback_${sanitizeFilePart(String(rows[0].training_program || 'Program'))}_${sanitizeFilePart(String(rows[0].batch_no || 'Batch'))}_${id}.xlsx`;
+      return new NextResponse(buffer as unknown as BodyInit, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="${fileName}"`,
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
 
     return NextResponse.json({ row: rows[0], submissions });
   } catch (err) {
