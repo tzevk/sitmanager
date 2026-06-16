@@ -10,5 +10,10 @@
       "maxDuration": 30
     }
   },
-  "crons": []
+  "crons": [
+    {
+      "path": "/api/cron/send-whatsapp",
+      "schedule": "*/2 * * * *"
+    }
+  ]
 }
