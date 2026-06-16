@@ -48,7 +48,6 @@ export default function AddFeeDetailsPage() {
   const router = useRouter();
 
   const [students, setStudents] = useState<StudentRow[]>([]);
-  const [studentSearch, setStudentSearch] = useState('');
   const [studentId, setStudentId] = useState('');
   const [data, setData] = useState<FeeDetailsData | null>(null);
 
@@ -120,16 +119,6 @@ export default function AddFeeDetailsPage() {
     loadFormData();
   }, [studentId]);
 
-  const filteredStudents = students.filter((s) => {
-    const q = studentSearch.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      String(s.Student_Id).includes(q) ||
-      (s.Student_Name || '').toLowerCase().includes(q) ||
-      (s.Batch_code || '').toLowerCase().includes(q)
-    );
-  });
-
   const handleParticularChange = (val: string) => {
     setParticular(val);
     const p = data?.particulars.find((x) => x.label === val);
@@ -189,33 +178,21 @@ export default function AddFeeDetailsPage() {
     <div className="flex flex-col gap-3">
       <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-3 shadow-[0_4px_14px_rgba(46,48,147,0.18)] relative overflow-hidden">
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
-        <div className="relative z-10">
-          <h2 className="text-sm font-black text-white tracking-tight leading-none">Add Fees Details</h2>
-          <p className="text-[11px] text-white/60 mt-0.5">Direct add form. No filter screen.</p>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-5">
-        {error && (
-          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2">{error}</div>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-          <div className="sm:col-span-2 lg:col-span-2 flex flex-col gap-1">
-            <label className={label}>Find Student</label>
-            <input
-              value={studentSearch}
-              onChange={(e) => setStudentSearch(e.target.value)}
-              placeholder="Type name, Student ID or batch code"
-              className={ctrl}
-            />
+        <div className="relative z-10 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-sm font-black text-white tracking-tight leading-none">Add Fees Details</h2>
+            <p className="text-[11px] text-white/60 mt-0.5">Direct add form. No filter screen.</p>
           </div>
-
-          <div className="sm:col-span-2 lg:col-span-2 flex flex-col gap-1">
-            <label className={label}>Student</label>
-            <select value={studentId} onChange={(e) => setStudentId(e.target.value)} disabled={loadingStudents || !filteredStudents.length} className={ctrl}>
+          <div className="w-full lg:w-[360px]">
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-white/80 mb-1">Student</label>
+            <select
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
+              disabled={loadingStudents || !students.length}
+              className="h-9 px-3 rounded-lg border border-white/30 bg-white text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:opacity-60 w-full"
+            >
               <option value="">{loadingStudents ? 'Loading students…' : 'Select Student'}</option>
-              {filteredStudents.map((s) => (
+              {students.map((s) => (
                 <option key={s.Student_Id} value={s.Student_Id}>
                   {s.Student_Name} ({s.Student_Id}){s.Batch_code ? ` - ${s.Batch_code}` : ''}
                 </option>
@@ -223,6 +200,12 @@ export default function AddFeeDetailsPage() {
             </select>
           </div>
         </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-5">
+        {error && (
+          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2">{error}</div>
+        )}
 
         {loadingForm && <div className="mb-4 text-xs text-slate-500">Loading form…</div>}
 
