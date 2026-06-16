@@ -13,6 +13,15 @@ type FeedbackSubmissionRow = RowDataPacket & {
   submitted_at: string | null;
 };
 
+function normalizeToken(input: string): string {
+  return input
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase();
+}
+
 function flattenAnswers(answersJson: string): Record<string, string> {
   let parsed: any = {};
   try {
@@ -33,14 +42,14 @@ function flattenAnswers(answersJson: string): Record<string, string> {
     ? parsed.trainingProgram
     : {};
   for (const [k, v] of Object.entries(trainingProgram)) {
-    out[`training_program_${k}`] = toText(v);
+    out[`training_program_${normalizeToken(k)}`] = toText(v);
   }
 
   const executiveRatings = parsed?.trainingExecutive?.ratings && typeof parsed.trainingExecutive.ratings === 'object'
     ? parsed.trainingExecutive.ratings
     : {};
   for (const [k, v] of Object.entries(executiveRatings)) {
-    out[`training_executive_${k}`] = toText(v);
+    out[`training_executive_${normalizeToken(k)}`] = toText(v);
   }
   out.training_executive_other_suggestions = toText(parsed?.trainingExecutive?.otherSuggestions);
 
@@ -50,7 +59,7 @@ function flattenAnswers(answersJson: string): Record<string, string> {
     out[`trainer_${n}_name`] = toText(entry?.trainerName);
     const ratings = entry?.ratings && typeof entry.ratings === 'object' ? entry.ratings : {};
     for (const [k, v] of Object.entries(ratings)) {
-      out[`trainer_${n}_${k}`] = toText(v);
+      out[`trainer_${n}_${normalizeToken(k)}`] = toText(v);
     }
   });
 
@@ -61,11 +70,22 @@ function flattenAnswers(answersJson: string): Record<string, string> {
 }
 
 function prettifyColumn(key: string): string {
-  return key
+  const label = key
     .replace(/_/g, ' ')
     .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/^./, (c) => c.toUpperCase());
+    .trim();
+  return label.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function orderAnswerKey(key: string): [number, number, string] {
+  if (key.startsWith('training_program_')) return [1, 0, key];
+  if (key.startsWith('training_executive_')) return [2, 0, key];
+  const trainerMatch = key.match(/^trainer_(\d+)_/);
+  if (trainerMatch) {
+    return [3, Number(trainerMatch[1] || 0), key];
+  }
+  if (key.startsWith('trainers_views_')) return [4, 0, key];
+  return [9, 0, key];
 }
 
 function sanitizeFilePart(value: string): string {
@@ -88,8 +108,19 @@ async function buildFeedbackWorkbook(params: {
     answers: flattenAnswers(s.answers_json),
   }));
 
-  const dynamicKeys = Array.from(new Set(flattened.flatMap((r) => Object.keys(r.answers)))).sort();
+  const dynamicKeys = Array.from(new Set(flattened.flatMap((r) => Object.keys(r.answers)))).sort((a, b) => {
+    const [wa, ia, ka] = orderAnswerKey(a);
+    const [wb, ib, kb] = orderAnswerKey(b);
+    if (wa !== wb) return wa - wb;
+    if (ia !== ib) return ia - ib;
+    return ka.localeCompare(kb);
+  });
   const columns = [
+    { key: 'form_id', header: 'Form ID' },
+    { key: 'feedback_stage_percent', header: 'Stage %' },
+    { key: 'feedback_training_program', header: 'Training Program' },
+    { key: 'feedback_batch_no', header: 'Batch No' },
+    { key: 'feedback_date', header: 'Feedback Date' },
     { key: 'student_id', header: 'Student ID' },
     { key: 'student_code', header: 'Student Code' },
     { key: 'student_name', header: 'Student Name' },
@@ -115,6 +146,11 @@ async function buildFeedbackWorkbook(params: {
 
   flattened.forEach((entry) => {
     const rowObj: Record<string, string | number | null> = {
+      form_id: row.id,
+      feedback_stage_percent: row.stage_percent,
+      feedback_training_program: row.training_program || '',
+      feedback_batch_no: row.batch_no || '',
+      feedback_date: row.feedback_date || '',
       student_id: entry.student_id,
       student_code: entry.student_code || '',
       student_name: entry.student_name || '',
@@ -126,7 +162,12 @@ async function buildFeedbackWorkbook(params: {
     ws.addRow(rowObj);
   });
 
+  ws.getColumn('feedback_date').numFmt = 'yyyy-mm-dd';
   ws.getColumn('submitted_at').numFmt = 'yyyy-mm-dd hh:mm:ss';
+  ws.autoFilter = {
+    from: { row: 2, column: 1 },
+    to: { row: 2, column: columns.length },
+  };
   ws.eachRow((r, rowNumber) => {
     if (rowNumber < 2) return;
     r.eachCell((cell) => {

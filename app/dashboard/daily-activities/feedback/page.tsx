@@ -114,7 +114,7 @@ export default function FeedbackPage() {
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50/60">
         <div>
           <h3 className="text-sm font-black text-slate-900">{stage}% Completed</h3>
-          <p className="text-xs text-slate-500 mt-0.5">{grouped[stage].length} entries</p>
+          <p className="text-xs text-slate-500 mt-0.5">{grouped[stage].length} entries • Use download icon for structured Excel</p>
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -172,7 +172,7 @@ export default function FeedbackPage() {
                       <button
                         onClick={() => handleDownloadExcel(r.id)}
                         className="p-2 rounded-xl hover:bg-indigo-50 transition-colors text-slate-500 hover:text-indigo-700"
-                        title="Download Excel"
+                        title="Download Responses Excel"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l4-4m-4 4l-4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
