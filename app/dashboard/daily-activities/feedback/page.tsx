@@ -150,6 +150,16 @@ export default function FeedbackPage() {
                   <td className="py-2.5 px-4 text-center">
                     <div className="flex items-center justify-center gap-1.5">
                       <button
+                        onClick={() => router.push(`/dashboard/daily-activities/feedback/${r.id}`)}
+                        className="p-2 rounded-xl hover:bg-indigo-50 transition-colors text-slate-500 hover:text-indigo-700"
+                        title="View Responses"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.27 2.943 9.542 7-1.273 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      </button>
+                      <button
                         disabled={!canUpdate}
                         onClick={() => router.push(`/dashboard/daily-activities/feedback/add?id=${r.id}`)}
                         className={`p-2 rounded-xl hover:bg-blue-50 transition-colors ${

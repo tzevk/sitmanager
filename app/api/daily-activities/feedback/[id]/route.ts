@@ -41,6 +41,24 @@ async function ensureFeedbackTable() {
   }
 }
 
+async function ensureSubmissionsTable() {
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS training_feedback_submissions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      form_id INT NOT NULL,
+      student_id INT NOT NULL,
+      student_code VARCHAR(50) NULL,
+      student_name VARCHAR(150) NULL,
+      batch_id INT NULL,
+      answers_json LONGTEXT NOT NULL,
+      submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_form_student (form_id, student_id),
+      INDEX idx_form (form_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+}
+
 type TrainingFeedbackRow = RowDataPacket & {
   id: number;
   stage_percent: number;
@@ -69,6 +87,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const id = parseId({ id: idStr });
     if (!id) return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
 
+    const includeSubmissions = req.nextUrl.searchParams.get('include') === 'submissions';
     const pool = getPool();
     const [rows] = await pool.query<TrainingFeedbackRow[]>(
       `SELECT id, stage_percent, training_program, batch_id, batch_no, feedback_date,
@@ -81,7 +100,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     );
 
     if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json({ row: rows[0] });
+
+    if (!includeSubmissions) {
+      return NextResponse.json({ row: rows[0] });
+    }
+
+    await ensureSubmissionsTable();
+    const [submissions] = await pool.query<RowDataPacket[]>(
+      `SELECT id, student_id, student_code, student_name, answers_json, submitted_at
+       FROM training_feedback_submissions
+       WHERE form_id = ?
+       ORDER BY submitted_at DESC, id DESC`,
+      [id]
+    );
+
+    return NextResponse.json({ row: rows[0], submissions });
   } catch (err) {
     console.error('Feedback get error:', err);
     return NextResponse.json({ error: 'Failed to fetch feedback' }, { status: 500 });
