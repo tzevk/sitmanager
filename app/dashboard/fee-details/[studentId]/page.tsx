@@ -239,9 +239,18 @@ export default function FeeDetailsEditPage() {
     <div className="flex flex-col gap-3">
       <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-3 shadow-[0_4px_14px_rgba(46,48,147,0.18)] relative overflow-hidden">
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
-        <div className="relative z-10">
-          <h2 className="text-sm font-black text-white tracking-tight leading-none">Add / Edit Fees Details</h2>
-          <p className="text-[11px] text-white/60 mt-0.5">{data.student.Student_Name} — Student ID {data.student.Student_Id}</p>
+        <div className="relative z-10 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-black text-white tracking-tight leading-none">Add / Edit Fees Details</h2>
+            <p className="text-[11px] text-white/60 mt-0.5">{data.student.Student_Name} — Student ID {data.student.Student_Id}</p>
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={saving || !canUpdate}
+            className="h-9 px-4 rounded-lg bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : (data.record ? 'Update' : 'Add')}
+          </button>
         </div>
       </div>
 
@@ -378,13 +387,6 @@ export default function FeeDetailsEditPage() {
 
         {/* Action buttons */}
         <div className="flex flex-wrap gap-2 mb-2">
-          <button
-            onClick={handleSave}
-            disabled={saving || !canUpdate}
-            className="h-9 px-4 rounded-lg bg-[#2E3093] text-white text-xs font-bold hover:bg-[#252875] disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : 'Update'}
-          </button>
           <button onClick={() => handlePrint('Receipt')} className="h-9 px-4 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50">
             Print Receipt
           </button>

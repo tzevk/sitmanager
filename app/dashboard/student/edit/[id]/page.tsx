@@ -192,6 +192,10 @@ export default function EditStudentPage() {
   const [docsLoading, setDocsLoading] = useState(false);
   const [docsError, setDocsError] = useState('');
   const [docsLoaded, setDocsLoaded] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadDocName, setUploadDocName] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   const [onlineAdmission, setOnlineAdmission] = useState<OnlineAdmissionSnapshot | null>(null);
   const [snapshotExpanded, setSnapshotExpanded] = useState(false);
@@ -415,6 +419,33 @@ export default function EditStudentPage() {
       fetchDocuments();
     }
   }, [activeTab, studentId, docsLoaded, fetchDocuments]);
+
+  /* ------------------------------------------------------------------ */
+  /*  Upload document                                                     */
+  /* ------------------------------------------------------------------ */
+  const handleUpload = async () => {
+    if (!uploadFile) return;
+    setUploading(true);
+    setUploadError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', uploadFile);
+      fd.append('doc_name', uploadDocName || uploadFile.name.replace(/\.[^.]+$/, ''));
+      const res = await fetch(`/api/admission-activity/student/${studentId}/documents`, {
+        method: 'POST',
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      setDocuments((prev) => [...prev, data.document]);
+      setUploadFile(null);
+      setUploadDocName('');
+    } catch (e: unknown) {
+      setUploadError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   /* ------------------------------------------------------------------ */
   /*  Save                                                                */
@@ -1394,6 +1425,57 @@ export default function EditStudentPage() {
           {/* ==== DOCUMENTS ==== */}
           {activeTab === 'documents' && (
             <div className="space-y-3">
+              {/* Upload panel */}
+              <SectionCard
+                title="Upload Document"
+                icon={
+                  <svg className="w-3 h-3 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                }
+              >
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="flex-1 min-w-[180px]">
+                    <label className={labelCls}>Document Label</label>
+                    <input
+                      type="text"
+                      value={uploadDocName}
+                      onChange={(e) => setUploadDocName(e.target.value)}
+                      placeholder="e.g. Marksheet, Aadhar Card"
+                      className={inputCls}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-[200px]">
+                    <label className={labelCls}>File (PDF / JPG / PNG / WebP · max 5 MB)</label>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp"
+                      onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                      className="w-full text-xs text-slate-600 file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#2E3093]/10 file:text-[#2E3093] hover:file:bg-[#2E3093]/20 cursor-pointer"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleUpload}
+                    disabled={!uploadFile || uploading}
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#2E3093] text-white text-xs font-semibold disabled:opacity-40 hover:bg-[#252780] transition-colors"
+                  >
+                    {uploading ? (
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                    )}
+                    {uploading ? 'Uploading…' : 'Upload'}
+                  </button>
+                </div>
+                {uploadError && (
+                  <p className="mt-2 text-xs text-red-600 font-medium">{uploadError}</p>
+                )}
+              </SectionCard>
+
+              {/* Document list */}
               <SectionCard
                 title={`Documents (${documents.length})`}
                 icon={
@@ -1414,7 +1496,7 @@ export default function EditStudentPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                     </svg>
                     <p className="text-xs text-slate-500 font-semibold">No documents uploaded yet</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Documents submitted via the online form will appear here.</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Use the Upload panel above to add documents.</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
