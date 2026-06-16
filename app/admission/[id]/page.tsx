@@ -1181,6 +1181,25 @@ export default function PublicAdmissionFormPage() {
         payAtOfficeOverrideUsed: formData.modeOfPayment === 'Pay at Office' ? payAtOfficeVerified : false,
         upiTransferConfirmed: paymentSubMethod === 'qr' ? upiTransferConfirmed : false,
         upiTransferReference: paymentSubMethod === 'qr' ? (upiTransferReference.trim() || null) : null,
+        upiAmount: paymentSubMethod === 'qr' && upiTransferConfirmed ? (() => {
+          const isProcessWeekend = /process\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '');
+          const is75kLoan = (
+            (/piping\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '')) ||
+            (/engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') && /full.?time/i.test(formData.trainingCategory || '')) ||
+            /piping\s+design.*drafting/i.test(formData.trainingProgrammeName || '')
+          );
+          return (formData.modeOfPayment === 'Full Payment'
+            ? Math.round((batchFees ?? 0) * 0.95)
+            : formData.modeOfPayment === '3-Installment Plan'
+            ? (isProcessWeekend ? 15000 : 25000)
+            : formData.modeOfPayment === '2-Payment Plan'
+            ? 15000
+            : formData.modeOfPayment === '6-Installment Plan'
+            ? 15000
+            : formData.modeOfPayment === 'Loan (0% Interest)'
+            ? ((is75kLoan || isProcessWeekend) ? 15000 : 12000)
+            : Math.round((batchFeesInstallment ?? batchFees ?? 0) / 2)) + ALUMNI_MEMBERSHIP_FEE;
+        })() : null,
         sameAsPresent: formData.sameAsPresent,
         consentAcknowledged: consentAcknowledged,
         experiencedConsentAcknowledged: experiencedConsentAcknowledged,

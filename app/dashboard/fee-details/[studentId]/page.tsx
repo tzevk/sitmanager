@@ -15,6 +15,10 @@ interface Student {
   Present_Mobile: string | null;
   Email: string | null;
   Admission_Id: number | null;
+  Transfered: string;
+  Moved_To_Batch_Code: string;
+  Moved_To_Course_Name: string;
+  Cancel: boolean;
 }
 
 interface Bank { Id: number; Bank_Name: string; }
@@ -242,7 +246,24 @@ export default function FeeDetailsEditPage() {
         <div className="relative z-10 flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 className="text-sm font-black text-white tracking-tight leading-none">Add / Edit Fees Details</h2>
-            <p className="text-[11px] text-white/60 mt-0.5">{data.student.Student_Name} — Student ID {data.student.Student_Id}</p>
+            <div className="flex flex-wrap items-center gap-2 mt-0.5">
+              <p className="text-[11px] text-white/60">{data.student.Student_Name} — Student ID {data.student.Student_Id}</p>
+              {data.student.Cancel && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-red-500/20 border border-red-400/40 px-2 py-0.5 text-[10px] font-bold text-red-200 uppercase tracking-wide">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
+                  Cancelled
+                </span>
+              )}
+              {data.student.Transfered === 'Y' && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/20 border border-amber-300/40 px-2 py-0.5 text-[10px] font-bold text-amber-200 uppercase tracking-wide">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-300 shrink-0" />
+                  Transferred
+                  {data.student.Moved_To_Batch_Code && (
+                    <span className="font-mono normal-case font-semibold">→ {data.student.Moved_To_Batch_Code}</span>
+                  )}
+                </span>
+              )}
+            </div>
           </div>
           <button
             onClick={handleSave}

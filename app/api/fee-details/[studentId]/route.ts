@@ -43,10 +43,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
     const [studentRows] = await pool.query<any[]>(
       `SELECT sm.Student_Id, sm.Student_Name, sm.Present_Mobile, sm.Email,
               sm.Course_Id, cm.Course_Name, sm.Batch_Code, bm.Batch_Id, bm.Fees_Full_Payment,
-              am.Admission_Id, am.Fees AS Admission_Fees
+              COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
+              COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
+              COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name,
+              am.Admission_Id, am.Fees AS Admission_Fees, COALESCE(am.Cancel, 0) AS Cancel
        FROM student_master sm
        LEFT JOIN course_mst cm ON cm.Course_Id = sm.Course_Id
        LEFT JOIN batch_mst bm  ON bm.Batch_code = sm.Batch_Code
+       LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
        LEFT JOIN admission_master am ON am.Student_Id = sm.Student_Id AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
        WHERE sm.Student_Id = ?
        LIMIT 1`,
@@ -150,6 +154,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
         Present_Mobile: student.Present_Mobile,
         Email: student.Email,
         Admission_Id: student.Admission_Id,
+        Transfered: student.Transfered || '',
+        Moved_To_Batch_Code: student.Moved_To_Batch_Code || '',
+        Moved_To_Course_Name: student.Moved_To_Course_Name || '',
+        Cancel: Number(student.Cancel) === 1,
       },
       dueDate,
       banks,

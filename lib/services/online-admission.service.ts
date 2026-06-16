@@ -171,6 +171,9 @@ const FORM_COLUMNS: [string, string][] = [
   ['Razorpay_Order_Id',         'VARCHAR(200) NULL'],
   ['Razorpay_Amount',           'DECIMAL(10,2) NULL'],
   ['Razorpay_Signature',        'VARCHAR(500) NULL'],
+  ['Upi_Transfer_Confirmed',    'TINYINT(1) NULL DEFAULT 0'],
+  ['Upi_Transfer_Reference',    'VARCHAR(300) NULL'],
+  ['Upi_Amount',                'DECIMAL(10,2) NULL'],
   ['Pay_At_Office_Audit',       'TEXT NULL'],
   // Consent
   ['Terms_Agreed',                      'TINYINT(1) NULL DEFAULT 0'],
@@ -473,9 +476,12 @@ export async function saveStructuredAdmissionData(
     ['Razorpay_Paid',      maybeBool(input.razorpayPaid)],
     ['Razorpay_Payment_Id', n(input.razorpayPaymentId)],
     ['Razorpay_Order_Id',  n(input.razorpayOrderId)],
-    ['Razorpay_Amount',    num(input.razorpayAmount)],
-    ['Razorpay_Signature', n(input.razorpaySignature)],
-    ['Pay_At_Office_Audit', jstr(input.payAtOfficeAudit)],
+    ['Razorpay_Amount',         num(input.razorpayAmount)],
+    ['Razorpay_Signature',      n(input.razorpaySignature)],
+    ['Upi_Transfer_Confirmed',  maybeBool(input.upiTransferConfirmed)],
+    ['Upi_Transfer_Reference',  n(input.upiTransferReference)],
+    ['Upi_Amount',              num(input.upiAmount)],
+    ['Pay_At_Office_Audit',     jstr(input.payAtOfficeAudit)],
     // Consent
     ['Terms_Agreed',                     maybeBool(input.termsAgreed)],
     ['Consent_Acknowledged',             maybeBool(input.consentAcknowledged)],
@@ -736,7 +742,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
   const presentAddress = buildAddress(input, 'present');
   const permanentAddress = buildAddress(input, 'permanent');
   const academic = resolveAcademicProfile(input);
-  void resolveWorkingSince(input); // computed for future use; no matching student_master column yet
+  const workingSince = resolveWorkingSince(input);
 
   const inquiryUpdateParts: string[] = [];
   const inquiryUpdateValues: any[] = [];
@@ -816,7 +822,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
         normalizeText(input.jobDesignation) || null,
         normalizeText(input.occupationalStatus) || null,
         parseOptionalNumber(input.totalOccupationYears),
-        normalizeText(input.jobDescription) || null,
+        normalizeText(input.jobDescription) || normalizeText(input.selfEmploymentDetails) || null,
         8,
         new Date().toISOString().slice(0, 10),
         admissionDate,
@@ -865,12 +871,22 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       normalizeText(input.jobDesignation) || null,
       normalizeText(input.occupationalStatus) || null,
       parseOptionalNumber(input.totalOccupationYears),
-      normalizeText(input.jobDescription) || null,
+      normalizeText(input.jobDescription) || normalizeText(input.selfEmploymentDetails) || null,
       nextStatusId,
       nextStatusId !== null ? new Date().toISOString().slice(0, 10) : null,
       nextStatusId === 8 ? admissionDate : null,
       studentId,
     ];
+
+    const writeWorkingSince = async (sid: number) => {
+      if (!workingSince || sid <= 0) return;
+      try {
+        await pool.query(
+          `UPDATE \`${studentMasterTable}\` SET WorkingSince = ? WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+          [workingSince, sid]
+        );
+      } catch { /* column doesn't exist in this deployment */ }
+    };
 
     if (studentExists) {
       await pool.query(
@@ -912,6 +928,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
         studentUpdateValues
       );
+      await writeWorkingSince(studentId);
     } else {
       const newStudentId = await createStudentMasterFromAdmission();
       if (newStudentId > 0) {
@@ -920,6 +937,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
           `UPDATE \`${inquiryTable}\` SET Student_Id = ? WHERE Inquiry_Id = ?`,
           [newStudentId, inquiryId]
         );
+        await writeWorkingSince(newStudentId);
       }
     }
   } else if (statusAction === 'accept') {
@@ -932,6 +950,14 @@ export async function syncOnlineAdmissionIntoCurrentDb(
           `UPDATE \`${inquiryTable}\` SET Student_Id = ? WHERE Inquiry_Id = ?`,
           [newStudentId, inquiryId]
         );
+        if (workingSince) {
+          try {
+            await pool.query(
+              `UPDATE \`${studentMasterTable}\` SET WorkingSince = ? WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+              [workingSince, newStudentId]
+            );
+          } catch { /* column doesn't exist in this deployment */ }
+        }
       }
     } catch (err) {
       console.error('[OnlineAdmission] Failed to create student_master record:', err);
@@ -960,22 +986,25 @@ export async function syncOnlineAdmissionIntoCurrentDb(
     let admissionId: number | null = null;
     if (admissionRows.length) {
       admissionId = Number(admissionRows[0].Admission_Id);
+      const modeOfPayment = normalizeText(input.modeOfPayment) || null;
       await pool.query(
         `UPDATE admission_master SET
            Batch_Id = COALESCE(?, Batch_Id),
            Course_Id = COALESCE(?, Course_Id),
            Admission_Date = COALESCE(?, Admission_Date),
+           Payment_Type = COALESCE(?, Payment_Type),
            IsActive = 1,
            Cancel = 0
          WHERE Admission_Id = ?`,
-        [batchId, courseId, admissionDate, admissionId]
+        [batchId, courseId, admissionDate, modeOfPayment, admissionId]
       );
     } else {
+      const modeOfPayment = normalizeText(input.modeOfPayment) || null;
       const [admInsert] = await pool.query(
         `INSERT INTO admission_master (
-           Student_Id, Course_Id, Batch_Id, Admission_Date, IsActive, Cancel, IsDelete
-         ) VALUES (?, ?, ?, ?, 1, 0, 0)`,
-        [resolvedStudentId, courseId, batchId, admissionDate]
+           Student_Id, Course_Id, Batch_Id, Admission_Date, Payment_Type, IsActive, Cancel, IsDelete
+         ) VALUES (?, ?, ?, ?, ?, 1, 0, 0)`,
+        [resolvedStudentId, courseId, batchId, admissionDate, modeOfPayment]
       ) as [any, any];
       admissionId = Number(admInsert.insertId);
     }
@@ -1011,6 +1040,41 @@ export async function syncOnlineAdmissionIntoCurrentDb(
             feesCode, resolvedStudentId, courseId, batchId, admissionId,
             razorpayAmount, razorpayAmount, 'Online Admission Payment (Razorpay)',
             admissionDate, now, now.getMonth() + 1, now.getFullYear(), razorpayPaymentId,
+          ]
+        );
+      }
+    }
+
+    // Record UPI / QR payment in the fees ledger (same dedup pattern as Razorpay, keyed on UTR).
+    const upiConfirmed = input.upiTransferConfirmed === true;
+    const upiReference = normalizeText(input.upiTransferReference);
+    const upiAmount    = parseOptionalNumber(input.upiAmount);
+    if (upiConfirmed && upiReference && upiAmount && upiAmount > 0) {
+      const [existingUpi] = await pool.query(
+        `SELECT Fees_Id FROM s_fees_mst WHERE Notes LIKE ? AND Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+        [`%${upiReference}%`, resolvedStudentId]
+      ) as [any[], any];
+
+      if (!existingUpi.length) {
+        const [upiCodeRows] = await pool.query(
+          `SELECT AUTO_INCREMENT AS nextId FROM information_schema.TABLES
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 's_fees_mst'`
+        ) as [any[], any];
+        const upiNextId = Number(upiCodeRows[0]?.nextId ?? 1);
+        const now = new Date();
+        const upiFeesCode = `R-${String(now.getMonth() + 1).padStart(2, '0')}/${String(upiNextId).padStart(3, '0')}`;
+
+        await pool.query(
+          `INSERT INTO s_fees_mst (
+             Fees_Code, Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type,
+             Amount, Total_Amt, TypeR, Notes, RDate, Date_Added, FeesMonth, FeesYear,
+             IsActive, IsDelete
+           ) VALUES (?, ?, ?, ?, ?, 'UPI', ?, ?, 'C', ?, ?, ?, ?, ?, 1, 0)`,
+          [
+            upiFeesCode, resolvedStudentId, courseId, batchId, admissionId,
+            upiAmount, upiAmount,
+            `Online Admission Payment (UPI/QR) — UTR: ${upiReference}`,
+            admissionDate, now, now.getMonth() + 1, now.getFullYear(),
           ]
         );
       }
