@@ -85,25 +85,26 @@ export async function GET(req: NextRequest) {
 
       // ── Batch Wise Fees Details ──────────────────────────────────
       if (subTab === 'batch-wise-fees') {
-        // Start from admission_master so all enrolled students appear,
-        // even those who have not yet made a payment.
-        const amConditions: string[] = [
-          '(am.IsDelete = 0 OR am.IsDelete IS NULL)',
-        ];
-        const amParams: any[] = [];
-        if (courseId) { amConditions.push('bm.Course_Id = ?');  amParams.push(Number(courseId)); }
-        if (batchId)  { amConditions.push('am.Batch_Id = ?');   amParams.push(Number(batchId)); }
+        // Use student_master as the base table so ALL enrolled students appear,
+        // even those whose admission_master.Batch_Id wasn't synced.
+        // The student's batch is the authoritative sm.Batch_Code column
+        // (same pattern used by fee-details/route.ts).
+        const smConditions: string[] = ['(sm.IsDelete = 0 OR sm.IsDelete IS NULL)'];
+        const smParams: any[] = [];
+        if (courseId) { smConditions.push('bm.Course_Id = ?');  smParams.push(Number(courseId)); }
+        if (batchId)  { smConditions.push('bm.Batch_Id = ?');   smParams.push(Number(batchId)); }
 
         const [rows] = await pool.query(
           `SELECT
              COALESCE(bm.Batch_code,'') AS Batch_Code,
              COALESCE(cm.Course_Name,'') AS Course_Name,
              bm.SDate AS Batch_Start, bm.EDate AS Batch_End, bm.Fees_Full_Payment,
-             am.Student_Id AS Student_Id,
+             sm.Student_Id AS Student_Id,
              am.Roll_No AS Roll_No,
-               am.Cancel AS Cancel, COALESCE(NULLIF(TRIM(sm.Transfered), ''), am.Transfered) AS Transfered,
-               COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
-               COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name,
+             am.Cancel AS Cancel,
+             COALESCE(NULLIF(TRIM(sm.Transfered), ''), am.Transfered) AS Transfered,
+             COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
+             COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name,
              COALESCE(sm.Student_Name, CONCAT_WS(' ', sm.FName, sm.MName, sm.LName), '') AS Student_Name,
              COALESCE(sm.Present_Mobile,'') AS Present_Mobile,
              sfm.Fees_Id, sfm.Fees_Code, sfm.Date_Added, sfm.RDate,
@@ -111,27 +112,29 @@ export async function GET(req: NextRequest) {
              sfm.Cheque_Date, sfm.Amount, sfm.Service_Tax, sfm.Total_Amt,
              sfm.UnPaid_Amt, sfm.Amt_Word, sfm.Notes,
              sfm.FeesMonth, sfm.FeesYear, sfm.Print
-           FROM admission_master am
-           LEFT JOIN student_master sm
-             ON sm.Student_Id = am.Student_Id
-             AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-           LEFT JOIN batch_mst bm ON bm.Batch_Id = am.Batch_Id
+           FROM student_master sm
+           LEFT JOIN batch_mst bm
+             ON bm.Batch_code = sm.Batch_Code
+             AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
            LEFT JOIN course_mst cm ON cm.Course_Id = bm.Course_Id
-             LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
+           LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
+           LEFT JOIN admission_master am
+             ON am.Student_Id = sm.Student_Id
+             AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
            LEFT JOIN s_fees_mst sfm
-             ON sfm.Student_Id = am.Student_Id
-             AND sfm.Batch_Id  = am.Batch_Id
+             ON sfm.Student_Id = sm.Student_Id
+             AND sfm.Batch_Id  = bm.Batch_Id
              AND sfm.IsDelete  = 0
              AND sfm.TypeR     = 'C'
              ${amountType ? 'AND sfm.Payment_Type = ?' : ''}
              ${fromDate   ? 'AND sfm.Date_Added >= ?' : ''}
              ${toDate     ? 'AND sfm.Date_Added <= ?' : ''}
              ${printDetails ? 'AND sfm.Print = 1' : ''}
-           WHERE ${amConditions.join(' AND ')}
+           WHERE ${smConditions.join(' AND ')}
            ORDER BY bm.Batch_code DESC, sm.Student_Name ASC, sfm.Date_Added DESC
            LIMIT 1000`,
           [
-            ...amParams,
+            ...smParams,
             ...(amountType ? [amountType] : []),
             ...(fromDate   ? [fromDate]   : []),
             ...(toDate     ? [toDate]     : []),
