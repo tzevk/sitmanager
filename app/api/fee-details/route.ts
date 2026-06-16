@@ -44,6 +44,26 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ rows: recentRows });
     }
 
+    if (mode === 'students') {
+      const [studentRows] = await getPool().query<any[]>(
+        `SELECT
+           sm.Student_Id,
+           sm.Student_Name,
+           sm.Present_Mobile,
+           sm.Email,
+           cm.Course_Name,
+           bm.Batch_code
+         FROM student_master sm
+         LEFT JOIN course_mst cm ON cm.Course_Id = sm.Course_Id
+         LEFT JOIN batch_mst bm ON bm.Batch_code = sm.Batch_Code
+         WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+           AND COALESCE(NULLIF(TRIM(sm.Student_Name), ''), '') <> ''
+         ORDER BY sm.Student_Id DESC
+         LIMIT 300`
+      );
+      return NextResponse.json({ rows: studentRows });
+    }
+
     const conditions = ['(sm.IsDelete = 0 OR sm.IsDelete IS NULL)'];
     const params: any[] = [];
 
