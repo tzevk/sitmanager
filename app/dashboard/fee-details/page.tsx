@@ -54,9 +54,18 @@ export default function FeeDetailsPage() {
     <div className="flex flex-col gap-3">
       <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-3 shadow-[0_4px_14px_rgba(46,48,147,0.18)] relative overflow-hidden">
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
-        <div className="relative z-10">
-          <h2 className="text-sm font-black text-white tracking-tight leading-none">Fee Details</h2>
-          <p className="text-[11px] text-white/60 mt-0.5">Search a student to view or edit fee receipts and account ledger</p>
+        <div className="relative z-10 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-black text-white tracking-tight leading-none">Fee Details</h2>
+            <p className="text-[11px] text-white/60 mt-0.5">Search a student to view or edit fee receipts and account ledger</p>
+          </div>
+          <Link
+            href="/dashboard/fee-details/add"
+            className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Add
+          </Link>
         </div>
       </div>
 
@@ -113,16 +122,6 @@ export default function FeeDetailsPage() {
               ))}
             </tbody>
           </table>
-        </div>
-
-        <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/60 flex justify-end">
-          <Link
-            href="/dashboard/fee-details/add"
-            className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 self-end"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
-            Add
-          </Link>
         </div>
       </div>
     </div>
