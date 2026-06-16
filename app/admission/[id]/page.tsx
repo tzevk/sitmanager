@@ -3475,7 +3475,7 @@ export default function PublicAdmissionFormPage() {
                           </p>
                           <div className="rounded-xl border border-sky-200 bg-white p-3 flex flex-col items-center gap-3">
                             <Image
-                              src="/direct-upi-transfer-qr.svg"
+                              src="/phot.jpg"
                               alt="Direct UPI Transfer QR"
                               width={260}
                               height={330}

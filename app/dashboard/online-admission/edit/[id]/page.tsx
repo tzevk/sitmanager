@@ -1205,7 +1205,7 @@ export default function EditOnlineAdmissionPage() {
                 <p className="font-semibold">Direct UPI Transfer enabled for this admission.</p>
                 <div className="rounded-lg border border-sky-200 bg-white p-2 flex flex-col items-center gap-2">
                   <Image
-                    src="/direct-upi-transfer-qr.svg"
+                    src="/phot.jpg"
                     alt="Direct UPI Transfer QR"
                     width={200}
                     height={250}
