@@ -154,7 +154,7 @@ export default function FeeDetailsPage() {
               {!recentLoading && recentRows.map((r, i) => (
                 <tr key={r.Fees_Id} className="hover:bg-slate-50/60 transition-colors">
                   <td className="py-2 px-3 text-xs text-slate-400 border-b border-slate-100">{i + 1}</td>
-                  <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Fees_Code || '—'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Fees_Code || ''}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100">{fmtDate(r.Receipt_Date)}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100 font-medium">{r.Student_Name || '—'}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Course_Name || '—'}</td>
