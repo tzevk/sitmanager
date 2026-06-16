@@ -174,6 +174,8 @@ export async function GET(
          s.Occupation       AS OccupationalStatus,
          s.Total_Exp        AS TotalExperience,
          s.Remark           AS JobDescription,
+         s.WorkingSince,
+         s.Login_Password,
          s.Inquiry_From, s.Inquiry_Type, s.Inquiry_Dt,
          s.Status_id, s.Status_date,
          s.Admission_Dt,
@@ -364,7 +366,7 @@ export async function PUT(
       Batch_Code, Batch_code, Batch_Category_id,
       Transfered, Moved_To_Course_Id, Moved_To_Batch_Code,
       // Company / Occupational
-      Organisation, Designation, JobDescription, TotalExperience, OccupationalStatus,
+      Organisation, Designation, JobDescription, TotalExperience, OccupationalStatus, WorkingSince,
       // Inquiry meta
       Inquiry_From, Inquiry_Type, Inquiry_Dt,
       // Status
@@ -472,6 +474,7 @@ export async function PUT(
       { col: 'Inquiry_Type',   val: Inquiry_Type || null },
       { col: 'Inquiry_Dt',     val: Inquiry_Dt || null },
       { col: 'Login_Password', val: Login_Password || null },
+      { col: 'WorkingSince',   val: WorkingSince || null },
       { col: 'SitPerformance', val: SitPerformance ? parseFloat(SitPerformance) : null },
       { col: 'PlacementRemark', val: PlacementRemark || null },
     ].filter(({ val }) => val !== null && val !== undefined);
