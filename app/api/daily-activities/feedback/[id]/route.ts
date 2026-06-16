@@ -13,6 +13,18 @@ type FeedbackSubmissionRow = RowDataPacket & {
   submitted_at: string | null;
 };
 
+type FeedbackSchemaForExport = {
+  trainingProgram?: { questions?: Array<{ id?: string; label?: string }> };
+  trainingExecutive?: { questions?: Array<{ id?: string; label?: string }> };
+  trainers?: { questions?: Array<{ id?: string; label?: string }> };
+};
+
+type QuestionLabelMaps = {
+  trainingProgram: Record<string, string>;
+  trainingExecutive: Record<string, string>;
+  trainers: Record<string, string>;
+};
+
 function normalizeToken(input: string): string {
   return input
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
@@ -22,7 +34,44 @@ function normalizeToken(input: string): string {
     .toLowerCase();
 }
 
-function flattenAnswers(answersJson: string): Record<string, string> {
+function buildQuestionLabelMaps(schemaJson: string): QuestionLabelMaps {
+  let schema: FeedbackSchemaForExport = {};
+  try {
+    schema = JSON.parse(schemaJson || '{}') as FeedbackSchemaForExport;
+  } catch {
+    schema = {};
+  }
+
+  const toMap = (questions: Array<{ id?: string; label?: string }> | undefined): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const q of questions || []) {
+      const id = String(q?.id || '').trim();
+      const label = String(q?.label || '').trim();
+      if (!id) continue;
+      out[id] = label || id;
+    }
+    return out;
+  };
+
+  return {
+    trainingProgram: toMap(schema.trainingProgram?.questions),
+    trainingExecutive: toMap(schema.trainingExecutive?.questions),
+    trainers: toMap(schema.trainers?.questions),
+  };
+}
+
+function setUniqueKey(target: Record<string, string>, key: string, value: string) {
+  const base = key || 'field';
+  let candidate = base;
+  let counter = 2;
+  while (Object.prototype.hasOwnProperty.call(target, candidate)) {
+    candidate = `${base}_${counter}`;
+    counter += 1;
+  }
+  target[candidate] = value;
+}
+
+function flattenAnswers(answersJson: string, maps: QuestionLabelMaps): Record<string, string> {
   let parsed: any = {};
   try {
     parsed = JSON.parse(answersJson || '{}');
@@ -42,24 +91,28 @@ function flattenAnswers(answersJson: string): Record<string, string> {
     ? parsed.trainingProgram
     : {};
   for (const [k, v] of Object.entries(trainingProgram)) {
-    out[`training_program_${normalizeToken(k)}`] = toText(v);
+    const label = maps.trainingProgram[k] || k;
+    setUniqueKey(out, `training_program_${normalizeToken(label)}`, toText(v));
   }
 
   const executiveRatings = parsed?.trainingExecutive?.ratings && typeof parsed.trainingExecutive.ratings === 'object'
     ? parsed.trainingExecutive.ratings
     : {};
   for (const [k, v] of Object.entries(executiveRatings)) {
-    out[`training_executive_${normalizeToken(k)}`] = toText(v);
+    const label = maps.trainingExecutive[k] || k;
+    setUniqueKey(out, `training_executive_${normalizeToken(label)}`, toText(v));
   }
   out.training_executive_other_suggestions = toText(parsed?.trainingExecutive?.otherSuggestions);
 
   const trainerEntries = Array.isArray(parsed?.trainers?.entries) ? parsed.trainers.entries : [];
   trainerEntries.forEach((entry: any, idx: number) => {
     const n = idx + 1;
-    out[`trainer_${n}_name`] = toText(entry?.trainerName);
+    const trainerName = toText(entry?.trainerName);
+    out[`trainer_${n}_name`] = trainerName;
     const ratings = entry?.ratings && typeof entry.ratings === 'object' ? entry.ratings : {};
     for (const [k, v] of Object.entries(ratings)) {
-      out[`trainer_${n}_${normalizeToken(k)}`] = toText(v);
+      const label = maps.trainers[k] || k;
+      setUniqueKey(out, `trainer_${n}_${normalizeToken(label)}`, toText(v));
     }
   });
 
@@ -105,7 +158,7 @@ async function buildFeedbackWorkbook(params: {
 
   const flattened = submissions.map((s) => ({
     ...s,
-    answers: flattenAnswers(s.answers_json),
+    answers: flattenAnswers(s.answers_json, buildQuestionLabelMaps(row.schema_json)),
   }));
 
   const dynamicKeys = Array.from(new Set(flattened.flatMap((r) => Object.keys(r.answers)))).sort((a, b) => {
