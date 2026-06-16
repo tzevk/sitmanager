@@ -174,8 +174,6 @@ export async function GET(
          s.Occupation       AS OccupationalStatus,
          s.Total_Exp        AS TotalExperience,
          s.Remark           AS JobDescription,
-         s.WorkingSince,
-         s.Login_Password,
          s.Inquiry_From, s.Inquiry_Type, s.Inquiry_Dt,
          s.Status_id, s.Status_date,
          s.Admission_Dt,
@@ -212,6 +210,18 @@ export async function GET(
 
     if (!rows.length) {
       return NextResponse.json({ error: 'Student not found' }, { status: 404 });
+    }
+
+    // Fetch optional columns that may not exist in all DB deployments
+    const optionalExtras: Record<string, unknown> = {};
+    for (const col of ['WorkingSince', 'Login_Password']) {
+      try {
+        const [extRows] = await pool.query(
+          `SELECT \`${col}\` AS val FROM student_master WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+          [id]
+        ) as [any[], any];
+        if (extRows.length) optionalExtras[col] = extRows[0].val ?? null;
+      } catch { /* column doesn't exist in this deployment */ }
     }
 
     // Placement records — CV shortlist children for this student
@@ -316,6 +326,7 @@ export async function GET(
     // Fall back to inquiry-row education fields when student_master is empty
     const studentBase = {
       ...rows[0],
+      ...optionalExtras,
       Qualification: firstNonEmpty(rows[0].Qualification, inquiry.Qualification),
       Discipline:    firstNonEmpty(rows[0].Discipline, inquiry.Discipline),
       Percentage:    firstNonEmpty(rows[0].Percentage, inquiry.Percentage),
