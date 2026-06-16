@@ -15,7 +15,27 @@ interface RecentReceiptRow {
   Receipt_Date: string | null;
   Payment_Type: string | null;
   Amount: number | null;
+  Transfered: string;
+  Moved_To_Batch_Code: string;
+  Cancelled: number;
 }
+
+const StatusTag = ({ row }: { row: Pick<RecentReceiptRow, 'Transfered' | 'Moved_To_Batch_Code' | 'Cancelled'> }) => {
+  if (Number(row.Cancelled) === 1)
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 border border-red-200 px-1.5 py-0.5 text-[10px] font-bold text-red-700 whitespace-nowrap">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />Cancelled
+      </span>
+    );
+  if (row.Transfered?.toLowerCase() === 'yes')
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 whitespace-nowrap">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+        Transferred{row.Moved_To_Batch_Code ? <span className="font-mono font-semibold">→ {row.Moved_To_Batch_Code}</span> : null}
+      </span>
+    );
+  return null;
+};
 
 const fmt = (n: number | null | undefined) =>
   (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -105,7 +125,12 @@ export default function FeeDetailsPage() {
                   <td className="py-2 px-3 text-xs text-slate-400 border-b border-slate-100">{i + 1}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Fees_Code || ''}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100">{fmtDate(r.Receipt_Date)}</td>
-                  <td className="py-2 px-3 text-xs border-b border-slate-100 font-medium">{r.Student_Name || '—'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-medium">{r.Student_Name || '—'}</span>
+                      <StatusTag row={r} />
+                    </div>
+                  </td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Course_Name || '—'}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Batch_code || '—'}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Payment_Type || '—'}</td>
