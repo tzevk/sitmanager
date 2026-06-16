@@ -183,21 +183,31 @@ export default function AddFeeDetailsPage() {
             <h2 className="text-sm font-black text-white tracking-tight leading-none">Add Fees Details</h2>
             <p className="text-[11px] text-white/60 mt-0.5">Direct add form. No filter screen.</p>
           </div>
-          <div className="w-full lg:w-[360px]">
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-white/80 mb-1">Student</label>
-            <select
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              disabled={loadingStudents || !students.length}
-              className="h-9 px-3 rounded-lg border border-white/30 bg-white text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:opacity-60 w-full"
+          <div className="w-full lg:w-[460px] grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-end">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-white/80 mb-1">Student</label>
+              <select
+                value={studentId}
+                onChange={(e) => setStudentId(e.target.value)}
+                disabled={loadingStudents || !students.length}
+                className="h-9 px-3 rounded-lg border border-white/30 bg-white text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:opacity-60 w-full"
+              >
+                <option value="">{loadingStudents ? 'Loading students…' : 'Select Student'}</option>
+                {students.map((s) => (
+                  <option key={s.Student_Id} value={s.Student_Id}>
+                    {s.Student_Name} ({s.Student_Id}){s.Batch_code ? ` - ${s.Batch_code}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!canUpdate || !studentId || saving}
+              className="h-9 px-4 rounded-lg bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 disabled:opacity-50"
             >
-              <option value="">{loadingStudents ? 'Loading students…' : 'Select Student'}</option>
-              {students.map((s) => (
-                <option key={s.Student_Id} value={s.Student_Id}>
-                  {s.Student_Name} ({s.Student_Id}){s.Batch_code ? ` - ${s.Batch_code}` : ''}
-                </option>
-              ))}
-            </select>
+              {saving ? 'Saving…' : 'Add'}
+            </button>
           </div>
         </div>
       </div>
@@ -302,14 +312,6 @@ export default function AddFeeDetailsPage() {
         </div>
 
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!canUpdate || !studentId || saving}
-            className="h-9 px-4 rounded-lg bg-[#2E3093] text-white text-xs font-bold hover:bg-[#252875] disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : 'Save Receipt'}
-          </button>
           <button
             type="button"
             onClick={() => router.push('/dashboard/fee-details')}
