@@ -966,12 +966,14 @@ export async function syncOnlineAdmissionIntoCurrentDb(
 
   if (statusAction === 'accept' && resolvedStudentId > 0) {
     let batchId: number | null = null;
+    let batchFees: number | null = null;
     if (batchCode) {
       const [batchRows] = await pool.query(
-        `SELECT Batch_Id FROM batch_mst WHERE Batch_code = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+        `SELECT Batch_Id, Fees_Full_Payment FROM batch_mst WHERE Batch_code = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
         [batchCode]
       ) as [any[], any];
       batchId = batchRows[0]?.Batch_Id ? Number(batchRows[0].Batch_Id) : null;
+      batchFees = batchRows[0]?.Fees_Full_Payment ? Number(batchRows[0].Fees_Full_Payment) : null;
     }
 
     const [admissionRows] = await pool.query(
@@ -993,18 +995,19 @@ export async function syncOnlineAdmissionIntoCurrentDb(
            Course_Id = COALESCE(?, Course_Id),
            Admission_Date = COALESCE(?, Admission_Date),
            Payment_Type = COALESCE(?, Payment_Type),
+           Fees = COALESCE(Fees, ?),
            IsActive = 1,
            Cancel = 0
          WHERE Admission_Id = ?`,
-        [batchId, courseId, admissionDate, modeOfPayment, admissionId]
+        [batchId, courseId, admissionDate, modeOfPayment, batchFees, admissionId]
       );
     } else {
       const modeOfPayment = normalizeText(input.modeOfPayment) || null;
       const [admInsert] = await pool.query(
         `INSERT INTO admission_master (
-           Student_Id, Course_Id, Batch_Id, Admission_Date, Payment_Type, IsActive, Cancel, IsDelete
-         ) VALUES (?, ?, ?, ?, ?, 1, 0, 0)`,
-        [resolvedStudentId, courseId, batchId, admissionDate, modeOfPayment]
+           Student_Id, Course_Id, Batch_Id, Admission_Date, Payment_Type, Fees, IsActive, Cancel, IsDelete
+         ) VALUES (?, ?, ?, ?, ?, ?, 1, 0, 0)`,
+        [resolvedStudentId, courseId, batchId, admissionDate, modeOfPayment, batchFees]
       ) as [any, any];
       admissionId = Number(admInsert.insertId);
     }

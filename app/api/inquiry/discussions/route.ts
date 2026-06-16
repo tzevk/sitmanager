@@ -113,6 +113,7 @@ export async function GET(req: NextRequest) {
       `SELECT id, date, ${nextDateSelect}, discussion, created_by, created_date
        FROM awt_inquirydiscussion
        WHERE (Inquiry_id = ? OR student_id = ?) AND (deleted = 0 OR deleted IS NULL)
+         AND date IS NOT NULL AND TRIM(COALESCE(date, '')) <> ''
        ORDER BY id ASC`,
       [canonicalInquiryId, canonicalStudentId ?? inquiryIdNum],
       5,
