@@ -14,15 +14,43 @@ type FeedbackSubmissionRow = RowDataPacket & {
 };
 
 type FeedbackSchemaForExport = {
+  ratingOptions?: string[];
   trainingProgram?: { questions?: Array<{ id?: string; label?: string }> };
-  trainingExecutive?: { questions?: Array<{ id?: string; label?: string }> };
-  trainers?: { questions?: Array<{ id?: string; label?: string }> };
+  trainingExecutive?: {
+    title?: string;
+    questions?: Array<{ id?: string; label?: string }>;
+    otherSuggestionsLabel?: string;
+  };
+  trainers?: {
+    title?: string;
+    questions?: Array<{ id?: string; label?: string }>;
+    viewsOnTrainerLabel?: string;
+    viewsOnSiteVisitLabel?: string;
+  };
 };
 
 type QuestionLabelMaps = {
   trainingProgram: Record<string, string>;
   trainingExecutive: Record<string, string>;
   trainers: Record<string, string>;
+};
+
+type ParsedTrainerEntry = {
+  trainerName?: string;
+  ratings?: Record<string, string | number | boolean | null | undefined>;
+};
+
+type ParsedFeedbackAnswers = {
+  trainingProgram?: Record<string, string | number | boolean | null | undefined>;
+  trainingExecutive?: {
+    ratings?: Record<string, string | number | boolean | null | undefined>;
+    otherSuggestions?: string | number | boolean | null;
+  };
+  trainers?: {
+    entries?: ParsedTrainerEntry[];
+    viewsOnTrainer?: string | number | boolean | null;
+    viewsOnSiteVisit?: string | number | boolean | null;
+  };
 };
 
 function normalizeToken(input: string): string {
@@ -72,9 +100,9 @@ function setUniqueKey(target: Record<string, string>, key: string, value: string
 }
 
 function flattenAnswers(answersJson: string, maps: QuestionLabelMaps): Record<string, string> {
-  let parsed: any = {};
+  let parsed: ParsedFeedbackAnswers = {};
   try {
-    parsed = JSON.parse(answersJson || '{}');
+    parsed = JSON.parse(answersJson || '{}') as ParsedFeedbackAnswers;
   } catch {
     parsed = {};
   }
@@ -105,7 +133,7 @@ function flattenAnswers(answersJson: string, maps: QuestionLabelMaps): Record<st
   out.training_executive_other_suggestions = toText(parsed?.trainingExecutive?.otherSuggestions);
 
   const trainerEntries = Array.isArray(parsed?.trainers?.entries) ? parsed.trainers.entries : [];
-  trainerEntries.forEach((entry: any, idx: number) => {
+  trainerEntries.forEach((entry: ParsedTrainerEntry, idx: number) => {
     const n = idx + 1;
     const trainerName = toText(entry?.trainerName);
     out[`trainer_${n}_name`] = trainerName;
@@ -145,6 +173,166 @@ function sanitizeFilePart(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'feedback';
 }
 
+function parseFeedbackSchema(schemaJson: string): FeedbackSchemaForExport {
+  try {
+    return JSON.parse(schemaJson || '{}') as FeedbackSchemaForExport;
+  } catch {
+    return {};
+  }
+}
+
+function parseAnswersJson(answersJson: string): ParsedFeedbackAnswers {
+  try {
+    return JSON.parse(answersJson || '{}') as ParsedFeedbackAnswers;
+  } catch {
+    return {};
+  }
+}
+
+function writeSectionTitle(ws: ExcelJS.Worksheet, rowNo: number, title: string, totalCols: number): number {
+  ws.mergeCells(rowNo, 1, rowNo, totalCols);
+  const cell = ws.getCell(rowNo, 1);
+  cell.value = title;
+  cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A6BB5' } };
+  cell.alignment = { vertical: 'middle', horizontal: 'left' };
+  return rowNo + 1;
+}
+
+function writeFormViewSheet(params: {
+  ws: ExcelJS.Worksheet;
+  row: TrainingFeedbackRow;
+  submissions: FeedbackSubmissionRow[];
+  schema: FeedbackSchemaForExport;
+}) {
+  const { ws, row, submissions, schema } = params;
+  const maxTrainerColumns = submissions.reduce((max, s) => {
+    const parsed = parseAnswersJson(s.answers_json);
+    const count = Array.isArray(parsed?.trainers?.entries) ? parsed.trainers.entries.length : 0;
+    return Math.max(max, count);
+  }, 1);
+  const totalCols = Math.max(2, 1 + maxTrainerColumns);
+
+  ws.columns = Array.from({ length: totalCols }, (_, idx) => ({
+    width: idx === 0 ? 42 : 20,
+  }));
+
+  let rowNo = 1;
+  ws.mergeCells(rowNo, 1, rowNo, totalCols);
+  const titleCell = ws.getCell(rowNo, 1);
+  titleCell.value = `${row.training_program || 'Training Feedback'}${row.batch_no ? ` - Batch ${row.batch_no}` : ''}`;
+  titleCell.font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
+  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E3093' } };
+  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  ws.getRow(rowNo).height = 24;
+  rowNo += 2;
+
+  submissions.forEach((submission, submissionIndex) => {
+    const parsed = parseAnswersJson(submission.answers_json);
+    const trainingProgram = parsed?.trainingProgram && typeof parsed.trainingProgram === 'object' ? parsed.trainingProgram : {};
+    const executiveRatings = parsed?.trainingExecutive?.ratings && typeof parsed.trainingExecutive.ratings === 'object'
+      ? parsed.trainingExecutive.ratings
+      : {};
+    const trainerEntries = Array.isArray(parsed?.trainers?.entries) ? parsed.trainers.entries : [];
+
+    ws.mergeCells(rowNo, 1, rowNo, totalCols);
+    const blockTitle = ws.getCell(rowNo, 1);
+    blockTitle.value = `Response ${submissionIndex + 1}`;
+    blockTitle.font = { bold: true, color: { argb: 'FF1F2937' } };
+    blockTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+    rowNo += 1;
+
+    const submittedDate = submission.submitted_at ? new Date(submission.submitted_at).toLocaleString('en-IN') : '';
+    ws.getCell(rowNo, 1).value = 'Student Name';
+    ws.getCell(rowNo, 2).value = submission.student_name || '';
+    rowNo += 1;
+    ws.getCell(rowNo, 1).value = 'Student Code';
+    ws.getCell(rowNo, 2).value = submission.student_code || '';
+    rowNo += 1;
+    ws.getCell(rowNo, 1).value = 'Student ID';
+    ws.getCell(rowNo, 2).value = submission.student_id;
+    rowNo += 1;
+    ws.getCell(rowNo, 1).value = 'Submitted At';
+    ws.getCell(rowNo, 2).value = submittedDate;
+    rowNo += 1;
+
+    rowNo = writeSectionTitle(ws, rowNo, 'Training Program', totalCols);
+    ws.getCell(rowNo, 1).value = 'Question';
+    ws.getCell(rowNo, 2).value = 'Response';
+    ws.getRow(rowNo).font = { bold: true };
+    rowNo += 1;
+    for (const q of schema.trainingProgram?.questions || []) {
+      const qid = String(q?.id || '').trim();
+      if (!qid) continue;
+      ws.getCell(rowNo, 1).value = String(q?.label || qid);
+      ws.getCell(rowNo, 2).value = String(trainingProgram?.[qid] ?? '');
+      rowNo += 1;
+    }
+
+    rowNo = writeSectionTitle(
+      ws,
+      rowNo,
+      schema.trainingExecutive?.title || 'Training Executive',
+      totalCols,
+    );
+    ws.getCell(rowNo, 1).value = 'Question';
+    ws.getCell(rowNo, 2).value = 'Rating';
+    ws.getRow(rowNo).font = { bold: true };
+    rowNo += 1;
+    for (const q of schema.trainingExecutive?.questions || []) {
+      const qid = String(q?.id || '').trim();
+      if (!qid) continue;
+      ws.getCell(rowNo, 1).value = String(q?.label || qid);
+      ws.getCell(rowNo, 2).value = String(executiveRatings?.[qid] ?? '');
+      rowNo += 1;
+    }
+    ws.getCell(rowNo, 1).value = schema.trainingExecutive?.otherSuggestionsLabel || 'Other Suggestions';
+    ws.getCell(rowNo, 2).value = String(parsed?.trainingExecutive?.otherSuggestions ?? '');
+    rowNo += 1;
+
+    rowNo = writeSectionTitle(
+      ws,
+      rowNo,
+      schema.trainers?.title || 'Trainers',
+      totalCols,
+    );
+    ws.getCell(rowNo, 1).value = 'Question';
+    for (let i = 0; i < maxTrainerColumns; i += 1) {
+      ws.getCell(rowNo, 2 + i).value = String(trainerEntries?.[i]?.trainerName || `Trainer ${i + 1}`);
+    }
+    ws.getRow(rowNo).font = { bold: true };
+    rowNo += 1;
+    for (const q of schema.trainers?.questions || []) {
+      const qid = String(q?.id || '').trim();
+      if (!qid) continue;
+      ws.getCell(rowNo, 1).value = String(q?.label || qid);
+      for (let i = 0; i < maxTrainerColumns; i += 1) {
+        const rating = trainerEntries?.[i]?.ratings?.[qid];
+        ws.getCell(rowNo, 2 + i).value = String(rating ?? '');
+      }
+      rowNo += 1;
+    }
+    ws.getCell(rowNo, 1).value = schema.trainers?.viewsOnTrainerLabel || 'Views on Trainer';
+    ws.getCell(rowNo, 2).value = String(parsed?.trainers?.viewsOnTrainer ?? '');
+    rowNo += 1;
+    ws.getCell(rowNo, 1).value = schema.trainers?.viewsOnSiteVisitLabel || 'Views on Site Visit';
+    ws.getCell(rowNo, 2).value = String(parsed?.trainers?.viewsOnSiteVisit ?? '');
+    rowNo += 2;
+  });
+
+  ws.eachRow((r) => {
+    r.eachCell((cell, colNumber) => {
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      };
+      cell.alignment = { vertical: 'top', wrapText: true, horizontal: colNumber === 1 ? 'left' : 'center' };
+    });
+  });
+}
+
 async function buildFeedbackWorkbook(params: {
   row: TrainingFeedbackRow;
   submissions: FeedbackSubmissionRow[];
@@ -154,7 +342,9 @@ async function buildFeedbackWorkbook(params: {
   workbook.creator = 'SIT Manager';
   workbook.created = new Date();
 
-  const ws = workbook.addWorksheet('Feedback Responses', { views: [{ state: 'frozen', ySplit: 2 }] });
+  const schema = parseFeedbackSchema(row.schema_json);
+
+  const ws = workbook.addWorksheet('Responses (Columns)', { views: [{ state: 'frozen', ySplit: 2 }] });
 
   const flattened = submissions.map((s) => ({
     ...s,
@@ -235,6 +425,9 @@ async function buildFeedbackWorkbook(params: {
       }
     });
   });
+
+  const formView = workbook.addWorksheet('Responses (Form View)');
+  writeFormViewSheet({ ws: formView, row, submissions, schema });
 
   return workbook.xlsx.writeBuffer();
 }
