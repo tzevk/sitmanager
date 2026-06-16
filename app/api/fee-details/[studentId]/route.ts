@@ -46,7 +46,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
               COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
               COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
               COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name,
-              am.Admission_Id, am.Fees AS Admission_Fees, COALESCE(am.Cancel, 0) AS Cancel
+              am.Admission_Id, am.Fees AS Admission_Fees,
+              CASE WHEN LOWER(TRIM(CAST(COALESCE(am.Cancel,'') AS CHAR))) IN ('yes','1','true') THEN 1 ELSE 0 END AS Cancel
        FROM student_master sm
        LEFT JOIN course_mst cm ON cm.Course_Id = sm.Course_Id
        LEFT JOIN batch_mst bm  ON bm.Batch_code = sm.Batch_Code
