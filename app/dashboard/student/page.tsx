@@ -146,7 +146,6 @@ export default function StudentPage() {
           <div>
             <h2 className="text-sm font-black text-white tracking-tight leading-none">Student</h2>
             <p className="text-[11px] text-white/60 mt-0.5">Total Student: {pagination.total.toLocaleString()}</p>
-          import { StudentTransferBadge } from '@/components/ui/StudentTransferBadge';
           </div>
           <button onClick={handleExport}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white/15 text-white border border-white/20 hover:bg-white/25 transition-all">
@@ -155,9 +154,6 @@ export default function StudentPage() {
             </svg>
             Export
           </button>
-            Transfered?: string | null;
-            Moved_To_Batch_Code?: string | null;
-            Moved_To_Course_Name?: string | null;
         </div>
       </div>
 
@@ -168,18 +164,15 @@ export default function StudentPage() {
             {SEARCH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <div className="relative flex-1 min-w-[200px]">
-                              <div className="flex flex-col gap-1">
-                                <span className="truncate block">{r.Student_Name || '—'}</span>
-                                <StudentTransferBadge
-                                  transferred={r.Transfered}
-                                  movedToCourseName={r.Moved_To_Course_Name}
-                                  movedToBatchCode={r.Moved_To_Batch_Code}
-                                />
-                              </div>
+            <input
+              ref={searchRef}
+              type="text"
+              value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSearch()}
               placeholder="Enter…"
-              className={`${ctrl} w-full pl-7`} />
+              className={`${ctrl} w-full pl-7`}
+            />
             <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
