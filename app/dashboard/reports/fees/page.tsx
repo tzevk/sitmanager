@@ -433,8 +433,11 @@ function FeesReportContent() {
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
         } else if (ci === 3) {
           cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: sFont } };
-          if (status !== 'Active') {
-            cell.value = `${r.Student_Name || '—'}  (${status})`;
+          if (status === 'Cancelled') {
+            cell.value = `${r.Student_Name || '—'}  [Cancelled]`;
+          } else if (status === 'Transferred') {
+            const dest = r.Moved_To_Batch_Code ? ` → ${r.Moved_To_Batch_Code}` : '';
+            cell.value = `${r.Student_Name || '—'}  [Transferred${dest}]`;
           }
         } else if (ci === 4 || ci === 5) {
           cell.numFmt = '₹#,##0';
@@ -468,6 +471,29 @@ function FeesReportContent() {
     const tTotal = ws.getCell(rowIdx, 5); tTotal.value = sumTotal; tTotal.numFmt = '₹#,##0'; tTotal.alignment = { horizontal: 'right', vertical: 'middle' };
     const tPaid = ws.getCell(rowIdx, 6); tPaid.value = sumPaid; tPaid.numFmt = '₹#,##0'; tPaid.alignment = { horizontal: 'right', vertical: 'middle' };
     const tRem = ws.getCell(rowIdx, 7); tRem.value = sumRemaining; tRem.numFmt = '₹#,##0'; tRem.alignment = { horizontal: 'right', vertical: 'middle' };
+
+    /* ── Legend row ── */
+    rowIdx += 2;
+    const legendDefs: [string, string, string][] = [
+      ['FFFEE2E2', 'FFB91C1C', 'Cancelled'],
+      ['FFFEF3C7', 'FFA16207', 'Transferred'],
+      ['FFDCFCE7', 'FF15803D', 'Balance cleared'],
+    ];
+    ws.mergeCells(rowIdx, 1, rowIdx, colCount);
+    const legendTitleCell = ws.getCell(rowIdx, 1);
+    legendTitleCell.value = 'Colour Legend:';
+    legendTitleCell.font = { name: 'Calibri', size: 8, bold: true, color: { argb: 'FF6B7280' } };
+    legendTitleCell.alignment = { vertical: 'middle' };
+    rowIdx++;
+    legendDefs.forEach(([bg, fg, label]) => {
+      ws.mergeCells(rowIdx, 1, rowIdx, colCount);
+      const lCell = ws.getCell(rowIdx, 1);
+      lCell.value = `  ■  ${label}`;
+      lCell.font = { name: 'Calibri', size: 8, color: { argb: fg } };
+      lCell.fill = fill(bg);
+      lCell.alignment = { vertical: 'middle' };
+      rowIdx++;
+    });
 
     /* ── Column widths ── */
     ws.columns = [
