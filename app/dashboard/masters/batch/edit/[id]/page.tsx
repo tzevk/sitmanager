@@ -1350,16 +1350,50 @@ export default function EditBatchPage() {
 
   /* Tab Content: Fees Structure */
   const FeesStructureTab = () => (
-    <div className="grid grid-cols-4 gap-2">
-      <div>
-        <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Total Fees (INR) <span className="text-red-500">*</span></label>
-        <input
-          type="number"
-          value={formData.INR_Total}
-          onChange={(e) => handleChange('INR_Total', e.target.value)}
-          className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs"
-          placeholder="e.g. 12899"
-        />
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Actual Fees (₹)</label>
+          <input
+            type="number"
+            value={formData.Actual_Fees_Payment}
+            onChange={(e) => handleChange('Actual_Fees_Payment', e.target.value)}
+            className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs"
+            placeholder="e.g. 112000"
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Full Payment Fees (₹)</label>
+          <input
+            type="number"
+            value={formData.Fees_Full_Payment}
+            onChange={(e) => handleChange('Fees_Full_Payment', e.target.value)}
+            className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs"
+            placeholder="e.g. 108000"
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Installment Fees (₹)</label>
+          <input
+            type="number"
+            value={formData.Fees_Installment_Payment}
+            onChange={(e) => handleChange('Fees_Installment_Payment', e.target.value)}
+            className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs"
+            placeholder="e.g. 115000"
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-4 gap-2">
+        <div>
+          <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Total Fees (INR)</label>
+          <input
+            type="number"
+            value={formData.INR_Total}
+            onChange={(e) => handleChange('INR_Total', e.target.value)}
+            className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs"
+            placeholder="e.g. 12899"
+          />
+        </div>
       </div>
     </div>
   );

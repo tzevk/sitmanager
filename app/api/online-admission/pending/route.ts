@@ -24,6 +24,11 @@ function buildName(payload: Record<string, unknown>, fallbackName: string): stri
   return normalizeText(fallbackName);
 }
 
+function parseTs(value: string): number {
+  const ts = Date.parse(value);
+  return Number.isFinite(ts) ? ts : 0;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const rateLimited = await apiRateLimiter(req);
@@ -34,6 +39,9 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const search = normalizeText(searchParams.get('search')).toLowerCase();
+    const sinceDaysRaw = Number(searchParams.get('sinceDays') ?? 45);
+    const sinceDays = Number.isFinite(sinceDaysRaw) ? Math.min(365, Math.max(1, sinceDaysRaw)) : 45;
+    const minTs = Date.now() - sinceDays * 24 * 60 * 60 * 1000;
 
     const pool = getPool();
     const inquiryTable = await resolveInquiryTableName(pool);
@@ -55,15 +63,27 @@ export async function GET(req: NextRequest) {
          si.Student_Name,
          si.Email,
          si.Present_Mobile,
-         si.OnlineState
+         si.OnlineState,
+         si.Student_Id
        FROM ${ONLINE_ADMISSION_PAYLOAD_TABLE} p
-       LEFT JOIN \`${inquiryTable}\` si
+       INNER JOIN \`${inquiryTable}\` si
          ON si.Inquiry_Id = p.Inquiry_Id
-       WHERE (si.IsDelete = 0 OR si.IsDelete IS NULL OR si.Inquiry_Id IS NULL)
-         AND (si.OnlineState IS NULL OR si.OnlineState NOT IN (7, 8))
+       WHERE (si.IsDelete = 0 OR si.IsDelete IS NULL)
+         AND (si.Student_Id IS NULL)
+         AND si.OnlineState IN (23, 24)
+         AND p.Payload LIKE '%__draftProgress%'
+         AND NULLIF(JSON_UNQUOTE(JSON_EXTRACT(p.Payload, '$.__draftProgress.autosavedAt')), '') IS NOT NULL
+         AND STR_TO_DATE(
+               REPLACE(
+                 SUBSTRING(JSON_UNQUOTE(JSON_EXTRACT(p.Payload, '$.__draftProgress.autosavedAt')), 1, 19),
+                 'T',
+                 ' '
+               ),
+               '%Y-%m-%d %H:%i:%s'
+             ) >= DATE_SUB(NOW(), INTERVAL ? DAY)
        ORDER BY p.Updated_At DESC
        LIMIT 1000`
-    ) as [any[], any];
+    , [sinceDays]) as [any[], any];
 
     const result = (rows as any[])
       .map((row) => {
@@ -82,13 +102,8 @@ export async function GET(req: NextRequest) {
           ? payload.__draftProgress as Record<string, unknown>
           : {};
 
-        const autosavedAt = normalizeText(draftMeta.autosavedAt) || (row.Updated_At ? new Date(row.Updated_At).toISOString() : '');
-        const currentStep = Number(draftMeta.currentStep || 1);
-          const hasAnyFilledFields = Object.entries(payload).some(([k, v]) => {
-            if (k === '__draftProgress' || k === 'payAtOfficeAudit') return false;
-            if (/file$/i.test(k)) return false;
-            return v !== null && v !== undefined && v !== '';
-          });
+        const autosavedAt = normalizeText(draftMeta.autosavedAt);
+        const currentStep = Number(draftMeta.currentStep ?? 0);
 
         // Full submitted form details (everything the student filled), minus internal/file keys.
         const details: Record<string, unknown> = {};
@@ -104,14 +119,15 @@ export async function GET(req: NextRequest) {
           studentName,
           email,
           mobile,
-          currentStep: Number.isFinite(currentStep) ? currentStep : (hasAnyFilledFields ? 1 : 0),
+          currentStep: Number.isFinite(currentStep) ? currentStep : 0,
           autosavedAt,
+          autosavedTs: parseTs(autosavedAt),
           draftUrl: `/admission/${Number(row.Inquiry_Id)}`,
           details,
           onlineState: Number(row.OnlineState ?? 0) || null,
         };
       })
-      .filter((item) => item.currentStep > 0)
+      .filter((item) => item.currentStep > 0 && item.autosavedTs >= minTs)
       .filter((item) => {
         if (!search) return true;
         return (
@@ -120,7 +136,9 @@ export async function GET(req: NextRequest) {
           item.mobile.toLowerCase().includes(search) ||
           String(item.inquiryId).includes(search)
         );
-      });
+      })
+      .sort((a, b) => b.autosavedTs - a.autosavedTs)
+      .map(({ autosavedTs, ...item }) => item);
 
     return NextResponse.json({ success: true, rows: result });
   } catch (err: unknown) {

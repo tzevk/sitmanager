@@ -108,6 +108,20 @@ function normalizePhoneText(value: unknown): string | null {
   return normalized;
 }
 
+function normalizeMobileForDedup(value: unknown): string | null {
+  const normalized = normalizePhoneText(value);
+  if (!normalized) return null;
+  const digits = normalized.replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : null;
+}
+
+function normalizeEmailForDedup(value: unknown): string | null {
+  const text = normalizeText(value);
+  if (!text) return null;
+  const lowered = text.toLowerCase();
+  return lowered.includes('@') ? lowered : null;
+}
+
 // Ordered list of field names to try when extracting a phone number.
 // More specific names come first so we don't accidentally pick up a
 // "contact" field that stores free-text rather than a number.
@@ -527,6 +541,55 @@ export async function syncSuvidyaInquiries(
       }
     }
 
+    // Batch-check existing inquiry contacts so we do not create duplicates when
+    // Suvidya sends the same lead with a new source id.
+    const incomingMobiles = Array.from(new Set(
+      validRecords
+        .map(({ record }) => normalizeMobileForDedup(extractPhoneForSync(record)))
+        .filter((v): v is string => Boolean(v))
+    ));
+    const incomingEmails = Array.from(new Set(
+      validRecords
+        .map(({ record }) => normalizeEmailForDedup(record.email_id))
+        .filter((v): v is string => Boolean(v))
+    ));
+
+    const existingInquiryByMobile = new Map<string, number>();
+    const existingInquiryByEmail = new Map<string, number>();
+    if (incomingMobiles.length > 0 || incomingEmails.length > 0) {
+      const conditions: string[] = [];
+      const params: Array<string | number> = [];
+
+      if (incomingMobiles.length > 0) {
+        const ph = incomingMobiles.map(() => '?').join(', ');
+        conditions.push(`RIGHT(REGEXP_REPLACE(COALESCE(Present_Mobile,''),'[^0-9]',''), 10) IN (${ph})`);
+        params.push(...incomingMobiles);
+      }
+      if (incomingEmails.length > 0) {
+        const ph = incomingEmails.map(() => '?').join(', ');
+        conditions.push(`LOWER(TRIM(COALESCE(Email,''))) IN (${ph})`);
+        params.push(...incomingEmails);
+      }
+
+      const [existingInquiryRows] = await syncConnection.query(
+        `SELECT Inquiry_Id, Present_Mobile, Email
+         FROM \`${inquiryTable}\`
+         WHERE (IsDelete = 0 OR IsDelete IS NULL)
+           AND (${conditions.join(' OR ')})
+         ORDER BY Inquiry_Id DESC`,
+        params
+      );
+
+      for (const row of existingInquiryRows as Array<{ Inquiry_Id: number; Present_Mobile: string | null; Email: string | null }>) {
+        const inquiryId = Number(row.Inquiry_Id);
+        if (!Number.isFinite(inquiryId) || inquiryId <= 0) continue;
+        const mobileKey = normalizeMobileForDedup(row.Present_Mobile);
+        const emailKey = normalizeEmailForDedup(row.Email);
+        if (mobileKey && !existingInquiryByMobile.has(mobileKey)) existingInquiryByMobile.set(mobileKey, inquiryId);
+        if (emailKey && !existingInquiryByEmail.has(emailKey)) existingInquiryByEmail.set(emailKey, inquiryId);
+      }
+    }
+
     for (const { record, sourceId, tableName, studentName } of validRecords) {
       const existing = existingRowsByKey.get(`${tableName}:${sourceId}`);
       if (existing) {
@@ -580,6 +643,49 @@ export async function syncSuvidyaInquiries(
         courseName,
         matchedCourseId,
       });
+
+      const mobileDedupKey = normalizeMobileForDedup(mobile);
+      const emailDedupKey = normalizeEmailForDedup(email);
+      const duplicateInquiryId =
+        (mobileDedupKey ? existingInquiryByMobile.get(mobileDedupKey) : undefined)
+        ?? (emailDedupKey ? existingInquiryByEmail.get(emailDedupKey) : undefined)
+        ?? null;
+
+      if (duplicateInquiryId) {
+        await syncConnection.query(
+          `INSERT INTO suvidya_inquiry_sync (
+             source_table_name,
+             source_inquiry_id,
+             inquiry_id,
+             student_name,
+             email,
+             mobile,
+             course_name,
+             page_source,
+             created_date,
+             payload_json
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             inquiry_id = COALESCE(inquiry_id, VALUES(inquiry_id)),
+             email = COALESCE(NULLIF(email, ''), VALUES(email)),
+             mobile = COALESCE(NULLIF(mobile, ''), VALUES(mobile)),
+             payload_json = VALUES(payload_json)`,
+          [
+            tableName,
+            sourceId,
+            duplicateInquiryId,
+            studentName,
+            email,
+            mobile,
+            courseName,
+            pageSource,
+            inquiryDate,
+            JSON.stringify(record),
+          ]
+        );
+        summary.skippedExisting += 1;
+        continue;
+      }
 
       try {
         const inquiryId = await insertInquiry(syncConnection, inquiryTable, {

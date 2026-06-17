@@ -70,11 +70,20 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
     );
     const admission = admissionRows[0] ?? null;
 
-    const [dueDateRows] = await pool.query<any[]>(
-      `SELECT duedate FROM fees_structure WHERE batch_id = ? AND deleted = 0 ORDER BY id DESC LIMIT 1`,
-      [student.Batch_Id]
+    // Query fees_structure and batch fees via Batch_code to avoid Batch_Id being NULL from the JOIN
+    const [feeRows] = await pool.query<any[]>(
+      `SELECT fs.duedate, fs.actualfees, fs.fullfees, fs.total_inr,
+              bm.Actual_Fees_Payment, bm.Fees_Full_Payment,
+              DATE_FORMAT(bm.SDate, '%Y-%m-%d') AS Batch_SDate_Direct
+       FROM batch_mst bm
+       LEFT JOIN fees_structure fs ON fs.batch_id = bm.Batch_Id AND (fs.deleted = 0 OR fs.deleted IS NULL)
+       WHERE bm.Batch_code = ? AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
+       ORDER BY bm.Batch_Id DESC, fs.id DESC
+       LIMIT 1`,
+      [student.Batch_Code]
     );
-    const dueDate = dueDateRows[0]?.duedate ?? admission?.Admission_Date ?? student.Batch_SDate ?? null;
+    const feeRow = feeRows[0] ?? null;
+    const dueDate = feeRow?.duedate ?? admission?.Admission_Date ?? feeRow?.Batch_SDate_Direct ?? student.Batch_SDate ?? null;
 
     const [banks] = await pool.query<any[]>(
       `SELECT Id, Bank_Name FROM bank WHERE (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Bank_Name`
@@ -89,21 +98,31 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
       [sid]
     );
 
-    const ledger = ledgerRows.map((r) => {
-      const { particular } = parseNotes(r.Notes);
-      const amt = Number(r.Total_Amt ?? r.Amount ?? 0);
-      return {
-        Fees_Id: r.Fees_Id,
-        Date: r.RDate || r.Date_Added,
-        Particular: particular,
-        Payment_Type: r.Payment_Type,
-        Fees_Code: r.Fees_Code,
-        Debit: r.TypeR === 'D' ? amt : 0,
-        Credit: r.TypeR === 'C' ? amt : 0,
-      };
-    });
+    const ledger = ledgerRows
+      .map((r) => {
+        const { particular } = parseNotes(r.Notes);
+        const amt = Number(r.Total_Amt ?? r.Amount ?? 0);
+        return {
+          Fees_Id: r.Fees_Id,
+          Date: r.RDate || r.Date_Added,
+          Particular: particular,
+          Payment_Type: r.Payment_Type,
+          Fees_Code: r.Fees_Code,
+          Debit: r.TypeR === 'D' ? amt : 0,
+          Credit: r.TypeR === 'C' ? amt : 0,
+        };
+      })
+      .filter((r) => r.Debit > 0 || r.Credit > 0);
 
-    const totalDebit = Number(admission?.Fees ?? student.Actual_Fees_Payment ?? student.Fees_Full_Payment ?? 0);
+    const totalDebit = Number(
+      admission?.Fees ??
+      feeRow?.actualfees ??
+      feeRow?.fullfees ??
+      feeRow?.total_inr ??
+      feeRow?.Actual_Fees_Payment ??
+      feeRow?.Fees_Full_Payment ??
+      0
+    );
     const totalCredit = ledger.reduce((s, r) => s + r.Credit, 0);
     const balance = totalDebit - totalCredit;
 

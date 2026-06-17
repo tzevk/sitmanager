@@ -7,8 +7,7 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type StatusTab = '' | 'open' | 'accepted' | 'closed';
-type FormStatusFilter = '' | 'filled' | 'filling';
+type AdmissionTab = '' | 'pending' | 'completed' | 'rejected';
 
 interface AdmissionRow {
   Inquiry_Id: number;
@@ -18,11 +17,12 @@ interface AdmissionRow {
   Present_Mobile: string | null;
   Batch_code: string | null;
   Admission_Date: string | null;
+  LastActivityAt: string | null;
   PayloadUpdatedAt: string | null;
   PayloadCreatedAt: string | null;
   Status_id: number | null;
   StatusLabel: string;
-  StatusCategory: 'open' | 'accepted' | 'closed';
+  StatusCategory: 'pending' | 'completed' | 'rejected';
   RazorpayPaid: boolean;
   RazorpayPaymentId: string;
   RazorpayOrderId: string;
@@ -33,11 +33,10 @@ interface Pagination { page: number; limit: number; total: number; totalPages: n
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const STATUS_TABS: { id: StatusTab; label: string }[] = [
-  { id: '', label: 'All' },
-  { id: 'open', label: 'Pending' },
-  { id: 'accepted', label: 'Accepted' },
-  { id: 'closed', label: 'Rejected' },
+const TABS: { id: AdmissionTab; label: string }[] = [
+  { id: 'pending',   label: 'Pending' },
+  { id: 'completed', label: 'Completed' },
+  { id: 'rejected',  label: 'Rejected' },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -71,9 +70,8 @@ export default function OnlineAdmissionPage() {
   const [busyId, setBusyId]         = useState<number | null>(null);
 
   // Filters
-  const [statusTab, setStatusTab]       = useState<StatusTab>('');
-  const [formStatus, setFormStatus]     = useState<FormStatusFilter>('');
-  const [search, setSearch]             = useState('');
+  const [tab, setTab]       = useState<AdmissionTab>('pending');
+  const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom]         = useState('');
   const [dateTo, setDateTo]             = useState('');
   const [page, setPage]           = useState(1);
@@ -89,11 +87,10 @@ export default function OnlineAdmissionPage() {
       const p = new URLSearchParams();
       p.set('page', String(page));
       p.set('limit', '25');
-      if (search)     p.set('search', search);
-      if (statusTab)  p.set('statusCategory', statusTab);
-      if (formStatus) p.set('formStatus', formStatus);
-      if (dateFrom)   p.set('dateFrom', dateFrom);
-      if (dateTo)     p.set('dateTo', dateTo);
+      if (search)   p.set('search', search);
+      if (tab)      p.set('tab', tab);
+      if (dateFrom) p.set('dateFrom', dateFrom);
+      if (dateTo)   p.set('dateTo', dateTo);
       const res  = await fetch(`/api/online-admission?${p}`, { signal: ctrl.signal });
       const data = await res.json();
       setRows(data.rows ?? []);
@@ -103,16 +100,16 @@ export default function OnlineAdmissionPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, fetchTrigger, search, statusTab, formStatus, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, fetchTrigger, search, tab, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const refresh = () => { setPage(1); setFetchTrigger(t => t + 1); };
 
-  const handleTabChange = (tab: StatusTab) => {
-    setStatusTab(tab);
+  const handleTabChange = (t: AdmissionTab) => {
+    setTab(t);
     setPage(1);
-    setFetchTrigger(t => t + 1);
+    setFetchTrigger(t2 => t2 + 1);
   };
 
   const handleAction = async (inquiryId: number, action: 'accept' | 'reject' | 'delete') => {
@@ -151,7 +148,7 @@ export default function OnlineAdmissionPage() {
         r.RazorpayAmount != null ? String(r.RazorpayAmount) : '',
         `"${(r.RazorpayPaymentId || '').replace(/"/g, '""')}"`,
         `"${r.StatusLabel}"`,
-        r.PayloadUpdatedAt ? new Date(r.PayloadUpdatedAt).toLocaleDateString('en-IN') : '',
+        r.LastActivityAt ? new Date(r.LastActivityAt).toLocaleDateString('en-IN') : '',
       ].join(',')),
     ];
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
@@ -165,9 +162,9 @@ export default function OnlineAdmissionPage() {
   // ── Style helpers ──────────────────────────────────────────────────────────
 
   const statusBadgeCls = (cat: string) =>
-    cat === 'accepted'
+    cat === 'completed'
       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-      : cat === 'closed'
+      : cat === 'rejected'
         ? 'bg-red-50 text-red-600 border-red-200'
         : 'bg-amber-50 text-amber-700 border-amber-200';
 
@@ -201,40 +198,19 @@ export default function OnlineAdmissionPage() {
 
           {/* ── Tabs + Filters ── */}
           <div className="bg-white rounded-xl border border-slate-200 px-4 py-2.5 flex flex-wrap items-center gap-2">
-            {/* Status tabs */}
+            {/* Tabs */}
             <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
-              {STATUS_TABS.map(tab => (
+              {TABS.map(t => (
                 <button
-                  key={tab.id}
-                  onClick={() => handleTabChange(tab.id)}
+                  key={t.id}
+                  onClick={() => handleTabChange(t.id)}
                   className={`px-3 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                    statusTab === tab.id
+                    tab === t.id
                       ? 'bg-[#2E3093] text-white shadow-sm'
                       : 'text-slate-600 hover:text-slate-800'
                   }`}
                 >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-            <div className="w-px h-5 bg-slate-200" />
-            {/* Form status filter */}
-            <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
-              {([['', 'All Forms'], ['filled', 'Filled'], ['filling', 'Filling']] as [FormStatusFilter, string][]).map(([val, label]) => (
-                <button
-                  key={val}
-                  onClick={() => { setFormStatus(val); setPage(1); setFetchTrigger(t => t + 1); }}
-                  className={`px-3 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                    formStatus === val
-                      ? val === 'filled'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : val === 'filling'
-                          ? 'bg-amber-500 text-white shadow-sm'
-                          : 'bg-[#2E3093] text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-800'
-                  }`}
-                >
-                  {label}
+                  {t.label}
                 </button>
               ))}
             </div>
@@ -258,7 +234,7 @@ export default function OnlineAdmissionPage() {
               Search
             </button>
             <button
-              onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); setFormStatus(''); refresh(); }}
+              onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); refresh(); }}
               className="px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors"
             >
               Clear
@@ -297,7 +273,7 @@ export default function OnlineAdmissionPage() {
                       <td colSpan={9} className="py-10 text-center text-xs text-slate-400">No admissions found</td>
                     </tr>
                   ) : rows.map(r => {
-                    const isPending  = r.StatusCategory === 'open';
+                    const isPending  = r.StatusCategory === 'pending';
                     const busy       = busyId === r.Inquiry_Id;
                     return (
                       <tr key={r.Inquiry_Id} className="border-b border-slate-100 transition-colors hover:bg-slate-50">
@@ -328,7 +304,7 @@ export default function OnlineAdmissionPage() {
                             </span>
                           </td>
                           <td className="py-1.5 px-3 text-slate-500 whitespace-nowrap text-[11px]">
-                            {fmtDateTime(r.PayloadUpdatedAt || r.PayloadCreatedAt || r.Admission_Date)}
+                            {fmtDateTime(r.LastActivityAt)}
                           </td>
                           <td className="py-1.5 px-3">
                             <div className="flex items-center justify-center gap-0.5">

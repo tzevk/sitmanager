@@ -13,16 +13,14 @@ export interface OnlineAdmissionListParams {
   page: number;
   limit: number;
   search?: string;
-  statusCategory?: string;
+  tab?: 'pending' | 'completed' | 'rejected' | '';
   dateFrom?: string;
   dateTo?: string;
   /** Only include fully-submitted forms (exclude draft autosaves). */
   submittedOnly?: boolean;
-  /** 'filled' = OnlineState 23 (submitted); 'filling' = has payload but not yet submitted */
-  formStatus?: 'filled' | 'filling' | '';
 }
 
-type StatusCategory = 'open' | 'accepted' | 'closed';
+type StatusCategory = 'pending' | 'completed' | 'rejected';
 
 export interface AdmissionRow {
   Admission_Id: number;
@@ -32,6 +30,7 @@ export interface AdmissionRow {
   Present_Mobile: string;
   Batch_code: string;
   Admission_Date: string | null;
+  LastActivityAt: string | null;
   PayloadUpdatedAt: string | null;
   PayloadCreatedAt: string | null;
   Status_id: number | null;
@@ -584,12 +583,12 @@ function safeDate(value: unknown): string | null {
 }
 
 function resolveCategory(statusId: number, statusText: string): StatusCategory {
-  if ([8, 9, 10].includes(statusId)) return 'accepted';
-  if ([5, 11, 13, 27].includes(statusId)) return 'closed';
+  if ([8, 10].includes(statusId)) return 'completed';
+  if ([4, 7, 9].includes(statusId)) return 'rejected';
   const base = (statusText || '').toLowerCase();
-  if (/accepted|admitted|confirm|taken/.test(base)) return 'accepted';
-  if (/cancel|reject|closed|not interested|drop|left|denied/.test(base)) return 'closed';
-  return 'open';
+  if (/accepted|admitted|confirm|taken/.test(base)) return 'completed';
+  if (/cancel|reject|closed|not interested|drop|left|denied/.test(base)) return 'rejected';
+  return 'pending';
 }
 
 function normalizeText(value: unknown): string {
@@ -1086,7 +1085,7 @@ export async function listOnlineAdmissions(
   const inquiryTable = await resolveInquiryTableName(pool);
   const statusTable = await resolveStatusTableName(pool);
   const studentMasterTable = await resolveStudentMasterTableName(pool);
-  const { page, limit, search = '', statusCategory = '', dateFrom = '', dateTo = '', submittedOnly = false, formStatus = '' } = params;
+  const { page, limit, search = '', tab = '', dateFrom = '', dateTo = '', submittedOnly = false } = params;
   const offset = (page - 1) * limit;
 
   const buildNewQuery = (withStatus: boolean) => {
@@ -1094,9 +1093,20 @@ export async function listOnlineAdmissions(
     const smJoin = studentMasterTable
       ? `LEFT JOIN \`${studentMasterTable}\` sm ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)`
       : '';
-    const statusTextExpr = effectiveStatusTable
-      ? `COALESCE(stm_si.Status, stm_sm.Status, '')`
-      : `''`;
+    // For known OnlineState values in the admission flow, always use our own labels
+    // rather than whatever the status master table says (it may have wrong/unrelated labels).
+    const statusTextExpr =
+      `CASE si.OnlineState
+         WHEN 23 THEN 'Document Pending'
+         WHEN 24 THEN 'Fees Pending'
+         WHEN 8  THEN 'Admitted'
+         WHEN 4  THEN 'Not Interested'
+         WHEN 7  THEN 'Cancelled'
+         WHEN 9  THEN 'Left'
+         WHEN 10 THEN 'On Hold'
+         WHEN 19 THEN 'Online Inquiry'
+         ${effectiveStatusTable ? `ELSE COALESCE(stm_si.Status, stm_sm.Status, '')` : `ELSE ''`}
+       END`;
     const statusJoins = effectiveStatusTable && studentMasterTable
       ? `LEFT JOIN \`${effectiveStatusTable}\` stm_sm ON stm_sm.Id = sm.Status_id
          LEFT JOIN \`${effectiveStatusTable}\` stm_si ON stm_si.Id = si.OnlineState`
@@ -1109,13 +1119,23 @@ export async function listOnlineAdmissions(
     // grant/reject decisions. Fall back to the student master status when it is unset
     // (NULL or empty string).
     const smStatusId = studentMasterTable ? `COALESCE(NULLIF(TRIM(si.OnlineState), ''), sm.Status_id)` : `NULLIF(TRIM(si.OnlineState), '')`;
-    return `SELECT
+    const draftAutosaveExpr = `NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.__draftProgress.autosavedAt')), '')`;
+    const activityExpr = tab === 'pending'
+      ? `COALESCE(${draftAutosaveExpr}, oap.Updated_At, oap.Created_At)`
+      : `COALESCE(
+          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), ''),
+          si.Inquiry_Dt,
+          oap.Updated_At,
+          oap.Created_At
+        )`;
+     return `SELECT
        si.Inquiry_Id AS Inquiry_Id,
        ${studentMasterTable ? `COALESCE(si.Student_Name, sm.Student_Name, '')` : `COALESCE(si.Student_Name, '')`} AS Student_Name,
        ${studentMasterTable ? `COALESCE(si.Email, sm.Email, '')` : `COALESCE(si.Email, '')`} AS Email,
        ${studentMasterTable ? `COALESCE(si.Present_Mobile, sm.Present_Mobile, '')` : `COALESCE(si.Present_Mobile, '')`} AS Present_Mobile,
        ${smBatchCode} AS Batch_code,
        ${smAdmissionDt} AS Admission_Date,
+       ${activityExpr} AS LastActivityAt,
        ${smStatusId} AS Status_id,
        ${statusTextExpr} AS StatusText,
        oap.Created_At AS PayloadCreatedAt,
@@ -1136,10 +1156,6 @@ export async function listOnlineAdmissions(
 
   await ensurePayloadTable(pool);
 
-  const ACCEPTED_IDS = [8, 9, 10];
-  const CLOSED_IDS   = [5, 11, 13, 27];
-  const normalizedCategory = statusCategory.trim().toLowerCase();
-
   // New entries (have a payload record)
   const newConds: string[] = ['(si.IsDelete = 0 OR si.IsDelete IS NULL)'];
   const newParams: any[] = [];
@@ -1150,25 +1166,34 @@ export async function listOnlineAdmissions(
     const like = `%${search}%`;
     newParams.push(like, like, like, like);
   }
-  if (dateFrom) { newConds.push('oap.Created_At >= ?'); newParams.push(dateFrom); }
-  if (dateTo)   { newConds.push('oap.Created_At <= ?'); newParams.push(dateTo); }
-  // Exclude draft autosaves — only forms that were actually submitted.
-  if (submittedOnly) { newConds.push("oap.Payload NOT LIKE '%__draftProgress%'"); }
-  // formStatus filter: 'filled' = student submitted (OnlineState=23); 'filling' = draft in progress
-  if (formStatus === 'filled') {
-    newConds.push('si.OnlineState = 23');
-  } else if (formStatus === 'filling') {
-    newConds.push('(si.OnlineState IS NULL OR si.OnlineState NOT IN (7, 8, 23))');
+  const pendingDateExpr = `COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.__draftProgress.autosavedAt')), ''), oap.Updated_At, oap.Created_At)`;
+  const defaultDateExpr = `COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), ''), si.Inquiry_Dt, oap.Updated_At, oap.Created_At)`;
+  const listDateExpr = tab === 'pending' ? pendingDateExpr : defaultDateExpr;
+
+  if (dateFrom) {
+    newConds.push(`${listDateExpr} >= ?`);
+    newParams.push(dateFrom);
   }
-  const smStatusIdExpr = studentMasterTable
-    ? `COALESCE(NULLIF(TRIM(si.OnlineState), ''), sm.Status_id)`
-    : `NULLIF(TRIM(si.OnlineState), '')`;
-  if (normalizedCategory === 'accepted') {
-    newConds.push(`${smStatusIdExpr} IN (${ACCEPTED_IDS.join(',')})`);
-  } else if (normalizedCategory === 'closed') {
-    newConds.push(`${smStatusIdExpr} IN (${CLOSED_IDS.join(',')})`);
-  } else if (normalizedCategory === 'open') {
-    newConds.push(`(${smStatusIdExpr} NOT IN (${[...ACCEPTED_IDS, ...CLOSED_IDS].join(',')}) OR ${smStatusIdExpr} IS NULL)`);
+  if (dateTo) {
+    newConds.push(`${listDateExpr} <= ?`);
+    newParams.push(dateTo);
+  }
+  if (submittedOnly) { newConds.push("oap.Payload NOT LIKE '%__draftProgress%'"); }
+
+  // A row counts as a real *submitted* admission form only when its payload has no
+  // __draftProgress marker. Drafts (autosaves) keep that marker and must never appear
+  // in any tab — OnlineState alone is unreliable because inquiries can carry 23/24 from
+  // the regular inquiry workflow without ever submitting the online form.
+  const SUBMITTED = "oap.Payload NOT LIKE '%__draftProgress%'";
+  if (tab === 'pending') {
+    newConds.push(`oap.Payload LIKE '%__draftProgress%' AND si.OnlineState IN (23, 24)`);
+    newConds.push(`${pendingDateExpr} >= DATE_SUB(NOW(), INTERVAL 45 DAY)`);
+  } else if (tab === 'completed') {
+    newConds.push(`${SUBMITTED} AND si.OnlineState NOT IN (4, 7, 9)`);
+  } else if (tab === 'rejected') {
+    newConds.push(`${SUBMITTED} AND si.OnlineState IN (4, 7, 9)`);
+  } else {
+    newConds.push(SUBMITTED);
   }
 
   let total = 0;
@@ -1181,7 +1206,10 @@ export async function listOnlineAdmissions(
     total = Number((countRows as any[])[0]?.total || 0);
 
     [newRows] = await pool.query(
-      `${buildNewQuery(true)} WHERE ${newConds.join(' AND ')} ORDER BY COALESCE(oap.Updated_At, oap.Created_At) DESC, oap.Created_At DESC, si.Inquiry_Id DESC LIMIT ? OFFSET ?`,
+      `${buildNewQuery(true)} WHERE ${newConds.join(' AND ')}
+       ORDER BY ${listDateExpr} DESC,
+                si.Inquiry_Id DESC
+       LIMIT ? OFFSET ?`,
       [...newParams, limit, offset]
     ) as [any[], any];
   } catch (e: any) {
@@ -1194,7 +1222,10 @@ export async function listOnlineAdmissions(
       total = Number((countRows as any[])[0]?.total || 0);
 
       [newRows] = await pool.query(
-        `${buildNewQuery(false)} WHERE ${newConds.join(' AND ')} ORDER BY COALESCE(oap.Updated_At, oap.Created_At) DESC, oap.Created_At DESC, si.Inquiry_Id DESC LIMIT ? OFFSET ?`,
+        `${buildNewQuery(false)} WHERE ${newConds.join(' AND ')}
+         ORDER BY ${listDateExpr} DESC,
+                  si.Inquiry_Id DESC
+         LIMIT ? OFFSET ?`,
         [...newParams, limit, offset]
       ) as [any[], any];
     } catch (e2: any) {
@@ -1236,6 +1267,7 @@ export async function listOnlineAdmissions(
     return {
       ...r,
       Admission_Date: safeDate(r.Admission_Date),
+      LastActivityAt: safeDate(r.LastActivityAt),
       PayloadCreatedAt: safeDate(r.PayloadCreatedAt),
       PayloadUpdatedAt: safeDate(r.PayloadUpdatedAt),
       DOB: safeDate(r.DOB),
@@ -1291,6 +1323,11 @@ export async function submitOnlineAdmission(
     grad_ktDetails: stripFiles(rest.grad_ktDetails),
     postgrad_ktDetails: stripFiles(rest.postgrad_ktDetails),
   };
+  // A final submission is never a draft — drop any leftover draft marker so this row is
+  // unambiguously a submitted admission form (the pending/completed/rejected tabs rely on
+  // the absence of __draftProgress to distinguish submissions from in-progress autosaves).
+  delete (cleanBody as Record<string, unknown>).__draftProgress;
+  (cleanBody as Record<string, unknown>).submittedAt = new Date().toISOString();
 
   await ensurePayloadTable(pool);
   await pool.query(
