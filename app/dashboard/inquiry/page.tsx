@@ -619,7 +619,14 @@ export default function InquiryPage() {
                     </td>
                     <td className="py-1.5 px-3">
                       <div className="flex items-center justify-center gap-0.5">
-                        <button title="View" className="p-1 rounded hover:bg-blue-50 text-slate-300 hover:text-[#2A6BB5] transition-colors">
+                        <button
+                          title="View"
+                          onClick={() => {
+                            const returnTo = encodeURIComponent(buildReturnTo());
+                            router.push(`/dashboard/inquiry/add?editId=${r.Student_Id}&returnTo=${returnTo}`);
+                          }}
+                          className="p-1 rounded hover:bg-blue-50 text-slate-300 hover:text-[#2A6BB5] transition-colors"
+                        >
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -649,8 +656,8 @@ export default function InquiryPage() {
                         <button
                           title="Delete"
                           onClick={() => handleDeleteInquiry(r)}
-                          disabled={!canDelete || deletingId === r.Student_Id}
-                          className={canDelete ? 'p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors disabled:opacity-50' : 'p-1 rounded text-slate-200 cursor-not-allowed'}
+                          disabled={!(canDelete || canUpdate) || deletingId === r.Student_Id}
+                          className={(canDelete || canUpdate) ? 'p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors disabled:opacity-50' : 'p-1 rounded text-slate-200 cursor-not-allowed'}
                         >
                           {deletingId === r.Student_Id ? (
                             <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />

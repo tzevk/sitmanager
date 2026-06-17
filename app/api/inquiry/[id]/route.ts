@@ -20,7 +20,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requirePermission(req, 'inquiry.delete');
+    const auth = await requirePermission(req, ['inquiry.delete', 'inquiry.update']);
     if (auth instanceof NextResponse) return auth;
 
     const pool = getPool();

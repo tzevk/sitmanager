@@ -128,7 +128,9 @@ function normalizeEmailForDedup(value: unknown): string | null {
 const PHONE_FIELD_CANDIDATES = [
   'phone', 'mobile', 'phone_number', 'mobile_number',
   'your_mobile', 'your_phone', 'your_number',
+  'your_whatsapp_number', 'mobile_number_1', 'phone1',
   'mobile_no', 'phone_no', 'mob_no', 'mob',
+  'contact_no', 'whatsapp_no', 'mobileno',
   'tel', 'telephone', 'cell', 'cellphone',
   'student_mobile', 'student_phone',
   'contact_number', 'contact', 'whatsapp', 'whatsapp_number',
@@ -152,9 +154,18 @@ function pickRawPhoneText(record: SuvidyaInquiryRecord): string | null {
 
     const text = normalizeText(raw);
     if (!text) continue;
-    // Must look like a phone: mostly digits, at least 10 of them
-    const digits = text.replace(/[\s\-\+\(\)\.]/g, '');
-    if (/^\d{10,15}$/.test(digits)) return text;
+
+    // Accept any embedded Indian-style mobile number inside free text.
+    const explicitMobileMatch = text.match(/(?:\+?91[\s\-]?)?([6-9]\d{9})/);
+    if (explicitMobileMatch?.[1]) return explicitMobileMatch[1];
+
+    // Generic numeric fallback.
+    const digits = text.replace(/\D/g, '');
+    if (digits.length >= 10 && digits.length <= 15) {
+      if (digits.length === 10) return digits;
+      const tail = digits.slice(-10);
+      if (/^[6-9]\d{9}$/.test(tail)) return tail;
+    }
   }
 
   return null;
@@ -652,6 +663,14 @@ export async function syncSuvidyaInquiries(
         ?? null;
 
       if (duplicateInquiryId) {
+        if (mobile) {
+          await syncConnection.query(
+            `UPDATE \`${inquiryTable}\`
+             SET Present_Mobile = COALESCE(NULLIF(Present_Mobile, ''), ?)
+             WHERE Inquiry_Id = ?`,
+            [mobile, duplicateInquiryId]
+          );
+        }
         await syncConnection.query(
           `INSERT INTO suvidya_inquiry_sync (
              source_table_name,
