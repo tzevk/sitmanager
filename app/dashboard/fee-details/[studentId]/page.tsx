@@ -271,19 +271,19 @@ export default function FeeDetailsEditPage() {
 
         <!-- Body -->
         <div class="body">
-          <!-- Amount highlight -->
-          <div class="amount-hero">
-            <div class="amount-label">Amount Received</div>
-            <div class="amount-figure">₹ ${fmt(amtNum)}</div>
-            <div class="amount-words">${amtWords}</div>
-          </div>
-
           <!-- Info grid -->
           <div class="info-grid">
             <div class="info-row">
               <div class="info-cell full">
                 <div class="info-key">Received with thanks from</div>
                 <div class="info-val highlight">${data.student.Student_Name}</div>
+              </div>
+            </div>
+            <div class="info-row">
+              <div class="info-cell full amount-hero">
+                <div class="amount-label">Amount Received</div>
+                <div class="amount-figure">₹ ${fmt(amtNum)}</div>
+                <div class="amount-words">${amtWords}</div>
               </div>
             </div>
             <div class="info-row">
