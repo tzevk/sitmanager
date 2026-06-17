@@ -7,7 +7,7 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type AdmissionTab = '' | 'pending' | 'completed' | 'rejected';
+type AdmissionTab = '' | 'in_progress' | 'pending' | 'completed' | 'rejected';
 
 interface AdmissionRow {
   Inquiry_Id: number;
@@ -27,6 +27,8 @@ interface AdmissionRow {
   RazorpayPaymentId: string;
   RazorpayOrderId: string;
   RazorpayAmount: number | null;
+  IsDraft: 0 | 1;
+  DraftStep: number;
 }
 
 interface Pagination { page: number; limit: number; total: number; totalPages: number }
@@ -34,9 +36,10 @@ interface Pagination { page: number; limit: number; total: number; totalPages: n
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const TABS: { id: AdmissionTab; label: string }[] = [
-  { id: 'pending',   label: 'Pending' },
-  { id: 'completed', label: 'Completed' },
-  { id: 'rejected',  label: 'Rejected' },
+  { id: 'in_progress', label: 'In Progress' },
+  { id: 'pending',     label: 'Pending' },
+  { id: 'completed',   label: 'Completed' },
+  { id: 'rejected',    label: 'Rejected' },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -253,6 +256,7 @@ export default function OnlineAdmissionPage() {
                     <th className="text-left py-2 px-3 font-bold">Mobile</th>
                     <th className="text-left py-2 px-3 font-bold">Batch</th>
                     <th className="text-left py-2 px-3 font-bold">Payment</th>
+                    <th className="text-left py-2 px-3 font-bold">Form</th>
                     <th className="text-left py-2 px-3 font-bold">Status</th>
                     <th className="text-left py-2 px-3 font-bold whitespace-nowrap">Last Updated</th>
                     <th className="text-center py-2 px-3 font-bold">Actions</th>
@@ -261,7 +265,7 @@ export default function OnlineAdmissionPage() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={9} className="py-10 text-center">
+                      <td colSpan={10} className="py-10 text-center">
                         <div className="inline-flex flex-col items-center gap-1.5">
                           <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                           <span className="text-xs text-slate-400">Loading…</span>
@@ -270,10 +274,12 @@ export default function OnlineAdmissionPage() {
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-10 text-center text-xs text-slate-400">No admissions found</td>
+                      <td colSpan={10} className="py-10 text-center text-xs text-slate-400">No admissions found</td>
                     </tr>
                   ) : rows.map(r => {
-                    const isPending  = r.StatusCategory === 'pending';
+                    // Grant/Reject only make sense on a finally-submitted form that is
+                    // still awaiting a decision — never on a draft the applicant is still filling.
+                    const isPending  = r.StatusCategory === 'pending' && !r.IsDraft;
                     const busy       = busyId === r.Inquiry_Id;
                     return (
                       <tr key={r.Inquiry_Id} className="border-b border-slate-100 transition-colors hover:bg-slate-50">
@@ -299,6 +305,21 @@ export default function OnlineAdmissionPage() {
                             )}
                           </td>
                           <td className="py-1.5 px-3">
+                            {r.IsDraft ? (
+                              <span
+                                title={r.DraftStep ? `Filling — reached step ${r.DraftStep}` : 'Filling the form'}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-sky-50 text-sky-700 border-sky-200 whitespace-nowrap"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+                                Filling{r.DraftStep ? ` · Step ${r.DraftStep}` : ''}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-indigo-50 text-indigo-700 border-indigo-200 whitespace-nowrap">
+                                Submitted
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-1.5 px-3">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusBadgeCls(r.StatusCategory)}`}>
                               {r.StatusLabel}
                             </span>
@@ -309,9 +330,9 @@ export default function OnlineAdmissionPage() {
                           <td className="py-1.5 px-3">
                             <div className="flex items-center justify-center gap-0.5">
 
-                              {/* View — opens the filled admission form */}
+                              {/* View — opens the admission form (in-progress draft or filled submission) */}
                               <button
-                                title="View filled admission form"
+                                title={r.IsDraft ? 'View in-progress admission form' : 'View filled admission form'}
                                 onClick={() => window.open(`/admission/${r.Inquiry_Id}`, '_blank')}
                                 className="p-1 rounded transition-colors text-slate-400 hover:bg-blue-50 hover:text-[#2E3093]"
                               >

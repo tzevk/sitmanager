@@ -43,9 +43,9 @@ export default function PendingAdmissionFormsPage() {
     setLoading(true);
     try {
       const p = new URLSearchParams();
+      p.set('tab', 'pending');
       p.set('page', '1');
       p.set('limit', '200');
-      p.set('submittedOnly', '1');
       if (search.trim()) p.set('search', search.trim());
       const res = await fetch(`/api/online-admission?${p.toString()}`, { signal: ctrl.signal, cache: 'no-store' });
       const data = await res.json();
@@ -93,7 +93,7 @@ export default function PendingAdmissionFormsPage() {
     <div className="flex flex-col gap-3">
       <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h2 className="text-sm font-black text-white tracking-tight">Pending Submitted Admission Forms</h2>
+          <h2 className="text-sm font-black text-white tracking-tight">Pending Admission Form Access</h2>
           <span className="text-[11px] text-white/70">{rows.length.toLocaleString()} records</span>
         </div>
         <Link

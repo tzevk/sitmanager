@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
 
     const rawTab = searchParams.get('tab') || '';
-    const validTabs = ['pending', 'completed', 'rejected'] as const;
+    const validTabs = ['in_progress', 'pending', 'completed', 'rejected'] as const;
     const result = await listOnlineAdmissions({
       page: Math.max(1, Number(searchParams.get('page')) || 1),
       limit: Math.min(100, Math.max(10, Number(searchParams.get('limit')) || 25)),

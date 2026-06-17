@@ -13,7 +13,7 @@ export interface OnlineAdmissionListParams {
   page: number;
   limit: number;
   search?: string;
-  tab?: 'pending' | 'completed' | 'rejected' | '';
+  tab?: 'in_progress' | 'pending' | 'completed' | 'rejected' | '';
   dateFrom?: string;
   dateTo?: string;
   /** Only include fully-submitted forms (exclude draft autosaves). */
@@ -41,6 +41,10 @@ export interface AdmissionRow {
   RazorpayPaymentId: string;
   RazorpayOrderId: string;
   RazorpayAmount: number | null;
+  /** 1 when the applicant is still filling the form (draft, not yet submitted). */
+  IsDraft: 0 | 1;
+  /** Last step reached while filling a draft (0 when unknown / already submitted). */
+  DraftStep: number;
   IsLegacy: 0 | 1;
 }
 
@@ -1119,12 +1123,23 @@ export async function listOnlineAdmissions(
     // grant/reject decisions. Fall back to the student master status when it is unset
     // (NULL or empty string).
     const smStatusId = studentMasterTable ? `COALESCE(NULLIF(TRIM(si.OnlineState), ''), sm.Status_id)` : `NULLIF(TRIM(si.OnlineState), '')`;
+    // "Last activity" must reflect the most recent thing that happened to this form —
+    // the final submission, the latest autosave while filling, or the row's own
+    // Updated_At (bumped on every save). Inquiry_Dt is only a last resort so that an
+    // old inquiry with a fresh draft still sorts as recent.
     const activityExpr = `COALESCE(
           NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), ''),
-          si.Inquiry_Dt,
+          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.__draftProgress.autosavedAt')), ''),
           oap.Updated_At,
-          oap.Created_At
+          oap.Created_At,
+          si.Inquiry_Dt
         )`;
+    // A form is still "filling" (a draft) until it is finally submitted: it carries a
+    // __draftProgress marker and has no submittedAt timestamp.
+    const isDraftExpr = `CASE WHEN (
+          oap.Payload LIKE '%__draftProgress%'
+          AND NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), '') IS NULL
+        ) THEN 1 ELSE 0 END`;
      return `SELECT
        si.Inquiry_Id AS Inquiry_Id,
        ${studentMasterTable ? `COALESCE(si.Student_Name, sm.Student_Name, '')` : `COALESCE(si.Student_Name, '')`} AS Student_Name,
@@ -1137,6 +1152,8 @@ export async function listOnlineAdmissions(
        ${statusTextExpr} AS StatusText,
        oap.Created_At AS PayloadCreatedAt,
        oap.Updated_At AS PayloadUpdatedAt,
+       ${isDraftExpr} AS IsDraft,
+       CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.__draftProgress.currentStep')), '') AS UNSIGNED) AS DraftStep,
        CASE
          WHEN JSON_EXTRACT(oap.Payload, '$.razorpayPaid') = true THEN 1
          WHEN LOWER(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.razorpayPaid'))) IN ('true', '1', 'yes', 'paid') THEN 1
@@ -1168,6 +1185,11 @@ export async function listOnlineAdmissions(
   const effectiveStatusExpr = studentMasterTable
     ? `COALESCE(NULLIF(TRIM(si.OnlineState), ''), sm.Status_id)`
     : `NULLIF(TRIM(si.OnlineState), '')`;
+  const hasAdmissionActivityExpr = `(
+    NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), '') IS NOT NULL
+    OR NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.__draftProgress.autosavedAt')), '') IS NOT NULL
+    OR CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.__draftProgress.currentStep')), '') AS UNSIGNED) > 0
+  )`;
 
   if (dateFrom) {
     newConds.push(`${listDateExpr} >= ?`);
@@ -1189,14 +1211,26 @@ export async function listOnlineAdmissions(
     oap.Payload NOT LIKE '%__draftProgress%'
     OR NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), '') IS NOT NULL
   )`;
-  if (tab === 'pending') {
-    newConds.push(`${SUBMITTED} AND ${effectiveStatusExpr} IN (23, 24)`);
+  // Still "filling": a draft that was actually started but never finally submitted.
+  const IN_PROGRESS = `(
+    oap.Payload LIKE '%__draftProgress%'
+    AND NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), '') IS NULL
+    AND ${hasAdmissionActivityExpr}
+  )`;
+  // The four tabs are mutually exclusive and each row's tab matches its status badge:
+  //   in_progress → draft (filling)        pending → submitted, awaiting decision
+  //   completed   → submitted, admitted    rejected → submitted, cancelled/left
+  if (tab === 'in_progress') {
+    newConds.push(IN_PROGRESS);
+  } else if (tab === 'pending') {
+    newConds.push(`${SUBMITTED} AND (${effectiveStatusExpr} IS NULL OR ${effectiveStatusExpr} NOT IN (8, 10, 4, 7, 9))`);
   } else if (tab === 'completed') {
-    newConds.push(`${SUBMITTED} AND ${effectiveStatusExpr} NOT IN (4, 7, 9)`);
+    newConds.push(`${SUBMITTED} AND ${effectiveStatusExpr} IN (8, 10)`);
   } else if (tab === 'rejected') {
     newConds.push(`${SUBMITTED} AND ${effectiveStatusExpr} IN (4, 7, 9)`);
   } else {
-    newConds.push(SUBMITTED);
+    // No tab → everything that has real admission-form activity, newest first.
+    newConds.push(`(${SUBMITTED} OR ${IN_PROGRESS})`);
   }
 
   let total = 0;
@@ -1210,7 +1244,7 @@ export async function listOnlineAdmissions(
 
     [newRows] = await pool.query(
       `${buildNewQuery(true)} WHERE ${newConds.join(' AND ')}
-       ORDER BY ${listDateExpr} DESC,
+       ORDER BY oap.Updated_At DESC,
                 si.Inquiry_Id DESC
        LIMIT ? OFFSET ?`,
       [...newParams, limit, offset]
@@ -1226,7 +1260,7 @@ export async function listOnlineAdmissions(
 
       [newRows] = await pool.query(
         `${buildNewQuery(false)} WHERE ${newConds.join(' AND ')}
-         ORDER BY ${listDateExpr} DESC,
+         ORDER BY oap.Updated_At DESC,
                   si.Inquiry_Id DESC
          LIMIT ? OFFSET ?`,
         [...newParams, limit, offset]
@@ -1278,6 +1312,8 @@ export async function listOnlineAdmissions(
       RazorpayPaymentId: String(r.RazorpayPaymentId || ''),
       RazorpayOrderId: String(r.RazorpayOrderId || ''),
       RazorpayAmount: r.RazorpayAmount != null ? Number(r.RazorpayAmount) : null,
+      IsDraft: r.IsDraft ? 1 : 0,
+      DraftStep: r.DraftStep != null ? Number(r.DraftStep) : 0,
       StatusLabel: label,
       StatusCategory: resolveCategory(Number(r.Status_id), label),
     };
