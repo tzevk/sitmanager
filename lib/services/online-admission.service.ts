@@ -1119,10 +1119,7 @@ export async function listOnlineAdmissions(
     // grant/reject decisions. Fall back to the student master status when it is unset
     // (NULL or empty string).
     const smStatusId = studentMasterTable ? `COALESCE(NULLIF(TRIM(si.OnlineState), ''), sm.Status_id)` : `NULLIF(TRIM(si.OnlineState), '')`;
-    const draftAutosaveExpr = `NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.__draftProgress.autosavedAt')), '')`;
-    const activityExpr = tab === 'pending'
-      ? `COALESCE(${draftAutosaveExpr}, oap.Updated_At, oap.Created_At)`
-      : `COALESCE(
+    const activityExpr = `COALESCE(
           NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), ''),
           si.Inquiry_Dt,
           oap.Updated_At,
@@ -1166,9 +1163,11 @@ export async function listOnlineAdmissions(
     const like = `%${search}%`;
     newParams.push(like, like, like, like);
   }
-  const pendingDateExpr = `COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.__draftProgress.autosavedAt')), ''), oap.Updated_At, oap.Created_At)`;
   const defaultDateExpr = `COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), ''), si.Inquiry_Dt, oap.Updated_At, oap.Created_At)`;
-  const listDateExpr = tab === 'pending' ? pendingDateExpr : defaultDateExpr;
+  const listDateExpr = defaultDateExpr;
+  const effectiveStatusExpr = studentMasterTable
+    ? `COALESCE(NULLIF(TRIM(si.OnlineState), ''), sm.Status_id)`
+    : `NULLIF(TRIM(si.OnlineState), '')`;
 
   if (dateFrom) {
     newConds.push(`${listDateExpr} >= ?`);
@@ -1178,20 +1177,24 @@ export async function listOnlineAdmissions(
     newConds.push(`${listDateExpr} <= ?`);
     newParams.push(dateTo);
   }
-  if (submittedOnly) { newConds.push("oap.Payload NOT LIKE '%__draftProgress%'"); }
+  if (submittedOnly) {
+    newConds.push(`(
+      oap.Payload NOT LIKE '%__draftProgress%'
+      OR NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), '') IS NOT NULL
+    )`);
+  }
 
-  // A row counts as a real *submitted* admission form only when its payload has no
-  // __draftProgress marker. Drafts (autosaves) keep that marker and must never appear
-  // in any tab — OnlineState alone is unreliable because inquiries can carry 23/24 from
-  // the regular inquiry workflow without ever submitting the online form.
-  const SUBMITTED = "oap.Payload NOT LIKE '%__draftProgress%'";
+  // Treat old records with submittedAt as submitted even if __draftProgress remains in payload.
+  const SUBMITTED = `(
+    oap.Payload NOT LIKE '%__draftProgress%'
+    OR NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), '') IS NOT NULL
+  )`;
   if (tab === 'pending') {
-    newConds.push(`oap.Payload LIKE '%__draftProgress%' AND si.OnlineState IN (23, 24)`);
-    newConds.push(`${pendingDateExpr} >= DATE_SUB(NOW(), INTERVAL 45 DAY)`);
+    newConds.push(`${SUBMITTED} AND ${effectiveStatusExpr} IN (23, 24)`);
   } else if (tab === 'completed') {
-    newConds.push(`${SUBMITTED} AND si.OnlineState NOT IN (4, 7, 9)`);
+    newConds.push(`${SUBMITTED} AND ${effectiveStatusExpr} NOT IN (4, 7, 9)`);
   } else if (tab === 'rejected') {
-    newConds.push(`${SUBMITTED} AND si.OnlineState IN (4, 7, 9)`);
+    newConds.push(`${SUBMITTED} AND ${effectiveStatusExpr} IN (4, 7, 9)`);
   } else {
     newConds.push(SUBMITTED);
   }

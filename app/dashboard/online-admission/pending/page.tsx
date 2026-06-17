@@ -6,20 +6,13 @@ import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 type DraftRow = {
-  inquiryId: number;
-  studentName: string;
-  email: string;
-  mobile: string;
-  currentStep: number;
-  autosavedAt: string;
-  onlineState: number | null;
+  Inquiry_Id: number;
+  Student_Name: string;
+  Email: string;
+  Present_Mobile: string;
+  StatusLabel: string;
+  LastActivityAt: string | null;
 };
-
-function stageLabel(onlineState: number | null): string {
-  if (onlineState === 23) return 'Document Pending';
-  if (onlineState === 24) return 'Fees Pending';
-  return 'Form In Progress';
-}
 
 function fmtDateTime(value: string): string {
   if (!value) return '—';
@@ -35,11 +28,12 @@ function fmtDateTime(value: string): string {
 }
 
 export default function PendingAdmissionFormsPage() {
-  const { canView, loading: permLoading } = useResourcePermissions('online_admission');
+  const { canView, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('online_admission');
 
   const [rows, setRows] = useState<DraftRow[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const fetchRows = useCallback(async () => {
@@ -49,9 +43,11 @@ export default function PendingAdmissionFormsPage() {
     setLoading(true);
     try {
       const p = new URLSearchParams();
-      p.set('sinceDays', '45');
+      p.set('page', '1');
+      p.set('limit', '200');
+      p.set('submittedOnly', '1');
       if (search.trim()) p.set('search', search.trim());
-      const res = await fetch(`/api/online-admission/pending?${p.toString()}`, { signal: ctrl.signal, cache: 'no-store' });
+      const res = await fetch(`/api/online-admission?${p.toString()}`, { signal: ctrl.signal, cache: 'no-store' });
       const data = await res.json();
       setRows(Array.isArray(data?.rows) ? data.rows : []);
     } catch (err: unknown) {
@@ -69,6 +65,27 @@ export default function PendingAdmissionFormsPage() {
     };
   }, [fetchRows]);
 
+  const handleDelete = useCallback(async (r: DraftRow) => {
+    const ok = window.confirm(`Delete admission form for ${r.Student_Name || `Inquiry #${r.Inquiry_Id}`}? This cannot be undone.`);
+    if (!ok) return;
+
+    setDeletingId(r.Inquiry_Id);
+    try {
+      const res = await fetch(`/api/inquiry/${r.Inquiry_Id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Failed to delete admission form');
+      }
+      setRows((prev) => prev.filter((row) => row.Inquiry_Id !== r.Inquiry_Id));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to delete admission form');
+    } finally {
+      setDeletingId(null);
+    }
+  }, []);
+
+  const canRemove = canDelete || canUpdate;
+
   if (permLoading) return <PermissionLoading />;
   if (!canView) return <AccessDenied message="You do not have permission to view pending admission forms." />;
 
@@ -76,7 +93,7 @@ export default function PendingAdmissionFormsPage() {
     <div className="flex flex-col gap-3">
       <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h2 className="text-sm font-black text-white tracking-tight">Pending Forms Not Submitted</h2>
+          <h2 className="text-sm font-black text-white tracking-tight">Pending Submitted Admission Forms</h2>
           <span className="text-[11px] text-white/70">{rows.length.toLocaleString()} records</span>
         </div>
         <Link
@@ -113,9 +130,8 @@ export default function PendingAdmissionFormsPage() {
                 <th className="text-left py-2 px-3 font-bold">Student Name</th>
                 <th className="text-left py-2 px-3 font-bold">Email</th>
                 <th className="text-left py-2 px-3 font-bold">Mobile</th>
-                <th className="text-left py-2 px-3 font-bold">Step</th>
                 <th className="text-left py-2 px-3 font-bold">Stage</th>
-                <th className="text-left py-2 px-3 font-bold whitespace-nowrap">Last Autosave</th>
+                <th className="text-left py-2 px-3 font-bold whitespace-nowrap">Last Activity</th>
                 <th className="text-left py-2 px-3 font-bold">Type</th>
                 <th className="text-center py-2 px-3 font-bold">Action</th>
               </tr>
@@ -123,33 +139,44 @@ export default function PendingAdmissionFormsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-slate-400">Loading forms...</td>
+                  <td colSpan={8} className="py-10 text-center text-slate-400">Loading forms...</td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-slate-400">No pending forms found</td>
+                  <td colSpan={8} className="py-10 text-center text-slate-400">No pending forms found</td>
                 </tr>
               ) : rows.map((r) => (
-                <tr key={r.inquiryId} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="py-1.5 px-3 font-mono text-slate-600">{r.inquiryId}</td>
-                  <td className="py-1.5 px-3 font-semibold text-slate-700">{r.studentName || '—'}</td>
-                  <td className="py-1.5 px-3 text-slate-600">{r.email || '—'}</td>
-                  <td className="py-1.5 px-3 text-slate-600">{r.mobile || '—'}</td>
-                  <td className="py-1.5 px-3 text-slate-600">Step {Math.max(1, Number(r.currentStep || 1))}</td>
-                  <td className="py-1.5 px-3 text-slate-600">{stageLabel(r.onlineState)}</td>
-                  <td className="py-1.5 px-3 text-slate-500 whitespace-nowrap">{fmtDateTime(r.autosavedAt || '')}</td>
+                <tr key={r.Inquiry_Id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="py-1.5 px-3 font-mono text-slate-600">{r.Inquiry_Id}</td>
+                  <td className="py-1.5 px-3 font-semibold text-slate-700">{r.Student_Name || '—'}</td>
+                  <td className="py-1.5 px-3 text-slate-600">{r.Email || '—'}</td>
+                  <td className="py-1.5 px-3 text-slate-600">{r.Present_Mobile || '—'}</td>
+                  <td className="py-1.5 px-3 text-slate-600">{r.StatusLabel || 'Pending'}</td>
+                  <td className="py-1.5 px-3 text-slate-500 whitespace-nowrap">{fmtDateTime(r.LastActivityAt || '')}</td>
                   <td className="py-1.5 px-3">
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border border-indigo-200 bg-indigo-50 text-indigo-700 whitespace-nowrap">
-                      Filling & Not Sent
+                      Submitted & Pending
                     </span>
                   </td>
                   <td className="py-1.5 px-3 text-center">
-                    <button
-                      onClick={() => window.open(`/admission/${r.inquiryId}`, '_blank')}
-                      className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold text-[#2E3093] bg-[#2E3093]/10 hover:bg-[#2E3093]/15"
-                    >
-                      Open
-                    </button>
+                    <div className="inline-flex items-center gap-1.5">
+                      <button
+                        onClick={() => window.open(`/admission/${r.Inquiry_Id}`, '_blank')}
+                        className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold text-[#2E3093] bg-[#2E3093]/10 hover:bg-[#2E3093]/15"
+                      >
+                        Open
+                      </button>
+                      {canRemove && (
+                        <button
+                          onClick={() => void handleDelete(r)}
+                          disabled={deletingId === r.Inquiry_Id}
+                          title="Delete"
+                          className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 disabled:opacity-50"
+                        >
+                          {deletingId === r.Inquiry_Id ? 'Deleting…' : 'Delete'}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

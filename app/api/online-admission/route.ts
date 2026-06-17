@@ -59,6 +59,7 @@ export async function GET(req: NextRequest) {
       tab: (validTabs as readonly string[]).includes(rawTab) ? rawTab as typeof validTabs[number] : '',
       dateFrom: searchParams.get('dateFrom') || '',
       dateTo: searchParams.get('dateTo') || '',
+      submittedOnly: ['1', 'true', 'yes'].includes((searchParams.get('submittedOnly') || '').toLowerCase()),
     });
 
     return NextResponse.json(result);
