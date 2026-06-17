@@ -280,13 +280,6 @@ export default function FeeDetailsEditPage() {
               </div>
             </div>
             <div class="info-row">
-              <div class="info-cell full amount-hero">
-                <div class="amount-label">Amount Received</div>
-                <div class="amount-figure">₹ ${fmt(amtNum)}</div>
-                <div class="amount-words">${amtWords}</div>
-              </div>
-            </div>
-            <div class="info-row">
               <div class="info-cell">
                 <div class="info-key">Course</div>
                 <div class="info-val">${data.student.Course_Name ?? '—'}</div>
@@ -304,6 +297,13 @@ export default function FeeDetailsEditPage() {
               <div class="info-cell">
                 <div class="info-key">Payment Mode</div>
                 <div class="info-val">${paymentType}</div>
+              </div>
+            </div>
+                        <div class="info-row">
+              <div class="info-cell full amount-hero">
+                <div class="amount-label">Amount Received</div>
+                <div class="amount-figure">₹ ${fmt(amtNum)}</div>
+                <div class="amount-words">${amtWords}</div>
               </div>
             </div>
             ${refNo ? `
