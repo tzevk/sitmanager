@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
          FROM s_fees_mst f
          LEFT JOIN student_master sm ON sm.Student_Id = f.Student_Id
          LEFT JOIN course_mst cm ON cm.Course_Id = sm.Course_Id
-         LEFT JOIN batch_mst bm  ON bm.Batch_code = sm.Batch_Code
+         LEFT JOIN batch_mst bm  ON bm.Batch_code = sm.Batch_Code AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
          WHERE f.TypeR = 'C'
            AND COALESCE(NULLIF(TRIM(f.Fees_Code), ''), '') <> ''
            AND (f.IsDelete = 0 OR f.IsDelete IS NULL)

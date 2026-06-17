@@ -110,6 +110,7 @@ export default function AddFeeDetailsPage() {
   const [receiptDate, setReceiptDate] = useState(todayISO());
   const [taxType, setTaxType] = useState('');
   const [generateReceipt, setGenerateReceipt] = useState(false);
+  const [receiptNo, setReceiptNo] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -159,11 +160,13 @@ export default function AddFeeDetailsPage() {
     setPaymentType('Cash');
     setReceiptDate(todayISO());
     setGenerateReceipt(false);
+    setReceiptNo('');
     try {
       const res = await fetch(`/api/fee-details/${sid}`);
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Failed to load');
       setData(d);
+      setReceiptNo(d.nextReceiptNo ?? '');
       setParticular(d.particulars?.[0]?.label ?? '');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load form details');
@@ -205,6 +208,7 @@ export default function AddFeeDetailsPage() {
         RDate: receiptDate,
         TaxType: taxType,
         GenerateReceipt: generateReceipt,
+        Fees_Code: receiptNo.trim() || null,
       };
       const res = await fetch(`/api/fee-details/${studentId}`, {
         method: 'POST',
@@ -388,20 +392,15 @@ export default function AddFeeDetailsPage() {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className={lbl}>Generate Receipt</label>
-            <div className="flex items-center h-[30px]">
-              <input
-                type="checkbox"
-                id="generateReceipt"
-                checked={generateReceipt}
-                onChange={e => setGenerateReceipt(e.target.checked)}
-                disabled={!studentId}
-                className="w-4 h-4 accent-[#2E3093] cursor-pointer"
-              />
-              <label htmlFor="generateReceipt" className="ml-2 text-xs text-slate-600 cursor-pointer select-none">
-                {data?.nextReceiptNo || ''}
-              </label>
-            </div>
+            <label className={lbl}>Receipt No</label>
+            <input
+              type="text"
+              className={ctrl}
+              value={receiptNo}
+              onChange={e => setReceiptNo(e.target.value)}
+              disabled={!studentId}
+              placeholder="e.g. R-06/052"
+            />
           </div>
           <div className="flex flex-col gap-1">
             <label className={lbl}>Particular</label>

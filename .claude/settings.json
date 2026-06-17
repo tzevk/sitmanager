@@ -85,7 +85,9 @@
       "Bash(curl -s \"http://localhost:3000/dashboard/fee-details\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:3000/\")",
       "Bash(curl -s \"http://localhost:3000/dashboard/fee-details\" -L)",
-      "Bash(curl -v \"http://localhost:3000/dashboard/fee-details\")"
+      "Bash(curl -v \"http://localhost:3000/dashboard/fee-details\")",
+      "Bash(mysql -u root sit -e \"DESCRIBE batch_mst;\")",
+      "Bash(mysql -u root -p'' sit -e \"DESCRIBE batch_mst;\")"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

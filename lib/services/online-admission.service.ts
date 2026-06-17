@@ -490,7 +490,7 @@ export async function saveStructuredAdmissionData(
     ['Consent_Checks',                   jstr(input.consentChecks)],
     // Draft
     ['Draft_Step',          draftMeta?.currentStep != null ? Number(draftMeta.currentStep) : null],
-    ['Draft_Autosaved_At',  draftMeta?.autosavedAt ? n(String(draftMeta.autosavedAt)) : null],
+    ['Draft_Autosaved_At',  draftMeta?.autosavedAt ? new Date(String(draftMeta.autosavedAt)).toISOString().slice(0, 19).replace('T', ' ') : null],
   ];
 
   const setClauses = fields.map(([col]) => `\`${col}\` = ?`).join(', ');
@@ -1025,26 +1025,22 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       ) as [any[], any];
 
       if (!existingFee.length) {
-        const [feesCodeRows] = await pool.query(
-          `SELECT AUTO_INCREMENT AS nextId FROM information_schema.TABLES
-           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 's_fees_mst'`
-        ) as [any[], any];
-        const nextId = Number(feesCodeRows[0]?.nextId ?? 1);
         const now = new Date();
-        const feesCode = `R-${String(now.getMonth() + 1).padStart(2, '0')}/${String(nextId).padStart(3, '0')}`;
-
-        await pool.query(
+        const [insertResult] = await pool.query(
           `INSERT INTO s_fees_mst (
-             Fees_Code, Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type,
+             Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type,
              Amount, Total_Amt, TypeR, Notes, RDate, Date_Added, FeesMonth, FeesYear,
              PaymentId, IsActive, IsDelete
-           ) VALUES (?, ?, ?, ?, ?, 'Online', ?, ?, 'C', ?, ?, ?, ?, ?, ?, 1, 0)`,
+           ) VALUES (?, ?, ?, ?, 'Online', ?, ?, 'C', ?, ?, ?, ?, ?, ?, 1, 0)`,
           [
-            feesCode, resolvedStudentId, courseId, batchId, admissionId,
+            resolvedStudentId, courseId, batchId, admissionId,
             razorpayAmount, razorpayAmount, 'Online Admission Payment (Razorpay)',
             admissionDate, now, now.getMonth() + 1, now.getFullYear(), razorpayPaymentId,
           ]
-        );
+        ) as [any, any];
+        const insertedId = Number(insertResult.insertId);
+        const feesCode = `R-${String(now.getMonth() + 1).padStart(2, '0')}/${String(insertedId).padStart(3, '0')}`;
+        await pool.query(`UPDATE s_fees_mst SET Fees_Code = ? WHERE Fees_Id = ?`, [feesCode, insertedId]);
       }
     }
 
@@ -1059,27 +1055,23 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       ) as [any[], any];
 
       if (!existingUpi.length) {
-        const [upiCodeRows] = await pool.query(
-          `SELECT AUTO_INCREMENT AS nextId FROM information_schema.TABLES
-           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 's_fees_mst'`
-        ) as [any[], any];
-        const upiNextId = Number(upiCodeRows[0]?.nextId ?? 1);
         const now = new Date();
-        const upiFeesCode = `R-${String(now.getMonth() + 1).padStart(2, '0')}/${String(upiNextId).padStart(3, '0')}`;
-
-        await pool.query(
+        const [upiInsertResult] = await pool.query(
           `INSERT INTO s_fees_mst (
-             Fees_Code, Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type,
+             Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type,
              Amount, Total_Amt, TypeR, Notes, RDate, Date_Added, FeesMonth, FeesYear,
              IsActive, IsDelete
-           ) VALUES (?, ?, ?, ?, ?, 'UPI', ?, ?, 'C', ?, ?, ?, ?, ?, 1, 0)`,
+           ) VALUES (?, ?, ?, ?, 'UPI', ?, ?, 'C', ?, ?, ?, ?, ?, 1, 0)`,
           [
-            upiFeesCode, resolvedStudentId, courseId, batchId, admissionId,
+            resolvedStudentId, courseId, batchId, admissionId,
             upiAmount, upiAmount,
             `Online Admission Payment (UPI/QR) — UTR: ${upiReference}`,
             admissionDate, now, now.getMonth() + 1, now.getFullYear(),
           ]
-        );
+        ) as [any, any];
+        const upiInsertedId = Number(upiInsertResult.insertId);
+        const upiFeesCode = `R-${String(now.getMonth() + 1).padStart(2, '0')}/${String(upiInsertedId).padStart(3, '0')}`;
+        await pool.query(`UPDATE s_fees_mst SET Fees_Code = ? WHERE Fees_Id = ?`, [upiFeesCode, upiInsertedId]);
       }
     }
   }

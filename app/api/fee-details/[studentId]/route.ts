@@ -23,8 +23,7 @@ async function generateReceiptNo(): Promise<string> {
   const nextId = Number(rows[0]?.nextId ?? 1);
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0');
-  const padded = String(nextId).padStart(3, '0');
-  return `R-${month}/${padded}`;
+  return `R-${month}/${nextId}`;
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: string }> }) {
@@ -42,17 +41,16 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
 
     const [studentRows] = await pool.query<any[]>(
       `SELECT sm.Student_Id, sm.Student_Name, sm.Present_Mobile, sm.Email,
-              sm.Course_Id, cm.Course_Name, sm.Batch_Code, bm.Batch_Id, bm.Fees_Full_Payment,
+              sm.Course_Id, cm.Course_Name, sm.Batch_Code, bm.Batch_Id,
+              bm.Actual_Fees_Payment, bm.Fees_Full_Payment,
+              DATE_FORMAT(bm.SDate, '%Y-%m-%d') AS Batch_SDate,
               COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
               COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
-              COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name,
-              am.Admission_Id, am.Fees AS Admission_Fees,
-              CASE WHEN LOWER(TRIM(CAST(COALESCE(am.Cancel,'') AS CHAR))) IN ('yes','1','true') THEN 1 ELSE 0 END AS Cancel
+              COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name
        FROM student_master sm
        LEFT JOIN course_mst cm ON cm.Course_Id = sm.Course_Id
-       LEFT JOIN batch_mst bm  ON bm.Batch_code = sm.Batch_Code
+       LEFT JOIN batch_mst bm  ON bm.Batch_code = sm.Batch_Code AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
        LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
-       LEFT JOIN admission_master am ON am.Student_Id = sm.Student_Id AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
        WHERE sm.Student_Id = ?
        LIMIT 1`,
       [sid]
@@ -60,11 +58,23 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
     if (!studentRows.length) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     const student = studentRows[0];
 
+    // Fetch admission separately to get the latest record with reliable Fees + Cancel + Date
+    const [admissionRows] = await pool.query<any[]>(
+      `SELECT Admission_Id, Fees, Cancel,
+              DATE_FORMAT(Admission_Date, '%Y-%m-%d') AS Admission_Date
+       FROM admission_master
+       WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+       ORDER BY Admission_Id DESC
+       LIMIT 1`,
+      [sid]
+    );
+    const admission = admissionRows[0] ?? null;
+
     const [dueDateRows] = await pool.query<any[]>(
       `SELECT duedate FROM fees_structure WHERE batch_id = ? AND deleted = 0 ORDER BY id DESC LIMIT 1`,
       [student.Batch_Id]
     );
-    const dueDate = dueDateRows[0]?.duedate ?? null;
+    const dueDate = dueDateRows[0]?.duedate ?? admission?.Admission_Date ?? student.Batch_SDate ?? null;
 
     const [banks] = await pool.query<any[]>(
       `SELECT Id, Bank_Name FROM bank WHERE (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Bank_Name`
@@ -93,15 +103,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
       };
     });
 
-    const totalDebit = Number(student.Admission_Fees ?? student.Fees_Full_Payment ?? 0);
+    const totalDebit = Number(admission?.Fees ?? student.Actual_Fees_Payment ?? student.Fees_Full_Payment ?? 0);
     const totalCredit = ledger.reduce((s, r) => s + r.Credit, 0);
     const balance = totalDebit - totalCredit;
 
-    if (totalDebit > 0) {
+    if (student.Course_Name) {
       ledger.unshift({
         Fees_Id: 0,
         Date: dueDate,
-        Particular: `Tuition Fees - ${student.Course_Name ?? ''}${student.Batch_Code ? `, ${student.Batch_Code}` : ''}`,
+        Particular: `Tuition Fees - ${student.Course_Name}${student.Batch_Code ? `, ${student.Batch_Code}` : ''}`,
         Payment_Type: null,
         Fees_Code: null,
         Debit: totalDebit,
@@ -154,11 +164,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
         Batch_Id: student.Batch_Id,
         Present_Mobile: student.Present_Mobile,
         Email: student.Email,
-        Admission_Id: student.Admission_Id,
+        Admission_Id: admission?.Admission_Id ?? null,
         Transfered: student.Transfered || '',
         Moved_To_Batch_Code: student.Moved_To_Batch_Code || '',
         Moved_To_Course_Name: student.Moved_To_Course_Name || '',
-        Cancel: Number(student.Cancel) === 1,
+        Cancel: Number(admission?.Cancel ?? 0) === 1,
       },
       dueDate,
       banks,
@@ -185,7 +195,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
     const body = await req.json();
     const {
       Type, Payment_Type, Cheque_Bank, Cheque_No, Cheque_Date, Cheque_Branch,
-      Amount, Particular, RDate, TaxType,
+      Amount, Particular, RDate, TaxType, Fees_Code: customFeesCode,
     } = body;
 
     if (!Amount || !RDate) {
@@ -205,26 +215,31 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
     const student = studentRows[0];
 
     const typeR = Type === 'Debit' ? 'D' : 'C';
-    const feesCode = await generateReceiptNo();
     const notes = TaxType ? `${Particular ?? ''} | Tax: ${TaxType}` : (Particular ?? '');
     const now = new Date();
     const amount = Number(Amount);
 
     const [result] = await pool.query<any>(
       `INSERT INTO s_fees_mst
-        (Fees_Code, Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type, Cheque_Bank, Cheque_No,
+        (Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type, Cheque_Bank, Cheque_No,
          Cheque_Date, Cheque_Branch, Amount, Total_Amt, TypeR, Notes, RDate, Date_Added,
          FeesMonth, FeesYear, IsDelete)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`,
       [
-        feesCode, sid, student.Course_Id, student.Batch_Id, student.Admission_Id,
+        sid, student.Course_Id, student.Batch_Id, student.Admission_Id,
         Payment_Type ?? null, Cheque_Bank ?? null, Cheque_No ?? null,
         Cheque_Date || null, Cheque_Branch ?? null, amount, amount, typeR, notes,
         RDate, now, now.getMonth() + 1, now.getFullYear(),
       ]
     );
 
-    return NextResponse.json({ success: true, Fees_Id: result.insertId, Fees_Code: feesCode });
+    const insertedId = Number(result.insertId);
+    const feesCode = (typeof customFeesCode === 'string' && customFeesCode.trim())
+      ? customFeesCode.trim()
+      : `R-${String(now.getMonth() + 1).padStart(2, '0')}/${String(insertedId).padStart(3, '0')}`;
+    await pool.query(`UPDATE s_fees_mst SET Fees_Code = ? WHERE Fees_Id = ?`, [feesCode, insertedId]);
+
+    return NextResponse.json({ success: true, Fees_Id: insertedId, Fees_Code: feesCode });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Server error' }, { status: 500 });
   }

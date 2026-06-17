@@ -1067,10 +1067,7 @@ export default function EditBatchPage() {
       setError('Training Name is required');
       return;
     }
-    if (!formData.Min_Qualification.trim()) {
-      setError('Eligibility is required');
-      return;
-    }
+
     if (!formData.Max_Students.trim()) {
       setError('Target Student is required');
       return;
@@ -1196,7 +1193,7 @@ export default function EditBatchPage() {
         {/* Row 2 */}
         <div className="grid grid-cols-3 gap-2">
           <div>
-            <label className={labelCls}>Eligibility <span className="text-red-500">*</span></label>
+            <label className={labelCls}>Eligibility</label>
             <input
               type="text"
               value={formData.Min_Qualification}

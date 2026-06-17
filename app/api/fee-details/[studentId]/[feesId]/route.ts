@@ -19,7 +19,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ studentId: 
     const body = await req.json();
     const {
       Type, Payment_Type, Cheque_Bank, Cheque_No, Cheque_Date, Cheque_Branch,
-      Amount, Particular, RDate, TaxType,
+      Amount, Particular, RDate, TaxType, Fees_Code: customFeesCode,
     } = body;
 
     if (!Amount || !RDate) {
@@ -31,15 +31,22 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ studentId: 
     const amount = Number(Amount);
 
     const pool = getPool();
+    const setClauses = [
+      'Payment_Type = ?', 'Cheque_Bank = ?', 'Cheque_No = ?', 'Cheque_Date = ?', 'Cheque_Branch = ?',
+      'Amount = ?', 'Total_Amt = ?', 'TypeR = ?', 'Notes = ?', 'RDate = ?',
+    ];
+    const setValues: any[] = [
+      Payment_Type ?? null, Cheque_Bank ?? null, Cheque_No ?? null, Cheque_Date || null, Cheque_Branch ?? null,
+      amount, amount, typeR, notes, RDate,
+    ];
+    if (typeof customFeesCode === 'string' && customFeesCode.trim()) {
+      setClauses.push('Fees_Code = ?');
+      setValues.push(customFeesCode.trim());
+    }
+
     const [result] = await pool.query<any>(
-      `UPDATE s_fees_mst SET
-         Payment_Type = ?, Cheque_Bank = ?, Cheque_No = ?, Cheque_Date = ?, Cheque_Branch = ?,
-         Amount = ?, Total_Amt = ?, TypeR = ?, Notes = ?, RDate = ?
-       WHERE Fees_Id = ? AND Student_Id = ?`,
-      [
-        Payment_Type ?? null, Cheque_Bank ?? null, Cheque_No ?? null, Cheque_Date || null, Cheque_Branch ?? null,
-        amount, amount, typeR, notes, RDate, fid, sid,
-      ]
+      `UPDATE s_fees_mst SET ${setClauses.join(', ')} WHERE Fees_Id = ? AND Student_Id = ?`,
+      [...setValues, fid, sid]
     );
 
     if (result.affectedRows === 0) {
