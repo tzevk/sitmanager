@@ -1012,7 +1012,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
            Course_Id = COALESCE(?, Course_Id),
            Admission_Date = COALESCE(?, Admission_Date),
            Payment_Type = COALESCE(?, Payment_Type),
-           Fees = COALESCE(Fees, ?),
+           Fees = COALESCE(NULLIF(Fees, 0), ?),
            IsActive = 1,
            Cancel = 0
          WHERE Admission_Id = ?`,
