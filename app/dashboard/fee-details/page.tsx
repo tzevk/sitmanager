@@ -20,6 +20,20 @@ interface RecentReceiptRow {
   Cancelled: number;
 }
 
+interface StudentSearchRow {
+  Student_Id: number;
+  Student_Name: string;
+  Present_Mobile: string | null;
+  Email: string | null;
+  Course_Name: string | null;
+  Batch_code: string | null;
+  Total_Fees: number | null;
+  Total_Paid: number | null;
+  Transfered: string;
+  Moved_To_Batch_Code: string;
+  Cancelled: number;
+}
+
 const StatusTag = ({ row }: { row: Pick<RecentReceiptRow, 'Transfered' | 'Moved_To_Batch_Code' | 'Cancelled'> }) => {
   if (Number(row.Cancelled) === 1)
     return (
@@ -53,6 +67,11 @@ export default function FeeDetailsPage() {
   const [recentRows, setRecentRows] = useState<RecentReceiptRow[]>([]);
   const [recentLoading, setRecentLoading] = useState(false);
 
+  const [search, setSearch] = useState('');
+  const [results, setResults] = useState<StudentSearchRow[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searched, setSearched] = useState(false);
+
   useEffect(() => {
     const loadRecent = async () => {
       setRecentLoading(true);
@@ -66,6 +85,34 @@ export default function FeeDetailsPage() {
     };
     loadRecent();
   }, []);
+
+  // Debounced student search (by name, id, or batch).
+  useEffect(() => {
+    const q = search.trim();
+    if (!q) {
+      setResults([]);
+      setSearched(false);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const ctrl = new AbortController();
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/fee-details?q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
+        const data = await res.json();
+        setResults(data.rows ?? []);
+        setSearched(true);
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        setResults([]);
+        setSearched(true);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+    return () => { clearTimeout(t); ctrl.abort(); };
+  }, [search]);
 
   if (permLoading) return <PermissionLoading />;
   if (!canView) return <AccessDenied />;
@@ -87,6 +134,86 @@ export default function FeeDetailsPage() {
             Add
           </Link>
         </div>
+      </div>
+
+      {/* Student search */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 flex items-center gap-2">
+          <div className="relative flex-1">
+            <svg className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search student by name, ID or batch code…"
+              className="w-full pl-9 pr-9 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                title="Clear"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {(searching || searched) && (
+          <div className="overflow-x-auto border-t border-slate-100">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Student</th>
+                  <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Mobile</th>
+                  <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Course</th>
+                  <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Batch</th>
+                  <th className="text-right py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Total Fees</th>
+                  <th className="text-right py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Paid</th>
+                  <th className="text-right py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Balance</th>
+                  <th className="text-center py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {searching && (
+                  <tr><td colSpan={8} className="py-6 text-center text-xs text-slate-400">Searching…</td></tr>
+                )}
+                {!searching && searched && !results.length && (
+                  <tr><td colSpan={8} className="py-6 text-center text-xs text-slate-400">No students found</td></tr>
+                )}
+                {!searching && results.map((r) => (
+                  <tr key={r.Student_Id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-2 px-3 text-xs border-b border-slate-100">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-medium">{r.Student_Name || '—'}</span>
+                        <span className="font-mono text-[10px] text-slate-400">#{r.Student_Id}</span>
+                        <StatusTag row={r} />
+                      </div>
+                    </td>
+                    <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Present_Mobile || '—'}</td>
+                    <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Course_Name || '—'}</td>
+                    <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Batch_code || '—'}</td>
+                    <td className="py-2 px-3 text-xs border-b border-slate-100 text-right font-mono">{fmt(r.Total_Fees)}</td>
+                    <td className="py-2 px-3 text-xs border-b border-slate-100 text-right font-mono text-emerald-700">{fmt(r.Total_Paid)}</td>
+                    <td className="py-2 px-3 text-xs border-b border-slate-100 text-right font-mono text-red-600">{fmt((Number(r.Total_Fees) || 0) - (Number(r.Total_Paid) || 0))}</td>
+                    <td className="py-2 px-3 text-xs border-b border-slate-100 text-center">
+                      <Link
+                        href={`/dashboard/fee-details/${r.Student_Id}`}
+                        className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#2E3093]/10 text-[#2E3093] text-[11px] font-semibold hover:bg-[#2E3093]/20"
+                      >
+                        View
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
