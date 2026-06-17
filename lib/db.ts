@@ -24,7 +24,15 @@ function registerPoolCleanup() {
   process.once('beforeExit', cleanup);
 }
 
+function isPoolClosed(p: mysql.Pool): boolean {
+  return (p as unknown as { pool?: { _closed?: boolean } }).pool?._closed === true;
+}
+
 export function getPool(): mysql.Pool {
+  if (pool && isPoolClosed(pool)) {
+    pool = null;
+    global.__sitDbPool = undefined;
+  }
   if (!pool) {
     const env = getDbEnv();
     pool = mysql.createPool({
@@ -133,12 +141,18 @@ export async function query<T>(
     return rows as T[];
   } catch (err: unknown) {
     const code = (err as { code?: string } | null)?.code;
-    if (code && ['ETIMEDOUT', 'ECONNRESET', 'PROTOCOL_CONNECTION_LOST', 'PROTOCOL_SEQUENCE_TIMEOUT'].includes(code)) {
+    const message = err instanceof Error ? err.message : 'Unknown DB error';
+    const isRetryable = (code && ['ETIMEDOUT', 'ECONNRESET', 'PROTOCOL_CONNECTION_LOST', 'PROTOCOL_SEQUENCE_TIMEOUT'].includes(code))
+      || message.includes('Pool is closed');
+    if (isRetryable) {
+      if (message.includes('Pool is closed')) {
+        pool = null;
+        global.__sitDbPool = undefined;
+      }
       await new Promise((resolve) => setTimeout(resolve, 250));
       const [rows] = await getPool().query<mysql.RowDataPacket[]>(sql, params);
       return rows as T[];
     }
-    const message = err instanceof Error ? err.message : 'Unknown DB error';
     console.error('DB query error:', message);
     throw new Error('Database query failed');
   }
