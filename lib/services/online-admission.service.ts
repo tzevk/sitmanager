@@ -739,7 +739,27 @@ export async function syncOnlineAdmissionIntoCurrentDb(
   const statusAction = options?.statusAction || normalizeText(input.statusAction);
   const nextStatusId = statusAction === 'accept' ? 8 : statusAction === 'reject' ? 7 : null;
   const courseId = parseOptionalNumber(input.trainingProgrammeId) ?? parseOptionalNumber(input.Course_Id) ?? parseOptionalNumber(inquiry.Course_Id);
-  const batchCode = firstNonEmpty(input.batchCode, inquiry.Batch_Code) || null;
+  // Prefer the batch the applicant actually picked in the form (payload), then the inquiry.
+  const rawBatchCode = firstNonEmpty(input.batchCode, input.Batch_Code, inquiry.Batch_Code) || null;
+  // Canonicalize against batch_mst so the value written to the student, inquiry and
+  // admission all agree exactly — this keeps leading zeros (e.g. "09066", not "9066")
+  // and prevents the three records from drifting apart. Resolve the batch id/fees once.
+  let batchCode = rawBatchCode;
+  let resolvedBatchId: number | null = null;
+  let resolvedBatchFees: number | null = null;
+  if (rawBatchCode) {
+    const [bRows] = await pool.query(
+      `SELECT Batch_Id, Batch_code, Fees_Full_Payment FROM batch_mst
+       WHERE Batch_code = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+       ORDER BY COALESCE(IsActive, 0) DESC, Batch_Id DESC LIMIT 1`,
+      [rawBatchCode]
+    ) as [any[], any];
+    if (bRows.length) {
+      batchCode = String(bRows[0].Batch_code);
+      resolvedBatchId = bRows[0].Batch_Id != null ? Number(bRows[0].Batch_Id) : null;
+      resolvedBatchFees = bRows[0].Fees_Full_Payment != null ? Number(bRows[0].Fees_Full_Payment) : null;
+    }
+  }
   const batchCategory = firstNonEmpty(input.trainingCategory, input.Batch_Category_id) || null;
   const batchCategoryId = await resolveBatchCategoryId(pool, batchCode, batchCategory);
   const presentAddress = buildAddress(input, 'present');
@@ -968,16 +988,10 @@ export async function syncOnlineAdmissionIntoCurrentDb(
   }
 
   if (statusAction === 'accept' && resolvedStudentId > 0) {
-    let batchId: number | null = null;
-    let batchFees: number | null = null;
-    if (batchCode) {
-      const [batchRows] = await pool.query(
-        `SELECT Batch_Id, Fees_Full_Payment FROM batch_mst WHERE Batch_code = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
-        [batchCode]
-      ) as [any[], any];
-      batchId = batchRows[0]?.Batch_Id ? Number(batchRows[0].Batch_Id) : null;
-      batchFees = batchRows[0]?.Fees_Full_Payment ? Number(batchRows[0].Fees_Full_Payment) : null;
-    }
+    // Reuse the batch already resolved above so the admission and the student record
+    // always reference the exact same batch.
+    const batchId: number | null = resolvedBatchId;
+    const batchFees: number | null = resolvedBatchFees;
 
     const [admissionRows] = await pool.query(
       `SELECT Admission_Id
@@ -1117,7 +1131,12 @@ export async function listOnlineAdmissions(
       : effectiveStatusTable
         ? `LEFT JOIN \`${effectiveStatusTable}\` stm_si ON stm_si.Id = si.OnlineState`
         : '';
-    const smBatchCode = studentMasterTable ? `COALESCE(sm.Batch_Code, si.Batch_Code, '')` : `COALESCE(si.Batch_Code, '')`;
+    // Batch can live in the student master (granted), on the inquiry, or — for forms that
+    // are still being filled and not yet linked to a student — only inside the saved payload.
+    const payloadBatch = `NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.batchCode')), '')`;
+    const smBatchCode = studentMasterTable
+      ? `COALESCE(NULLIF(TRIM(sm.Batch_Code), ''), NULLIF(TRIM(si.Batch_Code), ''), ${payloadBatch}, '')`
+      : `COALESCE(NULLIF(TRIM(si.Batch_Code), ''), ${payloadBatch}, '')`;
     const smAdmissionDt = studentMasterTable ? `COALESCE(sm.Admission_Dt, oap.Created_At)` : `oap.Created_At`;
     // Online admission state (OnlineState) is authoritative for this listing — it reflects
     // grant/reject decisions. Fall back to the student master status when it is unset

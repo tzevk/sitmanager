@@ -355,10 +355,10 @@ export default function OnlineAdmissionPage() {
                                 </button>
                               )}
 
-                              {/* Grant — pending only */}
-                              {canUpdate && isPending && (
+                              {/* Grant — submitted-pending or still-filling (in-progress) forms */}
+                              {canUpdate && (isPending || r.IsDraft === 1) && (
                                 <button
-                                  title="Grant admission → converts to student"
+                                  title={r.IsDraft ? 'Grant admission from in-progress form → converts to student' : 'Grant admission → converts to student'}
                                   disabled={busy}
                                   onClick={() => handleAction(r.Inquiry_Id, 'accept')}
                                   className="p-1 rounded text-slate-400 hover:bg-green-50 hover:text-green-600 transition-colors disabled:opacity-40"
