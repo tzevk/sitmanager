@@ -16,15 +16,19 @@ function parseNotes(notes: string | null): { particular: string; taxType: string
 }
 
 async function generateReceiptNo(): Promise<string> {
-  const [rows] = await getPool().query<any[]>(
-    `SELECT AUTO_INCREMENT AS nextId FROM information_schema.TABLES
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 's_fees_mst'`
-  );
-  const nextId = Number(rows[0]?.nextId ?? 1);
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0');
-  return `R-${month}/${nextId}`;
+  const [rows] = await getPool().query<any[]>(
+    `SELECT MAX(CAST(SUBSTRING_INDEX(Fees_Code, '/', -1) AS UNSIGNED)) AS lastSeq
+     FROM s_fees_mst
+     WHERE Fees_Code REGEXP ?`,
+    [`^R-${month}/[0-9]{3}$`]
+  );
+  const nextSeq = Number(rows[0]?.lastSeq ?? 0) + 1;
+  return `R-${month}/${String(nextSeq).padStart(3, '0')}`;
 }
+
+const isReceiptNoFormat = (value: string) => /^R-\d{2}\/\d{3}$/.test(value.trim());
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: string }> }) {
   const auth = await requirePermission(req, ['report_fees.view', 'finance.view']);
@@ -286,9 +290,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
       );
 
       const insertedId = Number(result.insertId);
-      const feesCode = (typeof forcedFeesCode === 'string' && forcedFeesCode.trim())
+      const feesCode = (typeof forcedFeesCode === 'string' && isReceiptNoFormat(forcedFeesCode))
         ? forcedFeesCode.trim()
-        : `R-${String(now.getMonth() + 1).padStart(2, '0')}/${String(insertedId).padStart(3, '0')}`;
+        : await generateReceiptNo();
       await pool.query(`UPDATE s_fees_mst SET Fees_Code = ? WHERE Fees_Id = ?`, [feesCode, insertedId]);
       return { Fees_Id: insertedId, Fees_Code: feesCode };
     };
