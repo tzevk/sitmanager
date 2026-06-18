@@ -67,7 +67,11 @@ export async function GET(request: NextRequest) {
     )`;
 
     const [rows] = await pool.query<any[]>(
-      `SELECT
+      // Server-side cap (MariaDB): this funnel aggregate joins three
+      // awt_inquirydiscussion derived tables; bound it so it can never become a
+      // runaway under repeated CBD dashboard loads and saturate the DB.
+      `SET STATEMENT max_statement_time=8 FOR
+       SELECT
          COUNT(*) AS total,
          SUM(CASE WHEN ${HAS_DISCUSSION} THEN 1 ELSE 0 END) AS contacted,
          SUM(CASE WHEN ${HAS_ADMISSION_FORM} THEN 1 ELSE 0 END) AS interested,

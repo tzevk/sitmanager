@@ -41,11 +41,6 @@ interface SeminarPlannerRow {
   college: string;
   topic: string;
   speaker: string;
-  platforms: string[];
-  content_type: string;
-  ct_planned: number;
-  ct_target: number;
-  ct_completed: number;
   status: SeminarStatus;
 }
 
@@ -59,7 +54,6 @@ interface ExhibitionPlannerRow {
 
 const SEMINAR_STATUSES: SeminarStatus[] = ['Not Started', 'Confirmed', 'Completed', 'Cancelled', 'Under Discussion'];
 const EXHIBITION_STATUSES: ExhibitionStatus[] = ['Not Started', 'Confirmed', 'Completed', 'Cancelled', 'Under Discussion'];
-const SEMINAR_PLATFORMS = ['Instagram', 'Facebook', 'WhatsApp', 'Email', 'Phone Call', 'LinkedIn', 'YouTube', 'Website', 'Google Ads'];
 
 function seminarStatusCls(status: SeminarStatus) {
   if (status === 'Completed')        return 'bg-emerald-100 text-emerald-700 ring-emerald-200';
@@ -75,49 +69,6 @@ function exhibitionStatusCls(status: ExhibitionStatus) {
   if (status === 'Cancelled')        return 'bg-rose-100 text-rose-700 ring-rose-200';
   if (status === 'Under Discussion') return 'bg-violet-100 text-violet-700 ring-violet-200';
   return 'bg-gray-100 text-gray-600 ring-gray-200';
-}
-
-function PlatformMultiSelect({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
-  const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const toggle = (p: string) =>
-    onChange(value.includes(p) ? value.filter(x => x !== p) : [...value, p]);
-
-  const label = value.length === 0 ? 'Select…' : value.length === 1 ? value[0] : `${value.length} platforms`;
-
-  return (
-    <div className="relative min-w-[120px]" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="w-full text-left text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white flex items-center justify-between gap-1 hover:border-gray-300"
-      >
-        <span className="truncate text-gray-700">{label}</span>
-        <svg className={`w-3 h-3 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute z-50 top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[160px]">
-          {SEMINAR_PLATFORMS.map(p => (
-            <label key={p} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs text-gray-700">
-              <input type="checkbox" checked={value.includes(p)} onChange={() => toggle(p)} className="rounded accent-[#2E3093]" />
-              {p}
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 /* ── Shared primitives ────────────────────────────────────────────── */
@@ -227,7 +178,6 @@ const Icons = {
 
 /* ── Component ────────────────────────────────────────────────────── */
 export default function CbdDashboard({ data, loading }: { data: any; loading: boolean }) {
-  const seminarTargets  = data?.seminarTargets ?? [];
   const pendingFollowups = data?.pendingFollowups ?? [];
   const dailyActivity   = data?.dailyActivity ?? [];
   const pendingFees     = data?.pendingFees ?? [];
@@ -271,23 +221,6 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterMode, filterYear, filterMonth]);
 
-  const initialSeminarPlan = React.useMemo<SeminarPlannerRow[]>(() => {
-    return (seminarTargets as any[]).map((row: any, i: number) => ({
-      id: String(row.id ?? `seminar-${i}`),
-      month: String(row.month ?? ''),
-      date: String(row.date ?? ''),
-      college: String(row.college_name ?? ''),
-      topic: String(row.topic ?? ''),
-      speaker: String(row.speaker ?? ''),
-      platforms: [],
-      content_type: '',
-      ct_planned: 0,
-      ct_target: 0,
-      ct_completed: 0,
-      status: 'Not Started' as SeminarStatus,
-    }));
-  }, [seminarTargets]);
-
   const initialExhibitionPlan = React.useMemo<ExhibitionPlannerRow[]>(() => {
     const seededRows = Array.isArray(data?.exhibitionTargets?.rows)
       ? data.exhibitionTargets.rows
@@ -316,24 +249,9 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
     }));
   }, [data?.exhibitionTargets]);
 
-  const seminarSeedSignature = React.useMemo(
-    () => initialSeminarPlan
-      .map(r => `${r.id}|${r.month}|${r.date}|${r.college}|${r.topic}|${r.speaker}|${r.status}`)
-      .join('||'),
-    [initialSeminarPlan]
-  );
-
   const [seminarPlan, setSeminarPlan] = React.useState<SeminarPlannerRow[]>([]);
   const [exhibitionPlan, setExhibitionPlan] = React.useState<ExhibitionPlannerRow[]>([]);
-  const lastSeminarSeedRef = React.useRef('');
   const lastExhibitionSeedRef = React.useRef('');
-
-  React.useEffect(() => {
-    if (!seminarSeedSignature) return;
-    if (seminarSeedSignature === lastSeminarSeedRef.current) return;
-    setSeminarPlan(initialSeminarPlan);
-    lastSeminarSeedRef.current = seminarSeedSignature;
-  }, [initialSeminarPlan, seminarSeedSignature]);
 
   const exhibitionSeedSignature = React.useMemo(
     () => initialExhibitionPlan
@@ -356,7 +274,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
     const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setSeminarPlan(prev => ([
       ...prev,
-      { id: uid, month: '', date: '', college: '', topic: '', speaker: '', platforms: [], content_type: '', ct_planned: 0, ct_target: 0, ct_completed: 0, status: 'Not Started' as SeminarStatus },
+      { id: uid, month: '', date: '', college: '', topic: '', speaker: '', status: 'Not Started' as SeminarStatus },
     ]));
   };
 

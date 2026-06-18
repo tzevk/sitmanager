@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { getPool, cachedWithMeta } from '@/lib/db';
+import { getPool } from '@/lib/db';
 import { requireAuth } from '@/lib/api-auth';
 import { dashboardRateLimiter } from '@/lib/rate-limit';
 import { cache, cacheTTL } from '@/lib/cache';
@@ -35,11 +35,26 @@ function releaseQuerySlot(): void {
   }
 }
 
-// ── helper: safe query that never throws ──
+// Per-query timeout (seconds). A single pathological query must never hang the
+// whole dashboard: Promise.all waits for the slowest member, so without this a
+// slow query makes /api/dashboard never return and the client renders no data.
+//
+// CRITICAL: the cap is enforced SERVER-SIDE via MariaDB's `SET STATEMENT
+// max_statement_time` so the DB kills the query at the deadline. A client-only
+// timeout would abandon the query while it keeps running on the server — under
+// the dashboard's 15s polling that lets slow queries pile up unbounded until the
+// DB saturates ("too many connections" + total lag). The client `timeout` is a
+// backstop set slightly above the server cap.
+const QUERY_TIMEOUT_SECONDS = Number(process.env.DASHBOARD_QUERY_TIMEOUT_SECONDS) || 8;
+
+// ── helper: safe query that never throws (and never hangs the DB) ──
 async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallback: T): Promise<T> {
   await acquireQuerySlot();
   try {
-    const [rows] = await pool.query(sql);
+    const [rows] = await pool.query({
+      sql: `SET STATEMENT max_statement_time=${QUERY_TIMEOUT_SECONDS} FOR ${sql}`,
+      timeout: (QUERY_TIMEOUT_SECONDS + 2) * 1000,
+    });
     return rows as T;
   } catch {
     return fallback;
@@ -105,7 +120,8 @@ async function fetchDashboardData(dept?: string) {
   const needsPlacementDepartment = isPlacement;
   const needsNotices = isGeneral;
   const needsLeadFunnel = isCbd || isAdmin;
-  const needsSeminars = isCbd;
+  // Seminar Schedule Planner is manual-only and should start empty.
+  const needsSeminars = false;
   const needsExhibitions = isCbd;
   const needsFollowups = isAdmin;
   const needsCbdFollowups = isCbd;
@@ -121,54 +137,6 @@ async function fetchDashboardData(dept?: string) {
   
   const needsAdminWidgets = isAdmin;
   const needsQuickStats = isGeneral || isAdmin;
-
-  // ── Per-batch lead-funnel aggregate (shared, set-based) ──────────
-  // Mirrors the corrected /api/dashboard/cbd-lead-funnel definitions so the
-  // per-batch numbers stay consistent with the Total Lead Funnel Summary:
-  //   • Contacted  → has a real discussion record (awt_inquirydiscussion)
-  //   • Interested → an online admission form exists (online_admission_payload)
-  //   • Converted  → that form was accepted into a student (Admitted / linked)
-  //
-  // IMPORTANT: this runs on the dashboard landing query over the whole
-  // student_inquiry table, so it MUST stay set-based. Per-row correlated
-  // EXISTS subqueries here exhaust the DB connection pool under load (see
-  // memory: student-list-perf). The signal tables are pre-grouped into derived
-  // sets and hash-joined once; each join key is unique per inquiry, so COUNT(*)
-  // does not fan out.
-  const BATCH_INQUIRY_AGG = `(
-    SELECT
-      TRIM(sinq.Batch_Code) AS Batch_code,
-      MAX(CAST(NULLIF(TRIM(CAST(sinq.Course_Id AS CHAR)), '') AS UNSIGNED)) AS Course_Id,
-      COUNT(*) AS Enquiries_Received,
-      SUM(CASE WHEN (
-            disc_inq.k IS NOT NULL
-            OR (sinq.Student_Id IS NOT NULL AND (disc_leg.k IS NOT NULL OR disc_stu.k IS NOT NULL))
-          ) THEN 1 ELSE 0 END) AS Enquiries_Contacted,
-      SUM(CASE WHEN oap.Inquiry_Id IS NOT NULL THEN 1 ELSE 0 END) AS Interested_Students,
-      SUM(CASE WHEN (
-            oap.Inquiry_Id IS NOT NULL
-            AND (sinq.OnlineState = 8 OR sm.Student_Id IS NOT NULL)
-          ) THEN 1 ELSE 0 END) AS Confirmed_Admissions
-    FROM student_inquiry sinq
-    LEFT JOIN (
-      SELECT Inquiry_id AS k FROM awt_inquirydiscussion
-      WHERE deleted = 0 AND Inquiry_id IS NOT NULL GROUP BY Inquiry_id
-    ) disc_inq ON disc_inq.k = sinq.Inquiry_Id
-    LEFT JOIN (
-      SELECT Inquiry_id AS k FROM awt_inquirydiscussion
-      WHERE deleted = 0 AND Inquiry_id IS NOT NULL GROUP BY Inquiry_id
-    ) disc_leg ON sinq.Student_Id IS NOT NULL AND disc_leg.k = sinq.Student_Id
-    LEFT JOIN (
-      SELECT student_id AS k FROM awt_inquirydiscussion
-      WHERE deleted = 0 AND student_id IS NOT NULL GROUP BY student_id
-    ) disc_stu ON sinq.Student_Id IS NOT NULL AND disc_stu.k = sinq.Student_Id
-    LEFT JOIN online_admission_payload oap ON oap.Inquiry_Id = sinq.Inquiry_Id
-    LEFT JOIN student_master sm
-      ON sm.Student_Id = sinq.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-    WHERE (sinq.IsDelete = 0 OR sinq.IsDelete IS NULL)
-      AND TRIM(IFNULL(sinq.Batch_Code, '')) <> ''
-    GROUP BY TRIM(sinq.Batch_Code)
-  )`;
 
   // batch_mst.SDate is stored in mixed formats — parse before comparing/sorting.
   const BATCH_SDATE_EXPR = `COALESCE(
@@ -300,79 +268,76 @@ async function fetchDashboardData(dept?: string) {
       ORDER BY c.Course_Id, month
     `, []) : Promise.resolve([]),
 
-    // 2. Upcoming batches — inquiry-first (group by inquiry Batch_Code), then enrich from batch master
+    // 2. Upcoming batches — batch-first, then enrich with indexed inquiry signals.
+    // Starting from all inquiry batches makes the dashboard pay for historical
+    // data it does not render; this widget only needs the next 3 months.
     needsUpcomingBatches ? safeQuery(pool, `
       SELECT
-        q.Batch_Id,
-        q.Batch_code,
-        DATE_FORMAT(q.ParsedSDate, '%Y-%m-%d') AS SDate,
-        DATE_FORMAT(q.ParsedEDate, '%Y-%m-%d') AS EDate,
-        q.Category,
-        q.Duration,
-        q.Timings,
-        q.Training_Coordinator,
-        q.INR_Basic,
-        DATE_FORMAT(q.ParsedAdmissionDate, '%Y-%m-%d') AS Admission_Date,
-        q.Max_Students,
-        q.NoStudent,
-        q.CourseName,
-        q.Enquiries_Received,
-        q.Enquiries_Contacted,
-        q.Interested_Students,
-        q.Confirmed_Admissions,
+        b.Batch_Id,
+        b.Batch_code,
+        DATE_FORMAT(${BATCH_SDATE_EXPR}, '%Y-%m-%d') AS SDate,
+        DATE_FORMAT(b.EDate, '%Y-%m-%d') AS EDate,
+        b.Category,
+        b.Duration,
+        b.Timings,
+        b.Training_Coordinator,
+        b.INR_Basic,
+        DATE_FORMAT(b.Admission_Date, '%Y-%m-%d') AS Admission_Date,
+        b.Max_Students,
+        b.NoStudent,
+        COALESCE(c.Course_Name, b.CourseName, '') AS CourseName,
+        COUNT(DISTINCT si.Inquiry_Id) AS Enquiries_Received,
+        COUNT(DISTINCT CASE WHEN (
+          d_inq.id IS NOT NULL
+          OR (si.Student_Id IS NOT NULL AND (d_leg.id IS NOT NULL OR d_stu.id IS NOT NULL))
+        ) THEN si.Inquiry_Id END) AS Enquiries_Contacted,
+        COUNT(DISTINCT CASE WHEN oap.Inquiry_Id IS NOT NULL THEN si.Inquiry_Id END) AS Interested_Students,
+        COUNT(DISTINCT CASE WHEN (
+          oap.Inquiry_Id IS NOT NULL
+          AND (si.OnlineState = 8 OR sm.Student_Id IS NOT NULL)
+        ) THEN si.Inquiry_Id END) AS Confirmed_Admissions,
         COALESCE(am.Enrolled, 0) AS Enrolled
-      FROM (
-        SELECT
-          b.Batch_Id,
-          si.Batch_code,
-          b.Category,
-          b.Duration,
-          b.Timings,
-          b.Training_Coordinator,
-          b.INR_Basic,
-          b.Max_Students,
-          b.NoStudent,
-          COALESCE(c_batch.Course_Name, c_si.Course_Name, '') AS CourseName,
-          si.Enquiries_Received,
-          si.Enquiries_Contacted,
-          si.Interested_Students,
-          si.Confirmed_Admissions,
-          COALESCE(
-            STR_TO_DATE(CAST(b.SDate AS CHAR), '%Y-%m-%d'),
-            STR_TO_DATE(CAST(b.SDate AS CHAR), '%d-%m-%Y'),
-            STR_TO_DATE(CAST(b.SDate AS CHAR), '%d/%m/%Y'),
-            STR_TO_DATE(CAST(b.SDate AS CHAR), '%m/%d/%Y')
-          ) AS ParsedSDate,
-          COALESCE(
-            STR_TO_DATE(CAST(b.EDate AS CHAR), '%Y-%m-%d'),
-            STR_TO_DATE(CAST(b.EDate AS CHAR), '%d-%m-%Y'),
-            STR_TO_DATE(CAST(b.EDate AS CHAR), '%d/%m/%Y'),
-            STR_TO_DATE(CAST(b.EDate AS CHAR), '%m/%d/%Y')
-          ) AS ParsedEDate,
-          COALESCE(
-            STR_TO_DATE(CAST(b.Admission_Date AS CHAR), '%Y-%m-%d'),
-            STR_TO_DATE(CAST(b.Admission_Date AS CHAR), '%d-%m-%Y'),
-            STR_TO_DATE(CAST(b.Admission_Date AS CHAR), '%d/%m/%Y'),
-            STR_TO_DATE(CAST(b.Admission_Date AS CHAR), '%m/%d/%Y')
-          ) AS ParsedAdmissionDate
-        FROM ${BATCH_INQUIRY_AGG} si
-        LEFT JOIN batch_mst b
-          ON LOWER(TRIM(b.Batch_code)) = LOWER(si.Batch_code)
-         AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
-         AND (b.Cancel IS NULL OR b.Cancel = 0)
-        LEFT JOIN course_mst c_batch ON b.Course_Id = c_batch.Course_Id
-        LEFT JOIN course_mst c_si ON si.Course_Id = c_si.Course_Id
-      ) q
+      FROM batch_mst b
+      LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
+      LEFT JOIN student_inquiry si
+        ON LOWER(TRIM(si.Batch_Code)) = LOWER(TRIM(b.Batch_code))
+       AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
+      LEFT JOIN awt_inquirydiscussion d_inq
+        ON d_inq.deleted = 0 AND d_inq.Inquiry_id = si.Inquiry_Id
+      LEFT JOIN awt_inquirydiscussion d_leg
+        ON si.Student_Id IS NOT NULL AND d_leg.deleted = 0 AND d_leg.Inquiry_id = si.Student_Id
+      LEFT JOIN awt_inquirydiscussion d_stu
+        ON si.Student_Id IS NOT NULL AND d_stu.deleted = 0 AND d_stu.student_id = si.Student_Id
+      LEFT JOIN online_admission_payload oap ON oap.Inquiry_Id = si.Inquiry_Id
+      LEFT JOIN student_master sm
+        ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
       LEFT JOIN (
         SELECT Batch_Id, COUNT(*) AS Enrolled
         FROM admission_master
         WHERE (IsDelete = 0 OR IsDelete IS NULL)
           AND (Cancel = 0 OR Cancel IS NULL)
         GROUP BY Batch_Id
-      ) am ON q.Batch_Id = am.Batch_Id
-      WHERE q.ParsedSDate >= CURDATE()
-        AND q.ParsedSDate <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
-      ORDER BY q.ParsedSDate ASC, q.Enquiries_Received DESC
+      ) am ON b.Batch_Id = am.Batch_Id
+      WHERE ${BATCH_SDATE_EXPR} >= CURDATE()
+        AND ${BATCH_SDATE_EXPR} <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
+        AND (b.IsDelete IS NULL OR b.IsDelete = 0)
+        AND (b.Cancel IS NULL OR b.Cancel = 0)
+      GROUP BY
+        b.Batch_Id,
+        b.Batch_code,
+        ${BATCH_SDATE_EXPR},
+        b.EDate,
+        b.Category,
+        b.Duration,
+        b.Timings,
+        b.Training_Coordinator,
+        b.INR_Basic,
+        b.Admission_Date,
+        b.Max_Students,
+        b.NoStudent,
+        COALESCE(c.Course_Name, b.CourseName, ''),
+        am.Enrolled
+      ORDER BY ${BATCH_SDATE_EXPR} ASC, Enquiries_Received DESC
       LIMIT 50
     `, []) : Promise.resolve([]),
 
@@ -1189,47 +1154,7 @@ async function fetchDashboardData(dept?: string) {
   // ── Shape the response ──────────────────────────────────────────
   const esRow = (enquirySummaryRows as Record<string, number>[])[0] ?? {};
 
-  // If the optimized upcoming-batches query fails (safeQuery => []),
-  // fall back to a direct batch_mst query enriched with inquiry counts via LEFT JOIN.
-  const upcomingBatchesFinal = (needsUpcomingBatches && (upcomingBatches as any[]).length === 0)
-    ? await safeQuery(pool, `
-      SELECT
-        b.Batch_Id,
-        b.Batch_code,
-        DATE_FORMAT(${BATCH_SDATE_EXPR}, '%Y-%m-%d') AS SDate,
-        DATE_FORMAT(b.EDate, '%Y-%m-%d') AS EDate,
-        b.Category,
-        b.Duration,
-        b.Timings,
-        b.Training_Coordinator,
-        b.INR_Basic,
-        DATE_FORMAT(b.Admission_Date, '%Y-%m-%d') AS Admission_Date,
-        b.Max_Students,
-        b.NoStudent,
-        c.Course_Name AS CourseName,
-        COALESCE(si.Enquiries_Received, 0)    AS Enquiries_Received,
-        COALESCE(si.Enquiries_Contacted, 0)   AS Enquiries_Contacted,
-        COALESCE(si.Interested_Students, 0)   AS Interested_Students,
-        COALESCE(si.Confirmed_Admissions, 0)  AS Confirmed_Admissions,
-        COALESCE(am.Enrolled, 0)              AS Enrolled
-      FROM batch_mst b
-      LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
-      LEFT JOIN (
-        SELECT Batch_Id, COUNT(*) AS Enrolled
-        FROM admission_master
-        WHERE (IsDelete = 0 OR IsDelete IS NULL)
-          AND (Cancel = 0 OR Cancel IS NULL)
-        GROUP BY Batch_Id
-      ) am ON b.Batch_Id = am.Batch_Id
-      LEFT JOIN ${BATCH_INQUIRY_AGG} si ON LOWER(TRIM(b.Batch_code)) = LOWER(si.Batch_code)
-      WHERE ${BATCH_SDATE_EXPR} >= CURDATE()
-        AND ${BATCH_SDATE_EXPR} <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
-        AND (b.IsDelete IS NULL OR b.IsDelete = 0)
-        AND (b.Cancel IS NULL OR b.Cancel = 0)
-      ORDER BY ${BATCH_SDATE_EXPR} ASC
-      LIMIT 50
-    `, [])
-    : upcomingBatches;
+  const upcomingBatchesFinal = upcomingBatches;
 
   // Merge placement data: batch rows + student aggregates + interview counts
   const studentAggMap: Record<string, { cv_received: number; self_placement: number; placement_blocked: number }> = {};

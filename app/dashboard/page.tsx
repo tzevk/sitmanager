@@ -359,9 +359,12 @@ export default function DashboardPage() {
       }
     };
     fetchDashboard(false);
+    // 60s, not 15s: the dashboard aggregates are heavy and server-cached for ~30s,
+    // so polling faster just multiplies DB load (and previously stampeded slow
+    // queries into pile-ups). One refresh/min is plenty for this data.
     const refreshId = window.setInterval(() => {
       fetchDashboard(true);
-    }, 15000);
+    }, 60000);
     return () => {
       cancelled = true;
       window.clearInterval(refreshId);
