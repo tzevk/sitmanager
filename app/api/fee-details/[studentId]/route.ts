@@ -124,8 +124,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
       feeRow?.Fees_Full_Payment ??
       0
     );
+    const postedDebit = ledger.reduce((s, r) => s + r.Debit, 0);
     const totalCredit = ledger.reduce((s, r) => s + r.Credit, 0);
-    const balance = totalDebit - totalCredit;
+    const hasAlumniDebit = ledger.some((r) => /one\s*time\s+membership\s+fees/i.test(r.Particular) && r.Debit > 0);
+    let ledgerTotalDebit = totalDebit + postedDebit;
 
     if (student.Course_Name) {
       ledger.unshift({
@@ -139,6 +141,28 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
         Credit: 0,
       });
     }
+
+    if (totalDebit > 0 && !hasAlumniDebit) {
+      ledger.splice(student.Course_Name ? 1 : 0, 0, {
+        Fees_Id: -1,
+        Date: dueDate,
+        Particular: MEMBERSHIP_FEE_LABEL,
+        Payment_Type: null,
+        Transaction_No: null,
+        Fees_Code: null,
+        Debit: MEMBERSHIP_FEE_AMOUNT,
+        Credit: 0,
+      });
+      ledgerTotalDebit += MEMBERSHIP_FEE_AMOUNT;
+    } else if (student.Course_Name && hasAlumniDebit) {
+      const alumniIndex = ledger.findIndex((r) => /one\s*time\s+membership\s+fees/i.test(r.Particular) && r.Debit > 0);
+      if (alumniIndex > 1) {
+        const [alumniRow] = ledger.splice(alumniIndex, 1);
+        ledger.splice(1, 0, alumniRow);
+      }
+    }
+
+    const balance = ledgerTotalDebit - totalCredit;
 
     const particulars = [
       {
@@ -197,7 +221,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
       banks,
       particulars,
       ledger,
-      totals: { debit: totalDebit, credit: totalCredit, balance },
+      totals: { debit: ledgerTotalDebit, credit: totalCredit, balance },
       nextReceiptNo: record?.Fees_Code ?? (await generateReceiptNo()),
       record,
     });
@@ -269,45 +293,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
       return { Fees_Id: insertedId, Fees_Code: feesCode };
     };
 
-    const baseParticular = String(Particular ?? '').trim();
-    const isTuitionCredit =
-      typeR === 'C'
-      && /^tuition\s+fees\s*-/i.test(baseParticular)
-      && !/one\s*time\s+membership\s+fees/i.test(baseParticular)
-      && amount >= MEMBERSHIP_FEE_AMOUNT;
-
-    if (isTuitionCredit) {
-      const alumniAmount = Math.min(MEMBERSHIP_FEE_AMOUNT, amount);
-      const tuitionAmount = amount - alumniAmount;
-      const createdRows: Array<{ Fees_Id: number; Fees_Code: string; particular: string; amount: number }> = [];
-
-      if (tuitionAmount > 0) {
-        const tuitionRow = await insertFeeRow(
-          tuitionAmount,
-          baseParticular,
-          TaxType || null,
-          typeof customFeesCode === 'string' ? customFeesCode : null,
-        );
-        createdRows.push({ ...tuitionRow, particular: baseParticular, amount: tuitionAmount });
-      }
-
-      if (alumniAmount > 0) {
-        const alumniRow = await insertFeeRow(
-          alumniAmount,
-          MEMBERSHIP_FEE_LABEL,
-          null,
-          null,
-        );
-        createdRows.push({ ...alumniRow, particular: MEMBERSHIP_FEE_LABEL, amount: alumniAmount });
-      }
-
-      const primary = createdRows[0];
-      return NextResponse.json({ success: true, Fees_Id: primary?.Fees_Id ?? null, Fees_Code: primary?.Fees_Code ?? null, splitTransactions: createdRows });
-    }
-
     const created = await insertFeeRow(
       amount,
-      baseParticular,
+      String(Particular ?? '').trim(),
       TaxType || null,
       typeof customFeesCode === 'string' ? customFeesCode : null,
     );

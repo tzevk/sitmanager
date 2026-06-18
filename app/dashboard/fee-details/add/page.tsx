@@ -114,6 +114,7 @@ export default function AddFeeDetailsPage() {
   const [receiptNo, setReceiptNo] = useState('');
 
   const [saving, setSaving] = useState(false);
+  const [deletingFeeId, setDeletingFeeId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -231,6 +232,25 @@ export default function AddFeeDetailsPage() {
       setError(e instanceof Error ? e.message : 'Failed to save receipt');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteFee = async (feesId: number) => {
+    if (!studentId || !canUpdate) return;
+    if (!window.confirm('Delete this fee receipt?')) return;
+    setError('');
+    setMessage('');
+    setDeletingFeeId(feesId);
+    try {
+      const res = await fetch(`/api/fee-details/${studentId}/${feesId}`, { method: 'DELETE' });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Failed to delete receipt');
+      setMessage('Receipt deleted successfully');
+      await loadFormData(studentId);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to delete receipt');
+    } finally {
+      setDeletingFeeId(null);
     }
   };
 
@@ -425,116 +445,105 @@ export default function AddFeeDetailsPage() {
 
         {loadingForm && <div className="mb-4 text-xs text-slate-400">Loading student details…</div>}
 
-        {/* ── Form fields ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-
-          {/* Row 1: Student Name | Student Id | Payment Type | Transaction No */}
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <label className={lbl}>Student Name</label>
-              {selectedStudent && <StatusTag row={selectedStudent} />}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+          <div className="rounded-xl border border-slate-200 p-4 bg-slate-50/40">
+            <h3 className="text-xs font-bold text-slate-700 mb-3">Student Details</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <label className={lbl}>Student Name</label>
+                  {selectedStudent && <StatusTag row={selectedStudent} />}
+                </div>
+                <input className={ctrlReadOnly} value={data?.student.Student_Name || ''} readOnly />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={lbl}>Student Id</label>
+                <input className={ctrlReadOnly} value={data?.student.Student_Id || ''} readOnly />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={lbl}>Course Name</label>
+                <input className={ctrlReadOnly} value={data?.student.Course_Name || ''} readOnly />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={lbl}>Batch Code</label>
+                <input className={ctrlReadOnly} value={data?.student.Batch_Code || ''} readOnly />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={lbl}>Contact No.</label>
+                <input className={ctrlReadOnly} value={data?.student.Present_Mobile || ''} readOnly />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={lbl}>Email Address</label>
+                <input className={ctrlReadOnly} value={data?.student.Email || ''} readOnly />
+              </div>
+              <div className="flex flex-col gap-1 sm:col-span-2">
+                <label className={lbl}>Due Date</label>
+                <input className={ctrlReadOnly} value={fmtDate(data?.dueDate)} readOnly />
+              </div>
             </div>
-            <input className={ctrlReadOnly} value={data?.student.Student_Name || ''} readOnly />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>Student Id</label>
-            <input className={ctrlReadOnly} value={data?.student.Student_Id || ''} readOnly />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>Payment Type</label>
-            <select className={ctrl} value={paymentType} onChange={e => setPaymentType(e.target.value)} disabled={!studentId}>
-              {PAYMENT_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>{showTransactionField ? transactionLabel : 'Transaction No.'}</label>
-            <input className={ctrl} value={chequeNo} onChange={e => setChequeNo(e.target.value)} disabled={!studentId || !showTransactionField} placeholder={showChequeFields ? 'Enter cheque / DD number' : 'Enter transaction number'} />
           </div>
 
-          {/* Row 2: Course Name | Batch Code | Bank | Cheque Date */}
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>Course Name</label>
-            <input className={ctrlReadOnly} value={data?.student.Course_Name || ''} readOnly />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>Batch Code</label>
-            <input className={ctrlReadOnly} value={data?.student.Batch_Code || ''} readOnly />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>Bank</label>
-            <select className={ctrl} value={bank} onChange={e => setBank(e.target.value)} disabled={!studentId || !showChequeFields}>
-              <option value="">Select Bank Name</option>
-              {(data?.banks || []).map(b => <option key={b.Id} value={b.Bank_Name}>{b.Bank_Name}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>Cheque Date</label>
-            <input type="date" className={ctrl} value={chequeDate} onChange={e => setChequeDate(e.target.value)} disabled={!studentId || !showChequeFields} />
-          </div>
-
-          {/* Row 3: Contact No. | Email Address | Branch | Amount */}
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>Contact No.</label>
-            <input className={ctrlReadOnly} value={data?.student.Present_Mobile || ''} readOnly />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>Email Address</label>
-            <input className={ctrlReadOnly} value={data?.student.Email || ''} readOnly />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>Branch</label>
-            <input className={ctrl} value={branch} onChange={e => setBranch(e.target.value)} disabled={!studentId || !showChequeFields} placeholder="Branch" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>Amount (Rs.) *</label>
-            <input type="number" className={ctrl} value={amount} onChange={e => setAmount(e.target.value)} disabled={!studentId} placeholder="0" />
-          </div>
-
-          {/* Row 4: Type | Generate Receipt | Particular | Receipt Date */}
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>Type *</label>
-            <select className={ctrl} value={type} onChange={e => setType(e.target.value as 'Credit' | 'Debit')} disabled={!studentId}>
-              <option value="Credit">Credit</option>
-              <option value="Debit">Debit</option>
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>Receipt No</label>
-            <input
-              type="text"
-              className={ctrl}
-              value={receiptNo}
-              onChange={e => setReceiptNo(e.target.value)}
-              disabled={!studentId}
-              placeholder="e.g. R-06/052"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>Particular</label>
-            <select className={ctrl} value={particular} onChange={e => handleParticularChange(e.target.value)} disabled={!studentId}>
-              <option value="">Select Particular Type</option>
-              {(data?.particulars || []).map(p => (
-                <option key={p.label} value={p.label}>
-                  {p.label}{p.fixed && p.amount != null ? ` (₹${p.amount})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>Receipt Date *</label>
-            <input type="date" className={ctrl} value={receiptDate} onChange={e => setReceiptDate(e.target.value)} disabled={!studentId} />
-          </div>
-
-          {/* Row 5: Due Date */}
-          <div className="flex flex-col gap-1">
-            <label className={lbl}>Due Date</label>
-            <input className={ctrlReadOnly} value={fmtDate(data?.dueDate)} readOnly />
-          </div>
-
-          {/* Tax Type (full row) */}
-          <div className="flex flex-col gap-1 lg:col-span-4">
-            <label className={lbl}>Tax Type</label>
-            <div className="flex gap-5 mt-1">
+          <div className="rounded-xl border border-slate-200 p-4">
+            <h3 className="text-xs font-bold text-slate-700 mb-3">Transaction Details</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className={lbl}>Type *</label>
+                <select className={ctrl} value={type} onChange={e => setType(e.target.value as 'Credit' | 'Debit')} disabled={!studentId}>
+                  <option value="Credit">Credit</option>
+                  <option value="Debit">Debit</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={lbl}>Receipt No</label>
+                <input type="text" className={ctrl} value={receiptNo} onChange={e => setReceiptNo(e.target.value)} disabled={!studentId} placeholder="e.g. R-06/052" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={lbl}>Payment Type</label>
+                <select className={ctrl} value={paymentType} onChange={e => setPaymentType(e.target.value)} disabled={!studentId}>
+                  {PAYMENT_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={lbl}>{showTransactionField ? transactionLabel : 'Transaction No.'}</label>
+                <input className={ctrl} value={chequeNo} onChange={e => setChequeNo(e.target.value)} disabled={!studentId || !showTransactionField} placeholder={showChequeFields ? 'Enter cheque / DD number' : 'Enter transaction number'} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={lbl}>Bank</label>
+                <select className={ctrl} value={bank} onChange={e => setBank(e.target.value)} disabled={!studentId || !showChequeFields}>
+                  <option value="">Select Bank Name</option>
+                  {(data?.banks || []).map(b => <option key={b.Id} value={b.Bank_Name}>{b.Bank_Name}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={lbl}>Cheque Date</label>
+                <input type="date" className={ctrl} value={chequeDate} onChange={e => setChequeDate(e.target.value)} disabled={!studentId || !showChequeFields} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={lbl}>Branch</label>
+                <input className={ctrl} value={branch} onChange={e => setBranch(e.target.value)} disabled={!studentId || !showChequeFields} placeholder="Branch" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={lbl}>Amount (Rs.) *</label>
+                <input type="number" className={ctrl} value={amount} onChange={e => setAmount(e.target.value)} disabled={!studentId} placeholder="0" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={lbl}>Particular</label>
+                <select className={ctrl} value={particular} onChange={e => handleParticularChange(e.target.value)} disabled={!studentId}>
+                  <option value="">Select Particular Type</option>
+                  {(data?.particulars || []).map(p => (
+                    <option key={p.label} value={p.label}>
+                      {p.label}{p.fixed && p.amount != null ? ` (₹${p.amount})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={lbl}>Receipt Date *</label>
+                <input type="date" className={ctrl} value={receiptDate} onChange={e => setReceiptDate(e.target.value)} disabled={!studentId} />
+              </div>
+              <div className="flex flex-col gap-1 sm:col-span-2">
+                <label className={lbl}>Tax Type</label>
+                <div className="flex gap-5 mt-1 flex-wrap">
               {TAX_TYPES.map(t => (
                 <label key={t} className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
                   <input type="radio" name="taxType" checked={taxType === t} onChange={() => setTaxType(t)} disabled={!studentId} className="accent-[#2E3093]" />
@@ -545,8 +554,10 @@ export default function AddFeeDetailsPage() {
                 <input type="radio" name="taxType" checked={taxType === ''} onChange={() => setTaxType('')} disabled={!studentId} className="accent-[#2E3093]" />
                 None
               </label>
+                </div>
             </div>
           </div>
+        </div>
         </div>
 
         {/* Action buttons */}
@@ -609,14 +620,37 @@ export default function AddFeeDetailsPage() {
                   <tr><td colSpan={7} className="py-6 text-center text-xs text-slate-400">No transactions yet</td></tr>
                 )}
                 {data.ledger.map(r => (
-                  <tr key={r.Fees_Id} className="hover:bg-slate-50/60">
+                  <tr key={r.Fees_Id} className="group hover:bg-slate-50/60">
                     <td className="py-2 px-3 text-xs border-b border-slate-100">{fmtDate(r.Date)}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Particular || '—'}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Payment_Type || '—'}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Fees_Code || '—'}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Transaction_No || '—'}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100 text-right font-mono">{r.Debit ? fmt(r.Debit) : ''}</td>
-                    <td className="py-2 px-3 text-xs border-b border-slate-100 text-right font-mono">{r.Credit ? fmt(r.Credit) : ''}</td>
+                    <td className="relative py-2 px-3 text-xs border-b border-slate-100 text-right font-mono overflow-visible">
+                      {r.Credit ? fmt(r.Credit) : ''}
+                      {r.Fees_Id > 0 ? (
+                        <div className="absolute right-0 top-1/2 z-10 flex -translate-y-1/2 translate-x-[calc(100%-0.35rem)] items-center gap-1 rounded-l-lg border border-slate-200 bg-white px-1.5 py-1 shadow-md opacity-75 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
+                            <span className="h-6 w-1 rounded-full bg-slate-300" aria-hidden />
+                            <button
+                              onClick={() => router.push(`/dashboard/fee-details/${studentId}?feesId=${r.Fees_Id}`)}
+                              disabled={!canUpdate}
+                              className="h-6 px-2 rounded-md border border-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteFee(r.Fees_Id)}
+                              disabled={!canUpdate || deletingFeeId === r.Fees_Id}
+                              className="h-6 px-2 rounded-md border border-red-200 text-[10px] font-bold text-red-600 hover:bg-red-50 disabled:opacity-40"
+                            >
+                              {deletingFeeId === r.Fees_Id ? 'Deleting' : 'Delete'}
+                            </button>
+                        </div>
+                      ) : (
+                        null
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

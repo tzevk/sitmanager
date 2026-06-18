@@ -59,3 +59,29 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ studentId: 
     return NextResponse.json({ error: err?.message ?? 'Server error' }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ studentId: string; feesId: string }> }) {
+  const auth = await requirePermission(req, ['report_fees.update', 'finance.update']);
+  if (auth instanceof NextResponse) return auth;
+
+  try {
+    const { studentId, feesId } = await ctx.params;
+    const sid = Number(studentId);
+    const fid = Number(feesId);
+    if (!sid || !fid) return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
+
+    const pool = getPool();
+    const [result] = await pool.query<any>(
+      `UPDATE s_fees_mst SET IsDelete = 1 WHERE Fees_Id = ? AND Student_Id = ?`,
+      [fid, sid]
+    );
+
+    if (result.affectedRows === 0) {
+      return NextResponse.json({ error: 'Record not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message ?? 'Server error' }, { status: 500 });
+  }
+}

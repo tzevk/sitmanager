@@ -61,6 +61,7 @@ interface FeeDetailsData {
 }
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors w-full';
+const ctrlReadOnly = 'bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 w-full';
 const label = 'text-[10px] font-bold text-slate-500 uppercase tracking-wider';
 const PAYMENT_TYPES = ['Cash', 'Cheque', 'DD', 'Online', 'UPI', 'Razorpay', 'NEFT', 'PDC'];
 const TAX_TYPES = ['CGST', 'SGST', 'IGST'];
@@ -90,7 +91,7 @@ export default function FeeDetailsEditPage() {
   const [saving, setSaving] = useState(false);
   const [emailing, setEmailing] = useState(false);
   const [rowActionFeeId, setRowActionFeeId] = useState<number | null>(null);
-  const [rowActionType, setRowActionType] = useState<'email' | 'download' | null>(null);
+  const [rowActionType, setRowActionType] = useState<'email' | 'download' | 'delete' | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -217,6 +218,28 @@ export default function FeeDetailsEditPage() {
       } else {
         setEmailing(false);
       }
+    }
+  };
+
+  const handleDeleteFee = async (targetFeesId: number) => {
+    if (!canUpdate) return;
+    if (!window.confirm('Delete this fee receipt?')) return;
+    setError('');
+    setMessage('');
+    setRowActionFeeId(targetFeesId);
+    setRowActionType('delete');
+    try {
+      const res = await fetch(`/api/fee-details/${params.studentId}/${targetFeesId}`, { method: 'DELETE' });
+      const d = await res.json();
+      if (!res.ok) { setError(d.error ?? 'Failed to delete receipt'); return; }
+      setMessage('Receipt deleted successfully');
+      if (data?.record?.Fees_Id === targetFeesId) {
+        router.replace(`/dashboard/fee-details/${params.studentId}`);
+      }
+      await load();
+    } finally {
+      setRowActionFeeId(null);
+      setRowActionType(null);
     }
   };
 
@@ -477,31 +500,31 @@ ${copy('Student Copy')}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
                 <label className={label}>Student Name</label>
-                <input className={ctrl} value={data.student.Student_Name} disabled />
+                <input className={ctrlReadOnly} value={data.student.Student_Name || ''} readOnly />
               </div>
               <div className="flex flex-col gap-1">
                 <label className={label}>Student Id</label>
-                <input className={ctrl} value={data.student.Student_Id} disabled />
+                <input className={ctrlReadOnly} value={data.student.Student_Id || ''} readOnly />
               </div>
               <div className="flex flex-col gap-1">
                 <label className={label}>Course Name</label>
-                <input className={ctrl} value={data.student.Course_Name ?? ''} disabled />
+                <input className={ctrlReadOnly} value={data.student.Course_Name || ''} readOnly />
               </div>
               <div className="flex flex-col gap-1">
                 <label className={label}>Batch Code</label>
-                <input className={ctrl} value={data.student.Batch_Code ?? ''} disabled />
+                <input className={ctrlReadOnly} value={data.student.Batch_Code || ''} readOnly />
               </div>
               <div className="flex flex-col gap-1">
                 <label className={label}>Contact No.</label>
-                <input className={ctrl} value={data.student.Present_Mobile ?? ''} disabled />
+                <input className={ctrlReadOnly} value={data.student.Present_Mobile || ''} readOnly />
               </div>
               <div className="flex flex-col gap-1">
                 <label className={label}>Email Address</label>
-                <input className={ctrl} value={data.student.Email ?? ''} disabled />
+                <input className={ctrlReadOnly} value={data.student.Email || ''} readOnly />
               </div>
               <div className="flex flex-col gap-1 sm:col-span-2">
                 <label className={label}>Due Date</label>
-                <input className={ctrl} value={fmtDate(data.dueDate)} disabled />
+                <input className={ctrlReadOnly} value={fmtDate(data.dueDate)} readOnly />
               </div>
             </div>
           </div>
@@ -517,13 +540,8 @@ ${copy('Student Copy')}
                 </select>
               </div>
               <div className="flex flex-col gap-1">
-                <label className={label}>Receipt No.</label>
-                <input
-                  className={`${ctrl} font-mono font-semibold text-[#2E3093]`}
-                  value={receiptNo}
-                  onChange={(e) => setReceiptNo(e.target.value)}
-                  placeholder="e.g. R-06/052"
-                />
+                <label className={label}>Receipt No</label>
+                <input type="text" className={ctrl} value={receiptNo} onChange={(e) => setReceiptNo(e.target.value)} placeholder="e.g. R-06/052" />
               </div>
               <div className="flex flex-col gap-1">
                 <label className={label}>Payment Type</label>
@@ -532,42 +550,29 @@ ${copy('Student Copy')}
                 </select>
               </div>
               <div className="flex flex-col gap-1">
-                <label className={label}>Receipt Date *</label>
-                <input type="date" className={ctrl} value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} />
+                <label className={label}>{showTransactionField ? transactionLabel : 'Transaction No.'}</label>
+                <input className={ctrl} value={chequeNo} onChange={(e) => setChequeNo(e.target.value)} disabled={!showTransactionField} placeholder={showChequeFields ? 'Enter cheque / DD number' : 'Enter transaction number'} />
               </div>
-
-              {showChequeFields && (
-                <>
-                  <div className="flex flex-col gap-1">
-                    <label className={label}>Bank</label>
-                    <select className={ctrl} value={bank} onChange={(e) => setBank(e.target.value)}>
-                      <option value="">Select Bank Name</option>
-                      {data.banks.map((b) => <option key={b.Id} value={b.Bank_Name}>{b.Bank_Name}</option>)}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className={label}>Cheque Date</label>
-                    <input type="date" className={ctrl} value={chequeDate} onChange={(e) => setChequeDate(e.target.value)} />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className={label}>Branch</label>
-                    <input className={ctrl} value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="Branch" />
-                  </div>
-                </>
-              )}
-
-              {showTransactionField && (
-                <div className="flex flex-col gap-1">
-                  <label className={label}>{transactionLabel}</label>
-                  <input className={ctrl} value={chequeNo} onChange={(e) => setChequeNo(e.target.value)} placeholder={showChequeFields ? 'Enter cheque / DD number' : 'Enter transaction number'} />
-                </div>
-              )}
-
               <div className="flex flex-col gap-1">
-                <label className={label}>Amount (Rs.)</label>
-                <input type="number" className={ctrl} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />
+                <label className={label}>Bank</label>
+                <select className={ctrl} value={bank} onChange={(e) => setBank(e.target.value)} disabled={!showChequeFields}>
+                  <option value="">Select Bank Name</option>
+                  {data.banks.map((b) => <option key={b.Id} value={b.Bank_Name}>{b.Bank_Name}</option>)}
+                </select>
               </div>
-              <div className="flex flex-col gap-1 sm:col-span-2">
+              <div className="flex flex-col gap-1">
+                <label className={label}>Cheque Date</label>
+                <input type="date" className={ctrl} value={chequeDate} onChange={(e) => setChequeDate(e.target.value)} disabled={!showChequeFields} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={label}>Branch</label>
+                <input className={ctrl} value={branch} onChange={(e) => setBranch(e.target.value)} disabled={!showChequeFields} placeholder="Branch" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={label}>Amount (Rs.) *</label>
+                <input type="number" className={ctrl} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+              </div>
+              <div className="flex flex-col gap-1">
                 <label className={label}>Particular</label>
                 <select className={ctrl} value={particular} onChange={(e) => handleParticularChange(e.target.value)}>
                   <option value="">Select Particular Type</option>
@@ -578,40 +583,51 @@ ${copy('Student Copy')}
                   ))}
                 </select>
               </div>
-
+              <div className="flex flex-col gap-1">
+                <label className={label}>Receipt Date *</label>
+                <input type="date" className={ctrl} value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} />
+              </div>
               <div className="flex flex-col gap-1 sm:col-span-2">
                 <label className={label}>Tax Type</label>
                 <div className="flex gap-5 mt-1 flex-wrap">
-                  {TAX_TYPES.map((t) => (
-                    <label key={t} className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="taxType"
-                        checked={taxType === t}
-                        onChange={() => setTaxType(t)}
-                        className="accent-[#2E3093]"
-                      />
-                      {t}
-                    </label>
-                  ))}
-                  <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="taxType"
-                      checked={taxType === ''}
-                      onChange={() => setTaxType('')}
-                      className="accent-[#2E3093]"
-                    />
-                    None
-                  </label>
+              {TAX_TYPES.map((t) => (
+                <label key={t} className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="taxType"
+                    checked={taxType === t}
+                    onChange={() => setTaxType(t)}
+                    className="accent-[#2E3093]"
+                  />
+                  {t}
+                </label>
+              ))}
+              <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                <input
+                  type="radio"
+                  name="taxType"
+                  checked={taxType === ''}
+                  onChange={() => setTaxType('')}
+                  className="accent-[#2E3093]"
+                />
+                None
+              </label>
                 </div>
-              </div>
             </div>
           </div>
         </div>
+        </div>
 
         {/* Action buttons */}
-        <div className="flex flex-wrap gap-2 mb-2">
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !canUpdate}
+            className="h-9 px-5 rounded-lg bg-[#2E3093] text-white text-xs font-bold hover:bg-[#252880] disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : (data.record ? 'Update' : 'Add')}
+          </button>
           <button onClick={handlePrint} className="h-9 px-4 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50">
             Print Receipt
           </button>
@@ -645,11 +661,11 @@ ${copy('Student Copy')}
               <tr className="border border-slate-300 bg-slate-50">
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-28">Date</th>
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300">Description</th>
+                <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-32">Receipt No</th>
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-44">Transaction</th>
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-32">Debit Amount</th>
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-32">Credit Amount</th>
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-36">Balance Payment</th>
-                <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-44">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -661,41 +677,61 @@ ${copy('Student Copy')}
                 return data.ledger.map((r) => {
                   running = running + r.Debit - r.Credit;
                   const desc = r.Credit > 0
-                    ? `Payment Received${r.Fees_Code ? ` - ${r.Fees_Code}` : r.Particular ? ` - ${r.Particular}` : ''}`
+                    ? `Payment Received${r.Particular ? ` - ${r.Particular}` : ''}`
                     : (r.Particular || '—');
                   return (
-                    <tr key={r.Fees_Id} className="hover:bg-slate-50/40">
+                    <tr key={r.Fees_Id} className="group hover:bg-slate-50/40">
                       <td className="py-2 px-3 text-xs border border-slate-300 text-center">{fmtDate(r.Date)}</td>
                       <td className="py-2 px-3 text-xs border border-slate-300">{desc}</td>
+                      <td className="py-2 px-3 text-xs border border-slate-300 text-center font-mono">{r.Fees_Code || '—'}</td>
                       <td className="py-2 px-3 text-xs border border-slate-300">
                         <div className="flex flex-col gap-0.5">
                           <span className="font-medium">{r.Payment_Type || '—'}</span>
-                          <span className="font-mono text-[10px] text-slate-500">{r.Transaction_No || r.Fees_Code || '—'}</span>
+                          <span className="font-mono text-[10px] text-slate-500">{r.Transaction_No || '—'}</span>
                         </div>
                       </td>
                       <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono">{r.Debit ? fmt(r.Debit) : ''}</td>
                       <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono">{r.Credit ? fmt(r.Credit) : ''}</td>
-                      <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono font-semibold">{fmt(running)}</td>
-                      <td className="py-2 px-3 text-xs border border-slate-300 text-center">
-                        {r.Fees_Id > 0 && r.Credit > 0 ? (
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              onClick={() => handleDownloadReceiptForFee(r.Fees_Id)}
-                              disabled={rowActionFeeId === r.Fees_Id && rowActionType === 'download'}
-                              className="h-7 px-2.5 rounded-md border border-slate-300 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                            >
-                              {rowActionFeeId === r.Fees_Id && rowActionType === 'download' ? 'Saving…' : 'Save'}
-                            </button>
-                            <button
-                              onClick={() => handleEmailReceipt(r.Fees_Id)}
-                              disabled={!data.student.Email || (rowActionFeeId === r.Fees_Id && rowActionType === 'email')}
-                              className="h-7 px-2.5 rounded-md border border-slate-300 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                            >
-                              {rowActionFeeId === r.Fees_Id && rowActionType === 'email' ? 'Sending…' : 'Email'}
-                            </button>
+                      <td className="relative py-2 px-3 text-xs border border-slate-300 text-right font-mono font-semibold overflow-visible">
+                        {fmt(running)}
+                        {r.Fees_Id > 0 ? (
+                          <div className="absolute right-0 top-1/2 z-10 flex -translate-y-1/2 translate-x-[calc(100%-0.35rem)] items-center gap-1 rounded-l-lg border border-slate-200 bg-white px-1.5 py-1 shadow-md opacity-75 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
+                              <span className="h-6 w-1 rounded-full bg-slate-300" aria-hidden />
+                              <button
+                                onClick={() => router.push(`/dashboard/fee-details/${params.studentId}?feesId=${r.Fees_Id}`)}
+                                disabled={!canUpdate}
+                                className="h-6 px-2 rounded-md border border-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteFee(r.Fees_Id)}
+                                disabled={!canUpdate || (rowActionFeeId === r.Fees_Id && rowActionType === 'delete')}
+                                className="h-6 px-2 rounded-md border border-red-200 text-[10px] font-bold text-red-600 hover:bg-red-50 disabled:opacity-40"
+                              >
+                                {rowActionFeeId === r.Fees_Id && rowActionType === 'delete' ? 'Deleting' : 'Delete'}
+                              </button>
+                              {r.Credit > 0 && (
+                                <>
+                                  <button
+                                    onClick={() => handleDownloadReceiptForFee(r.Fees_Id)}
+                                    disabled={rowActionFeeId === r.Fees_Id && rowActionType === 'download'}
+                                    className="h-6 px-2 rounded-md border border-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                                  >
+                                    {rowActionFeeId === r.Fees_Id && rowActionType === 'download' ? 'Saving' : 'Save'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleEmailReceipt(r.Fees_Id)}
+                                    disabled={!data.student.Email || (rowActionFeeId === r.Fees_Id && rowActionType === 'email')}
+                                    className="h-6 px-2 rounded-md border border-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                                  >
+                                    {rowActionFeeId === r.Fees_Id && rowActionType === 'email' ? 'Sending' : 'Email'}
+                                  </button>
+                                </>
+                              )}
                           </div>
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          null
                         )}
                       </td>
                     </tr>
@@ -704,11 +740,10 @@ ${copy('Student Copy')}
               })()}
               {data.ledger.length > 0 && (
                 <tr className="bg-slate-50 font-bold border-t-2 border-slate-400">
-                  <td colSpan={3} className="py-2 px-3 text-xs border border-slate-300 text-right">Total &gt;&gt;&gt;</td>
+                  <td colSpan={4} className="py-2 px-3 text-xs border border-slate-300 text-right">Total &gt;&gt;&gt;</td>
                   <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono">{fmt(data.totals.debit)}</td>
                   <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono">{fmt(data.totals.credit)}</td>
                   <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono">{fmt(data.totals.balance)}</td>
-                  <td className="py-2 px-3 text-xs border border-slate-300" />
                 </tr>
               )}
             </tbody>
