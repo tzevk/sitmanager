@@ -211,9 +211,9 @@ export default function AddFeeDetailsPage() {
         Type: type,
         Payment_Type: paymentType,
         Cheque_Bank: ['Cheque', 'DD', 'PDC'].includes(paymentType) ? bank || null : null,
-        Cheque_No: needsTransactionNo ? chequeNo.trim() : null,
-        Transaction_No: needsTransactionNo ? chequeNo.trim() : null,
-        PaymentId: needsTransactionNo ? chequeNo.trim() : null,
+        Cheque_No: chequeNo.trim() || null,
+        Transaction_No: chequeNo.trim() || null,
+        PaymentId: chequeNo.trim() || null,
         Cheque_Date: chequeDate || null,
         Cheque_Branch: ['Cheque', 'DD', 'PDC'].includes(paymentType) ? branch || null : null,
         Amount: amount,
@@ -509,7 +509,7 @@ export default function AddFeeDetailsPage() {
               </div>
               <div className="flex flex-col gap-1">
                 <label className={lbl}>{showTransactionField ? transactionLabel : 'Transaction No.'}</label>
-                <input className={ctrl} value={chequeNo} onChange={e => setChequeNo(e.target.value)} disabled={!studentId || !showTransactionField} placeholder={showChequeFields ? 'Enter cheque / DD number' : 'Enter transaction number'} />
+                <input className={ctrl} value={chequeNo} onChange={e => setChequeNo(e.target.value)} placeholder={showChequeFields ? 'Enter cheque / DD number' : 'Enter transaction number'} />
               </div>
               <div className="flex flex-col gap-1">
                 <label className={lbl}>Bank</label>
