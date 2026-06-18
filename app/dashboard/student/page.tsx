@@ -6,6 +6,7 @@ import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 interface StudentRow {
+  Admission_Id?: number;
   Student_Id: number;
   Batch_Code: string | null;
   Student_Name: string | null;
@@ -218,8 +219,8 @@ export default function StudentPage() {
                 </td></tr>
               ) : rows.length === 0 ? (
                 <tr><td colSpan={12} className="py-10 text-center text-xs text-slate-400">No students found</td></tr>
-              ) : rows.map(r => (
-                <tr key={r.Student_Id} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
+              ) : rows.map((r, index) => (
+                <tr key={r.Admission_Id ?? `${r.Student_Id}-${index}`} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
                   <td className="py-1.5 px-3 text-xs text-slate-700 font-mono whitespace-nowrap">{r.Student_Id}</td>
                   <td className="py-1.5 px-3 text-slate-500 font-mono text-xs whitespace-nowrap">{r.Batch_Code || '—'}</td>
                   <td className="py-1.5 px-3 font-semibold text-slate-900 text-xs max-w-[180px]">

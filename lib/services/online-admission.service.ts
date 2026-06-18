@@ -967,26 +967,36 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       }
     }
   } else if (statusAction === 'accept') {
-    // No existing student linked — create one from the online admission form data
+    // No existing student linked — create one from the online admission form data.
+    // Granting an admission MUST persist a student_master row; if it can't, fail
+    // loudly so the caller surfaces the error instead of silently leaving the
+    // inquiry at OnlineState=8 with no student (an orphaned "granted" record that
+    // never shows up in the student list).
+    let newStudentId = 0;
     try {
-      const newStudentId = await createStudentMasterFromAdmission();
-      if (newStudentId > 0) {
-        resolvedStudentId = newStudentId;
-        await pool.query(
-          `UPDATE \`${inquiryTable}\` SET Student_Id = ? WHERE Inquiry_Id = ?`,
-          [newStudentId, inquiryId]
-        );
-        if (workingSince) {
-          try {
-            await pool.query(
-              `UPDATE \`${studentMasterTable}\` SET WorkingSince = ? WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
-              [workingSince, newStudentId]
-            );
-          } catch { /* column doesn't exist in this deployment */ }
-        }
-      }
+      newStudentId = await createStudentMasterFromAdmission();
     } catch (err) {
       console.error('[OnlineAdmission] Failed to create student_master record:', err);
+      throw new Error(
+        `Failed to create student record while granting admission for inquiry ${inquiryId}: ` +
+        (err instanceof Error ? err.message : String(err))
+      );
+    }
+    if (newStudentId <= 0) {
+      throw new Error(`Failed to create student record while granting admission for inquiry ${inquiryId}`);
+    }
+    resolvedStudentId = newStudentId;
+    await pool.query(
+      `UPDATE \`${inquiryTable}\` SET Student_Id = ? WHERE Inquiry_Id = ?`,
+      [newStudentId, inquiryId]
+    );
+    if (workingSince) {
+      try {
+        await pool.query(
+          `UPDATE \`${studentMasterTable}\` SET WorkingSince = ? WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+          [workingSince, newStudentId]
+        );
+      } catch { /* column doesn't exist in this deployment */ }
     }
   }
 
@@ -1031,6 +1041,24 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       ) as [any, any];
       admissionId = Number(admInsert.insertId);
     }
+
+    // Invariant: granting an admission ⟹ the student is "Admission confirmed"
+    // (Status_id = 8). The student_master status write further up keys off the
+    // pre-resolution `studentId`, which can diverge from `resolvedStudentId`
+    // (re-pointed inquiry links, soft-deleted originals, legacy rows left at an
+    // inquiry-stage status like 3 = "Contacted - interested"). When it misses the
+    // student who actually receives the admission, the inquiry flips to
+    // OnlineState = 8 but student_master.Status_id stays behind, so the student
+    // never appears in the granted-students list. Stamp it here on the exact
+    // student that got the admission to keep the two in sync.
+    await pool.query(
+      `UPDATE \`${studentMasterTable}\` SET
+         Status_id = 8,
+         Status_date = COALESCE(Status_date, ?),
+         Admission_Dt = COALESCE(Admission_Dt, ?)
+       WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+      [new Date().toISOString().slice(0, 10), admissionDate, resolvedStudentId]
+    );
 
     // If the applicant paid online during the admission form, record it in the
     // fees ledger so it shows up as "Paid" on the student page. Dedupe on

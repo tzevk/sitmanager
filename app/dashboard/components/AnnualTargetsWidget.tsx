@@ -29,6 +29,11 @@ function Bar({ value }: { value: number }) {
   );
 }
 
+function targetForRow(row: PlanRow): number {
+  return Number(row.Yearly_Students_Target) ||
+    (Number(row.Target_Frequency) * Number(row.Min_Students_Per_Batch));
+}
+
 export default function AnnualTargetsWidget() {
   const currentYear = new Date().getFullYear();
   const [year, setYear]     = useState(currentYear);
@@ -56,6 +61,16 @@ export default function AnnualTargetsWidget() {
   useEffect(() => { load(year); }, [load, year]);
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+  const totalTarget = rows.reduce((sum, row) => sum + targetForRow(row), 0);
+  const totalAdmitted = rows.reduce((sum, row) => sum + (Number(row.Students_Admitted) || 0), 0);
+  const totalRemaining = Math.max(0, totalTarget - totalAdmitted);
+  const overallPct = totalTarget > 0 ? (totalAdmitted / totalTarget) * 100 : 0;
+  const onTrackCount = rows.filter(row => {
+    const target = targetForRow(row);
+    const admitted = Number(row.Students_Admitted) || 0;
+    const pct = Number(row.Percentage) || (target > 0 ? (admitted / target) * 100 : 0);
+    return pct >= 80;
+  }).length;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -79,6 +94,41 @@ export default function AnnualTargetsWidget() {
         >
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
+      </div>
+
+      {/* Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-5 border-b border-gray-100 bg-gradient-to-r from-indigo-50/70 via-white to-white divide-x divide-gray-100">
+        {loading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="px-4 py-3">
+              <div className="h-3 w-20 bg-gray-100 rounded animate-pulse mb-2" />
+              <div className="h-5 w-16 bg-gray-100 rounded animate-pulse" />
+            </div>
+          ))
+        ) : (
+          <>
+            <div className="px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Target Students</p>
+              <p className="text-lg font-black tabular-nums text-gray-800">{totalTarget.toLocaleString('en-IN')}</p>
+            </div>
+            <div className="px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Admitted</p>
+              <p className="text-lg font-black tabular-nums text-emerald-700">{totalAdmitted.toLocaleString('en-IN')}</p>
+            </div>
+            <div className="px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Remaining</p>
+              <p className="text-lg font-black tabular-nums text-rose-600">{totalRemaining.toLocaleString('en-IN')}</p>
+            </div>
+            <div className="px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Overall Achieved</p>
+              <p className={`text-lg font-black tabular-nums ${overallPct >= 80 ? 'text-emerald-700' : overallPct >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>{overallPct.toFixed(1)}%</p>
+            </div>
+            <div className="px-4 py-3 col-span-2 md:col-span-1">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">On Track</p>
+              <p className="text-lg font-black tabular-nums text-[#2E3093]">{onTrackCount}<span className="text-xs font-bold text-gray-400"> / {rows.length}</span></p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Table */}
@@ -112,8 +162,7 @@ export default function AnnualTargetsWidget() {
               </tr>
             ) : (
               rows.map((r, i) => {
-                const tgt    = Number(r.Yearly_Students_Target) ||
-                               (Number(r.Target_Frequency) * Number(r.Min_Students_Per_Batch));
+                const tgt    = targetForRow(r);
                 const adm    = Number(r.Students_Admitted) || 0;
                 const freq   = Number(r.Frequency_Conducted) || Number(r.Target_Frequency) || 1;
                 const avg    = freq > 0 ? adm / freq : 0;

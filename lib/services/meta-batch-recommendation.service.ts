@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getPool } from '@/lib/db';
-import { fetchMetaCampaignPerformance } from '@/lib/services/meta-ads.service';
+import { fetchMetaCampaignPerformance, isMetaRateLimitError } from '@/lib/services/meta-ads.service';
 import { resolveInquiryTableName } from '@/lib/services/inquiry.service';
 
 const SCORE_TABLE = 'meta_ads_batch_scores';
@@ -546,7 +546,10 @@ async function loadCourseHistorySignals(): Promise<Map<number, CourseSignals>> {
        GROUP BY LOWER(TRIM(m.campaign_name)), si.Course_Id`,
       [perfDateFrom]
     ),
-    fetchMetaCampaignPerformance({ dateFrom: perfDateFrom, dateTo: perfDateTo }),
+    fetchMetaCampaignPerformance({ dateFrom: perfDateFrom, dateTo: perfDateTo }).catch((error) => {
+      if (isMetaRateLimitError(error)) return [];
+      throw error;
+    }),
   ]);
 
   const baseSignals = new Map<number, CourseSignals>();

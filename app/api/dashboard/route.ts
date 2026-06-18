@@ -4,6 +4,11 @@ import { getPool } from '@/lib/db';
 import { requireAuth } from '@/lib/api-auth';
 import { dashboardRateLimiter } from '@/lib/rate-limit';
 import { cache, cacheTTL } from '@/lib/cache';
+import {
+  ensureTrainingDashboardMetaTable,
+  getTrainingDashboardEntityKey,
+  getTrainingDashboardMetaRows,
+} from '@/lib/services/training-dashboard.service';
 
 const DASHBOARD_CACHE_TTL = cacheTTL.short;
 
@@ -132,7 +137,7 @@ async function fetchDashboardData(dept?: string) {
   const needsTdDashboard = isTd;
   const needsTdConvocations = isTd || isAdmin;
   const needsTdExams = isTd || isAdmin;
-  const needsTdSiteVisits = isTd || isAdmin;
+  const needsTdSiteVisits = isAdmin;
   const needsTdLectures = isTd || isAdmin;
   
   const needsAdminWidgets = isAdmin;
@@ -144,6 +149,12 @@ async function fetchDashboardData(dept?: string) {
     STR_TO_DATE(CAST(b.SDate AS CHAR), '%d-%m-%Y'),
     STR_TO_DATE(CAST(b.SDate AS CHAR), '%d/%m/%Y'),
     STR_TO_DATE(CAST(b.SDate AS CHAR), '%m/%d/%Y')
+  )`;
+  const BATCH_EDATE_EXPR = `COALESCE(
+    STR_TO_DATE(CAST(b.EDate AS CHAR), '%Y-%m-%d'),
+    STR_TO_DATE(CAST(b.EDate AS CHAR), '%d-%m-%Y'),
+    STR_TO_DATE(CAST(b.EDate AS CHAR), '%d/%m/%Y'),
+    STR_TO_DATE(CAST(b.EDate AS CHAR), '%m/%d/%Y')
   )`;
 
   // The online admission form store may not exist on a fresh database; ensure it so
@@ -159,6 +170,12 @@ async function fetchDashboardData(dept?: string) {
          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
       );
     } catch { /* best-effort */ }
+  }
+
+  if (needsTdDashboard) {
+    try {
+      await ensureTrainingDashboardMetaTable(pool);
+    } catch { /* best-effort: dashboard can still render live data */ }
   }
 
   // ── Run ALL independent queries in parallel ──────────────────────
@@ -188,6 +205,7 @@ async function fetchDashboardData(dept?: string) {
     notices,
     sourcePerformanceRows,
     leadFunnelRows,
+    metaInquiryRows,
     seminarTargetsRows,
     seminarTargetsFallbackRows,
     exhibitionTargetsRows,
@@ -204,6 +222,7 @@ async function fetchDashboardData(dept?: string) {
     tdFinishedExamsRows,
     tdTodaysLecturesRows,
     tdGoogleReviewsPendingRows,
+    tdGoogleReviewRows,
     tdUpcomingConvocationsRows,
     tdSiteVisitsRows,
     tdAdmissionCancelledRows,
@@ -283,8 +302,8 @@ async function fetchDashboardData(dept?: string) {
         b.Training_Coordinator,
         b.INR_Basic,
         DATE_FORMAT(b.Admission_Date, '%Y-%m-%d') AS Admission_Date,
-        b.Max_Students,
-        b.NoStudent,
+        CAST(REPLACE(IFNULL(NULLIF(TRIM(CAST(b.Max_Students AS CHAR)), ''), '0'), ',', '') AS UNSIGNED) AS Max_Students,
+        CAST(REPLACE(IFNULL(NULLIF(TRIM(CAST(b.NoStudent AS CHAR)), ''), '0'), ',', '') AS UNSIGNED) AS NoStudent,
         COALESCE(c.Course_Name, b.CourseName, '') AS CourseName,
         COUNT(DISTINCT si.Inquiry_Id) AS Enquiries_Received,
         COUNT(DISTINCT CASE WHEN (
@@ -296,7 +315,12 @@ async function fetchDashboardData(dept?: string) {
           oap.Inquiry_Id IS NOT NULL
           AND (si.OnlineState = 8 OR sm.Student_Id IS NOT NULL)
         ) THEN si.Inquiry_Id END) AS Confirmed_Admissions,
-        COALESCE(am.Enrolled, 0) AS Enrolled
+        COALESCE(am.Enrolled, 0) AS Enrolled,
+        COALESCE(
+          NULLIF(am.Enrolled, 0),
+          NULLIF(CAST(REPLACE(IFNULL(NULLIF(TRIM(CAST(b.NoStudent AS CHAR)), ''), '0'), ',', '') AS UNSIGNED), 0),
+          0
+        ) AS Filled_Students
       FROM batch_mst b
       LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
       LEFT JOIN student_inquiry si
@@ -312,16 +336,31 @@ async function fetchDashboardData(dept?: string) {
       LEFT JOIN student_master sm
         ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
       LEFT JOIN (
-        SELECT Batch_Id, COUNT(*) AS Enrolled
-        FROM admission_master
-        WHERE (IsDelete = 0 OR IsDelete IS NULL)
-          AND (Cancel = 0 OR Cancel IS NULL)
-        GROUP BY Batch_Id
+        SELECT
+          resolved_batch.Batch_Id,
+          COUNT(DISTINCT resolved_batch.Student_Id) AS Enrolled
+        FROM (
+          SELECT
+            COALESCE(am.Batch_Id, bm_lookup.Batch_Id) AS Batch_Id,
+            am.Student_Id
+          FROM admission_master am
+          INNER JOIN student_master sm_enrolled
+            ON sm_enrolled.Student_Id = am.Student_Id
+           AND (sm_enrolled.IsDelete = 0 OR sm_enrolled.IsDelete IS NULL)
+          LEFT JOIN batch_mst bm_lookup
+            ON bm_lookup.Batch_code = sm_enrolled.Batch_Code
+           AND (bm_lookup.IsDelete = 0 OR bm_lookup.IsDelete IS NULL)
+           AND LOWER(TRIM(CAST(COALESCE(bm_lookup.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+          WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
+            AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+        ) resolved_batch
+        WHERE resolved_batch.Batch_Id IS NOT NULL
+        GROUP BY resolved_batch.Batch_Id
       ) am ON b.Batch_Id = am.Batch_Id
       WHERE ${BATCH_SDATE_EXPR} >= CURDATE()
         AND ${BATCH_SDATE_EXPR} <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
         AND (b.IsDelete IS NULL OR b.IsDelete = 0)
-        AND (b.Cancel IS NULL OR b.Cancel = 0)
+        AND LOWER(TRIM(CAST(COALESCE(b.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
       GROUP BY
         b.Batch_Id,
         b.Batch_code,
@@ -333,8 +372,8 @@ async function fetchDashboardData(dept?: string) {
         b.Training_Coordinator,
         b.INR_Basic,
         b.Admission_Date,
-        b.Max_Students,
-        b.NoStudent,
+        CAST(REPLACE(IFNULL(NULLIF(TRIM(CAST(b.Max_Students AS CHAR)), ''), '0'), ',', '') AS UNSIGNED),
+        CAST(REPLACE(IFNULL(NULLIF(TRIM(CAST(b.NoStudent AS CHAR)), ''), '0'), ',', '') AS UNSIGNED),
         COALESCE(c.Course_Name, b.CourseName, ''),
         am.Enrolled
       ORDER BY ${BATCH_SDATE_EXPR} ASC, Enquiries_Received DESC
@@ -694,6 +733,22 @@ async function fetchDashboardData(dept?: string) {
       WHERE (IsDelete = 0 OR IsDelete IS NULL)
     `, [{ total: 0, contacted: 0, interested: 0, converted: 0 }]) : Promise.resolve([{ total: 0, contacted: 0, interested: 0, converted: 0 }]),
 
+    // 8b. Meta leads that are not already counted in student_inquiry.
+    needsLeadFunnel ? safeQuery(pool, `
+      SELECT
+        COUNT(DISTINCT m.meta_lead_id) AS total,
+        COUNT(DISTINCT CASE WHEN DATE(m.created_at) >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN m.meta_lead_id END) AS current_month,
+        COUNT(DISTINCT CASE WHEN DATE(m.created_at) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN m.meta_lead_id END) AS last_30_days,
+        COUNT(DISTINCT CASE WHEN DATE(m.created_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN m.meta_lead_id END) AS last_7_days
+      FROM meta_ads_lead_sync m
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM student_inquiry si
+        WHERE si.Inquiry_Id = m.inquiry_id
+          AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
+      )
+    `, [{ total: 0, current_month: 0, last_30_days: 0, last_7_days: 0 }]) : Promise.resolve([{ total: 0, current_month: 0, last_30_days: 0, last_7_days: 0 }]),
+
     // 2. Seminar targets (scrollable) from annual planner items containing seminar signals
     needsSeminars ? safeQuery(pool, `
       SELECT
@@ -807,37 +862,127 @@ async function fetchDashboardData(dept?: string) {
       ) x
     `, []) : Promise.resolve([]),
 
-    // 9. Pending fees — exclude cancelled admissions; explicit CAST handles VARCHAR Fees column
+    // 9. Pending fees — one row per batch. Balance is summed from each student's
+    // outstanding balance computed the SAME way as the fee-details ledger
+    // (api/fee-details/[studentId]): tuition (admission.Fees first, then fee
+    // structure / batch fallbacks) + ₹899 membership fee (unless already posted as
+    // a debit) + any posted debit rows − all credit payments. Aggregating the real
+    // per-student balances is accurate; multiplying one structure fee × headcount
+    // was not (students in a batch can have different fees). Cancelled excluded.
     needsPendingFees ? safeQuery(pool, `
+      WITH active_admissions AS (
+        SELECT
+          am.Admission_Id AS id,
+          am.Fees AS admission_fees,
+          sm.Student_Id AS student_id,
+          COALESCE(c.Course_Name, '') AS course_name,
+          bm.Batch_Id AS batch_id,
+          COALESCE(NULLIF(TRIM(sm.Batch_Code), ''), bm.Batch_code, '') AS batch_code
+        FROM admission_master am
+        JOIN (
+          SELECT Student_Id, MAX(Admission_Id) AS Admission_Id
+          FROM admission_master
+          WHERE (IsDelete = 0 OR IsDelete IS NULL)
+            AND LOWER(TRIM(CAST(COALESCE(Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+          GROUP BY Student_Id
+        ) latest ON latest.Admission_Id = am.Admission_Id
+        LEFT JOIN student_master sm ON sm.Student_Id = am.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+        LEFT JOIN course_mst c ON c.Course_Id = sm.Course_Id
+        LEFT JOIN batch_mst bm ON bm.Batch_Id = COALESCE(
+          am.Batch_Id,
+          (
+            SELECT bm_lookup.Batch_Id
+            FROM batch_mst bm_lookup
+            WHERE NULLIF(TRIM(sm.Batch_Code), '') IS NOT NULL
+              AND LOWER(TRIM(bm_lookup.Batch_code)) = LOWER(TRIM(sm.Batch_Code))
+              AND (bm_lookup.IsDelete = 0 OR bm_lookup.IsDelete IS NULL)
+            ORDER BY bm_lookup.Batch_Id DESC
+            LIMIT 1
+          )
+        )
+        AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
+        AND LOWER(TRIM(CAST(COALESCE(bm.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+        WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
+          AND sm.Student_Id IS NOT NULL
+          AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+      ),
+      batch_fees AS (
+        SELECT
+          bm.Batch_Id AS batch_id,
+          COALESCE(
+            NULLIF(CAST(REPLACE(IFNULL(fs.actualfees, ''), ',', '') AS DECIMAL(15,2)), 0),
+            NULLIF(CAST(REPLACE(IFNULL(fs.fullfees, ''), ',', '') AS DECIMAL(15,2)), 0),
+            NULLIF(CAST(REPLACE(IFNULL(fs.total_inr, ''), ',', '') AS DECIMAL(15,2)), 0),
+            NULLIF(CAST(REPLACE(IFNULL(bm.Actual_Fees_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
+            NULLIF(CAST(REPLACE(IFNULL(bm.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
+            NULLIF(CAST(REPLACE(IFNULL(bm.INR_Total, ''), ',', '') AS DECIMAL(15,2)), 0),
+            NULLIF(CAST(REPLACE(IFNULL(bm.INR_Basic, ''), ',', '') AS DECIMAL(15,2)), 0) + IFNULL(CAST(REPLACE(IFNULL(bm.INR_ServiceTax, ''), ',', '') AS DECIMAL(15,2)), 0),
+            0
+          ) AS fee_per_student
+        FROM batch_mst bm
+        LEFT JOIN (
+          SELECT batch_id, MAX(id) AS id
+          FROM fees_structure
+          WHERE deleted = 0 OR deleted IS NULL
+          GROUP BY batch_id
+        ) latest_fs ON latest_fs.batch_id = bm.Batch_Id
+        LEFT JOIN fees_structure fs ON fs.id = latest_fs.id
+      ),
+      student_ledger AS (
+        SELECT
+          f.Student_Id AS student_id,
+          SUM(CASE WHEN f.TypeR = 'D' THEN IFNULL(f.Total_Amt, f.Amount) ELSE 0 END) AS posted_debit,
+          SUM(CASE WHEN f.TypeR = 'C' THEN IFNULL(f.Total_Amt, f.Amount) ELSE 0 END) AS credit,
+          MAX(CASE WHEN f.TypeR = 'D' AND LOWER(IFNULL(f.Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END) AS has_membership_debit
+        FROM s_fees_mst f
+        WHERE (f.IsDelete = 0 OR f.IsDelete IS NULL)
+        GROUP BY f.Student_Id
+      ),
+      student_balance AS (
+        SELECT
+          aa.batch_id,
+          aa.batch_code,
+          aa.course_name,
+          aa.student_id,
+          (
+            COALESCE(
+              NULLIF(CAST(REPLACE(IFNULL(aa.admission_fees, ''), ',', '') AS DECIMAL(15,2)), 0),
+              NULLIF(bf.fee_per_student, 0),
+              0
+            )
+            + CASE
+                WHEN COALESCE(
+                       NULLIF(CAST(REPLACE(IFNULL(aa.admission_fees, ''), ',', '') AS DECIMAL(15,2)), 0),
+                       NULLIF(bf.fee_per_student, 0),
+                       0
+                     ) > 0
+                 AND IFNULL(sl.has_membership_debit, 0) = 0
+                THEN 899 ELSE 0
+              END
+            + IFNULL(sl.posted_debit, 0)
+            - IFNULL(sl.credit, 0)
+          ) AS balance,
+          IFNULL(sl.credit, 0) AS paid_amount
+        FROM active_admissions aa
+        JOIN batch_fees bf ON bf.batch_id = aa.batch_id
+        LEFT JOIN student_ledger sl ON sl.student_id = aa.student_id
+        WHERE aa.batch_id IS NOT NULL
+      )
       SELECT
-        am.Admission_Id AS id,
-        sm.Student_Id AS student_id,
-        sm.Student_Name AS student_name,
-        COALESCE(c.Course_Name, '') AS course_name,
-        sm.Batch_Code AS batch_code,
-        CAST(REPLACE(IFNULL(am.Fees, 0), ',', '') AS DECIMAL(15,2)) AS total_fee,
-        IFNULL(paid.total_paid, 0) AS paid_amount,
-        GREATEST(
-          CAST(REPLACE(IFNULL(am.Fees, 0), ',', '') AS DECIMAL(15,2)) - IFNULL(paid.total_paid, 0),
-          0
-        ) AS amount
-      FROM admission_master am
-      LEFT JOIN student_master sm ON sm.Student_Id = am.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-      LEFT JOIN course_mst c ON c.Course_Id = sm.Course_Id
-      LEFT JOIN (
-        SELECT Student_Id, SUM(IFNULL(Total_Amt, 0)) AS total_paid
-        FROM s_fees_mst
-        WHERE (IsDelete IS NULL OR IsDelete = 0)
-          AND TypeR = 'C'
-        GROUP BY Student_Id
-      ) paid ON paid.Student_Id = am.Student_Id
-      WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
-        AND sm.Student_Id IS NOT NULL
-        AND am.Admission_Date >= DATE_SUB(CURDATE(), INTERVAL 3 YEAR)
-        AND (am.Cancel IS NULL OR LOWER(TRIM(CAST(am.Cancel AS CHAR))) IN ('no', '0', 'false', ''))
-        AND CAST(REPLACE(IFNULL(am.Fees, 0), ',', '') AS DECIMAL(15,2)) > IFNULL(paid.total_paid, 0)
+        batch_id AS id,
+        batch_id,
+        batch_code,
+        course_name,
+        COUNT(DISTINCT student_id) AS student_count,
+        SUM(balance + paid_amount) AS total_fee,
+        SUM(paid_amount) AS paid_amount,
+        SUM(balance) AS amount
+      FROM student_balance
+      WHERE balance > 0
+      GROUP BY batch_id, batch_code, course_name
+      HAVING amount > 0
       ORDER BY amount DESC
-      LIMIT 30
+      LIMIT 100
     `, []) : Promise.resolve([]),
 
     // 10. Alumni registration progress approximated by contact completeness per batch
@@ -869,15 +1014,20 @@ async function fetchDashboardData(dept?: string) {
       SELECT
         b.Batch_Id,
         b.Batch_code AS batch_no,
+        b.Category AS batch_status,
         COALESCE(c.Course_Name, b.CourseName, 'N/A') AS training_program,
+        DATE_FORMAT(${BATCH_SDATE_EXPR}, '%Y-%m-%d') AS start_date,
+        DATE_FORMAT(${BATCH_EDATE_EXPR}, '%Y-%m-%d') AS end_date,
+        GREATEST(0, DATEDIFF(CURDATE(), ${BATCH_SDATE_EXPR}) + 1) AS days_completed,
+        GREATEST(1, DATEDIFF(${BATCH_EDATE_EXPR}, ${BATCH_SDATE_EXPR}) + 1) AS duration_days,
         CASE
-          WHEN b.SDate IS NULL OR b.EDate IS NULL OR DATEDIFF(b.EDate, b.SDate) <= 0 THEN 0
+          WHEN ${BATCH_SDATE_EXPR} IS NULL OR ${BATCH_EDATE_EXPR} IS NULL OR DATEDIFF(${BATCH_EDATE_EXPR}, ${BATCH_SDATE_EXPR}) <= 0 THEN 0
           ELSE ROUND(
-            LEAST(100, GREATEST(0, (DATEDIFF(CURDATE(), b.SDate) / DATEDIFF(b.EDate, b.SDate)) * 100)),
+            LEAST(100, GREATEST(0, (DATEDIFF(CURDATE(), ${BATCH_SDATE_EXPR}) / DATEDIFF(${BATCH_EDATE_EXPR}, ${BATCH_SDATE_EXPR})) * 100)),
             1
           )
         END AS percentage_complete,
-        COALESCE(NULLIF(b.NoStudent, ''), 0) AS total_students,
+        COUNT(DISTINCT sm.Student_Id) AS total_students,
         ROUND(AVG(CASE
           WHEN TRIM(IFNULL(am.Stud_Attend, '')) REGEXP '^[0-9]+(\\.[0-9]+)?$'
           THEN CAST(am.Stud_Attend AS DECIMAL(10,2))
@@ -892,13 +1042,16 @@ async function fetchDashboardData(dept?: string) {
           THEN 1 ELSE 0 END) AS low_performing_students
       FROM batch_mst b
       LEFT JOIN course_mst c ON c.Course_Id = b.Course_Id
-      LEFT JOIN admission_master am ON am.Batch_Id = b.Batch_Id AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+      LEFT JOIN admission_master am ON am.Batch_Id = b.Batch_Id
+        AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+        AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
       LEFT JOIN student_master sm ON sm.Student_Id = am.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
       WHERE (b.IsDelete = 0 OR b.IsDelete IS NULL)
-        AND (b.Cancel IS NULL OR b.Cancel = 0)
-        AND b.SDate <= CURDATE() AND b.EDate >= CURDATE()
-      GROUP BY b.Batch_Id, b.Batch_code, COALESCE(c.Course_Name, b.CourseName, 'N/A'), b.SDate, b.EDate, b.NoStudent
-      ORDER BY b.SDate ASC
+        AND LOWER(TRIM(CAST(COALESCE(b.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+        AND ${BATCH_SDATE_EXPR} <= CURDATE()
+        AND ${BATCH_EDATE_EXPR} >= CURDATE()
+      GROUP BY b.Batch_Id, b.Batch_code, b.Category, COALESCE(c.Course_Name, b.CourseName, 'N/A'), ${BATCH_SDATE_EXPR}, ${BATCH_EDATE_EXPR}
+      ORDER BY ${BATCH_SDATE_EXPR} ASC
       LIMIT 30
     `, []) : Promise.resolve([]),
 
@@ -914,15 +1067,21 @@ async function fetchDashboardData(dept?: string) {
       LEFT JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
       LEFT JOIN course_mst c ON c.Course_Id = am.Course_Id
       WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
+        AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+        AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
+        AND LOWER(TRIM(CAST(COALESCE(b.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+        AND ${BATCH_SDATE_EXPR} <= CURDATE()
+        AND ${BATCH_EDATE_EXPR} >= CURDATE()
         AND TRIM(IFNULL(am.Stud_Attend, '')) REGEXP '^[0-9]+(\\.[0-9]+)?$'
         AND CAST(am.Stud_Attend AS DECIMAL(10,2)) < 75
+        AND CAST(am.Stud_Attend AS DECIMAL(10,2)) > 10
       ORDER BY CAST(am.Stud_Attend AS DECIMAL(10,2)) ASC
       LIMIT 50
     `, []) : Promise.resolve([]),
 
     // T&D-3 Low performing students
     needsTdDashboard ? safeQuery(pool, `
-      SELECT
+      SELECT DISTINCT
         sm.Student_Name AS name,
         sm.Batch_Code AS batch_no,
         COALESCE(c.Course_Name, 'N/A') AS training_program,
@@ -930,7 +1089,14 @@ async function fetchDashboardData(dept?: string) {
       FROM student_master sm
       LEFT JOIN batch_mst b ON b.Batch_code = sm.Batch_Code
       LEFT JOIN course_mst c ON c.Course_Id = COALESCE(sm.Course_Id, b.Course_Id)
+      INNER JOIN admission_master am ON am.Student_Id = sm.Student_Id
+        AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+        AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
       WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+        AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
+        AND LOWER(TRIM(CAST(COALESCE(b.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+        AND ${BATCH_SDATE_EXPR} <= CURDATE()
+        AND ${BATCH_EDATE_EXPR} >= CURDATE()
         AND TRIM(IFNULL(sm.Percentage, '')) REGEXP '^[0-9]+(\\.[0-9]+)?$'
         AND CAST(sm.Percentage AS DECIMAL(10,2)) < 40
       ORDER BY CAST(sm.Percentage AS DECIMAL(10,2)) ASC
@@ -940,6 +1106,7 @@ async function fetchDashboardData(dept?: string) {
     // T&D-4 Upcoming exams
     needsTdExams ? safeQuery(pool, `
       SELECT
+        e.Exam_Id AS exam_id,
         b.Batch_code AS batch_no,
         COALESCE(c.Course_Name, b.CourseName, 'N/A') AS training_program,
         e.Exam_Date AS exam_date,
@@ -963,6 +1130,7 @@ async function fetchDashboardData(dept?: string) {
     // T&D-4b Fallback exam schedule when no future exams exist
     needsTdExams ? safeQuery(pool, `
       SELECT
+        e.Exam_Id AS exam_id,
         b.Batch_code AS batch_no,
         COALESCE(c.Course_Name, b.CourseName, 'N/A') AS training_program,
         e.Exam_Date AS exam_date,
@@ -985,6 +1153,7 @@ async function fetchDashboardData(dept?: string) {
     // T&D-5 Finished exams
     needsTdDashboard ? safeQuery(pool, `
       SELECT
+        e.Exam_Id AS exam_id,
         b.Batch_code AS batch_no,
         COALESCE(c.Course_Name, b.CourseName, 'N/A') AS training_program,
         e.Exam_Date AS exam_date,
@@ -996,6 +1165,7 @@ async function fetchDashboardData(dept?: string) {
           ) THEN 'Paper Taken'
           ELSE 'Completed'
         END AS paper_status,
+        DATE_ADD(DATE(e.Exam_Date), INTERVAL 7 DAY) AS paper_showing_date,
         ROUND(AVG(CASE
           WHEN TRIM(IFNULL(sm.Percentage, '')) REGEXP '^[0-9]+(\\.[0-9]+)?$'
           THEN CAST(sm.Percentage AS DECIMAL(10,2))
@@ -1014,15 +1184,24 @@ async function fetchDashboardData(dept?: string) {
     // T&D-6 Today's lectures
     needsTdLectures ? safeQuery(pool, `
       SELECT
+        ltm.Take_Id AS take_id,
         b.Batch_code AS batch_no,
         COALESCE(c.Course_Name, b.CourseName, 'N/A') AS training_program,
         ltm.Topic AS lecture_topic,
         ltm.ClassRoom AS room_no,
+        CONCAT_WS(' - ', NULLIF(TRIM(ltm.Faculty_Start), ''), NULLIF(TRIM(ltm.Faculty_End), '')) AS timing,
+        COALESCE(att.attendance_count, 0) AS attendance_count,
         fm.Faculty_Name AS trainer
       FROM lecture_taken_master ltm
       LEFT JOIN batch_mst b ON b.Batch_Id = ltm.Batch_Id
       LEFT JOIN course_mst c ON c.Course_Id = ltm.Course_Id
       LEFT JOIN faculty_master fm ON fm.Faculty_Id = ltm.Faculty_Id
+      LEFT JOIN (
+        SELECT Take_Id, COUNT(*) AS attendance_count
+        FROM lecture_taken_child
+        WHERE IsDelete = 0 OR IsDelete IS NULL
+        GROUP BY Take_Id
+      ) att ON att.Take_Id = ltm.Take_Id
       WHERE (ltm.IsDelete = 0 OR ltm.IsDelete IS NULL)
         AND DATE(ltm.Take_Dt) = CURDATE()
       ORDER BY ltm.Lecture_Start ASC, ltm.Take_Id DESC
@@ -1038,16 +1217,50 @@ async function fetchDashboardData(dept?: string) {
         AND TRIM(IFNULL(sm.SitPerformance, '')) = ''
     `, [{ pending_count: 0 }]) : Promise.resolve([{ pending_count: 0 }]),
 
+    // T&D-7b Google review collection window: ongoing batches through one week after convocation
+    needsTdDashboard ? safeQuery(pool, `
+      SELECT
+        b.Batch_Id AS batch_id,
+        b.Batch_code AS batch_no,
+        COALESCE(c.Course_Name, b.CourseName, 'N/A') AS training_program,
+        DATE_FORMAT(${BATCH_EDATE_EXPR}, '%Y-%m-%d') AS end_date,
+        DATE_FORMAT(b.ConvocationDate, '%Y-%m-%d') AS convocation_date,
+        COUNT(DISTINCT sm.Student_Id) AS total_students
+      FROM batch_mst b
+      LEFT JOIN course_mst c ON c.Course_Id = b.Course_Id
+      LEFT JOIN admission_master am ON am.Batch_Id = b.Batch_Id
+        AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+        AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+      LEFT JOIN student_master sm ON sm.Student_Id = am.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+      WHERE (b.IsDelete = 0 OR b.IsDelete IS NULL)
+        AND LOWER(TRIM(CAST(COALESCE(b.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+        AND ${BATCH_SDATE_EXPR} <= CURDATE()
+        AND (
+          ${BATCH_EDATE_EXPR} >= CURDATE()
+          OR (b.ConvocationDate IS NOT NULL AND DATE(b.ConvocationDate) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY))
+        )
+      GROUP BY b.Batch_Id, b.Batch_code, COALESCE(c.Course_Name, b.CourseName, 'N/A'), ${BATCH_EDATE_EXPR}, b.ConvocationDate
+      ORDER BY ${BATCH_EDATE_EXPR} DESC
+      LIMIT 40
+    `, []) : Promise.resolve([]),
+
     // T&D-8 Upcoming convocations
     needsTdConvocations ? safeQuery(pool, `
       SELECT
-        Id AS id,
-        Batch_List AS batch_list,
-        Convocation_Date AS convocation_date
-      FROM convocation_mst
-      WHERE (IsDelete = 0 OR IsDelete IS NULL)
-        AND DATE(Convocation_Date) >= CURDATE()
-      ORDER BY DATE(Convocation_Date) ASC
+        b.Batch_Id AS id,
+        b.Batch_code AS batch_no,
+        COALESCE(c.Course_Name, b.CourseName, 'N/A') AS training_program,
+        DATE_FORMAT(${BATCH_EDATE_EXPR}, '%Y-%m-%d') AS end_date,
+        DATE_FORMAT(b.ConvocationDate, '%Y-%m-%d') AS convocation_date,
+        '-' AS location
+      FROM batch_mst b
+      LEFT JOIN course_mst c ON c.Course_Id = b.Course_Id
+      WHERE (b.IsDelete = 0 OR b.IsDelete IS NULL)
+        AND LOWER(TRIM(CAST(COALESCE(b.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+        AND ${BATCH_SDATE_EXPR} <= CURDATE()
+        AND ${BATCH_EDATE_EXPR} >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+        AND b.ConvocationDate IS NOT NULL
+      ORDER BY DATE(b.ConvocationDate) ASC
       LIMIT 30
     `, []) : Promise.resolve([]),
 
@@ -1068,23 +1281,7 @@ async function fetchDashboardData(dept?: string) {
       LIMIT 40
     `, []) : Promise.resolve([]),
 
-    // T&D-10 Admission cancelled
-    needsTdDashboard ? safeQuery(pool, `
-      SELECT
-        bc.Cancel_Id AS id,
-        sm.Student_Name AS student_name,
-        b.Batch_code AS batch_no,
-        COALESCE(c.Course_Name, b.CourseName, 'N/A') AS training_program,
-        bc.Cancel_Amt AS cancel_amount,
-        bc.Date_Added AS cancel_date
-      FROM batch_cancel bc
-      LEFT JOIN student_master sm ON sm.Student_Id = bc.Student_Id
-      LEFT JOIN batch_mst b ON b.Batch_Id = bc.Batch_Id
-      LEFT JOIN course_mst c ON c.Course_Id = COALESCE(bc.Course_Id, b.Course_Id)
-      WHERE (bc.IsDelete = 0 OR bc.IsDelete IS NULL)
-      ORDER BY DATE(bc.Date_Added) DESC
-      LIMIT 50
-    `, []) : Promise.resolve([]),
+    Promise.resolve([]),
 
     // Admin - meetings (today and recent) from followups marked as meetings
     needsAdminWidgets ? safeQuery(pool, `
@@ -1160,6 +1357,13 @@ async function fetchDashboardData(dept?: string) {
 
   // ── Shape the response ──────────────────────────────────────────
   const esRow = (enquirySummaryRows as Record<string, number>[])[0] ?? {};
+  const metaInquiryRow = (metaInquiryRows as Record<string, number>[])[0] ?? {};
+  const metaInquiries = {
+    total: Number(metaInquiryRow.total || 0),
+    currentMonth: Number(metaInquiryRow.current_month || 0),
+    last30Days: Number(metaInquiryRow.last_30_days || 0),
+    last7Days: Number(metaInquiryRow.last_7_days || 0),
+  };
 
   const upcomingBatchesFinal = upcomingBatches;
 
@@ -1216,20 +1420,59 @@ async function fetchDashboardData(dept?: string) {
   });
 
   const leadFunnel = {
-    total: Number((leadFunnelRows as any[])[0]?.total || 0),
+    total: Number((leadFunnelRows as any[])[0]?.total || 0) + metaInquiries.currentMonth,
     contacted: Number((leadFunnelRows as any[])[0]?.contacted || 0),
     interested: Number((leadFunnelRows as any[])[0]?.interested || 0),
     converted: Number((leadFunnelRows as any[])[0]?.converted || 0),
+    metaCurrentMonth: metaInquiries.currentMonth,
   };
+
+  const tdMetaRows = needsTdDashboard ? await getTrainingDashboardMetaRows(pool).catch(() => []) : [];
+  const tdMetaMap = new Map(
+    (tdMetaRows as any[]).map((row) => [`${row.widget_type}:${row.entity_key}`, row])
+  );
+
+  const tdUpcomingExamsBase = (tdUpcomingExamsRows as any[]).length > 0 ? tdUpcomingExamsRows : tdUpcomingExamsFallbackRows;
+  const tdUpcomingExams = (tdUpcomingExamsBase as any[]).map((row) => {
+    const entityKey = getTrainingDashboardEntityKey([row.exam_id, row.batch_no, row.exam_date]);
+    const meta = tdMetaMap.get(`upcoming_exam:${entityKey}`);
+    return {
+      ...row,
+      entity_key: entityKey,
+      paper_status: meta?.status || row.paper_status || 'Not Started',
+    };
+  });
+
+  const tdFinishedExams = (tdFinishedExamsRows as any[]).map((row) => {
+    const entityKey = getTrainingDashboardEntityKey([row.exam_id, row.batch_no, row.exam_date]);
+    const meta = tdMetaMap.get(`finished_exam:${entityKey}`);
+    return {
+      ...row,
+      entity_key: entityKey,
+      paper_status: meta?.status || 'Pending',
+      paper_showing_date: meta?.date_value || row.paper_showing_date,
+    };
+  });
+
+  const tdGoogleReviews = (tdGoogleReviewRows as any[]).map((row) => {
+    const entityKey = getTrainingDashboardEntityKey([row.batch_id, row.batch_no]);
+    const meta = tdMetaMap.get(`google_review:${entityKey}`);
+    return {
+      ...row,
+      entity_key: entityKey,
+      reviews_received: Number(meta?.numeric_value || 0),
+    };
+  });
 
   const trainingDevelopment = {
     ongoingBatches: tdOngoingBatchesRows,
     lowAttendanceStudents: tdLowAttendanceRows,
     lowPerformingStudents: tdLowPerformanceRows,
-    upcomingExams: (tdUpcomingExamsRows as any[]).length > 0 ? tdUpcomingExamsRows : tdUpcomingExamsFallbackRows,
-    finishedExams: tdFinishedExamsRows,
+    upcomingExams: tdUpcomingExams,
+    finishedExams: tdFinishedExams,
     todaysLectures: tdTodaysLecturesRows,
     googleReviewsPending: Number((tdGoogleReviewsPendingRows as any[])[0]?.pending_count || 0),
+    googleReviews: tdGoogleReviews,
     upcomingConvocations: tdUpcomingConvocationsRows,
     siteVisits: tdSiteVisitsRows,
     admissionCancelled: tdAdmissionCancelledRows,
@@ -1259,9 +1502,10 @@ async function fetchDashboardData(dept?: string) {
     adminDashboard,
     enquiryReport: {
       summary: {
-        total_enquiries: esRow.total_enquiries || 0,
-        last_30_days: esRow.last_30_days || 0,
-        last_7_days: esRow.last_7_days || 0,
+        total_enquiries: Number(esRow.total_enquiries || 0) + metaInquiries.currentMonth,
+        last_30_days: Number(esRow.last_30_days || 0) + metaInquiries.last30Days,
+        last_7_days: Number(esRow.last_7_days || 0) + metaInquiries.last7Days,
+        meta_current_month: metaInquiries.currentMonth,
       },
       recentEnquiries,
       corporateTotal: (corporateTotalRows as Record<string, number>[])[0]?.total || 0,

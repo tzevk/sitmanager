@@ -70,9 +70,9 @@ const fmt = (n: number | null | undefined) =>
   (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const fmtDate = (d: string | null | undefined) => {
-  if (!d) return '—';
+  if (!d) return '';
   const s = String(d).slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '—';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
   const [y, m, day] = s.split('-');
   return `${day}/${m}/${y}`;
 };
@@ -678,16 +678,16 @@ ${copy('Student Copy')}
                   running = running + r.Debit - r.Credit;
                   const desc = r.Credit > 0
                     ? `Payment Received${r.Particular ? ` - ${r.Particular}` : ''}`
-                    : (r.Particular || '—');
+                    : (r.Particular || '');
                   return (
                     <tr key={r.Fees_Id} className="group hover:bg-slate-50/40">
                       <td className="py-2 px-3 text-xs border border-slate-300 text-center">{fmtDate(r.Date)}</td>
                       <td className="py-2 px-3 text-xs border border-slate-300">{desc}</td>
-                      <td className="py-2 px-3 text-xs border border-slate-300 text-center font-mono">{r.Fees_Code || '—'}</td>
+                      <td className="py-2 px-3 text-xs border border-slate-300 text-center font-mono">{r.Fees_Code || ''}</td>
                       <td className="py-2 px-3 text-xs border border-slate-300">
                         <div className="flex flex-col gap-0.5">
-                          <span className="font-medium">{r.Payment_Type || '—'}</span>
-                          <span className="font-mono text-[10px] text-slate-500">{r.Transaction_No || '—'}</span>
+                          <span className="font-medium">{r.Payment_Type || ''}</span>
+                          <span className="font-mono text-[10px] text-slate-500">{r.Transaction_No || ''}</span>
                         </div>
                       </td>
                       <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono">{r.Debit ? fmt(r.Debit) : ''}</td>

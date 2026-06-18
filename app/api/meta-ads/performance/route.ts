@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
-import { fetchMetaCampaignPerformance } from '@/lib/services/meta-ads.service';
+import { fetchMetaCampaignPerformance, isMetaRateLimitError } from '@/lib/services/meta-ads.service';
 
 interface CampaignTotals {
   reach: number;
@@ -49,6 +49,15 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to fetch Meta campaign performance';
+    if (isMetaRateLimitError(error)) {
+      console.warn('Meta campaign performance rate limited:', message);
+      return NextResponse.json({
+        campaigns: [],
+        totals: { reach: 0, impressions: 0, clicks: 0, leads: 0, spend: 0, ctr: 0, cpl: null },
+        rateLimited: true,
+        error: message,
+      }, { status: 429 });
+    }
     console.error('Meta campaign performance error:', error);
     return NextResponse.json({ error: message }, { status: 500 });
   }

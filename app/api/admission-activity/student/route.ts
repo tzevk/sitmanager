@@ -66,6 +66,7 @@ export async function GET(req: NextRequest) {
     const [rows, [countRows]] = await Promise.all([
       pool.query<any[]>(
         `SELECT
+            am.Admission_Id,
            sm.Student_Id,
            COALESCE(NULLIF(TRIM(sm.Batch_Code), ''), bm.Batch_code) AS Batch_Code,
            sm.Student_Name,

@@ -18,13 +18,20 @@ function parseNotes(notes: string | null): { particular: string; taxType: string
 async function generateReceiptNo(): Promise<string> {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0');
+  const prefix = `R-${month}/`;
   const [rows] = await getPool().query<any[]>(
-    `SELECT MAX(CAST(SUBSTRING_INDEX(Fees_Code, '/', -1) AS UNSIGNED)) AS lastSeq
+    `SELECT Fees_Code
      FROM s_fees_mst
-     WHERE Fees_Code REGEXP ?`,
-    [`^R-${month}/[0-9]+$`]
+     WHERE Fees_Code LIKE ?
+     ORDER BY Fees_Id DESC
+     LIMIT 500`,
+    [`${prefix}%`]
   );
-  const nextSeq = Number(rows[0]?.lastSeq ?? 0) + 1;
+  const lastSeq = rows.reduce((max, row) => {
+    const match = String(row.Fees_Code ?? '').match(/^R-\d{2}\/(\d+)$/);
+    return Math.max(max, Number(match?.[1] ?? 0));
+  }, 0);
+  const nextSeq = lastSeq + 1;
   return `R-${month}/${String(nextSeq).padStart(3, '0')}`;
 }
 
@@ -62,8 +69,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
     if (!studentRows.length) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     const student = studentRows[0];
 
-    // Fetch admission separately to get the latest record with reliable Fees + Cancel + Date
-    const [admissionRows] = await pool.query<any[]>(
+    const admissionPromise = pool.query<any[]>(
       `SELECT Admission_Id, Fees, Cancel,
               DATE_FORMAT(Admission_Date, '%Y-%m-%d') AS Admission_Date
        FROM admission_master
@@ -72,10 +78,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
        LIMIT 1`,
       [sid]
     );
-    const admission = admissionRows[0] ?? null;
-
-    // Query fees_structure and batch fees via Batch_code to avoid Batch_Id being NULL from the JOIN
-    const [feeRows] = await pool.query<any[]>(
+    const feePromise = pool.query<any[]>(
       `SELECT fs.duedate, fs.actualfees, fs.fullfees, fs.total_inr,
               bm.Actual_Fees_Payment, bm.Fees_Full_Payment,
               DATE_FORMAT(bm.SDate, '%Y-%m-%d') AS Batch_SDate_Direct
@@ -86,21 +89,39 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
        LIMIT 1`,
       [student.Batch_Code]
     );
-    const feeRow = feeRows[0] ?? null;
-    const dueDate = feeRow?.duedate ?? admission?.Admission_Date ?? feeRow?.Batch_SDate_Direct ?? student.Batch_SDate ?? null;
-
-    const [banks] = await pool.query<any[]>(
+    const banksPromise = pool.query<any[]>(
       `SELECT Id, Bank_Name FROM bank WHERE (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Bank_Name`
     );
-
-    const [ledgerRows] = await pool.query<any[]>(
-            `SELECT Fees_Id, Fees_Code, Date_Added, RDate, Payment_Type, Cheque_No, PaymentId, Cheque_Bank, Cheque_Branch,
+    const ledgerPromise = pool.query<any[]>(
+      `SELECT Fees_Id, Fees_Code, Date_Added, RDate, Payment_Type, Cheque_No, PaymentId, Cheque_Bank, Cheque_Branch,
               Cheque_Date, Amount, Total_Amt, TypeR, Notes
        FROM s_fees_mst
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
-       ORDER BY COALESCE(RDate, Date_Added) ASC, Fees_Id ASC`,
+       ORDER BY Fees_Id ASC`,
       [sid]
     );
+    const recordPromise = feesId
+      ? pool.query<any[]>(
+          `SELECT * FROM s_fees_mst WHERE Fees_Id = ? AND Student_Id = ? LIMIT 1`,
+          [Number(feesId), sid]
+        )
+      : Promise.resolve([[]] as any[]);
+
+    const [admissionResult, feeResult, banksResult, ledgerResult, recordResult] = await Promise.all([
+      admissionPromise,
+      feePromise,
+      banksPromise,
+      ledgerPromise,
+      recordPromise,
+    ]);
+
+    const admissionRows = admissionResult[0];
+    const admission = admissionRows[0] ?? null;
+    const feeRows = feeResult[0];
+    const feeRow = feeRows[0] ?? null;
+    const dueDate = feeRow?.duedate ?? admission?.Admission_Date ?? feeRow?.Batch_SDate_Direct ?? student.Batch_SDate ?? null;
+    const banks = banksResult[0];
+    const ledgerRows = ledgerResult[0];
 
     const ledger = ledgerRows
       .map((r) => {
@@ -179,10 +200,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
 
     let record: any = null;
     if (feesId) {
-      const [recRows] = await pool.query<any[]>(
-        `SELECT * FROM s_fees_mst WHERE Fees_Id = ? AND Student_Id = ? LIMIT 1`,
-        [Number(feesId), sid]
-      );
+      const recRows = recordResult[0] as any[];
       if (recRows.length) {
         const r = recRows[0];
         const { particular, taxType } = parseNotes(r.Notes);
@@ -226,7 +244,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
       particulars,
       ledger,
       totals: { debit: ledgerTotalDebit, credit: totalCredit, balance },
-      nextReceiptNo: record?.Fees_Code ?? (await generateReceiptNo()),
+      nextReceiptNo: record?.Fees_Code ?? (feesId ? '' : await generateReceiptNo()),
       record,
     });
   } catch (err: any) {
@@ -273,7 +291,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
     const mkNotes = (particular: string, txTaxType?: string | null) =>
       txTaxType ? `${particular} | Tax: ${txTaxType}` : particular;
 
-    const insertFeeRow = async (rowAmount: number, rowParticular: string, txTaxType?: string | null, forcedFeesCode?: string | null) => {
+    const insertFeeRow = async (
+      rowAmount: number,
+      rowParticular: string,
+      txTaxType?: string | null,
+      forcedFeesCode?: string | null,
+      options?: { paymentType?: string | null; transactionNo?: string | null; bank?: string | null; chequeDate?: string | null; branch?: string | null }
+    ) => {
       const [result] = await pool.query<any>(
         `INSERT INTO s_fees_mst
           (Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type, Cheque_Bank, Cheque_No, PaymentId,
@@ -282,9 +306,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`,
         [
           sid, student.Course_Id, student.Batch_Id, student.Admission_Id,
-          Payment_Type ?? null, Cheque_Bank ?? null, transactionNo,
-          transactionNo,
-          Cheque_Date || null, Cheque_Branch ?? null, rowAmount, rowAmount, typeR, mkNotes(rowParticular, txTaxType),
+          options ? options.paymentType ?? null : Payment_Type ?? null,
+          options ? options.bank ?? null : Cheque_Bank ?? null,
+          options ? options.transactionNo ?? null : transactionNo,
+          options ? options.transactionNo ?? null : transactionNo,
+          options ? options.chequeDate ?? null : Cheque_Date || null,
+          options ? options.branch ?? null : Cheque_Branch ?? null,
+          rowAmount, rowAmount, typeR, mkNotes(rowParticular, txTaxType),
           RDate, now, now.getMonth() + 1, now.getFullYear(),
         ]
       );
@@ -303,6 +331,29 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
       TaxType || null,
       typeof customFeesCode === 'string' ? customFeesCode : null,
     );
+
+    const isTuitionDebit = typeR === 'D' && /tuition\s+fees/i.test(String(Particular ?? ''));
+    if (isTuitionDebit) {
+      const [alumniRows] = await pool.query<any[]>(
+        `SELECT Fees_Id
+         FROM s_fees_mst
+         WHERE Student_Id = ?
+           AND TypeR = 'D'
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+           AND LOWER(IFNULL(Notes, '')) LIKE '%one time membership fees%'
+         LIMIT 1`,
+        [sid]
+      );
+      if (!alumniRows.length) {
+        await insertFeeRow(MEMBERSHIP_FEE_AMOUNT, MEMBERSHIP_FEE_LABEL, null, null, {
+          paymentType: null,
+          transactionNo: null,
+          bank: null,
+          chequeDate: null,
+          branch: null,
+        });
+      }
+    }
 
     return NextResponse.json({ success: true, Fees_Id: created.Fees_Id, Fees_Code: created.Fees_Code });
   } catch (err: any) {

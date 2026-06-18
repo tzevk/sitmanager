@@ -56,9 +56,9 @@ const fmt = (n: number | null | undefined) =>
   (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const fmtDate = (d: string | null | undefined) => {
-  if (!d) return '—';
+  if (!d) return '';
   const s = String(d).slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '—';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
   const [y, m, day] = s.split('-');
   return `${day}/${m}/${y}`;
 };
@@ -67,6 +67,7 @@ export default function FeeDetailsPage() {
   const { canView, loading: permLoading } = useResourcePermissions('finance');
   const [recentRows, setRecentRows] = useState<RecentReceiptRow[]>([]);
   const [recentLoading, setRecentLoading] = useState(false);
+  const [recentError, setRecentError] = useState('');
 
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<StudentSearchRow[]>([]);
@@ -74,17 +75,35 @@ export default function FeeDetailsPage() {
   const [searched, setSearched] = useState(false);
 
   useEffect(() => {
+    let active = true;
+    const ctrl = new AbortController();
+    const timeout = window.setTimeout(() => ctrl.abort(), 12000);
+
     const loadRecent = async () => {
       setRecentLoading(true);
+      setRecentError('');
       try {
-        const res = await fetch('/api/fee-details?mode=recent');
+        const res = await fetch('/api/fee-details?mode=recent', { signal: ctrl.signal });
+        if (!res.ok) throw new Error('Failed to load recent receipts');
         const data = await res.json();
-        setRecentRows(data.rows ?? []);
+        if (active) setRecentRows(data.rows ?? []);
+      } catch (err) {
+        if (!active) return;
+        setRecentRows([]);
+        setRecentError(err instanceof Error && err.name === 'AbortError'
+          ? 'Recent receipts took too long to load. Search is still available.'
+          : 'Recent receipts could not be loaded. Search is still available.');
       } finally {
-        setRecentLoading(false);
+        if (active) setRecentLoading(false);
       }
     };
     loadRecent();
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      ctrl.abort();
+    };
   }, []);
 
   // Debounced student search (by name, id, or batch).
@@ -190,14 +209,14 @@ export default function FeeDetailsPage() {
                   <tr key={r.Student_Id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-2 px-3 text-xs border-b border-slate-100">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-medium">{r.Student_Name || '—'}</span>
+                        <span className="font-medium">{r.Student_Name || ''}</span>
                         <span className="font-mono text-[10px] text-slate-400">#{r.Student_Id}</span>
                         <StatusTag row={r} />
                       </div>
                     </td>
-                    <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Present_Mobile || '—'}</td>
-                    <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Course_Name || '—'}</td>
-                    <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Batch_code || '—'}</td>
+                    <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Present_Mobile || ''}</td>
+                    <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Course_Name || ''}</td>
+                    <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Batch_code || ''}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100 text-right font-mono">{fmt(r.Total_Fees)}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100 text-right font-mono text-emerald-700">{fmt(r.Total_Paid)}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100 text-right font-mono text-red-600">{fmt((Number(r.Total_Fees) || 0) - (Number(r.Total_Paid) || 0))}</td>
@@ -244,26 +263,31 @@ export default function FeeDetailsPage() {
                   <td colSpan={10} className="py-6 text-center text-xs text-slate-400">Loading recent receipts…</td>
                 </tr>
               )}
-              {!recentLoading && !recentRows.length && (
+              {!recentLoading && recentError && (
+                <tr>
+                  <td colSpan={10} className="py-6 text-center text-xs text-amber-600">{recentError}</td>
+                </tr>
+              )}
+              {!recentLoading && !recentError && !recentRows.length && (
                 <tr>
                   <td colSpan={10} className="py-6 text-center text-xs text-slate-400">No recent fee receipts found</td>
                 </tr>
               )}
-              {!recentLoading && recentRows.map((r, i) => (
+              {!recentLoading && !recentError && recentRows.map((r, i) => (
                 <tr key={r.Fees_Id} className="hover:bg-slate-50/60 transition-colors">
                   <td className="py-2 px-3 text-xs text-slate-400 border-b border-slate-100">{i + 1}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Fees_Code || ''}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100">{fmtDate(r.Receipt_Date)}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-medium">{r.Student_Name || '—'}</span>
+                      <span className="font-medium">{r.Student_Name || ''}</span>
                       <StatusTag row={r} />
                     </div>
                   </td>
-                  <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Course_Name || '—'}</td>
-                  <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Batch_code || '—'}</td>
-                  <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Payment_Type || '—'}</td>
-                  <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.PaymentId || '—'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Course_Name || ''}</td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Batch_code || ''}</td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Payment_Type || ''}</td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.PaymentId || ''}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100 text-right font-mono">{fmt(r.Amount)}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100 text-center">
                     <Link

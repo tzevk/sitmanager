@@ -57,6 +57,30 @@ const META_SPECIAL_AD_CATEGORIES = [
 
 let metaTablesReady = false;
 
+export class MetaRateLimitError extends Error {
+  status = 429;
+
+  constructor(message = 'Meta application request limit reached') {
+    super(message);
+    this.name = 'MetaRateLimitError';
+  }
+}
+
+export function isMetaRateLimitError(error: unknown): error is MetaRateLimitError {
+  return error instanceof MetaRateLimitError || (
+    error instanceof Error &&
+    /request limit|rate limit|too many calls|too many requests|call count|user request limit/i.test(error.message)
+  );
+}
+
+function isMetaRateLimitResponse(data: any, status: number): boolean {
+  const error = data?.error || {};
+  const code = Number(error?.code || 0);
+  const subcode = Number(error?.error_subcode || 0);
+  const message = String(error?.message || '');
+  return status === 429 || [4, 17, 32, 613].includes(code) || subcode === 2446079 || isMetaRateLimitError(new Error(message));
+}
+
 export interface MetaWebhookLeadEvent {
   leadgen_id?: string;
   form_id?: string;
@@ -2551,6 +2575,9 @@ export async function fetchMetaCampaignPerformance(params: { dateFrom?: string |
     const text = await res.text();
     const data = text ? JSON.parse(text) : {};
     if (!res.ok) {
+      if (isMetaRateLimitResponse(data, res.status)) {
+        throw new MetaRateLimitError(data?.error?.message || undefined);
+      }
       throw new Error(data?.error?.message || `Meta insights request failed with ${res.status}`);
     }
 

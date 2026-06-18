@@ -1,7 +1,6 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useCallback, useEffect, useRef } from 'react';
-import Link from 'next/link';
 import BatchMarketingWidget from './BatchMarketingWidget';
 import AnnualTargetsWidget from './AnnualTargetsWidget';
 import ContentCalendarWidget from './ContentCalendarWidget';
@@ -330,6 +329,14 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
   ];
 
   const totalPendingFeeAmount = pendingFees.reduce((sum: number, row: any) => sum + Number(row.amount || 0), 0);
+  const totalPendingFeeStudents = pendingFees.reduce((sum: number, row: any) => sum + Number(row.student_count || 0), 0);
+  const pendingFeesBatchSummary = pendingFees
+    .map((row: any) => ({
+      batchName: row.course_name || '',
+      batchNo: row.batch_code ? toBatchNumber(row.batch_code) : '',
+      balance: Number(row.amount || 0),
+    }))
+    .sort((a: any, b: any) => Number(b.balance || 0) - Number(a.balance || 0));
 
   const pendingFeesCard = (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -349,66 +356,48 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
             </div>
             <div className="rounded-lg bg-white border border-gray-100 px-3 py-1 shadow-sm">
               <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Students</p>
-              <p className="text-sm font-black tabular-nums text-gray-800">{pendingFees.length}</p>
+              <p className="text-sm font-black tabular-nums text-gray-800">{totalPendingFeeStudents}</p>
             </div>
           </div>
         )}
       </div>
-      <div className="max-h-80 overflow-auto">
-        {loading ? (
-          <div className="p-4 space-y-2">
-            {[...Array(4)].map((_, i) => <div key={i} className="h-12 rounded-lg bg-gray-100 animate-pulse" />)}
-          </div>
-        ) : pendingFees.length === 0 ? (
-          <Empty text="No pending fees" />
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {pendingFees.map((f: any, i: number) => (
-              <div key={`${f.id || f.student_id || i}`} className="grid grid-cols-1 lg:grid-cols-[minmax(220px,1.4fr)_minmax(180px,1fr)_minmax(180px,1fr)_auto] gap-3 items-center px-4 py-2.5 hover:bg-red-50/20">
-                <div className="min-w-0 flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-red-50 text-red-700 flex items-center justify-center text-xs font-black shrink-0">
-                    {(f.student_name || f.name || 'S').slice(0, 1).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 truncate">{f.student_name || f.name || 'Student'}</p>
-                    <p className="text-[11px] text-gray-400 truncate">
-                      {f.course_name || '—'}{f.batch_code ? ` · ${toBatchNumber(f.batch_code)}` : ''}
-                    </p>
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between text-[10px] font-semibold text-gray-400 mb-1">
-                    <span>Paid</span>
-                    <span className="tabular-nums">₹ {Number(f.paid_amount || 0).toLocaleString('en-IN')} / ₹ {Number(f.total_fee || 0).toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-500 rounded-full"
-                      style={{ width: `${Math.min(100, Math.max(0, Number(f.total_fee) > 0 ? (Number(f.paid_amount || 0) / Number(f.total_fee)) * 100 : 0))}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center justify-start lg:justify-end">
-                  <span className={`text-sm font-black tabular-nums px-2.5 py-1 rounded-lg whitespace-nowrap ${
-                    Number(f.amount) >= 20000 ? 'bg-red-100 text-red-700' :
-                    Number(f.amount) >= 10000 ? 'bg-orange-100 text-orange-700' :
-                                                'bg-rose-50 text-rose-600'
-                  }`}>
-                    ₹ {Number(f.amount || 0).toLocaleString('en-IN')}
-                  </span>
-                </div>
-                {f.student_id ? (
-                  <Link href={`/dashboard/fee-details/${f.student_id}`} className="h-7 px-3 inline-flex items-center justify-center rounded-md border border-gray-200 text-[11px] font-bold text-gray-600 hover:bg-gray-50 whitespace-nowrap">
-                    View
-                  </Link>
-                ) : (
-                  <span />
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {!loading && pendingFeesBatchSummary.length > 0 && (
+        <div className="border-b border-gray-100 bg-gray-50/60 overflow-x-auto">
+          <table className={TABLE_CLS}>
+            <thead>
+              <tr className="border-b border-gray-100">
+                <Th center>Sr No</Th>
+                <Th>Batch Name</Th>
+                <Th center>Batch No</Th>
+                <Th center>Balance Fees</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingFeesBatchSummary.map((row: any, i: number) => (
+                <tr key={`pending-fee-batch-${row.batchNo || row.batchName || i}-${i}`} className="border-t border-gray-100">
+                  <td className="px-3 py-2 text-center text-xs font-bold tabular-nums text-gray-500">{i + 1}</td>
+                  <td className="px-3 py-2 text-xs font-semibold text-gray-700 min-w-[180px]">{row.batchName}</td>
+                  <td className="px-3 py-2 text-center text-xs font-mono text-gray-500 whitespace-nowrap">{row.batchNo}</td>
+                  <td className="px-3 py-2 text-right text-xs font-black tabular-nums text-red-700">₹ {Number(row.balance || 0).toLocaleString('en-IN')}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-gray-200 bg-red-50/60">
+                <td className="px-3 py-2.5 text-right text-xs font-black uppercase tracking-wide text-gray-700" colSpan={3}>Balance Fees &gt;&gt;&gt;</td>
+                <td className="px-3 py-2.5 text-right text-sm font-black tabular-nums text-red-700">₹ {totalPendingFeeAmount.toLocaleString('en-IN')}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+      {loading ? (
+        <div className="p-4 space-y-2">
+          {[...Array(4)].map((_, i) => <div key={i} className="h-12 rounded-lg bg-gray-100 animate-pulse" />)}
+        </div>
+      ) : pendingFees.length === 0 ? (
+        <Empty text="No pending fees" />
+      ) : null}
     </div>
   );
 
@@ -536,7 +525,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                   <tr><td colSpan={8}><Empty text="No upcoming batches for the next 3 months" /></td></tr>
                 ) : (
                   upcomingBatches.map((b: any, i: number) => {
-                    const enrolled  = Number(b.Enrolled ?? b.NoStudent ?? 0);
+                    const enrolled  = Number(b.Filled_Students ?? b.Enrolled ?? b.NoStudent ?? 0);
                     const max       = Number(b.Max_Students || 0);
                     const fillPct   = max > 0 ? (enrolled / max) * 100 : 0;
                     const sDate     = b.SDate ? String(b.SDate).slice(0, 10) : null;
@@ -561,7 +550,12 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                         <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Enquiries_Contacted ?? 0}</td>
                         <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Interested_Students ?? 0}</td>
                         <td className="px-4 py-2.5 text-center tabular-nums font-semibold text-gray-800">{Number(b.Confirmed_Admissions ?? 0)}</td>
-                        <td className="px-4 py-2.5 w-40"><Bar value={fillPct} /></td>
+                        <td className="px-4 py-2.5 w-40">
+                          <div className="space-y-1">
+                            <Bar value={fillPct} />
+                            <div className="text-[10px] font-semibold text-gray-400 tabular-nums text-right">{enrolled}/{max || 0}</div>
+                          </div>
+                        </td>
                       </tr>
                     );
                   })

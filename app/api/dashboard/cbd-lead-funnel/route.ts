@@ -25,15 +25,28 @@ export async function GET(request: NextRequest) {
   const pool = getPool();
   const params: (number | string)[] = [];
   let dateCondition = '';
+  // Meta leads (meta_ads_lead_sync) keep their own date column, so apply the same
+  // FY/month window with a parallel expression + param set.
+  const META_DATE_EXPR =
+    `COALESCE(` +
+    `STR_TO_DATE(LEFT(NULLIF(TRIM(lead_created_time),''),19),'%Y-%m-%d %H:%i:%s'),` +
+    `STR_TO_DATE(LEFT(NULLIF(TRIM(lead_created_time),''),10),'%Y-%m-%d'),` +
+    `created_at)`;
+  const metaParams: (number | string)[] = [];
+  let metaDateCondition = '';
 
   if (month && Number.isFinite(month) && month >= 1 && month <= 12) {
     dateCondition = `AND YEAR(${INQUIRY_DATE_EXPR}) = ? AND MONTH(${INQUIRY_DATE_EXPR}) = ?`;
     params.push(year, month);
+    metaDateCondition = `AND YEAR(${META_DATE_EXPR}) = ? AND MONTH(${META_DATE_EXPR}) = ?`;
+    metaParams.push(year, month);
   } else {
     // "By Year" means the financial year: 1 Apr of `year` to 31 Mar of `year + 1`.
     // `year` is the financial-year start year (e.g. 2025 -> FY 2025-26).
     dateCondition = `AND ${INQUIRY_DATE_EXPR} >= ? AND ${INQUIRY_DATE_EXPR} < ?`;
     params.push(`${year}-04-01`, `${year + 1}-04-01`);
+    metaDateCondition = `AND ${META_DATE_EXPR} >= ? AND ${META_DATE_EXPR} < ?`;
+    metaParams.push(`${year}-04-01`, `${year + 1}-04-01`);
   }
 
   try {
@@ -98,11 +111,37 @@ export async function GET(request: NextRequest) {
     );
 
     const row = (rows as any[])[0] ?? {};
+
+    // Meta Ads instant-form leads also feed the top of the funnel. Count only the
+    // ones not already represented by a live student_inquiry (same "not already
+    // counted" rule as the dashboard route's seed) so converted leads — already in
+    // the count above — aren't doubled.
+    let metaLeads = 0;
+    try {
+      const [metaRows] = await pool.query<any[]>(
+        `SET STATEMENT max_statement_time=8 FOR
+         SELECT COUNT(DISTINCT m.meta_lead_id) AS meta_leads
+         FROM meta_ads_lead_sync m
+         WHERE NOT EXISTS (
+           SELECT 1 FROM student_inquiry si
+           WHERE si.Inquiry_Id = m.inquiry_id
+             AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
+         )
+         ${metaDateCondition}`,
+        metaParams
+      );
+      metaLeads = Number((metaRows as any[])[0]?.meta_leads || 0);
+    } catch (metaErr: any) {
+      // Table may not exist until the first Meta lead syncs; treat as zero.
+      console.warn('cbd-lead-funnel meta count skipped:', metaErr?.message || metaErr);
+    }
+
     return NextResponse.json({
-      total:     Number(row.total     || 0),
+      total:     Number(row.total     || 0) + metaLeads,
       contacted: Number(row.contacted || 0),
       interested:Number(row.interested|| 0),
       converted: Number(row.converted || 0),
+      metaLeads,
     });
   } catch (err: any) {
     console.error('cbd-lead-funnel error:', err);
