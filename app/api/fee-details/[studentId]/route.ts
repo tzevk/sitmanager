@@ -32,7 +32,7 @@ async function generateReceiptNo(): Promise<string> {
   const previousSeqText = String(rows[0]?.Fees_Code ?? '').split('/').pop() ?? '';
   const lastSeq = Number(previousSeqText || 0);
   const nextSeq = lastSeq + 1;
-  const width = Math.max(previousSeqText.length, 2);
+  const width = Math.max(previousSeqText.length, 3);
   return `R-${month}/${String(nextSeq).padStart(width, '0')}`;
 }
 
