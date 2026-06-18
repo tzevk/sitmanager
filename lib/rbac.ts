@@ -333,6 +333,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       ...createPermissions('company_requirement', 'Company Requirement'),
       ...createPermissions('shortlisted_sit', 'Shortlisted by SIT'),
       ...createPermissions('shortlisted_company', 'Shortlisted by Company'),
+      ...createPermissions('interview_master', 'Interview Master'),
     ],
   },
 
@@ -523,6 +524,7 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/dashboard/masters/faculty': ['faculty.view'],
   '/dashboard/masters/faculty/add': ['faculty.create'],
   '/dashboard/masters/faculty/edit': ['faculty.update'],
+  '/dashboard/masters/interview-master': ['interview_master.view'],
 
   // Consultancy
   '/dashboard/masters/consultancy': ['consultancy.view'],
@@ -585,6 +587,12 @@ export const API_PERMISSIONS: Record<string, Record<string, string[]>> = {
   },
   '/api/masters/consultancy/:id': {
     GET: ['consultancy.view'],
+  },
+  '/api/masters/interview-master': {
+    GET: ['interview_master.view'],
+    POST: ['interview_master.create'],
+    PUT: ['interview_master.update'],
+    DELETE: ['interview_master.delete'],
   },
   '/api/roles': {
     GET: ['role.view'],

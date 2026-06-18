@@ -31,6 +31,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Masters > Employee': '/dashboard/masters/employee',
   'Masters > Library Book': '/dashboard/masters/library-book',
   'Masters > Trainer': '/dashboard/masters/faculty',
+  'Masters > Interview Master': '/dashboard/masters/interview-master',
   'Masters > Closed Batches': '/dashboard/masters/closed-batches',
   'Admin/Accounts > Finance Dashboard': '/dashboard/finance',
   'Admin/Accounts > Employee Profession Tax': '/dashboard/account-master/employee-profession-tax',
@@ -74,6 +75,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Placement > Student Placement Report': '/dashboard/reports/placement',
   'Placement > Job Postings': '/dashboard/placement',
   'Placement > Mock Interviews': '/dashboard/placement/mock-interviews',
+  'Placement > Interview Master': '/dashboard/masters/interview-master',
   'Placement > Email Company': '/dashboard/placement/email-company',
   'Utility > Festival Photo Upload': '/dashboard/utility/festival-photo-upload',
 };
@@ -112,6 +114,7 @@ const SUB_MENUS: Record<string, string[]> = {
     'Employee',
     'Library Book',
     'Trainer',
+    'Interview Master',
   ],
   'Admission Activity': [
     'Inquiry',
@@ -203,6 +206,7 @@ const SUB_MENUS: Record<string, string[]> = {
   'Placement': [
     'Job Postings',
     'Mock Interviews',
+    'Interview Master',
     'Email Company',
     'Consultancy Master',
     'CV Shortlisted',
@@ -234,6 +238,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Masters > Employee': ['employee.view'],
   'Masters > Library Book': ['library_book.view'],
   'Masters > Trainer': ['faculty.view'],
+  'Masters > Interview Master': ['interview_master.view'],
   'Masters > Closed Batches': ['batch.view'],
   'Admin/Accounts > Finance Dashboard': ['finance.view'],
   'Admin/Accounts > Employee Profession Tax': ['profession_tax.view'],
@@ -272,6 +277,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Daily Activities > Trainer Working Hours': ['faculty_working_hours.view'],
   'Daily Activities > Feedback': ['feedback1.view'],
   'Placement > Consultancy Master': ['consultancy.view'],
+  'Placement > Interview Master': ['interview_master.view'],
   'Placement > CV Shortlisted': ['cv_shortlisted.view'],
   'Placement > Latest CV Updated': ['cv_latest.view'],
   'Placement > Convocation Guest List': ['placement_convocation.view'],

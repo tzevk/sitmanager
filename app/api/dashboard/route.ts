@@ -9,6 +9,7 @@ import {
   getTrainingDashboardEntityKey,
   getTrainingDashboardMetaRows,
 } from '@/lib/services/training-dashboard.service';
+import { ensurePlacementDashboardTables, getPlacementCampusInterviews, getPlacementCompanyVisits, getPlacementDeputationOpenings } from '@/lib/services/placement-dashboard.service';
 
 const DASHBOARD_CACHE_TTL = cacheTTL.short;
 
@@ -176,6 +177,12 @@ async function fetchDashboardData(dept?: string) {
     try {
       await ensureTrainingDashboardMetaTable(pool);
     } catch { /* best-effort: dashboard can still render live data */ }
+  }
+
+  if (needsPlacementDepartment) {
+    try {
+      await ensurePlacementDashboardTables(pool);
+    } catch { /* best-effort: placement widgets can still use other sources */ }
   }
 
   // ── Run ALL independent queries in parallel ──────────────────────
@@ -422,7 +429,7 @@ async function fetchDashboardData(dept?: string) {
       WHERE (b.IsDelete IS NULL OR b.IsDelete = 0)
         AND (b.Cancel IS NULL OR b.Cancel = 0)
         AND b.StudentPassed1 > 0
-      ORDER BY b.ConvocationDate DESC
+      ORDER BY b.ConvocationDate IS NULL ASC, b.ConvocationDate DESC, b.Batch_Id DESC
       LIMIT 50
     `, []) : Promise.resolve([]),
 
@@ -435,7 +442,22 @@ async function fetchDashboardData(dept?: string) {
         SUM(CASE WHEN LOWER(IFNULL(Placement_Type,'')) IN ('permanent','temporary')
              OR LOWER(IFNULL(Placement_Type,'')) LIKE '%permanent%'
              OR LOWER(IFNULL(Placement_Type,'')) LIKE '%temporary%' THEN 1 ELSE 0 END) AS self_placement,
-        SUM(CASE WHEN Placement_Block = 'Yes' THEN 1 ELSE 0 END) AS placement_blocked
+        SUM(CASE WHEN Placement_Block = 'Yes' THEN 1 ELSE 0 END) AS placement_blocked,
+        AVG(CASE
+          WHEN LOWER(TRIM(IFNULL(Salary, ''))) IN ('', 'null', '-', 'no', 'fresh') THEN NULL
+          WHEN LOWER(TRIM(IFNULL(Salary, ''))) LIKE '%pm%' THEN NULLIF(CAST(REPLACE(LOWER(TRIM(Salary)), ',', '') AS DECIMAL(12,2)), 0) * 12
+          WHEN LOWER(TRIM(IFNULL(Salary, ''))) REGEXP 'lpa|lac' THEN NULLIF(CAST(REPLACE(LOWER(TRIM(Salary)), ',', '') AS DECIMAL(12,2)), 0) * 100000
+          WHEN LOWER(TRIM(IFNULL(Salary, ''))) REGEXP '^[0-9]+(\\.[0-9]+)?$' AND CAST(REPLACE(TRIM(Salary), ',', '') AS DECIMAL(12,2)) < 1000 THEN CAST(REPLACE(TRIM(Salary), ',', '') AS DECIMAL(12,2)) * 100000
+          WHEN LOWER(TRIM(IFNULL(Salary, ''))) REGEXP '^[0-9]+(\\.[0-9]+)?$' THEN NULLIF(CAST(REPLACE(TRIM(Salary), ',', '') AS DECIMAL(12,2)), 0)
+          ELSE NULL
+        END) AS avg_salary,
+        COUNT(CASE
+          WHEN LOWER(TRIM(IFNULL(Salary, ''))) IN ('', 'null', '-', 'no', 'fresh') THEN NULL
+          WHEN LOWER(TRIM(IFNULL(Salary, ''))) LIKE '%pm%' THEN NULLIF(CAST(REPLACE(LOWER(TRIM(Salary)), ',', '') AS DECIMAL(12,2)), 0)
+          WHEN LOWER(TRIM(IFNULL(Salary, ''))) REGEXP 'lpa|lac' THEN NULLIF(CAST(REPLACE(LOWER(TRIM(Salary)), ',', '') AS DECIMAL(12,2)), 0)
+          WHEN LOWER(TRIM(IFNULL(Salary, ''))) REGEXP '^[0-9]+(\\.[0-9]+)?$' THEN NULLIF(CAST(REPLACE(TRIM(Salary), ',', '') AS DECIMAL(12,2)), 0)
+          ELSE NULL
+        END) AS salary_count
       FROM student_master
       WHERE (IsDelete IS NULL OR IsDelete = 0)
       GROUP BY Batch_Code
@@ -509,11 +531,8 @@ async function fetchDashboardData(dept?: string) {
         UNION ALL
 
         SELECT 'Campus Interviews Planned' AS metric, COUNT(*) AS value
-        FROM company_req_batch_details_apk cbd
-        INNER JOIN company_requirements_apk cr ON cr.CompReqId = cbd.CompanyReqId
-        WHERE (cbd.IsDelete = 0 OR cbd.IsDelete IS NULL)
-          AND (cr.IsDelete = 0 OR cr.IsDelete IS NULL)
-          AND IFNULL(cr.IsActive, 1) = 1
+        FROM placement_interview_master
+        WHERE is_deleted = 0
 
         UNION ALL
 
@@ -572,12 +591,21 @@ async function fetchDashboardData(dept?: string) {
         COALESCE(NULLIF(TRIM(c.Course_Name), ''), 'N/A') AS training_name,
         COALESCE(NULLIF(TRIM(b.Batch_code), ''), '-') AS batch_code
       FROM cv_shortlisted cv
+      INNER JOIN cvchild cc
+        ON cc.CV_Id = cv.id
+       AND (cc.IsDelete = 0 OR cc.IsDelete IS NULL)
+       AND (
+         LOWER(TRIM(COALESCE(cc.Sended, ''))) = 'yes'
+         OR LOWER(TRIM(COALESCE(cc.Result, ''))) = 'yes'
+         OR LOWER(TRIM(COALESCE(cc.Placement, ''))) = 'yes'
+       )
       LEFT JOIN consultant_mst cm ON cm.Const_Id = cv.Company_Id
       LEFT JOIN course_mst c ON c.Course_Id = cv.Course_id
       LEFT JOIN batch_mst b ON b.Batch_Id = cv.Batch_Id
       WHERE (cv.IsDelete = 0 OR cv.IsDelete IS NULL)
         AND DATE(cv.TDate) >= CURDATE()
         AND LOWER(IFNULL(cv.CompanyName, '')) NOT LIKE '%mock%'
+      GROUP BY cv.id, cv.TDate, cv.CompanyName, cm.Comp_Name, c.Course_Name, b.Batch_code
       ORDER BY DATE(cv.TDate) ASC, cv.id DESC
       LIMIT 20
     `, []) : Promise.resolve([]),
@@ -588,72 +616,35 @@ async function fetchDashboardData(dept?: string) {
         DATE_FORMAT(cv.TDate, '%d-%m-%Y') AS interview_date,
         COALESCE(NULLIF(TRIM(cv.CompanyName), ''), cm.Comp_Name, 'Company') AS company_name,
         COALESCE(NULLIF(TRIM(c.Course_Name), ''), 'N/A') AS training_name,
-        COALESCE(NULLIF(TRIM(b.Batch_code), ''), '-') AS batch_code
+        COALESCE(NULLIF(TRIM(b.Batch_code), ''), '-') AS batch_code,
+        COUNT(DISTINCT CASE WHEN LOWER(TRIM(COALESCE(cc.Sended, ''))) = 'yes' THEN cc.Student_Id END) AS students_interested,
+        COUNT(DISTINCT CASE WHEN LOWER(TRIM(COALESCE(cc.Result, ''))) = 'yes' THEN cc.Student_Id END) AS students_attended,
+        COUNT(DISTINCT CASE WHEN LOWER(TRIM(COALESCE(cc.Placement, ''))) = 'yes' THEN cc.Student_Id END) AS students_placed
       FROM cv_shortlisted cv
+      INNER JOIN cvchild cc
+        ON cc.CV_Id = cv.id
+       AND (cc.IsDelete = 0 OR cc.IsDelete IS NULL)
+       AND (
+         LOWER(TRIM(COALESCE(cc.Sended, ''))) = 'yes'
+         OR LOWER(TRIM(COALESCE(cc.Result, ''))) = 'yes'
+         OR LOWER(TRIM(COALESCE(cc.Placement, ''))) = 'yes'
+       )
       LEFT JOIN consultant_mst cm ON cm.Const_Id = cv.Company_Id
       LEFT JOIN course_mst c ON c.Course_Id = cv.Course_id
       LEFT JOIN batch_mst b ON b.Batch_Id = cv.Batch_Id
       WHERE (cv.IsDelete = 0 OR cv.IsDelete IS NULL)
         AND DATE(cv.TDate) < CURDATE()
         AND LOWER(IFNULL(cv.CompanyName, '')) NOT LIKE '%mock%'
+      GROUP BY cv.id, cv.TDate, cv.CompanyName, cm.Comp_Name, c.Course_Name, b.Batch_code
       ORDER BY DATE(cv.TDate) DESC, cv.id DESC
       LIMIT 20
     `, []) : Promise.resolve([]),
 
-    needsPlacementDepartment ? safeQuery(pool, `
-      SELECT
-        j.Job_Id,
-        COALESCE(NULLIF(TRIM(j.Company_Name), ''), 'Company') AS company_name,
-        COALESCE(NULLIF(TRIM(j.Job_Title), ''), 'Position') AS designation,
-        COALESCE(NULLIF(TRIM(j.Location), ''), '-') AS location,
-        DATE_FORMAT(j.Application_Deadline, '%d-%m-%Y') AS application_deadline,
-        COALESCE(NULLIF(TRIM(j.Status), ''), 'Open') AS status,
-        (
-          SELECT COUNT(*)
-          FROM placement_applications a
-          WHERE a.Job_Id = j.Job_Id AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
-        ) AS total_applications
-      FROM placement_jobs j
-      WHERE (j.IsDelete = 0 OR j.IsDelete IS NULL)
-      ORDER BY j.Created_Date DESC
-      LIMIT 20
-    `, []) : Promise.resolve([]),
+    needsPlacementDepartment ? getPlacementDeputationOpenings(pool).catch(() => []) : Promise.resolve([]),
 
-    needsPlacementDepartment ? safeQuery(pool, `
-      SELECT
-        sv.Visit_Id,
-        DATE_FORMAT(IFNULL(sv.Visit_Date, sv.ConfirmDAte), '%d-%m-%Y') AS visit_date,
-        COALESCE(NULLIF(TRIM(sv.Region), ''), '-') AS region,
-        COALESCE(NULLIF(TRIM(sv.Location), ''), '-') AS location,
-        COALESCE(NULLIF(TRIM(sv.Course_Name), ''), 'N/A') AS training_name,
-        COALESCE(NULLIF(TRIM(b.Batch_code), ''), '-') AS batch_code
-      FROM site_visit_master sv
-      LEFT JOIN batch_mst b ON b.Batch_Id = sv.Batch_ID
-      WHERE (sv.IsDelete = 0 OR sv.IsDelete IS NULL)
-        AND DATE(IFNULL(sv.Visit_Date, sv.ConfirmDAte)) >= CURDATE()
-      ORDER BY DATE(IFNULL(sv.Visit_Date, sv.ConfirmDAte)) ASC, sv.Visit_Id DESC
-      LIMIT 20
-    `, []) : Promise.resolve([]),
+    needsPlacementDepartment ? getPlacementCompanyVisits(pool).catch(() => []) : Promise.resolve([]),
 
-    needsPlacementDepartment ? safeQuery(pool, `
-      SELECT
-        cbd.CompReqBatchId,
-        COALESCE(NULLIF(TRIM(cm.Comp_Name), ''), 'Company') AS company_name,
-        COALESCE(NULLIF(TRIM(cr.Profile), ''), 'Campus Drive') AS profile,
-        COALESCE(NULLIF(TRIM(c.Course_Name), ''), 'N/A') AS training_name,
-        COALESCE(NULLIF(TRIM(b.Batch_code), ''), '-') AS batch_code,
-        DATE_FORMAT(cr.PostedDate, '%d-%m-%Y') AS posted_date
-      FROM company_req_batch_details_apk cbd
-      INNER JOIN company_requirements_apk cr ON cr.CompReqId = cbd.CompanyReqId
-      LEFT JOIN consultant_mst cm ON cm.Const_Id = cr.CompanyId
-      LEFT JOIN course_mst c ON c.Course_Id = cr.CourseId
-      LEFT JOIN batch_mst b ON b.Batch_Id = cbd.BatchId
-      WHERE (cbd.IsDelete = 0 OR cbd.IsDelete IS NULL)
-        AND (cr.IsDelete = 0 OR cr.IsDelete IS NULL)
-        AND IFNULL(cr.IsActive, 1) = 1
-      ORDER BY cr.CompReqId DESC, cbd.CompReqBatchId DESC
-      LIMIT 20
-    `, []) : Promise.resolve([]),
+    needsPlacementDepartment ? getPlacementCampusInterviews(pool).catch(() => []) : Promise.resolve([]),
 
     needsPlacementDepartment ? safeQuery(pool, `
       SELECT
@@ -1368,12 +1359,14 @@ async function fetchDashboardData(dept?: string) {
   const upcomingBatchesFinal = upcomingBatches;
 
   // Merge placement data: batch rows + student aggregates + interview counts
-  const studentAggMap: Record<string, { cv_received: number; self_placement: number; placement_blocked: number }> = {};
+  const studentAggMap: Record<string, { cv_received: number; self_placement: number; placement_blocked: number; avg_salary: number; salary_count: number }> = {};
   for (const sa of placementStudentAgg as any[]) {
     studentAggMap[sa.Batch_Code] = {
       cv_received: Number(sa.cv_received) || 0,
       self_placement: Number(sa.self_placement) || 0,
       placement_blocked: Number(sa.placement_blocked) || 0,
+      avg_salary: Number(sa.avg_salary) || 0,
+      salary_count: Number(sa.salary_count) || 0,
     };
   }
 
@@ -1383,7 +1376,7 @@ async function fetchDashboardData(dept?: string) {
   }
 
   const placementRows = (placementBatchData as any[]).map((b: any) => {
-    const sa = studentAggMap[b.Batch_code] ?? { cv_received: 0, self_placement: 0, placement_blocked: 0 };
+    const sa = studentAggMap[b.Batch_code] ?? { cv_received: 0, self_placement: 0, placement_blocked: 0, avg_salary: 0, salary_count: 0 };
     const passed = Number(b.passed_student) || 0;
     const totalPlaced = Number(b.total_placed) || 0;
     const cvReceived = sa.cv_received;
@@ -1404,8 +1397,14 @@ async function fetchDashboardData(dept?: string) {
       others,
       totalInterviewed,
       totalPlaced,
+      avgSalary: Math.round(Number(sa.avg_salary) || 0),
+      salaryCount: Number(sa.salary_count) || 0,
       placedPct,
     };
+  }).sort((a: any, b: any) => {
+    const aTime = a.convocationDate ? new Date(a.convocationDate).getTime() : 0;
+    const bTime = b.convocationDate ? new Date(b.convocationDate).getTime() : 0;
+    return bTime - aTime;
   });
 
   const sourcePerformance = (sourcePerformanceRows as any[]).map((r: any) => {

@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
           WHERE (b.IsDelete IS NULL OR b.IsDelete = 0)
             AND (b.Cancel IS NULL OR b.Cancel = 0)
             AND b.StudentPassed1 > 0
-          ORDER BY b.ConvocationDate DESC
+          ORDER BY b.ConvocationDate IS NULL ASC, b.ConvocationDate DESC, b.Batch_Id DESC
           LIMIT 50
         `, []),
 
@@ -112,7 +112,22 @@ export async function GET(request: NextRequest) {
             SUM(CASE WHEN LOWER(IFNULL(Placement_Type,'')) IN ('permanent','temporary')
                  OR LOWER(IFNULL(Placement_Type,'')) LIKE '%permanent%'
                  OR LOWER(IFNULL(Placement_Type,'')) LIKE '%temporary%' THEN 1 ELSE 0 END) AS self_placement,
-            SUM(CASE WHEN Placement_Block = 'Yes' THEN 1 ELSE 0 END) AS placement_blocked
+            SUM(CASE WHEN Placement_Block = 'Yes' THEN 1 ELSE 0 END) AS placement_blocked,
+            AVG(CASE
+              WHEN LOWER(TRIM(IFNULL(Salary, ''))) IN ('', 'null', '-', 'no', 'fresh') THEN NULL
+              WHEN LOWER(TRIM(IFNULL(Salary, ''))) LIKE '%pm%' THEN NULLIF(CAST(REPLACE(LOWER(TRIM(Salary)), ',', '') AS DECIMAL(12,2)), 0) * 12
+              WHEN LOWER(TRIM(IFNULL(Salary, ''))) REGEXP 'lpa|lac' THEN NULLIF(CAST(REPLACE(LOWER(TRIM(Salary)), ',', '') AS DECIMAL(12,2)), 0) * 100000
+              WHEN LOWER(TRIM(IFNULL(Salary, ''))) REGEXP '^[0-9]+(\\.[0-9]+)?$' AND CAST(REPLACE(TRIM(Salary), ',', '') AS DECIMAL(12,2)) < 1000 THEN CAST(REPLACE(TRIM(Salary), ',', '') AS DECIMAL(12,2)) * 100000
+              WHEN LOWER(TRIM(IFNULL(Salary, ''))) REGEXP '^[0-9]+(\\.[0-9]+)?$' THEN NULLIF(CAST(REPLACE(TRIM(Salary), ',', '') AS DECIMAL(12,2)), 0)
+              ELSE NULL
+            END) AS avg_salary,
+            COUNT(CASE
+              WHEN LOWER(TRIM(IFNULL(Salary, ''))) IN ('', 'null', '-', 'no', 'fresh') THEN NULL
+              WHEN LOWER(TRIM(IFNULL(Salary, ''))) LIKE '%pm%' THEN NULLIF(CAST(REPLACE(LOWER(TRIM(Salary)), ',', '') AS DECIMAL(12,2)), 0)
+              WHEN LOWER(TRIM(IFNULL(Salary, ''))) REGEXP 'lpa|lac' THEN NULLIF(CAST(REPLACE(LOWER(TRIM(Salary)), ',', '') AS DECIMAL(12,2)), 0)
+              WHEN LOWER(TRIM(IFNULL(Salary, ''))) REGEXP '^[0-9]+(\\.[0-9]+)?$' THEN NULLIF(CAST(REPLACE(TRIM(Salary), ',', '') AS DECIMAL(12,2)), 0)
+              ELSE NULL
+            END) AS salary_count
           FROM student_master
           WHERE (IsDelete IS NULL OR IsDelete = 0)
           GROUP BY Batch_Code
@@ -128,12 +143,14 @@ export async function GET(request: NextRequest) {
       ]);
 
       // Merge placement data
-      const studentAggMap: Record<string, { cv_received: number; self_placement: number; placement_blocked: number }> = {};
+      const studentAggMap: Record<string, { cv_received: number; self_placement: number; placement_blocked: number; avg_salary: number; salary_count: number }> = {};
       for (const sa of placementStudentAgg as any[]) {
         studentAggMap[sa.Batch_Code] = {
           cv_received: Number(sa.cv_received) || 0,
           self_placement: Number(sa.self_placement) || 0,
           placement_blocked: Number(sa.placement_blocked) || 0,
+          avg_salary: Number(sa.avg_salary) || 0,
+          salary_count: Number(sa.salary_count) || 0,
         };
       }
 
@@ -143,7 +160,7 @@ export async function GET(request: NextRequest) {
       }
 
       const placementRows = (placementBatchData as any[]).map((b: any) => {
-        const sa = studentAggMap[b.Batch_code] ?? { cv_received: 0, self_placement: 0, placement_blocked: 0 };
+        const sa = studentAggMap[b.Batch_code] ?? { cv_received: 0, self_placement: 0, placement_blocked: 0, avg_salary: 0, salary_count: 0 };
         const passed = Number(b.passed_student) || 0;
         const totalPlaced = Number(b.total_placed) || 0;
         const cvReceived = sa.cv_received;
@@ -164,8 +181,14 @@ export async function GET(request: NextRequest) {
           others,
           totalInterviewed,
           totalPlaced,
+          avgSalary: Math.round(Number(sa.avg_salary) || 0),
+          salaryCount: Number(sa.salary_count) || 0,
           placedPct,
         };
+      }).sort((a: any, b: any) => {
+        const aTime = a.convocationDate ? new Date(a.convocationDate).getTime() : 0;
+        const bTime = b.convocationDate ? new Date(b.convocationDate).getTime() : 0;
+        return bTime - aTime;
       });
 
       // Build sparkline map
