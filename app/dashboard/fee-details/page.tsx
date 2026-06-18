@@ -211,6 +211,7 @@ export default function FeeDetailsPage() {
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-medium">{r.Student_Name || ''}</span>
                         <span className="font-mono text-[10px] text-slate-400">#{r.Student_Id}</span>
+                        {r.Batch_code && <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-600">{r.Batch_code}</span>}
                         <StatusTag row={r} />
                       </div>
                     </td>

@@ -155,7 +155,7 @@ export async function GET(req: NextRequest) {
       // Fees_Full_Payment, so batches that store the fee elsewhere don't show 0.
       `SELECT
          sm.Student_Id, sm.Student_Name, sm.Present_Mobile, sm.Email,
-         cm.Course_Name, bm.Batch_code, bm.Batch_Id,
+         cm.Course_Name, COALESCE(bm.Batch_code, sm.Batch_Code) AS Batch_code, bm.Batch_Id,
          COALESCE(
            NULLIF(CAST(REPLACE(IFNULL(fs.actualfees, ''), ',', '') AS DECIMAL(15,2)), 0),
            NULLIF(CAST(REPLACE(IFNULL(fs.fullfees, ''), ',', '') AS DECIMAL(15,2)), 0),

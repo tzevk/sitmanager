@@ -214,7 +214,7 @@ export default function AddFeeDetailsPage() {
         Cheque_No: needsTransactionNo ? chequeNo.trim() : null,
         Transaction_No: needsTransactionNo ? chequeNo.trim() : null,
         PaymentId: needsTransactionNo ? chequeNo.trim() : null,
-        Cheque_Date: ['Cheque', 'DD', 'PDC'].includes(paymentType) ? chequeDate || null : null,
+        Cheque_Date: chequeDate || null,
         Cheque_Branch: ['Cheque', 'DD', 'PDC'].includes(paymentType) ? branch || null : null,
         Amount: amount,
         Particular: particular,
@@ -520,7 +520,7 @@ export default function AddFeeDetailsPage() {
               </div>
               <div className="flex flex-col gap-1">
                 <label className={lbl}>Cheque Date</label>
-                <input type="date" className={ctrl} value={chequeDate} onChange={e => setChequeDate(e.target.value)} disabled={!studentId || !showChequeFields} />
+                <input type="date" className={ctrl} value={chequeDate} onChange={e => setChequeDate(e.target.value)} />
               </div>
               <div className="flex flex-col gap-1">
                 <label className={lbl}>Branch</label>

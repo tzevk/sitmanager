@@ -173,7 +173,7 @@ export default function FeeDetailsEditPage() {
         Cheque_No: needsTransactionNo ? chequeNo.trim() : null,
         Transaction_No: needsTransactionNo ? chequeNo.trim() : null,
         PaymentId: needsTransactionNo ? chequeNo.trim() : null,
-        Cheque_Date: isChequePayment ? chequeDate : null,
+        Cheque_Date: chequeDate || null,
         Cheque_Branch: isChequePayment ? branch : null,
         Amount: amount,
         Particular: particular,
@@ -571,7 +571,7 @@ ${copy('Student Copy')}
               </div>
               <div className="flex flex-col gap-1">
                 <label className={label}>Cheque Date</label>
-                <input type="date" className={ctrl} value={chequeDate} onChange={(e) => setChequeDate(e.target.value)} disabled={!showChequeFields} />
+                <input type="date" className={ctrl} value={chequeDate} onChange={(e) => setChequeDate(e.target.value)} />
               </div>
               <div className="flex flex-col gap-1">
                 <label className={label}>Branch</label>
