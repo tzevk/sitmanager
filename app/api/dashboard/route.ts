@@ -811,24 +811,26 @@ async function fetchDashboardData(dept?: string) {
     needsPendingFees ? safeQuery(pool, `
       SELECT
         am.Admission_Id AS id,
+        sm.Student_Id AS student_id,
         sm.Student_Name AS student_name,
         GREATEST(
-          CAST(IFNULL(am.Fees, 0) AS DECIMAL(15,2)) - IFNULL(paid.total_paid, 0),
+          CAST(REPLACE(IFNULL(am.Fees, 0), ',', '') AS DECIMAL(15,2)) - IFNULL(paid.total_paid, 0),
           0
         ) AS amount
       FROM admission_master am
-      LEFT JOIN student_master sm ON sm.Student_Id = am.Student_Id
+      LEFT JOIN student_master sm ON sm.Student_Id = am.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
       LEFT JOIN (
-        SELECT Admission_Id, SUM(IFNULL(Total_Amt, 0)) AS total_paid
+        SELECT Student_Id, SUM(IFNULL(Total_Amt, 0)) AS total_paid
         FROM s_fees_mst
         WHERE (IsDelete IS NULL OR IsDelete = 0)
-          AND Date_Added >= DATE_SUB(CURDATE(), INTERVAL 3 YEAR)
-        GROUP BY Admission_Id
-      ) paid ON paid.Admission_Id = am.Admission_Id
+          AND TypeR = 'C'
+        GROUP BY Student_Id
+      ) paid ON paid.Student_Id = am.Student_Id
       WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
+        AND sm.Student_Id IS NOT NULL
         AND am.Admission_Date >= DATE_SUB(CURDATE(), INTERVAL 3 YEAR)
         AND (am.Cancel IS NULL OR LOWER(TRIM(CAST(am.Cancel AS CHAR))) IN ('no', '0', 'false', ''))
-        AND CAST(IFNULL(am.Fees, 0) AS DECIMAL(15,2)) > IFNULL(paid.total_paid, 0)
+        AND CAST(REPLACE(IFNULL(am.Fees, 0), ',', '') AS DECIMAL(15,2)) > IFNULL(paid.total_paid, 0)
       ORDER BY amount DESC
       LIMIT 30
     `, []) : Promise.resolve([]),

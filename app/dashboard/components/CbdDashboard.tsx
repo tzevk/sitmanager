@@ -328,6 +328,43 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
     { label: 'Converted',       value: activeFunnel.converted,  pct: activeFunnel.total ? activeFunnel.converted  / activeFunnel.total * 100 : null,  color: '#D97706', bg: 'bg-amber-50/70'   },
   ];
 
+  const pendingFeesCard = (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <CardHeader
+        title="Pending Fees"
+        accent="#DC2626"
+        icon={Icons.wallet}
+        count={loading ? undefined : pendingFees.length}
+      />
+      <div className="max-h-64 overflow-y-auto">
+        {loading ? (
+          <div className="p-4 space-y-2">
+            {[...Array(4)].map((_, i) => <div key={i} className="h-12 rounded-lg bg-gray-100 animate-pulse" />)}
+          </div>
+        ) : pendingFees.length === 0 ? (
+          <Empty text="No pending fees" />
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {pendingFees.map((f: any, i: number) => (
+              <div key={`${f.id || f.student_id || i}`} className="flex items-center justify-between gap-3 px-4 py-2 hover:bg-gray-50/50">
+                <span className="text-sm text-gray-700 truncate min-w-0">
+                  {f.student_name || f.name || 'Student'}
+                </span>
+                <span className={`text-sm font-bold tabular-nums px-2 py-0.5 rounded-md whitespace-nowrap ${
+                  Number(f.amount) >= 20000 ? 'bg-red-100 text-red-700' :
+                  Number(f.amount) >= 10000 ? 'bg-orange-100 text-orange-700' :
+                                              'bg-rose-50 text-rose-600'
+                }`}>
+                  {f.amount ? `₹ ${Number(f.amount).toLocaleString('en-IN')}` : '—'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-3 pb-4 rounded-2xl bg-gradient-to-br from-indigo-50/60 via-blue-50/40 to-purple-50/30 p-2">
 
@@ -419,7 +456,10 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
         )}
       </div>
 
-      {/* ②  Upcoming Batches (next 3 months) */}
+      {/* ②  Pending Fees */}
+      {pendingFeesCard}
+
+      {/* ③  Upcoming Batches (next 3 months) */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <CardHeader
           title="Upcoming Batches (next 3 months)"
@@ -765,45 +805,8 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
         </div>
       </div>
 
-      {/* ⑥  Pending Fees · Alumni Registration Progress */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-
-        {/* Pending Fees */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <CardHeader
-            title="Pending Fees"
-            accent="#DC2626"
-            icon={Icons.wallet}
-            count={loading ? undefined : pendingFees.length}
-          />
-          <div className="max-h-64 overflow-y-auto">
-            {loading ? (
-              <div className="p-4 space-y-2">
-                {[...Array(4)].map((_, i) => <div key={i} className="h-12 rounded-lg bg-gray-100 animate-pulse" />)}
-              </div>
-            ) : pendingFees.length === 0 ? (
-              <Empty text="No pending fees" />
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {pendingFees.map((f: any, i: number) => (
-                  <div key={`${f.id || i}`} className="flex items-center justify-between px-4 py-2 hover:bg-gray-50/50">
-                    <span className="text-sm text-gray-700 truncate max-w-[55%]">
-                      {f.student_name || f.name || 'Student'}
-                    </span>
-                    <span className={`text-sm font-bold tabular-nums px-2 py-0.5 rounded-md ${
-                      Number(f.amount) >= 20000 ? 'bg-red-100 text-red-700' :
-                      Number(f.amount) >= 10000 ? 'bg-orange-100 text-orange-700' :
-                                                  'bg-rose-50 text-rose-600'
-                    }`}>
-                      {f.amount ? `₹ ${Number(f.amount).toLocaleString('en-IN')}` : '—'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
+      {/* ⑥  Alumni Registration Progress */}
+      <div className="grid grid-cols-1 gap-3">
         {/* Alumni Registration Progress */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <CardHeader
