@@ -177,6 +177,30 @@ export interface InquiryRow {
 
 export interface StatusOption { id: number; label: string }
 
+export const ALLOWED_INQUIRY_STATUSES: StatusOption[] = [
+  { id: 1, label: 'New' },
+  { id: 2, label: 'Contacted (not recieved call)' },
+  { id: 3, label: 'Contacted (interested)' },
+  { id: 4, label: 'Contacted (next batch)' },
+  { id: 5, label: 'Contacted - eligible' },
+  { id: 6, label: 'Irrelevant' },
+  { id: 7, label: 'Follow up pending' },
+  { id: 8, label: 'Admission confirmed' },
+  { id: 9, label: 'Lost lead' },
+];
+
+const ALLOWED_INQUIRY_STATUS_IDS = new Set(ALLOWED_INQUIRY_STATUSES.map((status) => status.id));
+
+function requireAllowedInquiryStatus(value: unknown): number {
+  const statusId = Number(value);
+  if (!Number.isInteger(statusId) || !ALLOWED_INQUIRY_STATUS_IDS.has(statusId)) {
+    const error = new Error('Status is required');
+    (error as { status?: number }).status = 400;
+    throw error;
+  }
+  return statusId;
+}
+
 export interface InquiryListResult {
   rows: InquiryRow[];
   pagination: { page: number; limit: number; total: number; totalPages: number };
@@ -305,7 +329,7 @@ function buildFallbackFilterOptions(): InquiryFilterOptions {
     disciplines: [],
     inquiryTypes: [],
     trainings: [],
-    statusOptions: Object.entries(FALLBACK_STATUSES).map(([id, label]) => ({ id: Number(id), label })),
+    statusOptions: ALLOWED_INQUIRY_STATUSES,
   };
 }
 
@@ -486,15 +510,6 @@ const DEFAULT_PRIMARY_INQUIRY_MOBILE_EXPR =
 const DEFAULT_SEARCHABLE_INQUIRY_MOBILE_EXPR =
   `COALESCE(${DEFAULT_PRIMARY_INQUIRY_MOBILE_EXPR}, NULLIF(TRIM(si.Present_Mobile2),''))`;
 
-const FALLBACK_STATUSES: Record<number, string> = {
-  1: 'New', 2: 'Contacted', 3: 'Inquiry', 4: 'Follow Up', 5: 'Interested',
-  6: 'Not Interested', 7: 'Admitted', 8: 'Closed', 9: 'DNC', 10: 'Converted',
-  12: 'Pending', 15: 'Callback', 16: 'Visited', 18: 'On Hold', 19: 'Lost',
-  24: 'Hot Lead', 25: 'Warm Lead', 26: 'Cold Lead', 27: 'Enrolled',
-  29: 'Dropped', 33: 'Archived', 34: 'Duplicate Entry', 35: 'Next Batch',
-  36: 'Not Eligible',
-};
-
 function normalizeInquiryMobile(value: unknown): string | null {
   const text = String(value ?? '').trim();
   if (!text) return null;
@@ -604,17 +619,8 @@ async function resolveInquiryMobileExpressions(
 }
 
 async function loadStatusOptions(pool: ReturnType<typeof getPool>): Promise<StatusOption[]> {
-  try {
-    const [rows] = await pool.query(
-      `SELECT Status_id as id, Status as label FROM awt_status
-       WHERE (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Status_id`
-    );
-    const options = (rows as any[])
-      .map((r: any) => ({ id: Number(r.id), label: String(r.label ?? '').trim() }))
-      .filter((s) => Number.isFinite(s.id) && s.id > 0 && s.label.length > 0);
-    if (options.length) return options;
-  } catch { /* fallback below */ }
-  return Object.entries(FALLBACK_STATUSES).map(([id, label]) => ({ id: +id, label }));
+  void pool;
+  return ALLOWED_INQUIRY_STATUSES;
 }
 
 async function loadInquiryFilterOptions(
@@ -665,6 +671,7 @@ async function loadInquiryFilterOptions(
 
 export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Promise<number> {
   if (!data.Student_Name?.trim()) throw new Error('Name is required');
+  const statusId = requireAllowedInquiryStatus(data.Status_id);
 
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
@@ -687,7 +694,7 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
       data.Nationality ?? null,
       data.Present_Country ?? null,
       data.Discussion?.trim() ?? null,
-      data.Status_id ?? 1,
+      statusId,
       data.Inquiry_Dt ?? new Date().toISOString().slice(0, 10),
       data.Inquiry_From ?? null,
       data.Inquiry_Type ?? null,
@@ -1269,6 +1276,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
 
 export async function updateInquiry(id: number, data: UpdateInquiryInput, createdBy = 1): Promise<void> {
   if (!data.Student_Name?.trim()) throw new Error('Name is required');
+  const statusId = requireAllowedInquiryStatus(data.Status_id);
 
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
@@ -1292,7 +1300,7 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
       data.Nationality ?? null,
       data.Present_Country ?? null,
       data.Discussion?.trim() ?? null,
-      data.Status_id ?? 1,
+      statusId,
       data.Inquiry_Dt ?? null,
       data.Inquiry_From ?? null,
       data.Inquiry_Type ?? null,

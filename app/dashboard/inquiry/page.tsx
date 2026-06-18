@@ -57,50 +57,45 @@ interface Filters { disciplines: string[]; inquiryTypes: string[]; trainings: st
 function hasLatestFollowUp(r: InquiryRow) { return Boolean(r.Discussion && r.Discussion !== 'NULL' && r.Discussion.trim()); }
 function hasScheduledFollowUp(r: InquiryRow) { return Boolean(r.NextFollowUpDate); }
 function isPendingFollowUp(r: InquiryRow) {
-  if (r.Status_id != null && [4, 12, 15].includes(r.Status_id)) return true;
+  if (r.Status_id === 7) return true;
   const l = String(r.StatusLabel || '').toLowerCase();
-  return l.includes('follow up') || l.includes('pending') || l.includes('callback');
+  return l.includes('follow up pending');
 }
 
 function statusPill(id: number | null, label: string) {
   if (id != null) {
-    if ([7,10,27].includes(id)) return 'bg-emerald-100 text-emerald-700';
-    if ([1,2,3].includes(id)) return 'bg-blue-100 text-blue-700';
-    if ([5,24].includes(id)) return 'bg-orange-100 text-orange-700';
-    if ([4,15,25].includes(id)) return 'bg-amber-100 text-amber-700';
-    if ([6,9,19,29,34].includes(id)) return 'bg-red-100 text-red-600';
-    if ([8,33].includes(id)) return 'bg-gray-100 text-gray-500';
-    if ([35].includes(id)) return 'bg-indigo-100 text-indigo-700';
-    if ([12,16].includes(id)) return 'bg-purple-100 text-purple-700';
-    if ([18,26].includes(id)) return 'bg-slate-100 text-slate-500';
+    if (id === 8) return 'bg-emerald-100 text-emerald-700';
+    if ([1,2].includes(id)) return 'bg-blue-100 text-blue-700';
+    if ([3,5].includes(id)) return 'bg-orange-100 text-orange-700';
+    if (id === 7) return 'bg-amber-100 text-amber-700';
+    if ([6,9].includes(id)) return 'bg-red-100 text-red-600';
+    if (id === 4) return 'bg-indigo-100 text-indigo-700';
   }
   const l = label.toLowerCase();
-  if (['admitted','converted','enrolled'].includes(l)) return 'bg-emerald-100 text-emerald-700';
-  if (['inquiry','new','contacted'].includes(l)) return 'bg-blue-100 text-blue-700';
-  if (['hot lead','interested'].includes(l)) return 'bg-orange-100 text-orange-700';
-  if (['warm lead','follow up','callback'].includes(l)) return 'bg-amber-100 text-amber-700';
-  if (['not interested','lost','dropped','dnc'].includes(l)) return 'bg-red-100 text-red-600';
-  if (['visited','pending'].includes(l)) return 'bg-purple-100 text-purple-700';
+  if (l.includes('admission confirmed')) return 'bg-emerald-100 text-emerald-700';
+  if (l === 'new' || l.includes('not recieved call')) return 'bg-blue-100 text-blue-700';
+  if (l.includes('interested') || l.includes('eligible')) return 'bg-orange-100 text-orange-700';
+  if (l.includes('follow up pending')) return 'bg-amber-100 text-amber-700';
+  if (l.includes('irrelevant') || l.includes('lost lead')) return 'bg-red-100 text-red-600';
+  if (l.includes('next batch')) return 'bg-indigo-100 text-indigo-700';
   return 'bg-gray-100 text-gray-500';
 }
 
 function statusBar(id: number | null, label: string) {
   if (id != null) {
-    if ([7,10,27].includes(id)) return 'bg-emerald-400';
-    if ([1,2,3].includes(id)) return 'bg-blue-400';
-    if ([5,24].includes(id)) return 'bg-orange-400';
-    if ([4,15,25].includes(id)) return 'bg-amber-400';
-    if ([6,9,19,29,34].includes(id)) return 'bg-red-400';
-    if ([35].includes(id)) return 'bg-indigo-400';
-    if ([12,16].includes(id)) return 'bg-purple-400';
-    if ([18,26].includes(id)) return 'bg-slate-400';
+    if (id === 8) return 'bg-emerald-400';
+    if ([1,2].includes(id)) return 'bg-blue-400';
+    if ([3,5].includes(id)) return 'bg-orange-400';
+    if (id === 7) return 'bg-amber-400';
+    if ([6,9].includes(id)) return 'bg-red-400';
+    if (id === 4) return 'bg-indigo-400';
   }
   const l = label.toLowerCase();
-  if (['admitted','converted','enrolled'].includes(l)) return 'bg-emerald-400';
-  if (['hot lead','interested'].includes(l)) return 'bg-orange-400';
-  if (['warm lead','follow up','callback'].includes(l)) return 'bg-amber-400';
-  if (['not interested','lost','dropped','dnc'].includes(l)) return 'bg-red-400';
-  if (['visited','pending'].includes(l)) return 'bg-purple-400';
+  if (l.includes('admission confirmed')) return 'bg-emerald-400';
+  if (l.includes('interested') || l.includes('eligible')) return 'bg-orange-400';
+  if (l.includes('follow up pending')) return 'bg-amber-400';
+  if (l.includes('irrelevant') || l.includes('lost lead')) return 'bg-red-400';
+  if (l.includes('next batch')) return 'bg-indigo-400';
   return 'bg-slate-300';
 }
 
@@ -131,7 +126,18 @@ export default function InquiryPage() {
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [rowTags, setRowTags] = useState<Record<number, Set<string>>>({});
   const abortRef = useRef<AbortController | null>(null);
+
+  const toggleRowTag = (studentId: number, tag: string) => {
+    setRowTags(prev => {
+      const next = new Set(prev[studentId] ?? []);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return { ...prev, [studentId]: next };
+    });
+  };
+
   const fetchData = useCallback(async () => {
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -316,7 +322,6 @@ export default function InquiryPage() {
     return () => { cancelled = true; };
   }, [fetchTrigger, overdueExpanded, overdueLoadedForTrigger]);
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const followUps = rows.filter(hasScheduledFollowUp);
 
   return (
@@ -537,27 +542,50 @@ export default function InquiryPage() {
                 const secondarySource = r.Inquiry_From && r.Inquiry_Type && r.Inquiry_From !== r.Inquiry_Type
                   ? r.Inquiry_Type
                   : null;
+                const selectedTags = rowTags[r.Student_Id] ?? new Set<string>();
+                const tagButtons = [
+                  {
+                    key: 'call',
+                    label: 'Call',
+                    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h2.28a1 1 0 01.95.68l1.03 3.09a1 1 0 01-.5 1.2l-1.52.76a11.04 11.04 0 005.52 5.52l.76-1.52a1 1 0 011.2-.5l3.09 1.03a1 1 0 01.68.95V19a2 2 0 01-2 2h-1C8.82 21 3 15.18 3 8V5z" />,
+                  },
+                  {
+                    key: 'mail',
+                    label: 'Mail',
+                    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />,
+                  },
+                  {
+                    key: 'whatsapp',
+                    label: 'WhatsApp',
+                    icon: <><path strokeLinecap="round" strokeLinejoin="round" d="M8.6 13.4c1.6 1.6 3.2 2.4 4 2.1.5-.2.9-.8 1.1-1.3.1-.3 0-.6-.3-.8l-1.1-.7a.8.8 0 00-.9.1l-.5.5c-.9-.5-1.6-1.2-2.1-2.1l.5-.5a.8.8 0 00.1-.9l-.7-1.1a.8.8 0 00-.8-.3c-.5.2-1.1.6-1.3 1.1-.3.8.5 2.4 2 3.9z" /><path strokeLinecap="round" strokeLinejoin="round" d="M20 11.5a8 8 0 01-11.9 7L4 20l1.5-4.1A8 8 0 1120 11.5z" /></>,
+                  },
+                  {
+                    key: 'personal-inquiry',
+                    label: 'Personal Inquiry',
+                    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M5.121 17.804A9 9 0 1118.88 17.8M15 11a3 3 0 11-6 0 3 3 0 016 0z" />,
+                  },
+                ];
                 return (
                   <tr key={r.Student_Id} className={`border-b border-slate-100 transition-colors ${colorCls} ${sourceRowCls}`}>
-                    <td className="py-1.5 px-3 font-semibold font-mono tabular-nums relative pl-5">
+                    <td className="py-1 px-2 font-semibold font-mono tabular-nums relative pl-4">
                       <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${statusBar(r.Status_id, r.StatusLabel)} rounded-r`} />
                       {(pagination.page - 1) * pagination.limit + i + 1}
                     </td>
-                    <td className="py-1.5 px-3 font-semibold max-w-[160px]">
+                    <td className="py-1 px-2 font-semibold max-w-[140px]">
                       <span className="truncate block">{formatName(r.Student_Name)}</span>
                     </td>
-                    <td className="py-1.5 px-3 max-w-[140px]">
+                    <td className="py-1 px-2 max-w-[120px]">
                       <span className="truncate block text-red-600">{r.CourseName || '—'}</span>
                     </td>
-                    <td className="py-1.5 px-3 whitespace-nowrap font-mono">{r.Present_Mobile || '—'}</td>
-                    <td className="py-1.5 px-3 max-w-[160px]">
+                    <td className="py-1 px-2 whitespace-nowrap font-mono">{r.Present_Mobile || '—'}</td>
+                    <td className="py-1 px-2 max-w-[140px]">
                       <span className="truncate block">{r.Email || '—'}</span>
                     </td>
-                    <td className="py-1.5 px-3 whitespace-nowrap">
+                    <td className="py-1 px-2 whitespace-nowrap">
                       {r.Discipline && r.Discipline !== 'NULL' && r.Discipline !== 'Select' ? r.Discipline : '—'}
                     </td>
-                    <td className="py-1.5 px-3 min-w-[220px]">
-                      <div className="flex flex-col gap-1">
+                    <td className="py-1 px-2 min-w-[190px]">
+                      <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-2 whitespace-nowrap">
                           <span className="font-semibold">{primarySource}</span>
                           {r.IsMetaAdConverted && (
@@ -589,8 +617,8 @@ export default function InquiryPage() {
                         )}
                       </div>
                     </td>
-                    <td className="py-1.5 px-3 whitespace-nowrap">{formatDate(r.Inquiry_Dt)}</td>
-                    <td className="py-1.5 px-3 max-w-[220px]">
+                    <td className="py-1 px-2 whitespace-nowrap">{formatDate(r.Inquiry_Dt)}</td>
+                    <td className="py-1 px-2 max-w-[190px]">
                       {(() => {
                         const raw = (r.Discussion || '').trim();
                         if (!raw || raw === 'NULL') return <span className="text-slate-300">—</span>;
@@ -612,13 +640,33 @@ export default function InquiryPage() {
                         );
                       })()}
                     </td>
-                    <td className="py-1.5 px-3 text-center">
+                    <td className="py-1 px-2 text-center">
                       <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(r.Status_id, r.StatusLabel)}`}>
                         {r.StatusLabel}
                       </span>
                     </td>
-                    <td className="py-1.5 px-3">
-                      <div className="flex items-center justify-center gap-0.5">
+                    <td className="py-1 px-2">
+                      <div className="flex items-center justify-center gap-0.5 flex-wrap min-w-[150px]">
+                        {tagButtons.map(tag => {
+                          const checked = selectedTags.has(tag.key);
+                          return (
+                            <button
+                              key={tag.key}
+                              type="button"
+                              title={tag.label}
+                              aria-label={tag.label}
+                              aria-pressed={checked}
+                              onClick={() => toggleRowTag(r.Student_Id, tag.key)}
+                              className={`inline-flex h-6 w-6 items-center justify-center rounded border transition-colors ${checked ? 'border-[#2E3093]/40 bg-[#2E3093]/10 text-[#2E3093]' : 'border-slate-200 text-slate-400 hover:bg-blue-50 hover:text-[#2A6BB5]'}`}
+                            >
+                              {checked ? (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">{tag.icon}</svg>
+                              )}
+                            </button>
+                          );
+                        })}
                         <button
                           title="View"
                           onClick={() => {

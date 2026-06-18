@@ -62,6 +62,7 @@ function fmtDate(value?: string | Date | null): string {
 
 const ctrl = 'w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 const lbl  = 'block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5';
+const ALLOWED_STATUS_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
 export default function AddInquiryPage() {
   const router = useRouter();
@@ -80,7 +81,6 @@ export default function AddInquiryPage() {
     router.push('/dashboard/inquiry');
   }, [router, returnToParam]);
 
-  const [activeTab, setActiveTab] = useState<'personal' | 'discussion'>('personal');
   const [opts, setOpts] = useState<FormOptions | null>(null);
   const [batches, setBatches] = useState<Batch[]>([]);
 
@@ -140,7 +140,7 @@ export default function AddInquiryPage() {
       setNationality(d.Nationality || '');
       setCountry(d.Present_Country || '');
       setNotes(d.Discussion || '');
-      setStatusId(d.Status_id ?? 1);
+      setStatusId(ALLOWED_STATUS_IDS.has(Number(d.Status_id)) ? Number(d.Status_id) : 1);
       setInquiryDate(d.Inquiry_Dt ? String(d.Inquiry_Dt).slice(0,10) : today());
       setInquiryMode(d.Inquiry_From || '');
       setInquiryType(d.Inquiry_Type || '');
@@ -179,6 +179,7 @@ export default function AddInquiryPage() {
 
   const handleSave = async () => {
     if (!name.trim()) { setError('Name is required'); return; }
+    if (!Number.isInteger(statusId) || statusId <= 0) { setError('Status is required'); return; }
     setError(''); setSaving(true);
     try {
       const res = await fetch('/api/inquiry', {
@@ -314,26 +315,7 @@ export default function AddInquiryPage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-slate-200 bg-white rounded-t-xl">
-        {(['personal', 'discussion'] as const).map(tab => (
-          <button key={tab}
-            onClick={() => { if (tab === 'discussion' && !editId) return; setActiveTab(tab); }}
-            className={`flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold border-b-2 -mb-px transition-colors ${
-              activeTab === tab ? 'border-[#2E3093] text-[#2E3093]' : 'border-transparent text-slate-400 hover:text-slate-600'
-            } ${tab === 'discussion' && !editId ? 'opacity-40 cursor-not-allowed' : ''}`}
-          >
-            {tab === 'personal' ? 'Personal Details' : 'Discussion'}
-            {tab === 'discussion' && discussions.length > 0 && (
-              <span className="bg-[#2E3093] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">{discussions.length}</span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* ===== Personal Tab ===== */}
-      {activeTab === 'personal' && (
-        <div className="bg-white rounded-b-xl border border-slate-200 border-t-0 px-4 py-3">
+      <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
           <div className="grid grid-cols-4 gap-x-3 gap-y-2">
 
             {/* Personal */}
@@ -447,120 +429,93 @@ export default function AddInquiryPage() {
               <input type="number" step="0.01" min="0" max="100" value={percentage} onChange={e => setPercentage(e.target.value)} placeholder="e.g. 85.50" className={ctrl} />
             </div>
             <div>
-              <label className={lbl}>Status</label>
-              <select value={statusId} onChange={e => setStatusId(parseInt(e.target.value))} className={ctrl}>
+              <label className={lbl}>Status <span className="text-red-400 normal-case">*</span></label>
+              <select value={statusId} onChange={e => setStatusId(parseInt(e.target.value))} className={ctrl} required>
                 {opts?.statuses?.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
               </select>
             </div>
           </div>
         </div>
-      )}
 
-      {/* ===== Discussion Tab ===== */}
-      {activeTab === 'discussion' && (
-        <div className="flex flex-col gap-1.5">
-          {!editId ? (
-            <div className="bg-white rounded-xl border border-slate-200 flex items-center justify-center py-10 text-center px-6">
-              <p className="text-xs font-bold text-slate-500">Save the inquiry first to add discussions.</p>
-            </div>
-          ) : (
-            <>
-              <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
-                <div className="grid grid-cols-4 gap-x-3 gap-y-2">
-                  <div>
-                    <label className={lbl}>Next Follow-Up Date</label>
-                    <input type="date" value={newNextDate} onChange={e => setNewNextDate(e.target.value)} className={ctrl} />
-                  </div>
-                  <div className="col-span-3">
-                    <label className={lbl}>Discussion Notes</label>
-                    <textarea value={newDiscussion} onChange={e => setNewDiscussion(e.target.value)} placeholder="Discussion notes…" rows={1} className={`${ctrl} resize-none`} />
-                  </div>
-                </div>
-                <button onClick={handleAddDiscussion} disabled={discLoading || !newDiscussion.trim() || !newNextDate}
-                  className="mt-2 flex items-center gap-1 bg-[#2E3093] text-white px-3 py-1 rounded-lg text-xs font-bold transition-colors disabled:opacity-50">
-                  {discLoading
-                    ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    : <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>}
-                  Add
-                </button>
-              </div>
-
-              <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">History</span>
-                  <span className="text-[10px] text-slate-400">{discussions.length}</span>
-                </div>
-                {discussions.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-3 text-center">No discussions yet.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {discussions.map((d, i) => (
-                      <div key={d.id} className="flex gap-3">
-                        <div className="flex flex-col items-center pt-1.5">
-                          <div className="w-2 h-2 rounded-full bg-[#2E3093] shrink-0" />
-                          {i < discussions.length - 1 && <div className="w-px flex-1 bg-slate-200 mt-1" />}
-                        </div>
-                        <div className="flex-1 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100 mb-1">
-                          {editingDiscId === d.id ? (
-                            <div className="space-y-2">
-                              <textarea
-                                value={editingDiscText}
-                                onChange={(e) => setEditingDiscText(e.target.value)}
-                                rows={3}
-                                className="w-full text-xs border border-slate-300 rounded-md p-2 resize-none focus:outline-none focus:ring-2 focus:ring-[#2E3093]"
-                              />
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => handleSaveEditDisc(d.id)}
-                                  className="px-2.5 py-1 text-[10px] font-semibold bg-[#2E3093] text-white rounded hover:bg-[#252780] transition-colors"
-                                >Save</button>
-                                <button
-                                  onClick={() => { setEditingDiscId(null); setEditingDiscText(''); }}
-                                  className="px-2.5 py-1 text-[10px] font-semibold bg-white text-slate-600 border border-slate-300 rounded hover:bg-slate-50 transition-colors"
-                                >Cancel</button>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <div className="flex items-start justify-between gap-2">
-                                <p className="text-xs text-slate-800 flex-1">{d.discussion}</p>
-                                <div className="flex items-center gap-0.5 shrink-0">
-                                  <button
-                                    onClick={() => { setEditingDiscId(d.id); setEditingDiscText(d.discussion); }}
-                                    title="Edit"
-                                    className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-[#2E3093] transition-colors"
-                                  >
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 0l.172.172a2 2 0 010 2.828L12 16H9v-3z" />
-                                    </svg>
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteDisc(d.id)}
-                                    title="Delete"
-                                    className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-red-500 transition-colors"
-                                  >
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="flex gap-4 mt-1">
-                                <span className="text-[10px] text-slate-400">Date: <span className="text-slate-600 font-medium">{fmtDate(d.date)}</span></span>
-                                <span className="text-[10px] text-slate-400">Follow-up: <span className="text-[#2E3093] font-medium">{fmtDate(d.nextdate)}</span></span>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+      <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Follow-up Discussion</span>
+          <span className="text-[10px] text-slate-400">{editId ? discussions.length : 0}</span>
         </div>
-      )}
+        {!editId ? (
+          <p className="text-xs text-slate-400 py-3 text-center">Save the inquiry first to add follow-up discussions.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border border-slate-100 rounded-lg overflow-hidden">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wider text-[#2A6BB5]/60 bg-zinc-50 border-b border-zinc-200">
+                  <th className="text-left py-2 px-3 font-bold">Current Date</th>
+                  <th className="text-left py-2 px-3 font-bold">Next Follow-Up Date</th>
+                  <th className="text-left py-2 px-3 font-bold">Follow-Up Discussion</th>
+                  <th className="text-center py-2 px-3 font-bold">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-slate-100 bg-slate-50/60">
+                  <td className="py-2 px-3 whitespace-nowrap font-semibold text-slate-500">{fmtDate(today())}</td>
+                  <td className="py-2 px-3 min-w-[160px]">
+                    <input type="date" value={newNextDate} onChange={e => setNewNextDate(e.target.value)} className={ctrl} />
+                  </td>
+                  <td className="py-2 px-3 min-w-[280px]">
+                    <textarea value={newDiscussion} onChange={e => setNewDiscussion(e.target.value)} placeholder="Follow-up discussion…" rows={1} className={`${ctrl} resize-none`} />
+                  </td>
+                  <td className="py-2 px-3 text-center">
+                    <button onClick={handleAddDiscussion} disabled={discLoading || !newDiscussion.trim() || !newNextDate}
+                      className="inline-flex items-center gap-1 bg-[#2E3093] text-white px-3 py-1 rounded-lg text-xs font-bold transition-colors disabled:opacity-50">
+                      {discLoading
+                        ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        : <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>}
+                      Add
+                    </button>
+                  </td>
+                </tr>
+                {discussions.length === 0 ? (
+                  <tr><td colSpan={4} className="py-6 text-center text-xs text-slate-400">No discussions yet.</td></tr>
+                ) : discussions.map((d) => (
+                  <tr key={d.id} className="border-b border-slate-100 last:border-b-0">
+                    <td className="py-2 px-3 whitespace-nowrap text-slate-600">{fmtDate(d.date)}</td>
+                    <td className="py-2 px-3 whitespace-nowrap text-[#2E3093] font-medium">{fmtDate(d.nextdate)}</td>
+                    <td className="py-2 px-3 min-w-[280px]">
+                      {editingDiscId === d.id ? (
+                        <textarea
+                          value={editingDiscText}
+                          onChange={(e) => setEditingDiscText(e.target.value)}
+                          rows={2}
+                          className="w-full text-xs border border-slate-300 rounded-md p-2 resize-none focus:outline-none focus:ring-2 focus:ring-[#2E3093]"
+                        />
+                      ) : (
+                        <span className="text-slate-700 whitespace-pre-wrap">{d.discussion}</span>
+                      )}
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      {editingDiscId === d.id ? (
+                        <div className="inline-flex items-center gap-1">
+                          <button onClick={() => handleSaveEditDisc(d.id)} className="px-2.5 py-1 text-[10px] font-semibold bg-[#2E3093] text-white rounded hover:bg-[#252780] transition-colors">Save</button>
+                          <button onClick={() => { setEditingDiscId(null); setEditingDiscText(''); }} className="px-2.5 py-1 text-[10px] font-semibold bg-white text-slate-600 border border-slate-300 rounded hover:bg-slate-50 transition-colors">Cancel</button>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-0.5">
+                          <button onClick={() => { setEditingDiscId(d.id); setEditingDiscText(d.discussion); }} title="Edit" className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-[#2E3093] transition-colors">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 0l.172.172a2 2 0 010 2.828L12 16H9v-3z" /></svg>
+                          </button>
+                          <button onClick={() => handleDeleteDisc(d.id)} title="Delete" className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-red-500 transition-colors">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Mail Modal */}
       {showMailModal && editId && (
