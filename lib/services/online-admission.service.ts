@@ -41,6 +41,9 @@ export interface AdmissionRow {
   RazorpayPaymentId: string;
   RazorpayOrderId: string;
   RazorpayAmount: number | null;
+  PaymentSubMethod: string;
+  NeftTransactionNumber: string;
+  NeftAmount: number | null;
   /** 1 when the applicant is still filling the form (draft, not yet submitted). */
   IsDraft: 0 | 1;
   /** Last step reached while filling a draft (0 when unknown / already submitted). */
@@ -1091,6 +1094,35 @@ export async function syncOnlineAdmissionIntoCurrentDb(
         await pool.query(`UPDATE s_fees_mst SET Fees_Code = ? WHERE Fees_Id = ?`, [upiFeesCode, upiInsertedId]);
       }
     }
+
+    const neftReference = normalizeText(input.neftTransactionNumber);
+    const neftAmount = parseOptionalNumber(input.neftAmount);
+    if (neftReference && neftAmount && neftAmount > 0) {
+      const [existingNeft] = await pool.query(
+        `SELECT Fees_Id FROM s_fees_mst WHERE PaymentId = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+        [neftReference]
+      ) as [any[], any];
+
+      if (!existingNeft.length) {
+        const now = new Date();
+        const [neftInsertResult] = await pool.query(
+          `INSERT INTO s_fees_mst (
+             Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type,
+             Amount, Total_Amt, TypeR, Notes, RDate, Date_Added, FeesMonth, FeesYear,
+             PaymentId, IsActive, IsDelete
+           ) VALUES (?, ?, ?, ?, 'NEFT', ?, ?, 'C', ?, ?, ?, ?, ?, ?, 1, 0)`,
+          [
+            resolvedStudentId, courseId, batchId, admissionId,
+            neftAmount, neftAmount,
+            `Online Admission Payment (NEFT) - Transaction: ${neftReference}`,
+            admissionDate, now, now.getMonth() + 1, now.getFullYear(), neftReference,
+          ]
+        ) as [any, any];
+        const neftInsertedId = Number(neftInsertResult.insertId);
+        const neftFeesCode = `R-${String(now.getMonth() + 1).padStart(2, '0')}/${String(neftInsertedId).padStart(3, '0')}`;
+        await pool.query(`UPDATE s_fees_mst SET Fees_Code = ? WHERE Fees_Id = ?`, [neftFeesCode, neftInsertedId]);
+      }
+    }
   }
 }
 
@@ -1180,7 +1212,10 @@ export async function listOnlineAdmissions(
        END AS RazorpayPaid,
        COALESCE(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.razorpayPaymentId')), '') AS RazorpayPaymentId,
        COALESCE(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.razorpayOrderId')), '') AS RazorpayOrderId,
-       CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.razorpayAmount')), '') AS DECIMAL(12,2)) AS RazorpayAmount
+      CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.razorpayAmount')), '') AS DECIMAL(12,2)) AS RazorpayAmount,
+      COALESCE(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.paymentSubMethod')), '') AS PaymentSubMethod,
+      COALESCE(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.neftTransactionNumber')), '') AS NeftTransactionNumber,
+      CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.neftAmount')), '') AS DECIMAL(12,2)) AS NeftAmount
      FROM ${PAYLOAD_TABLE} oap
        JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = oap.Inquiry_Id
      ${smJoin}
@@ -1331,6 +1366,9 @@ export async function listOnlineAdmissions(
       RazorpayPaymentId: String(r.RazorpayPaymentId || ''),
       RazorpayOrderId: String(r.RazorpayOrderId || ''),
       RazorpayAmount: r.RazorpayAmount != null ? Number(r.RazorpayAmount) : null,
+      PaymentSubMethod: String(r.PaymentSubMethod || ''),
+      NeftTransactionNumber: String(r.NeftTransactionNumber || ''),
+      NeftAmount: r.NeftAmount != null ? Number(r.NeftAmount) : null,
       IsDraft: r.IsDraft ? 1 : 0,
       DraftStep: r.DraftStep != null ? Number(r.DraftStep) : 0,
       StatusLabel: label,
@@ -1351,6 +1389,9 @@ export async function submitOnlineAdmission(
   const { inquiryId, firstName, middleName, lastName, email, mobile, batchCode, ...rest } = input;
 
   if (!Number.isFinite(inquiryId) || inquiryId <= 0) throw new Error('Invalid Inquiry ID');
+  if (String(input.paymentSubMethod || '').toLowerCase() === 'neft' && !normalizeText(input.neftTransactionNumber)) {
+    throw Object.assign(new Error('NEFT transaction number is required'), { status: 400 });
+  }
 
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);

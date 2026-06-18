@@ -14,6 +14,7 @@ interface RecentReceiptRow {
   Fees_Code: string | null;
   Receipt_Date: string | null;
   Payment_Type: string | null;
+  PaymentId: string | null;
   Amount: number | null;
   Transfered: string;
   Moved_To_Batch_Code: string;
@@ -232,19 +233,20 @@ export default function FeeDetailsPage() {
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Course</th>
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Batch</th>
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Payment Type</th>
-                <th className="text-right py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Amount</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Transaction No</th>
+                <th className="text-right py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Credit Amount</th>
                 <th className="text-center py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Action</th>
               </tr>
             </thead>
             <tbody>
               {recentLoading && (
                 <tr>
-                  <td colSpan={9} className="py-6 text-center text-xs text-slate-400">Loading recent receipts…</td>
+                  <td colSpan={10} className="py-6 text-center text-xs text-slate-400">Loading recent receipts…</td>
                 </tr>
               )}
               {!recentLoading && !recentRows.length && (
                 <tr>
-                  <td colSpan={9} className="py-6 text-center text-xs text-slate-400">No recent fee receipts found</td>
+                  <td colSpan={10} className="py-6 text-center text-xs text-slate-400">No recent fee receipts found</td>
                 </tr>
               )}
               {!recentLoading && recentRows.map((r, i) => (
@@ -261,6 +263,7 @@ export default function FeeDetailsPage() {
                   <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Course_Name || '—'}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.Batch_code || '—'}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100">{r.Payment_Type || '—'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.PaymentId || '—'}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100 text-right font-mono">{fmt(r.Amount)}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100 text-center">
                     <Link

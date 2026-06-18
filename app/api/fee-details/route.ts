@@ -17,11 +17,6 @@ export async function GET(req: NextRequest) {
     const courseId = searchParams.get('courseId') ?? '';
     const batchId = searchParams.get('batchId') ?? '';
 
-    const statusCols = `
-         COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
-         COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
-         CASE WHEN LOWER(TRIM(CAST(COALESCE(am.Cancel,'') AS CHAR))) IN ('yes','1','true') THEN 1 ELSE 0 END AS Cancelled`;
-
     // Pre-aggregated admission status — one scan of admission_master, no per-row subqueries
     const amStatusJoin = `LEFT JOIN (
        SELECT Student_Id,
@@ -43,6 +38,7 @@ export async function GET(req: NextRequest) {
            f.Fees_Code,
            COALESCE(f.RDate, f.Date_Added) AS Receipt_Date,
            f.Payment_Type,
+           f.PaymentId,
            f.Amount,
            COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
            COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,

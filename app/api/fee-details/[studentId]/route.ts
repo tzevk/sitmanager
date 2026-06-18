@@ -90,7 +90,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
     );
 
     const [ledgerRows] = await pool.query<any[]>(
-      `SELECT Fees_Id, Fees_Code, Date_Added, RDate, Payment_Type, Cheque_No, Cheque_Bank, Cheque_Branch,
+            `SELECT Fees_Id, Fees_Code, Date_Added, RDate, Payment_Type, Cheque_No, PaymentId, Cheque_Bank, Cheque_Branch,
               Cheque_Date, Amount, Total_Amt, TypeR, Notes
        FROM s_fees_mst
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
@@ -107,6 +107,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
           Date: r.RDate || r.Date_Added,
           Particular: particular,
           Payment_Type: r.Payment_Type,
+          Transaction_No: r.PaymentId || r.Cheque_No || '',
           Fees_Code: r.Fees_Code,
           Debit: r.TypeR === 'D' ? amt : 0,
           Credit: r.TypeR === 'C' ? amt : 0,
@@ -132,6 +133,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
         Date: dueDate,
         Particular: `Tuition Fees - ${student.Course_Name}${student.Batch_Code ? `, ${student.Batch_Code}` : ''}`,
         Payment_Type: null,
+        Transaction_No: null,
         Fees_Code: null,
         Debit: totalDebit,
         Credit: 0,
@@ -163,6 +165,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
           Payment_Type: r.Payment_Type,
           Cheque_Bank: r.Cheque_Bank,
           Cheque_No: r.Cheque_No,
+          PaymentId: r.PaymentId,
+          Transaction_No: r.PaymentId || r.Cheque_No || '',
           Cheque_Date: r.Cheque_Date,
           Cheque_Branch: r.Cheque_Branch,
           Amount: r.Amount,
@@ -213,7 +217,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
 
     const body = await req.json();
     const {
-      Type, Payment_Type, Cheque_Bank, Cheque_No, Cheque_Date, Cheque_Branch,
+      Type, Payment_Type, Cheque_Bank, Cheque_No, Transaction_No, PaymentId, Cheque_Date, Cheque_Branch,
       Amount, Particular, RDate, TaxType, Fees_Code: customFeesCode,
     } = body;
 
@@ -236,6 +240,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
     const typeR = Type === 'Debit' ? 'D' : 'C';
     const now = new Date();
     const amount = Number(Amount);
+    const transactionNo = String(Transaction_No ?? PaymentId ?? Cheque_No ?? '').trim() || null;
 
     const mkNotes = (particular: string, txTaxType?: string | null) =>
       txTaxType ? `${particular} | Tax: ${txTaxType}` : particular;
@@ -243,13 +248,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
     const insertFeeRow = async (rowAmount: number, rowParticular: string, txTaxType?: string | null, forcedFeesCode?: string | null) => {
       const [result] = await pool.query<any>(
         `INSERT INTO s_fees_mst
-          (Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type, Cheque_Bank, Cheque_No,
+          (Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type, Cheque_Bank, Cheque_No, PaymentId,
            Cheque_Date, Cheque_Branch, Amount, Total_Amt, TypeR, Notes, RDate, Date_Added,
            FeesMonth, FeesYear, IsDelete)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`,
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`,
         [
           sid, student.Course_Id, student.Batch_Id, student.Admission_Id,
-          Payment_Type ?? null, Cheque_Bank ?? null, Cheque_No ?? null,
+          Payment_Type ?? null, Cheque_Bank ?? null, transactionNo,
+          transactionNo,
           Cheque_Date || null, Cheque_Branch ?? null, rowAmount, rowAmount, typeR, mkNotes(rowParticular, txTaxType),
           RDate, now, now.getMonth() + 1, now.getFullYear(),
         ]

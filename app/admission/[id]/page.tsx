@@ -46,6 +46,15 @@ const stepEnterStyle = { animation: 'stepEnter 320ms ease-out' };
 // One Time Membership Fee - Sitians Alumni Association — mandatory for every training course
 const ALUMNI_MEMBERSHIP_FEE = 899;
 
+type PaymentSubMethod = '' | 'razorpay' | 'qr' | 'neft';
+
+const NEFT_BANK_DETAILS = {
+  bank: 'Axis Bank Ltd.',
+  address: 'City Survey No. 841 to 846, "Florence" Florence CHS. LTD. Vakola, Mumbai - 400 055',
+  accountNumber: '911020002988600',
+  ifsCode: 'UTIB0001244',
+};
+
 // Training Program Eligibility Map (based on educational background)
 const COURSE_ELIGIBILITY: { [key: string]: string[] } = {
   'Piping Engineering': ['Mechanical', 'Production', 'Chemical', 'Petrochemical'],
@@ -87,7 +96,8 @@ export default function PublicAdmissionFormPage() {
   const [payAtOfficeVerified, setPayAtOfficeVerified] = useState(false);
   const [upiTransferConfirmed, setUpiTransferConfirmed] = useState(false);
   const [upiTransferReference, setUpiTransferReference] = useState('');
-  const [paymentSubMethod, setPaymentSubMethod] = useState<'' | 'razorpay' | 'qr'>('');
+  const [neftTransactionNumber, setNeftTransactionNumber] = useState('');
+  const [paymentSubMethod, setPaymentSubMethod] = useState<PaymentSubMethod>('');
   const [showPayAtOfficeModal, setShowPayAtOfficeModal] = useState(false);
   const [payAtOfficePassword, setPayAtOfficePassword] = useState('');
   const [payAtOfficeVerifying, setPayAtOfficeVerifying] = useState(false);
@@ -293,7 +303,8 @@ export default function PublicAdmissionFormPage() {
       payAtOfficeVerified?: boolean;
       upiTransferConfirmed?: boolean;
       upiTransferReference?: string;
-      paymentSubMethod?: '' | 'razorpay' | 'qr';
+      neftTransactionNumber?: string;
+      paymentSubMethod?: PaymentSubMethod;
       consentData?: {
         eligibility?: string;
         qualification?: string;
@@ -402,7 +413,10 @@ export default function PublicAdmissionFormPage() {
       if (typeof bestProgress?.upiTransferReference === 'string') {
         setUpiTransferReference(bestProgress.upiTransferReference);
       }
-      if (bestProgress?.paymentSubMethod === 'razorpay' || bestProgress?.paymentSubMethod === 'qr') {
+      if (typeof bestProgress?.neftTransactionNumber === 'string') {
+        setNeftTransactionNumber(bestProgress.neftTransactionNumber);
+      }
+      if (bestProgress?.paymentSubMethod === 'razorpay' || bestProgress?.paymentSubMethod === 'qr' || bestProgress?.paymentSubMethod === 'neft') {
         setPaymentSubMethod(bestProgress.paymentSubMethod);
       }
       if (bestProgress?.consentData && typeof bestProgress.consentData === 'object') {
@@ -453,6 +467,7 @@ export default function PublicAdmissionFormPage() {
         payAtOfficeVerified,
         upiTransferConfirmed,
         upiTransferReference,
+        neftTransactionNumber,
         paymentSubMethod,
         consentData,
       };
@@ -495,6 +510,7 @@ export default function PublicAdmissionFormPage() {
     formData,
     payAtOfficeVerified,
     paymentSubMethod,
+    neftTransactionNumber,
     upiTransferConfirmed,
     upiTransferReference,
     razorpayOrderId,
@@ -556,31 +572,7 @@ export default function PublicAdmissionFormPage() {
       return;
     }
 
-    const installmentTotal = batchFeesInstallment ?? baseFees;
-    const isPipingEngineeringFulltimeMode =
-      /piping\s+engineering/i.test(formData.trainingProgrammeName || '') &&
-      /full.?time/i.test(formData.trainingCategory || '');
-    const isEngineeringDesignDraftingFulltimeMode =
-      /engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') &&
-      /full.?time/i.test(formData.trainingCategory || '');
-    const isLoanAdmission15000Mode = (
-      (/engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') && /full.?time/i.test(formData.trainingCategory || '')) ||
-      /piping\s+design.*drafting/i.test(formData.trainingProgrammeName || '')
-    );
-    const isProcessWeekendMode = /process\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '');
-    const amountPaise =
-      (formData.modeOfPayment === 'Full Payment'
-        ? Math.round(baseFees * 0.95)
-        : formData.modeOfPayment === '3-Installment Plan'
-        ? (isProcessWeekendMode ? 15000 : 25000)
-        : formData.modeOfPayment === '2-Payment Plan'
-        ? 15000
-        : formData.modeOfPayment === '6-Installment Plan'
-        ? 15000
-        : formData.modeOfPayment === 'Loan (0% Interest)'
-        ? (isPipingEngineeringFulltimeMode ? 12000 : ((isEngineeringDesignDraftingFulltimeMode || isLoanAdmission15000Mode || isProcessWeekendMode) ? 15000 : 12000))
-        : Math.round(installmentTotal / 2)) * 100
-      + ALUMNI_MEMBERSHIP_FEE * 100;
+    const amountPaise = calculateAdmissionPayableAmount() * 100;
 
     setPaymentLoading(true);
     try {
@@ -758,6 +750,35 @@ export default function PublicAdmissionFormPage() {
   const requiresStudentConsent = () => formData.occupationalStatus === 'Student' && !checkEligibility();
   const requiresExperiencedConsent = () => formData.occupationalStatus === 'Employee' && (parseFloat(formData.totalOccupationYears) || 0) >= 10;
 
+  const calculateAdmissionPayableAmount = () => {
+    const baseFees = batchFees ?? 0;
+    const installmentTotal = batchFeesInstallment ?? baseFees;
+    const isPipingEngineeringFulltimeMode =
+      /piping\s+engineering/i.test(formData.trainingProgrammeName || '') &&
+      /full.?time/i.test(formData.trainingCategory || '');
+    const isEngineeringDesignDraftingFulltimeMode =
+      /engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') &&
+      /full.?time/i.test(formData.trainingCategory || '');
+    const isLoanAdmission15000Mode = (
+      (/engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') && /full.?time/i.test(formData.trainingCategory || '')) ||
+      /piping\s+design.*drafting/i.test(formData.trainingProgrammeName || '')
+    );
+    const isProcessWeekendMode = /process\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '');
+    const payableTuition = formData.modeOfPayment === 'Full Payment'
+      ? Math.round(baseFees * 0.95)
+      : formData.modeOfPayment === '3-Installment Plan'
+      ? (isProcessWeekendMode ? 15000 : 25000)
+      : formData.modeOfPayment === '2-Payment Plan'
+      ? 15000
+      : formData.modeOfPayment === '6-Installment Plan'
+      ? 15000
+      : formData.modeOfPayment === 'Loan (0% Interest)'
+      ? (isPipingEngineeringFulltimeMode ? 12000 : ((isEngineeringDesignDraftingFulltimeMode || isLoanAdmission15000Mode || isProcessWeekendMode) ? 15000 : 12000))
+      : Math.round(installmentTotal / 2);
+
+    return payableTuition + (formData.modeOfPayment ? ALUMNI_MEMBERSHIP_FEE : 0);
+  };
+
   const loadBatchesForCategory = useCallback(async (courseId: string, category: string) => {
     if (!courseId || !category) return;
     setLoadingBatches(true);
@@ -914,7 +935,16 @@ export default function PublicAdmissionFormPage() {
     } else {
       setFormData(prev => ({ ...prev, [field]: value }));
     }
-    if (field === 'modeOfPayment') setPaymentSubMethod('');
+    if (field === 'modeOfPayment') {
+      setPaymentSubMethod('');
+      setUpiTransferConfirmed(false);
+      setUpiTransferReference('');
+      setNeftTransactionNumber('');
+      setRazorpayPaid(false);
+      setRazorpayPaymentId('');
+      setRazorpayOrderId('');
+      setRazorpaySignature('');
+    }
   };
 
   const handleKtDetailChange = (level: 'ssc' | 'hsc' | 'diploma' | 'grad' | 'postgrad', index: number, field: string, value: string | File | null) => {
@@ -1004,7 +1034,7 @@ export default function PublicAdmissionFormPage() {
           return false;
         }
         if (formData.modeOfPayment !== 'Pay at Office' && !paymentSubMethod) {
-          alert('Please select how you would like to pay — Pay Online or Pay by QR.');
+          alert('Please select how you would like to pay — Pay Online, Pay by QR, or Pay by NEFT.');
           return false;
         }
         if (paymentSubMethod === 'qr' && !upiTransferConfirmed) {
@@ -1013,6 +1043,10 @@ export default function PublicAdmissionFormPage() {
         }
         if (paymentSubMethod === 'razorpay' && !razorpayPaid) {
           alert('Please complete the online payment before proceeding.');
+          return false;
+        }
+        if (paymentSubMethod === 'neft' && !neftTransactionNumber.trim()) {
+          alert('Please enter the NEFT transaction number before proceeding.');
           return false;
         }
         break;
@@ -1077,7 +1111,7 @@ export default function PublicAdmissionFormPage() {
       return;
     }
     if (formData.modeOfPayment !== 'Pay at Office' && !paymentSubMethod) {
-      alert('Please select a payment method (Pay Online or Pay by QR) in Step 6.');
+      alert('Please select a payment method (Pay Online, Pay by QR, or Pay by NEFT) in Step 6.');
       setCurrentStep(6);
       return;
     }
@@ -1091,9 +1125,15 @@ export default function PublicAdmissionFormPage() {
       setCurrentStep(6);
       return;
     }
+    if (paymentSubMethod === 'neft' && !neftTransactionNumber.trim()) {
+      alert('Please enter the NEFT transaction number in Step 6 before submitting.');
+      setCurrentStep(6);
+      return;
+    }
 
     setSubmitting(true);
     try {
+      const payableAmount = calculateAdmissionPayableAmount();
       const submitData = {
         inquiryId: studentId, // Inquiry ID from URL
         Student_Id: parseInt(studentId),
@@ -1178,28 +1218,14 @@ export default function PublicAdmissionFormPage() {
         trainingCategory: formData.trainingCategory,
         batchCode: formData.batchCode,
         modeOfPayment: formData.modeOfPayment,
+        paymentSubMethod: paymentSubMethod || null,
         payAtOfficeOverrideUsed: formData.modeOfPayment === 'Pay at Office' ? payAtOfficeVerified : false,
         upiTransferConfirmed: paymentSubMethod === 'qr' ? upiTransferConfirmed : false,
         upiTransferReference: paymentSubMethod === 'qr' ? (upiTransferReference.trim() || null) : null,
-        upiAmount: paymentSubMethod === 'qr' && upiTransferConfirmed ? (() => {
-          const isProcessWeekend = /process\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '');
-          const is75kLoan = (
-            (/piping\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '')) ||
-            (/engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') && /full.?time/i.test(formData.trainingCategory || '')) ||
-            /piping\s+design.*drafting/i.test(formData.trainingProgrammeName || '')
-          );
-          return (formData.modeOfPayment === 'Full Payment'
-            ? Math.round((batchFees ?? 0) * 0.95)
-            : formData.modeOfPayment === '3-Installment Plan'
-            ? (isProcessWeekend ? 15000 : 25000)
-            : formData.modeOfPayment === '2-Payment Plan'
-            ? 15000
-            : formData.modeOfPayment === '6-Installment Plan'
-            ? 15000
-            : formData.modeOfPayment === 'Loan (0% Interest)'
-            ? ((is75kLoan || isProcessWeekend) ? 15000 : 12000)
-            : Math.round((batchFeesInstallment ?? batchFees ?? 0) / 2)) + ALUMNI_MEMBERSHIP_FEE;
-        })() : null,
+        upiAmount: paymentSubMethod === 'qr' && upiTransferConfirmed ? payableAmount : null,
+        neftTransactionNumber: paymentSubMethod === 'neft' ? neftTransactionNumber.trim() : null,
+        neftAmount: paymentSubMethod === 'neft' ? payableAmount : null,
+        neftBankDetails: paymentSubMethod === 'neft' ? NEFT_BANK_DETAILS : null,
         sameAsPresent: formData.sameAsPresent,
         consentAcknowledged: consentAcknowledged,
         experiencedConsentAcknowledged: experiencedConsentAcknowledged,
@@ -1211,25 +1237,7 @@ export default function PublicAdmissionFormPage() {
         razorpayPaymentId:  razorpayPaymentId  || null,
         razorpayOrderId:    razorpayOrderId    || null,
         razorpaySignature:  razorpaySignature  || null,
-        razorpayAmount:     razorpayPaid ? (() => {
-          const isProcessWeekend = /process\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '');
-          const is75kLoan = (
-            (/piping\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '')) ||
-            (/engineering\s+design.*drafting/i.test(formData.trainingProgrammeName || '') && /full.?time/i.test(formData.trainingCategory || '')) ||
-            /piping\s+design.*drafting/i.test(formData.trainingProgrammeName || '')
-          );
-          return (formData.modeOfPayment === 'Full Payment'
-            ? Math.round((batchFees ?? 0) * 0.95)
-            : formData.modeOfPayment === '3-Installment Plan'
-            ? (isProcessWeekend ? 15000 : 25000)
-            : formData.modeOfPayment === '2-Payment Plan'
-            ? 15000
-            : formData.modeOfPayment === '6-Installment Plan'
-            ? 15000
-            : formData.modeOfPayment === 'Loan (0% Interest)'
-            ? ((is75kLoan || isProcessWeekend) ? 15000 : 12000)
-            : Math.round((batchFeesInstallment ?? batchFees ?? 0) / 2)) + ALUMNI_MEMBERSHIP_FEE;
-        })() : null,
+        razorpayAmount:     razorpayPaid ? payableAmount : null,
       };
 
       const requestBody = new FormData();
@@ -3315,7 +3323,7 @@ export default function PublicAdmissionFormPage() {
                               <i className="fas fa-credit-card text-slate-400"></i>
                               How would you like to pay?
                             </p>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               {/* Pay Online (Razorpay) */}
                               <button
                                 type="button"
@@ -3323,6 +3331,7 @@ export default function PublicAdmissionFormPage() {
                                   setPaymentSubMethod('razorpay');
                                   setUpiTransferConfirmed(false);
                                   setUpiTransferReference('');
+                                  setNeftTransactionNumber('');
                                 }}
                                 className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
                                   paymentSubMethod === 'razorpay'
@@ -3349,6 +3358,7 @@ export default function PublicAdmissionFormPage() {
                                   setRazorpayPaymentId('');
                                   setRazorpayOrderId('');
                                   setRazorpaySignature('');
+                                  setNeftTransactionNumber('');
                                 }}
                                 className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
                                   paymentSubMethod === 'qr'
@@ -3364,6 +3374,34 @@ export default function PublicAdmissionFormPage() {
                                   <div className="text-[10px] text-gray-400 mt-0.5">Scan &amp; pay via UPI app</div>
                                 </div>
                                 {paymentSubMethod === 'qr' && <div className="w-4 h-4 rounded-full bg-sky-500 flex items-center justify-center"><i className="fas fa-check text-white text-[8px]"></i></div>}
+                              </button>
+
+                              {/* Pay by NEFT */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPaymentSubMethod('neft');
+                                  setRazorpayPaid(false);
+                                  setRazorpayPaymentId('');
+                                  setRazorpayOrderId('');
+                                  setRazorpaySignature('');
+                                  setUpiTransferConfirmed(false);
+                                  setUpiTransferReference('');
+                                }}
+                                className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                                  paymentSubMethod === 'neft'
+                                    ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-200'
+                                    : 'border-gray-200 bg-white hover:border-gray-300'
+                                }`}
+                              >
+                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${paymentSubMethod === 'neft' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                                  <i className="fas fa-university text-base"></i>
+                                </div>
+                                <div className="text-center">
+                                  <div className={`text-xs font-bold ${paymentSubMethod === 'neft' ? 'text-emerald-900' : 'text-gray-700'}`}>Pay by NEFT</div>
+                                  <div className="text-[10px] text-gray-400 mt-0.5">Bank transfer</div>
+                                </div>
+                                {paymentSubMethod === 'neft' && <div className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center"><i className="fas fa-check text-white text-[8px]"></i></div>}
                               </button>
                             </div>
                           </div>
@@ -3454,6 +3492,9 @@ export default function PublicAdmissionFormPage() {
                                   setRazorpayPaymentId('');
                                   setRazorpayOrderId('');
                                   setRazorpaySignature('');
+                                  setUpiTransferConfirmed(false);
+                                  setUpiTransferReference('');
+                                  setNeftTransactionNumber('');
                                 } else {
                                   setShowPayAtOfficeModal(true);
                                 }
@@ -3511,7 +3552,35 @@ export default function PublicAdmissionFormPage() {
                               {formData.modeOfPayment === '6-Installment Plan' && <> — &#8377;{fmt(payableNow)} now + &#8377;12,000 × 5 instalments</>}
                               {formData.modeOfPayment === 'Loan (0% Interest)' && <> — &#8377;{fmt(payableNow)} at admission + &#8377;{isProcessWeekend ? '35,000' : is75kPlan ? '60,000' : '1,00,000'} loan via financial institution</>}
                               {paymentSubMethod === 'qr' && <> — pay &#8377;{fmt(payableNow)} via QR code / UPI.</>}
+                              {paymentSubMethod === 'neft' && <> — pay &#8377;{fmt(payableNow)} by NEFT.</>}
                             </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Pay by NEFT */}
+                      {paymentSubMethod === 'neft' && (
+                        <div className="rounded-xl p-4 space-y-3 border-2 border-emerald-300 bg-emerald-50">
+                          <p className="text-xs font-semibold text-emerald-900 flex items-center gap-2">
+                            <i className="fas fa-university"></i>
+                            Pay by NEFT — transfer &#8377;{fmt(payableNow)}
+                          </p>
+                          <div className="rounded-xl border border-emerald-200 bg-white p-3 text-xs text-slate-700 space-y-1.5">
+                            <p><span className="font-semibold text-slate-900">Bank -</span> {NEFT_BANK_DETAILS.bank}</p>
+                            <p><span className="font-semibold text-slate-900">Add. -</span> {NEFT_BANK_DETAILS.address}</p>
+                            <p><span className="font-semibold text-slate-900">A/c No.</span> {NEFT_BANK_DETAILS.accountNumber}</p>
+                            <p><span className="font-semibold text-slate-900">IFS CODE :</span> {NEFT_BANK_DETAILS.ifsCode}.</p>
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-700 mb-1">NEFT Transaction Number <span className="text-red-500">*</span></label>
+                            <input
+                              type="text"
+                              value={neftTransactionNumber}
+                              onChange={(e) => setNeftTransactionNumber(e.target.value)}
+                              placeholder="Enter NEFT transaction number"
+                              className="w-full h-10 px-3 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                              required={paymentSubMethod === 'neft'}
+                            />
                           </div>
                         </div>
                       )}
@@ -3605,6 +3674,9 @@ export default function PublicAdmissionFormPage() {
                               </p>
                               <p className="text-xs text-gray-600">
                                 You must pay online before submitting your application.
+                              </p>
+                              <p className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                Convenience charges to be borne by the user.
                               </p>
                               {!hasFees && (
                                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -3776,8 +3848,8 @@ export default function PublicAdmissionFormPage() {
                       ) : (
                         <button
                           type="submit"
-                          disabled={submitting || !formData.modeOfPayment || (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : !razorpayPaid)}
-                          title={(!formData.modeOfPayment || (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : !razorpayPaid)) ? (formData.modeOfPayment === 'Pay at Office' ? 'Enter override password to submit' : 'Complete payment to submit') : undefined}
+                          disabled={submitting || !formData.modeOfPayment || (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : paymentSubMethod === 'razorpay' ? !razorpayPaid : paymentSubMethod === 'qr' ? !upiTransferConfirmed : paymentSubMethod === 'neft' ? !neftTransactionNumber.trim() : true)}
+                          title={(!formData.modeOfPayment || (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : paymentSubMethod === 'razorpay' ? !razorpayPaid : paymentSubMethod === 'qr' ? !upiTransferConfirmed : paymentSubMethod === 'neft' ? !neftTransactionNumber.trim() : true)) ? (formData.modeOfPayment === 'Pay at Office' ? 'Enter override password to submit' : 'Complete payment details to submit') : undefined}
                           className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                           {submitting ? (
                             <><i className="fas fa-spinner fa-spin mr-1 sm:mr-2"></i><span className="hidden sm:inline">Submitting...</span><span className="sm:hidden">Wait...</span></>

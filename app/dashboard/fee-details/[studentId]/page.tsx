@@ -28,6 +28,7 @@ interface LedgerRow {
   Date: string | null;
   Particular: string;
   Payment_Type: string | null;
+  Transaction_No: string | null;
   Fees_Code: string | null;
   Debit: number;
   Credit: number;
@@ -48,6 +49,8 @@ interface FeeDetailsData {
     Payment_Type: string | null;
     Cheque_Bank: string | null;
     Cheque_No: string | null;
+    PaymentId: string | null;
+    Transaction_No: string | null;
     Cheque_Date: string | null;
     Cheque_Branch: string | null;
     Amount: number | null;
@@ -59,7 +62,7 @@ interface FeeDetailsData {
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors w-full';
 const label = 'text-[10px] font-bold text-slate-500 uppercase tracking-wider';
-const PAYMENT_TYPES = ['Cash', 'Cheque', 'DD', 'Online', 'NEFT', 'PDC'];
+const PAYMENT_TYPES = ['Cash', 'Cheque', 'DD', 'Online', 'UPI', 'Razorpay', 'NEFT', 'PDC'];
 const TAX_TYPES = ['CGST', 'SGST', 'IGST'];
 
 const fmt = (n: number | null | undefined) =>
@@ -117,7 +120,7 @@ export default function FeeDetailsEditPage() {
         setType(d.record.Type === 'Debit' ? 'Debit' : 'Credit');
         setPaymentType(d.record.Payment_Type ?? 'Cash');
         setBank(d.record.Cheque_Bank ?? '');
-        setChequeNo(d.record.Cheque_No ?? '');
+        setChequeNo(d.record.Transaction_No ?? d.record.PaymentId ?? d.record.Cheque_No ?? '');
         setChequeDate(d.record.Cheque_Date ? String(d.record.Cheque_Date).slice(0, 10) : '');
         setBranch(d.record.Cheque_Branch ?? '');
         setAmount(d.record.Amount != null ? String(d.record.Amount) : '');
@@ -147,13 +150,21 @@ export default function FeeDetailsEditPage() {
     setError('');
     setMessage('');
     try {
+      const isChequePayment = ['Cheque', 'DD', 'PDC'].includes(paymentType);
+      const needsTransactionNo = paymentType !== 'Cash';
+      if (needsTransactionNo && !chequeNo.trim()) {
+        setError('Transaction number is required for this payment type.');
+        return;
+      }
       const body = {
         Type: type,
         Payment_Type: paymentType,
-        Cheque_Bank: ['Cheque', 'DD', 'PDC'].includes(paymentType) ? bank : null,
-        Cheque_No: ['Cheque', 'DD', 'PDC'].includes(paymentType) ? chequeNo : null,
-        Cheque_Date: ['Cheque', 'DD', 'PDC'].includes(paymentType) ? chequeDate : null,
-        Cheque_Branch: ['Cheque', 'DD', 'PDC'].includes(paymentType) ? branch : null,
+        Cheque_Bank: isChequePayment ? bank : null,
+        Cheque_No: needsTransactionNo ? chequeNo.trim() : null,
+        Transaction_No: needsTransactionNo ? chequeNo.trim() : null,
+        PaymentId: needsTransactionNo ? chequeNo.trim() : null,
+        Cheque_Date: isChequePayment ? chequeDate : null,
+        Cheque_Branch: isChequePayment ? branch : null,
         Amount: amount,
         Particular: particular,
         RDate: receiptDate,
@@ -266,208 +277,83 @@ export default function FeeDetailsEditPage() {
 
     const copy = (label: string) => `
       <div class="receipt">
-        <!-- Watermark -->
-        <img src="${logo}" alt="" class="watermark" />
-
-        <!-- Header band -->
-        <div class="header-band">
+        <div class="top-row">
+          <img src="${logo}" alt="SIT" class="logo" />
           <div class="copy-tag">${label}</div>
+        </div>
+        <div class="header">
           <div class="receipt-label">PAYMENT RECEIPT</div>
           <div class="org-name">Suvidya Institute of Technology Private Limited</div>
-          <div class="org-addr">18/140 Anand Nagar, Nehru Road, Vakola, Santacruz (E), Mumbai – 400 055 &nbsp;|&nbsp; Tel: 022 26682290 / 9821569885</div>
+          <div class="org-addr">Regd. Office : 18/140 Anand Nagar, Nehru Road, Vakola, Santacruz (E),<br />Mumbai - 400 055. Tel.: 022 26682290, 9821569885</div>
         </div>
-
-        <!-- Yellow accent stripe -->
-        <div class="accent-stripe"></div>
-
-        <!-- Receipt meta row -->
-        <div class="meta-bar">
-          <div class="meta-pill">
-            <span class="meta-key">Receipt No.</span>
-            <span class="meta-val">${receiptInput.receiptNoVal}</span>
-          </div>
-          <div class="meta-pill">
-            <span class="meta-key">Date</span>
-            <span class="meta-val">${receiptDateFmt}</span>
-          </div>
+        <div class="meta-line">
+          <div>Receipt No.: <span class="strong">${receiptInput.receiptNoVal}</span></div>
+          <div>Date : <span class="strong">${receiptDateFmt}</span></div>
         </div>
-
-        <!-- Body -->
         <div class="body">
-          <!-- Info grid -->
-          <div class="info-grid">
-            <div class="info-row">
-              <div class="info-cell full">
-                <div class="info-key">Received with thanks from</div>
-                <div class="info-val highlight">${data.student.Student_Name}</div>
-              </div>
-            </div>
-            <div class="info-row">
-              <div class="info-cell">
-                <div class="info-key">Course</div>
-                <div class="info-val">${data.student.Course_Name ?? '—'}</div>
-              </div>
-              <div class="info-cell">
-                <div class="info-key">Batch Code</div>
-                <div class="info-val">${data.student.Batch_Code ?? '—'}</div>
-              </div>
-            </div>
-            <div class="info-row">
-              <div class="info-cell">
-                <div class="info-key">Particular</div>
-                <div class="info-val">${receiptInput.particularValue || '—'}</div>
-              </div>
-              <div class="info-cell">
-                <div class="info-key">Payment Mode</div>
-                <div class="info-val">${receiptInput.paymentTypeValue}</div>
-              </div>
-            </div>
-                        <div class="info-row">
-              <div class="info-cell full amount-hero">
-                <div class="amount-label">Amount Received</div>
-                <div class="amount-figure">₹ ${fmt(receiptInput.amountValue)}</div>
-                <div class="amount-words">${amtWords}</div>
-              </div>
-            </div>
-            ${refNo ? `
-            <div class="info-row">
-              <div class="info-cell">
-                <div class="info-key">${showCheque ? 'Cheque / DD No.' : 'Reference No.'}</div>
-                <div class="info-val mono">${refNo}</div>
-              </div>
-              <div class="info-cell">
-                <div class="info-key">${showCheque ? 'Cheque Date' : 'Transaction Date'}</div>
-                <div class="info-val">${showCheque ? chequeDateFmt : receiptDateFmt}</div>
-              </div>
-            </div>` : ''}
-            ${(showCheque && receiptInput.bankValue) ? `
-            <div class="info-row">
-              <div class="info-cell">
-                <div class="info-key">Bank</div>
-                <div class="info-val">${receiptInput.bankValue}</div>
-              </div>
-              ${receiptInput.branchValue ? `<div class="info-cell"><div class="info-key">Branch</div><div class="info-val">${receiptInput.branchValue}</div></div>` : '<div class="info-cell"></div>'}
-            </div>` : ''}
+          <div class="line-row">Received with thanks from <span class="fill name">${data.student.Student_Name}</span></div>
+          <div class="line-row">the sum of rupees <span class="fill words">${amtWords}</span> as</div>
+          <div class="course-row">
+            <span>Course fees for</span><span class="fill course">${data.student.Course_Name || receiptInput.particularValue || ''}</span>
+            <span>by</span><span class="fill mode">${receiptInput.paymentTypeValue}</span>
+            <span>No.</span><span class="fill ref">${refNo}</span>
           </div>
-
-          <!-- Notes -->
-          <div class="notes-box">
-            <div class="notes-title">Notes</div>
-            <ul class="notes-list">
-              <li>Payment by cheque is subject to realization of cheque.</li>
-              <li>In case of cheque bounce, this receipt will be automatically cancelled.</li>
-              <li>Course fee is strictly non-refundable and non-transferable.</li>
-            </ul>
+          <div class="course-row second">
+            <span>Dated</span><span class="fill dated">${showCheque ? chequeDateFmt : receiptDateFmt}</span>
+            <span>drawn on</span><span class="fill drawn">${showCheque ? (receiptInput.bankValue || '') : ''}</span>
           </div>
+          <div class="note-row">
+            <span>Note :</span><span class="fill note">${receiptInput.particularValue || ''}</span>
+            <span>Branch</span><span class="fill branch">${showCheque ? (receiptInput.branchValue || '') : ''}</span>
+            <span class="amount-box">RS. ${fmt(receiptInput.amountValue)}</span>
+          </div>
+          <div class="notes-title">Notes:</div>
+          <ul class="notes-list">
+            <li>Payment by cheque shall be subject to realization of cheque.</li>
+            <li>In case cheque bounces, receipt will be automatically cancelled.</li>
+            <li>Payment strictly not refundable or transferable.</li>
+          </ul>
         </div>
-
-        <!-- Footer -->
-        <div class="footer">
-          <div class="footer-line"></div>
-          <div class="footer-text">This is a computer generated receipt — signature not required.</div>
-        </div>
+        <div class="footer-text">This is computer generated receipt signature does not required.</div>
+        <div class="cut-line"></div>
       </div>`;
 
     w.document.write(`<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Receipt ${receiptInput.receiptNoVal}</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; }
-  body {
-    font-family: 'Inter', Arial, sans-serif; font-size: 12px; color: #1e293b;
-    background: #f1f5f9;
-    display: flex; align-items: center; justify-content: center; min-height: 100%;
-  }
-
-  .receipt {
-    width: min(740px, 96vw); margin: 20px auto; background: #fff;
-    border-radius: 12px; overflow: hidden;
-    box-shadow: 0 6px 32px rgba(46,48,147,0.15);
-    border: 1px solid #e2e8f0;
-    position: relative;
-    page-break-after: always;
-  }
-
-  /* Watermark */
-  .watermark {
-    position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%) rotate(-30deg);
-    width: 340px; height: 340px; object-fit: contain;
-    opacity: 0.045; pointer-events: none; z-index: 0;
-  }
-
-  /* Header */
-  .header-band {
-    background: linear-gradient(135deg, #1e2080 0%, #2E3093 60%, #2A6BB5 100%);
-    padding: 18px 20px 16px;
-    text-align: center;
-    position: relative;
-  }
-  .receipt-label { font-size: 10px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #FAE452; margin-bottom: 5px; }
-  .org-name { font-size: 15px; font-weight: 800; color: #fff; line-height: 1.3; margin-bottom: 4px; }
-  .org-addr { font-size: 9.5px; color: rgba(255,255,255,0.72); line-height: 1.5; }
-  .copy-tag {
-    font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
-    color: #1e2080; background: #FAE452; padding: 3px 8px; border-radius: 20px;
-    position: absolute; top: 14px; right: 16px;
-  }
-
-  /* Accent stripe */
-  .accent-stripe { height: 4px; background: linear-gradient(90deg, #FAE452 0%, #f59e0b 100%); }
-
-  /* Meta bar */
-  .meta-bar {
-    display: flex; gap: 0; border-bottom: 1px solid #e2e8f0;
-  }
-  .meta-pill {
-    flex: 1; padding: 8px 16px; display: flex; align-items: center; gap: 8px;
-    border-right: 1px solid #e2e8f0;
-  }
-  .meta-pill:last-child { border-right: none; }
-  .meta-key { font-size: 10px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
-  .meta-val { font-size: 13px; font-weight: 700; color: #2E3093; font-variant-numeric: tabular-nums; }
-
-  /* Body */
-  .body { padding: 16px 20px 12px; }
-
-  /* Amount hero */
-  .amount-hero {
-    background: linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 100%);
-    border: 1px solid #c7d2fe; border-radius: 8px;
-    padding: 12px 18px; margin-bottom: 14px;
-    display: flex; align-items: center; gap: 14px;
-  }
-  .amount-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #6366f1; writing-mode: horizontal-tb; }
-  .amount-figure { font-size: 22px; font-weight: 800; color: #2E3093; letter-spacing: -0.5px; flex-shrink: 0; }
-  .amount-words { font-size: 9.5px; font-weight: 500; color: #475569; font-style: italic; flex: 1; line-height: 1.4; border-left: 2px solid #c7d2fe; padding-left: 12px; }
-
-  /* Info grid */
-  .info-grid { display: flex; flex-direction: column; gap: 0; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
-  .info-row { display: flex; border-bottom: 1px solid #e2e8f0; }
-  .info-row:last-child { border-bottom: none; }
-  .info-cell { flex: 1; padding: 8px 12px; border-right: 1px solid #e2e8f0; }
-  .info-cell:last-child { border-right: none; }
-  .info-cell.full { flex: 2; }
-  .info-key { font-size: 9px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
-  .info-val { font-size: 11.5px; font-weight: 600; color: #1e293b; }
-  .info-val.highlight { font-size: 13px; font-weight: 700; color: #2E3093; }
-  .info-val.mono { font-family: 'Courier New', monospace; font-size: 11px; }
-
-  /* Notes */
-  .notes-box { background: #fafafa; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; }
-  .notes-title { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 4px; }
-  .notes-list { padding-left: 14px; }
-  .notes-list li { font-size: 9.5px; color: #64748b; line-height: 1.6; }
-
-  /* Footer */
-  .footer { padding: 8px 20px 12px; }
-  .footer-line { border-top: 1.5px dashed #cbd5e1; margin-bottom: 6px; }
-  .footer-text { font-size: 9.5px; color: #94a3b8; text-align: center; font-style: italic; }
+  body { font-family: Arial, sans-serif; color: #000; background: #fff; font-size: 14px; }
+  .receipt { width: 980px; margin: 0 auto; padding: 48px 52px 22px; background: #fff; page-break-after: always; }
+  .top-row { display: flex; align-items: flex-start; justify-content: space-between; }
+  .logo { width: 235px; height: auto; object-fit: contain; }
+  .copy-tag { margin-top: 58px; margin-right: 55px; font-size: 14px; }
+  .header { text-align: center; margin-top: 0; }
+  .receipt-label { font-size: 18px; font-weight: 700; margin-bottom: 18px; }
+  .org-name { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+  .org-addr { font-size: 12px; line-height: 1.4; }
+  .meta-line { display: flex; justify-content: space-between; margin-top: 44px; font-size: 14px; }
+  .strong { font-size: 16px; font-weight: 400; margin-left: 24px; }
+  .body { margin-top: 24px; }
+  .line-row, .course-row, .note-row { display: flex; align-items: baseline; gap: 8px; margin-top: 24px; white-space: nowrap; }
+  .fill { display: inline-block; border-bottom: 2px dotted #222; text-align: center; min-height: 20px; font-size: 16px; }
+  .name { width: 650px; }
+  .words { width: 630px; }
+  .course { width: 340px; }
+  .mode { width: 120px; }
+  .ref { width: 170px; }
+  .dated { width: 145px; }
+  .drawn { width: 455px; }
+  .note { width: 380px; }
+  .branch { width: 160px; }
+  .amount-box { margin-left: auto; border: 3px solid #111; padding: 10px 46px; font-size: 18px; font-weight: 700; }
+  .notes-title { margin-top: 22px; font-size: 16px; }
+  .notes-list { margin-top: 0; padding-left: 18px; font-size: 12px; line-height: 1.15; }
+  .footer-text { margin-top: 28px; text-align: center; font-size: 18px; font-weight: 700; }
+  .cut-line { margin-top: 22px; border-top: 4px dashed #111; }
 
   @media print {
-    body { background: #fff; display: block; }
-    .receipt { margin: 0; box-shadow: none; border: none; border-radius: 0; width: 100%; max-width: 100%; min-height: 100vh; }
+    @page { size: A4 landscape; margin: 8mm; }
+    .receipt { width: 100%; padding: 28px 28px 12px; }
   }
 </style></head><body>
 ${copy('Student Copy')}
@@ -510,7 +396,7 @@ ${copy('Student Copy')}
         chequeDateValue: payload.record.Cheque_Date,
         paymentTypeValue: payload.record.Payment_Type ?? 'Cash',
         particularValue: payload.record.Particular ?? '',
-        chequeNoValue: payload.record.Cheque_No ?? '',
+        chequeNoValue: payload.record.Transaction_No ?? payload.record.PaymentId ?? payload.record.Cheque_No ?? '',
         bankValue: payload.record.Cheque_Bank ?? '',
         branchValue: payload.record.Cheque_Branch ?? '',
       });
@@ -534,6 +420,8 @@ ${copy('Student Copy')}
   if (!data) return null;
 
   const showChequeFields = ['Cheque', 'DD', 'PDC'].includes(paymentType);
+  const showTransactionField = paymentType !== 'Cash';
+  const transactionLabel = showChequeFields ? 'Cheque / DD No. *' : 'Transaction No. *';
 
   return (
     <div className="flex flex-col gap-3">
@@ -658,10 +546,6 @@ ${copy('Student Copy')}
                     </select>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className={label}>Cheque/D.D. No. *</label>
-                    <input className={ctrl} value={chequeNo} onChange={(e) => setChequeNo(e.target.value)} placeholder="Cheque/D.D.No." />
-                  </div>
-                  <div className="flex flex-col gap-1">
                     <label className={label}>Cheque Date</label>
                     <input type="date" className={ctrl} value={chequeDate} onChange={(e) => setChequeDate(e.target.value)} />
                   </div>
@@ -670,6 +554,13 @@ ${copy('Student Copy')}
                     <input className={ctrl} value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="Branch" />
                   </div>
                 </>
+              )}
+
+              {showTransactionField && (
+                <div className="flex flex-col gap-1">
+                  <label className={label}>{transactionLabel}</label>
+                  <input className={ctrl} value={chequeNo} onChange={(e) => setChequeNo(e.target.value)} placeholder={showChequeFields ? 'Enter cheque / DD number' : 'Enter transaction number'} />
+                </div>
               )}
 
               <div className="flex flex-col gap-1">
@@ -755,8 +646,8 @@ ${copy('Student Copy')}
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-28">Date</th>
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300">Description</th>
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-44">Transaction</th>
-                <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-32">Amount</th>
-                <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-32">Amount</th>
+                <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-32">Debit Amount</th>
+                <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-32">Credit Amount</th>
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-36">Balance Payment</th>
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-44">Action</th>
               </tr>
@@ -779,7 +670,7 @@ ${copy('Student Copy')}
                       <td className="py-2 px-3 text-xs border border-slate-300">
                         <div className="flex flex-col gap-0.5">
                           <span className="font-medium">{r.Payment_Type || '—'}</span>
-                          <span className="font-mono text-[10px] text-slate-500">{r.Fees_Code || '—'}</span>
+                          <span className="font-mono text-[10px] text-slate-500">{r.Transaction_No || r.Fees_Code || '—'}</span>
                         </div>
                       </td>
                       <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono">{r.Debit ? fmt(r.Debit) : ''}</td>

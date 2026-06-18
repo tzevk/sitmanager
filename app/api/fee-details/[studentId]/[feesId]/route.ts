@@ -18,7 +18,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ studentId: 
 
     const body = await req.json();
     const {
-      Type, Payment_Type, Cheque_Bank, Cheque_No, Cheque_Date, Cheque_Branch,
+      Type, Payment_Type, Cheque_Bank, Cheque_No, Transaction_No, PaymentId, Cheque_Date, Cheque_Branch,
       Amount, Particular, RDate, TaxType, Fees_Code: customFeesCode,
     } = body;
 
@@ -29,14 +29,15 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ studentId: 
     const typeR = Type === 'Debit' ? 'D' : 'C';
     const notes = TaxType ? `${Particular ?? ''} | Tax: ${TaxType}` : (Particular ?? '');
     const amount = Number(Amount);
+    const transactionNo = String(Transaction_No ?? PaymentId ?? Cheque_No ?? '').trim() || null;
 
     const pool = getPool();
     const setClauses = [
-      'Payment_Type = ?', 'Cheque_Bank = ?', 'Cheque_No = ?', 'Cheque_Date = ?', 'Cheque_Branch = ?',
+      'Payment_Type = ?', 'Cheque_Bank = ?', 'Cheque_No = ?', 'PaymentId = ?', 'Cheque_Date = ?', 'Cheque_Branch = ?',
       'Amount = ?', 'Total_Amt = ?', 'TypeR = ?', 'Notes = ?', 'RDate = ?',
     ];
     const setValues: any[] = [
-      Payment_Type ?? null, Cheque_Bank ?? null, Cheque_No ?? null, Cheque_Date || null, Cheque_Branch ?? null,
+      Payment_Type ?? null, Cheque_Bank ?? null, transactionNo, transactionNo, Cheque_Date || null, Cheque_Branch ?? null,
       amount, amount, typeR, notes, RDate,
     ];
     if (typeof customFeesCode === 'string' && customFeesCode.trim()) {

@@ -27,6 +27,9 @@ interface AdmissionRow {
   RazorpayPaymentId: string;
   RazorpayOrderId: string;
   RazorpayAmount: number | null;
+  PaymentSubMethod: string;
+  NeftTransactionNumber: string;
+  NeftAmount: number | null;
   IsDraft: 0 | 1;
   DraftStep: number;
 }
@@ -138,7 +141,7 @@ export default function OnlineAdmissionPage() {
   };
 
   const handleExport = () => {
-    const headers = ['Inquiry Id', 'Name', 'Email', 'Mobile', 'Batch', 'Payment Status', 'Payment Amount', 'Payment ID', 'Status', 'Last Updated'];
+    const headers = ['Inquiry Id', 'Name', 'Email', 'Mobile', 'Batch', 'Payment Status', 'Payment Amount', 'Payment ID', 'Payment Method', 'Status', 'Last Updated'];
     const csvRows = [
       headers.join(','),
       ...rows.map(r => [
@@ -147,9 +150,10 @@ export default function OnlineAdmissionPage() {
         `"${(r.Email || '').replace(/"/g, '""')}"`,
         r.Present_Mobile || '',
         r.Batch_code || '',
-        r.RazorpayPaid ? 'Paid' : (r.RazorpayPaymentId ? 'Payment Logged' : ''),
-        r.RazorpayAmount != null ? String(r.RazorpayAmount) : '',
-        `"${(r.RazorpayPaymentId || '').replace(/"/g, '""')}"`,
+        r.RazorpayPaid || r.NeftTransactionNumber ? 'Paid' : (r.RazorpayPaymentId ? 'Payment Logged' : ''),
+        r.NeftAmount != null ? String(r.NeftAmount) : (r.RazorpayAmount != null ? String(r.RazorpayAmount) : ''),
+        `"${(r.NeftTransactionNumber || r.RazorpayPaymentId || '').replace(/"/g, '""')}"`,
+        `"${(r.NeftTransactionNumber ? 'NEFT' : r.PaymentSubMethod || (r.RazorpayPaymentId ? 'Razorpay' : '')).replace(/"/g, '""')}"`,
         `"${r.StatusLabel}"`,
         r.LastActivityAt ? new Date(r.LastActivityAt).toLocaleDateString('en-IN') : '',
       ].join(',')),
@@ -293,7 +297,15 @@ export default function OnlineAdmissionPage() {
                           <td className="py-1.5 px-3 font-mono text-slate-600 whitespace-nowrap">{r.Present_Mobile || '—'}</td>
                           <td className="py-1.5 px-3 text-slate-600 whitespace-nowrap font-semibold">{r.Batch_code || '—'}</td>
                           <td className="py-1.5 px-3">
-                            {r.RazorpayPaid || r.RazorpayPaymentId ? (
+                            {r.NeftTransactionNumber ? (
+                              <div className="flex flex-col leading-tight">
+                                <span className="inline-flex w-fit items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200">
+                                  NEFT Logged
+                                </span>
+                                <span className="text-[10px] text-slate-500 mt-0.5">{fmtCurrency(r.NeftAmount)}</span>
+                                <span className="text-[10px] text-slate-400 font-mono mt-0.5 max-w-[120px] truncate" title={r.NeftTransactionNumber}>{r.NeftTransactionNumber}</span>
+                              </div>
+                            ) : r.RazorpayPaid || r.RazorpayPaymentId ? (
                               <div className="flex flex-col leading-tight">
                                 <span className={`inline-flex w-fit items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${r.RazorpayPaid ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
                                   {r.RazorpayPaid ? 'Paid' : 'Payment Logged'}

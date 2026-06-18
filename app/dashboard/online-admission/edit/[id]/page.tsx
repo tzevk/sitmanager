@@ -164,6 +164,7 @@ export default function EditOnlineAdmissionPage() {
     idProofType: '',
     modeOfPayment: '',
     upiTransferConfirmed: false, upiTransferReference: '',
+    paymentSubMethod: '', neftTransactionNumber: '', neftAmount: null as number | null,
     razorpayPaid: false, razorpayPaymentId: '', razorpayOrderId: '',
     razorpayAmount: null as number | null,
     termsAgreed: false, consentAcknowledged: false,
@@ -309,6 +310,9 @@ export default function EditOnlineAdmissionPage() {
         modeOfPayment: d.modeOfPayment || '',
         upiTransferConfirmed: Boolean(d.upiTransferConfirmed),
         upiTransferReference: d.upiTransferReference || '',
+        paymentSubMethod: d.paymentSubMethod || '',
+        neftTransactionNumber: d.neftTransactionNumber || '',
+        neftAmount: d.neftAmount != null ? Number(d.neftAmount) : null,
         razorpayPaid: Boolean(d.razorpayPaid),
         razorpayPaymentId: d.razorpayPaymentId || '',
         razorpayOrderId: d.razorpayOrderId || '',
@@ -1241,6 +1245,22 @@ export default function EditOnlineAdmissionPage() {
                     <span className="font-mono">{formData.upiTransferReference}</span>
                   </div>
                 )}
+              </div>
+            )}
+
+            {formData.neftTransactionNumber && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-[11px] text-emerald-900 space-y-1.5">
+                <p className="font-semibold">NEFT Payment</p>
+                {formData.neftAmount != null && (
+                  <div>
+                    <span className="font-semibold">Amount: </span>
+                    <span>₹{Number(formData.neftAmount).toLocaleString('en-IN')}</span>
+                  </div>
+                )}
+                <div>
+                  <span className="font-semibold">Transaction Number: </span>
+                  <span className="font-mono">{formData.neftTransactionNumber}</span>
+                </div>
               </div>
             )}
           </div>
