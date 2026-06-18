@@ -228,27 +228,127 @@ export default function AddFeeDetailsPage() {
 
   const handlePrint = (kind: 'Receipt' | 'Invoice') => {
     if (!data) return;
-    const w = window.open('', '_blank', 'width=700,height=900');
+    const w = window.open('', '_blank', 'width=780,height=1100');
     if (!w) return;
-    const taxLine = taxType ? `<tr><td>${taxType}</td><td style="text-align:right">${fmt(Number(amount) * 0.09)}</td></tr>` : '';
-    w.document.write(`
-      <html><head><title>${kind} - ${data.nextReceiptNo}</title>
-      <style>body{font-family:Arial,sans-serif;padding:24px;color:#1e293b;}h1{font-size:18px;margin-bottom:4px;}table{width:100%;border-collapse:collapse;margin-top:16px;}td,th{border:1px solid #cbd5e1;padding:6px 10px;font-size:12px;text-align:left;}.muted{color:#64748b;font-size:11px;}</style></head><body>
-      <h1>${kind}</h1>
-      <div class="muted">Receipt No: ${data.nextReceiptNo} &nbsp;|&nbsp; Date: ${fmtDate(receiptDate)}</div>
-      <table>
-        <tr><th>Student Name</th><td>${data.student.Student_Name}</td></tr>
-        <tr><th>Student ID</th><td>${data.student.Student_Id}</td></tr>
-        <tr><th>Course</th><td>${data.student.Course_Name ?? ''}</td></tr>
-        <tr><th>Batch Code</th><td>${data.student.Batch_Code ?? ''}</td></tr>
-        <tr><th>Particular</th><td>${particular}</td></tr>
-        <tr><th>Payment Type</th><td>${paymentType}</td></tr>
-        <tr><th>Amount</th><td style="text-align:right">₹ ${fmt(amount ? Number(amount) : 0)}</td></tr>
-        ${taxLine}
-      </table>
-      <script>window.onload = () => window.print();</script>
-      </body></html>
-    `);
+    const receiptNoVal = receiptNo || data.nextReceiptNo || '';
+    const amtNum = Number(amount) || 0;
+    const logo = `${window.location.origin}/sit.png`;
+
+    const numToWords = (n: number): string => {
+      const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+      const tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+      if (n === 0) return 'ZERO';
+      const b100 = (x: number) => (x < 20 ? ones[x] : `${tens[Math.floor(x / 10)]}${x % 10 ? ` ${ones[x % 10]}` : ''}`);
+      const b1000 = (x: number) => (x < 100 ? b100(x) : `${ones[Math.floor(x / 100)]} HUNDRED${x % 100 ? ` ${b100(x % 100)}` : ''}`);
+      let r = '';
+      let num = n;
+      if (num >= 10000000) { r += `${b1000(Math.floor(num / 10000000))} CRORE `; num %= 10000000; }
+      if (num >= 100000) { r += `${b1000(Math.floor(num / 100000))} LAKH `; num %= 100000; }
+      if (num >= 1000) { r += `${b100(Math.floor(num / 1000))} THOUSAND `; num %= 1000; }
+      if (num > 0) r += b1000(num);
+      return r.trim();
+    };
+
+    const amountToWords = (a: number) => {
+      const cents = Math.round(a * 100);
+      const rs = Math.floor(cents / 100);
+      const ps = cents % 100;
+      return `${numToWords(rs)} RUPEES${ps > 0 ? ` AND ${numToWords(ps)} PAISE` : ''} ONLY`;
+    };
+
+    const fmtDate2 = (d: string | null | undefined) => {
+      if (!d) return '';
+      const s = String(d).slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return String(d);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const [y, m, dy] = s.split('-');
+      const day = parseInt(dy, 10);
+      const suffix = day === 1 || day === 21 || day === 31 ? 'st' : day === 2 || day === 22 ? 'nd' : day === 3 || day === 23 ? 'rd' : 'th';
+      return `${day}${suffix} ${months[parseInt(m, 10) - 1]}-${y}`;
+    };
+
+    const amtWords = amountToWords(amtNum);
+    const receiptDateFmt = fmtDate2(receiptDate);
+    const chequeDateFmt = fmtDate2(chequeDate);
+    const showCheque = ['Cheque', 'DD', 'PDC'].includes(paymentType);
+
+    const refNo = chequeNo || '';
+    const copy = (label: string) => `
+      <div class="receipt">
+        <img src="${logo}" alt="" class="watermark" />
+        <div class="header-band">
+          <div class="copy-tag">${label}</div>
+          <div class="receipt-label">PAYMENT RECEIPT</div>
+          <div class="org-name">Suvidya Institute of Technology Private Limited</div>
+          <div class="org-addr">18/140 Anand Nagar, Nehru Road, Vakola, Santacruz (E), Mumbai – 400 055 &nbsp;|&nbsp; Tel: 022 26682290 / 9821569885</div>
+        </div>
+        <div class="accent-stripe"></div>
+        <div class="meta-bar">
+          <div class="meta-pill"><span class="meta-key">Receipt No.</span><span class="meta-val">${receiptNoVal}</span></div>
+          <div class="meta-pill"><span class="meta-key">Date</span><span class="meta-val">${receiptDateFmt}</span></div>
+        </div>
+        <div class="body">
+          <div class="info-grid">
+            <div class="info-row"><div class="info-cell full"><div class="info-key">Received with thanks from</div><div class="info-val highlight">${data.student.Student_Name}</div></div></div>
+            <div class="info-row">
+              <div class="info-cell"><div class="info-key">Course</div><div class="info-val">${data.student.Course_Name ?? '—'}</div></div>
+              <div class="info-cell"><div class="info-key">Batch Code</div><div class="info-val">${data.student.Batch_Code ?? '—'}</div></div>
+            </div>
+            <div class="info-row">
+              <div class="info-cell"><div class="info-key">Particular</div><div class="info-val">${particular || '—'}</div></div>
+              <div class="info-cell"><div class="info-key">Payment Mode</div><div class="info-val">${paymentType}</div></div>
+            </div>
+            <div class="info-row"><div class="info-cell full amount-hero"><div class="amount-label">Amount Received</div><div class="amount-figure">₹ ${fmt(amtNum)}</div><div class="amount-words">${amtWords}</div></div></div>
+            ${refNo ? `<div class="info-row"><div class="info-cell"><div class="info-key">${showCheque ? 'Cheque / DD No.' : 'Reference No.'}</div><div class="info-val mono">${refNo}</div></div><div class="info-cell"><div class="info-key">${showCheque ? 'Cheque Date' : 'Transaction Date'}</div><div class="info-val">${showCheque ? chequeDateFmt : receiptDateFmt}</div></div></div>` : ''}
+            ${(showCheque && bank) ? `<div class="info-row"><div class="info-cell"><div class="info-key">Bank</div><div class="info-val">${bank}</div></div>${branch ? `<div class="info-cell"><div class="info-key">Branch</div><div class="info-val">${branch}</div></div>` : '<div class="info-cell"></div>'}</div>` : ''}
+          </div>
+          <div class="notes-box"><div class="notes-title">Notes</div><ul class="notes-list"><li>Payment by cheque is subject to realization of cheque.</li><li>In case of cheque bounce, this receipt will be automatically cancelled.</li><li>Course fee is strictly non-refundable and non-transferable.</li></ul></div>
+        </div>
+        <div class="footer"><div class="footer-line"></div><div class="footer-text">This is a computer generated receipt — signature not required.</div></div>
+      </div>`;
+
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${kind} ${receiptNoVal}</title><style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { height: 100%; }
+      body { font-family: 'Inter', Arial, sans-serif; font-size: 12px; color: #1e293b; background: #f1f5f9; display: flex; align-items: center; justify-content: center; min-height: 100%; }
+      .receipt { width: min(740px, 96vw); margin: 20px auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 6px 32px rgba(46,48,147,0.15); border: 1px solid #e2e8f0; position: relative; page-break-after: always; }
+      .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); width: 340px; height: 340px; object-fit: contain; opacity: 0.045; pointer-events: none; z-index: 0; }
+      .header-band { background: linear-gradient(135deg, #1e2080 0%, #2E3093 60%, #2A6BB5 100%); padding: 18px 20px 16px; text-align: center; position: relative; }
+      .receipt-label { font-size: 10px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #FAE452; margin-bottom: 5px; }
+      .org-name { font-size: 15px; font-weight: 800; color: #fff; line-height: 1.3; margin-bottom: 4px; }
+      .org-addr { font-size: 9.5px; color: rgba(255,255,255,0.72); line-height: 1.5; }
+      .copy-tag { font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #1e2080; background: #FAE452; padding: 3px 8px; border-radius: 20px; position: absolute; top: 14px; right: 16px; }
+      .accent-stripe { height: 4px; background: linear-gradient(90deg, #FAE452 0%, #f59e0b 100%); }
+      .meta-bar { display: flex; gap: 0; border-bottom: 1px solid #e2e8f0; }
+      .meta-pill { flex: 1; padding: 8px 16px; display: flex; align-items: center; gap: 8px; border-right: 1px solid #e2e8f0; }
+      .meta-pill:last-child { border-right: none; }
+      .meta-key { font-size: 10px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+      .meta-val { font-size: 13px; font-weight: 700; color: #2E3093; font-variant-numeric: tabular-nums; }
+      .body { padding: 16px 20px 12px; }
+      .amount-hero { background: linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 100%); border: 1px solid #c7d2fe; border-radius: 8px; padding: 12px 18px; margin-bottom: 14px; display: flex; align-items: center; gap: 14px; }
+      .amount-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #6366f1; writing-mode: horizontal-tb; }
+      .amount-figure { font-size: 22px; font-weight: 800; color: #2E3093; letter-spacing: -0.5px; flex-shrink: 0; }
+      .amount-words { font-size: 9.5px; font-weight: 500; color: #475569; font-style: italic; flex: 1; line-height: 1.4; border-left: 2px solid #c7d2fe; padding-left: 12px; }
+      .info-grid { display: flex; flex-direction: column; gap: 0; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+      .info-row { display: flex; border-bottom: 1px solid #e2e8f0; }
+      .info-row:last-child { border-bottom: none; }
+      .info-cell { flex: 1; padding: 8px 12px; border-right: 1px solid #e2e8f0; }
+      .info-cell:last-child { border-right: none; }
+      .info-cell.full { flex: 2; }
+      .info-key { font-size: 9px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+      .info-val { font-size: 11.5px; font-weight: 600; color: #1e293b; }
+      .info-val.highlight { font-size: 13px; font-weight: 700; color: #2E3093; }
+      .info-val.mono { font-family: 'Courier New', monospace; font-size: 11px; }
+      .notes-box { background: #fafafa; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; }
+      .notes-title { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 4px; }
+      .notes-list { padding-left: 14px; }
+      .notes-list li { font-size: 9.5px; color: #64748b; line-height: 1.6; }
+      .footer { padding: 8px 20px 12px; }
+      .footer-line { border-top: 1.5px dashed #cbd5e1; margin-bottom: 6px; }
+      .footer-text { font-size: 9.5px; color: #94a3b8; text-align: center; font-style: italic; }
+      @media print { body { background: #fff; display: block; } .receipt { margin: 0; box-shadow: none; border: none; border-radius: 0; width: 100%; max-width: 100%; min-height: 100vh; } }
+    </style></head><body>${copy('Student Copy')}<script>window.onload = () => { setTimeout(() => window.print(), 500); };<\/script></body></html>`);
     w.document.close();
   };
 

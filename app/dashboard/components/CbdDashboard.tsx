@@ -727,7 +727,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
             ) : (
               <div className="divide-y divide-gray-100">
                 {pendingFollowups.map((f: any, i: number) => (
-                  <div key={`${f.id || i}`} className={`flex items-center gap-3 px-4 py-2 hover:bg-rose-50/30 ${i % 2 === 0 ? 'bg-white' : 'bg-rose-50/20'}`}>
+                  <div key={`${f.id ?? 'no-id'}-${i}`} className={`flex items-center gap-3 px-4 py-2 hover:bg-rose-50/30 ${i % 2 === 0 ? 'bg-white' : 'bg-rose-50/20'}`}>
                     <div className="w-7 h-7 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center text-xs font-bold shrink-0">
                       {(f.name || f.student_name || 'F')[0].toUpperCase()}
                     </div>

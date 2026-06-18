@@ -234,31 +234,79 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
     const student = studentRows[0];
 
     const typeR = Type === 'Debit' ? 'D' : 'C';
-    const notes = TaxType ? `${Particular ?? ''} | Tax: ${TaxType}` : (Particular ?? '');
     const now = new Date();
     const amount = Number(Amount);
 
-    const [result] = await pool.query<any>(
-      `INSERT INTO s_fees_mst
-        (Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type, Cheque_Bank, Cheque_No,
-         Cheque_Date, Cheque_Branch, Amount, Total_Amt, TypeR, Notes, RDate, Date_Added,
-         FeesMonth, FeesYear, IsDelete)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`,
-      [
-        sid, student.Course_Id, student.Batch_Id, student.Admission_Id,
-        Payment_Type ?? null, Cheque_Bank ?? null, Cheque_No ?? null,
-        Cheque_Date || null, Cheque_Branch ?? null, amount, amount, typeR, notes,
-        RDate, now, now.getMonth() + 1, now.getFullYear(),
-      ]
+    const mkNotes = (particular: string, txTaxType?: string | null) =>
+      txTaxType ? `${particular} | Tax: ${txTaxType}` : particular;
+
+    const insertFeeRow = async (rowAmount: number, rowParticular: string, txTaxType?: string | null, forcedFeesCode?: string | null) => {
+      const [result] = await pool.query<any>(
+        `INSERT INTO s_fees_mst
+          (Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type, Cheque_Bank, Cheque_No,
+           Cheque_Date, Cheque_Branch, Amount, Total_Amt, TypeR, Notes, RDate, Date_Added,
+           FeesMonth, FeesYear, IsDelete)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`,
+        [
+          sid, student.Course_Id, student.Batch_Id, student.Admission_Id,
+          Payment_Type ?? null, Cheque_Bank ?? null, Cheque_No ?? null,
+          Cheque_Date || null, Cheque_Branch ?? null, rowAmount, rowAmount, typeR, mkNotes(rowParticular, txTaxType),
+          RDate, now, now.getMonth() + 1, now.getFullYear(),
+        ]
+      );
+
+      const insertedId = Number(result.insertId);
+      const feesCode = (typeof forcedFeesCode === 'string' && forcedFeesCode.trim())
+        ? forcedFeesCode.trim()
+        : `R-${String(now.getMonth() + 1).padStart(2, '0')}/${String(insertedId).padStart(3, '0')}`;
+      await pool.query(`UPDATE s_fees_mst SET Fees_Code = ? WHERE Fees_Id = ?`, [feesCode, insertedId]);
+      return { Fees_Id: insertedId, Fees_Code: feesCode };
+    };
+
+    const baseParticular = String(Particular ?? '').trim();
+    const isTuitionCredit =
+      typeR === 'C'
+      && /^tuition\s+fees\s*-/i.test(baseParticular)
+      && !/one\s*time\s+membership\s+fees/i.test(baseParticular)
+      && amount >= MEMBERSHIP_FEE_AMOUNT;
+
+    if (isTuitionCredit) {
+      const alumniAmount = Math.min(MEMBERSHIP_FEE_AMOUNT, amount);
+      const tuitionAmount = amount - alumniAmount;
+      const createdRows: Array<{ Fees_Id: number; Fees_Code: string; particular: string; amount: number }> = [];
+
+      if (tuitionAmount > 0) {
+        const tuitionRow = await insertFeeRow(
+          tuitionAmount,
+          baseParticular,
+          TaxType || null,
+          typeof customFeesCode === 'string' ? customFeesCode : null,
+        );
+        createdRows.push({ ...tuitionRow, particular: baseParticular, amount: tuitionAmount });
+      }
+
+      if (alumniAmount > 0) {
+        const alumniRow = await insertFeeRow(
+          alumniAmount,
+          MEMBERSHIP_FEE_LABEL,
+          null,
+          null,
+        );
+        createdRows.push({ ...alumniRow, particular: MEMBERSHIP_FEE_LABEL, amount: alumniAmount });
+      }
+
+      const primary = createdRows[0];
+      return NextResponse.json({ success: true, Fees_Id: primary?.Fees_Id ?? null, Fees_Code: primary?.Fees_Code ?? null, splitTransactions: createdRows });
+    }
+
+    const created = await insertFeeRow(
+      amount,
+      baseParticular,
+      TaxType || null,
+      typeof customFeesCode === 'string' ? customFeesCode : null,
     );
 
-    const insertedId = Number(result.insertId);
-    const feesCode = (typeof customFeesCode === 'string' && customFeesCode.trim())
-      ? customFeesCode.trim()
-      : `R-${String(now.getMonth() + 1).padStart(2, '0')}/${String(insertedId).padStart(3, '0')}`;
-    await pool.query(`UPDATE s_fees_mst SET Fees_Code = ? WHERE Fees_Id = ?`, [feesCode, insertedId]);
-
-    return NextResponse.json({ success: true, Fees_Id: insertedId, Fees_Code: feesCode });
+    return NextResponse.json({ success: true, Fees_Id: created.Fees_Id, Fees_Code: created.Fees_Code });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Server error' }, { status: 500 });
   }

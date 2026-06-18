@@ -86,6 +86,8 @@ export default function FeeDetailsEditPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [emailing, setEmailing] = useState(false);
+  const [rowActionFeeId, setRowActionFeeId] = useState<number | null>(null);
+  const [rowActionType, setRowActionType] = useState<'email' | 'download' | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -179,68 +181,89 @@ export default function FeeDetailsEditPage() {
     }
   };
 
-  const handleEmailReceipt = async () => {
-    if (!data?.record) return;
-    setEmailing(true);
+  const handleEmailReceipt = async (feesId?: number) => {
+    const targetFeesId = feesId ?? data?.record?.Fees_Id;
+    if (!targetFeesId) return;
     setError('');
     setMessage('');
+    if (feesId) {
+      setRowActionFeeId(targetFeesId);
+      setRowActionType('email');
+    } else {
+      setEmailing(true);
+    }
     try {
-      const res = await fetch(`/api/fee-details/${params.studentId}/${data.record.Fees_Id}/email`, {
+      const res = await fetch(`/api/fee-details/${params.studentId}/${targetFeesId}/email`, {
         method: 'POST',
       });
       const d = await res.json();
       if (!res.ok) { setError(d.error ?? 'Failed to send email'); return; }
       setMessage(`Receipt emailed to ${d.email}`);
     } finally {
-      setEmailing(false);
+      if (feesId) {
+        setRowActionFeeId(null);
+        setRowActionType(null);
+      } else {
+        setEmailing(false);
+      }
     }
   };
 
-  const handlePrint = (_kind: 'Receipt' | 'Invoice') => {
+  const formatReceiptDate = (d: string | null | undefined) => {
+    if (!d) return '';
+    const s = String(d).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return String(d);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const [y, m, dy] = s.split('-');
+    const day = parseInt(dy, 10);
+    const suffix = day === 1 || day === 21 || day === 31 ? 'st' : day === 2 || day === 22 ? 'nd' : day === 3 || day === 23 ? 'rd' : 'th';
+    return `${day}${suffix} ${months[parseInt(m, 10) - 1]}-${y}`;
+  };
+
+  const numToWords = (n: number): string => {
+    const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+    const tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+    if (n === 0) return 'ZERO';
+    const b100 = (x: number) => (x < 20 ? ones[x] : `${tens[Math.floor(x / 10)]}${x % 10 ? ` ${ones[x % 10]}` : ''}`);
+    const b1000 = (x: number) => (x < 100 ? b100(x) : `${ones[Math.floor(x / 100)]} HUNDRED${x % 100 ? ` ${b100(x % 100)}` : ''}`);
+    let r = '';
+    let num = n;
+    if (num >= 10000000) { r += `${b1000(Math.floor(num / 10000000))} CRORE `; num %= 10000000; }
+    if (num >= 100000) { r += `${b1000(Math.floor(num / 100000))} LAKH `; num %= 100000; }
+    if (num >= 1000) { r += `${b100(Math.floor(num / 1000))} THOUSAND `; num %= 1000; }
+    if (num > 0) r += b1000(num);
+    return r.trim();
+  };
+
+  const amountToWords = (a: number) => {
+    const cents = Math.round(a * 100);
+    const rs = Math.floor(cents / 100);
+    const ps = cents % 100;
+    return `${numToWords(rs)} RUPEES${ps > 0 ? ` AND ${numToWords(ps)} PAISE` : ''} ONLY`;
+  };
+
+  const renderReceipt = (receiptInput: {
+    receiptNoVal: string;
+    amountValue: number;
+    receiptDateValue: string | null | undefined;
+    chequeDateValue: string | null | undefined;
+    paymentTypeValue: string;
+    particularValue: string;
+    chequeNoValue: string;
+    bankValue: string;
+    branchValue: string;
+  }) => {
     if (!data) return;
     const w = window.open('', '_blank', 'width=780,height=1100');
     if (!w) return;
-
-    const receiptNoVal = data.record?.Fees_Code ?? receiptNo ?? data.nextReceiptNo ?? '';
-    const amtNum = Number(amount) || 0;
     const logo = `${window.location.origin}/sit.png`;
 
-    function numToWords(n: number): string {
-      const ones = ['','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE',
-                    'TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN',
-                    'SEVENTEEN','EIGHTEEN','NINETEEN'];
-      const tens = ['','','TWENTY','THIRTY','FORTY','FIFTY','SIXTY','SEVENTY','EIGHTY','NINETY'];
-      if (n === 0) return 'ZERO';
-      function b100(x: number) { return x < 20 ? ones[x] : tens[Math.floor(x/10)] + (x%10 ? ' '+ones[x%10] : ''); }
-      function b1000(x: number) { return x < 100 ? b100(x) : ones[Math.floor(x/100)]+' HUNDRED'+(x%100?' '+b100(x%100):''); }
-      let r = '';
-      if (n >= 10000000) { r += b1000(Math.floor(n/10000000))+' CRORE '; n %= 10000000; }
-      if (n >= 100000)   { r += b1000(Math.floor(n/100000))+' LAKH '; n %= 100000; }
-      if (n >= 1000)     { r += b100(Math.floor(n/1000))+' THOUSAND '; n %= 1000; }
-      if (n > 0)         { r += b1000(n); }
-      return r.trim();
-    }
-    function amountToWords(a: number) {
-      const cents = Math.round(a * 100);
-      const rs = Math.floor(cents / 100), ps = cents % 100;
-      return numToWords(rs) + ' RUPEES' + (ps > 0 ? ' AND ' + numToWords(ps) + ' PAISE' : '') + ' ONLY';
-    }
+    const amtWords = amountToWords(receiptInput.amountValue);
+    const receiptDateFmt = formatReceiptDate(receiptInput.receiptDateValue);
+    const chequeDateFmt = formatReceiptDate(receiptInput.chequeDateValue);
+    const showCheque = ['Cheque', 'DD', 'PDC'].includes(receiptInput.paymentTypeValue);
+    const refNo = receiptInput.chequeNoValue || '';
 
-    const amtWords = amountToWords(amtNum);
-    const fmtDate2 = (d: string | null | undefined) => {
-      if (!d) return '';
-      const s = String(d).slice(0,10);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return d;
-      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      const [y,m,dy] = s.split('-');
-      return `${parseInt(dy)}${['st','nd','rd'][parseInt(dy)-1]||'th'} ${months[parseInt(m)-1]}-${y}`;
-    };
-
-    const receiptDateFmt = fmtDate2(receiptDate);
-    const chequeDateFmt = fmtDate2(chequeDate);
-    const showCheque = ['Cheque','DD','PDC'].includes(paymentType);
-
-    const refNo = chequeNo || '';
     const copy = (label: string) => `
       <div class="receipt">
         <!-- Watermark -->
@@ -261,7 +284,7 @@ export default function FeeDetailsEditPage() {
         <div class="meta-bar">
           <div class="meta-pill">
             <span class="meta-key">Receipt No.</span>
-            <span class="meta-val">${receiptNoVal}</span>
+            <span class="meta-val">${receiptInput.receiptNoVal}</span>
           </div>
           <div class="meta-pill">
             <span class="meta-key">Date</span>
@@ -292,17 +315,17 @@ export default function FeeDetailsEditPage() {
             <div class="info-row">
               <div class="info-cell">
                 <div class="info-key">Particular</div>
-                <div class="info-val">${particular || '—'}</div>
+                <div class="info-val">${receiptInput.particularValue || '—'}</div>
               </div>
               <div class="info-cell">
                 <div class="info-key">Payment Mode</div>
-                <div class="info-val">${paymentType}</div>
+                <div class="info-val">${receiptInput.paymentTypeValue}</div>
               </div>
             </div>
                         <div class="info-row">
               <div class="info-cell full amount-hero">
                 <div class="amount-label">Amount Received</div>
-                <div class="amount-figure">₹ ${fmt(amtNum)}</div>
+                <div class="amount-figure">₹ ${fmt(receiptInput.amountValue)}</div>
                 <div class="amount-words">${amtWords}</div>
               </div>
             </div>
@@ -317,13 +340,13 @@ export default function FeeDetailsEditPage() {
                 <div class="info-val">${showCheque ? chequeDateFmt : receiptDateFmt}</div>
               </div>
             </div>` : ''}
-            ${(showCheque && bank) ? `
+            ${(showCheque && receiptInput.bankValue) ? `
             <div class="info-row">
               <div class="info-cell">
                 <div class="info-key">Bank</div>
-                <div class="info-val">${bank}</div>
+                <div class="info-val">${receiptInput.bankValue}</div>
               </div>
-              ${branch ? `<div class="info-cell"><div class="info-key">Branch</div><div class="info-val">${branch}</div></div>` : '<div class="info-cell"></div>'}
+              ${receiptInput.branchValue ? `<div class="info-cell"><div class="info-key">Branch</div><div class="info-val">${receiptInput.branchValue}</div></div>` : '<div class="info-cell"></div>'}
             </div>` : ''}
           </div>
 
@@ -346,7 +369,7 @@ export default function FeeDetailsEditPage() {
       </div>`;
 
     w.document.write(`<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Receipt ${receiptNoVal}</title>
+<html><head><meta charset="UTF-8"><title>Receipt ${receiptInput.receiptNoVal}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -453,6 +476,50 @@ ${copy('Student Copy')}
     w.document.close();
   };
 
+  const handlePrint = () => {
+    renderReceipt({
+      receiptNoVal: data?.record?.Fees_Code ?? receiptNo ?? data?.nextReceiptNo ?? '',
+      amountValue: Number(amount) || 0,
+      receiptDateValue: receiptDate,
+      chequeDateValue: chequeDate,
+      paymentTypeValue: paymentType,
+      particularValue: particular,
+      chequeNoValue: chequeNo,
+      bankValue: bank,
+      branchValue: branch,
+    });
+  };
+
+  const handleDownloadReceiptForFee = async (feesId: number) => {
+    if (!data) return;
+    setRowActionFeeId(feesId);
+    setRowActionType('download');
+    setError('');
+    setMessage('');
+    try {
+      const res = await fetch(`/api/fee-details/${params.studentId}?feesId=${feesId}`);
+      const payload = await res.json();
+      if (!res.ok || !payload?.record) {
+        setError(payload?.error ?? 'Unable to load transaction for receipt download');
+        return;
+      }
+      renderReceipt({
+        receiptNoVal: payload.record.Fees_Code ?? data.nextReceiptNo ?? '',
+        amountValue: Number(payload.record.Amount) || 0,
+        receiptDateValue: payload.record.RDate,
+        chequeDateValue: payload.record.Cheque_Date,
+        paymentTypeValue: payload.record.Payment_Type ?? 'Cash',
+        particularValue: payload.record.Particular ?? '',
+        chequeNoValue: payload.record.Cheque_No ?? '',
+        bankValue: payload.record.Cheque_Bank ?? '',
+        branchValue: payload.record.Cheque_Branch ?? '',
+      });
+    } finally {
+      setRowActionFeeId(null);
+      setRowActionType(null);
+    }
+  };
+
   if (permLoading) return <PermissionLoading />;
   if (!canView) return <AccessDenied message="You do not have permission to view fee details." />;
 
@@ -494,13 +561,21 @@ ${copy('Student Copy')}
               )}
             </div>
           </div>
-          <button
-            onClick={handleSave}
-            disabled={saving || !canUpdate}
-            className="h-9 px-4 rounded-lg bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : (data.record ? 'Update' : 'Add')}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => router.push('/dashboard/fee-details')}
+              className="h-9 px-4 rounded-lg border border-white/40 bg-white/10 text-white text-xs font-bold hover:bg-white/20"
+            >
+              Back
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving || !canUpdate}
+              className="h-9 px-4 rounded-lg bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : (data.record ? 'Update' : 'Add')}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -508,149 +583,153 @@ ${copy('Student Copy')}
       {message && <div className="rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs px-3 py-2">{message}</div>}
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-5">
-        {/* Student info (read-only) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-          <div className="flex flex-col gap-1">
-            <label className={label}>Student Name</label>
-            <input className={ctrl} value={data.student.Student_Name} disabled />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={label}>Student Id</label>
-            <input className={ctrl} value={data.student.Student_Id} disabled />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={label}>Course Name</label>
-            <input className={ctrl} value={data.student.Course_Name ?? ''} disabled />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={label}>Batch Code</label>
-            <input className={ctrl} value={data.student.Batch_Code ?? ''} disabled />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={label}>Contact No.</label>
-            <input className={ctrl} value={data.student.Present_Mobile ?? ''} disabled />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={label}>Email Address</label>
-            <input className={ctrl} value={data.student.Email ?? ''} disabled />
-          </div>
-        </div>
-
-        <div className="border-t border-slate-100 my-4" />
-
-        {/* Receipt fields */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-          <div className="flex flex-col gap-1">
-            <label className={label}>Type *</label>
-            <select className={ctrl} value={type} onChange={(e) => setType(e.target.value as 'Credit' | 'Debit')}>
-              <option value="Credit">Credit</option>
-              <option value="Debit">Debit</option>
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={label}>Receipt No.</label>
-            <input
-              className={`${ctrl} font-mono font-semibold text-[#2E3093]`}
-              value={receiptNo}
-              onChange={(e) => setReceiptNo(e.target.value)}
-              placeholder="e.g. R-06/052"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={label}>Payment Type</label>
-            <select className={ctrl} value={paymentType} onChange={(e) => setPaymentType(e.target.value)}>
-              {PAYMENT_TYPES.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={label}>Receipt Date *</label>
-            <input type="date" className={ctrl} value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} />
-          </div>
-
-          {showChequeFields && (
-            <>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+          <div className="rounded-xl border border-slate-200 p-4 bg-slate-50/40">
+            <h3 className="text-xs font-bold text-slate-700 mb-3">Student Details</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
-                <label className={label}>Bank</label>
-                <select className={ctrl} value={bank} onChange={(e) => setBank(e.target.value)}>
-                  <option value="">Select Bank Name</option>
-                  {data.banks.map((b) => <option key={b.Id} value={b.Bank_Name}>{b.Bank_Name}</option>)}
+                <label className={label}>Student Name</label>
+                <input className={ctrl} value={data.student.Student_Name} disabled />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={label}>Student Id</label>
+                <input className={ctrl} value={data.student.Student_Id} disabled />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={label}>Course Name</label>
+                <input className={ctrl} value={data.student.Course_Name ?? ''} disabled />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={label}>Batch Code</label>
+                <input className={ctrl} value={data.student.Batch_Code ?? ''} disabled />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={label}>Contact No.</label>
+                <input className={ctrl} value={data.student.Present_Mobile ?? ''} disabled />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={label}>Email Address</label>
+                <input className={ctrl} value={data.student.Email ?? ''} disabled />
+              </div>
+              <div className="flex flex-col gap-1 sm:col-span-2">
+                <label className={label}>Due Date</label>
+                <input className={ctrl} value={fmtDate(data.dueDate)} disabled />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 p-4">
+            <h3 className="text-xs font-bold text-slate-700 mb-3">Transaction Details</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className={label}>Type *</label>
+                <select className={ctrl} value={type} onChange={(e) => setType(e.target.value as 'Credit' | 'Debit')}>
+                  <option value="Credit">Credit</option>
+                  <option value="Debit">Debit</option>
                 </select>
               </div>
               <div className="flex flex-col gap-1">
-                <label className={label}>Cheque/D.D. No. *</label>
-                <input className={ctrl} value={chequeNo} onChange={(e) => setChequeNo(e.target.value)} placeholder="Cheque/D.D.No." />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className={label}>Cheque Date</label>
-                <input type="date" className={ctrl} value={chequeDate} onChange={(e) => setChequeDate(e.target.value)} />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className={label}>Branch</label>
-                <input className={ctrl} value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="Branch" />
-              </div>
-            </>
-          )}
-
-          <div className="flex flex-col gap-1">
-            <label className={label}>Amount (Rs.)</label>
-            <input type="number" className={ctrl} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />
-          </div>
-          <div className="flex flex-col gap-1 lg:col-span-2">
-            <label className={label}>Particular</label>
-            <select className={ctrl} value={particular} onChange={(e) => handleParticularChange(e.target.value)}>
-              <option value="">Select Particular Type</option>
-              {data.particulars.map((p) => (
-                <option key={p.label} value={p.label}>
-                  {p.label}{p.fixed && p.amount != null ? ` (₹${p.amount})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={label}>Due Date</label>
-            <input className={ctrl} value={fmtDate(data.dueDate)} disabled />
-          </div>
-
-          <div className="flex flex-col gap-1 lg:col-span-4">
-            <label className={label}>Tax Type</label>
-            <div className="flex gap-5 mt-1">
-              {TAX_TYPES.map((t) => (
-                <label key={t} className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="taxType"
-                    checked={taxType === t}
-                    onChange={() => setTaxType(t)}
-                    className="accent-[#2E3093]"
-                  />
-                  {t}
-                </label>
-              ))}
-              <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                <label className={label}>Receipt No.</label>
                 <input
-                  type="radio"
-                  name="taxType"
-                  checked={taxType === ''}
-                  onChange={() => setTaxType('')}
-                  className="accent-[#2E3093]"
+                  className={`${ctrl} font-mono font-semibold text-[#2E3093]`}
+                  value={receiptNo}
+                  onChange={(e) => setReceiptNo(e.target.value)}
+                  placeholder="e.g. R-06/052"
                 />
-                None
-              </label>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={label}>Payment Type</label>
+                <select className={ctrl} value={paymentType} onChange={(e) => setPaymentType(e.target.value)}>
+                  {PAYMENT_TYPES.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={label}>Receipt Date *</label>
+                <input type="date" className={ctrl} value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} />
+              </div>
+
+              {showChequeFields && (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <label className={label}>Bank</label>
+                    <select className={ctrl} value={bank} onChange={(e) => setBank(e.target.value)}>
+                      <option value="">Select Bank Name</option>
+                      {data.banks.map((b) => <option key={b.Id} value={b.Bank_Name}>{b.Bank_Name}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className={label}>Cheque/D.D. No. *</label>
+                    <input className={ctrl} value={chequeNo} onChange={(e) => setChequeNo(e.target.value)} placeholder="Cheque/D.D.No." />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className={label}>Cheque Date</label>
+                    <input type="date" className={ctrl} value={chequeDate} onChange={(e) => setChequeDate(e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className={label}>Branch</label>
+                    <input className={ctrl} value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="Branch" />
+                  </div>
+                </>
+              )}
+
+              <div className="flex flex-col gap-1">
+                <label className={label}>Amount (Rs.)</label>
+                <input type="number" className={ctrl} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />
+              </div>
+              <div className="flex flex-col gap-1 sm:col-span-2">
+                <label className={label}>Particular</label>
+                <select className={ctrl} value={particular} onChange={(e) => handleParticularChange(e.target.value)}>
+                  <option value="">Select Particular Type</option>
+                  {data.particulars.map((p) => (
+                    <option key={p.label} value={p.label}>
+                      {p.label}{p.fixed && p.amount != null ? ` (₹${p.amount})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1 sm:col-span-2">
+                <label className={label}>Tax Type</label>
+                <div className="flex gap-5 mt-1 flex-wrap">
+                  {TAX_TYPES.map((t) => (
+                    <label key={t} className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="taxType"
+                        checked={taxType === t}
+                        onChange={() => setTaxType(t)}
+                        className="accent-[#2E3093]"
+                      />
+                      {t}
+                    </label>
+                  ))}
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="taxType"
+                      checked={taxType === ''}
+                      onChange={() => setTaxType('')}
+                      className="accent-[#2E3093]"
+                    />
+                    None
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Action buttons */}
         <div className="flex flex-wrap gap-2 mb-2">
-          <button onClick={() => handlePrint('Receipt')} className="h-9 px-4 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50">
+          <button onClick={handlePrint} className="h-9 px-4 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50">
             Print Receipt
           </button>
-          <button onClick={() => handlePrint('Invoice')} className="h-9 px-4 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50">
+          <button onClick={handlePrint} className="h-9 px-4 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50">
             Invoice
           </button>
           {data.record && (
             <button
-              onClick={handleEmailReceipt}
+              onClick={() => handleEmailReceipt()}
               disabled={emailing || !data.student.Email}
               title={!data.student.Email ? 'Student does not have an email address on file' : undefined}
               className="h-9 px-4 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
@@ -675,14 +754,16 @@ ${copy('Student Copy')}
               <tr className="border border-slate-300 bg-slate-50">
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-28">Date</th>
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300">Description</th>
+                <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-44">Transaction</th>
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-32">Amount</th>
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-32">Amount</th>
                 <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-36">Balance Payment</th>
+                <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-44">Action</th>
               </tr>
             </thead>
             <tbody>
               {!data.ledger.length && (
-                <tr><td colSpan={5} className="py-6 text-center text-xs text-slate-400 border border-slate-300">No transactions yet</td></tr>
+                <tr><td colSpan={7} className="py-6 text-center text-xs text-slate-400 border border-slate-300">No transactions yet</td></tr>
               )}
               {(() => {
                 let running = 0;
@@ -695,19 +776,48 @@ ${copy('Student Copy')}
                     <tr key={r.Fees_Id} className="hover:bg-slate-50/40">
                       <td className="py-2 px-3 text-xs border border-slate-300 text-center">{fmtDate(r.Date)}</td>
                       <td className="py-2 px-3 text-xs border border-slate-300">{desc}</td>
+                      <td className="py-2 px-3 text-xs border border-slate-300">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium">{r.Payment_Type || '—'}</span>
+                          <span className="font-mono text-[10px] text-slate-500">{r.Fees_Code || '—'}</span>
+                        </div>
+                      </td>
                       <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono">{r.Debit ? fmt(r.Debit) : ''}</td>
                       <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono">{r.Credit ? fmt(r.Credit) : ''}</td>
                       <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono font-semibold">{fmt(running)}</td>
+                      <td className="py-2 px-3 text-xs border border-slate-300 text-center">
+                        {r.Fees_Id > 0 && r.Credit > 0 ? (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => handleDownloadReceiptForFee(r.Fees_Id)}
+                              disabled={rowActionFeeId === r.Fees_Id && rowActionType === 'download'}
+                              className="h-7 px-2.5 rounded-md border border-slate-300 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              {rowActionFeeId === r.Fees_Id && rowActionType === 'download' ? 'Saving…' : 'Save'}
+                            </button>
+                            <button
+                              onClick={() => handleEmailReceipt(r.Fees_Id)}
+                              disabled={!data.student.Email || (rowActionFeeId === r.Fees_Id && rowActionType === 'email')}
+                              className="h-7 px-2.5 rounded-md border border-slate-300 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              {rowActionFeeId === r.Fees_Id && rowActionType === 'email' ? 'Sending…' : 'Email'}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 });
               })()}
               {data.ledger.length > 0 && (
                 <tr className="bg-slate-50 font-bold border-t-2 border-slate-400">
-                  <td colSpan={2} className="py-2 px-3 text-xs border border-slate-300 text-right">Total &gt;&gt;&gt;</td>
+                  <td colSpan={3} className="py-2 px-3 text-xs border border-slate-300 text-right">Total &gt;&gt;&gt;</td>
                   <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono">{fmt(data.totals.debit)}</td>
                   <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono">{fmt(data.totals.credit)}</td>
                   <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono">{fmt(data.totals.balance)}</td>
+                  <td className="py-2 px-3 text-xs border border-slate-300" />
                 </tr>
               )}
             </tbody>
