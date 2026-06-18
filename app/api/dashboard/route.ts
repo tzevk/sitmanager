@@ -813,12 +813,17 @@ async function fetchDashboardData(dept?: string) {
         am.Admission_Id AS id,
         sm.Student_Id AS student_id,
         sm.Student_Name AS student_name,
+        COALESCE(c.Course_Name, '') AS course_name,
+        sm.Batch_Code AS batch_code,
+        CAST(REPLACE(IFNULL(am.Fees, 0), ',', '') AS DECIMAL(15,2)) AS total_fee,
+        IFNULL(paid.total_paid, 0) AS paid_amount,
         GREATEST(
           CAST(REPLACE(IFNULL(am.Fees, 0), ',', '') AS DECIMAL(15,2)) - IFNULL(paid.total_paid, 0),
           0
         ) AS amount
       FROM admission_master am
       LEFT JOIN student_master sm ON sm.Student_Id = am.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+      LEFT JOIN course_mst c ON c.Course_Id = sm.Course_Id
       LEFT JOIN (
         SELECT Student_Id, SUM(IFNULL(Total_Amt, 0)) AS total_paid
         FROM s_fees_mst

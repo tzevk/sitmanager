@@ -1,6 +1,7 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useCallback, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import BatchMarketingWidget from './BatchMarketingWidget';
 import AnnualTargetsWidget from './AnnualTargetsWidget';
 import ContentCalendarWidget from './ContentCalendarWidget';
@@ -328,15 +329,32 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
     { label: 'Converted',       value: activeFunnel.converted,  pct: activeFunnel.total ? activeFunnel.converted  / activeFunnel.total * 100 : null,  color: '#D97706', bg: 'bg-amber-50/70'   },
   ];
 
+  const totalPendingFeeAmount = pendingFees.reduce((sum: number, row: any) => sum + Number(row.amount || 0), 0);
+
   const pendingFeesCard = (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <CardHeader
-        title="Pending Fees"
-        accent="#DC2626"
-        icon={Icons.wallet}
-        count={loading ? undefined : pendingFees.length}
-      />
-      <div className="max-h-64 overflow-y-auto">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-red-100 bg-gradient-to-r from-red-50/80 via-white to-white">
+        <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-red-100 text-red-700 [&_svg]:w-4 [&_svg]:h-4">
+          {Icons.wallet}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-gray-800 text-sm tracking-tight">Pending Fees</p>
+          <p className="text-[11px] text-gray-500">Students with remaining fee balance</p>
+        </div>
+        {!loading && (
+          <div className="flex items-center gap-2 text-right">
+            <div className="rounded-lg bg-white border border-red-100 px-3 py-1 shadow-sm">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Total Pending</p>
+              <p className="text-sm font-black tabular-nums text-red-700">₹ {totalPendingFeeAmount.toLocaleString('en-IN')}</p>
+            </div>
+            <div className="rounded-lg bg-white border border-gray-100 px-3 py-1 shadow-sm">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Students</p>
+              <p className="text-sm font-black tabular-nums text-gray-800">{pendingFees.length}</p>
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="max-h-80 overflow-auto">
         {loading ? (
           <div className="p-4 space-y-2">
             {[...Array(4)].map((_, i) => <div key={i} className="h-12 rounded-lg bg-gray-100 animate-pulse" />)}
@@ -346,17 +364,46 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
         ) : (
           <div className="divide-y divide-gray-100">
             {pendingFees.map((f: any, i: number) => (
-              <div key={`${f.id || f.student_id || i}`} className="flex items-center justify-between gap-3 px-4 py-2 hover:bg-gray-50/50">
-                <span className="text-sm text-gray-700 truncate min-w-0">
-                  {f.student_name || f.name || 'Student'}
-                </span>
-                <span className={`text-sm font-bold tabular-nums px-2 py-0.5 rounded-md whitespace-nowrap ${
-                  Number(f.amount) >= 20000 ? 'bg-red-100 text-red-700' :
-                  Number(f.amount) >= 10000 ? 'bg-orange-100 text-orange-700' :
-                                              'bg-rose-50 text-rose-600'
-                }`}>
-                  {f.amount ? `₹ ${Number(f.amount).toLocaleString('en-IN')}` : '—'}
-                </span>
+              <div key={`${f.id || f.student_id || i}`} className="grid grid-cols-1 lg:grid-cols-[minmax(220px,1.4fr)_minmax(180px,1fr)_minmax(180px,1fr)_auto] gap-3 items-center px-4 py-2.5 hover:bg-red-50/20">
+                <div className="min-w-0 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-red-50 text-red-700 flex items-center justify-center text-xs font-black shrink-0">
+                    {(f.student_name || f.name || 'S').slice(0, 1).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 truncate">{f.student_name || f.name || 'Student'}</p>
+                    <p className="text-[11px] text-gray-400 truncate">
+                      {f.course_name || '—'}{f.batch_code ? ` · ${toBatchNumber(f.batch_code)}` : ''}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between text-[10px] font-semibold text-gray-400 mb-1">
+                    <span>Paid</span>
+                    <span className="tabular-nums">₹ {Number(f.paid_amount || 0).toLocaleString('en-IN')} / ₹ {Number(f.total_fee || 0).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full"
+                      style={{ width: `${Math.min(100, Math.max(0, Number(f.total_fee) > 0 ? (Number(f.paid_amount || 0) / Number(f.total_fee)) * 100 : 0))}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-start lg:justify-end">
+                  <span className={`text-sm font-black tabular-nums px-2.5 py-1 rounded-lg whitespace-nowrap ${
+                    Number(f.amount) >= 20000 ? 'bg-red-100 text-red-700' :
+                    Number(f.amount) >= 10000 ? 'bg-orange-100 text-orange-700' :
+                                                'bg-rose-50 text-rose-600'
+                  }`}>
+                    ₹ {Number(f.amount || 0).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                {f.student_id ? (
+                  <Link href={`/dashboard/fee-details/${f.student_id}`} className="h-7 px-3 inline-flex items-center justify-center rounded-md border border-gray-200 text-[11px] font-bold text-gray-600 hover:bg-gray-50 whitespace-nowrap">
+                    View
+                  </Link>
+                ) : (
+                  <span />
+                )}
               </div>
             ))}
           </div>
