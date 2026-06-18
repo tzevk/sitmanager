@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
          b.Batch_Id,
          b.Batch_code,
          b.Course_Id,
+         b.Category,
          c.Course_Name,
          DATE_FORMAT(${SDATE_EXPR}, '%Y-%m-%d') AS SDate,
          b.EDate

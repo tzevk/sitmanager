@@ -71,6 +71,16 @@ function exhibitionStatusCls(status: ExhibitionStatus) {
   return 'bg-gray-100 text-gray-600 ring-gray-200';
 }
 
+function batchCategoryLabel(row: any): string {
+  const raw = String(row?.Category ?? row?.BatchCategory ?? row?.Batch_Type ?? '').trim();
+  if (raw) return raw;
+  const name = String(row?.CourseName ?? '').trim();
+  const match = name.match(/\b(Weekend|Full\s*Time|Fulltime|Part\s*Time|Online|Corporate Training)\b/i);
+  if (!match) return '';
+  const value = match[1].replace(/full\s*time/i, 'Full Time').replace(/part\s*time/i, 'Part Time');
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 /* ── Shared primitives ────────────────────────────────────────────── */
 function Bar({ value, className = '' }: { value: number; className?: string }) {
   const t = tone(value);
@@ -449,7 +459,16 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                         <td className="px-4 py-2.5">
                           <span className="font-mono font-semibold text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md border border-indigo-100">{toBatchNumber(b.Batch_code)}</span>
                         </td>
-                        <td className="px-4 py-2.5 text-gray-700 font-medium">{b.CourseName || '—'}</td>
+                        <td className="px-4 py-2.5 text-gray-700 font-medium">
+                          <span className="inline-flex items-center gap-2 flex-wrap">
+                            <span>{b.CourseName || '—'}</span>
+                            {batchCategoryLabel(b) && (
+                              <span className="inline-flex items-center rounded-full border border-sky-100 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 whitespace-nowrap">
+                                {batchCategoryLabel(b)}
+                              </span>
+                            )}
+                          </span>
+                        </td>
                         <td className="px-4 py-2.5 text-center tabular-nums text-[11px] font-medium text-gray-600 whitespace-nowrap">{fmtStart}</td>
                         <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Enquiries_Received ?? 0}</td>
                         <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Enquiries_Contacted ?? 0}</td>

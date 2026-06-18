@@ -20,6 +20,7 @@ interface BatchOption {
   Batch_Id: number;
   Batch_code: string;
   Course_Name: string | null;
+  Category: string | null;
   SDate: string | null;
 }
 
@@ -27,6 +28,7 @@ interface AnnualBatchApiRow {
   Batch_Id: number;
   Batch_code: string;
   Course_Name: string | null;
+  Category: string | null;
   SDate: string | null;
 }
 
@@ -122,6 +124,17 @@ function statusCls(status: BMStatus) {
   return 'bg-amber-100 text-amber-700 ring-amber-200';
 }
 
+function batchCategoryLabel(batch: BatchOption): string {
+  const raw = String(batch.Category ?? '').trim();
+  if (raw) return raw;
+  const name = String(batch.Course_Name ?? '').trim();
+  const match = name.match(/\b(Weekend|Full\s*Time|Fulltime|Part\s*Time|Online|Corporate Training)\b/i);
+  if (!match) return '';
+  return match[1]
+    .replace(/full\s*time/i, 'Full Time')
+    .replace(/part\s*time/i, 'Part Time');
+}
+
 // ── Task cells: split due date and status into separate columns ───────────────
 function TaskCells({
   status,
@@ -199,6 +212,7 @@ export default function BatchMarketingWidget() {
           Batch_Id: b.Batch_Id,
           Batch_code: b.Batch_code,
           Course_Name: b.Course_Name,
+          Category: b.Category,
           SDate: b.SDate,
         });
       }
@@ -426,7 +440,14 @@ export default function BatchMarketingWidget() {
                             <path d="M12 2a5 5 0 00-5 5v3H6a2 2 0 00-2 2v9a2 2 0 002 2h12a2 2 0 002-2v-9a2 2 0 00-2-2h-1V7a5 5 0 00-5-5zm0 2a3 3 0 013 3v3H9V7a3 3 0 013-3z" />
                           </svg>
                         )}
-                        {b.Course_Name || '—'}
+                        <span className="inline-flex items-center gap-2 flex-wrap">
+                          <span>{b.Course_Name || '—'}</span>
+                          {batchCategoryLabel(b) && (
+                            <span className="inline-flex items-center rounded-full border border-sky-100 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 whitespace-nowrap">
+                              {batchCategoryLabel(b)}
+                            </span>
+                          )}
+                        </span>
                       </td>
 
                       {/* Batch code */}
