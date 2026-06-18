@@ -106,6 +106,7 @@ export default function FeeDetailsEditPage() {
   const [receiptDate, setReceiptDate] = useState(todayISO());
   const [taxType, setTaxType] = useState('');
   const [receiptNo, setReceiptNo] = useState('');
+  const [suggestedReceiptNo, setSuggestedReceiptNo] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -129,9 +130,12 @@ export default function FeeDetailsEditPage() {
         setReceiptDate(d.record.RDate ? String(d.record.RDate).slice(0, 10) : todayISO());
         setTaxType(d.record.TaxType ?? '');
         setReceiptNo(d.record.Fees_Code ?? '');
+        setSuggestedReceiptNo('');
       } else {
         setParticular(d.particulars?.[0]?.label ?? '');
-        setReceiptNo(d.nextReceiptNo ?? '');
+        const nextReceiptNo = d.nextReceiptNo ?? '';
+        setReceiptNo(nextReceiptNo);
+        setSuggestedReceiptNo(nextReceiptNo);
       }
     } finally {
       setLoading(false);
@@ -157,6 +161,11 @@ export default function FeeDetailsEditPage() {
         setError('Transaction number is required for this payment type.');
         return;
       }
+      const feesCode = data?.record
+        ? receiptNo.trim() || null
+        : receiptNo.trim() && receiptNo.trim() !== suggestedReceiptNo.trim()
+          ? receiptNo.trim()
+          : null;
       const body = {
         Type: type,
         Payment_Type: paymentType,
@@ -170,7 +179,7 @@ export default function FeeDetailsEditPage() {
         Particular: particular,
         RDate: receiptDate,
         TaxType: taxType,
-        Fees_Code: receiptNo.trim() || null,
+        Fees_Code: feesCode,
       };
 
       const url = data?.record

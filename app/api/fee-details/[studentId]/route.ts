@@ -23,16 +23,17 @@ async function generateReceiptNo(): Promise<string> {
     `SELECT Fees_Code
      FROM s_fees_mst
      WHERE Fees_Code LIKE ?
+       AND CAST(SUBSTRING_INDEX(Fees_Code, '/', -1) AS UNSIGNED) > 0
+       AND (IsDelete = 0 OR IsDelete IS NULL)
      ORDER BY Fees_Id DESC
-     LIMIT 500`,
+     LIMIT 1`,
     [`${prefix}%`]
   );
-  const lastSeq = rows.reduce((max, row) => {
-    const match = String(row.Fees_Code ?? '').match(/^R-\d{2}\/(\d+)$/);
-    return Math.max(max, Number(match?.[1] ?? 0));
-  }, 0);
+  const previousSeqText = String(rows[0]?.Fees_Code ?? '').split('/').pop() ?? '';
+  const lastSeq = Number(previousSeqText || 0);
   const nextSeq = lastSeq + 1;
-  return `R-${month}/${String(nextSeq).padStart(3, '0')}`;
+  const width = Math.max(previousSeqText.length, 2);
+  return `R-${month}/${String(nextSeq).padStart(width, '0')}`;
 }
 
 const isReceiptNoFormat = (value: string) => /^R-\d{2}\/\d+$/.test(value.trim());

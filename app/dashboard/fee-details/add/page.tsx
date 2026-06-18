@@ -112,6 +112,7 @@ export default function AddFeeDetailsPage() {
   const [taxType, setTaxType] = useState('');
   const [generateReceipt, setGenerateReceipt] = useState(false);
   const [receiptNo, setReceiptNo] = useState('');
+  const [suggestedReceiptNo, setSuggestedReceiptNo] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [deletingFeeId, setDeletingFeeId] = useState<number | null>(null);
@@ -163,12 +164,15 @@ export default function AddFeeDetailsPage() {
     setReceiptDate(todayISO());
     setGenerateReceipt(false);
     setReceiptNo('');
+    setSuggestedReceiptNo('');
     try {
       const res = await fetch(`/api/fee-details/${sid}`);
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Failed to load');
       setData(d);
-      setReceiptNo(d.nextReceiptNo ?? '');
+      const nextReceiptNo = d.nextReceiptNo ?? '';
+      setReceiptNo(nextReceiptNo);
+      setSuggestedReceiptNo(nextReceiptNo);
       setParticular(d.particulars?.[0]?.label ?? '');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load form details');
@@ -217,7 +221,7 @@ export default function AddFeeDetailsPage() {
         RDate: receiptDate,
         TaxType: taxType,
         GenerateReceipt: generateReceipt,
-        Fees_Code: receiptNo.trim() || null,
+        Fees_Code: receiptNo.trim() && receiptNo.trim() !== suggestedReceiptNo.trim() ? receiptNo.trim() : null,
       };
       const res = await fetch(`/api/fee-details/${studentId}`, {
         method: 'POST',
