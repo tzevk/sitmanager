@@ -19,7 +19,6 @@ const REQUIRED_ENV = [...DB_REQUIRED_ENV, ...AUTH_REQUIRED_ENV] as const;
 const OPTIONAL_ENV = [
   'DB_PORT',       // defaults to 3306
   'NODE_ENV',      // defaults to development
-  'REDIS_URL',     // Upstash Redis URL — enables distributed rate-limit & permission cache
   'META_APP_ID',
   'NEXT_PUBLIC_META_APP_ID',
   'NEXT_PUBLIC_META_API_VERSION',

@@ -1,12 +1,11 @@
 /**
  * Rate limiter for API routes.
  *
- * Uses Redis when REDIS_URL is set (distributed, works across all instances).
- * Falls back to in-memory sliding-window counter (per-instance) otherwise.
+ * In-memory sliding-window counter (per-instance). Limits are enforced per
+ * running instance rather than globally.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { redis } from './redis';
 
 interface RateLimitEntry {
   count: number;
@@ -66,50 +65,6 @@ function memCheck(
   };
 }
 
-// ── Redis check (atomic via Lua) ──────────────────────────────────────────────
-
-const LUA_SCRIPT = `
-local key = KEYS[1]
-local limit = tonumber(ARGV[1])
-local window = tonumber(ARGV[2])
-local current = redis.call('GET', key)
-if current == false then
-  redis.call('SET', key, 1, 'EX', window)
-  return {1, limit - 1, window}
-end
-current = tonumber(current)
-if current >= limit then
-  local ttl = redis.call('TTL', key)
-  return {0, 0, ttl}
-end
-redis.call('INCR', key)
-local ttl = redis.call('TTL', key)
-return {1, limit - current - 1, ttl}
-`;
-
-async function redisCheck(
-  ip: string,
-  storeKey: string,
-  maxRequests: number,
-  windowSeconds: number
-): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
-  try {
-    const key = `rl:${storeKey}:${ip}`;
-    const result = await redis!.eval(LUA_SCRIPT, 1, key, String(maxRequests), String(windowSeconds)) as [number, number, number];
-    const [allowed, remaining, ttl] = result;
-    return {
-      allowed: allowed === 1,
-      remaining,
-      resetAt: Date.now() + ttl * 1000,
-    };
-  } catch (err) {
-    // Redis unavailable (ECONNRESET, timeout, etc.) — fall back to in-memory
-    // so login and other routes keep working during Redis outages.
-    console.warn('[RateLimit] Redis error, using in-memory fallback:', err instanceof Error ? err.message : String(err));
-    return memCheck(ip, storeKey, maxRequests, windowSeconds);
-  }
-}
-
 // ── Factory ───────────────────────────────────────────────────────────────────
 
 export function createRateLimiter(options: RateLimiterOptions) {
@@ -121,9 +76,7 @@ export function createRateLimiter(options: RateLimiterOptions) {
     const pathKey = normalizeRateLimitPath(request.nextUrl.pathname);
     const storeKey = `${baseStoreKey}:${pathKey}`;
 
-    const { allowed, resetAt } = redis
-      ? await redisCheck(ip, storeKey, maxRequests, windowSeconds)
-      : memCheck(ip, storeKey, maxRequests, windowSeconds);
+    const { allowed, resetAt } = memCheck(ip, storeKey, maxRequests, windowSeconds);
 
     if (!allowed) {
       const retryAfter = Math.ceil((resetAt - Date.now()) / 1000);

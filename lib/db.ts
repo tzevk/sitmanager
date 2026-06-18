@@ -42,8 +42,13 @@ export function getPool(): mysql.Pool {
       user: env.DB_USER,
       password: env.DB_PASSWORD,
       waitForConnections: true,
-      connectionLimit: 10,
-      maxIdle: 2,
+      // Per-instance limit. Total server connections = this × running instances
+      // (each request/cron instance holds its own pool), so keep the product well
+      // under MySQL max_connections. The dashboard fan-out is already capped at 8
+      // concurrent queries by its own semaphore, so 15 is ample for request traffic.
+      // Override via DB_POOL_LIMIT once you know your MySQL max_connections.
+      connectionLimit: Number(process.env.DB_POOL_LIMIT) || 15,
+      maxIdle: Number(process.env.DB_POOL_MAX_IDLE) || 4,
       idleTimeout: 10_000,
       queueLimit: 0,
       connectTimeout: 30_000,
@@ -166,7 +171,7 @@ export async function queryOne<T>(
   return rows[0] || null;
 }
 
-// ── Shared cache helpers (Redis-backed when REDIS_URL is configured) ────────
+// ── Shared cache helpers (in-process, per-instance) ────────
 
 const inFlight = new Map<string, Promise<unknown>>();
 

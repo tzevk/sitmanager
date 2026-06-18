@@ -1,6 +1,4 @@
-import { redis } from './redis';
-
-// ── In-memory fallback (used when REDIS_URL is not set) ──────────────────────
+// ── In-process cache store ───────────────────────────────────────────────────
 
 interface CacheEntry<T> {
   data: T;
@@ -46,47 +44,27 @@ if (typeof setInterval !== 'undefined') {
   setInterval(() => mem.cleanup(), 5 * 60 * 1000);
 }
 
-// ── Unified async cache (Redis when available, memory otherwise) ──────────────
+// ── Unified async cache (in-process, per-instance) ───────────────────────────
+// The async signatures are kept so call sites need no changes.
 
 export const cache = {
   async get<T>(key: string): Promise<T | null> {
-    if (redis) {
-      const raw = await redis.get(key);
-      if (raw == null) return null;
-      try { return JSON.parse(raw) as T; } catch { return null; }
-    }
     return mem.get<T>(key);
   },
 
   async set<T>(key: string, data: T, ttlMs: number = 60_000): Promise<void> {
-    if (redis) {
-      await redis.set(key, JSON.stringify(data), 'PX', ttlMs);
-      return;
-    }
     mem.set(key, data, ttlMs);
   },
 
   async delete(key: string): Promise<void> {
-    if (redis) { await redis.del(key); return; }
     mem.delete(key);
   },
 
   async deleteByPrefix(prefix: string): Promise<void> {
-    if (redis) {
-      // SCAN instead of KEYS to avoid blocking the server
-      let cursor = '0';
-      do {
-        const [next, keys] = await redis.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 100);
-        cursor = next;
-        if (keys.length) await redis.del(...keys);
-      } while (cursor !== '0');
-      return;
-    }
     mem.deleteByPrefix(prefix);
   },
 
   async clear(): Promise<void> {
-    if (redis) { await redis.flushdb(); return; }
     mem.clear();
   },
 };

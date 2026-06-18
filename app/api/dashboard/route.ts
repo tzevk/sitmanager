@@ -1,19 +1,50 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { getPool } from '@/lib/db';
+import { getPool, cachedWithMeta } from '@/lib/db';
 import { requireAuth } from '@/lib/api-auth';
 import { dashboardRateLimiter } from '@/lib/rate-limit';
 import { cache, cacheTTL } from '@/lib/cache';
 
 const DASHBOARD_CACHE_TTL = cacheTTL.short;
 
+// ── concurrency limiter ──
+// The dashboard fans out ~50 sub-queries in one Promise.all. Without a cap, a
+// single dashboard load would grab every pool connection and starve other
+// endpoints. Gate each query through a process-wide semaphore so at most
+// MAX_CONCURRENT_QUERIES are in flight, leaving pool headroom for other routes.
+// Because safeQuery is async, each call suspends at acquireQuerySlot() BEFORE
+// reaching pool.query — even though the array literal invokes them eagerly.
+const MAX_CONCURRENT_QUERIES = 8;
+let activeQueries = 0;
+const queryWaiters: Array<() => void> = [];
+
+function acquireQuerySlot(): Promise<void> {
+  if (activeQueries < MAX_CONCURRENT_QUERIES) {
+    activeQueries++;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => queryWaiters.push(resolve));
+}
+
+function releaseQuerySlot(): void {
+  const next = queryWaiters.shift();
+  if (next) {
+    next(); // hand the held slot directly to the next waiter
+  } else {
+    activeQueries--;
+  }
+}
+
 // ── helper: safe query that never throws ──
 async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallback: T): Promise<T> {
+  await acquireQuerySlot();
   try {
     const [rows] = await pool.query(sql);
     return rows as T;
   } catch {
     return fallback;
+  } finally {
+    releaseQuerySlot();
   }
 }
 

@@ -8,27 +8,15 @@
   "crons": [
     {
       "path": "/api/cron/legacy-inquiry-sync",
-      "schedule": "*/10 * * * *"
+      "schedule": "3-59/10 * * * *"
     },
     {
       "path": "/api/cron/meta-leads-refresh",
       "schedule": "*/2 * * * *"
     },
     {
-      "path": "/api/cron/db-connection-cleanup",
-      "schedule": "*/10 * * * *"
-    },
-    {
       "path": "/api/cron/legacy-batch-sync",
-      "schedule": "*/10 * * * *"
-    },
-    {
-      "path": "/api/cron/legacy-student-sync",
-      "schedule": "*/10 * * * *"
-    },
-    {
-      "path": "/api/cron/legacy-fees-sync",
-      "schedule": "*/10 * * * *"
+      "schedule": "5-59/10 * * * *"
     },
     {
       "path": "/api/cron/suvidya-inquiry-sync",
@@ -37,10 +25,6 @@
     {
       "path": "/api/cron/suvidya-inquiry-sync-pune",
       "schedule": "1-59/2 * * * *"
-    },
-    {
-      "path": "/api/cron/meta-batch-recommendations",
-      "schedule": "5 0 * * *"
     }
   ],
   "functions": {
