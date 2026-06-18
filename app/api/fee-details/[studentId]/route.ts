@@ -22,13 +22,13 @@ async function generateReceiptNo(): Promise<string> {
     `SELECT MAX(CAST(SUBSTRING_INDEX(Fees_Code, '/', -1) AS UNSIGNED)) AS lastSeq
      FROM s_fees_mst
      WHERE Fees_Code REGEXP ?`,
-    [`^R-${month}/[0-9]{3}$`]
+    [`^R-${month}/[0-9]+$`]
   );
   const nextSeq = Number(rows[0]?.lastSeq ?? 0) + 1;
   return `R-${month}/${String(nextSeq).padStart(3, '0')}`;
 }
 
-const isReceiptNoFormat = (value: string) => /^R-\d{2}\/\d{3}$/.test(value.trim());
+const isReceiptNoFormat = (value: string) => /^R-\d{2}\/\d+$/.test(value.trim());
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: string }> }) {
   const auth = await requirePermission(req, ['report_fees.view', 'finance.view']);
