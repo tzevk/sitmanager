@@ -91,6 +91,77 @@ async function fetchDashboardData(dept?: string) {
   const needsAdminWidgets = isAdmin;
   const needsQuickStats = isGeneral || isAdmin;
 
+  // ── Per-batch lead-funnel aggregate (shared, set-based) ──────────
+  // Mirrors the corrected /api/dashboard/cbd-lead-funnel definitions so the
+  // per-batch numbers stay consistent with the Total Lead Funnel Summary:
+  //   • Contacted  → has a real discussion record (awt_inquirydiscussion)
+  //   • Interested → an online admission form exists (online_admission_payload)
+  //   • Converted  → that form was accepted into a student (Admitted / linked)
+  //
+  // IMPORTANT: this runs on the dashboard landing query over the whole
+  // student_inquiry table, so it MUST stay set-based. Per-row correlated
+  // EXISTS subqueries here exhaust the DB connection pool under load (see
+  // memory: student-list-perf). The signal tables are pre-grouped into derived
+  // sets and hash-joined once; each join key is unique per inquiry, so COUNT(*)
+  // does not fan out.
+  const BATCH_INQUIRY_AGG = `(
+    SELECT
+      TRIM(sinq.Batch_Code) AS Batch_code,
+      MAX(CAST(NULLIF(TRIM(CAST(sinq.Course_Id AS CHAR)), '') AS UNSIGNED)) AS Course_Id,
+      COUNT(*) AS Enquiries_Received,
+      SUM(CASE WHEN (
+            disc_inq.k IS NOT NULL
+            OR (sinq.Student_Id IS NOT NULL AND (disc_leg.k IS NOT NULL OR disc_stu.k IS NOT NULL))
+          ) THEN 1 ELSE 0 END) AS Enquiries_Contacted,
+      SUM(CASE WHEN oap.Inquiry_Id IS NOT NULL THEN 1 ELSE 0 END) AS Interested_Students,
+      SUM(CASE WHEN (
+            oap.Inquiry_Id IS NOT NULL
+            AND (sinq.OnlineState = 8 OR sm.Student_Id IS NOT NULL)
+          ) THEN 1 ELSE 0 END) AS Confirmed_Admissions
+    FROM student_inquiry sinq
+    LEFT JOIN (
+      SELECT Inquiry_id AS k FROM awt_inquirydiscussion
+      WHERE deleted = 0 AND Inquiry_id IS NOT NULL GROUP BY Inquiry_id
+    ) disc_inq ON disc_inq.k = sinq.Inquiry_Id
+    LEFT JOIN (
+      SELECT Inquiry_id AS k FROM awt_inquirydiscussion
+      WHERE deleted = 0 AND Inquiry_id IS NOT NULL GROUP BY Inquiry_id
+    ) disc_leg ON sinq.Student_Id IS NOT NULL AND disc_leg.k = sinq.Student_Id
+    LEFT JOIN (
+      SELECT student_id AS k FROM awt_inquirydiscussion
+      WHERE deleted = 0 AND student_id IS NOT NULL GROUP BY student_id
+    ) disc_stu ON sinq.Student_Id IS NOT NULL AND disc_stu.k = sinq.Student_Id
+    LEFT JOIN online_admission_payload oap ON oap.Inquiry_Id = sinq.Inquiry_Id
+    LEFT JOIN student_master sm
+      ON sm.Student_Id = sinq.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+    WHERE (sinq.IsDelete = 0 OR sinq.IsDelete IS NULL)
+      AND TRIM(IFNULL(sinq.Batch_Code, '')) <> ''
+    GROUP BY TRIM(sinq.Batch_Code)
+  )`;
+
+  // batch_mst.SDate is stored in mixed formats — parse before comparing/sorting.
+  const BATCH_SDATE_EXPR = `COALESCE(
+    STR_TO_DATE(CAST(b.SDate AS CHAR), '%Y-%m-%d'),
+    STR_TO_DATE(CAST(b.SDate AS CHAR), '%d-%m-%Y'),
+    STR_TO_DATE(CAST(b.SDate AS CHAR), '%d/%m/%Y'),
+    STR_TO_DATE(CAST(b.SDate AS CHAR), '%m/%d/%Y')
+  )`;
+
+  // The online admission form store may not exist on a fresh database; ensure it so
+  // the EXISTS checks above don't make safeQuery() swallow the whole widget query.
+  if (needsUpcomingBatches) {
+    try {
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS online_admission_payload (
+           Inquiry_Id INT NOT NULL PRIMARY KEY,
+           Payload    LONGTEXT NULL,
+           Created_At DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           Updated_At DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+      );
+    } catch { /* best-effort */ }
+  }
+
   // ── Run ALL independent queries in parallel ──────────────────────
   const [
     annualTargets,
@@ -253,26 +324,7 @@ async function fetchDashboardData(dept?: string) {
             STR_TO_DATE(CAST(b.Admission_Date AS CHAR), '%d/%m/%Y'),
             STR_TO_DATE(CAST(b.Admission_Date AS CHAR), '%m/%d/%Y')
           ) AS ParsedAdmissionDate
-        FROM (
-          SELECT
-            TRIM(Batch_Code) AS Batch_code,
-            MAX(CAST(NULLIF(TRIM(CAST(Course_Id AS CHAR)), '') AS UNSIGNED)) AS Course_Id,
-            COUNT(*) AS Enquiries_Received,
-            SUM(CASE WHEN TRIM(IFNULL(Discussion, '')) <> '' THEN 1 ELSE 0 END) AS Enquiries_Contacted,
-            SUM(CASE
-              WHEN LOWER(IFNULL(Inquiry, '')) IN ('yes', 'y', 'interested')
-                OR LOWER(IFNULL(JobRequired, '')) IN ('yes', 'y')
-                OR LOWER(IFNULL(Discussion, '')) LIKE '%interested%'
-              THEN 1 ELSE 0 END) AS Interested_Students,
-            SUM(CASE
-              WHEN LOWER(IFNULL(Admission, '')) IN ('yes', 'y', '1', 'true')
-                OR IFNULL(admission_done, 0) = 1
-              THEN 1 ELSE 0 END) AS Confirmed_Admissions
-          FROM student_inquiry
-          WHERE (IsDelete = 0 OR IsDelete IS NULL)
-            AND TRIM(IFNULL(Batch_Code, '')) <> ''
-          GROUP BY TRIM(Batch_Code)
-        ) si
+        FROM ${BATCH_INQUIRY_AGG} si
         LEFT JOIN batch_mst b
           ON LOWER(TRIM(b.Batch_code)) = LOWER(si.Batch_code)
          AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
@@ -1113,7 +1165,7 @@ async function fetchDashboardData(dept?: string) {
       SELECT
         b.Batch_Id,
         b.Batch_code,
-        DATE_FORMAT(b.SDate, '%Y-%m-%d') AS SDate,
+        DATE_FORMAT(${BATCH_SDATE_EXPR}, '%Y-%m-%d') AS SDate,
         DATE_FORMAT(b.EDate, '%Y-%m-%d') AS EDate,
         b.Category,
         b.Duration,
@@ -1138,30 +1190,12 @@ async function fetchDashboardData(dept?: string) {
           AND (Cancel = 0 OR Cancel IS NULL)
         GROUP BY Batch_Id
       ) am ON b.Batch_Id = am.Batch_Id
-      LEFT JOIN (
-        SELECT
-          Course_Id,
-          COUNT(*) AS Enquiries_Received,
-          SUM(CASE WHEN TRIM(IFNULL(Discussion, '')) <> '' THEN 1 ELSE 0 END) AS Enquiries_Contacted,
-          SUM(CASE
-            WHEN LOWER(IFNULL(Inquiry, '')) IN ('yes', 'y', 'interested')
-              OR LOWER(IFNULL(JobRequired, '')) IN ('yes', 'y')
-              OR LOWER(IFNULL(Discussion, '')) LIKE '%interested%'
-            THEN 1 ELSE 0 END) AS Interested_Students,
-          SUM(CASE
-            WHEN LOWER(IFNULL(Admission, '')) IN ('yes', 'y', '1', 'true')
-              OR IFNULL(admission_done, 0) = 1
-            THEN 1 ELSE 0 END) AS Confirmed_Admissions
-        FROM student_inquiry
-        WHERE (IsDelete = 0 OR IsDelete IS NULL)
-          AND Inquiry_Dt >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
-        GROUP BY Course_Id
-      ) si ON b.Course_Id = si.Course_Id
-      WHERE b.SDate >= CURDATE()
-        AND b.SDate <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
+      LEFT JOIN ${BATCH_INQUIRY_AGG} si ON LOWER(TRIM(b.Batch_code)) = LOWER(si.Batch_code)
+      WHERE ${BATCH_SDATE_EXPR} >= CURDATE()
+        AND ${BATCH_SDATE_EXPR} <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
         AND (b.IsDelete IS NULL OR b.IsDelete = 0)
         AND (b.Cancel IS NULL OR b.Cancel = 0)
-      ORDER BY b.SDate ASC
+      ORDER BY ${BATCH_SDATE_EXPR} ASC
       LIMIT 50
     `, [])
     : upcomingBatches;

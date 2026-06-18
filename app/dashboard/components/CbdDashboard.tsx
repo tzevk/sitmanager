@@ -237,6 +237,9 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
   // ── Lead funnel filter state ────────────────────────────────────
   const nowYear  = new Date().getFullYear();
   const nowMonth = new Date().getMonth() + 1; // 1-12
+  // Financial year runs Apr–Mar, so the current FY started last calendar year
+  // when we're in Jan–Mar.
+  const currentFyStartYear = nowMonth >= 4 ? nowYear : nowYear - 1;
   const [filterMode,  setFilterMode]  = React.useState<'year' | 'month'>('month');
   const [filterYear,  setFilterYear]  = React.useState(nowYear);
   const [filterMonth, setFilterMonth] = React.useState(nowMonth);
@@ -409,13 +412,13 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
           {/* Mode toggle */}
           <div className="flex rounded-lg overflow-hidden border border-gray-200 text-[11px] font-bold">
             <button
-              onClick={() => setFilterMode('month')}
+              onClick={() => { setFilterMode('month'); setFilterYear(nowYear); }}
               className={`px-3 py-1.5 transition-colors ${filterMode === 'month' ? 'bg-[#2E3093] text-white' : 'text-gray-500 hover:bg-gray-100'}`}
             >
               By Month
             </button>
             <button
-              onClick={() => setFilterMode('year')}
+              onClick={() => { setFilterMode('year'); setFilterYear(currentFyStartYear); }}
               className={`px-3 py-1.5 transition-colors ${filterMode === 'year' ? 'bg-[#2E3093] text-white' : 'text-gray-500 hover:bg-gray-100'}`}
             >
               By Year
@@ -429,7 +432,9 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
             className="text-[11px] font-semibold border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20"
           >
             {buildYearOptions(nowYear).map(y => (
-              <option key={y} value={y}>{y}</option>
+              <option key={y} value={y}>
+                {filterMode === 'year' ? `FY ${y}-${String((y + 1) % 100).padStart(2, '0')}` : y}
+              </option>
             ))}
           </select>
 
@@ -449,7 +454,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
           <span className="ml-auto text-[10px] font-semibold text-gray-400">
             {filterMode === 'month'
               ? `${MONTH_NAMES[filterMonth - 1]} ${filterYear}`
-              : `Full Year ${filterYear}`}
+              : `FY ${filterYear}-${String((filterYear + 1) % 100).padStart(2, '0')} (Apr–Mar)`}
           </span>
           {funnelLoading && (
             <div className="w-3.5 h-3.5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />

@@ -40,7 +40,6 @@ interface LocalStatus {
   announcement_status: BMStatus;
   meta_ads_status: BMStatus;
   is_locked: boolean;
-  platforms: string[];
 }
 
 const DEFAULT_STATUS: Omit<LocalStatus, 'id'> = {
@@ -48,54 +47,7 @@ const DEFAULT_STATUS: Omit<LocalStatus, 'id'> = {
   announcement_status: 'Pending',
   meta_ads_status: 'Pending',
   is_locked: false,
-  platforms: [],
 };
-
-const BATCH_PLATFORMS = ['Instagram', 'Facebook', 'WhatsApp', 'Email', 'LinkedIn', 'YouTube', 'Website', 'Google Ads', 'Phone Call'];
-
-function PlatformMultiSelect({ value, onChange, disabled }: { value: string[]; onChange: (v: string[]) => void; disabled: boolean }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const toggle = (p: string) =>
-    onChange(value.includes(p) ? value.filter(x => x !== p) : [...value, p]);
-
-  const label = value.length === 0 ? 'Select…' : value.length === 1 ? value[0] : `${value.length} platforms`;
-
-  return (
-    <div className="relative min-w-[110px]" ref={ref}>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => !disabled && setOpen(o => !o)}
-        className={`w-full text-left text-[10px] border border-gray-200 rounded-md px-2 py-1.5 bg-white flex items-center justify-between gap-1 hover:border-gray-300 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-      >
-        <span className="truncate text-gray-700">{label}</span>
-        <svg className={`w-3 h-3 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute z-50 top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[150px]">
-          {BATCH_PLATFORMS.map(p => (
-            <label key={p} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs text-gray-700">
-              <input type="checkbox" checked={value.includes(p)} onChange={() => toggle(p)} className="rounded accent-[#2E3093]" />
-              {p}
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function subtractMonths(dateStr: string, months: number): string {
@@ -262,7 +214,6 @@ export default function BatchMarketingWidget() {
           announcement_status: r.announcement_status,
           meta_ads_status:     r.meta_ads_status,
           is_locked:           r.is_locked === 1,
-          platforms:           [],
         });
       }
       setStatuses(map);
@@ -380,16 +331,6 @@ export default function BatchMarketingWidget() {
     }
   }, [statuses]);
 
-  const handleLocalUpdate = useCallback((batch: BatchOption, update: Partial<Pick<LocalStatus, 'platforms'>>) => {
-    const key = batchIdentity(batch);
-    setStatuses(prev => {
-      const m = new Map(prev);
-      const current = m.get(key) ?? m.get(batch.Batch_code) ?? { ...DEFAULT_STATUS };
-      m.set(key, { ...current, ...update });
-      return m;
-    });
-  }, []);
-
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -439,7 +380,6 @@ export default function BatchMarketingWidget() {
                 <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center whitespace-nowrap">Meta Status</th>
                 <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center whitespace-nowrap">Flyer Date</th>
                 <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center whitespace-nowrap">Flyer Status</th>
-                <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-left whitespace-nowrap">Platform</th>
                 <th className="py-2.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 text-center w-20 sticky right-0 z-20 bg-gray-50 whitespace-nowrap shadow-[-1px_0_0_rgba(229,231,235,1)]">Actions</th>
               </tr>
             </thead>
@@ -447,7 +387,7 @@ export default function BatchMarketingWidget() {
               {loading ? (
                 Array.from({length: 5}).map((_, i) => (
                   <tr key={i} className="border-t border-gray-200">
-                    {Array.from({length: 11}).map((_, j) => (
+                    {Array.from({length: 10}).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-3 bg-gray-100 rounded animate-pulse" style={{ width: j === 0 ? '70%' : '50%' }} />
                       </td>
@@ -456,7 +396,7 @@ export default function BatchMarketingWidget() {
                 ))
               ) : batches.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-5 py-12 text-center text-sm text-gray-400">
+                  <td colSpan={10} className="px-5 py-12 text-center text-sm text-gray-400">
                     No upcoming batches in the next 6 months
                   </td>
                 </tr>
@@ -466,7 +406,7 @@ export default function BatchMarketingWidget() {
                   const startStr        = toDateStr(b.SDate);
                   const annDate  = startStr ? subtractMonths(startStr, 3) : null;
                   const metaDate = startStr ? subtractMonths(startStr, 1) : null;
-                  const flyDate  = startStr ? subtractDays(startStr, 42)  : null;
+                  const flyDate  = annDate;
                   const status    = statuses.get(key) ?? statuses.get(b.Batch_code);
                   const locked    = status?.is_locked ?? false;
                   const hasRecord = !!status?.id;
@@ -507,15 +447,6 @@ export default function BatchMarketingWidget() {
 
                       {/* Flyer */}
                       <TaskCells status={status?.flyer_status ?? 'Pending'} field="flyer_status" batch={b} dueDate={flyDate} onUpdate={handleStatusChange} disabled={locked || isSaving} />
-
-                      {/* Platform */}
-                      <td className="px-3 py-2">
-                        <PlatformMultiSelect
-                          value={status?.platforms ?? []}
-                          onChange={v => handleLocalUpdate(b, { platforms: v })}
-                          disabled={locked || isSaving}
-                        />
-                      </td>
 
                       {/* Actions */}
                       <td className="px-3 py-2.5 sticky right-0 z-10 bg-white shadow-[-1px_0_0_rgba(229,231,235,1)]">

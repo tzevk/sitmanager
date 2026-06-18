@@ -19,9 +19,19 @@ export async function GET(request: NextRequest) {
   const pool = getPool();
   const params: string[] = [fromDate];
 
-  let whereSDate = `AND b.SDate >= ?`;
+  // batch_mst.SDate is stored in mixed formats (ISO, dd-mm-yyyy, dd/mm/yyyy, …),
+  // so comparing the raw string against an ISO date drops non-ISO rows. Parse it
+  // into a real DATE first and filter/sort on that.
+  const SDATE_EXPR =
+    `COALESCE(` +
+    `STR_TO_DATE(CAST(b.SDate AS CHAR), '%Y-%m-%d'),` +
+    `STR_TO_DATE(CAST(b.SDate AS CHAR), '%d-%m-%Y'),` +
+    `STR_TO_DATE(CAST(b.SDate AS CHAR), '%d/%m/%Y'),` +
+    `STR_TO_DATE(CAST(b.SDate AS CHAR), '%m/%d/%Y'))`;
+
+  let whereSDate = `AND ${SDATE_EXPR} >= ?`;
   if (toDate) {
-    whereSDate += ` AND b.SDate <= ?`;
+    whereSDate += ` AND ${SDATE_EXPR} <= ?`;
     params.push(toDate);
   }
 
@@ -32,14 +42,14 @@ export async function GET(request: NextRequest) {
          b.Batch_code,
          b.Course_Id,
          c.Course_Name,
-         b.SDate,
+         DATE_FORMAT(${SDATE_EXPR}, '%Y-%m-%d') AS SDate,
          b.EDate
        FROM batch_mst b
        LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
        WHERE (b.IsDelete IS NULL OR b.IsDelete = 0)
          AND (b.Cancel IS NULL OR b.Cancel = 0)
          ${whereSDate}
-       ORDER BY b.SDate ASC
+       ORDER BY ${SDATE_EXPR} ASC
        LIMIT 500`,
       params
     );
