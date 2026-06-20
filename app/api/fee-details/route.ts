@@ -112,15 +112,17 @@ export async function GET(req: NextRequest) {
     }
 
     if (mode === 'students') {
+      // No LIMIT: this powers the Add Fee Receipt page's client-side name/ID
+      // search, which needs the full roster or older students silently
+      // disappear from search once the active count passes the cap.
       const studentRows = await runGuardedQuery(getPool(),
         `SELECT Student_Id, Student_Name, Batch_Code AS Batch_code
          FROM student_master
          WHERE (IsDelete = 0 OR IsDelete IS NULL)
            AND COALESCE(NULLIF(TRIM(Student_Name), ''), '') <> ''
-         ORDER BY Student_Id DESC
-         LIMIT 500`,
+         ORDER BY Student_Name ASC`,
         [],
-        5
+        10
       );
       return NextResponse.json({ rows: studentRows });
     }
@@ -182,7 +184,7 @@ export async function GET(req: NextRequest) {
        LEFT JOIN fees_structure fs ON fs.id = latest_fs.id
        WHERE ${conditions.join(' AND ')}
        ORDER BY sm.Student_Id DESC
-       LIMIT 50`,
+       LIMIT 300`,
       params,
       8
     );
