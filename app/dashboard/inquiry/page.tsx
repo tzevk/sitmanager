@@ -126,16 +126,44 @@ export default function InquiryPage() {
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [rowTags, setRowTags] = useState<Record<number, Set<string>>>({});
+  type ContactInfo = { count: number; lastAt: string | null };
+  const [rowContacts, setRowContacts] = useState<Record<number, Record<string, ContactInfo>>>({});
+  const [contactBusy, setContactBusy] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const toggleRowTag = (studentId: number, tag: string) => {
-    setRowTags(prev => {
-      const next = new Set(prev[studentId] ?? []);
-      if (next.has(tag)) next.delete(tag);
-      else next.add(tag);
-      return { ...prev, [studentId]: next };
+  // Record a contact attempt (Call / Mail / WhatsApp / Walk-in). Each click logs a
+  // timestamped entry on the server; the button stays highlighted once any exist.
+  const logContact = async (studentId: number, channel: string) => {
+    const busyKey = `${studentId}:${channel}`;
+    if (contactBusy === busyKey) return;
+    setContactBusy(busyKey);
+    // Optimistic: bump count + timestamp immediately.
+    const nowIso = new Date().toISOString();
+    setRowContacts(prev => {
+      const forRow = { ...(prev[studentId] ?? {}) };
+      const existing = forRow[channel];
+      forRow[channel] = { count: (existing?.count ?? 0) + 1, lastAt: nowIso };
+      return { ...prev, [studentId]: forRow };
     });
+    try {
+      const res = await fetch('/api/inquiry/contact-log', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquiryId: studentId, channel }),
+      });
+      if (!res.ok) throw new Error('Failed');
+    } catch {
+      // Roll back the optimistic bump on failure.
+      setRowContacts(prev => {
+        const forRow = { ...(prev[studentId] ?? {}) };
+        const existing = forRow[channel];
+        const nextCount = (existing?.count ?? 1) - 1;
+        if (nextCount <= 0) delete forRow[channel];
+        else forRow[channel] = { count: nextCount, lastAt: existing?.lastAt ?? null };
+        return { ...prev, [studentId]: forRow };
+      });
+    } finally {
+      setContactBusy(null);
+    }
   };
 
   const fetchData = useCallback(async () => {
@@ -178,6 +206,23 @@ export default function InquiryPage() {
   }, [page, fetchTrigger, search, discipline, inquiryType, status, dateFrom, dateTo, training, puneOnly]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Load the timestamped contact summary for the inquiries on the current page so the
+  // Call/Mail/WhatsApp/Walk-in buttons reflect prior contacts. One batched request.
+  useEffect(() => {
+    const ids = rows.map(r => r.Student_Id).filter(Boolean);
+    if (ids.length === 0) { setRowContacts({}); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/inquiry/contact-log?inquiryIds=${ids.join(',')}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setRowContacts(data.contacts ?? {});
+      } catch { /* non-fatal: buttons just start unhighlighted */ }
+    })();
+    return () => { cancelled = true; };
+  }, [rows]);
 
   const syncUrl = (params: Record<string, string>) => {
     const p = new URLSearchParams();
@@ -542,7 +587,7 @@ export default function InquiryPage() {
                 const secondarySource = r.Inquiry_From && r.Inquiry_Type && r.Inquiry_From !== r.Inquiry_Type
                   ? r.Inquiry_Type
                   : null;
-                const selectedTags = rowTags[r.Student_Id] ?? new Set<string>();
+                const rowContact = rowContacts[r.Student_Id] ?? {};
                 const tagButtons = [
                   {
                     key: 'call',
@@ -648,21 +693,26 @@ export default function InquiryPage() {
                     <td className="py-1 px-2">
                       <div className="flex items-center justify-center gap-0.5 flex-wrap min-w-[150px]">
                         {tagButtons.map(tag => {
-                          const checked = selectedTags.has(tag.key);
+                          const info = rowContact[tag.key];
+                          const contacted = (info?.count ?? 0) > 0;
+                          const busy = contactBusy === `${r.Student_Id}:${tag.key}`;
+                          const title = contacted
+                            ? `${tag.label} — ${info!.count}× , last ${info!.lastAt ? formatDate(info!.lastAt) : '—'}`
+                            : tag.label;
                           return (
                             <button
                               key={tag.key}
                               type="button"
-                              title={tag.label}
+                              title={title}
                               aria-label={tag.label}
-                              aria-pressed={checked}
-                              onClick={() => toggleRowTag(r.Student_Id, tag.key)}
-                              className={`inline-flex h-6 w-6 items-center justify-center rounded border transition-colors ${checked ? 'border-[#2E3093]/40 bg-[#2E3093]/10 text-[#2E3093]' : 'border-slate-200 text-slate-400 hover:bg-blue-50 hover:text-[#2A6BB5]'}`}
+                              aria-pressed={contacted}
+                              disabled={busy}
+                              onClick={() => logContact(r.Student_Id, tag.key)}
+                              className={`relative inline-flex h-6 w-6 items-center justify-center rounded border transition-colors disabled:opacity-50 ${contacted ? 'border-[#2E3093]/40 bg-[#2E3093]/10 text-[#2E3093]' : 'border-slate-200 text-slate-400 hover:bg-blue-50 hover:text-[#2A6BB5]'}`}
                             >
-                              {checked ? (
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                              ) : (
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">{tag.icon}</svg>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">{tag.icon}</svg>
+                              {contacted && info!.count > 1 && (
+                                <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-[#2E3093] text-white text-[8px] font-bold leading-[14px] text-center">{info!.count}</span>
                               )}
                             </button>
                           );
