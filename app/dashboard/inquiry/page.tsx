@@ -52,7 +52,7 @@ interface InquiryRow {
 }
 
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
-interface Filters { disciplines: string[]; inquiryTypes: string[]; trainings: string[]; batchCategories: string[]; statusOptions: { id: number; label: string }[]; }
+interface Filters { disciplines: string[]; inquiryTypes: string[]; trainings: string[]; batchCategories: { id: number; label: string }[]; statusOptions: { id: number; label: string }[]; }
 
 function hasLatestFollowUp(r: InquiryRow) { return Boolean(r.Discussion && r.Discussion !== 'NULL' && r.Discussion.trim()); }
 function hasScheduledFollowUp(r: InquiryRow) { return Boolean(r.NextFollowUpDate); }
@@ -527,7 +527,7 @@ export default function InquiryPage() {
         </select>
         <select value={batchCategory} onChange={e => setBatchCategory(e.target.value)} className={`${ctrl} w-[150px]`}>
           <option value="">Batch Category</option>
-          {filters.batchCategories.map(c => <option key={c} value={c}>{c}</option>)}
+          {filters.batchCategories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
         </select>
         <select value={puneOnly} onChange={e => setPuneOnly(e.target.value)} className={`${ctrl} w-[130px]`}>
           <option value="">All Sources</option>

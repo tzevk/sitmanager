@@ -209,7 +209,7 @@ export interface InquiryListResult {
     disciplines: string[];
     inquiryTypes: string[];
     trainings: string[];
-    batchCategories: string[];
+    batchCategories: { id: number; label: string }[];
     statusOptions: StatusOption[];
   };
 }
@@ -324,7 +324,7 @@ interface InquiryFilterOptions {
   disciplines: string[];
   inquiryTypes: string[];
   trainings: string[];
-  batchCategories: string[];
+  batchCategories: { id: number; label: string }[];
   statusOptions: StatusOption[];
 }
 
@@ -719,20 +719,30 @@ async function loadInquiryFilterOptions(
            WHERE c.Course_Name IS NOT NULL AND c.Course_Name != ''
              AND (si.IsDelete = 0 OR si.IsDelete IS NULL) ORDER BY c.Course_Name`
         ),
+        // Inquiries store Batch_Category_id as the mst_batchcategory id. Only surface the
+        // four standard categories (Full Time, Part Time, Weekend, Online) as filter options.
         pool.query(
-          `SELECT DISTINCT Batch_Category_id FROM \`${inquiryTable}\`
-           WHERE Batch_Category_id IS NOT NULL
-             AND TRIM(Batch_Category_id) NOT IN ('', 'NULL', 'Select')
-             AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Batch_Category_id`
+          `SELECT id, BatchCategory FROM mst_batchcategory
+           WHERE (IsDelete = 0 OR IsDelete IS NULL) AND (IsActive = 1 OR IsActive IS NULL)
+             AND BatchCategory IN ('Full Time', 'Part Time', 'Weekend Batches', 'ONLINE')
+           ORDER BY FIELD(BatchCategory, 'Full Time', 'Part Time', 'Weekend Batches', 'ONLINE')`
         ),
         loadStatusOptions(pool),
       ]);
+
+      const batchCategoryLabels: Record<string, string> = {
+        'Weekend Batches': 'Weekend',
+        'ONLINE': 'Online',
+      };
 
       return {
         disciplines: (disciplinesResult[0] as any[]).map((d: any) => String(d.Discipline).trim()),
         inquiryTypes: (typesResult[0] as any[]).map((t: any) => String(t.Inquiry_Type).trim()),
         trainings: (trainingsResult[0] as any[]).map((r: any) => String(r.Course_Name).trim()),
-        batchCategories: (batchCategoriesResult[0] as any[]).map((r: any) => String(r.Batch_Category_id).trim()),
+        batchCategories: (batchCategoriesResult[0] as any[]).map((r: any) => {
+          const name = String(r.BatchCategory).trim();
+          return { id: Number(r.id), label: batchCategoryLabels[name] ?? name };
+        }),
         statusOptions,
       };
     }
