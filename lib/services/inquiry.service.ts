@@ -139,6 +139,7 @@ export interface InquiryListParams {
   leadTag?: string;
   location?: string;
   training?: string;
+  batchCategory?: string;
   statusId?: string;
   duplicatesOnly?: boolean;
   dateFrom?: string;
@@ -208,6 +209,7 @@ export interface InquiryListResult {
     disciplines: string[];
     inquiryTypes: string[];
     trainings: string[];
+    batchCategories: string[];
     statusOptions: StatusOption[];
   };
 }
@@ -220,6 +222,7 @@ function getInquiryCountCacheKey(params: {
   leadTag: string;
   location: string;
   training: string;
+  batchCategory: string;
   statusId: string;
   duplicatesOnly: boolean;
   dateFrom: string;
@@ -321,6 +324,7 @@ interface InquiryFilterOptions {
   disciplines: string[];
   inquiryTypes: string[];
   trainings: string[];
+  batchCategories: string[];
   statusOptions: StatusOption[];
 }
 
@@ -329,6 +333,7 @@ function buildFallbackFilterOptions(): InquiryFilterOptions {
     disciplines: [],
     inquiryTypes: [],
     trainings: [],
+    batchCategories: [],
     statusOptions: ALLOWED_INQUIRY_STATUSES,
   };
 }
@@ -693,7 +698,7 @@ async function loadInquiryFilterOptions(
     `inquiry:filters:${inquiryTable}:${disciplineJoin ? 'with-discipline' : 'without-discipline'}`,
     5 * 60 * 1000,
     async () => {
-      const [disciplinesResult, typesResult, trainingsResult, statusOptions] = await Promise.all([
+      const [disciplinesResult, typesResult, trainingsResult, batchCategoriesResult, statusOptions] = await Promise.all([
         pool.query(
           `SELECT DISTINCT ${disciplineExpr} as Discipline
            FROM \`${inquiryTable}\` si
@@ -714,6 +719,12 @@ async function loadInquiryFilterOptions(
            WHERE c.Course_Name IS NOT NULL AND c.Course_Name != ''
              AND (si.IsDelete = 0 OR si.IsDelete IS NULL) ORDER BY c.Course_Name`
         ),
+        pool.query(
+          `SELECT DISTINCT Batch_Category_id FROM \`${inquiryTable}\`
+           WHERE Batch_Category_id IS NOT NULL
+             AND TRIM(Batch_Category_id) NOT IN ('', 'NULL', 'Select')
+             AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Batch_Category_id`
+        ),
         loadStatusOptions(pool),
       ]);
 
@@ -721,6 +732,7 @@ async function loadInquiryFilterOptions(
         disciplines: (disciplinesResult[0] as any[]).map((d: any) => String(d.Discipline).trim()),
         inquiryTypes: (typesResult[0] as any[]).map((t: any) => String(t.Inquiry_Type).trim()),
         trainings: (trainingsResult[0] as any[]).map((r: any) => String(r.Course_Name).trim()),
+        batchCategories: (batchCategoriesResult[0] as any[]).map((r: any) => String(r.Batch_Category_id).trim()),
         statusOptions,
       };
     }
@@ -832,7 +844,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   warmInquirySchema(pool, inquiryTable);
   const {
     page, limit, search = '', discipline = '', inquiryType = '', leadTag = '',
-    location = '', training = '', statusId = '', duplicatesOnly = false, dateFrom = '', dateTo = '',
+    location = '', training = '', batchCategory = '', statusId = '', duplicatesOnly = false, dateFrom = '', dateTo = '',
     puneOnly = false,
     followUpDue = false,
   } = params;
@@ -976,6 +988,10 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     conditions.push('c.Course_Name = ?');
     queryParams.push(training);
   }
+  if (batchCategory) {
+    conditions.push('si.Batch_Category_id = ?');
+    queryParams.push(batchCategory);
+  }
   if (duplicatesOnly) {
     conditions.push(
       `EXISTS (
@@ -1042,7 +1058,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
 
   const hasActiveFilters = Boolean(
     search || discipline || inquiryType || leadTag || normalizedLocation || training ||
-    statusId || dateFrom || dateTo || duplicatesOnly || puneOnly || followUpDue
+    batchCategory || statusId || dateFrom || dateTo || duplicatesOnly || puneOnly || followUpDue
   );
   const useFastUnfilteredPath = !hasActiveFilters;
 
@@ -1089,6 +1105,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
         leadTag,
         location: normalizedLocation,
         training,
+        batchCategory,
         statusId,
         duplicatesOnly,
         dateFrom,
@@ -1248,7 +1265,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   }
   perfPhases.filtersMs = Date.now() - filtersStartedAt;
 
-  const { disciplines, inquiryTypes, trainings, statusOptions } = resolvedFilters;
+  const { disciplines, inquiryTypes, trainings, batchCategories, statusOptions } = resolvedFilters;
 
   const statusMap = Object.fromEntries(statusOptions.map((s) => [s.id, s.label]));
 
@@ -1329,6 +1346,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       disciplines,
       inquiryTypes,
       trainings,
+      batchCategories,
       statusOptions,
     },
   };

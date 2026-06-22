@@ -52,7 +52,7 @@ interface InquiryRow {
 }
 
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
-interface Filters { disciplines: string[]; inquiryTypes: string[]; trainings: string[]; statusOptions: { id: number; label: string }[]; }
+interface Filters { disciplines: string[]; inquiryTypes: string[]; trainings: string[]; batchCategories: string[]; statusOptions: { id: number; label: string }[]; }
 
 function hasLatestFollowUp(r: InquiryRow) { return Boolean(r.Discussion && r.Discussion !== 'NULL' && r.Discussion.trim()); }
 function hasScheduledFollowUp(r: InquiryRow) { return Boolean(r.NextFollowUpDate); }
@@ -108,7 +108,7 @@ export default function InquiryPage() {
   const { canView, canUpdate, canDelete, canCreate, loading: permLoading } = useResourcePermissions('inquiry');
   const [rows, setRows] = useState<InquiryRow[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
-  const [filters, setFilters] = useState<Filters>({ disciplines: [], inquiryTypes: [], trainings: [], statusOptions: [] });
+  const [filters, setFilters] = useState<Filters>({ disciplines: [], inquiryTypes: [], trainings: [], batchCategories: [], statusOptions: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -121,6 +121,7 @@ export default function InquiryPage() {
   const [dateFrom, setDateFrom] = useState(() => getInitParam('dateFrom'));
   const [dateTo, setDateTo] = useState(() => getInitParam('dateTo'));
   const [training, setTraining] = useState(() => getInitParam('training'));
+  const [batchCategory, setBatchCategory] = useState(() => getInitParam('batchCategory'));
   const [puneOnly, setPuneOnly] = useState(() => getInitParam('puneOnly'));
   const [page, setPage] = useState(() => Math.max(1, parseInt(searchParams.get('page') || '1')));
   const [fetchTrigger, setFetchTrigger] = useState(0);
@@ -181,6 +182,7 @@ export default function InquiryPage() {
       if (dateFrom) p.set('dateFrom', dateFrom);
       if (dateTo) p.set('dateTo', dateTo);
       if (training) p.set('training', training);
+      if (batchCategory) p.set('batchCategory', batchCategory);
       if (puneOnly) p.set('puneOnly', puneOnly);
       const res = await fetch(`/api/inquiry?${p}`, { signal: controller.signal });
       const ct = res.headers.get('content-type') || '';
@@ -203,7 +205,7 @@ export default function InquiryPage() {
     }
     finally { setLoading(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, fetchTrigger, search, discipline, inquiryType, status, dateFrom, dateTo, training, puneOnly]);
+  }, [page, fetchTrigger, search, discipline, inquiryType, status, dateFrom, dateTo, training, batchCategory, puneOnly]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -239,6 +241,7 @@ export default function InquiryPage() {
       dateFrom,
       dateTo,
       training,
+      batchCategory,
       puneOnly,
     };
     syncUrl(params);
@@ -248,7 +251,7 @@ export default function InquiryPage() {
     router.replace(pathname, { scroll: false });
     setSearch(''); setDiscipline(''); setInquiryType('');
     setStatus(''); setDateFrom(''); setDateTo(''); setTraining('');
-    setPuneOnly('');
+    setBatchCategory(''); setPuneOnly('');
     setPage(1); setFetchTrigger(t => t + 1);
   };
 
@@ -261,6 +264,7 @@ export default function InquiryPage() {
     if (dateFrom) p.set('dateFrom', dateFrom);
     if (dateTo) p.set('dateTo', dateTo);
     if (training) p.set('training', training);
+    if (batchCategory) p.set('batchCategory', batchCategory);
     if (puneOnly) p.set('puneOnly', puneOnly);
     if (page > 1) p.set('page', String(page));
     const qs = p.toString();
@@ -520,6 +524,10 @@ export default function InquiryPage() {
         <select value={training} onChange={e => setTraining(e.target.value)} className={`${ctrl} w-[140px]`}>
           <option value="">Training</option>
           {filters.trainings.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <select value={batchCategory} onChange={e => setBatchCategory(e.target.value)} className={`${ctrl} w-[150px]`}>
+          <option value="">Batch Category</option>
+          {filters.batchCategories.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <select value={puneOnly} onChange={e => setPuneOnly(e.target.value)} className={`${ctrl} w-[130px]`}>
           <option value="">All Sources</option>

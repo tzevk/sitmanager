@@ -92,6 +92,7 @@ export async function GET(req: NextRequest) {
       leadTag: url.searchParams.get('leadTag')?.trim() || '',
       location: (url.searchParams.get('location') || '').trim(),
       training: url.searchParams.get('training') || '',
+      batchCategory: url.searchParams.get('batchCategory') || '',
       statusId: url.searchParams.get('status') || '',
       duplicatesOnly: url.searchParams.get('duplicatesOnly') === '1',
       dateFrom: url.searchParams.get('dateFrom') || '',
