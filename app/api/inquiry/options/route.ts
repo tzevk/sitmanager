@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { getPool, cached } from '@/lib/db';
 import { logEndpointTiming } from '@/lib/perf-log';
-import { ALLOWED_INQUIRY_STATUSES } from '@/lib/services/inquiry.service';
+import { ALLOWED_INQUIRY_STATUSES, getStatusMasterOptions } from '@/lib/services/inquiry.service';
 
 let supportsStatementTimeout: boolean | null = null;
 
@@ -84,6 +84,8 @@ export async function GET() {
       const countries = (countriesRes as any[]).map((r) => r.Present_Country);
 
       const statuses = ALLOWED_INQUIRY_STATUSES;
+      // Full admin-managed status list for the discussion-area dropdown.
+      const statusMaster = await getStatusMasterOptions();
 
       const genders = ['Male', 'Female'];
 
@@ -118,6 +120,7 @@ export async function GET() {
         nationalities,
         countries,
         statuses,
+        statusMaster,
         genders,
         inquiryModes,
         inquiryTypes,

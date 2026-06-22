@@ -16,6 +16,19 @@ const SEARCH_FIELDS: Record<string, string> = {
 // Granted admissions only: active, admitted (Status_id=8) and NOT cancelled.
 const BASE_WHERE = `am.IsDelete = 0 AND am.IsActive = 1 AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL) AND sm.Status_id = 8 AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))`;
 
+// One row per student: keep only the latest active, non-cancelled admission.
+// A student can accumulate more than one active admission_master row (e.g. a batch
+// transfer leaves the old admission active while roll-number allotment inserts a new
+// one for the new batch). Without this, the student appears once per admission and the
+// displayed Batch_Code can come from a stale admission. Done as a derived MAX() join
+// rather than a correlated subquery to keep the list query index-friendly.
+const LATEST_ADMISSION_JOIN = `JOIN (
+  SELECT Student_Id, MAX(Admission_Id) AS Admission_Id
+  FROM admission_master
+  WHERE IsDelete = 0 AND IsActive = 1 AND (Cancel IS NULL OR LOWER(TRIM(Cancel)) NOT IN ('yes'))
+  GROUP BY Student_Id
+) la ON la.Admission_Id = am.Admission_Id`;
+
 // Paid fees per student = sum of credit (TypeR='C') entries in the fees ledger.
 const FEES_JOIN = `LEFT JOIN (
   SELECT Student_Id, SUM(Amount) AS Paid
@@ -82,6 +95,7 @@ export async function GET(req: NextRequest) {
            COALESCE(fp.Paid, 0) AS Paid_Fees,
            (COALESCE(bm.Fees_Full_Payment, bm2.Fees_Full_Payment, 0) - COALESCE(fp.Paid, 0)) AS Balance_Fees
          FROM admission_master am
+         ${LATEST_ADMISSION_JOIN}
          JOIN student_master sm ON sm.Student_Id = am.Student_Id
          LEFT JOIN batch_mst bm ON bm.Batch_Id = am.Batch_Id
          LEFT JOIN batch_mst bm2 ON bm2.Batch_code = sm.Batch_Code AND (bm2.IsDelete = 0 OR bm2.IsDelete IS NULL)
@@ -95,6 +109,7 @@ export async function GET(req: NextRequest) {
       pool.query<any[]>(
         `SELECT COUNT(*) AS total
          FROM admission_master am
+         ${LATEST_ADMISSION_JOIN}
          JOIN student_master sm ON sm.Student_Id = am.Student_Id
          LEFT JOIN batch_mst bm ON bm.Batch_Id = am.Batch_Id
          WHERE ${BASE_WHERE} ${clause}`,

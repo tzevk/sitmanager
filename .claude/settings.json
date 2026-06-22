@@ -87,7 +87,11 @@
       "Bash(curl -s \"http://localhost:3000/dashboard/fee-details\" -L)",
       "Bash(curl -v \"http://localhost:3000/dashboard/fee-details\")",
       "Bash(mysql -u root sit -e \"DESCRIBE batch_mst;\")",
-      "Bash(mysql -u root -p'' sit -e \"DESCRIBE batch_mst;\")"
+      "Bash(mysql -u root -p'' sit -e \"DESCRIBE batch_mst;\")",
+      "Bash(node list-cols.mjs status_master)",
+      "Bash(/api/inquiry\" app/dashboard/inquiry/components/InquiryForm.tsx)",
+      "Bash(grep -n \"setStatusId\\\\|Status_id\\\\|OnlineState\\\\|getInquiryById\\\\|/api/inquiry?id\\\\|fetch\\(`/api/inquiry\" app/dashboard/inquiry/components/InquiryForm.tsx)",
+      "Bash(echo \"exit: $?\")"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

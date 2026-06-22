@@ -14,6 +14,7 @@ interface FormOptions {
   nationalities: string[];
   countries: string[];
   statuses: { id: number; label: string }[];
+  statusMaster: { id: number; label: string }[];
   genders: string[];
   inquiryModes: string[];
   inquiryTypes: string[];
@@ -111,6 +112,11 @@ export default function AddInquiryPage() {
   const [editingDiscId, setEditingDiscId] = useState<number | null>(null);
   const [editingDiscText, setEditingDiscText] = useState('');
 
+  /* discussion-area status (sourced from status_master, saved immediately) */
+  const [discStatusId, setDiscStatusId] = useState<number | ''>('');
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [statusSaved, setStatusSaved] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [showMailModal, setShowMailModal] = useState(false);
@@ -141,6 +147,7 @@ export default function AddInquiryPage() {
       setCountry(d.Present_Country || '');
       setNotes(d.Discussion || '');
       setStatusId(ALLOWED_STATUS_IDS.has(Number(d.Status_id)) ? Number(d.Status_id) : 1);
+      setDiscStatusId(Number.isInteger(Number(d.Status_id)) && Number(d.Status_id) > 0 ? Number(d.Status_id) : '');
       setInquiryDate(d.Inquiry_Dt ? String(d.Inquiry_Dt).slice(0,10) : today());
       setInquiryMode(d.Inquiry_From || '');
       setInquiryType(d.Inquiry_Type || '');
@@ -218,6 +225,32 @@ export default function AddInquiryPage() {
       setNewDiscussion(''); setNewNextDate(today()); fetchDiscussions();
     } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed'); }
     setDiscLoading(false);
+  };
+
+  const handleDiscStatusChange = async (value: number) => {
+    if (!editId || !Number.isInteger(value) || value <= 0) return;
+    const prev = discStatusId;
+    setDiscStatusId(value);
+    setStatusSaving(true);
+    setStatusSaved(false);
+    setError('');
+    try {
+      const res = await fetch('/api/inquiry', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Student_Id: editId, Status_id: value }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to update status');
+      // Keep the main form's status select in sync when the value is one it supports.
+      if (ALLOWED_STATUS_IDS.has(value)) setStatusId(value);
+      setStatusSaved(true);
+      setTimeout(() => setStatusSaved(false), 2000);
+    } catch (err: unknown) {
+      setDiscStatusId(prev);
+      setError(err instanceof Error ? err.message : 'Failed to update status');
+    } finally {
+      setStatusSaving(false);
+    }
   };
 
   const handleSaveEditDisc = async (id: number) => {
@@ -438,9 +471,28 @@ export default function AddInquiryPage() {
         </div>
 
       <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2 gap-3">
           <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Follow-up Discussion</span>
-          <span className="text-[10px] text-slate-400">{editId ? discussions.length : 0}</span>
+          <div className="flex items-center gap-2">
+            {editId && discussions.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="disc-status" className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Status</label>
+                <select
+                  id="disc-status"
+                  value={discStatusId}
+                  onChange={e => handleDiscStatusChange(parseInt(e.target.value, 10))}
+                  disabled={statusSaving}
+                  className={`${ctrl} w-auto py-1`}
+                >
+                  <option value="" disabled>— Select status —</option>
+                  {opts?.statusMaster?.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                </select>
+                {statusSaving && <div className="w-3 h-3 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />}
+                {statusSaved && !statusSaving && <span className="text-[10px] font-semibold text-green-600">Saved</span>}
+              </div>
+            )}
+            <span className="text-[10px] text-slate-400">{editId ? discussions.length : 0}</span>
+          </div>
         </div>
         {!editId ? (
           <p className="text-xs text-slate-400 py-3 text-center">Save the inquiry first to add follow-up discussions.</p>

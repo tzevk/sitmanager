@@ -8,6 +8,7 @@ import {
   getInquiryById,
   listInquiries,
   updateInquiry,
+  updateInquiryStatus,
 } from '@/lib/services/inquiry.service';
 
 export const runtime = 'nodejs';
@@ -116,6 +117,59 @@ export async function GET(req: NextRequest) {
       status: perfStatus,
       code: perfCode,
       meta: { hasId: req.nextUrl.searchParams.has('id') },
+    });
+  }
+}
+
+// Lightweight status-only update, used by the discussion area's status dropdown
+// (status sourced from status_master). Cheaper than the full PUT/updateInquiry.
+export async function PATCH(req: NextRequest) {
+  const startedAt = Date.now();
+  let perfStatus: 'ok' | 'error' = 'ok';
+  let perfCode = 200;
+  try {
+    const auth = await requirePermission(req, ['inquiry.update', 'inquiry.edit']);
+    if (auth instanceof NextResponse) {
+      perfCode = auth.status;
+      return auth;
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const inquiryId = Number(body?.Student_Id ?? body?.inquiryId);
+    const statusId = Number(body?.Status_id ?? body?.statusId);
+
+    if (!Number.isInteger(inquiryId) || inquiryId <= 0) {
+      perfCode = 400;
+      return NextResponse.json({ error: 'Valid Student_Id is required' }, { status: 400 });
+    }
+
+    await updateInquiryStatus(inquiryId, statusId);
+
+    await logTableActivity(req, {
+      tableName: 'Student_Inquiry',
+      action: 'UPDATE',
+      recordId: inquiryId,
+      details: { statusId },
+    });
+
+    invalidateCache('api:inquiry');
+
+    return NextResponse.json({ success: true });
+  } catch (error: unknown) {
+    perfStatus = 'error';
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const status = (error as { status?: number }).status ?? 500;
+    perfCode = status;
+    if (status === 400) return NextResponse.json({ error: message }, { status: 400 });
+    console.error('Update inquiry status error:', error);
+    return NextResponse.json({ error: 'Failed to update status', details: message }, { status: 500 });
+  } finally {
+    logEndpointTiming({
+      endpoint: '/api/inquiry',
+      method: 'PATCH',
+      durationMs: Date.now() - startedAt,
+      status: perfStatus,
+      code: perfCode,
     });
   }
 }

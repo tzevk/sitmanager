@@ -623,6 +623,66 @@ async function loadStatusOptions(pool: ReturnType<typeof getPool>): Promise<Stat
   return ALLOWED_INQUIRY_STATUSES;
 }
 
+/**
+ * Status options sourced from the canonical `status_master` table (the list an
+ * admin manages under Masters › Status). Its `Id` maps directly to the inquiry's
+ * `OnlineState`. Used by the inquiry discussion area's status dropdown. Cached for
+ * 5 minutes since the list changes rarely — keeps this off the hot request path.
+ */
+export async function getStatusMasterOptions(): Promise<StatusOption[]> {
+  const pool = getPool();
+  return cached('inquiry:status-master-options', 5 * 60 * 1000, async () => {
+    const [rows] = await pool.query(
+      `SELECT Id AS id, Status AS label
+       FROM status_master
+       WHERE (IsDelete = 0 OR IsDelete IS NULL) AND (IsActive = 1 OR IsActive IS NULL)
+       ORDER BY Id`
+    );
+    return (rows as { id: number; label: string }[])
+      .map((r) => ({ id: Number(r.id), label: String(r.label ?? '').trim() }))
+      .filter((s) => Number.isInteger(s.id) && s.id > 0 && s.label.length > 0);
+  });
+}
+
+/**
+ * Lightweight, status-only update for the discussion area. Validates the target
+ * status against `status_master` (active, not deleted) so the caller may pick any
+ * admin-managed status rather than being limited to the hardcoded allowlist. Two
+ * small indexed queries — intentionally cheaper than the full updateInquiry path.
+ */
+export async function updateInquiryStatus(inquiryId: number, statusId: number): Promise<void> {
+  if (!Number.isInteger(inquiryId) || inquiryId <= 0) {
+    const error = new Error('Valid inquiryId is required');
+    (error as { status?: number }).status = 400;
+    throw error;
+  }
+  if (!Number.isInteger(statusId) || statusId <= 0) {
+    const error = new Error('Valid status is required');
+    (error as { status?: number }).status = 400;
+    throw error;
+  }
+
+  const pool = getPool();
+  const [statusRows] = await pool.query(
+    `SELECT Id FROM status_master
+     WHERE Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) AND (IsActive = 1 OR IsActive IS NULL)
+     LIMIT 1`,
+    [statusId]
+  );
+  if (!(statusRows as unknown[]).length) {
+    const error = new Error('Unknown status');
+    (error as { status?: number }).status = 400;
+    throw error;
+  }
+
+  const inquiryTable = await resolveInquiryTableName(pool);
+  await pool.query(
+    `UPDATE \`${inquiryTable}\` SET OnlineState = ?
+     WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+    [statusId, inquiryId]
+  );
+}
+
 async function loadInquiryFilterOptions(
   pool: ReturnType<typeof getPool>,
   inquiryTable: string,
