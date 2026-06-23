@@ -244,7 +244,6 @@ export default function InquiryPage() {
   const doSearch = () => {
     const params = {
       search,
-      discipline,
       inquiryType,
       status,
       dateFrom,
@@ -267,7 +266,6 @@ export default function InquiryPage() {
   const buildReturnTo = () => {
     const p = new URLSearchParams();
     if (search) p.set('search', search);
-    if (discipline) p.set('discipline', discipline);
     if (inquiryType) p.set('inquiryType', inquiryType);
     if (status) p.set('status', status);
     if (dateFrom) p.set('dateFrom', dateFrom);
@@ -544,41 +542,37 @@ export default function InquiryPage() {
           type="text" value={search} placeholder="Search name, mobile, email…"
           onChange={e => setSearch(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && doSearch()}
-          className={`${ctrl} flex-1 min-w-[160px]`}
+          className={`${ctrl} flex-1 min-w-[150px] h-8 py-1`}
         />
-        <select value={discipline} onChange={e => setDiscipline(e.target.value)} className={`${ctrl} w-[130px]`}>
-          <option value="">Discipline</option>
-          {filters.disciplines.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
-        <select value={inquiryType} onChange={e => setInquiryType(e.target.value)} className={`${ctrl} w-[120px]`}>
+        <select value={inquiryType} onChange={e => setInquiryType(e.target.value)} className={`${ctrl} w-[105px] h-8 py-1`}>
           <option value="">Type</option>
           {filters.inquiryTypes.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select value={status} onChange={e => setStatus(e.target.value)} className={`${ctrl} w-[130px]`}>
+        <select value={status} onChange={e => setStatus(e.target.value)} className={`${ctrl} w-[115px] h-8 py-1`}>
           <option value="">Status</option>
           {filters.statusOptions.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
-        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} title="From date" className={`${ctrl} w-[130px]`} />
-        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} title="To date" className={`${ctrl} w-[130px]`} />
-        <select value={training} onChange={e => setTraining(e.target.value)} className={`${ctrl} w-[140px]`}>
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} title="From date" className={`${ctrl} w-[118px] h-8 py-1`} />
+        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} title="To date" className={`${ctrl} w-[118px] h-8 py-1`} />
+        <select value={training} onChange={e => setTraining(e.target.value)} className={`${ctrl} w-[125px] h-8 py-1`}>
           <option value="">Training</option>
           {filters.trainings.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select value={batchCategory} onChange={e => setBatchCategory(e.target.value)} className={`${ctrl} w-[150px]`}>
-          <option value="">Batch Category</option>
+        <select value={batchCategory} onChange={e => setBatchCategory(e.target.value)} className={`${ctrl} w-[125px] h-8 py-1`}>
+          <option value="">Batch</option>
           {filters.batchCategories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
         </select>
-        <select value={puneOnly} onChange={e => setPuneOnly(e.target.value)} className={`${ctrl} w-[130px]`}>
+        <select value={puneOnly} onChange={e => setPuneOnly(e.target.value)} className={`${ctrl} w-[112px] h-8 py-1`}>
           <option value="">All Sources</option>
           <option value="1">Pune Only</option>
         </select>
-        <button onClick={doSearch} className="flex items-center gap-1 bg-[#2E3093] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-[#252880] transition-colors">
+        <button onClick={doSearch} className="h-8 flex items-center gap-1 bg-[#2E3093] text-white px-2.5 py-1 rounded-lg text-xs font-bold hover:bg-[#252880] transition-colors">
           <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           Search
         </button>
-        <button onClick={doClear} className="px-3 py-1.5 text-xs font-semibold text-slate-500 border border-zinc-200 rounded-lg hover:border-zinc-300 transition-colors">
+        <button onClick={doClear} className="h-8 px-2.5 py-1 text-xs font-semibold text-slate-600 border border-zinc-300 rounded-lg hover:bg-slate-50 transition-colors">
           Clear
         </button>
       </FilterBar>
