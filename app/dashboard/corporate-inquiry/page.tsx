@@ -202,7 +202,7 @@ export default function CorporateInquiryPage() {
   if (!canView) return <AccessDenied message="You do not have permission to view corporate inquiries." />;
 
   return (
-    <div className="space-y-6">
+    <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3 space-y-6">
 
       <PageHeader
         title="Corporate Inquiry"

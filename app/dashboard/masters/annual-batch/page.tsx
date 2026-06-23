@@ -166,7 +166,7 @@ export default function AnnualBatchPage() {
   if (!canView) return <AccessDenied message="You do not have permission to view annual batches." />;
 
   return (
-    <div className="space-y-6">
+    <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3 space-y-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-2xl px-8 py-6 shadow-[0_10px_30px_rgba(46,48,147,0.18)] relative overflow-hidden">
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />

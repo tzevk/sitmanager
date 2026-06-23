@@ -89,13 +89,17 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
           [Number(feesId), sid]
         )
       : Promise.resolve([[]] as any[]);
+    // Generate the next receipt number in parallel rather than as a serial round-trip
+    // after the other queries — only needed for the "new entry" (no feesId) view.
+    const receiptNoPromise = feesId ? Promise.resolve('') : generateReceiptNo();
 
-    const [admissionResult, feeResult, banksResult, ledgerResult, recordResult] = await Promise.all([
+    const [admissionResult, feeResult, banksResult, ledgerResult, recordResult, generatedReceiptNo] = await Promise.all([
       admissionPromise,
       feePromise,
       banksPromise,
       ledgerPromise,
       recordPromise,
+      receiptNoPromise,
     ]);
 
     const admissionRows = admissionResult[0];
@@ -227,7 +231,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
       particulars,
       ledger,
       totals: { debit: ledgerTotalDebit, credit: totalCredit, balance },
-      nextReceiptNo: record?.Fees_Code ?? (feesId ? '' : await generateReceiptNo()),
+      nextReceiptNo: record?.Fees_Code ?? generatedReceiptNo,
       record,
     });
   } catch (err: any) {

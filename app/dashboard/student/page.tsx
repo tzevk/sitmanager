@@ -135,7 +135,8 @@ export default function StudentPage() {
   };
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3">
+      <div className="flex flex-col gap-2">
       {permLoading ? <PermissionLoading /> : !canView ? (
         <AccessDenied message="You do not have permission to view students." />
       ) : (<>
@@ -325,6 +326,7 @@ export default function StudentPage() {
         )}
       </div>
       </>)}
+      </div>
     </div>
   );
 }

@@ -374,7 +374,7 @@ export default function InquiryPage() {
   const followUps = rows.filter(hasScheduledFollowUp);
 
   return (
-    <div className="space-y-6">
+    <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3 space-y-6">
       {permLoading ? <PermissionLoading /> : !canView ? <AccessDenied message="You do not have permission to view inquiries." /> : (<>
 
       <PageHeader

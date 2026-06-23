@@ -130,7 +130,7 @@ export default function BatchPage() {
   if (!canView) return <AccessDenied message="You do not have permission to view batches." />;
 
   return (
-    <div className="space-y-6">
+    <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3 space-y-6">
       {/* Page Header */}
       <div className="flex items-center gap-3">
         <div className="p-2.5 bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] rounded-xl shadow-lg">

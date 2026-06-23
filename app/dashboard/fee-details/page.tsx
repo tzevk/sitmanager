@@ -138,7 +138,7 @@ export default function FeeDetailsPage() {
   if (!canView) return <AccessDenied />;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex flex-col gap-3">
       <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-3 shadow-[0_4px_14px_rgba(46,48,147,0.18)] relative overflow-hidden">
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
         <div className="relative z-10 flex flex-wrap items-end justify-between gap-2">

@@ -17,19 +17,26 @@ export async function generateFeesReceiptNo(pool: ReturnType<typeof getPool>): P
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const prefix = `R-${month}/`;
+  // Index-range scan over this month's receipts only (idx_sfees_code). We pull the
+  // matching codes and compute the max sequence in JS rather than ORDER BY Fees_Id —
+  // that ordering forced a full backward primary-key scan of the whole table.
   const [rows] = await pool.query<any[]>(
     `SELECT Fees_Code
      FROM s_fees_mst
      WHERE Fees_Code LIKE ?
-       AND CAST(SUBSTRING_INDEX(Fees_Code, '/', -1) AS UNSIGNED) > 0
-       AND (IsDelete = 0 OR IsDelete IS NULL)
-     ORDER BY Fees_Id DESC
-     LIMIT 1`,
+       AND (IsDelete = 0 OR IsDelete IS NULL)`,
     [`${prefix}%`]
   );
-  const previousSeqText = String(rows[0]?.Fees_Code ?? '').split('/').pop() ?? '';
-  const lastSeq = Number(previousSeqText || 0);
+  let lastSeq = 0;
+  let seqWidth = 3;
+  for (const r of rows) {
+    const seqText = String(r.Fees_Code ?? '').split('/').pop() ?? '';
+    const seq = Number(seqText);
+    if (Number.isFinite(seq) && seq > lastSeq) {
+      lastSeq = seq;
+      seqWidth = Math.max(seqText.length, 3);
+    }
+  }
   const nextSeq = lastSeq + 1;
-  const width = Math.max(previousSeqText.length, 3);
-  return `R-${month}/${String(nextSeq).padStart(width, '0')}`;
+  return `R-${month}/${String(nextSeq).padStart(seqWidth, '0')}`;
 }

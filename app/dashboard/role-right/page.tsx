@@ -112,7 +112,7 @@ function RoleRightContent() {
   ] as const;
 
   return (
-    <div className="space-y-4">
+    <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3 space-y-4">
       {/* ── Header ── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         {/* Top row */}

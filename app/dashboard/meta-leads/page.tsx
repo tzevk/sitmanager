@@ -1043,7 +1043,7 @@ export default function MetaLeadsPage() {
   const metaDataModalRow = useMemo(() => metaDataModalLeadId ? rows.find((r) => r.MetaLead_Id === metaDataModalLeadId) ?? null : null, [metaDataModalLeadId, rows]);
 
   return (
-    <div className="space-y-5">
+    <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3 space-y-5">
       {permLoading ? <PermissionLoading /> : !canView ? <AccessDenied message="You do not have permission to view meta leads." /> : (
         <>
           <PageHeader

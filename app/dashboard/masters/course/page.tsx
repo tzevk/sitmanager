@@ -136,7 +136,7 @@ if (permLoading) return <PermissionLoading />;
 if (!canView) return <AccessDenied message="You do not have permission to view courses." />;
 
 return (
-  <div className="space-y-4">
+  <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3 space-y-4">
 
     {/* Header */}
     <div className="flex items-center justify-between">

@@ -180,7 +180,7 @@ export default function OnlineAdmissionPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex flex-col gap-2">
       {permLoading ? <PermissionLoading /> : !canView ? (
         <AccessDenied message="You do not have permission to view online admissions." />
       ) : (

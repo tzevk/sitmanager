@@ -60,7 +60,7 @@ export default function PlacementJobsPage() {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3 space-y-3">
       {/* Header */}
       <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-4 shadow-md">
         <div className="flex items-center justify-between">
