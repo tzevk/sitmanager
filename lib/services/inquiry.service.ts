@@ -824,7 +824,7 @@ export async function getInquiryById(id: number): Promise<any | null> {
        si.Present_Mobile, si.Present_Mobile2, si.Email,
        si.Nationality, si.Present_Country, si.Discussion,
        CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) as Status_id,
-       si.Inquiry_Dt, si.Inquiry_From, si.Inquiry_Type,
+        si.Inquiry_Dt, si.Date_Added, si.Inquiry_From, si.Inquiry_Type,
        si.Course_Id, si.Batch_Category_id, si.Batch_Code,
        si.Qualification, si.Discipline, ${disciplineExpr} as DisciplineName, si.Percentage,
        c.Course_Name as CourseName

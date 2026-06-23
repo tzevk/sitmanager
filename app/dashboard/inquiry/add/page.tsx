@@ -61,6 +61,22 @@ function fmtDate(value?: string | Date | null): string {
   return '—';
 }
 
+function fmtDateTime(value?: string | Date | null): string {
+  if (!value) return '—';
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) return '—';
+    return value.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+  }
+  const raw = String(value).trim();
+  if (!raw || raw === '0000-00-00') return '—';
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const parsed = new Date(normalized);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+  }
+  return raw;
+}
+
 const ctrl = 'w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 const lbl  = 'block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5';
 const ALLOWED_STATUS_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 11]);
@@ -96,6 +112,7 @@ export default function AddInquiryPage() {
   const [notes, setNotes] = useState('');
   const [statusId, setStatusId] = useState<number>(1);
   const [inquiryDate, setInquiryDate] = useState(today());
+  const [inquirySoftwareTime, setInquirySoftwareTime] = useState('');
   const [inquiryMode, setInquiryMode] = useState('');
   const [inquiryType, setInquiryType] = useState('');
   const [courseId, setCourseId] = useState('');
@@ -152,6 +169,7 @@ export default function AddInquiryPage() {
       setStatusId(ALLOWED_STATUS_IDS.has(Number(d.Status_id)) ? Number(d.Status_id) : 1);
       setDiscStatusId(Number.isInteger(Number(d.Status_id)) && Number(d.Status_id) > 0 ? Number(d.Status_id) : '');
       setInquiryDate(d.Inquiry_Dt ? String(d.Inquiry_Dt).slice(0,10) : today());
+      setInquirySoftwareTime(d.Date_Added ? String(d.Date_Added) : '');
       setInquiryMode(d.Inquiry_From || '');
       setInquiryType(d.Inquiry_Type || '');
       setCourseId(d.Course_Id ? String(d.Course_Id) : '');
@@ -186,6 +204,8 @@ export default function AddInquiryPage() {
   }, [editId]);
 
   useEffect(() => { if (editId) fetchDiscussions(); }, [editId, fetchDiscussions]);
+
+  const firstDiscussionTime = discussions.length > 0 ? discussions[0]?.created_date : null;
 
   const handleSave = async () => {
     if (!name.trim()) { setError('Name is required'); return; }
@@ -436,6 +456,12 @@ export default function AddInquiryPage() {
               <label className={lbl}>Inquiry Date</label>
               <input type="date" value={inquiryDate} onChange={e => setInquiryDate(e.target.value)} className={ctrl} />
             </div>
+            {editId && (
+              <div>
+                <label className={lbl}>Inquiry in Software</label>
+                <input value={fmtDateTime(inquirySoftwareTime)} readOnly className={`${ctrl} bg-slate-50 text-slate-500`} />
+              </div>
+            )}
             <div>
               <label className={lbl}>Mode</label>
               <select value={inquiryMode} onChange={e => setInquiryMode(e.target.value)} className={ctrl}>
@@ -443,7 +469,7 @@ export default function AddInquiryPage() {
                 {opts?.inquiryModes?.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
-            <div className="col-span-2">
+            <div className={editId ? '' : 'col-span-2'}>
               <label className={lbl}>How They Know About SIT</label>
               <select value={inquiryType} onChange={e => setInquiryType(e.target.value)} className={ctrl}>
                 <option value="">— Select —</option>
@@ -506,7 +532,14 @@ export default function AddInquiryPage() {
 
       <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
         <div className="flex items-center justify-between mb-2 gap-3">
-          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Follow-up Discussion</span>
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Follow-up Discussion</span>
+            {editId && (
+              <span className="text-[10px] font-semibold text-slate-500 truncate">
+                First discussion: {fmtDateTime(firstDiscussionTime)}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             {editId && discussions.length > 0 && (
               <div className="flex items-center gap-1.5">
