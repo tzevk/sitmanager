@@ -80,8 +80,6 @@ interface InquiryRow {
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
 interface Filters { disciplines: string[]; inquiryTypes: string[]; trainings: string[]; batchCategories: { id: number; label: string }[]; statusOptions: { id: number; label: string }[]; }
 
-function hasScheduledFollowUp(r: InquiryRow) { return Boolean(r.NextFollowUpDate); }
-
 function statusPill(id: number | null, label: string) {
   if (id === 1 || label.toLowerCase() === 'new') return 'border-red-300 bg-white/70 text-red-700';
   return 'border-slate-400 bg-white/70 text-slate-800';
@@ -379,9 +377,6 @@ export default function InquiryPage() {
     a.click();
     URL.revokeObjectURL(url);
   };
-
- 
-  const followUps = rows.filter(hasScheduledFollowUp);
 
   return (
     <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3 space-y-6">
@@ -724,48 +719,6 @@ export default function InquiryPage() {
           </div>
         )}
       </div>
-
-      {/* Follow-ups */}
-      {!loading && followUps.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Scheduled Follow-ups</span>
-            <span className="text-[10px] font-semibold text-slate-400">{followUps.length}</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-100">
-                  <th className="text-left py-2 px-3 font-bold">Name</th>
-                  <th className="text-left py-2 px-3 font-bold">Training</th>
-                  <th className="text-left py-2 px-3 font-bold">Mobile</th>
-                  <th className="text-left py-2 px-3 font-bold">Follow-Up Date</th>
-                  <th className="text-left py-2 px-3 font-bold">By</th>
-                  <th className="text-left py-2 px-3 font-bold">Note</th>
-                  <th className="text-center py-2 px-3 font-bold">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {followUps.map(r => (
-                  <tr key={`fu-${r.Student_Id}`} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
-                    <td className="py-1.5 px-3 font-semibold text-slate-800 whitespace-nowrap">{formatName(r.Student_Name)}</td>
-                    <td className="py-1.5 px-3 text-red-600 max-w-[140px]"><span className="truncate block">{r.CourseName || '—'}</span></td>
-                    <td className="py-1.5 px-3 font-mono whitespace-nowrap">{r.Present_Mobile || '—'}</td>
-                    <td className="py-1.5 px-3 font-semibold text-[#2E3093] whitespace-nowrap">{formatDate(r.NextFollowUpDate || null)}</td>
-                    <td className="py-1.5 px-3 text-slate-400 whitespace-nowrap">{r.FollowUpBy || 'System'}</td>
-                    <td className="py-1.5 px-3 text-slate-600 max-w-[220px]"><span className="line-clamp-2 block">{r.Discussion || '—'}</span></td>
-                    <td className="py-1.5 px-3 text-center">
-                      <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(r.Status_id, r.StatusLabel)}`}>
-                        {r.StatusLabel}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       </>)}
     </div>
