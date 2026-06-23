@@ -32,10 +32,14 @@ const STEP_GUIDANCE: Record<number, { focus: string; tip: string }> = {
     tip: 'Once a batch is selected, the linked fee details are pulled automatically from the current database.',
   },
   5: {
+    focus: 'Confirm the medical declaration before reviewing the admission terms.',
+    tip: 'If there is medical history, add a clear note so the review team has the required context.',
+  },
+  6: {
     focus: 'Review the declarations and accept the Terms & Conditions before moving on to payment.',
     tip: 'Read and acknowledge each section — payment unlocks only after the terms are accepted.',
   },
-  6: {
+  7: {
     focus: 'Pick the payment mode and complete payment to finish the application.',
     tip: 'This is the final step — submit the application once payment is done.',
   },
@@ -1660,7 +1664,7 @@ export default function PublicAdmissionFormPage() {
                         style={{ width: `${Math.max((completedSteps.length / STEPS.length) * 100, (currentStep / STEPS.length) * 100)}%` }}
                       />
                     </div>
-                    <p className="mt-3 text-xs leading-relaxed text-slate-600">{STEP_GUIDANCE[currentStep].tip}</p>
+                    <p className="mt-3 text-xs leading-relaxed text-slate-600">{STEP_GUIDANCE[currentStep]?.tip ?? STEP_GUIDANCE[7].tip}</p>
                   </div>
                 </div>
                 <div className="hidden sm:flex gap-1 sm:gap-1.5 mt-2">
@@ -1694,7 +1698,7 @@ export default function PublicAdmissionFormPage() {
                     <i className="fas fa-lightbulb mt-0.5 text-[11px] text-amber-600"></i>
                     <div>
                       <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-amber-700">Helpful Note</p>
-                      <p className="mt-1 text-xs leading-relaxed text-slate-700">{STEP_GUIDANCE[currentStep].tip}</p>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-700">{STEP_GUIDANCE[currentStep]?.tip ?? STEP_GUIDANCE[7].tip}</p>
                     </div>
                   </div>
                   <p className="mt-2 text-[11px] text-slate-500"><span className="text-red-500 font-bold">*</span> Mandatory fields need to be completed before continuing.</p>
