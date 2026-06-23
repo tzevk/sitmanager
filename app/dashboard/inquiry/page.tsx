@@ -80,49 +80,31 @@ interface InquiryRow {
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
 interface Filters { disciplines: string[]; inquiryTypes: string[]; trainings: string[]; batchCategories: { id: number; label: string }[]; statusOptions: { id: number; label: string }[]; }
 
-function hasLatestFollowUp(r: InquiryRow) { return Boolean(r.Discussion && r.Discussion !== 'NULL' && r.Discussion.trim()); }
 function hasScheduledFollowUp(r: InquiryRow) { return Boolean(r.NextFollowUpDate); }
-function isPendingFollowUp(r: InquiryRow) {
-  if (r.Status_id === 7) return true;
-  const l = String(r.StatusLabel || '').toLowerCase();
-  return l.includes('follow up pending');
-}
 
 function statusPill(id: number | null, label: string) {
-  if (id != null) {
-    if (id === 8) return 'bg-emerald-100 text-emerald-700';
-    if ([1,2].includes(id)) return 'bg-blue-100 text-blue-700';
-    if ([3,5].includes(id)) return 'bg-orange-100 text-orange-700';
-    if (id === 7) return 'bg-amber-100 text-amber-700';
-    if ([6,9].includes(id)) return 'bg-red-100 text-red-600';
-    if (id === 4) return 'bg-indigo-100 text-indigo-700';
-  }
-  const l = label.toLowerCase();
-  if (l.includes('admission confirmed')) return 'bg-emerald-100 text-emerald-700';
-  if (l === 'new' || l.includes('not recieved call')) return 'bg-blue-100 text-blue-700';
-  if (l.includes('interested') || l.includes('eligible')) return 'bg-orange-100 text-orange-700';
-  if (l.includes('follow up pending')) return 'bg-amber-100 text-amber-700';
-  if (l.includes('irrelevant') || l.includes('lost lead')) return 'bg-red-100 text-red-600';
-  if (l.includes('next batch')) return 'bg-indigo-100 text-indigo-700';
-  return 'bg-gray-100 text-gray-500';
+  if (id === 1 || label.toLowerCase() === 'new') return 'border-red-300 bg-white/70 text-red-700';
+  return 'border-slate-400 bg-white/70 text-slate-800';
 }
 
-function statusBar(id: number | null, label: string) {
-  if (id != null) {
-    if (id === 8) return 'bg-emerald-400';
-    if ([1,2].includes(id)) return 'bg-blue-400';
-    if ([3,5].includes(id)) return 'bg-orange-400';
-    if (id === 7) return 'bg-amber-400';
-    if ([6,9].includes(id)) return 'bg-red-400';
-    if (id === 4) return 'bg-indigo-400';
-  }
+function statusRow(id: number | null, label: string) {
   const l = label.toLowerCase();
-  if (l.includes('admission confirmed')) return 'bg-emerald-400';
-  if (l.includes('interested') || l.includes('eligible')) return 'bg-orange-400';
-  if (l.includes('follow up pending')) return 'bg-amber-400';
-  if (l.includes('irrelevant') || l.includes('lost lead')) return 'bg-red-400';
-  if (l.includes('next batch')) return 'bg-indigo-400';
-  return 'bg-slate-300';
+  if (id === 1 || l === 'new') return 'bg-white hover:bg-red-50 [&>td]:text-red-600';
+  if (id != null) {
+    if (id === 8) return 'bg-emerald-100 hover:bg-emerald-200/80 [&>td]:text-emerald-950';
+    if (id === 2) return 'bg-blue-100 hover:bg-blue-200/80 [&>td]:text-blue-950';
+    if ([3,5].includes(id)) return 'bg-orange-100 hover:bg-orange-200/80 [&>td]:text-orange-950';
+    if (id === 7) return 'bg-amber-100 hover:bg-amber-200/80 [&>td]:text-amber-950';
+    if ([6,9].includes(id)) return 'bg-red-100 hover:bg-red-200/80 [&>td]:text-red-950';
+    if (id === 4) return 'bg-indigo-100 hover:bg-indigo-200/80 [&>td]:text-indigo-950';
+  }
+  if (l.includes('admission confirmed')) return 'bg-emerald-100 hover:bg-emerald-200/80 [&>td]:text-emerald-950';
+  if (l.includes('not recieved call')) return 'bg-blue-100 hover:bg-blue-200/80 [&>td]:text-blue-950';
+  if (l.includes('interested') || l.includes('eligible')) return 'bg-orange-100 hover:bg-orange-200/80 [&>td]:text-orange-950';
+  if (l.includes('follow up pending')) return 'bg-amber-100 hover:bg-amber-200/80 [&>td]:text-amber-950';
+  if (l.includes('irrelevant') || l.includes('lost lead')) return 'bg-red-100 hover:bg-red-200/80 [&>td]:text-red-950';
+  if (l.includes('next batch')) return 'bg-indigo-100 hover:bg-indigo-200/80 [&>td]:text-indigo-950';
+  return 'bg-slate-50 hover:bg-slate-100 [&>td]:text-slate-800';
 }
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
@@ -641,13 +623,7 @@ export default function InquiryPage() {
                   <td colSpan={11} className="py-10 text-center text-xs text-slate-400">No inquiries found</td>
                 </tr>
               ) : rows.map((r, i) => {
-                const attended = hasLatestFollowUp(r);
-                const colorCls = isPendingFollowUp(r) ? '[&>td]:text-purple-600' : attended ? '[&>td]:text-slate-800' : '[&>td]:text-red-500';
-                const sourceRowCls = r.IsPuneInquiry
-                  ? 'bg-amber-100/80 hover:bg-amber-200/70'
-                  : r.IsMetaAdConverted
-                    ? 'bg-[#2E3093]/[0.06] hover:bg-[#2E3093]/[0.12]'
-                    : 'hover:bg-slate-50';
+                const rowStatusCls = statusRow(r.Status_id, r.StatusLabel);
                 const primarySource = r.Inquiry_From || r.Inquiry_Type || '—';
                 const secondarySource = r.Inquiry_From && r.Inquiry_Type && r.Inquiry_From !== r.Inquiry_Type
                   ? r.Inquiry_Type
@@ -676,9 +652,8 @@ export default function InquiryPage() {
                   },
                 ];
                 return (
-                  <tr key={r.Student_Id} className={`border-b border-slate-200 transition-colors ${colorCls} ${sourceRowCls}`}>
-                    <td className="py-1 px-2 font-semibold font-mono tabular-nums relative pl-4">
-                      <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${statusBar(r.Status_id, r.StatusLabel)} rounded-r`} />
+                  <tr key={r.Student_Id} className={`border-b border-slate-200 transition-colors ${rowStatusCls}`}>
+                    <td className="py-1 px-2 font-semibold font-mono tabular-nums relative pl-3">
                       {(pagination.page - 1) * pagination.limit + i + 1}
                     </td>
                     <td className="py-1 px-2 font-semibold max-w-[140px]">
