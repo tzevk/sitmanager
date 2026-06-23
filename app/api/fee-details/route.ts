@@ -147,6 +147,17 @@ export async function GET(req: NextRequest) {
     if (!q && !batchId) {
       conditions.push('1 = 0');
     }
+    // Fee-details search is about students with actual fee activity. student_master
+    // holds ~169k rows, many of them phantom/import duplicates (same name, no admission
+    // or receipt) that fan a single search into dozens of rows. Restrict results to
+    // students who have an admission or a fee ledger entry so each real person shows
+    // once and the search stays relevant.
+    conditions.push(`(
+      EXISTS (SELECT 1 FROM admission_master am2
+              WHERE am2.Student_Id = sm.Student_Id AND (am2.IsDelete = 0 OR am2.IsDelete IS NULL))
+      OR EXISTS (SELECT 1 FROM s_fees_mst f2
+              WHERE f2.Student_Id = sm.Student_Id AND (f2.IsDelete = 0 OR f2.IsDelete IS NULL))
+    )`);
 
     const pool = getPool();
     const studentRows = await runGuardedQuery(pool,

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { generateFeesReceiptNo } from '@/lib/fees-receipt';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -15,26 +16,7 @@ function parseNotes(notes: string | null): { particular: string; taxType: string
   return { particular: (m?.[1] ?? notes).trim(), taxType: (m?.[2] ?? '').toUpperCase() };
 }
 
-async function generateReceiptNo(): Promise<string> {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const prefix = `R-${month}/`;
-  const [rows] = await getPool().query<any[]>(
-    `SELECT Fees_Code
-     FROM s_fees_mst
-     WHERE Fees_Code LIKE ?
-       AND CAST(SUBSTRING_INDEX(Fees_Code, '/', -1) AS UNSIGNED) > 0
-       AND (IsDelete = 0 OR IsDelete IS NULL)
-     ORDER BY Fees_Id DESC
-     LIMIT 1`,
-    [`${prefix}%`]
-  );
-  const previousSeqText = String(rows[0]?.Fees_Code ?? '').split('/').pop() ?? '';
-  const lastSeq = Number(previousSeqText || 0);
-  const nextSeq = lastSeq + 1;
-  const width = Math.max(previousSeqText.length, 3);
-  return `R-${month}/${String(nextSeq).padStart(width, '0')}`;
-}
+const generateReceiptNo = () => generateFeesReceiptNo(getPool());
 
 const isReceiptNoFormat = (value: string) => /^R-\d{2}\/\d+$/.test(value.trim());
 

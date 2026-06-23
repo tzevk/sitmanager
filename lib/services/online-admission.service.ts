@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getPool } from '@/lib/db';
+import { generateFeesReceiptNo } from '@/lib/fees-receipt';
 import { sendOnlineAdmissionSubmissionEmail } from '@/lib/mailer';
 import { hasAdmissionUploads, type AdmissionUploadBundle, saveAdmissionAssetsForStudent } from '@/lib/student-documents.server';
 
@@ -1087,7 +1088,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
           ]
         ) as [any, any];
         const insertedId = Number(insertResult.insertId);
-        const feesCode = `R-${String(now.getMonth() + 1).padStart(2, '0')}/${String(insertedId).padStart(3, '0')}`;
+        const feesCode = await generateFeesReceiptNo(pool);
         await pool.query(`UPDATE s_fees_mst SET Fees_Code = ? WHERE Fees_Id = ?`, [feesCode, insertedId]);
       }
     }
@@ -1118,7 +1119,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
           ]
         ) as [any, any];
         const upiInsertedId = Number(upiInsertResult.insertId);
-        const upiFeesCode = `R-${String(now.getMonth() + 1).padStart(2, '0')}/${String(upiInsertedId).padStart(3, '0')}`;
+        const upiFeesCode = await generateFeesReceiptNo(pool);
         await pool.query(`UPDATE s_fees_mst SET Fees_Code = ? WHERE Fees_Id = ?`, [upiFeesCode, upiInsertedId]);
       }
     }
@@ -1147,7 +1148,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
           ]
         ) as [any, any];
         const neftInsertedId = Number(neftInsertResult.insertId);
-        const neftFeesCode = `R-${String(now.getMonth() + 1).padStart(2, '0')}/${String(neftInsertedId).padStart(3, '0')}`;
+        const neftFeesCode = await generateFeesReceiptNo(pool);
         await pool.query(`UPDATE s_fees_mst SET Fees_Code = ? WHERE Fees_Id = ?`, [neftFeesCode, neftInsertedId]);
       }
     }
