@@ -63,7 +63,7 @@ function fmtDate(value?: string | Date | null): string {
 
 const ctrl = 'w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 const lbl  = 'block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5';
-const ALLOWED_STATUS_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+const ALLOWED_STATUS_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 11]);
 
 export default function AddInquiryPage() {
   const router = useRouter();

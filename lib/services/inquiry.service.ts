@@ -184,6 +184,7 @@ export const ALLOWED_INQUIRY_STATUSES: StatusOption[] = [
   { id: 3, label: 'Contacted (interested)' },
   { id: 4, label: 'Contacted (next batch)' },
   { id: 5, label: 'Contacted - eligible' },
+  { id: 11, label: 'Contacted - Not Interested' },
   { id: 6, label: 'Irrelevant' },
   { id: 7, label: 'Follow up pending' },
   { id: 8, label: 'Admission confirmed' },
