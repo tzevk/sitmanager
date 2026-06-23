@@ -154,6 +154,7 @@ export interface InquiryRow {
   Student_Name: string;
   CourseName: string | null;
   Inquiry_Dt: string | null;
+  InquirySoftwareTime?: string | null;
   Present_Mobile: string | null;
   Email: string | null;
   Location: string | null;
@@ -164,6 +165,7 @@ export interface InquiryRow {
   StatusLabel: string;
   Discussion: string | null;
   DiscussionDate: string | null;
+  FirstDiscussionTime?: string | null;
   NextFollowUpDate: string | null;
   FollowUpBy: string | null;
   MetaCampaignName?: string | null;
@@ -1211,7 +1213,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       pool,
       `SELECT
          si.Inquiry_Id as Student_Id, si.Student_Id as SourceStudentId,
-         si.Student_Name, c.Course_Name as CourseName, si.Inquiry_Dt,
+         si.Student_Name, c.Course_Name as CourseName, si.Inquiry_Dt, si.Date_Added as InquirySoftwareTime,
         COALESCE(
           ${mobileExpressions.primary},
           NULLIF(TRIM((
@@ -1232,6 +1234,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
          ${metaSelect}
          ld.discussion as LatestDiscussion, ld.date as LatestDiscDate,
          ld.nextdate as NextFollowUpDate, ld.created_by as LatestDiscussionById,
+         fd.created_date as FirstDiscussionTime,
          COALESCE(
            NULLIF(TRIM(CONCAT(COALESCE(au.firstname,''),' ',COALESCE(au.lastname,''))),''),
            NULLIF(TRIM(au.username),''), NULLIF(TRIM(au.email),''),
@@ -1263,10 +1266,28 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
          GROUP BY si_map.Inquiry_Id
        ) tld_legacy ON tld_legacy.InquiryId = si.Inquiry_Id
        LEFT JOIN awt_inquirydiscussion ld ON ld.id = COALESCE(tld_primary.max_id, tld_legacy.max_id)
+       LEFT JOIN (
+         SELECT d.Inquiry_id as InquiryId, MIN(d.id) as min_id
+         FROM awt_inquirydiscussion d
+         WHERE d.deleted = 0
+           AND d.Inquiry_id IN (${ph})
+         GROUP BY d.Inquiry_id
+       ) tfd_primary ON tfd_primary.InquiryId = si.Inquiry_Id
+       LEFT JOIN (
+         SELECT si_map.Inquiry_Id as InquiryId, MIN(d.id) as min_id
+         FROM \`${inquiryTable}\` si_map
+         INNER JOIN awt_inquirydiscussion d
+           ON d.deleted = 0
+          AND si_map.Student_Id IS NOT NULL
+          AND (d.Inquiry_id = si_map.Student_Id OR d.student_id = si_map.Student_Id)
+         WHERE si_map.Inquiry_Id IN (${ph})
+         GROUP BY si_map.Inquiry_Id
+       ) tfd_legacy ON tfd_legacy.InquiryId = si.Inquiry_Id
+       LEFT JOIN awt_inquirydiscussion fd ON fd.id = COALESCE(tfd_primary.min_id, tfd_legacy.min_id)
        LEFT JOIN awt_adminuser au ON au.id = ld.created_by
        LEFT JOIN office_employee_mst oe ON oe.Emp_Id = ld.created_by
        WHERE si.Inquiry_Id IN (${ph})`,
-      [...pageIds, ...pageIds, ...pageIds],
+      [...pageIds, ...pageIds, ...pageIds, ...pageIds, ...pageIds],
       10,
     );
     dataRows = (rows as any[]).sort(
@@ -1332,6 +1353,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       Student_Name: r.Student_Name,
       CourseName: r.CourseName ?? null,
       Inquiry_Dt: r.Inquiry_Dt ?? null,
+      InquirySoftwareTime: r.InquirySoftwareTime ?? null,
       Present_Mobile: normalizeInquiryMobile(r.Present_Mobile),
       Email: r.Email ?? null,
       Location: r.Location?.trim() || null,
@@ -1346,6 +1368,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
         (r.Status_id != null ? `Status ${r.Status_id}` : 'Open'),
       Discussion: cleanedLatestDisc || cleanedInlineDisc || null,
       DiscussionDate: r.LatestDiscDate ?? null,
+      FirstDiscussionTime: r.FirstDiscussionTime ?? null,
       NextFollowUpDate: r.NextFollowUpDate ?? null,
       FollowUpBy: r.LatestDiscussionByName || (r.LatestDiscussionById != null ? `User ${r.LatestDiscussionById}` : null),
       MetaCampaignName: r.MetaCampaignName ?? null,

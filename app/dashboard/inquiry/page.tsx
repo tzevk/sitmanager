@@ -21,6 +21,17 @@ function formatDate(dateStr: string | null): string {
   } catch { return '—'; }
 }
 
+function formatDateTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
+  try {
+    const raw = String(dateStr).trim();
+    const parsed = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'));
+    if (isNaN(parsed.getTime())) return raw || '—';
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${String(parsed.getDate()).padStart(2,'0')} ${months[parsed.getMonth()]} ${String(parsed.getHours()).padStart(2,'0')}:${String(parsed.getMinutes()).padStart(2,'0')}`;
+  } catch { return '—'; }
+}
+
 function formatName(name: string | null | undefined): string {
   const t = String(name ?? '').trim();
   if (!t) return '—';
@@ -33,8 +44,10 @@ interface InquiryRow {
   Student_Name: string;
   CourseName: string | null;
   Inquiry_Dt: string | null;
+  InquirySoftwareTime?: string | null;
   Discussion: string | null;
   DiscussionDate: string | null;
+  FirstDiscussionTime?: string | null;
   NextFollowUpDate?: string | null;
   Present_Mobile: string | null;
   Email: string | null;
@@ -594,7 +607,7 @@ export default function InquiryPage() {
                 <th className="text-left py-2 px-3 font-bold">Email</th>
                 <th className="text-left py-2 px-3 font-bold">Discipline</th>
                 <th className="text-left py-2 px-3 font-bold">Source</th>
-                <th className="text-left py-2 px-3 font-bold">Date</th>
+                <th className="text-left py-2 px-3 font-bold">Inquiry Time</th>
                 <th className="text-left py-2 px-3 font-bold">Last Discussion</th>
                 <th className="text-center py-2 px-3 font-bold">Status</th>
                 <th className="text-center py-2 px-3 font-bold">Actions</th>
@@ -701,7 +714,13 @@ export default function InquiryPage() {
                         )}
                       </div>
                     </td>
-                    <td className="py-1 px-2 whitespace-nowrap">{formatDate(r.Inquiry_Dt)}</td>
+                    <td className="py-1 px-2 whitespace-nowrap min-w-[122px]">
+                      <div className="flex flex-col leading-tight">
+                        <span className="font-semibold text-slate-700">{formatDate(r.Inquiry_Dt)}</span>
+                        <span className="text-[9px] text-slate-400">Software: {formatDateTime(r.InquirySoftwareTime)}</span>
+                        <span className="text-[9px] text-slate-400">First disc: {formatDateTime(r.FirstDiscussionTime)}</span>
+                      </div>
+                    </td>
                     <td className="py-1 px-2 max-w-[190px]">
                       {(() => {
                         const raw = (r.Discussion || '').trim();
@@ -730,7 +749,7 @@ export default function InquiryPage() {
                       </span>
                     </td>
                     <td className="py-1 px-2">
-                      <div className="flex items-center justify-center gap-0.5 flex-wrap min-w-[150px]">
+                      <div className="flex items-center justify-center gap-0.5 flex-nowrap min-w-[244px] whitespace-nowrap">
                         {tagButtons.map(tag => {
                           const info = rowContact[tag.key];
                           const contacted = (info?.count ?? 0) > 0;
