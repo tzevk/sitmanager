@@ -9,8 +9,9 @@ const STEPS = [
   { id: 2, title: 'Academic', icon: 'fa-graduation-cap', description: 'Educational background and documents' },
   { id: 3, title: 'Occupational Info', icon: 'fa-briefcase', description: 'Current occupational status' },
   { id: 4, title: 'Training', icon: 'fa-chalkboard-teacher', description: 'Training programme details' },
-  { id: 5, title: 'Terms & Conditions', icon: 'fa-scroll', description: 'Read & accept terms' },
-  { id: 6, title: 'Mode of Payment', icon: 'fa-credit-card', description: 'Select your payment method' },
+  { id: 5, title: 'Medical History', icon: 'fa-notes-medical', description: 'Medical background declaration' },
+  { id: 6, title: 'Terms & Conditions', icon: 'fa-scroll', description: 'Read & accept terms' },
+  { id: 7, title: 'Mode of Payment', icon: 'fa-credit-card', description: 'Select your payment method' },
 ];
 
 const STEP_GUIDANCE: Record<number, { focus: string; tip: string }> = {
@@ -124,7 +125,7 @@ export default function PublicAdmissionFormPage() {
 
   useEffect(() => {
     if (!isPreviewTermsMode) return;
-    if (forcedStep >= 1 && forcedStep <= 6) {
+    if (forcedStep >= 1 && forcedStep <= 7) {
       setCurrentStep(forcedStep);
     }
   }, [isPreviewTermsMode, forcedStep]);
@@ -267,6 +268,9 @@ export default function PublicAdmissionFormPage() {
     workingFromMonths: '',
     totalOccupationYears: '',
     selfEmploymentDetails: '',
+    // Medical history — '', 'yes' or 'no'; description only when 'yes'
+    hasMedicalHistory: '',
+    medicalHistoryDescription: '',
     trainingProgrammeId: '',
     trainingProgrammeName: '',
     trainingCategory: '',
@@ -375,7 +379,7 @@ export default function PublicAdmissionFormPage() {
       setFormData(prev => ({ ...prev, ...patched }));
       if (bestProgress && Number.isFinite(Number(bestProgress.currentStep))) {
         const s = Number(bestProgress.currentStep);
-        if (s >= 1 && s <= 6) setCurrentStep(s);
+        if (s >= 1 && s <= 7) setCurrentStep(s);
       }
       if (Array.isArray(bestProgress?.completedSteps)) {
         setCompletedSteps(bestProgress.completedSteps.filter((n: unknown) => Number.isFinite(Number(n))).map((n: unknown) => Number(n)));
@@ -1034,6 +1038,16 @@ export default function PublicAdmissionFormPage() {
         }
         break;
       case 5:
+        if (formData.hasMedicalHistory !== 'yes' && formData.hasMedicalHistory !== 'no') {
+          alert('Please indicate whether you have any medical history');
+          return false;
+        }
+        if (formData.hasMedicalHistory === 'yes' && !formData.medicalHistoryDescription.trim()) {
+          alert('Please describe your medical history');
+          return false;
+        }
+        break;
+      case 6:
         if (!allSectionsChecked) {
           alert('Please read and acknowledge all sections of the Terms & Conditions');
           return false;
@@ -1043,7 +1057,7 @@ export default function PublicAdmissionFormPage() {
           return false;
         }
         break;
-      case 6:
+      case 7:
         if (!formData.modeOfPayment) {
           alert('Please select a fee plan');
           return false;
@@ -1082,8 +1096,8 @@ export default function PublicAdmissionFormPage() {
   };
 
   const jumpToStep = (step: number) => {
-    // Step 6 (Payment) is locked until steps 1–5 are all completed
-    if (!isPreviewTermsMode && step === 6 && ![1, 2, 3, 4, 5].every((s) => completedSteps.includes(s))) return;
+    // Step 7 (Payment) is locked until steps 1–6 are all completed
+    if (!isPreviewTermsMode && step === 7 && ![1, 2, 3, 4, 5, 6].every((s) => completedSteps.includes(s))) return;
     setCurrentStep(step);
   };
 
@@ -1114,39 +1128,49 @@ export default function PublicAdmissionFormPage() {
       setShowConsentModal(true);
       return;
     }
-    if (!allSectionsChecked || !formData.termsAgreed) {
-      alert('Please complete Step 5: Read and accept the Terms & Conditions');
+    if (formData.hasMedicalHistory !== 'yes' && formData.hasMedicalHistory !== 'no') {
+      alert('Please complete Step 5: Indicate whether you have any medical history');
       setCurrentStep(5);
       return;
     }
-    if (!formData.modeOfPayment) {
-      alert('Please complete Step 6: Select a fee plan');
+    if (formData.hasMedicalHistory === 'yes' && !formData.medicalHistoryDescription.trim()) {
+      alert('Please complete Step 5: Describe your medical history');
+      setCurrentStep(5);
+      return;
+    }
+    if (!allSectionsChecked || !formData.termsAgreed) {
+      alert('Please complete Step 6: Read and accept the Terms & Conditions');
       setCurrentStep(6);
+      return;
+    }
+    if (!formData.modeOfPayment) {
+      alert('Please complete Step 7: Select a fee plan');
+      setCurrentStep(7);
       return;
     }
     if (formData.modeOfPayment === 'Pay at Office' && !payAtOfficeVerified) {
-      alert('Please complete Pay at Office override verification in Step 6.');
-      setCurrentStep(6);
+      alert('Please complete Pay at Office override verification in Step 7.');
+      setCurrentStep(7);
       return;
     }
     if (formData.modeOfPayment !== 'Pay at Office' && !paymentSubMethod) {
-      alert('Please select a payment method (Pay Online, Pay by QR, or Pay by NEFT) in Step 6.');
-      setCurrentStep(6);
+      alert('Please select a payment method (Pay Online, Pay by QR, or Pay by NEFT) in Step 7.');
+      setCurrentStep(7);
       return;
     }
     if (paymentSubMethod === 'qr' && !upiTransferConfirmed) {
-      alert('Please confirm your QR payment in Step 6 before submitting.');
-      setCurrentStep(6);
+      alert('Please confirm your QR payment in Step 7 before submitting.');
+      setCurrentStep(7);
       return;
     }
     if (paymentSubMethod === 'razorpay' && !razorpayPaid) {
-      alert('Please complete the online payment in Step 6 before submitting.');
-      setCurrentStep(6);
+      alert('Please complete the online payment in Step 7 before submitting.');
+      setCurrentStep(7);
       return;
     }
     if (paymentSubMethod === 'neft' && !neftTransactionNumber.trim()) {
-      alert('Please enter the NEFT transaction number in Step 6 before submitting.');
-      setCurrentStep(6);
+      alert('Please enter the NEFT transaction number in Step 7 before submitting.');
+      setCurrentStep(7);
       return;
     }
 
@@ -1232,6 +1256,8 @@ export default function PublicAdmissionFormPage() {
         workingFromMonths: formData.workingFromMonths,
         totalOccupationYears: formData.totalOccupationYears,
         selfEmploymentDetails: formData.selfEmploymentDetails,
+        medicalHistory: formData.hasMedicalHistory === 'yes',
+        medicalHistoryDetails: formData.hasMedicalHistory === 'yes' ? formData.medicalHistoryDescription.trim() : '',
         trainingProgrammeId: formData.trainingProgrammeId,
         trainingProgrammeName: formData.trainingProgrammeName,
         trainingCategory: formData.trainingCategory,
@@ -1405,7 +1431,7 @@ export default function PublicAdmissionFormPage() {
               </div>
               <div className="sm:hidden mt-1 flex gap-1">
                 {STEPS.map((step) => {
-                  const isLocked = !isPreviewTermsMode && step.id === 6 && ![1, 2, 3, 4, 5].every((s) => completedSteps.includes(s));
+                  const isLocked = !isPreviewTermsMode && step.id === 7 && ![1, 2, 3, 4, 5, 6].every((s) => completedSteps.includes(s));
                   const isCompleted = step.id < currentStep || completedSteps.includes(step.id);
                   const isCurrent = step.id === currentStep;
                   return (
@@ -1474,7 +1500,7 @@ export default function PublicAdmissionFormPage() {
           {/* Step dots */}
           <div className="flex gap-1">
             {STEPS.map((step) => {
-              const isLocked = !isPreviewTermsMode && step.id === 6 && ![1, 2, 3, 4, 5].every((s) => completedSteps.includes(s));
+              const isLocked = !isPreviewTermsMode && step.id === 7 && ![1, 2, 3, 4, 5, 6].every((s) => completedSteps.includes(s));
               const isCompleted = step.id < currentStep || completedSteps.includes(step.id);
               const isCurrent = step.id === currentStep;
               return (
@@ -1518,7 +1544,7 @@ export default function PublicAdmissionFormPage() {
                 {STEPS.map((step) => {
                   const isActive = currentStep === step.id;
                   const isCompleted = completedSteps.includes(step.id);
-                  const isLocked = !isPreviewTermsMode && step.id === 6 && ![1, 2, 3, 4, 5].every((s) => completedSteps.includes(s));
+                  const isLocked = !isPreviewTermsMode && step.id === 7 && ![1, 2, 3, 4, 5, 6].every((s) => completedSteps.includes(s));
                   return (
                     <button
                       key={step.id}
@@ -2874,7 +2900,7 @@ export default function PublicAdmissionFormPage() {
                   )}
 
                   {/* ── STEP 5: Mode of Payment ── */}
-                  {currentStep === 6 && (() => {
+                  {currentStep === 7 && (() => {
                     const baseFees = batchFees ?? 0;
                     const hasFees = baseFees > 0;
                     const fullPayAmount = Math.round(baseFees * 0.95);
@@ -3727,8 +3753,74 @@ export default function PublicAdmissionFormPage() {
                     );
                   })()}
 
-                  {/* ── STEP 6: Terms & Conditions ── */}
+                  {/* ── STEP 5: Medical History ── */}
                   {currentStep === 5 && (
+                    <div className="space-y-4 sm:space-y-5" style={stepEnterStyle}>
+                      <div>
+                        <h3 className="text-base font-bold text-gray-800 mb-1 pb-1.5 border-b border-gray-200 flex items-center gap-2">
+                          <i className="fas fa-notes-medical text-[#2A6BB5]"></i>
+                          Medical History
+                        </h3>
+                        <p className="text-sm text-gray-500 mb-4">Do you have any medical history (existing condition, allergy, ongoing treatment, etc.) we should be aware of?</p>
+                      </div>
+
+                      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 space-y-4">
+                        <label className="block text-sm font-semibold text-gray-700">
+                          Any medical history? <span className="text-red-500">*</span>
+                        </label>
+                        <div className="flex flex-wrap gap-3">
+                          {(['yes', 'no'] as const).map((opt) => (
+                            <label
+                              key={opt}
+                              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+                                formData.hasMedicalHistory === opt
+                                  ? 'border-[#2E3093] bg-[#2E3093]/5 text-[#2E3093] font-semibold'
+                                  : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="hasMedicalHistory"
+                                value={opt}
+                                checked={formData.hasMedicalHistory === opt}
+                                onChange={() =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    hasMedicalHistory: opt,
+                                    // Clear the description if the answer is switched to "No"
+                                    medicalHistoryDescription: opt === 'no' ? '' : prev.medicalHistoryDescription,
+                                  }))
+                                }
+                                className="accent-[#2E3093]"
+                              />
+                              {opt === 'yes' ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+
+                        {formData.hasMedicalHistory === 'yes' && (
+                          <div style={stepEnterStyle}>
+                            <label htmlFor="medicalHistoryDescription" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                              Please describe <span className="text-red-500">*</span>
+                            </label>
+                            <textarea
+                              id="medicalHistoryDescription"
+                              rows={4}
+                              value={formData.medicalHistoryDescription}
+                              onChange={(e) =>
+                                setFormData((prev) => ({ ...prev, medicalHistoryDescription: e.target.value }))
+                              }
+                              placeholder="Describe the condition, allergy, medication or treatment, and any precautions we should take."
+                              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-gray-400 transition-colors resize-y"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── STEP 6: Terms & Conditions ── */}
+                  {currentStep === 6 && (
                     <div className="space-y-4 sm:space-y-5" style={stepEnterStyle}>
                       <div>
                         <h3 className="text-base font-bold text-gray-800 mb-1 pb-1.5 border-b border-gray-200 flex items-center gap-2">
@@ -3854,12 +3946,12 @@ export default function PublicAdmissionFormPage() {
                           : <><i className="fas fa-save mr-1.5"></i><span className="hidden sm:inline">Save Draft</span><span className="sm:hidden">Save</span></>}
                       </button>
 
-                      {currentStep < 6 ? (
+                      {currentStep < 7 ? (
                         <button
                           type="button"
                           onClick={() => nextStep(currentStep + 1)}
-                          disabled={currentStep === 5 && (!allSectionsChecked || !formData.termsAgreed)}
-                          title={currentStep === 5 && (!allSectionsChecked || !formData.termsAgreed) ? 'Read and accept the Terms & Conditions to continue' : undefined}
+                          disabled={currentStep === 6 && (!allSectionsChecked || !formData.termsAgreed)}
+                          title={currentStep === 6 && (!allSectionsChecked || !formData.termsAgreed) ? 'Read and accept the Terms & Conditions to continue' : undefined}
                           className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#FAE452] to-[#FDD835] text-[#2E3093] rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
                         >
                           <span className="hidden sm:inline">Continue</span><span className="sm:hidden">Next</span> <i className="fas fa-arrow-right ml-1 sm:ml-2"></i>

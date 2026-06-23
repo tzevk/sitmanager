@@ -166,6 +166,9 @@ const FORM_COLUMNS: [string, string][] = [
   ['Self_Employment_Details',   'TEXT NULL'],
   ['Working_From_Years',        'VARCHAR(10) NULL'],
   ['Working_From_Months',       'VARCHAR(20) NULL'],
+  // Medical
+  ['Medical_History',           'TINYINT(1) NULL DEFAULT 0'],
+  ['Medical_History_Details',   'TEXT NULL'],
   // Training
   ['Course_Id',                 'INT NULL'],
   ['Batch_Code',                'VARCHAR(100) NULL'],
@@ -473,6 +476,9 @@ export async function saveStructuredAdmissionData(
     ['Self_Employment_Details', n(input.selfEmploymentDetails)],
     ['Working_From_Years',      n(input.workingFromYears)],
     ['Working_From_Months',     n(input.workingFromMonths)],
+    // Medical
+    ['Medical_History',         maybeBool(input.medicalHistory)],
+    ['Medical_History_Details', n(input.medicalHistoryDetails)],
     // Training
     ['Course_Id',               num(input.trainingProgrammeId) ?? num(input.Course_Id)],
     ['Batch_Code',              n(input.batchCode)],
