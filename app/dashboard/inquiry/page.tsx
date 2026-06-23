@@ -21,15 +21,28 @@ function formatDate(dateStr: string | null): string {
   } catch { return '—'; }
 }
 
-function formatDateTime(dateStr: string | null | undefined): string {
-  if (!dateStr) return '—';
+function parseDateTime(value: string | null | undefined): Date | null {
+  if (!value) return null;
   try {
-    const raw = String(dateStr).trim();
+    const raw = String(value).trim();
+    if (!raw) return null;
     const parsed = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'));
-    if (isNaN(parsed.getTime())) return raw || '—';
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return `${String(parsed.getDate()).padStart(2,'0')} ${months[parsed.getMonth()]} ${String(parsed.getHours()).padStart(2,'0')}:${String(parsed.getMinutes()).padStart(2,'0')}`;
-  } catch { return '—'; }
+    return isNaN(parsed.getTime()) ? null : parsed;
+  } catch { return null; }
+}
+
+function formatDurationBetween(startValue: string | null | undefined, endValue: string | null | undefined): string {
+  const start = parseDateTime(startValue);
+  const end = parseDateTime(endValue);
+  if (!start || !end) return '—';
+  const diffMinutes = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+  if (diffMinutes < 60) return `${diffMinutes} min`;
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+  if (hours < 24) return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours ? `${days}d ${remainingHours}h` : `${days}d`;
 }
 
 function formatName(name: string | null | undefined): string {
@@ -595,11 +608,11 @@ export default function InquiryPage() {
       )}
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-[#2E3093]/10 overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-300 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-[10px] uppercase tracking-wider text-[#2A6BB5]/60 bg-zinc-50 border-b border-zinc-200">
+              <tr className="text-[10px] uppercase tracking-wider text-slate-700 bg-slate-200 border-b border-slate-300">
                 <th className="text-left py-2 px-3 font-bold">#</th>
                 <th className="text-left py-2 px-3 font-bold">Name</th>
                 <th className="text-left py-2 px-3 font-bold">Training</th>
@@ -607,7 +620,7 @@ export default function InquiryPage() {
                 <th className="text-left py-2 px-3 font-bold">Email</th>
                 <th className="text-left py-2 px-3 font-bold">Discipline</th>
                 <th className="text-left py-2 px-3 font-bold">Source</th>
-                <th className="text-left py-2 px-3 font-bold">Inquiry Time</th>
+                <th className="text-left py-2 px-3 font-bold">Inquiry</th>
                 <th className="text-left py-2 px-3 font-bold">Last Discussion</th>
                 <th className="text-center py-2 px-3 font-bold">Status</th>
                 <th className="text-center py-2 px-3 font-bold">Actions</th>
@@ -663,7 +676,7 @@ export default function InquiryPage() {
                   },
                 ];
                 return (
-                  <tr key={r.Student_Id} className={`border-b border-slate-100 transition-colors ${colorCls} ${sourceRowCls}`}>
+                  <tr key={r.Student_Id} className={`border-b border-slate-200 transition-colors ${colorCls} ${sourceRowCls}`}>
                     <td className="py-1 px-2 font-semibold font-mono tabular-nums relative pl-4">
                       <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${statusBar(r.Status_id, r.StatusLabel)} rounded-r`} />
                       {(pagination.page - 1) * pagination.limit + i + 1}
@@ -714,11 +727,10 @@ export default function InquiryPage() {
                         )}
                       </div>
                     </td>
-                    <td className="py-1 px-2 whitespace-nowrap min-w-[122px]">
+                    <td className="py-1 px-2 whitespace-nowrap min-w-[108px]">
                       <div className="flex flex-col leading-tight">
                         <span className="font-semibold text-slate-700">{formatDate(r.Inquiry_Dt)}</span>
-                        <span className="text-[9px] text-slate-400">Software: {formatDateTime(r.InquirySoftwareTime)}</span>
-                        <span className="text-[9px] text-slate-400">First disc: {formatDateTime(r.FirstDiscussionTime)}</span>
+                        <span className="text-[9px] text-slate-400">First response: {formatDurationBetween(r.InquirySoftwareTime, r.FirstDiscussionTime)}</span>
                       </div>
                     </td>
                     <td className="py-1 px-2 max-w-[190px]">
@@ -749,7 +761,7 @@ export default function InquiryPage() {
                       </span>
                     </td>
                     <td className="py-1 px-2">
-                      <div className="flex items-center justify-center gap-0.5 flex-nowrap min-w-[244px] whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-0.5 flex-nowrap min-w-[210px] whitespace-nowrap">
                         {tagButtons.map(tag => {
                           const info = rowContact[tag.key];
                           const contacted = (info?.count ?? 0) > 0;
@@ -766,9 +778,9 @@ export default function InquiryPage() {
                               aria-pressed={contacted}
                               disabled={busy}
                               onClick={() => logContact(r.Student_Id, tag.key)}
-                              className={`relative inline-flex h-6 w-6 items-center justify-center rounded border transition-colors disabled:opacity-50 ${contacted ? 'border-[#2E3093]/40 bg-[#2E3093]/10 text-[#2E3093]' : 'border-slate-200 text-slate-400 hover:bg-blue-50 hover:text-[#2A6BB5]'}`}
+                              className={`relative inline-flex h-5 w-5 items-center justify-center rounded border transition-colors disabled:opacity-50 ${contacted ? 'border-[#2E3093] bg-[#2E3093]/15 text-[#2E3093]' : 'border-slate-400 text-slate-600 hover:border-[#2A6BB5] hover:bg-blue-50 hover:text-[#2A6BB5]'}`}
                             >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">{tag.icon}</svg>
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">{tag.icon}</svg>
                               {contacted && info!.count > 1 && (
                                 <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-[#2E3093] text-white text-[8px] font-bold leading-[14px] text-center">{info!.count}</span>
                               )}
@@ -776,36 +788,23 @@ export default function InquiryPage() {
                           );
                         })}
                         <button
-                          title="View"
-                          onClick={() => {
-                            const returnTo = encodeURIComponent(buildReturnTo());
-                            router.push(`/dashboard/inquiry/add?editId=${r.Student_Id}&returnTo=${returnTo}`);
-                          }}
-                          className="p-1 rounded hover:bg-blue-50 text-slate-300 hover:text-[#2A6BB5] transition-colors"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                        </button>
-                        <button
                           title="Edit"
                           onClick={() => {
                             const returnTo = encodeURIComponent(buildReturnTo());
                             router.push(`/dashboard/inquiry/add?editId=${r.Student_Id}&returnTo=${returnTo}`);
                           }}
                           disabled={!canUpdate}
-                          className={canUpdate ? 'p-1 rounded hover:bg-emerald-50 text-slate-300 hover:text-emerald-600 transition-colors' : 'p-1 rounded text-slate-200 cursor-not-allowed'}>
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          className={canUpdate ? 'p-0.5 rounded text-emerald-700 hover:bg-emerald-100 transition-colors' : 'p-0.5 rounded text-slate-400 cursor-not-allowed'}>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
                         </button>
                         <button title="Send admission form" onClick={() => handleSendAdmissionForm(r)}
                           disabled={!canUpdate || sendingId === r.Student_Id}
-                          className={canUpdate ? 'p-1 rounded hover:bg-indigo-50 text-slate-300 hover:text-indigo-600 transition-colors disabled:opacity-50' : 'p-1 rounded text-slate-200 cursor-not-allowed'}>
+                          className={canUpdate ? 'p-0.5 rounded text-indigo-700 hover:bg-indigo-100 transition-colors disabled:opacity-50' : 'p-0.5 rounded text-slate-400 cursor-not-allowed'}>
                           {sendingId === r.Student_Id
-                            ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                            : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            ? <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            : <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                               </svg>}
                         </button>
@@ -813,10 +812,10 @@ export default function InquiryPage() {
                           title="Regenerate admission link"
                           onClick={() => handleRegenerateAdmissionLink(r)}
                           disabled={!canUpdate || regeneratingId === r.Student_Id}
-                          className={canUpdate ? 'p-1 rounded hover:bg-amber-50 text-slate-300 hover:text-amber-600 transition-colors disabled:opacity-50' : 'p-1 rounded text-slate-200 cursor-not-allowed'}>
+                          className={canUpdate ? 'p-0.5 rounded text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50' : 'p-0.5 rounded text-slate-400 cursor-not-allowed'}>
                           {regeneratingId === r.Student_Id
-                            ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                            : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            ? <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            : <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                               </svg>}
                         </button>
@@ -824,12 +823,12 @@ export default function InquiryPage() {
                           title="Delete"
                           onClick={() => handleDeleteInquiry(r)}
                           disabled={!(canDelete || canUpdate) || deletingId === r.Student_Id}
-                          className={(canDelete || canUpdate) ? 'p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors disabled:opacity-50' : 'p-1 rounded text-slate-200 cursor-not-allowed'}
+                          className={(canDelete || canUpdate) ? 'p-0.5 rounded text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50' : 'p-0.5 rounded text-slate-400 cursor-not-allowed'}
                         >
                           {deletingId === r.Student_Id ? (
-                            <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
                           ) : (
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
                           )}
