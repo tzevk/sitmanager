@@ -610,7 +610,7 @@ export default function InquiryPage() {
       {/* Table */}
       <div className="bg-white rounded-xl border border-slate-300 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="w-full text-xs border-collapse [&_th]:border-r [&_th]:border-slate-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-slate-200 [&_td:last-child]:border-r-0">
             <thead>
               <tr className="text-[10px] uppercase tracking-wider text-slate-700 bg-slate-200 border-b border-slate-300">
                 <th className="text-left py-2 px-3 font-bold">#</th>
