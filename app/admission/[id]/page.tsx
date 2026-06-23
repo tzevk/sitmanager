@@ -874,7 +874,7 @@ export default function PublicAdmissionFormPage() {
     return () => {
       cancelled = true;
     };
-  }, [formData.batchCode, formData.trainingCategory, formData.trainingProgrammeId, loadBatchesForCategory]);
+  }, [formData.batchCode, formData.trainingCategory, formData.trainingProgrammeId]);
 
   const fetchStudentData = async () => {
     try {
