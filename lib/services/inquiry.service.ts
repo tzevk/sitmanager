@@ -393,6 +393,9 @@ function getStudentInquiryTargetIndexes(inquiryTable: string): InquirySchemaInde
     { table: inquiryTable, name: 'idx_si_status_list', cols: 'IsDelete, OnlineState, _inquiry_date, Inquiry_Id' },
     { table: inquiryTable, name: 'idx_si_type_list', cols: 'IsDelete, Inquiry_Type, _inquiry_date, Inquiry_Id' },
     { table: inquiryTable, name: 'idx_si_course_list', cols: 'IsDelete, Course_Id, _inquiry_date, Inquiry_Id' },
+    // Supports the per-Student_Id de-duplication of the listing (latest Inquiry_Id
+    // per linked student) via a loose index scan instead of a full table scan.
+    { table: inquiryTable, name: 'idx_si_student_dedup', cols: 'Student_Id, Inquiry_Id' },
   ];
 }
 
@@ -583,12 +586,13 @@ async function resolveInquiryMobileExpressions(
   const cachedExpr = mobileExprCache.get(inquiryTable);
   if (cachedExpr) return cachedExpr;
 
+  // Only the lead's own contact numbers. Father/Mother/Sibling mobiles were
+  // previously included as fallbacks, which surfaced a relative's number as the
+  // lead's contact ("wrong number"). The Meta-lead mobile fallback is applied
+  // separately in the listing query for leads with no own number.
   const preferredColumns = [
     'Present_Mobile',
     'Present_Mobile2',
-    'Father_Mobile',
-    'Mother_Mobile',
-    'Sibling_Mobile',
   ];
 
   try {
@@ -1065,6 +1069,25 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   }
 
   const whereClause = `WHERE (${conditions.join(') AND (')})`;
+
+  // Collapse duplicate inquiry rows that point to the same linked Student_Id (repeated
+  // imports/syncs create many Inquiry_Ids for one person). Keep only the latest inquiry
+  // per Student_Id; rows with no linked Student_Id are never merged. Skipped when the
+  // user explicitly asks to see duplicates. The derived table uses idx_si_student_dedup
+  // (Student_Id, Inquiry_Id) for a loose index scan rather than a full table scan.
+  const applyStudentDedup = !duplicatesOnly;
+  const dedupJoin = applyStudentDedup
+    ? `LEFT JOIN (
+         SELECT Student_Id, MAX(Inquiry_Id) AS keep_id
+         FROM \`${inquiryTable}\`
+         WHERE Student_Id IS NOT NULL AND TRIM(CAST(Student_Id AS CHAR)) NOT IN ('', '0')
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+         GROUP BY Student_Id
+       ) dedup ON dedup.Student_Id = si.Student_Id`
+    : '';
+  const dedupClause = applyStudentDedup
+    ? `AND (si.Student_Id IS NULL OR TRIM(CAST(si.Student_Id AS CHAR)) IN ('', '0') OR si.Inquiry_Id = dedup.keep_id)`
+    : '';
   perfPhases.prepMs = Date.now() - startedAt;
 
   const hasActiveFilters = Boolean(
@@ -1085,7 +1108,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
 
   let filteredCountPromise: Promise<number> | null = null;
 
-  if (useFastUnfilteredPath) {
+  if (useFastUnfilteredPath && !applyStudentDedup) {
     const countStartedAt = Date.now();
     // Avoid a full table COUNT(*) on default listing requests. TABLE_ROWS is near-instant
     // and good enough for pagination totals on high-traffic pages.
@@ -1133,7 +1156,9 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
            ${listCourseJoin}
            ${listDisciplineJoin}
            ${puneOnly ? puneListJoin : ''}
-           ${whereClause}`,
+           ${dedupJoin}
+           ${whereClause}
+           ${dedupClause}`,
           queryParams,
           5,
         );
@@ -1151,7 +1176,9 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
      ${listCourseJoin}
      ${listDisciplineJoin}
      ${puneOnly ? puneListJoin : ''}
+     ${dedupJoin}
      ${whereClause}
+     ${dedupClause}
      ORDER BY ${listOrderByClause}
      LIMIT ? OFFSET ?`,
     [...queryParams, limit, offset],

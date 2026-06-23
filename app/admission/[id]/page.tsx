@@ -779,6 +779,10 @@ export default function PublicAdmissionFormPage() {
     return payableTuition + (formData.modeOfPayment ? ALUMNI_MEMBERSHIP_FEE : 0);
   };
 
+  // Tracks the programme|category combo we've already fetched batches for, so the
+  // centralized loader below runs once per combo and never loops on empty results.
+  const loadedBatchKeyRef = useRef<string>('');
+
   const loadBatchesForCategory = useCallback(async (courseId: string, category: string) => {
     if (!courseId || !category) return;
     setLoadingBatches(true);
@@ -792,6 +796,22 @@ export default function PublicAdmissionFormPage() {
       setLoadingBatches(false);
     }
   }, []);
+
+  // Single source of truth for loading the batch-code list: whenever a programme and
+  // category are both selected, fetch the matching batches — regardless of HOW the
+  // category got set (dropdown, restored draft, or the hydrate effect). This fixes
+  // "Select Batch Code" staying empty when the category wasn't picked via its onChange.
+  useEffect(() => {
+    const { trainingProgrammeId, trainingCategory } = formData;
+    if (!trainingProgrammeId || !trainingCategory) {
+      loadedBatchKeyRef.current = '';
+      return;
+    }
+    const key = `${trainingProgrammeId}|${trainingCategory}`;
+    if (loadedBatchKeyRef.current === key) return;
+    loadedBatchKeyRef.current = key;
+    void loadBatchesForCategory(trainingProgrammeId, trainingCategory);
+  }, [formData.trainingProgrammeId, formData.trainingCategory, loadBatchesForCategory]);
 
   const handleProgrammeChange = async (courseId: string) => {
     const course = courses.find((c) => String(c.Course_Id) === courseId);
@@ -820,14 +840,13 @@ export default function PublicAdmissionFormPage() {
     }
   };
 
-  const handleCategoryChange = async (category: string) => {
+  const handleCategoryChange = (category: string) => {
     setFormData(prev => ({ ...prev, trainingCategory: category, batchCode: '' }));
     setAvailableBatches([]);
     setBatchFees(null);
     setBatchFeesFullPayment(null);
     setBatchFeesInstallment(null);
-    if (!category || !formData.trainingProgrammeId) return;
-    await loadBatchesForCategory(formData.trainingProgrammeId, category);
+    // Batches are loaded by the centralized effect that watches programme + category.
   };
 
   useEffect(() => {
@@ -844,8 +863,8 @@ export default function PublicAdmissionFormPage() {
         const resolvedCategory = typeof data.category === 'string' ? data.category.trim() : '';
         if (!resolvedCategory) return;
 
+        // Set the category; the centralized effect loads its batches.
         setFormData(prev => (prev.trainingCategory === resolvedCategory ? prev : { ...prev, trainingCategory: resolvedCategory }));
-        await loadBatchesForCategory(formData.trainingProgrammeId, resolvedCategory);
       } catch {
         // non-fatal
       }
