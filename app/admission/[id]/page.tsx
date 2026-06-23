@@ -81,6 +81,7 @@ export default function PublicAdmissionFormPage() {
   const studentId = params.id as string;
   const isPreviewTermsMode = searchParams.get('previewTerms') === '1';
   const forcedStep = Number(searchParams.get('step') || '0');
+  const resetDraftToken = searchParams.get('resetDraft') || '';
 
   const [submitted, setSubmitted] = useState(false);
   const [submittedStudentId, setSubmittedStudentId] = useState<number | null>(null);
@@ -341,6 +342,9 @@ export default function PublicAdmissionFormPage() {
       let localProgress: DraftProgress | null = null;
 
       try {
+        if (resetDraftToken) {
+          localStorage.removeItem(draftKey);
+        }
         const raw = localStorage.getItem(draftKey);
         if (raw) {
           const parsed = JSON.parse(raw) as { data?: DraftPayload; progress?: DraftProgress; savedAt?: number };
@@ -434,7 +438,7 @@ export default function PublicAdmissionFormPage() {
     };
 
     void restoreDraft();
-  }, [loading, draftKey, studentId]);
+  }, [loading, draftKey, studentId, resetDraftToken]);
 
   const persistDraftNow = useCallback(async (): Promise<boolean> => {
     try {

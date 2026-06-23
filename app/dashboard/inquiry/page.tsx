@@ -126,6 +126,7 @@ export default function InquiryPage() {
   const [page, setPage] = useState(() => Math.max(1, parseInt(searchParams.get('page') || '1')));
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [sendingId, setSendingId] = useState<number | null>(null);
+  const [regeneratingId, setRegeneratingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   type ContactInfo = { count: number; lastAt: string | null };
   const [rowContacts, setRowContacts] = useState<Record<number, Record<string, ContactInfo>>>({});
@@ -294,6 +295,36 @@ export default function InquiryPage() {
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed to send');
     } finally { setSendingId(null); }
+  };
+
+  const handleRegenerateAdmissionLink = async (r: InquiryRow) => {
+    const ok = window.confirm(
+      `Regenerate admission link for ${formatName(r.Student_Name)}?\n\nThis clears the saved online admission form/draft for this inquiry and creates a fresh usable form link.`
+    );
+    if (!ok) return;
+
+    setRegeneratingId(r.Student_Id);
+    try {
+      const res = await fetch('/api/inquiry/regenerate-admission-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquiryId: r.Student_Id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Failed to regenerate admission link');
+      }
+
+      if (data.admissionFormUrl) {
+        await navigator.clipboard.writeText(String(data.admissionFormUrl));
+      }
+      alert('Admission link regenerated successfully. Fresh link copied to clipboard.');
+      setFetchTrigger((t) => t + 1);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to regenerate admission link');
+    } finally {
+      setRegeneratingId(null);
+    }
   };
 
   const handleDeleteInquiry = async (r: InquiryRow) => {
@@ -757,6 +788,17 @@ export default function InquiryPage() {
                             ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
                             : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                              </svg>}
+                        </button>
+                        <button
+                          title="Regenerate admission link"
+                          onClick={() => handleRegenerateAdmissionLink(r)}
+                          disabled={!canUpdate || regeneratingId === r.Student_Id}
+                          className={canUpdate ? 'p-1 rounded hover:bg-amber-50 text-slate-300 hover:text-amber-600 transition-colors disabled:opacity-50' : 'p-1 rounded text-slate-200 cursor-not-allowed'}>
+                          {regeneratingId === r.Student_Id
+                            ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                               </svg>}
                         </button>
                         <button

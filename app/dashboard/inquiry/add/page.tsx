@@ -121,12 +121,15 @@ export default function AddInquiryPage() {
   const [error, setError] = useState('');
   const [showMailModal, setShowMailModal] = useState(false);
   const [sendingMail, setSendingMail] = useState(false);
+  const [regeneratingLink, setRegeneratingLink] = useState(false);
   const [mailSubject, setMailSubject] = useState('Your SIT Admission Form Link');
   const [mailBody, setMailBody] = useState('');
+  const [regeneratedAdmissionFormUrl, setRegeneratedAdmissionFormUrl] = useState('');
 
   const admissionFormUrl = editId
     ? (typeof window !== 'undefined' ? `${window.location.origin}/admission/${editId}` : `/admission/${editId}`)
     : '';
+  const activeAdmissionFormUrl = regeneratedAdmissionFormUrl || admissionFormUrl;
 
   useEffect(() => {
     fetch('/api/inquiry/options').then(r => r.json()).then(setOpts).catch(console.error);
@@ -278,7 +281,7 @@ export default function AddInquiryPage() {
     if (!editId) { alert('Save the inquiry first.'); return; }
     if (!email.trim()) { alert('No email found. Add email and save first.'); return; }
     setMailSubject('Your SIT Admission Form Link');
-    setMailBody([`Dear ${name.trim() || 'Student'},`,'','Thank you for your interest in SIT.','Please complete your admission form using the link below:',admissionFormUrl,'','Regards,','SIT Admissions Team'].join('\n'));
+    setMailBody([`Dear ${name.trim() || 'Student'},`,'','Thank you for your interest in SIT.','Please complete your admission form using the link below:',activeAdmissionFormUrl,'','Regards,','SIT Admissions Team'].join('\n'));
     setShowMailModal(true);
   };
 
@@ -292,7 +295,7 @@ export default function AddInquiryPage() {
       });
       const pd = await prev.json();
       if (!prev.ok) throw new Error(pd?.error || 'Failed');
-      if (!window.confirm([`To: ${email.trim()}`,`Subject: ${mailSubject}`,`Link: ${admissionFormUrl}`,'','Click OK to send.'].join('\n'))) return;
+      if (!window.confirm([`To: ${email.trim()}`,`Subject: ${mailSubject}`,`Link: ${activeAdmissionFormUrl}`,'','Click OK to send.'].join('\n'))) return;
       const res = await fetch('/api/inquiry/send-admission-form', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ inquiryId: editId, toEmail: email.trim(), studentName: name, subject: mailSubject, body: mailBody }),
@@ -302,6 +305,37 @@ export default function AddInquiryPage() {
       alert('Email sent'); setShowMailModal(false);
     } catch (err: unknown) { alert(err instanceof Error ? err.message : 'Failed'); }
     finally { setSendingMail(false); }
+  };
+
+  const regenerateAdmissionLink = async () => {
+    if (!editId) return;
+    const ok = window.confirm(
+      'Regenerate this admission link?\n\nThis clears the saved online admission form/draft for this inquiry and creates a fresh usable form link.'
+    );
+    if (!ok) return;
+
+    setRegeneratingLink(true);
+    try {
+      const res = await fetch('/api/inquiry/regenerate-admission-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquiryId: editId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Failed to regenerate admission link');
+      }
+
+      const freshUrl = String(data.admissionFormUrl || admissionFormUrl);
+      setRegeneratedAdmissionFormUrl(freshUrl);
+      setMailBody((prev) => prev.includes(activeAdmissionFormUrl) ? prev.replaceAll(activeAdmissionFormUrl, freshUrl) : prev);
+      await navigator.clipboard.writeText(freshUrl);
+      alert('Admission link regenerated successfully. Fresh link copied to clipboard.');
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to regenerate admission link');
+    } finally {
+      setRegeneratingLink(false);
+    }
   };
 
   if (permLoading) return <PermissionLoading />;
@@ -589,7 +623,7 @@ export default function AddInquiryPage() {
                 </div>
                 <div>
                   <label className={lbl}>Admission Form Link</label>
-                  <input value={admissionFormUrl} readOnly className={`${ctrl} opacity-60`} />
+                  <input value={activeAdmissionFormUrl} readOnly className={`${ctrl} opacity-60`} />
                 </div>
               </div>
               <div>
@@ -602,11 +636,15 @@ export default function AddInquiryPage() {
               </div>
             </div>
             <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-2 flex-wrap">
-              <button onClick={async () => { await navigator.clipboard.writeText(admissionFormUrl); alert('Link copied'); }}
+              <button onClick={async () => { await navigator.clipboard.writeText(activeAdmissionFormUrl); alert('Link copied'); }}
                 className="px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-lg text-slate-600 hover:bg-white transition-colors">Copy Link</button>
               <button onClick={async () => { await navigator.clipboard.writeText(mailBody); alert('Body copied'); }}
                 className="px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-lg text-slate-600 hover:bg-white transition-colors">Copy Body</button>
-              <button onClick={() => window.open(`/admission/${editId}`, '_blank', 'noopener,noreferrer')}
+              <button onClick={regenerateAdmissionLink} disabled={regeneratingLink || sendingMail}
+                className="px-3 py-1.5 text-xs font-bold border border-amber-200 bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 transition-colors disabled:opacity-60">
+                {regeneratingLink ? 'Regenerating...' : 'Regenerate Link'}
+              </button>
+              <button onClick={() => window.open(activeAdmissionFormUrl, '_blank', 'noopener,noreferrer')}
                 className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors">Open Form</button>
               <button onClick={sendMail} disabled={sendingMail}
                 className="px-3 py-1.5 text-xs font-bold bg-[#2E3093] hover:bg-[#252780] text-white rounded-lg transition-colors disabled:opacity-60">
