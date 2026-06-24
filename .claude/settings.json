@@ -107,7 +107,8 @@
       "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('vercel.json','utf8'\\)\\); console.log\\('valid JSON; crons:', JSON.parse\\(require\\('fs'\\).readFileSync\\('vercel.json','utf8'\\)\\).crons.map\\(c=>c.path\\).join\\(', '\\)\\)\")",
       "Bash(git status *)",
       "Bash(echo \"=== EXIT: $? ===\")",
-      "Bash(node -e \"const c=JSON.parse\\(require\\('fs'\\).readFileSync\\('vercel.json','utf8'\\)\\); console.log\\(c.crons.map\\(x=>x.path+' @ '+x.schedule\\).join\\('\\\\n'\\)\\)\")"
+      "Bash(node -e \"const c=JSON.parse\\(require\\('fs'\\).readFileSync\\('vercel.json','utf8'\\)\\); console.log\\(c.crons.map\\(x=>x.path+' @ '+x.schedule\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('vercel.json','utf8'\\)\\).crons.forEach\\(c=>console.log\\(c.path,'@',c.schedule\\)\\)\")"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
