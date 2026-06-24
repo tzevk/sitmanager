@@ -108,7 +108,7 @@ export default function SignIn() {
           <div className="bg-gray-10 rounded-3xl shadow-lg border border-gray-100 p-6 pt-2 sm:p-8 sm:pt-2">
             {/* Logo inside container */}
             <div className="flex flex-col items-center">
-              <div className="w-64 h-64 sm:w-72 sm:h-72 relative flex items-center justify-center">
+              <div className="w-32 h-32 sm:w-40 sm:h-40 relative flex items-center justify-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="/sit.png"
