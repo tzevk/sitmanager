@@ -16,7 +16,7 @@
     },
     {
       "path": "/api/cron/legacy-inquiry-sync",
-      "schedule": "3-59/10 * * * *"
+      "schedule": "*/2 * * * *"
     },
     {
       "path": "/api/cron/suvidya-inquiry-sync",
