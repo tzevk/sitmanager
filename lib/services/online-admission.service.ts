@@ -395,7 +395,7 @@ export async function saveStructuredAdmissionData(
     ['Last_Name',       n(input.lastName)],
     ['Short_Name',      n(input.shortName)],
     ['Student_Name',    fullName || null],
-    ['DOB',             n(input.dob)],
+    ['DOB',             toDbDate(input.dob)],
     ['Sex',             n(input.gender)],
     ['Nationality',     n(input.nationality)],
     ['Email',           n(input.email)],
@@ -609,6 +609,20 @@ function normalizeText(value: unknown): string {
   return value == null ? '' : String(value).trim();
 }
 
+// Coerce a user-entered date into a MySQL-safe DATE ('YYYY-MM-DD') or NULL.
+// Guards against malformed/garbage values (e.g. '+020006-03') and out-of-range
+// years that would otherwise abort the whole INSERT/UPDATE with ER_TRUNCATED_WRONG_VALUE.
+function toDbDate(value: unknown): string | null {
+  const s = normalizeText(value);
+  if (!s) return null;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  const year = Number(y), month = Number(mo), day = Number(d);
+  if (year < 1900 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return `${y}-${mo}-${d}`;
+}
+
 function firstNonEmpty(...values: unknown[]): string {
   for (const value of values) {
     const normalized = normalizeText(value);
@@ -789,7 +803,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
   pushInquiry('Email', firstNonEmpty(input.email, inquiry.Email) || null);
   pushInquiry('Present_Mobile', firstNonEmpty(input.mobile, inquiry.Present_Mobile) || null);
   pushInquiry('Present_Mobile2', normalizeText(input.telephone) || null);
-  pushInquiry('DOB', normalizeText(input.dob) || null);
+  pushInquiry('DOB', toDbDate(input.dob));
   pushInquiry('Sex', normalizeText(input.gender) || null);
   pushInquiry('Nationality', normalizeText(input.nationality) || null);
   pushInquiry('Batch_Code', batchCode);
@@ -829,7 +843,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
         normalizeText(input.firstName) || null,
         normalizeText(input.middleName) || null,
         normalizeText(input.lastName) || null,
-        normalizeText(input.dob) || null,
+        toDbDate(input.dob),
         normalizeText(input.gender) || null,
         normalizeText(input.nationality) || 'Indian',
         firstNonEmpty(input.email, inquiry.Email) || null,
@@ -878,7 +892,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       normalizeText(input.firstName) || null,
       normalizeText(input.middleName) || null,
       normalizeText(input.lastName) || null,
-      normalizeText(input.dob) || null,
+      toDbDate(input.dob),
       normalizeText(input.gender) || null,
       normalizeText(input.nationality) || null,
       firstNonEmpty(input.email, inquiry.Email) || null,

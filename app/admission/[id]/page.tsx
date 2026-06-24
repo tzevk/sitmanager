@@ -369,13 +369,20 @@ export default function PublicAdmissionFormPage() {
         if (res.ok && data?.draft && typeof data.draft === 'object') {
           serverData = data.draft as DraftPayload;
           serverProgress = (data.draftMeta as DraftProgress | null) ?? ((serverData as DraftPayload).__draftProgress ?? null);
-          serverSavedAt = serverProgress?.autosavedAt ? Date.parse(String(serverProgress.autosavedAt)) : 0;
+          // A finally-submitted form has no __draftProgress; fall back to its
+          // submittedAt timestamp so it still wins over a stale/absent local draft.
+          const submittedAt = (serverData as { submittedAt?: unknown }).submittedAt;
+          serverSavedAt = serverProgress?.autosavedAt
+            ? Date.parse(String(serverProgress.autosavedAt))
+            : (submittedAt ? Date.parse(String(submittedAt)) : 0);
         }
       } catch {
         serverData = null;
       }
 
-      const useServer = serverSavedAt > localSavedAt;
+      // Prefer whichever source is newer, but always fall back to the one that
+      // exists — so a submitted form (server data, no local draft) still pre-fills.
+      const useServer = serverData ? (!localData || serverSavedAt >= localSavedAt) : false;
       const bestData = useServer ? serverData : localData;
       const bestProgress = useServer ? serverProgress : localProgress;
       if (!bestData) return;
