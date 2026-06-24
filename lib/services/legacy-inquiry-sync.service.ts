@@ -11,6 +11,8 @@ export interface LegacyInquirySyncSummary {
   inquiriesFetched: number;
   inquiriesUpserted: number;
   inquiriesSkippedWebDuplicate: number;
+  /** Website/API-origin rows soft-deleted because a legacy row (correct phone) supersedes them. */
+  websiteDuplicatesSuperseded: number;
   discussionsFetched: number;
   discussionsUpserted: number;
   errors: string[];
@@ -105,7 +107,7 @@ async function loadExistingContactKeys(
   legacyIds: number[],
   phones: string[],
   emails: string[],
-): Promise<{ existingIds: Set<number>; websiteContactKeys: Set<string> }> {
+): Promise<{ existingIds: Set<number>; websiteContactKeys: Set<string>; websiteIdsByContact: Map<string, number[]> }> {
   const existingIds = new Set<number>();
 
   // Check which Inquiry_Ids already exist in the new DB
@@ -124,7 +126,10 @@ async function loadExistingContactKeys(
   // We consider any existing inquiry whose Inquiry_Id is NOT in legacyIds set
   // as a website-origin record (Suvidya API sync gives new auto-increment IDs).
   const websiteContactKeys = new Set<string>();
-  if (phones.length === 0 && emails.length === 0) return { existingIds, websiteContactKeys };
+  // Map each website-origin contact key to the new-DB Inquiry_Id(s) holding it, so a
+  // matching legacy row can supersede (soft-delete) those rows and win.
+  const websiteIdsByContact = new Map<string, number[]>();
+  if (phones.length === 0 && emails.length === 0) return { existingIds, websiteContactKeys, websiteIdsByContact };
 
   const legacyIdSet = new Set(legacyIds);
   const conditions: string[] = [];
@@ -149,17 +154,24 @@ async function loadExistingContactKeys(
     params,
   );
 
+  const linkContact = (key: string, id: number) => {
+    websiteContactKeys.add(key);
+    const ids = websiteIdsByContact.get(key) ?? [];
+    if (!ids.includes(id)) ids.push(id);
+    websiteIdsByContact.set(key, ids);
+  };
+
   for (const row of contactRows as any[]) {
     const id = Number(row.Inquiry_Id);
     // Only flag as website-origin if this inquiry_id is NOT one the legacy DB owns
     if (legacyIdSet.has(id)) continue;
     const phone = normalizeMobileForDedup(row.Present_Mobile);
     const email = normalizeEmailForDedup(row.Email);
-    if (phone) websiteContactKeys.add(`phone:${phone}`);
-    if (email) websiteContactKeys.add(`email:${email}`);
+    if (phone) linkContact(`phone:${phone}`, id);
+    if (email) linkContact(`email:${email}`, id);
   }
 
-  return { existingIds, websiteContactKeys };
+  return { existingIds, websiteContactKeys, websiteIdsByContact };
 }
 
 async function upsertBatched(
@@ -206,6 +218,7 @@ export async function syncLegacyInquiries(
     inquiriesFetched: 0,
     inquiriesUpserted: 0,
     inquiriesSkippedWebDuplicate: 0,
+    websiteDuplicatesSuperseded: 0,
     discussionsFetched: 0,
     discussionsUpserted: 0,
     errors: [],
