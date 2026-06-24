@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { getPool } from '@/lib/db';
+import { getPool, invalidateCache } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
 async function resolveInquiryTableName(pool: any): Promise<string> {
@@ -34,8 +34,11 @@ export async function DELETE(
 
     const inquiryIdStr = String(inquiryId);
 
-    await pool.query(`UPDATE ${inquiryTable} SET IsDelete = 1 WHERE Inquiry_Id = ?`, [inquiryId]);
-
+    // The listing collapses every inquiry row that shares a linked Student_Id into a
+    // single row (repeated imports/syncs create many Inquiry_Ids for one person).
+    // So deleting just this Inquiry_Id would leave the next duplicate to immediately
+    // resurface in the list, making the delete look like it did nothing. Resolve the
+    // linked Student_Id first and soft-delete the whole group so the row truly goes away.
     const [studentRows] = await pool.query(
       `SELECT Student_Id FROM ${inquiryTable} WHERE Inquiry_Id = ? LIMIT 1`,
       [inquiryId]
@@ -44,8 +47,20 @@ export async function DELETE(
     const sourceStudentIdStr = sourceStudentId === null || sourceStudentId === undefined
       ? null
       : String(sourceStudentId).trim();
+    const hasLinkedStudent = Boolean(sourceStudentIdStr && !['', '0'].includes(sourceStudentIdStr));
 
-    if (sourceStudentIdStr) {
+    if (hasLinkedStudent) {
+      // Soft-delete every inquiry row for this person, plus the row itself as a safety net.
+      await pool.query(
+        `UPDATE ${inquiryTable} SET IsDelete = 1
+         WHERE Inquiry_Id = ? OR TRIM(CAST(Student_Id AS CHAR)) = ?`,
+        [inquiryId, sourceStudentIdStr]
+      );
+    } else {
+      await pool.query(`UPDATE ${inquiryTable} SET IsDelete = 1 WHERE Inquiry_Id = ?`, [inquiryId]);
+    }
+
+    if (hasLinkedStudent) {
       await pool.query(
         `UPDATE awt_inquirydiscussion
          SET deleted = 1
@@ -60,6 +75,11 @@ export async function DELETE(
         [inquiryIdStr]
       );
     }
+
+    // Drop the cached inquiry listing/count so the deleted row disappears on the
+    // immediate refetch instead of lingering for the cache TTL.
+    invalidateCache('api:inquiry');
+    invalidateCache('inquiry:list-count');
 
     return NextResponse.json({ success: true, message: 'Inquiry deleted successfully' });
   } catch (error: any) {
