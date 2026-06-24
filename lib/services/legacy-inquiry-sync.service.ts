@@ -263,46 +263,67 @@ export async function syncLegacyInquiries(
     summary.inquiriesFetched = rows.length;
 
     if (rows.length > 0) {
-      // ── 3a. Dedup: website leads are primary; legacy is fallback ─────────────
-      // Collect identifiers needed for the overlap check
+      // ── 3a. Dedup: legacy is authoritative (it carries the correct phone) ─────
+      // The website/API feed (Suvidya GetInquiry.php) overflows phone numbers to
+      // 2147483647, so when both feeds capture the same person (matched by email or
+      // phone) the legacy row must WIN. We upsert the legacy row and soft-delete the
+      // website-origin duplicate so only the correct-phone row remains.
       const legacyIds = rows
         .map((r: any) => Number(r['Inquiry_Id']))
         .filter((id) => Number.isFinite(id) && id > 0);
+      const legacyIdSet = new Set(legacyIds);
 
       const rawPhones = rows.map((r: any) => normalizeMobileForDedup(r['Present_Mobile'])).filter(Boolean) as string[];
       const rawEmails = rows.map((r: any) => normalizeEmailForDedup(r['Email'])).filter(Boolean) as string[];
       const uniquePhones = [...new Set(rawPhones)];
       const uniqueEmails = [...new Set(rawEmails)];
 
-      const { existingIds, websiteContactKeys } = await loadExistingContactKeys(
+      const { existingIds, websiteIdsByContact } = await loadExistingContactKeys(
         newPool, INQUIRY_DST, legacyIds, uniquePhones, uniqueEmails,
       );
 
-      // Split rows: safe to upsert vs. blocked new-inserts
       const rowsToUpsert: any[] = [];
+      const supersededWebsiteIds = new Set<number>();
       for (const row of rows) {
         const id = Number(row['Inquiry_Id']);
-        if (existingIds.has(id)) {
-          // Record already in new DB from a previous legacy sync — safe to update
-          rowsToUpsert.push(row);
-          continue;
-        }
-        // New insert candidate: skip if phone or email is owned by a website-origin record
+        // Every legacy row is upserted — legacy is the source of truth.
+        rowsToUpsert.push(row);
+        if (existingIds.has(id)) continue;
+
+        // New legacy insert: if a website-origin row already holds this email/phone,
+        // mark it to be superseded so the listing shows only the correct-phone row.
         const phone = normalizeMobileForDedup(row['Present_Mobile']);
         const email = normalizeEmailForDedup(row['Email']);
-        const isWebDuplicate =
-          (phone && websiteContactKeys.has(`phone:${phone}`)) ||
-          (email && websiteContactKeys.has(`email:${email}`));
+        const matchKeys = [
+          email ? `email:${email}` : null,
+          phone ? `phone:${phone}` : null,
+        ].filter(Boolean) as string[];
 
-        if (isWebDuplicate) {
-          summary.inquiriesSkippedWebDuplicate += 1;
-        } else {
-          rowsToUpsert.push(row);
+        let matched = false;
+        for (const key of matchKeys) {
+          for (const wid of websiteIdsByContact.get(key) ?? []) {
+            if (!legacyIdSet.has(wid)) { supersededWebsiteIds.add(wid); matched = true; }
+          }
         }
+        if (matched) summary.websiteDuplicatesSuperseded += 1;
       }
 
       if (rowsToUpsert.length > 0) {
         summary.inquiriesUpserted = await upsertBatched(newPool, INQUIRY_DST, inquiryColumns, rowsToUpsert, batchSize);
+      }
+
+      // Soft-delete the superseded website/API rows AFTER the legacy rows are safely
+      // upserted, so we never drop a record without its replacement in place.
+      if (supersededWebsiteIds.size > 0) {
+        const ids = [...supersededWebsiteIds];
+        for (let i = 0; i < ids.length; i += 500) {
+          const chunk = ids.slice(i, i + 500);
+          const ph = chunk.map(() => '?').join(', ');
+          await newPool.query(
+            `UPDATE \`${INQUIRY_DST}\` SET IsDelete = 1 WHERE Inquiry_Id IN (${ph})`,
+            chunk,
+          );
+        }
       }
     }
 
