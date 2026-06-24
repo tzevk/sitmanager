@@ -95,7 +95,12 @@
       "Bash(node _cat_tmp.mjs)",
       "Bash(echo \"tsc exit: $?\")",
       "Bash(node -p \"require\\('./package.json'\\).dependencies.next\")",
-      "Bash(node -e \"const m=require\\('next/server'\\); console.log\\('after' in m ? 'after exported' : 'no after'\\)\")"
+      "Bash(node -e \"const m=require\\('next/server'\\); console.log\\('after' in m ? 'after exported' : 'no after'\\)\")",
+      "Bash(timeout 120 node /tmp/test_dedup.cjs)",
+      "Bash(node /tmp/test_dedup.cjs)",
+      "Bash(sed 's/Student_Inquiry/student_inquiry/g' /tmp/test_dedup.cjs)",
+      "Bash(node /tmp/test_dedup2.cjs)",
+      "Bash(node ./diag.mjs)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

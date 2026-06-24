@@ -180,7 +180,7 @@ export default function OnlineAdmissionPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex flex-col gap-2">
+    <div className="h-full overflow-hidden bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex flex-col gap-2">
       {permLoading ? <PermissionLoading /> : !canView ? (
         <AccessDenied message="You do not have permission to view online admissions." />
       ) : (
@@ -249,10 +249,10 @@ export default function OnlineAdmissionPage() {
           </div>
 
           {/* ── Table ── */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="overflow-x-auto">
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex-1 min-h-0 flex flex-col">
+            <div className="flex-1 min-h-0 overflow-auto">
               <table className="w-full text-xs">
-                <thead>
+                <thead className="sticky top-0 z-10 [&_th]:bg-slate-50">
                   <tr className="text-[10px] uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-200">
                     <th className="text-left py-2 px-3 font-bold w-16">Id</th>
                     <th className="text-left py-2 px-3 font-bold">Name</th>

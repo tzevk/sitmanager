@@ -1289,22 +1289,29 @@ export async function listOnlineAdmissions(
     newParams.push(dateTo);
   }
   if (submittedOnly) {
-    newConds.push(`(
-      oap.Payload NOT LIKE '%__draftProgress%'
-      OR NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), '') IS NOT NULL
-    )`);
+    newConds.push(`NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), '') IS NOT NULL`);
   }
 
-  // Treat old records with submittedAt as submitted even if __draftProgress remains in payload.
+  // A form is genuinely "submitted" only when the applicant finished the online
+  // admission form and submitOnlineAdmission stamped a `submittedAt` timestamp.
+  // (Many legacy payload rows are just inquiry data pre-seeded into the form for
+  // editing — they have no __draftProgress and no submittedAt; they were never
+  // actually submitted and must NOT show up in the pending/completed/rejected tabs.)
   const SUBMITTED = `(
-    oap.Payload NOT LIKE '%__draftProgress%'
-    OR NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), '') IS NOT NULL
+    NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), '') IS NOT NULL
   )`;
-  // Still "filling": a draft that was actually started but never finally submitted.
+  // A row is "decided" once the admission has been granted/rejected/closed
+  // (OnlineState 8/10 = admitted/on-hold, 4/7/9 = not-interested/cancelled/left).
+  // Such a row must drop out of the actionable tabs regardless of its draft marker.
+  const NOT_DECIDED = `(${effectiveStatusExpr} IS NULL OR ${effectiveStatusExpr} NOT IN (8, 10, 4, 7, 9))`;
+  // Still "filling": a draft that was actually started but never finally submitted,
+  // and that has not yet been granted/rejected (granting an in-progress draft converts
+  // it to a student, so it must leave the In Progress tab).
   const IN_PROGRESS = `(
     oap.Payload LIKE '%__draftProgress%'
     AND NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), '') IS NULL
     AND ${hasAdmissionActivityExpr}
+    AND ${NOT_DECIDED}
   )`;
   // The four tabs are mutually exclusive and each row's tab matches its status badge:
   //   in_progress → draft (filling)        pending → submitted, awaiting decision
@@ -1312,7 +1319,7 @@ export async function listOnlineAdmissions(
   if (tab === 'in_progress') {
     newConds.push(IN_PROGRESS);
   } else if (tab === 'pending') {
-    newConds.push(`${SUBMITTED} AND (${effectiveStatusExpr} IS NULL OR ${effectiveStatusExpr} NOT IN (8, 10, 4, 7, 9))`);
+    newConds.push(`${SUBMITTED} AND ${NOT_DECIDED}`);
   } else if (tab === 'completed') {
     newConds.push(`${SUBMITTED} AND ${effectiveStatusExpr} IN (8, 10)`);
   } else if (tab === 'rejected') {

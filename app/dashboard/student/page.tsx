@@ -135,8 +135,8 @@ export default function StudentPage() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3">
-      <div className="flex flex-col gap-2">
+    <div className="h-full overflow-hidden bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex flex-col">
+      <div className="flex flex-col gap-2 flex-1 min-h-0">
       {permLoading ? <PermissionLoading /> : !canView ? (
         <AccessDenied message="You do not have permission to view students." />
       ) : (<>
@@ -191,10 +191,10 @@ export default function StudentPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 overflow-auto">
           <table className="dashboard-table w-full">
-            <thead>
+            <thead className="sticky top-0 z-10 [&_th]:bg-slate-50">
               <tr className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 border-b border-slate-200">
                 <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Student Id</th>
                 <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Batch Code</th>
