@@ -522,32 +522,11 @@ const DEFAULT_SEARCHABLE_INQUIRY_MOBILE_EXPR =
   `COALESCE(${DEFAULT_PRIMARY_INQUIRY_MOBILE_EXPR}, NULLIF(TRIM(si.Present_Mobile2),''))`;
 
 function normalizeInquiryMobile(value: unknown): string | null {
+  // Allow all values: display the stored phone exactly as captured, with no
+  // length/format filtering or extraction. Whatever the cron stored (including
+  // overflow values from the source) is shown verbatim.
   const text = String(value ?? '').trim();
-  if (!text) return null;
-
-  const rawCandidates = [
-    text,
-    ...text.split(/[|,;\/]+/).map((part) => part.trim()).filter(Boolean),
-    ...Array.from(text.matchAll(/\+?\d[\d\s().-]{8,20}\d/g), (match) => String(match[0] || '').trim()).filter(Boolean),
-  ];
-
-  const seen = new Set<string>();
-  for (const candidate of rawCandidates) {
-    if (!candidate || seen.has(candidate)) continue;
-    seen.add(candidate);
-
-    const digits = candidate.replace(/\D/g, '');
-    if (!digits) continue;
-
-    if (digits.length === 11 && digits.startsWith('0')) {
-      return digits.slice(1);
-    }
-    if (digits.length >= 10 && digits.length <= 15) {
-      return digits;
-    }
-  }
-
-  return null;
+  return text || null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
