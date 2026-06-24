@@ -19,7 +19,14 @@ function isAuthorized(req: NextRequest): boolean {
   return bearer === secret || headerSecret === secret || querySecret === secret;
 }
 
+// Temporarily disable the legacy sync for now. Set to false to re-enable.
+const LEGACY_SYNC_PAUSED: boolean = true;
+
 async function runSync(req: NextRequest) {
+  if (LEGACY_SYNC_PAUSED) {
+    return NextResponse.json({ ok: false, disabled: true, message: 'Legacy batch sync temporarily disabled' });
+  }
+
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
