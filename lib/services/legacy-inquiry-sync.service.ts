@@ -278,20 +278,18 @@ export async function syncLegacyInquiries(
       const uniquePhones = [...new Set(rawPhones)];
       const uniqueEmails = [...new Set(rawEmails)];
 
-      const { existingIds, websiteIdsByContact } = await loadExistingContactKeys(
+      const { websiteIdsByContact } = await loadExistingContactKeys(
         newPool, INQUIRY_DST, legacyIds, uniquePhones, uniqueEmails,
       );
 
       const rowsToUpsert: any[] = [];
       const supersededWebsiteIds = new Set<number>();
       for (const row of rows) {
-        const id = Number(row['Inquiry_Id']);
         // Every legacy row is upserted — legacy is the source of truth.
         rowsToUpsert.push(row);
-        if (existingIds.has(id)) continue;
 
-        // New legacy insert: if a website-origin row already holds this email/phone,
-        // mark it to be superseded so the listing shows only the correct-phone row.
+        // If a website-origin row already holds this email/phone, mark it to be
+        // superseded so the listing shows only the correct-phone legacy row.
         const phone = normalizeMobileForDedup(row['Present_Mobile']);
         const email = normalizeEmailForDedup(row['Email']);
         const matchKeys = [
