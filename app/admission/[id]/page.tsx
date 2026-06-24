@@ -126,6 +126,9 @@ export default function PublicAdmissionFormPage() {
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [manualSaving, setManualSaving] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set once we load an already-submitted payload — viewing it must not autosave
+  // (which would strip submittedAt and revert the application to a draft).
+  const submittedLockRef = useRef(false);
   const draftKey = `sit_admission_draft_${studentId}`;
 
   useEffect(() => {
@@ -380,9 +383,15 @@ export default function PublicAdmissionFormPage() {
         serverData = null;
       }
 
-      // Prefer whichever source is newer, but always fall back to the one that
-      // exists — so a submitted form (server data, no local draft) still pre-fills.
-      const useServer = serverData ? (!localData || serverSavedAt >= localSavedAt) : false;
+      // A finally-submitted server payload is authoritative and must always win —
+      // otherwise a stale localStorage draft (e.g. left behind when staff previously
+      // opened this form) would override the real submitted data. Otherwise prefer
+      // whichever source is newer, falling back to whichever exists.
+      const serverSubmitted = Boolean(serverData && (serverData as { submittedAt?: unknown }).submittedAt);
+      // Already submitted → show it filled, but lock autosave so a staff view can't
+      // overwrite/revert the submission.
+      if (serverSubmitted) submittedLockRef.current = true;
+      const useServer = Boolean(serverData) && (serverSubmitted || !localData || serverSavedAt >= localSavedAt);
       const bestData = useServer ? serverData : localData;
       const bestProgress = useServer ? serverProgress : localProgress;
       if (!bestData) return;
@@ -452,6 +461,9 @@ export default function PublicAdmissionFormPage() {
   }, [loading, draftKey, studentId, resetDraftToken]);
 
   const persistDraftNow = useCallback(async (): Promise<boolean> => {
+    // Never autosave over an already-submitted application (would strip submittedAt
+    // and revert it to a draft). Staff are only viewing it.
+    if (submittedLockRef.current) return false;
     try {
       setAutoSaveStatus('saving');
 
