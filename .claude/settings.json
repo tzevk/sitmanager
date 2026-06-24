@@ -104,7 +104,10 @@
       "Bash(grep -rn \"INSERT INTO\\\\|CREATE TABLE\\\\|TABLE_NAME\\\\|suvidya_sync\\\\|FROM \\\\`\\\\?[a-z_]*sync\" lib/services/suvidya-sync-run.service.ts)",
       "Bash(grep -n \"INSERT INTO\\\\|UPDATE \\\\`\\\\|INTO suvidya_inquiry_sync\\\\|recordSuvidyaSyncRun\\\\|admission_master\\\\|fitStudentInquiryText\" lib/services/suvidya-inquiry.service.ts)",
       "Bash(node -e \"console.log\\('tsx:', require\\('fs'\\).existsSync\\('node_modules/.bin/tsx'\\)\\)\")",
-      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('vercel.json','utf8'\\)\\); console.log\\('valid JSON; crons:', JSON.parse\\(require\\('fs'\\).readFileSync\\('vercel.json','utf8'\\)\\).crons.map\\(c=>c.path\\).join\\(', '\\)\\)\")"
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('vercel.json','utf8'\\)\\); console.log\\('valid JSON; crons:', JSON.parse\\(require\\('fs'\\).readFileSync\\('vercel.json','utf8'\\)\\).crons.map\\(c=>c.path\\).join\\(', '\\)\\)\")",
+      "Bash(git status *)",
+      "Bash(echo \"=== EXIT: $? ===\")",
+      "Bash(node -e \"const c=JSON.parse\\(require\\('fs'\\).readFileSync\\('vercel.json','utf8'\\)\\); console.log\\(c.crons.map\\(x=>x.path+' @ '+x.schedule\\).join\\('\\\\n'\\)\\)\")"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
