@@ -108,7 +108,8 @@
       "Bash(git status *)",
       "Bash(echo \"=== EXIT: $? ===\")",
       "Bash(node -e \"const c=JSON.parse\\(require\\('fs'\\).readFileSync\\('vercel.json','utf8'\\)\\); console.log\\(c.crons.map\\(x=>x.path+' @ '+x.schedule\\).join\\('\\\\n'\\)\\)\")",
-      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('vercel.json','utf8'\\)\\).crons.forEach\\(c=>console.log\\(c.path,'@',c.schedule\\)\\)\")"
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('vercel.json','utf8'\\)\\).crons.forEach\\(c=>console.log\\(c.path,'@',c.schedule\\)\\)\")",
+      "Bash(cd /Users/tanvikadam/Desktop/SIT/sitmanager; echo \"=== helpers ===\"; grep -n \"function formatDocumentLabel\\\\|function buildStudentDocumentUrl\\\\|formatDocumentLabel =\\\\|buildStudentDocumentUrl =\" app/dashboard/student/edit/\\\\[id\\\\]/page.tsx; sed -n '/buildStudentDocumentUrl/,/^}/p' app/dashboard/student/edit/\\\\[id\\\\]/page.tsx | head -20; echo \"=== submit upload save \\(online-admission.service\\) ===\"; sed -n '1492,1500p' lib/services/online-admission.service.ts)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
@@ -116,7 +117,8 @@
       "/Users/tanvikadam/Desktop/SIT/sitmanager",
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/finance/pending-invoices",
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/meta-ads/leads/[leadId]",
-      "/tmp"
+      "/tmp",
+      "/Users/tanvikadam/Desktop/SIT/sitmanager/app/dashboard/student/edit/[id]"
     ]
   }
 }

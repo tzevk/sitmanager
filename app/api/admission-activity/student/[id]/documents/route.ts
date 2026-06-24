@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { extname } from 'path';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
-import { writeStorageFile } from '@/lib/storage-api';
+import { ensureDocumentBlobColumns } from '@/lib/student-documents.server';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
@@ -66,13 +66,14 @@ export async function POST(
 
     const ext = extname(file.name || '').toLowerCase() || (file.type === 'application/pdf' ? '.pdf' : '.jpg');
     const filename = `${sanitize(docName)}-${Date.now()}${ext}`;
-    const bytes = await file.arrayBuffer();
-    await writeStorageFile(`${id}/${filename}`, Buffer.from(bytes));
+    const bytes = Buffer.from(await file.arrayBuffer());
 
     const pool = getPool();
+    await ensureDocumentBlobColumns(pool);
+    // Store the file bytes directly in the DB (no external file store).
     const [result] = await pool.query(
-      `INSERT INTO documents (upload_image, doc_name, Student_id) VALUES (?, ?, ?)`,
-      [filename, docName, id]
+      `INSERT INTO documents (upload_image, doc_name, Student_id, File_Data, Content_Type) VALUES (?, ?, ?, ?, ?)`,
+      [filename, docName, id, bytes, file.type || 'application/octet-stream']
     ) as [any, any];
 
     return NextResponse.json({

@@ -4,6 +4,7 @@ import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { basename } from 'path';
 import { readStorageFile } from '@/lib/storage-api';
+import { ensureDocumentBlobColumns } from '@/lib/student-documents.server';
 
 export async function GET(
   req: NextRequest,
@@ -26,21 +27,25 @@ export async function GET(
     // Verify the document belongs to this student.
     // Try exact match first, then basename match for legacy paths stored with a prefix.
     const pool = getPool();
+    await ensureDocumentBlobColumns(pool);
     let matchedUploadImage: string | null = null;
+    let matchedRow: { File_Data?: Buffer | null; Content_Type?: string | null } | null = null;
 
     const [exactRows] = await pool.query<any[]>(
-      `SELECT upload_image FROM documents WHERE Student_id = ? AND upload_image = ? LIMIT 1`,
+      `SELECT upload_image, File_Data, Content_Type FROM documents WHERE Student_id = ? AND upload_image = ? LIMIT 1`,
       [safeStudentId, rawPath]
     );
     if ((exactRows as any[]).length) {
       matchedUploadImage = (exactRows as any[])[0].upload_image;
+      matchedRow = (exactRows as any[])[0];
     } else {
       const [basenameRows] = await pool.query<any[]>(
-        `SELECT upload_image FROM documents WHERE Student_id = ? AND (upload_image = ? OR upload_image LIKE ?) LIMIT 1`,
+        `SELECT upload_image, File_Data, Content_Type FROM documents WHERE Student_id = ? AND (upload_image = ? OR upload_image LIKE ?) LIMIT 1`,
         [safeStudentId, fileBasename, `%/${fileBasename}`]
       );
       if ((basenameRows as any[]).length) {
         matchedUploadImage = (basenameRows as any[])[0].upload_image;
+        matchedRow = (basenameRows as any[])[0];
       }
     }
 
@@ -48,6 +53,20 @@ export async function GET(
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
+    // Preferred path: the file bytes are stored directly in the DB.
+    if (matchedRow?.File_Data) {
+      const data = Buffer.from(matchedRow.File_Data);
+      return new Response(new Uint8Array(data), {
+        headers: {
+          'Content-Type': matchedRow.Content_Type || 'application/octet-stream',
+          'Cache-Control': 'private, max-age=3600',
+          'Content-Disposition': `inline; filename="${fileBasename}"`,
+          'Content-Length': String(data.length),
+        },
+      });
+    }
+
+    // Legacy fallback: older documents whose bytes still live on the file store.
     const candidates = [
       `${safeStudentId}/${fileBasename}`,
       fileBasename,

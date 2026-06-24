@@ -40,9 +40,16 @@ interface Pagination { page: number; limit: number; total: number; totalPages: n
 
 const TABS: { id: AdmissionTab; label: string }[] = [
   { id: 'in_progress', label: 'In Progress' },
-  { id: 'pending',     label: 'Pending' },
   { id: 'completed',   label: 'Completed' },
   { id: 'rejected',    label: 'Rejected' },
+];
+
+// Mirrors the admission form wizard (app/admission/[id]/page.tsx) so drafts can show
+// how far the applicant has reached.
+const TOTAL_STEPS = 7;
+const STEP_NAMES = [
+  'Personal Info', 'Academic', 'Occupational Info', 'Training',
+  'Medical History', 'Terms & Conditions', 'Mode of Payment',
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -76,7 +83,7 @@ export default function OnlineAdmissionPage() {
   const [busyId, setBusyId]         = useState<number | null>(null);
 
   // Filters
-  const [tab, setTab]       = useState<AdmissionTab>('pending');
+  const [tab, setTab]       = useState<AdmissionTab>('in_progress');
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom]         = useState('');
   const [dateTo, setDateTo]             = useState('');
@@ -251,7 +258,7 @@ export default function OnlineAdmissionPage() {
           {/* ── Table ── */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex-1 min-h-0 flex flex-col">
             <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-xs [&_th]:border-r [&_th]:border-slate-200 [&_td]:border-r [&_td]:border-slate-100 [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0 [&_td]:!py-1 [&_th]:!py-1.5 [&_td]:!px-2 [&_th]:!px-2">
                 <thead className="sticky top-0 z-10 [&_th]:bg-slate-50">
                   <tr className="text-[10px] uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-200">
                     <th className="text-left py-2 px-3 font-bold w-16">Id</th>
@@ -278,24 +285,32 @@ export default function OnlineAdmissionPage() {
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="py-10 text-center text-xs text-slate-400">No admissions found</td>
+                      <td colSpan={10} className="py-12 text-center">
+                        <div className="inline-flex flex-col items-center gap-2 text-slate-400">
+                          <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span className="text-xs font-medium">No admissions found</span>
+                          <span className="text-[11px] text-slate-400">Try a different tab or clear your filters.</span>
+                        </div>
+                      </td>
                     </tr>
-                  ) : rows.map(r => {
+                  ) : rows.map((r, idx) => {
                     // Grant/Reject only make sense on a finally-submitted form that is
                     // still awaiting a decision — never on a draft the applicant is still filling.
                     const isPending  = r.StatusCategory === 'pending' && !r.IsDraft;
                     const busy       = busyId === r.Inquiry_Id;
                     return (
-                      <tr key={r.Inquiry_Id} className="border-b border-slate-100 transition-colors hover:bg-slate-50">
+                      <tr key={r.Inquiry_Id} className={`border-b border-slate-100 transition-colors hover:bg-blue-50/50 ${idx % 2 === 1 ? 'bg-slate-50/40' : 'bg-white'}`}>
                           <td className="py-1.5 px-3 font-mono text-slate-500 text-[11px]">{r.Inquiry_Id}</td>
                           <td className="py-1.5 px-3 font-semibold text-slate-700 max-w-[160px]">
-                            <span className="truncate block">{r.Student_Name || '—'}</span>
+                            <span className="truncate block" title={r.Student_Name || ''}>{r.Student_Name || '—'}</span>
                           </td>
                           <td className="py-1.5 px-3 text-slate-600 max-w-[170px]">
-                            <span className="truncate block">{r.Email || '—'}</span>
+                            <span className="truncate block" title={r.Email || ''}>{r.Email || '—'}</span>
                           </td>
-                          <td className="py-1.5 px-3 font-mono text-slate-600 whitespace-nowrap">{r.Present_Mobile || '—'}</td>
-                          <td className="py-1.5 px-3 text-slate-600 whitespace-nowrap font-semibold">{r.Batch_code || '—'}</td>
+                          <td className="py-1.5 px-3 font-mono text-slate-600 whitespace-nowrap" title={r.Present_Mobile || ''}>{r.Present_Mobile || '—'}</td>
+                          <td className="py-1.5 px-3 text-slate-600 whitespace-nowrap font-semibold" title={r.Batch_code || ''}>{r.Batch_code || '—'}</td>
                           <td className="py-1.5 px-3">
                             {r.NeftTransactionNumber ? (
                               <div className="flex flex-col leading-tight">
@@ -316,14 +331,26 @@ export default function OnlineAdmissionPage() {
                               <span className="text-slate-400">—</span>
                             )}
                           </td>
-                          <td className="py-1.5 px-3">
-                            {r.IsDraft ? (
-                              <span
-                                title={r.DraftStep ? `Filling — reached step ${r.DraftStep}` : 'Filling the form'}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-sky-50 text-sky-700 border-sky-200 whitespace-nowrap"
-                              >
-                                <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
-                                Filling{r.DraftStep ? ` · Step ${r.DraftStep}` : ''}
+                          <td className="py-1.5 px-3 min-w-[148px]">
+                            {r.IsDraft ? (() => {
+                              const step = Math.min(TOTAL_STEPS, Math.max(1, r.DraftStep || 1));
+                              const pct = Math.round((step / TOTAL_STEPS) * 100);
+                              return (
+                                <div className="flex flex-col gap-1" title={`Filling — ${STEP_NAMES[step - 1] ?? ''} (step ${step} of ${TOTAL_STEPS})`}>
+                                  <span className="inline-flex w-fit items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-sky-50 text-sky-700 border-sky-200 whitespace-nowrap">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+                                    Step {step} of {TOTAL_STEPS}
+                                  </span>
+                                  <div className="h-1 w-full max-w-[128px] rounded-full bg-slate-100 overflow-hidden">
+                                    <div className="h-full rounded-full bg-sky-400 transition-all" style={{ width: `${pct}%` }} />
+                                  </div>
+                                  <span className="text-[10px] text-slate-400 truncate max-w-[128px]">{STEP_NAMES[step - 1] ?? ''}</span>
+                                </div>
+                              );
+                            })() : isPending ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-amber-50 text-amber-700 border-amber-200 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                Submitted · awaiting decision
                               </span>
                             ) : (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-indigo-50 text-indigo-700 border-indigo-200 whitespace-nowrap">

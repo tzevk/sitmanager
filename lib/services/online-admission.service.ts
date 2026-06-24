@@ -2,7 +2,7 @@
 import { getPool } from '@/lib/db';
 import { generateFeesReceiptNo } from '@/lib/fees-receipt';
 import { sendOnlineAdmissionSubmissionEmail } from '@/lib/mailer';
-import { hasAdmissionUploads, type AdmissionUploadBundle, saveAdmissionAssetsForStudent } from '@/lib/student-documents.server';
+import { hasAdmissionUploads, type AdmissionUploadBundle, saveAdmissionAssetsForStudent, saveAdmissionAssetsForInquiry, attachInquiryAssetsToStudent } from '@/lib/student-documents.server';
 
 let inquiryTableNameCache: string | null = null;
 let statusTableNameCache: string | null | undefined;
@@ -1067,6 +1067,15 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       [new Date().toISOString().slice(0, 10), admissionDate, resolvedStudentId]
     );
 
+    // Move any documents the applicant uploaded during the form (stashed against the
+    // inquiry while there was no student) onto this student so they show in the
+    // student-master Documents tab.
+    try {
+      await attachInquiryAssetsToStudent(inquiryId, resolvedStudentId);
+    } catch (e) {
+      console.warn('[OnlineAdmission] attach inquiry documents failed:', e);
+    }
+
     // If the applicant paid online during the admission form, record it in the
     // fees ledger so it shows up as "Paid" on the student page. Dedupe on
     // PaymentId so re-granting / re-syncing doesn't create duplicate entries.
@@ -1228,9 +1237,29 @@ export async function listOnlineAdmissions(
         ) THEN 1 ELSE 0 END`;
      return `SELECT
        si.Inquiry_Id AS Inquiry_Id,
-       ${studentMasterTable ? `COALESCE(si.Student_Name, sm.Student_Name, '')` : `COALESCE(si.Student_Name, '')`} AS Student_Name,
-       ${studentMasterTable ? `COALESCE(si.Email, sm.Email, '')` : `COALESCE(si.Email, '')`} AS Email,
-       ${studentMasterTable ? `COALESCE(si.Present_Mobile, sm.Present_Mobile, '')` : `COALESCE(si.Present_Mobile, '')`} AS Present_Mobile,
+       COALESCE(
+         NULLIF(si.Student_Name, ''),
+         ${studentMasterTable ? `NULLIF(sm.Student_Name, ''),` : ``}
+         NULLIF(TRIM(CONCAT_WS(' ',
+           JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.firstName')),
+           JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.middleName')),
+           JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.lastName'))
+         )), ''),
+         NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.Student_Name')), ''),
+         ''
+       ) AS Student_Name,
+       COALESCE(
+         NULLIF(si.Email, ''),
+         ${studentMasterTable ? `NULLIF(sm.Email, ''),` : ``}
+         NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.email')), ''),
+         ''
+       ) AS Email,
+       COALESCE(
+         NULLIF(si.Present_Mobile, ''),
+         ${studentMasterTable ? `NULLIF(sm.Present_Mobile, ''),` : ``}
+         NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.mobile')), ''),
+         ''
+       ) AS Present_Mobile,
        ${smBatchCode} AS Batch_code,
        ${smAdmissionDt} AS Admission_Date,
        ${activityExpr} AS LastActivityAt,
@@ -1313,11 +1342,13 @@ export async function listOnlineAdmissions(
     AND ${hasAdmissionActivityExpr}
     AND ${NOT_DECIDED}
   )`;
-  // The four tabs are mutually exclusive and each row's tab matches its status badge:
-  //   in_progress → draft (filling)        pending → submitted, awaiting decision
+  // Tabs: In Progress now holds everything still awaiting a decision — both drafts
+  // being filled AND fully-submitted forms that haven't been granted/rejected yet
+  // (the old "Pending" tab is folded in here). Completed/Rejected stay decision-based.
+  //   in_progress → draft (filling) OR submitted-awaiting-decision
   //   completed   → submitted, admitted    rejected → submitted, cancelled/left
   if (tab === 'in_progress') {
-    newConds.push(IN_PROGRESS);
+    newConds.push(`(${IN_PROGRESS} OR (${SUBMITTED} AND ${NOT_DECIDED}))`);
   } else if (tab === 'pending') {
     newConds.push(`${SUBMITTED} AND ${NOT_DECIDED}`);
   } else if (tab === 'completed') {
@@ -1499,8 +1530,21 @@ export async function submitOnlineAdmission(
   await syncOnlineAdmissionIntoCurrentDb(inquiryId, cleanBody, { statusAction: 'update' });
 
   const studentId = await resolveStudentIdForInquiry(pool, inquiryId);
-  if (hasAdmissionUploads(uploads) && studentId) {
-    await saveAdmissionAssetsForStudent(studentId, uploads);
+  if (hasAdmissionUploads(uploads)) {
+    // Saving documents must NEVER block the submission — the form data is already
+    // persisted above. If a file fails to save (bad type, too large, storage/DB
+    // issue), log it and let the applicant's submission still go through.
+    try {
+      if (studentId) {
+        await saveAdmissionAssetsForStudent(studentId, uploads);
+      } else {
+        // No student yet (typical new admission) — keep the uploaded files in the DB
+        // against the inquiry; they get attached to the student when admission is granted.
+        await saveAdmissionAssetsForInquiry(inquiryId, uploads);
+      }
+    } catch (e) {
+      console.warn('[OnlineAdmission] document save failed (submission still accepted):', e);
+    }
   }
 
   const recipientEmail = String(email || inquiry.Email || '').trim();
