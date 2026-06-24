@@ -84,35 +84,15 @@ function normalizeText(value: unknown): string | null {
   return text || null;
 }
 
-function normalizePhoneText(value: unknown): string | null {
-  const text = normalizeText(value);
-  if (!text) return null;
-
-  const digits = text.replace(/\D/g, '');
-  if (!digits) return null;
-
-  // Filter overflow / garbage values the legacy source sometimes emits.
-  if (digits === '2147483647' || digits === '9999999999' || /^0+$/.test(digits)) return null;
-
-  // Must have at least 10 digits to be a valid Indian mobile.
-  if (digits.length < 10) return null;
-
-  // Strip country code: take the last 10 digits for Indian mobiles.
-  // e.g. "919876543210" (12 digits) → "9876543210"
-  //      "+91 98765 43210" (12 digits stripped) → "9876543210"
-  const normalized = digits.length > 10 ? digits.slice(-10) : digits;
-
-  // Reject sequences that are clearly not mobile numbers.
-  if (/^0+$/.test(normalized)) return null;
-
-  return normalized;
-}
-
 function normalizeMobileForDedup(value: unknown): string | null {
-  const normalized = normalizePhoneText(value);
-  if (!normalized) return null;
-  const digits = normalized.replace(/\D/g, '');
-  return digits.length >= 10 ? digits.slice(-10) : null;
+  // The phone itself is stored verbatim (see extractPhoneForSync). For matching
+  // an inquiry against an already-synced one, only a genuine 10-digit Indian
+  // mobile is a reliable key — take the last 10 digits to drop any country code.
+  // Anything else (overflow values, partial/garbage numbers) is NOT used as a
+  // dedup key, so distinct people are never merged onto one another.
+  const digits = (normalizeText(value) ?? '').replace(/\D/g, '');
+  const tail = digits.length > 10 ? digits.slice(-10) : digits;
+  return /^[6-9]\d{9}$/.test(tail) ? tail : null;
 }
 
 function normalizeEmailForDedup(value: unknown): string | null {
@@ -172,18 +152,10 @@ function pickRawPhoneText(record: SuvidyaInquiryRecord): string | null {
 }
 
 function extractPhoneForSync(record: SuvidyaInquiryRecord): string | null {
-  const raw = pickRawPhoneText(record);
-  if (!raw) return null;
-
-  const normalized = normalizePhoneText(raw);
-  if (normalized) return normalized;
-
-  // Both form types can emit slightly truncated values (9 digits instead of 10).
-  // Keep the raw digits rather than silently dropping the phone entirely.
-  const digits = raw.replace(/\D/g, '');
-  if (digits.length >= 9 && digits.length <= 15) return digits;
-
-  return null;
+  // Accept the phone exactly as the website sends it — no validation, length
+  // checks, country-code stripping, or overflow filtering. Whatever value the
+  // form delivers (including short/garbage values) is stored verbatim.
+  return pickRawPhoneText(record);
 }
 
 function normalizeCourseKey(value: string): string {

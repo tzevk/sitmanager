@@ -21,10 +21,6 @@
     {
       "path": "/api/cron/suvidya-inquiry-sync",
       "schedule": "*/2 * * * *"
-    },
-    {
-      "path": "/api/cron/suvidya-inquiry-sync-pune",
-      "schedule": "1-59/2 * * * *"
     }
   ],
   "functions": {

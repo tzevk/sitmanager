@@ -539,9 +539,6 @@ function normalizeInquiryMobile(value: unknown): string | null {
     const digits = candidate.replace(/\D/g, '');
     if (!digits) continue;
 
-    // Upstream Suvidya payloads sometimes overflow phone numbers into int32 max.
-    if (digits === '2147483647') continue;
-
     if (digits.length === 11 && digits.startsWith('0')) {
       return digits.slice(1);
     }
