@@ -138,8 +138,8 @@ export default function FeeDetailsPage() {
   if (!canView) return <AccessDenied />;
 
   return (
-    <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex flex-col gap-3">
-      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-3 shadow-[0_4px_14px_rgba(46,48,147,0.18)] relative overflow-hidden">
+    <div className="h-full overflow-hidden bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex flex-col gap-3">
+      <div className="shrink-0 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-3 shadow-[0_4px_14px_rgba(46,48,147,0.18)] relative overflow-hidden">
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
         <div className="relative z-10 flex flex-wrap items-end justify-between gap-2">
           <div>
@@ -157,7 +157,7 @@ export default function FeeDetailsPage() {
       </div>
 
       {/* Student search */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="shrink-0 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3 flex items-center gap-2">
           <div className="relative flex-1">
             <svg className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -184,7 +184,7 @@ export default function FeeDetailsPage() {
         </div>
 
         {(searching || searched) && (
-          <div className="overflow-x-auto border-t border-slate-100">
+          <div className="max-h-[40vh] overflow-auto border-t border-slate-100">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-200">
@@ -237,12 +237,12 @@ export default function FeeDetailsPage() {
         )}
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-100 bg-[#f8fafc]">
+      <div className="flex-1 min-h-0 flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="shrink-0 px-5 py-3 border-b border-slate-100 bg-[#f8fafc]">
           <h3 className="text-xs font-bold text-slate-700">Recent Fee Receipts</h3>
           <p className="text-[11px] text-slate-500 mt-0.5">Latest posted receipts across students</p>
         </div>
-        <div className="overflow-x-auto border-b border-slate-100">
+        <div className="flex-1 min-h-0 overflow-auto border-b border-slate-100">
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-200">
