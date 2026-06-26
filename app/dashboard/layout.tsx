@@ -919,7 +919,10 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
       </nav>
 
       {/* Page content */}
-      <main className="flex-1 overflow-y-auto p-6">
+      {/* min-h-0 overrides the flex item's content-based auto min-height —
+          without it, Safari/WebKit can let main grow past the available
+          space instead of scrolling within it. */}
+      <main className="flex-1 min-h-0 overflow-y-auto p-6">
         {children}
       </main>
 
