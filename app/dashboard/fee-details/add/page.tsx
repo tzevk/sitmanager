@@ -74,6 +74,18 @@ const lbl = 'text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.
 const fmt = (n: number | null | undefined) =>
   (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Parse a response as JSON, but tolerate non-JSON bodies (e.g. a server/timeout
+// error page) so callers get a readable message instead of an
+// "Unexpected token 'A'… is not valid JSON" crash.
+const safeJson = async (res: Response): Promise<any> => {
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return { error: res.ok ? 'Unexpected server response' : `Request failed (${res.status}). The server may be busy — please try again.` };
+  }
+};
+
 const fmtDate = (d: string | null | undefined) => {
   if (!d) return '';
   const s = String(d).slice(0, 10);
@@ -167,7 +179,7 @@ export default function AddFeeDetailsPage() {
     setSuggestedReceiptNo('');
     try {
       const res = await fetch(`/api/fee-details/${sid}`);
-      const d = await res.json();
+      const d = await safeJson(res);
       if (!res.ok) throw new Error(d.error || 'Failed to load');
       setData(d);
       const nextReceiptNo = d.nextReceiptNo ?? '';
@@ -228,7 +240,7 @@ export default function AddFeeDetailsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const d = await res.json();
+      const d = await safeJson(res);
       if (!res.ok) throw new Error(d.error || 'Failed to save receipt');
       setMessage('Saved successfully');
       router.push(`/dashboard/fee-details/${studentId}?feesId=${d.Fees_Id}`);
@@ -247,7 +259,7 @@ export default function AddFeeDetailsPage() {
     setDeletingFeeId(feesId);
     try {
       const res = await fetch(`/api/fee-details/${studentId}/${feesId}`, { method: 'DELETE' });
-      const d = await res.json();
+      const d = await safeJson(res);
       if (!res.ok) throw new Error(d.error || 'Failed to delete receipt');
       setMessage('Receipt deleted successfully');
       await loadFormData(studentId);
