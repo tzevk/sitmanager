@@ -351,12 +351,26 @@ export async function GET(
     const [statuses] = await pool.query(
       `SELECT Id AS id, Status AS label FROM status_master WHERE (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Id`
     ) as [any[], any];
-    const [batchCategories] = await pool.query(
-      `SELECT DISTINCT Category AS label FROM batch_mst
-       WHERE Category IS NOT NULL AND Category != ''
-         AND (IsDelete = 0 OR IsDelete IS NULL)
-       ORDER BY Category`
-    ) as [any[], any];
+    // Batch categories come from the master (id + label) so the saved
+    // Batch_Category_id maps to a selectable option. Fall back to distinct
+    // batch_mst pairs if the master table is absent in this deployment.
+    let batchCategories: any[] = [];
+    try {
+      const [rows] = await pool.query(
+        `SELECT id, BatchCategory AS label FROM mst_batchcategory
+         WHERE (IsDelete = 0 OR IsDelete IS NULL) AND (IsActive = 1 OR IsActive IS NULL)
+         ORDER BY id`
+      ) as [any[], any];
+      batchCategories = rows;
+    } catch {
+      const [rows] = await pool.query(
+        `SELECT DISTINCT Batch_Category_id AS id, Category AS label FROM batch_mst
+         WHERE Batch_Category_id IS NOT NULL AND Category IS NOT NULL AND Category != ''
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+         ORDER BY Batch_Category_id`
+      ) as [any[], any];
+      batchCategories = rows;
+    }
 
     // Fall back to inquiry-row education fields when student_master is empty
     const studentBase = {

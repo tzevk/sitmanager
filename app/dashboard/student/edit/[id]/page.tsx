@@ -12,7 +12,7 @@ import { StudentTransferBadge } from '../../../../../components/ui/StudentTransf
 interface Course { Course_Id: number; Course_Name: string }
 interface Batch  { Batch_Id: number; Batch_code: string; Course_Id: number }
 interface Status { id: number; label: string }
-interface BatchCategoryOption { label: string }
+interface BatchCategoryOption { id: number; label: string }
 interface Discussion {
   id: number;
   date: string;
@@ -34,66 +34,6 @@ interface DocumentRow {
   id: number;
   doc_name: string;
   upload_image: string;
-}
-
-interface OnlineAdmissionSnapshot {
-  inquiryId?: number | null;
-  admissionId?: number | null;
-  studentId?: number | null;
-  statusLabel?: string;
-  statusCategory?: string;
-  onlineAdmissionDate?: string;
-  firstName?: string;
-  middleName?: string;
-  lastName?: string;
-  shortName?: string;
-  dob?: string;
-  gender?: string;
-  nationality?: string;
-  email?: string;
-  mobile?: string;
-  telephone?: string;
-  familyContact?: string;
-  presentAddress?: string;
-  presentCity?: string;
-  presentDistrict?: string;
-  presentState?: string;
-  presentPin?: string;
-  presentCountry?: string;
-  permanentAddress?: string;
-  permanentCity?: string;
-  permanentDistrict?: string;
-  permanentState?: string;
-  permanentPin?: string;
-  permanentCountry?: string;
-  qualification?: string;
-  discipline?: string;
-  percentage?: string;
-  trainingProgrammeId?: string | number;
-  trainingProgrammeName?: string;
-  trainingCategory?: string;
-  batchCode?: string;
-  modeOfPayment?: string;
-  occupationalStatus?: string;
-  jobOrganisation?: string;
-  jobDesignation?: string;
-  jobDescription?: string;
-  totalOccupationYears?: string;
-  termsAgreed?: boolean;
-  consentAcknowledged?: boolean;
-  experiencedConsentAcknowledged?: boolean;
-  consentData?: {
-    eligibility?: string;
-    qualification?: string;
-    candidateRemark?: string;
-  };
-  consentChecks?: boolean[];
-  payAtOfficeAudit?: {
-    enabledAt?: string;
-    enabledByName?: string;
-    enabledByEmail?: string;
-  } | null;
-  photo?: string;
 }
 
 function buildStudentDocumentUrl(studentId: string, uploadImage: string): string {
@@ -210,13 +150,9 @@ export default function EditStudentPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
 
-  const [onlineAdmission, setOnlineAdmission] = useState<OnlineAdmissionSnapshot | null>(null);
-  const [snapshotExpanded, setSnapshotExpanded] = useState(false);
-
   /* sidebar stats */
   const [batchStartDate, setBatchStartDate] = useState('');
   const [batchEndDate, setBatchEndDate] = useState('');
-  const [onlineAdmissionDate, setOnlineAdmissionDate] = useState('');
 
   /* ---- form ---- */
   const [form, setForm] = useState({
@@ -340,58 +276,6 @@ export default function EditStudentPage() {
 
         setBatchStartDate(s.Batch_StartDate ? String(s.Batch_StartDate).slice(0, 10) : '');
         setBatchEndDate(s.Batch_EndDate ? String(s.Batch_EndDate).slice(0, 10) : '');
-        setOnlineAdmissionDate(s.OnlineAdmission_Date ? String(s.OnlineAdmission_Date).slice(0, 10) : '');
-        setOnlineAdmission({
-          inquiryId: data.inquiryId ?? null,
-          admissionId: s.Admission_Id ?? null,
-          studentId: s.Student_Id ?? null,
-          statusLabel: s.Status_name || s.StatusLabel || '',
-          statusCategory: s.StatusCategory || '',
-          onlineAdmissionDate: s.OnlineAdmission_Date ? String(s.OnlineAdmission_Date).slice(0, 10) : '',
-          firstName: s.FName || '',
-          middleName: s.MName || '',
-          lastName: s.LName || '',
-          shortName: s.shortName || s.ShortName || '',
-          dob: s.DOB ? String(s.DOB).slice(0, 10) : '',
-          gender: s.Sex || '',
-          nationality: s.Nationality || 'Indian',
-          email: s.Email || '',
-          mobile: s.Present_Mobile || '',
-          telephone: s.Present_Mobile2 || '',
-          familyContact: s.familyContact || '',
-          presentAddress: s.Present_Address || '',
-          presentCity: s.Present_City || '',
-          presentDistrict: s.presentDistrict || '',
-          presentState: s.Present_State || '',
-          presentPin: s.Present_Pin != null ? String(s.Present_Pin) : '',
-          presentCountry: s.Present_Country || 'India',
-          permanentAddress: s.Permanent_Address || '',
-          permanentCity: s.Permanent_City || '',
-          permanentDistrict: s.permanentDistrict || '',
-          permanentState: s.Permanent_State || '',
-          permanentPin: s.Permanent_Pin != null ? String(s.Permanent_Pin) : '',
-          permanentCountry: s.Permanent_Country || 'India',
-          qualification: s.Qualification || '',
-          discipline: s.Discipline || '',
-          percentage: s.Percentage != null ? String(s.Percentage) : '',
-          trainingProgrammeId: s.Course_Id != null ? String(s.Course_Id) : '',
-          trainingProgrammeName: s.trainingProgrammeName || s.Course_Name || '',
-          trainingCategory: s.trainingCategory || '',
-          batchCode: s.Batch_Code || s.Batch_code || '',
-          modeOfPayment: s.modeOfPayment || '',
-          occupationalStatus: s.OccupationalStatus || '',
-          jobOrganisation: s.Organisation || s.Company || '',
-          jobDesignation: s.Designation || '',
-          jobDescription: s.JobDescription || '',
-          totalOccupationYears: s.TotalExperience != null ? String(s.TotalExperience) : '',
-          termsAgreed: Boolean(s.termsAgreed),
-          consentAcknowledged: Boolean(s.consentAcknowledged),
-          experiencedConsentAcknowledged: Boolean(s.experiencedConsentAcknowledged),
-          consentData: s.consentData || null,
-          consentChecks: Array.isArray(s.consentChecks) ? s.consentChecks : [],
-          payAtOfficeAudit: s.payAtOfficeAudit && typeof s.payAtOfficeAudit === 'object' ? s.payAtOfficeAudit : null,
-          photo: s.photo || '',
-        });
 
         // Structured academic data (admission payload)
         const e = (data.education ?? {}) as Record<string, unknown>;
@@ -621,13 +505,6 @@ export default function EditStudentPage() {
 
   const isTransferred = String(form.Transfered).trim().toLowerCase() === 'yes';
 
-  const snapshotField = (label: string, value: unknown) => (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-      <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{label}</div>
-      <div className="mt-0.5 text-xs font-medium text-slate-800 break-words">{value == null || value === '' ? '—' : String(value)}</div>
-    </div>
-  );
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -829,7 +706,7 @@ export default function EditStudentPage() {
                           <select value={form.Batch_Category_id} onChange={(e) => set('Batch_Category_id', e.target.value)} className={selectCls}>
                             <option value="">— Select —</option>
                             {batchCategories.map((bc) => (
-                              <option key={bc.label} value={bc.label}>{bc.label}</option>
+                              <option key={bc.id} value={bc.id}>{bc.label}</option>
                             ))}
                           </select>
                         </div>
@@ -872,81 +749,6 @@ export default function EditStudentPage() {
                         <input type="date" value={form.Inquiry_Dt} onChange={(e) => set('Inquiry_Dt', e.target.value)} className={inputCls} />
                       </div>
                     </div>
-                  </div>
-
-                  {/* Online Admission Details — collapsible */}
-                  <div className="rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                    <button
-                      type="button"
-                      onClick={() => setSnapshotExpanded((x) => !x)}
-                      className="w-full bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-4 py-2 border-b border-slate-200 flex items-center justify-between"
-                    >
-                      <span className="text-[12px] font-black text-[#2E3093] flex items-center gap-1.5">
-                        <span className="w-5 h-5 rounded-md bg-[#2E3093]/10 flex items-center justify-center">
-                          <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                        </span>
-                        Online Form Snapshot
-                        {onlineAdmissionDate && (
-                          <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">Submitted {onlineAdmissionDate}</span>
-                        )}
-                        {!onlineAdmissionDate && (
-                          <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500">No form on record</span>
-                        )}
-                      </span>
-                      <svg className={`w-4 h-4 text-slate-400 transition-transform ${snapshotExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {snapshotExpanded && onlineAdmission && (
-                      <div className="px-4 py-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
-                        {snapshotField('Full Name', [onlineAdmission.firstName, onlineAdmission.middleName, onlineAdmission.lastName].filter(Boolean).join(' '))}
-                        {snapshotField('Short Name', onlineAdmission.shortName)}
-                        {snapshotField('DOB', onlineAdmission.dob)}
-                        {snapshotField('Gender', onlineAdmission.gender)}
-                        {snapshotField('Nationality', onlineAdmission.nationality)}
-                        {snapshotField('Email', onlineAdmission.email)}
-                        {snapshotField('Mobile', onlineAdmission.mobile)}
-                        {snapshotField('Telephone', onlineAdmission.telephone)}
-                        {snapshotField('Family Contact', onlineAdmission.familyContact)}
-                        {snapshotField('Present Address', onlineAdmission.presentAddress)}
-                        {snapshotField('Present City', onlineAdmission.presentCity)}
-                        {snapshotField('Present District', onlineAdmission.presentDistrict)}
-                        {snapshotField('Present State', onlineAdmission.presentState)}
-                        {snapshotField('Present PIN', onlineAdmission.presentPin)}
-                        {snapshotField('Present Country', onlineAdmission.presentCountry)}
-                        {snapshotField('Permanent Address', onlineAdmission.permanentAddress)}
-                        {snapshotField('Permanent City', onlineAdmission.permanentCity)}
-                        {snapshotField('Permanent District', onlineAdmission.permanentDistrict)}
-                        {snapshotField('Permanent State', onlineAdmission.permanentState)}
-                        {snapshotField('Permanent PIN', onlineAdmission.permanentPin)}
-                        {snapshotField('Permanent Country', onlineAdmission.permanentCountry)}
-                        {snapshotField('Qualification', onlineAdmission.qualification)}
-                        {snapshotField('Discipline', onlineAdmission.discipline)}
-                        {snapshotField('Percentage', onlineAdmission.percentage)}
-                        {snapshotField('Programme', onlineAdmission.trainingProgrammeName || onlineAdmission.trainingProgrammeId)}
-                        {snapshotField('Category', onlineAdmission.trainingCategory)}
-                        {snapshotField('Batch Code', onlineAdmission.batchCode)}
-                        {snapshotField('Mode of Payment', onlineAdmission.modeOfPayment)}
-                        {snapshotField('Occupational Status', onlineAdmission.occupationalStatus)}
-                        {snapshotField('Organisation', onlineAdmission.jobOrganisation)}
-                        {snapshotField('Designation', onlineAdmission.jobDesignation)}
-                        {snapshotField('Job Description', onlineAdmission.jobDescription)}
-                        {snapshotField('Total Experience', onlineAdmission.totalOccupationYears)}
-                        {snapshotField('Terms Agreed', onlineAdmission.termsAgreed ? 'Yes' : 'No')}
-                        {snapshotField('Consent Acknowledged', onlineAdmission.consentAcknowledged ? 'Yes' : 'No')}
-                        {snapshotField('Experienced Consent', onlineAdmission.experiencedConsentAcknowledged ? 'Yes' : 'No')}
-                        {snapshotField('Consent Eligibility', onlineAdmission.consentData?.eligibility)}
-                        {snapshotField('Consent Qualification', onlineAdmission.consentData?.qualification)}
-                        {snapshotField('Consent Remark', onlineAdmission.consentData?.candidateRemark)}
-                        {snapshotField('Pay at Office Audit', onlineAdmission.payAtOfficeAudit?.enabledAt ? `${onlineAdmission.payAtOfficeAudit.enabledByName || 'Unknown'} @ ${new Date(onlineAdmission.payAtOfficeAudit.enabledAt).toLocaleString('en-IN')}` : '—')}
-                        {snapshotField('Photo Uploaded', onlineAdmission.photo ? 'Yes' : 'No')}
-                      </div>
-                    )}
-                    {snapshotExpanded && !onlineAdmission && (
-                      <div className="px-4 py-6 text-center text-xs text-slate-400 italic">No online admission form data available.</div>
-                    )}
                   </div>
 
                   {/* Status + Status Date */}
@@ -1157,7 +959,7 @@ export default function EditStudentPage() {
                     <select value={form.Batch_Category_id} onChange={(e) => set('Batch_Category_id', e.target.value)} className={selectCls}>
                       <option value="">— Select —</option>
                       {batchCategories.map((bc) => (
-                        <option key={bc.label} value={bc.label}>{bc.label}</option>
+                        <option key={bc.id} value={bc.id}>{bc.label}</option>
                       ))}
                     </select>
                   </div>
