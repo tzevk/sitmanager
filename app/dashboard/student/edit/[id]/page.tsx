@@ -665,7 +665,7 @@ export default function EditStudentPage() {
                   </div>
                 </SectionCard>
 
-                {/* ── Column 2: Training + Online Admission + Status + Permanent Address ── */}
+                {/* ── Column 2: Training + Dates + Status ── */}
                 <div className="space-y-3">
 
                   {/* Training Programme & Batch Detail */}
@@ -768,42 +768,6 @@ export default function EditStudentPage() {
                     </div>
                   </div>
 
-                  {/* Permanent Address */}
-                  <SectionCard
-                    title="Permanent Address"
-                    icon={
-                      <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                      </svg>
-                    }
-                  >
-                    <div className="space-y-2">
-                      <div>
-                        <label className={labelCls}>Address</label>
-                        <textarea value={form.Permanent_Address} onChange={(e) => set('Permanent_Address', e.target.value)} rows={3} className={textareaCls} placeholder="Permanent address" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className={labelCls}>City</label>
-                          <input type="text" value={form.Permanent_City} onChange={(e) => set('Permanent_City', e.target.value)} className={inputCls} placeholder="City" />
-                        </div>
-                        <div>
-                          <label className={labelCls}>PIN Code</label>
-                          <input type="text" value={form.Permanent_Pin} onChange={(e) => set('Permanent_Pin', e.target.value)} className={inputCls} placeholder="PIN" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className={labelCls}>State</label>
-                          <input type="text" value={form.Permanent_State} onChange={(e) => set('Permanent_State', e.target.value)} className={inputCls} placeholder="State" />
-                        </div>
-                        <div>
-                          <label className={labelCls}>Country</label>
-                          <input type="text" value={form.Permanent_Country} onChange={(e) => set('Permanent_Country', e.target.value)} className={inputCls} placeholder="Country" />
-                        </div>
-                      </div>
-                    </div>
-                  </SectionCard>
                 </div>
 
                 {/* ── Column 3: Student Info Sidebar (read-only) ── */}
