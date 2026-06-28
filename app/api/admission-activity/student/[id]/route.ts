@@ -3,6 +3,41 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { ensureStudentTransferColumns } from '@/lib/student-transfer';
+import { saveStructuredAdmissionData } from '@/lib/services/online-admission.service';
+
+const ONLINE_ADMISSION_PAYLOAD_TABLE = 'online_admission_payload';
+
+// Scalar + array keys that make up the structured academic ("Education &
+// Enrolment") section of the admission form. Source of truth is the admission
+// JSON payload (online_admission_payload.Payload); the student-master edit page
+// surfaces and edits the same fields.
+const EDUCATION_SCALAR_KEYS = [
+  'ssc_board', 'ssc_schoolName', 'ssc_yearOfPassing', 'ssc_percentage', 'ssc_ktCount',
+  'hsc_board', 'hsc_collegeName', 'hsc_stream', 'hsc_yearOfPassing', 'hsc_percentage', 'hsc_ktCount',
+  'diploma_degree', 'diploma_specialization', 'diploma_institute', 'diploma_yearOfPassing', 'diploma_percentage', 'diploma_ktCount',
+  'grad_degree', 'grad_specialization', 'grad_university', 'grad_yearOfPassing', 'grad_percentage', 'grad_ktCount',
+  'postgrad_degree', 'postgrad_specialization', 'postgrad_university', 'postgrad_yearOfPassing', 'postgrad_percentage', 'postgrad_ktCount',
+  'educationRemark',
+] as const;
+const EDUCATION_KT_KEYS = ['ssc_ktDetails', 'hsc_ktDetails', 'diploma_ktDetails', 'grad_ktDetails', 'postgrad_ktDetails'] as const;
+const KT_DETAIL_FIELDS = ['subjectName', 'year', 'semester', 'clearedYear', 'marks'] as const;
+
+/** Pull only the academic keys out of a merged admission payload. */
+function extractEducation(payload: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const k of EDUCATION_SCALAR_KEYS) {
+    out[k] = payload[k] == null ? '' : String(payload[k]);
+  }
+  for (const k of EDUCATION_KT_KEYS) {
+    const arr = Array.isArray(payload[k]) ? payload[k] : [];
+    out[k] = arr.map((d: any) => {
+      const row: Record<string, string> = {};
+      for (const f of KT_DETAIL_FIELDS) row[f] = d?.[f] == null ? '' : String(d[f]);
+      return row;
+    });
+  }
+  return out;
+}
 
 async function resolveInquiryTableName(pool: any): Promise<string> {
   const [rows] = await pool.query(
@@ -339,6 +374,7 @@ export async function GET(
       discussions,
       documents: [],
       inquiryId,
+      education: extractEducation(payload),
       courses,
       batches,
       statuses,
@@ -545,6 +581,87 @@ export async function PUT(
       }
     } catch (admErr) {
       console.warn('Student PUT: admission_master sync skipped:', (admErr as Error)?.message);
+    }
+
+    // ── 4. Persist structured academic data back to the admission payload ──
+    // The detailed Education & Enrolment fields (SSC/HSC/Diploma/Grad/PG + KT)
+    // live in online_admission_payload, keyed by the student's inquiry. Merge the
+    // edited values into the latest payload (JSON blob + normalized columns/KT).
+    const education = body.education;
+    if (education && typeof education === 'object' && !Array.isArray(education)) {
+      try {
+        // Keep only the recognised academic keys from the client payload.
+        const edits: Record<string, any> = {};
+        for (const k of EDUCATION_SCALAR_KEYS) {
+          if (education[k] !== undefined) edits[k] = education[k];
+        }
+        for (const k of EDUCATION_KT_KEYS) {
+          if (Array.isArray(education[k])) {
+            edits[k] = education[k].map((d: any) => {
+              const row: Record<string, string> = {};
+              for (const f of KT_DETAIL_FIELDS) row[f] = d?.[f] == null ? '' : String(d[f]);
+              return row;
+            });
+          }
+        }
+
+        const inquiryTable = await resolveInquiryTableName(pool);
+        const [inqRows] = await pool.query(
+          `SELECT Inquiry_Id FROM \`${inquiryTable}\`
+           WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+           ORDER BY Inquiry_Id DESC`,
+          [id]
+        ) as [any[], any];
+        const inquiryIds = (inqRows as any[]).map((r) => r.Inquiry_Id).filter((x) => x != null);
+
+        if (inquiryIds.length) {
+          // Target the most recently updated existing payload row, else the latest inquiry.
+          const [payloadRows] = await pool.query(
+            `SELECT Inquiry_Id, Payload FROM ${ONLINE_ADMISSION_PAYLOAD_TABLE}
+             WHERE Inquiry_Id IN (${inquiryIds.map(() => '?').join(',')})
+             ORDER BY Updated_At DESC, Created_At DESC
+             LIMIT 1`,
+            inquiryIds
+          ) as [any[], any];
+
+          let targetInquiryId: number;
+          let currentPayload: Record<string, any> = {};
+          if ((payloadRows as any[]).length) {
+            targetInquiryId = Number((payloadRows as any[])[0].Inquiry_Id);
+            try { currentPayload = (payloadRows as any[])[0].Payload ? JSON.parse(String((payloadRows as any[])[0].Payload)) : {}; } catch { currentPayload = {}; }
+          } else {
+            targetInquiryId = Number(inquiryIds[0]);
+          }
+
+          const merged = { ...currentPayload, ...edits };
+          await pool.query(
+            `INSERT INTO ${ONLINE_ADMISSION_PAYLOAD_TABLE} (Inquiry_Id, Payload)
+             VALUES (?, ?)
+             ON DUPLICATE KEY UPDATE Payload = VALUES(Payload), Updated_At = NOW()`,
+            [targetInquiryId, JSON.stringify(merged)]
+          );
+
+          // Mirror into the normalized columns + KT table (and refresh the
+          // flat Qualification/Discipline/Percentage summary on student_master).
+          await saveStructuredAdmissionData(targetInquiryId, merged);
+          const academic = resolveAcademicProfile(merged);
+          if (academic.qualification || academic.discipline || academic.percentage) {
+            await pool.query(
+              `UPDATE student_master SET Qualification = ?, Percentage = ?
+               WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+              [academic.qualification || null, academic.percentage ? parseFloat(academic.percentage) : null, id]
+            );
+            try {
+              await pool.query(
+                `UPDATE student_master SET Discipline = ? WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+                [academic.discipline || null, id]
+              );
+            } catch { /* Discipline column may not exist in this deployment */ }
+          }
+        }
+      } catch (eduErr) {
+        console.warn('Student PUT: education payload sync skipped:', (eduErr as Error)?.message);
+      }
     }
 
     return NextResponse.json({ success: true });

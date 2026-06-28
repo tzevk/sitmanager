@@ -115,6 +115,19 @@ function formatDocumentLabel(docName: string, uploadImage: string): string {
   return raw.replace(/\b\w/g, (char) => char.toUpperCase()) || 'Document';
 }
 
+/* Structured academic ("Education & Enrolment") — mirrors the admission form */
+interface KtDetail { subjectName: string; year: string; semester: string; clearedYear: string; marks: string }
+type EduLevel = 'ssc' | 'hsc' | 'diploma' | 'grad' | 'postgrad';
+const emptyEducation = {
+  ssc_board: '', ssc_schoolName: '', ssc_yearOfPassing: '', ssc_percentage: '', ssc_ktCount: '0', ssc_ktDetails: [] as KtDetail[],
+  hsc_board: '', hsc_collegeName: '', hsc_stream: '', hsc_yearOfPassing: '', hsc_percentage: '', hsc_ktCount: '0', hsc_ktDetails: [] as KtDetail[],
+  diploma_degree: '', diploma_specialization: '', diploma_institute: '', diploma_yearOfPassing: '', diploma_percentage: '', diploma_ktCount: '0', diploma_ktDetails: [] as KtDetail[],
+  grad_degree: '', grad_specialization: '', grad_university: '', grad_yearOfPassing: '', grad_percentage: '', grad_ktCount: '0', grad_ktDetails: [] as KtDetail[],
+  postgrad_degree: '', postgrad_specialization: '', postgrad_university: '', postgrad_yearOfPassing: '', postgrad_percentage: '', postgrad_ktCount: '0', postgrad_ktDetails: [] as KtDetail[],
+  educationRemark: '',
+};
+type EducationState = typeof emptyEducation;
+
 const TABS = [
   { id: 'personal',     label: 'Personal Info' },
   { id: 'academic',     label: 'Academic Qualification' },
@@ -238,6 +251,31 @@ export default function EditStudentPage() {
   const set = (field: string, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
+  /* ---- structured academic ("Education & Enrolment") ---- */
+  const emptyKt = (): KtDetail => ({ subjectName: '', year: '', semester: '', clearedYear: '', marks: '' });
+  const [education, setEducation] = useState<EducationState>(emptyEducation);
+  const [academicSubTab, setAcademicSubTab] = useState<EduLevel | 'graduation'>('ssc');
+
+  const setEdu = (field: keyof EducationState, value: string) =>
+    setEducation((prev) => ({ ...prev, [field]: value }));
+
+  const setKtCount = (level: EduLevel, countStr: string) => {
+    const count = Math.max(0, parseInt(countStr) || 0);
+    setEducation((prev) => {
+      const existing = (prev[`${level}_ktDetails`] as KtDetail[]) || [];
+      const next = Array.from({ length: count }, (_, i) => existing[i] ?? emptyKt());
+      return { ...prev, [`${level}_ktCount`]: String(count), [`${level}_ktDetails`]: next };
+    });
+  };
+
+  const setKtDetail = (level: EduLevel, index: number, field: keyof KtDetail, value: string) => {
+    setEducation((prev) => {
+      const arr = [...((prev[`${level}_ktDetails`] as KtDetail[]) || [])];
+      arr[index] = { ...(arr[index] ?? emptyKt()), [field]: value };
+      return { ...prev, [`${level}_ktDetails`]: arr };
+    });
+  };
+
   /* ------------------------------------------------------------------ */
   /*  Fetch student data                                                  */
   /* ------------------------------------------------------------------ */
@@ -355,6 +393,27 @@ export default function EditStudentPage() {
           photo: s.photo || '',
         });
 
+        // Structured academic data (admission payload)
+        const e = (data.education ?? {}) as Record<string, unknown>;
+        const nextEdu = { ...emptyEducation } as Record<string, unknown>;
+        (Object.keys(emptyEducation) as Array<keyof EducationState>).forEach((k) => {
+          const v = e[k];
+          if (k.endsWith('_ktDetails')) {
+            const arr = Array.isArray(v) ? (v as KtDetail[]) : [];
+            nextEdu[k] = arr.map((d) => ({ ...emptyKt(), ...d }));
+          } else if (k.endsWith('_ktCount')) {
+            nextEdu[k] = v ? String(v) : '0';
+          } else {
+            nextEdu[k] = v != null ? String(v) : '';
+          }
+        });
+        // Keep each level's KT count in sync with the number of detail rows.
+        (['ssc', 'hsc', 'diploma', 'grad', 'postgrad'] as EduLevel[]).forEach((lvl) => {
+          const details = nextEdu[`${lvl}_ktDetails`] as KtDetail[];
+          if (details.length) nextEdu[`${lvl}_ktCount`] = String(details.length);
+        });
+        setEducation(nextEdu as EducationState);
+
         setCourses(data.courses           ?? []);
         setBatches(data.batches           ?? []);
         setStatuses(data.statuses         ?? []);
@@ -462,7 +521,7 @@ export default function EditStudentPage() {
       const res  = await fetch(`/api/admission-activity/student/${studentId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, education }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
@@ -485,6 +544,72 @@ export default function EditStudentPage() {
     'w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/10 focus:border-[#2E3093] transition-all font-medium';
   const textareaCls =
     'w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/10 focus:border-[#2E3093] placeholder:text-slate-400 transition-all font-medium resize-none';
+
+  /* Academic option lists — mirror the admission form */
+  const BOARD_OPTS = ['CBSE', 'ICSE', 'State Board', 'Other'];
+  const HSC_STREAM_OPTS = ['Science', 'Commerce', 'Arts', 'Vocational'];
+  const DIPLOMA_DEGREE_OPTS = ['Diploma', 'I.T.I.', 'Mech. Draughtsman', 'Civil Draughtsman', 'Piping Draftsman', 'Electronics', 'Electrical', 'OTHERS'];
+  const GRAD_DEGREE_OPTS = ['B.SC', 'B.E.', 'B.TECH', 'B.COM', 'B.A.', 'BBA', 'BCA', 'OTHERS'];
+  const PG_DEGREE_OPTS = ['M.E.', 'M.TECH', 'M.SC', 'MBA', 'M.COM', 'M.A.', 'MCA', 'PHD', 'OTHERS'];
+  const SPECIALIZATION_OPTS = ['Mechanical', 'Chemical', 'Computers', 'Production', 'Electronics & Tele-Communication', 'Eletrical', 'Civil', 'Instrumentation', 'Petrochemical', 'Industrial', 'Automobile', 'Fabrication', 'N.C.T.V.T.', 'M.C.V.C', 'Refrigeration & Airconditioning', 'Electrical & Electronics', 'Fitter'];
+  const KT_SEM_MAX: Record<EduLevel, number> = { ssc: 2, hsc: 2, diploma: 6, grad: 8, postgrad: 4 };
+
+  /* KT / backlog editor for one education level */
+  const renderKt = (level: EduLevel) => {
+    const count = parseInt(String(education[`${level}_ktCount`])) || 0;
+    const details = (education[`${level}_ktDetails`] as KtDetail[]) || [];
+    return (
+      <div className="mt-3 pt-3 border-t border-slate-100">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
+          <div>
+            <label className={labelCls}>KT / Backlog Subjects</label>
+            <select className={selectCls} value={String(count)} onChange={(e) => setKtCount(level, e.target.value)}>
+              <option value="0">No KT</option>
+              {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n} Subject{n > 1 ? 's' : ''}</option>)}
+            </select>
+          </div>
+        </div>
+        {count > 0 && details.map((kt, i) => (
+          <div key={i} className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="text-[11px] font-bold text-slate-600 mb-2">KT Subject {i + 1}</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-3 gap-y-2">
+              <div className="col-span-2 lg:col-span-1">
+                <label className={labelCls}>Subject</label>
+                <input className={inputCls} value={kt.subjectName} onChange={(e) => setKtDetail(level, i, 'subjectName', e.target.value)} placeholder="Subject name" />
+              </div>
+              <div>
+                <label className={labelCls}>Year</label>
+                <input type="number" className={inputCls} value={kt.year} onChange={(e) => setKtDetail(level, i, 'year', e.target.value)} placeholder="YYYY" />
+              </div>
+              <div>
+                <label className={labelCls}>Semester</label>
+                <select className={selectCls} value={kt.semester} onChange={(e) => setKtDetail(level, i, 'semester', e.target.value)}>
+                  <option value="">—</option>
+                  {Array.from({ length: KT_SEM_MAX[level] }, (_, s) => s + 1).map((s) => <option key={s} value={s}>Sem {s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Cleared Year</label>
+                <input type="number" className={inputCls} value={kt.clearedYear} onChange={(e) => setKtDetail(level, i, 'clearedYear', e.target.value)} placeholder="YYYY" />
+              </div>
+              <div>
+                <label className={labelCls}>Marks</label>
+                <input type="number" className={inputCls} value={kt.marks} onChange={(e) => setKtDetail(level, i, 'marks', e.target.value)} placeholder="If cleared" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const eduSubTabs: { id: EduLevel | 'graduation'; label: string }[] = [
+    { id: 'ssc', label: 'SSC (10th)' },
+    { id: 'hsc', label: 'HSC (12th)' },
+    { id: 'diploma', label: 'Diploma' },
+    { id: 'graduation', label: 'Graduation' },
+    { id: 'postgrad', label: 'Post-Graduation' },
+  ];
 
   const filteredBatches = form.Course_Id
     ? batches.filter((b) => String(b.Course_Id) === form.Course_Id)
@@ -995,27 +1120,16 @@ export default function EditStudentPage() {
           {/* ==== ACADEMIC QUALIFICATION ==== */}
           {activeTab === 'academic' && (
             <div className="space-y-3">
+              {/* ── Enrolment ── */}
               <SectionCard
-                title="Education & Enrolment"
+                title="Enrolment"
                 icon={
                   <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                   </svg>
                 }
               >
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
-                  <div>
-                    <label className={labelCls}>Qualification / Degree</label>
-                    <input type="text" value={form.Qualification} onChange={(e) => set('Qualification', e.target.value)} className={inputCls} placeholder="e.g. B.E., MBA" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Discipline / Stream</label>
-                    <input type="text" value={form.Discipline} onChange={(e) => set('Discipline', e.target.value)} className={inputCls} placeholder="e.g. Computer Science" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Percentage / CGPA</label>
-                    <input type="text" value={form.Percentage} onChange={(e) => set('Percentage', e.target.value)} className={inputCls} placeholder="e.g. 72.5" />
-                  </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-2">
                   <div>
                     <label className={labelCls}>Enrolled Course</label>
                     <select
@@ -1047,6 +1161,208 @@ export default function EditStudentPage() {
                       ))}
                     </select>
                   </div>
+                </div>
+              </SectionCard>
+
+              {/* ── Education (admission-form style) ── */}
+              <SectionCard
+                title="Education"
+                icon={
+                  <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                  </svg>
+                }
+              >
+                {/* Sub-tab nav */}
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {eduSubTabs.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setAcademicSubTab(t.id)}
+                      className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all border ${
+                        academicSubTab === t.id
+                          ? 'text-white bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] border-[#2A6BB5] shadow-sm'
+                          : 'text-slate-600 bg-white border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* SSC */}
+                {academicSubTab === 'ssc' && (
+                  <div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
+                      <div>
+                        <label className={labelCls}>Board</label>
+                        <select className={selectCls} value={education.ssc_board} onChange={(e) => setEdu('ssc_board', e.target.value)}>
+                          <option value="">Select</option>
+                          {BOARD_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <label className={labelCls}>School Name</label>
+                        <input className={inputCls} value={education.ssc_schoolName} onChange={(e) => setEdu('ssc_schoolName', e.target.value)} placeholder="School name" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Year of Passing</label>
+                        <input type="number" className={inputCls} value={education.ssc_yearOfPassing} onChange={(e) => setEdu('ssc_yearOfPassing', e.target.value)} placeholder="YYYY" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Percentage / CGPA</label>
+                        <input className={inputCls} value={education.ssc_percentage} onChange={(e) => setEdu('ssc_percentage', e.target.value)} placeholder="e.g. 85%" />
+                      </div>
+                    </div>
+                    {renderKt('ssc')}
+                  </div>
+                )}
+
+                {/* HSC */}
+                {academicSubTab === 'hsc' && (
+                  <div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
+                      <div>
+                        <label className={labelCls}>Board</label>
+                        <select className={selectCls} value={education.hsc_board} onChange={(e) => setEdu('hsc_board', e.target.value)}>
+                          <option value="">Select</option>
+                          {BOARD_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <label className={labelCls}>College / Jr. College</label>
+                        <input className={inputCls} value={education.hsc_collegeName} onChange={(e) => setEdu('hsc_collegeName', e.target.value)} placeholder="College name" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Stream</label>
+                        <select className={selectCls} value={education.hsc_stream} onChange={(e) => setEdu('hsc_stream', e.target.value)}>
+                          <option value="">Select</option>
+                          {HSC_STREAM_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Year of Passing</label>
+                        <input type="number" className={inputCls} value={education.hsc_yearOfPassing} onChange={(e) => setEdu('hsc_yearOfPassing', e.target.value)} placeholder="YYYY" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Percentage / CGPA</label>
+                        <input className={inputCls} value={education.hsc_percentage} onChange={(e) => setEdu('hsc_percentage', e.target.value)} placeholder="e.g. 75%" />
+                      </div>
+                    </div>
+                    {renderKt('hsc')}
+                  </div>
+                )}
+
+                {/* Diploma */}
+                {academicSubTab === 'diploma' && (
+                  <div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
+                      <div>
+                        <label className={labelCls}>Diploma Degree</label>
+                        <select className={selectCls} value={education.diploma_degree} onChange={(e) => setEdu('diploma_degree', e.target.value)}>
+                          <option value="">Select</option>
+                          {DIPLOMA_DEGREE_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <label className={labelCls}>Specialization</label>
+                        <select className={selectCls} value={education.diploma_specialization} onChange={(e) => setEdu('diploma_specialization', e.target.value)}>
+                          <option value="">Select</option>
+                          {SPECIALIZATION_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Year of Passing</label>
+                        <input type="number" className={inputCls} value={education.diploma_yearOfPassing} onChange={(e) => setEdu('diploma_yearOfPassing', e.target.value)} placeholder="YYYY" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className={labelCls}>Institute Name</label>
+                        <input className={inputCls} value={education.diploma_institute} onChange={(e) => setEdu('diploma_institute', e.target.value)} placeholder="Institute name" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Percentage / CGPA</label>
+                        <input className={inputCls} value={education.diploma_percentage} onChange={(e) => setEdu('diploma_percentage', e.target.value)} placeholder="e.g. 70%" />
+                      </div>
+                    </div>
+                    {renderKt('diploma')}
+                  </div>
+                )}
+
+                {/* Graduation */}
+                {academicSubTab === 'graduation' && (
+                  <div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
+                      <div>
+                        <label className={labelCls}>Graduation Degree</label>
+                        <select className={selectCls} value={education.grad_degree} onChange={(e) => setEdu('grad_degree', e.target.value)}>
+                          <option value="">Select</option>
+                          {GRAD_DEGREE_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <label className={labelCls}>Specialization</label>
+                        <select className={selectCls} value={education.grad_specialization} onChange={(e) => setEdu('grad_specialization', e.target.value)}>
+                          <option value="">Select</option>
+                          {SPECIALIZATION_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Year of Passing</label>
+                        <input type="number" className={inputCls} value={education.grad_yearOfPassing} onChange={(e) => setEdu('grad_yearOfPassing', e.target.value)} placeholder="YYYY" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className={labelCls}>University</label>
+                        <input className={inputCls} value={education.grad_university} onChange={(e) => setEdu('grad_university', e.target.value)} placeholder="University name" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Percentage / CGPA</label>
+                        <input className={inputCls} value={education.grad_percentage} onChange={(e) => setEdu('grad_percentage', e.target.value)} placeholder="e.g. 65%" />
+                      </div>
+                    </div>
+                    {renderKt('grad')}
+                  </div>
+                )}
+
+                {/* Post-Graduation */}
+                {academicSubTab === 'postgrad' && (
+                  <div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
+                      <div>
+                        <label className={labelCls}>PG Degree</label>
+                        <select className={selectCls} value={education.postgrad_degree} onChange={(e) => setEdu('postgrad_degree', e.target.value)}>
+                          <option value="">Select</option>
+                          {PG_DEGREE_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <label className={labelCls}>Specialization</label>
+                        <select className={selectCls} value={education.postgrad_specialization} onChange={(e) => setEdu('postgrad_specialization', e.target.value)}>
+                          <option value="">Select</option>
+                          {SPECIALIZATION_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Year of Passing</label>
+                        <input type="number" className={inputCls} value={education.postgrad_yearOfPassing} onChange={(e) => setEdu('postgrad_yearOfPassing', e.target.value)} placeholder="YYYY" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className={labelCls}>University</label>
+                        <input className={inputCls} value={education.postgrad_university} onChange={(e) => setEdu('postgrad_university', e.target.value)} placeholder="University name" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Percentage / CGPA</label>
+                        <input className={inputCls} value={education.postgrad_percentage} onChange={(e) => setEdu('postgrad_percentage', e.target.value)} placeholder="e.g. 70%" />
+                      </div>
+                    </div>
+                    {renderKt('postgrad')}
+                  </div>
+                )}
+
+                {/* Additional remark */}
+                <div className="mt-3 pt-3 border-t border-slate-100">
+                  <label className={labelCls}>Additional Remarks</label>
+                  <textarea rows={2} className={textareaCls} value={education.educationRemark} onChange={(e) => setEdu('educationRemark', e.target.value)} placeholder="Any additional information about educational qualifications" />
                 </div>
               </SectionCard>
             </div>
