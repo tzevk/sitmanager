@@ -22,6 +22,7 @@ interface Student {
 }
 
 interface Bank { Id: number; Bank_Name: string; }
+interface StudentOption { Student_Id: number; Student_Name: string; Batch_code: string | null; }
 interface Particular { label: string; amount: number | null; fixed: boolean; }
 interface LedgerRow {
   Fees_Id: number;
@@ -94,6 +95,9 @@ export default function FeeDetailsEditPage() {
   const [rowActionType, setRowActionType] = useState<'email' | 'download' | 'delete' | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [students, setStudents] = useState<StudentOption[]>([]);
+  const [studentNameInput, setStudentNameInput] = useState('');
+  const [targetStudentId, setTargetStudentId] = useState<number | null>(null);
 
   const [type, setType] = useState<'Credit' | 'Debit'>('Credit');
   const [paymentType, setPaymentType] = useState('Cash');
@@ -108,6 +112,13 @@ export default function FeeDetailsEditPage() {
   const [receiptNo, setReceiptNo] = useState('');
   const [suggestedReceiptNo, setSuggestedReceiptNo] = useState('');
 
+  useEffect(() => {
+    fetch('/api/fee-details?mode=students')
+      .then((res) => res.json())
+      .then((payload) => setStudents(Array.isArray(payload.rows) ? payload.rows : []))
+      .catch(() => setStudents([]));
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -117,6 +128,8 @@ export default function FeeDetailsEditPage() {
       const d = await res.json();
       if (!res.ok) { setError(d.error ?? 'Failed to load'); return; }
       setData(d);
+      setStudentNameInput(d.student?.Student_Name ? `${d.student.Student_Name} (#${d.student.Student_Id})` : '');
+      setTargetStudentId(Number(d.student?.Student_Id) || null);
 
       if (d.record) {
         setType(d.record.Type === 'Debit' ? 'Debit' : 'Credit');
@@ -142,6 +155,15 @@ export default function FeeDetailsEditPage() {
     }
   }, [params.studentId, feesId]);
 
+  const resolveStudentSelection = (value: string): number | null => {
+    const trimmed = value.trim();
+    const idFromLabel = trimmed.match(/#(\d+)\)?$/)?.[1];
+    const numericId = idFromLabel || (/^\d+$/.test(trimmed) ? trimmed : '');
+    if (numericId) return Number(numericId);
+    const lowered = trimmed.toLowerCase();
+    return students.find((student) => student.Student_Name.toLowerCase() === lowered)?.Student_Id ?? null;
+  };
+
   useEffect(() => { load(); }, [load]);
 
   const handleParticularChange = (val: string) => {
@@ -159,6 +181,10 @@ export default function FeeDetailsEditPage() {
       const needsTransactionNo = paymentType !== 'Cash';
       if (needsTransactionNo && !chequeNo.trim()) {
         setError('Transaction number is required for this payment type.');
+        return;
+      }
+      if (data?.record && (!targetStudentId || !students.some((student) => student.Student_Id === targetStudentId))) {
+        setError('Select a valid student before assigning this receipt.');
         return;
       }
       const feesCode = data?.record
@@ -180,6 +206,7 @@ export default function FeeDetailsEditPage() {
         RDate: receiptDate,
         TaxType: taxType,
         Fees_Code: feesCode,
+        Target_Student_Id: data?.record ? targetStudentId : undefined,
       };
 
       const url = data?.record
@@ -193,6 +220,10 @@ export default function FeeDetailsEditPage() {
       const d = await res.json();
       if (!res.ok) { setError(d.error ?? 'Failed to save'); return; }
       setMessage('Saved successfully');
+      if (data?.record && d.Student_Id && Number(d.Student_Id) !== Number(params.studentId)) {
+        router.replace(`/dashboard/fee-details/${d.Student_Id}?feesId=${data.record.Fees_Id}`);
+        return;
+      }
       if (!data?.record && d.Fees_Id) {
         router.replace(`/dashboard/fee-details/${params.studentId}?feesId=${d.Fees_Id}`);
       }
@@ -509,7 +540,36 @@ ${copy('Student Copy')}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
                 <label className={label}>Student Name</label>
-                <input className={ctrlReadOnly} value={data.student.Student_Name || ''} readOnly />
+                <input
+                  className={data.record ? ctrl : ctrlReadOnly}
+                  value={studentNameInput}
+                  readOnly={!data.record}
+                  list={data.record ? 'receipt-student-list' : undefined}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    setStudentNameInput(nextValue);
+                    setTargetStudentId(resolveStudentSelection(nextValue));
+                  }}
+                  onBlur={() => {
+                    if (!data.record) return;
+                    const resolvedId = resolveStudentSelection(studentNameInput);
+                    const selected = students.find((student) => student.Student_Id === resolvedId);
+                    if (selected) {
+                      setStudentNameInput(`${selected.Student_Name} (#${selected.Student_Id})`);
+                      setTargetStudentId(selected.Student_Id);
+                    }
+                  }}
+                  placeholder="Type student name or ID"
+                />
+                {data.record && (
+                  <datalist id="receipt-student-list">
+                    {students.map((student) => (
+                      <option key={student.Student_Id} value={`${student.Student_Name} (#${student.Student_Id})`}>
+                        {student.Batch_code || ''}
+                      </option>
+                    ))}
+                  </datalist>
+                )}
               </div>
               <div className="flex flex-col gap-1">
                 <label className={label}>Student Id</label>

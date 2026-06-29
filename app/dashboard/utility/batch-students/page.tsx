@@ -14,6 +14,8 @@ type Batch = {
   Batch_code: string;
   Category: string | null;
   Timings: string | null;
+  IsDelete?: number | null;
+  Cancel?: number | null;
 };
 
 type StudentRow = {
@@ -335,7 +337,7 @@ export default function BatchStudentsPage() {
               <option value="">{loadingBatches ? 'Loading batches...' : 'Select batch code'}</option>
               {batches.map((batch) => (
                 <option key={batch.Batch_Id} value={batch.Batch_Id}>
-                  {batch.Batch_code}{batch.Category ? ` - ${batch.Category}` : ''}{batch.Timings ? ` (${batch.Timings})` : ''}
+                  {batch.Batch_code}{batch.Category ? ` - ${batch.Category}` : ''}{batch.Timings ? ` (${batch.Timings})` : ''}{Number(batch.Cancel) === 1 ? ' [Cancelled]' : ''}{Number(batch.IsDelete) === 1 ? ' [Deleted]' : ''}
                 </option>
               ))}
             </select>

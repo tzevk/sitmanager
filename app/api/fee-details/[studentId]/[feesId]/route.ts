@@ -19,7 +19,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ studentId: 
     const body = await req.json();
     const {
       Type, Payment_Type, Cheque_Bank, Cheque_No, Transaction_No, PaymentId, Cheque_Date, Cheque_Branch,
-      Amount, Particular, RDate, TaxType, Fees_Code: customFeesCode,
+      Amount, Particular, RDate, TaxType, Fees_Code: customFeesCode, Target_Student_Id,
     } = body;
 
     if (!Amount || !RDate) {
@@ -32,6 +32,11 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ studentId: 
     const transactionNo = String(Transaction_No ?? PaymentId ?? Cheque_No ?? '').trim() || null;
 
     const pool = getPool();
+    const targetStudentId = Number(Target_Student_Id || sid);
+    if (!Number.isInteger(targetStudentId) || targetStudentId <= 0) {
+      return NextResponse.json({ error: 'Invalid target student' }, { status: 400 });
+    }
+
     const setClauses = [
       'Payment_Type = ?', 'Cheque_Bank = ?', 'Cheque_No = ?', 'PaymentId = ?', 'Cheque_Date = ?', 'Cheque_Branch = ?',
       'Amount = ?', 'Total_Amt = ?', 'TypeR = ?', 'Notes = ?', 'RDate = ?',
@@ -45,6 +50,25 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ studentId: 
       setValues.push(customFeesCode.trim());
     }
 
+    if (targetStudentId !== sid) {
+      const [targetRows] = await pool.query<any[]>(
+        `SELECT sm.Student_Id, sm.Course_Id, bm.Batch_Id, am.Admission_Id
+         FROM student_master sm
+         LEFT JOIN batch_mst bm ON bm.Batch_code = sm.Batch_Code
+         LEFT JOIN admission_master am ON am.Student_Id = sm.Student_Id AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+         WHERE sm.Student_Id = ? AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+         ORDER BY am.Admission_Id DESC
+         LIMIT 1`,
+        [targetStudentId]
+      );
+      if (!targetRows.length) {
+        return NextResponse.json({ error: 'Target student not found' }, { status: 404 });
+      }
+      const target = targetRows[0];
+      setClauses.push('Student_Id = ?', 'Course_Id = ?', 'Batch_Id = ?', 'Admission_Id = ?');
+      setValues.push(targetStudentId, target.Course_Id ?? null, target.Batch_Id ?? null, target.Admission_Id ?? null);
+    }
+
     const [result] = await pool.query<any>(
       `UPDATE s_fees_mst SET ${setClauses.join(', ')} WHERE Fees_Id = ? AND Student_Id = ?`,
       [...setValues, fid, sid]
@@ -54,7 +78,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ studentId: 
       return NextResponse.json({ error: 'Record not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, Student_Id: targetStudentId });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Server error' }, { status: 500 });
   }

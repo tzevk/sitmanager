@@ -88,7 +88,6 @@ export async function GET(req: NextRequest) {
         SELECT Course_Id, Course_Name
         FROM course_mst
         WHERE (IsDelete = 0 OR IsDelete IS NULL)
-          AND (IsActive = 1 OR IsActive IS NULL)
         ORDER BY Course_Name
       `);
       return NextResponse.json({ success: true, courses }, {
@@ -101,11 +100,11 @@ export async function GET(req: NextRequest) {
       if (!courseId) return NextResponse.json({ success: true, batches: [] });
 
       const [batches] = await pool.query<any[]>(
-        `SELECT Batch_Id, Batch_code, Category, Timings
+        `SELECT Batch_Id, Batch_code, Category, Timings, IsDelete, Cancel
          FROM batch_mst
          WHERE Course_Id = ?
-           AND (IsDelete = 0 OR IsDelete IS NULL)
-           AND (Cancel = 0 OR Cancel IS NULL)
+           AND Batch_code IS NOT NULL
+           AND TRIM(Batch_code) <> ''
          ORDER BY Batch_Id DESC`,
         [courseId]
       );
