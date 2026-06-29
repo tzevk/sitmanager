@@ -206,6 +206,17 @@ const MAIN_INQUIRY_STATUS_LABELS = [
   'Irrelevant',
 ];
 
+const LEGACY_MAIN_STATUS_LABELS: Record<number, string> = {
+  1: 'New',
+  2: 'Contacted (not recieved call)',
+  3: 'Contacted (interested)',
+  4: 'Contacted (next batch)',
+  6: 'Irrelevant',
+  7: 'Follow up pending',
+  8: 'Admission confirmed',
+  9: 'Lost lead',
+};
+
 function parseInquiryStatus(value: unknown): number {
   const statusId = Number(value);
   if (!Number.isInteger(statusId) || statusId <= 0) {
@@ -1265,6 +1276,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
          si.Inquiry_From, si.Inquiry_Type,
          si.OnlineState as OnlineStateRaw,
          CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) as Status_id,
+         sm.Status as StatusLabelFromMaster,
          si.Discussion as InlineDiscussion,
          ${metaSelect}
          ld.discussion as LatestDiscussion, ld.date as LatestDiscDate,
@@ -1280,6 +1292,9 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
          ${punePageSourceExpr} as PunePageSource
       FROM \`${inquiryTable}\` si
        LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
+       LEFT JOIN status_master sm
+         ON sm.Id = CAST(NULLIF(si.OnlineState,'') AS UNSIGNED)
+        AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
       ${disciplineJoin}
       ${metaJoin}
       ${puneListJoin}
@@ -1398,9 +1413,11 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       IsMetaAdConverted: isMetaAdConverted,
       Status_id: r.Status_id ?? null,
       StatusLabel:
+        LEGACY_MAIN_STATUS_LABELS[Number(r.Status_id)] ??
+        (r.StatusLabelFromMaster?.trim() || null) ??
         statusMap[r.Status_id] ??
         (r.OnlineStateRaw?.trim() || null) ??
-        (r.Status_id != null ? `Status ${r.Status_id}` : 'Open'),
+        (r.Status_id != null ? `Status ${r.Status_id}` : 'New'),
       Discussion: cleanedLatestDisc || cleanedInlineDisc || null,
       DiscussionDate: r.LatestDiscDate ?? null,
       FirstDiscussionTime: r.FirstDiscussionTime ?? null,

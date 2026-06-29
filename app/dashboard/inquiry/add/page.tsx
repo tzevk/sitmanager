@@ -89,6 +89,19 @@ const contactModeChannels: Record<string, { channel: string; label: string }> = 
 
 const contactActionButtons = Object.entries(contactModeChannels).map(([mode, item]) => ({ mode, ...item }));
 
+function ContactActionIcon({ channel }: { channel: string }) {
+  if (channel === 'call') {
+    return <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.28 6.72 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.37c0-.51-.34-.96-.83-1.09l-4.42-1.1a1.13 1.13 0 00-1.17.38l-.97 1.18a1.13 1.13 0 01-1.21.33 12.04 12.04 0 01-6.98-6.98 1.13 1.13 0 01.33-1.21l1.18-.97c.34-.28.49-.73.38-1.17l-1.1-4.42a1.13 1.13 0 00-1.09-.83H4.5A2.25 2.25 0 002.25 6.75z" /></svg>;
+  }
+  if (channel === 'whatsapp') {
+    return <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8.6 18.3L4 19.5l1.25-4.35A8 8 0 1112 20a7.95 7.95 0 01-3.4-.75z" /><path strokeLinecap="round" strokeLinejoin="round" d="M9.2 8.8c.18 3.1 2.85 5.35 5.95 5.95l1.05-1.35-2.05-1.05-.85.55c-.9-.42-1.6-1.13-2.05-2.05l.55-.85L10.75 7.9 9.2 8.8z" /></svg>;
+  }
+  if (channel === 'personal-inquiry') {
+    return <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a7.5 7.5 0 0115 0" /></svg>;
+  }
+  return <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.9 5.25a2 2 0 002.2 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>;
+}
+
 export default function AddInquiryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -163,6 +176,14 @@ export default function AddInquiryPage() {
   }, []);
 
   useEffect(() => {
+    if (editId || !opts?.statuses?.length) return;
+    const newStatus = opts.statuses.find((status) => status.label.toLowerCase() === 'new');
+    if (newStatus && !opts.statuses.some((status) => status.id === statusId)) {
+      setStatusId(newStatus.id);
+    }
+  }, [editId, opts, statusId]);
+
+  useEffect(() => {
     if (!editId) return;
     fetch(`/api/inquiry?id=${editId}`).then(r => r.json()).then(data => {
       const d = data.inquiry;
@@ -176,7 +197,9 @@ export default function AddInquiryPage() {
       setNationality(d.Nationality || '');
       setCountry(d.Present_Country || '');
       setNotes(d.Discussion || '');
-      setStatusId(Number.isInteger(Number(d.Status_id)) && Number(d.Status_id) > 0 ? Number(d.Status_id) : 1);
+      const loadedStatusId = Number(d.Status_id);
+      const fallbackStatusId = opts?.statuses?.find((status) => status.label.toLowerCase() === 'new')?.id ?? 1;
+      setStatusId(Number.isInteger(loadedStatusId) && loadedStatusId > 0 ? loadedStatusId : fallbackStatusId);
       setDiscStatusId(Number.isInteger(Number(d.Status_id)) && Number(d.Status_id) > 0 ? Number(d.Status_id) : '');
       setInquiryDate(d.Inquiry_Dt ? String(d.Inquiry_Dt).slice(0,10) : today());
       setInquirySoftwareTime(d.Date_Added ? String(d.Date_Added) : '');
@@ -189,7 +212,7 @@ export default function AddInquiryPage() {
       setDiscipline(d.DisciplineName || d.Discipline || '');
       setPercentage(d.Percentage != null ? String(d.Percentage) : '');
     }).catch(console.error);
-  }, [editId]);
+  }, [editId, opts]);
 
   useEffect(() => {
     if (!courseId && !category) { setBatches([]); return; }
@@ -411,6 +434,19 @@ export default function AddInquiryPage() {
         </div>
         <div className="relative z-10 flex items-center gap-1.5 shrink-0">
           {error && <span className="text-[10px] text-red-300 font-semibold max-w-[160px] truncate">{error}</span>}
+          {editId && contactActionButtons.map((action) => {
+            const selected = inquiryMode === action.mode;
+            return (
+              <button key={action.channel} type="button" onClick={() => logContactAction(action)} disabled={Boolean(loggingContact)}
+                title={`Log ${action.label}`} aria-label={`Log ${action.label}`}
+                className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors disabled:opacity-60 ${selected ? 'bg-white text-[#2E3093]' : 'bg-white/15 text-white hover:bg-white/25'}`}>
+                {loggingContact === action.channel
+                  ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  : <ContactActionIcon channel={action.channel} />}
+              </button>
+            );
+          })}
+          {contactLogged && <span className="text-[10px] font-semibold text-emerald-200">Logged</span>}
           <button onClick={handleSave} disabled={saving}
             className="flex items-center gap-1 bg-white text-[#2E3093] px-3 py-1 rounded-lg text-xs font-bold hover:bg-white/90 transition-colors disabled:opacity-60">
             {saving
@@ -508,20 +544,6 @@ export default function AddInquiryPage() {
                 {opts?.inquiryTypes?.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-            {editId && (
-              <div className="col-span-2">
-                <label className={lbl}>Log Contact Action</label>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {contactActionButtons.map((action) => (
-                    <button key={action.channel} type="button" onClick={() => logContactAction(action)} disabled={Boolean(loggingContact)}
-                      className="rounded-lg border border-[#2E3093]/20 bg-[#2E3093]/10 px-2 py-1.5 text-[10px] font-bold text-[#2E3093] hover:bg-[#2E3093]/15 disabled:opacity-60 transition-colors">
-                      {loggingContact === action.channel ? 'Logging…' : action.label}
-                    </button>
-                  ))}
-                </div>
-                {contactLogged && <div className="mt-1 text-[10px] font-semibold text-emerald-600">Action logged</div>}
-              </div>
-            )}
 
             {/* Training */}
             <div className="col-span-4 border-t border-slate-100 mt-0.5" />
