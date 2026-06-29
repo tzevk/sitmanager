@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { ensureStudentTransferColumns } from '@/lib/student-transfer';
+import { ensureAlumniColumn } from '@/lib/student-alumni';
 import { saveStructuredAdmissionData } from '@/lib/services/online-admission.service';
 
 const ONLINE_ADMISSION_PAYLOAD_TABLE = 'online_admission_payload';
@@ -190,6 +191,7 @@ export async function GET(
 
     const pool = getPool();
     await ensureStudentTransferColumns(pool);
+    await ensureAlumniColumn(pool);
   const inquiryTable = await resolveInquiryTableName(pool);
     const { id } = await params;
 
@@ -213,6 +215,7 @@ export async function GET(
          s.Status_id, s.Status_date,
          s.Admission_Dt,
          s.Refered_By,
+         s.Alumni_Registered,
          s.SitPerformance, s.PlacementRemark,
          a.Admission_Id, a.Batch_Id, a.Admission_Date,
          COALESCE(b.Batch_code, b2.Batch_code) AS Batch_code,
@@ -330,12 +333,15 @@ export async function GET(
       }
     }
 
-    // Discussions (linked via Inquiry_Id for new records, student_id for older ones)
+    // Discussions (linked via Inquiry_Id for new records, student_id for older ones).
+    // created_by → admin account name that logged the discussion.
     const [discussions] = await pool.query(
-      `SELECT id, date, discussion, created_by, created_date, nextdate
-       FROM awt_inquirydiscussion
-       WHERE deleted = 0 AND (Inquiry_id = ? OR student_id = ?)
-       ORDER BY id DESC`,
+      `SELECT d.id, d.date, d.discussion, d.created_by, d.created_date, d.nextdate,
+              COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.firstname, ''), ' ', COALESCE(u.lastname, ''))), ''), u.username) AS created_by_name
+       FROM awt_inquirydiscussion d
+       LEFT JOIN awt_adminuser u ON u.id = d.created_by
+       WHERE d.deleted = 0 AND (d.Inquiry_id = ? OR d.student_id = ?)
+       ORDER BY d.id DESC`,
       [inquiryId ?? -1, id]
     ) as [any[], any];
 
@@ -412,6 +418,7 @@ export async function PUT(
 
     const pool = getPool();
     await ensureStudentTransferColumns(pool);
+    await ensureAlumniColumn(pool);
     const { id } = await params;
     const body = await req.json();
 
@@ -438,6 +445,8 @@ export async function PUT(
       Admission_Dt,
       // Placement
       SitPerformance, PlacementRemark,
+      // Alumni
+      Alumni_Registered,
     } = body;
 
     const fullName = Student_Name ||
@@ -538,6 +547,7 @@ export async function PUT(
       { col: 'WorkingSince',   val: WorkingSince || null },
       { col: 'SitPerformance', val: SitPerformance ? parseFloat(SitPerformance) : null },
       { col: 'PlacementRemark', val: PlacementRemark || null },
+      { col: 'Alumni_Registered', val: Alumni_Registered || null },
     ].filter(({ val }) => val !== null && val !== undefined);
 
     for (const { col, val } of extras) {

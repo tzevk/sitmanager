@@ -49,6 +49,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Reports > Inquiry Report': '/dashboard/reports/inquiry',
   'Reports > Pune Inquiries': '/dashboard/reports/suvidya-pune',
   'Reports > Online Students': '/dashboard/reports/online-student',
+  'Reports > Student Report': '/dashboard/reports/student',
   'Reports > Full Attendance Report': '/dashboard/reports/attendance',
   'Reports > Corporate Record': '/dashboard/reports/corporate-record',
   'Reports > Student Search for Interview': '/dashboard/reports/student-interview',

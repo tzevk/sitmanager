@@ -106,15 +106,17 @@ export async function GET(req: NextRequest) {
     const { canonicalInquiryId, canonicalStudentId } = await resolveInquiryLink(pool, inquiryTable, inquiryIdNum);
 
     const withNextDate = await hasNextDateColumn(pool);
-    const nextDateSelect = withNextDate ? 'nextdate' : 'NULL as nextdate';
+    const nextDateSelect = withNextDate ? 'd.nextdate' : 'NULL as nextdate';
     const cacheKey = `api:inquiry:discussions:${canonicalInquiryId}:${canonicalStudentId ?? inquiryIdNum}`;
     const rows = await cached(cacheKey, 10_000, async () => runGuardedQuery(
       pool,
-      `SELECT id, date, ${nextDateSelect}, discussion, created_by, created_date
-       FROM awt_inquirydiscussion
-       WHERE (Inquiry_id = ? OR student_id = ?) AND (deleted = 0 OR deleted IS NULL)
-         AND date IS NOT NULL AND TRIM(COALESCE(date, '')) <> ''
-       ORDER BY id ASC`,
+      `SELECT d.id, d.date, ${nextDateSelect}, d.discussion, d.created_by, d.created_date,
+              COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.firstname, ''), ' ', COALESCE(u.lastname, ''))), ''), u.username) AS created_by_name
+       FROM awt_inquirydiscussion d
+       LEFT JOIN awt_adminuser u ON u.id = d.created_by
+       WHERE (d.Inquiry_id = ? OR d.student_id = ?) AND (d.deleted = 0 OR d.deleted IS NULL)
+         AND d.date IS NOT NULL AND TRIM(COALESCE(d.date, '')) <> ''
+       ORDER BY d.id ASC`,
       [canonicalInquiryId, canonicalStudentId ?? inquiryIdNum],
       5,
     ));

@@ -14,6 +14,8 @@ export interface OnlineAdmissionListParams {
   page: number;
   limit: number;
   search?: string;
+  /** Filter by batch code (matches student master, inquiry, or saved payload). */
+  batchCode?: string;
   tab?: 'in_progress' | 'pending' | 'completed' | 'rejected' | '';
   dateFrom?: string;
   dateTo?: string;
@@ -1193,7 +1195,7 @@ export async function listOnlineAdmissions(
   const inquiryTable = await resolveInquiryTableName(pool);
   const statusTable = await resolveStatusTableName(pool);
   const studentMasterTable = await resolveStudentMasterTableName(pool);
-  const { page, limit, search = '', tab = '', dateFrom = '', dateTo = '', submittedOnly = false } = params;
+  const { page, limit, search = '', batchCode = '', tab = '', dateFrom = '', dateTo = '', submittedOnly = false } = params;
   const offset = (page - 1) * limit;
 
   const buildNewQuery = (withStatus: boolean) => {
@@ -1311,6 +1313,19 @@ export async function listOnlineAdmissions(
     );
     const like = `%${search}%`;
     newParams.push(like, like, like, like);
+  }
+  if (batchCode) {
+    const bcLike = `%${batchCode}%`;
+    const parts = [
+      `NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.batchCode')), '') LIKE ?`,
+      `TRIM(IFNULL(si.Batch_Code, '')) LIKE ?`,
+    ];
+    newParams.push(bcLike, bcLike);
+    if (studentMasterTable) {
+      parts.push(`TRIM(IFNULL(sm.Batch_Code, '')) LIKE ?`);
+      newParams.push(bcLike);
+    }
+    newConds.push(`(${parts.join(' OR ')})`);
   }
   const defaultDateExpr = `COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), ''), si.Inquiry_Dt, oap.Updated_At, oap.Created_At)`;
   const listDateExpr = defaultDateExpr;

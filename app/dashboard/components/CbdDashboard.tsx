@@ -207,6 +207,11 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
   const [funnelLoading, setFunnelLoading] = React.useState(false);
   const fetchAbortRef = useRef<AbortController | null>(null);
 
+  // ── Pending Fees filters ────────────────────────────────────────
+  const [pfOngoingOnly, setPfOngoingOnly] = React.useState(true);
+  const [pfStartFrom, setPfStartFrom] = React.useState('');
+  const [pfStartTo, setPfStartTo] = React.useState('');
+
   const fetchFunnel = useCallback(async (mode: 'year' | 'month', year: number, month: number) => {
     if (fetchAbortRef.current) fetchAbortRef.current.abort();
     const ctrl = new AbortController();
@@ -328,12 +333,25 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
     { label: 'Converted',       value: activeFunnel.converted,  pct: activeFunnel.total ? activeFunnel.converted  / activeFunnel.total * 100 : null,  color: '#D97706', bg: 'bg-amber-50/70'   },
   ];
 
-  const totalPendingFeeAmount = pendingFees.reduce((sum: number, row: any) => sum + Number(row.amount || 0), 0);
-  const totalPendingFeeStudents = pendingFees.reduce((sum: number, row: any) => sum + Number(row.student_count || 0), 0);
-  const pendingFeesBatchSummary = pendingFees
+  // Apply the Pending Fees filters (ongoing batches + batch start-date range).
+  const anyOngoingPendingFee = pendingFees.some((r: any) => Number(r.is_ongoing) === 1);
+  const filteredPendingFees = pendingFees.filter((row: any) => {
+    if (pfOngoingOnly && Number(row.is_ongoing) !== 1) return false;
+    const sd = row.start_date ? String(row.start_date).slice(0, 10) : '';
+    if (pfStartFrom && (!sd || sd < pfStartFrom)) return false;
+    if (pfStartTo && (!sd || sd > pfStartTo)) return false;
+    return true;
+  });
+  const pfFiltersActive = pfOngoingOnly || !!pfStartFrom || !!pfStartTo;
+
+  const totalPendingFeeAmount = filteredPendingFees.reduce((sum: number, row: any) => sum + Number(row.amount || 0), 0);
+  const totalPendingFeeStudents = filteredPendingFees.reduce((sum: number, row: any) => sum + Number(row.student_count || 0), 0);
+  const pendingFeesBatchSummary = filteredPendingFees
     .map((row: any) => ({
       batchName: row.course_name || '',
       batchNo: row.batch_code ? toBatchNumber(row.batch_code) : '',
+      startDate: row.start_date ? String(row.start_date).slice(0, 10) : '',
+      ongoing: Number(row.is_ongoing) === 1,
       balance: Number(row.amount || 0),
     }))
     .sort((a: any, b: any) => Number(b.balance || 0) - Number(a.balance || 0));
@@ -361,14 +379,57 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
           </div>
         )}
       </div>
+      {/* Filters */}
+      {!loading && pendingFees.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
+          <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={pfOngoingOnly}
+              disabled={!anyOngoingPendingFee}
+              onChange={(e) => setPfOngoingOnly(e.target.checked)}
+              className="w-3.5 h-3.5 accent-[#2E3093] disabled:opacity-40"
+            />
+            Ongoing batches only
+          </label>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Start date</span>
+            <input
+              type="date"
+              value={pfStartFrom}
+              onChange={(e) => setPfStartFrom(e.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700 focus:outline-none focus:border-[#2E3093]"
+            />
+            <span className="text-[11px] text-gray-400">to</span>
+            <input
+              type="date"
+              value={pfStartTo}
+              onChange={(e) => setPfStartTo(e.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700 focus:outline-none focus:border-[#2E3093]"
+            />
+          </div>
+          {pfFiltersActive && (
+            <button
+              type="button"
+              onClick={() => { setPfOngoingOnly(false); setPfStartFrom(''); setPfStartTo(''); }}
+              className="text-[11px] font-semibold text-gray-400 hover:text-gray-600 underline"
+            >
+              Clear filters
+            </button>
+          )}
+          <span className="ml-auto text-[11px] text-gray-400">{filteredPendingFees.length} batch{filteredPendingFees.length === 1 ? '' : 'es'}</span>
+        </div>
+      )}
       {!loading && pendingFeesBatchSummary.length > 0 && (
         <div className="border-b border-gray-100 bg-gray-50/60 overflow-x-auto">
+          <div className="max-h-72 overflow-y-auto">
           <table className={TABLE_CLS}>
-            <thead>
+            <thead className="bg-gray-50 sticky top-0 z-10">
               <tr className="border-b border-gray-100">
                 <Th center>Sr No</Th>
                 <Th>Batch Name</Th>
                 <Th center>Batch No</Th>
+                <Th center>Start Date</Th>
                 <Th center>Balance Fees</Th>
               </tr>
             </thead>
@@ -376,19 +437,28 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
               {pendingFeesBatchSummary.map((row: any, i: number) => (
                 <tr key={`pending-fee-batch-${row.batchNo || row.batchName || i}-${i}`} className="border-t border-gray-100">
                   <td className="px-3 py-2 text-center text-xs font-bold tabular-nums text-gray-500">{i + 1}</td>
-                  <td className="px-3 py-2 text-xs font-semibold text-gray-700 min-w-[180px]">{row.batchName}</td>
+                  <td className="px-3 py-2 text-xs font-semibold text-gray-700 min-w-[180px]">
+                    <span className="inline-flex items-center gap-1.5 flex-wrap">
+                      {row.batchName}
+                      {row.ongoing && (
+                        <span className="inline-flex items-center rounded-full border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Ongoing</span>
+                      )}
+                    </span>
+                  </td>
                   <td className="px-3 py-2 text-center text-xs font-mono text-gray-500 whitespace-nowrap">{row.batchNo}</td>
+                  <td className="px-3 py-2 text-center text-[11px] tabular-nums text-gray-500 whitespace-nowrap">{row.startDate ? `${row.startDate.slice(8)}/${row.startDate.slice(5,7)}/${row.startDate.slice(0,4)}` : '—'}</td>
                   <td className="px-3 py-2 text-right text-xs font-black tabular-nums text-red-700">₹ {Number(row.balance || 0).toLocaleString('en-IN')}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-gray-200 bg-red-50/60">
-                <td className="px-3 py-2.5 text-right text-xs font-black uppercase tracking-wide text-gray-700" colSpan={3}>Balance Fees &gt;&gt;&gt;</td>
+                <td className="px-3 py-2.5 text-right text-xs font-black uppercase tracking-wide text-gray-700" colSpan={4}>Balance Fees &gt;&gt;&gt;</td>
                 <td className="px-3 py-2.5 text-right text-sm font-black tabular-nums text-red-700">₹ {totalPendingFeeAmount.toLocaleString('en-IN')}</td>
               </tr>
             </tfoot>
           </table>
+          </div>
         </div>
       )}
       {loading ? (
@@ -397,6 +467,8 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
         </div>
       ) : pendingFees.length === 0 ? (
         <Empty text="No pending fees" />
+      ) : filteredPendingFees.length === 0 ? (
+        <Empty text="No batches match the selected filters" />
       ) : null}
     </div>
   );
@@ -492,9 +564,6 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
         )}
       </div>
 
-      {/* ②  Pending Fees */}
-      {pendingFeesCard}
-
       {/* ③  Upcoming Batches (next 3 months) */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <CardHeader
@@ -565,6 +634,9 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
           </div>
         </div>
       </div>
+
+      {/* ②  Pending Fees */}
+      {pendingFeesCard}
 
       {/* ②½  Batch Marketing Tracker */}
       <BatchMarketingWidget />
@@ -877,7 +949,12 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                     <tr key={`${r.batch_no || i}`} className="border-t border-gray-100 hover:bg-gray-50/50">
                       <td className="px-4 py-2 font-mono text-gray-700">{toBatchNumber(r.batch_no)}</td>
                       <td className="px-3 py-2 text-gray-700">{r.training_program || '—'}</td>
-                      <td className="px-3 py-2 w-40"><Bar value={Number(r.registered_pct || 0)} /></td>
+                      <td className="px-3 py-2 w-40">
+                        <Bar value={Number(r.registered_pct || 0)} />
+                        {r.total_students != null && (
+                          <div className="text-[10px] font-semibold text-gray-400 tabular-nums text-right mt-0.5">{Number(r.registered_students || 0)}/{Number(r.total_students || 0)} registered</div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

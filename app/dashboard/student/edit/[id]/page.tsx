@@ -18,6 +18,7 @@ interface Discussion {
   date: string;
   discussion: string;
   created_by: number;
+  created_by_name?: string | null;
   created_date: string;
 }
 interface PlacementRow {
@@ -71,6 +72,7 @@ type EducationState = typeof emptyEducation;
 const TABS = [
   { id: 'personal',     label: 'Personal Info' },
   { id: 'academic',     label: 'Academic Qualification' },
+  { id: 'alumni',       label: 'Alumni Registration' },
   { id: 'company',      label: 'Company Information' },
   { id: 'transfer',     label: 'Transfer / Cancel' },
   { id: 'discussion',   label: 'Discussion' },
@@ -133,6 +135,8 @@ export default function EditStudentPage() {
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
   const [discLoading, setDiscLoading] = useState(false);
   const [discError, setDiscError] = useState('');
+  const [newDiscussion, setNewDiscussion] = useState('');
+  const [addingDiscussion, setAddingDiscussion] = useState(false);
 
   /* placement */
   const [placement, setPlacement] = useState<PlacementRow[]>([]);
@@ -182,6 +186,8 @@ export default function EditStudentPage() {
     Login_Password: '', Refered_By: '',
     /* Placement */
     SitPerformance: '', PlacementRemark: '',
+    /* Alumni */
+    Alumni_Registered: '',
   });
 
   const set = (field: string, value: string) =>
@@ -272,6 +278,7 @@ export default function EditStudentPage() {
           Refered_By:       s.Refered_By       || '',
           SitPerformance:   s.SitPerformance != null && String(s.SitPerformance) !== 'NULL' ? String(s.SitPerformance) : '',
           PlacementRemark:  s.PlacementRemark && s.PlacementRemark !== 'NULL' ? s.PlacementRemark : '',
+          Alumni_Registered: s.Alumni_Registered || '',
         });
 
         setBatchStartDate(s.Batch_StartDate ? String(s.Batch_StartDate).slice(0, 10) : '');
@@ -337,6 +344,27 @@ export default function EditStudentPage() {
       fetchDiscussions();
     }
   }, [activeTab, studentId, fetchDiscussions]);
+
+  const handleAddDiscussion = async () => {
+    if (!newDiscussion.trim() || !studentId) return;
+    setAddingDiscussion(true);
+    setDiscError('');
+    try {
+      const res = await fetch(`/api/admission-activity/student/${studentId}/discussions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ discussion: newDiscussion.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add discussion');
+      setNewDiscussion('');
+      await fetchDiscussions();
+    } catch (e: unknown) {
+      setDiscError(e instanceof Error ? e.message : 'Failed to add discussion');
+    } finally {
+      setAddingDiscussion(false);
+    }
+  };
 
   /* ------------------------------------------------------------------ */
   /*  Fetch documents (lazy — only when the Documents tab is opened)      */
@@ -1134,6 +1162,47 @@ export default function EditStudentPage() {
             </div>
           )}
 
+          {/* ==== ALUMNI REGISTRATION ==== */}
+          {activeTab === 'alumni' && (
+            <div className="space-y-3">
+              <SectionCard
+                title="Alumni Registration"
+                icon={
+                  <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                  </svg>
+                }
+              >
+                <p className="text-xs text-slate-500 mb-3">Is the student registered with the Sitians Alumni Association?</p>
+                <div className="flex items-center gap-5">
+                  {['Yes', 'No'].map((opt) => (
+                    <label key={opt} className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="alumniRegistered"
+                        value={opt}
+                        checked={form.Alumni_Registered === opt}
+                        onChange={(e) => set('Alumni_Registered', e.target.value)}
+                        className="w-4 h-4 accent-[#2E3093]"
+                      />
+                      {opt}
+                    </label>
+                  ))}
+                  {form.Alumni_Registered && (
+                    <button
+                      type="button"
+                      onClick={() => set('Alumni_Registered', '')}
+                      className="text-[11px] font-semibold text-slate-400 hover:text-slate-600 underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </SectionCard>
+            </div>
+          )}
+
           {/* ==== COMPANY INFORMATION ==== */}
           {activeTab === 'company' && (
             <div className="space-y-3">
@@ -1345,6 +1414,41 @@ export default function EditStudentPage() {
           {/* ==== DISCUSSION ==== */}
           {activeTab === 'discussion' && (
             <div className="space-y-3">
+              {/* Add new discussion */}
+              <SectionCard
+                title="Add Discussion"
+                icon={
+                  <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                }
+              >
+                <textarea
+                  value={newDiscussion}
+                  onChange={(e) => setNewDiscussion(e.target.value)}
+                  rows={3}
+                  className={textareaCls}
+                  placeholder="Type a new discussion note…"
+                />
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleAddDiscussion}
+                    disabled={!canUpdate || addingDiscussion || !newDiscussion.trim()}
+                    className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-[#2E3093] text-white text-xs font-bold hover:bg-[#252780] disabled:opacity-50"
+                  >
+                    {addingDiscussion ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                      </svg>
+                    )}
+                    Add Discussion
+                  </button>
+                </div>
+              </SectionCard>
+
               {/* History */}
               <div className="rounded-lg border border-gray-200 overflow-hidden shadow-sm">
                 <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-3 py-1.5 border-b border-gray-200">
@@ -1379,10 +1483,23 @@ export default function EditStudentPage() {
                           </div>
                           <div className="flex-1 bg-gray-50 rounded-lg p-3 border border-gray-100">
                             <p className="text-xs text-gray-800">{d.discussion}</p>
-                            <p className="text-[11px] text-gray-400 mt-1.5 font-medium">
-                              {d.date
-                                ? new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                                : '—'}
+                            <p className="text-[11px] text-gray-400 mt-1.5 font-medium flex items-center gap-1.5 flex-wrap">
+                              <span>
+                                {d.date
+                                  ? new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                                  : '—'}
+                              </span>
+                              {d.created_by_name && (
+                                <>
+                                  <span className="text-gray-300">·</span>
+                                  <span className="inline-flex items-center gap-1 text-[#2E3093]/70 font-semibold">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                    </svg>
+                                    {d.created_by_name}
+                                  </span>
+                                </>
+                              )}
                             </p>
                           </div>
                         </div>

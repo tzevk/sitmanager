@@ -10,6 +10,7 @@ import {
   getTrainingDashboardMetaRows,
 } from '@/lib/services/training-dashboard.service';
 import { ensurePlacementDashboardTables, getPlacementCampusInterviews, getPlacementCompanyVisits, getPlacementDeputationOpenings } from '@/lib/services/placement-dashboard.service';
+import { ensureAlumniColumn } from '@/lib/student-alumni';
 
 const DASHBOARD_CACHE_TTL = cacheTTL.short;
 
@@ -170,6 +171,14 @@ async function fetchDashboardData(dept?: string) {
            Updated_At DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
       );
+    } catch { /* best-effort */ }
+  }
+
+  if (needsAlumni) {
+    // Ensure student_master.Alumni_Registered exists so the alumni query isn't
+    // silently swallowed by safeQuery on databases where no student was saved yet.
+    try {
+      await ensureAlumniColumn(pool);
     } catch { /* best-effort */ }
   }
 
@@ -960,31 +969,42 @@ async function fetchDashboardData(dept?: string) {
         WHERE aa.batch_id IS NOT NULL
       )
       SELECT
-        batch_id AS id,
-        batch_id,
-        batch_code,
-        course_name,
-        COUNT(DISTINCT student_id) AS student_count,
-        SUM(balance + paid_amount) AS total_fee,
-        SUM(paid_amount) AS paid_amount,
-        SUM(balance) AS amount
-      FROM student_balance
-      WHERE balance > 0
-      GROUP BY batch_id, batch_code, course_name
+        sb.batch_id AS id,
+        sb.batch_id,
+        sb.batch_code,
+        sb.course_name,
+        COUNT(DISTINCT sb.student_id) AS student_count,
+        SUM(sb.balance + sb.paid_amount) AS total_fee,
+        SUM(sb.paid_amount) AS paid_amount,
+        SUM(sb.balance) AS amount,
+        DATE_FORMAT(${BATCH_SDATE_EXPR}, '%Y-%m-%d') AS start_date,
+        CASE
+          WHEN ${BATCH_SDATE_EXPR} IS NOT NULL
+           AND ${BATCH_SDATE_EXPR} <= CURDATE()
+           AND (${BATCH_EDATE_EXPR} IS NULL OR ${BATCH_EDATE_EXPR} >= CURDATE())
+          THEN 1 ELSE 0
+        END AS is_ongoing
+      FROM student_balance sb
+      LEFT JOIN batch_mst b ON b.Batch_Id = sb.batch_id
+      WHERE sb.balance > 0
+      GROUP BY sb.batch_id, sb.batch_code, sb.course_name, b.SDate, b.EDate
       HAVING amount > 0
       ORDER BY amount DESC
       LIMIT 100
     `, []) : Promise.resolve([]),
 
-    // 10. Alumni registration progress approximated by contact completeness per batch
+    // 10. Alumni registration progress — % of each batch's students flagged as
+    // registered with the Sitians Alumni Association (student_master.Alumni_Registered,
+    // set from the student-master "Alumni Registration" tab).
     needsAlumni ? safeQuery(pool, `
       SELECT
         b.Batch_code AS batch_no,
         COALESCE(c.Course_Name, b.CourseName, 'N/A') AS training_program,
+        COUNT(sm.Student_Id) AS total_students,
+        SUM(CASE WHEN LOWER(TRIM(IFNULL(sm.Alumni_Registered, ''))) IN ('yes', 'y', '1', 'true') THEN 1 ELSE 0 END) AS registered_students,
         ROUND(
-          100 * SUM(CASE
-            WHEN TRIM(IFNULL(sm.Email, '')) <> '' OR TRIM(IFNULL(sm.Present_Mobile, '')) <> ''
-            THEN 1 ELSE 0 END) / NULLIF(COUNT(sm.Student_Id), 0),
+          100 * SUM(CASE WHEN LOWER(TRIM(IFNULL(sm.Alumni_Registered, ''))) IN ('yes', 'y', '1', 'true') THEN 1 ELSE 0 END)
+            / NULLIF(COUNT(sm.Student_Id), 0),
           1
         ) AS registered_pct
       FROM batch_mst b

@@ -37,12 +37,15 @@ export async function GET(
     );
     const inquiryId = inqRows[0]?.Inquiry_Id ?? null;
 
-    // Query by Inquiry_id OR student_id to cover both old and new records
+    // Query by Inquiry_id OR student_id to cover both old and new records.
+    // Resolve created_by → the admin account name that logged the discussion.
     const [rows] = await pool.query<any[]>(
-      `SELECT id, date, discussion, created_by, created_date, nextdate
-       FROM awt_inquirydiscussion
-       WHERE deleted = 0 AND (Inquiry_id = ? OR student_id = ?)
-       ORDER BY id DESC`,
+      `SELECT d.id, d.date, d.discussion, d.created_by, d.created_date, d.nextdate,
+              COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.firstname, ''), ' ', COALESCE(u.lastname, ''))), ''), u.username) AS created_by_name
+       FROM awt_inquirydiscussion d
+       LEFT JOIN awt_adminuser u ON u.id = d.created_by
+       WHERE d.deleted = 0 AND (d.Inquiry_id = ? OR d.student_id = ?)
+       ORDER BY d.id DESC`,
       [inquiryId ?? -1, id]
     );
 
@@ -84,11 +87,14 @@ export async function POST(
       return NextResponse.json({ error: 'No inquiry record found for this student' }, { status: 404 });
     }
 
+    // Log the account that created the discussion.
+    const createdBy = auth.session.userId;
+
     const [result] = await pool.query(
       `INSERT INTO awt_inquirydiscussion
-         (Inquiry_id, date, discussion, deleted, created_by, created_date)
-       VALUES (?, CURDATE(), ?, 0, 1, NOW())`,
-      [inquiryId, discussion.trim()]
+         (Inquiry_id, student_id, date, discussion, deleted, created_by, created_date)
+       VALUES (?, ?, CURDATE(), ?, 0, ?, NOW())`,
+      [inquiryId, id, discussion.trim(), createdBy]
     );
 
     return NextResponse.json({ success: true, id: (result as any).insertId });

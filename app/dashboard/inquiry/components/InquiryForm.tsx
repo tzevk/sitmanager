@@ -33,6 +33,7 @@ interface Discussion {
   date: string;
   discussion: string;
   created_by: number;
+  created_by_name?: string | null;
   created_date: string;
 }
 
@@ -815,14 +816,27 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
                                     </button>
                                   </div>
                                 </div>
-                                <p className="text-[11px] text-gray-400 mt-1.5">
-                                  {d.date
-                                    ? new Date(d.date).toLocaleDateString('en-IN', {
-                                        day: '2-digit',
-                                        month: 'short',
-                                        year: 'numeric',
-                                      })
-                                    : '—'}
+                                <p className="text-[11px] text-gray-400 mt-1.5 flex items-center gap-1.5 flex-wrap">
+                                  <span>
+                                    {d.date
+                                      ? new Date(d.date).toLocaleDateString('en-IN', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          year: 'numeric',
+                                        })
+                                      : '—'}
+                                  </span>
+                                  {d.created_by_name && (
+                                    <>
+                                      <span className="text-gray-300">·</span>
+                                      <span className="inline-flex items-center gap-1 text-[#2E3093]/70 font-semibold">
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                        </svg>
+                                        {d.created_by_name}
+                                      </span>
+                                    </>
+                                  )}
                                 </p>
                               </>
                             )}

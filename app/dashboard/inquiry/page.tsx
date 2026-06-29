@@ -585,17 +585,24 @@ export default function InquiryPage() {
                       {(() => {
                         const raw = (r.Discussion || '').trim();
                         if (!raw || raw === 'NULL') return <span className="text-slate-300">—</span>;
-                        // Parse "counsellor - note" format
+                        // Strip the legacy "counsellor - note" prefix; the real account
+                        // name is shown from FollowUpBy instead.
                         const dashIdx = raw.indexOf(' - ');
                         const hasCounsellor = dashIdx > 0 && dashIdx < 30;
-                        const counsellor = hasCounsellor ? raw.slice(0, dashIdx).trim() : null;
                         const note = hasCounsellor ? raw.slice(dashIdx + 3).trim() : raw;
                         return (
                           <div className="flex flex-col gap-0.5">
-                            {counsellor && (
-                              <span className="inline-flex items-center gap-1">
-                                <span className="text-[9px] font-bold uppercase tracking-wide bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full max-w-[80px] truncate">{counsellor}</span>
-                                {r.DiscussionDate && <span className="text-[9px] text-slate-400 whitespace-nowrap">{formatDate(r.DiscussionDate)}</span>}
+                            {(r.FollowUpBy || r.DiscussionDate) && (
+                              <span className="inline-flex items-center gap-1 flex-wrap text-[9px] text-slate-400">
+                                {r.FollowUpBy && (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-[#2E3093]/20 bg-[#2E3093]/10 px-1.5 py-0.5 text-[9px] font-bold text-[#2E3093] whitespace-nowrap max-w-[110px]">
+                                    <svg className="w-2.5 h-2.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                    </svg>
+                                    <span className="truncate">{r.FollowUpBy}</span>
+                                  </span>
+                                )}
+                                {r.DiscussionDate && <span className="whitespace-nowrap">{formatDate(r.DiscussionDate)}</span>}
                               </span>
                             )}
                             <span className="line-clamp-2 text-slate-600 leading-snug">{note}</span>

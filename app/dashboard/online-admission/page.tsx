@@ -85,6 +85,7 @@ export default function OnlineAdmissionPage() {
   // Filters
   const [tab, setTab]       = useState<AdmissionTab>('in_progress');
   const [search, setSearch] = useState('');
+  const [batchCode, setBatchCode] = useState('');
   const [dateFrom, setDateFrom]         = useState('');
   const [dateTo, setDateTo]             = useState('');
   const [page, setPage]           = useState(1);
@@ -100,10 +101,11 @@ export default function OnlineAdmissionPage() {
       const p = new URLSearchParams();
       p.set('page', String(page));
       p.set('limit', '25');
-      if (search)   p.set('search', search);
-      if (tab)      p.set('tab', tab);
-      if (dateFrom) p.set('dateFrom', dateFrom);
-      if (dateTo)   p.set('dateTo', dateTo);
+      if (search)    p.set('search', search);
+      if (batchCode) p.set('batchCode', batchCode);
+      if (tab)       p.set('tab', tab);
+      if (dateFrom)  p.set('dateFrom', dateFrom);
+      if (dateTo)    p.set('dateTo', dateTo);
       const res  = await fetch(`/api/online-admission?${p}`, { signal: ctrl.signal });
       const data = await res.json();
       setRows(data.rows ?? []);
@@ -113,7 +115,7 @@ export default function OnlineAdmissionPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, fetchTrigger, search, tab, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, fetchTrigger, search, batchCode, tab, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -236,6 +238,14 @@ export default function OnlineAdmissionPage() {
               onKeyDown={e => e.key === 'Enter' && refresh()}
               className={`${inp} flex-1 min-w-[180px]`}
             />
+            <input
+              type="text" value={batchCode}
+              placeholder="Batch code…"
+              title="Filter by batch code"
+              onChange={e => setBatchCode(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && refresh()}
+              className={`${inp} w-[140px]`}
+            />
             <input type="date" value={dateFrom} title="From date" onChange={e => setDateFrom(e.target.value)} className={`${inp} w-[130px]`} />
             <input type="date" value={dateTo}   title="To date"   onChange={e => setDateTo(e.target.value)}   className={`${inp} w-[130px]`} />
             <button
@@ -248,7 +258,7 @@ export default function OnlineAdmissionPage() {
               Search
             </button>
             <button
-              onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); refresh(); }}
+              onClick={() => { setSearch(''); setBatchCode(''); setDateFrom(''); setDateTo(''); refresh(); }}
               className="px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors"
             >
               Clear

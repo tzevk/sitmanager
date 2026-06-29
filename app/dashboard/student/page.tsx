@@ -31,6 +31,20 @@ const SEARCH_OPTIONS = [
   { value: 'mobile',    label: 'Mobile' },
 ];
 
+// Persist the list filters so they survive navigation and the browser Back
+// button (e.g. opening a student then returning to the list).
+const FILTERS_STORAGE_KEY = 'studentList:filters';
+type SavedFilters = { field: string; search: string; page: number };
+const readSavedFilters = (): SavedFilters | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(FILTERS_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as SavedFilters) : null;
+  } catch {
+    return null;
+  }
+};
+
 export default function StudentPage() {
   const router = useRouter();
   const { canView, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('student');
@@ -39,12 +53,18 @@ export default function StudentPage() {
   const [loading, setLoading]       = useState(true);
   const [busyId, setBusyId]         = useState<number | null>(null);
 
-  const [field,  setField]  = useState('');
-  const [search, setSearch] = useState('');
-  const [page,   setPage]   = useState(1);
+  const [field,  setField]  = useState(() => readSavedFilters()?.field ?? '');
+  const [search, setSearch] = useState(() => readSavedFilters()?.search ?? '');
+  const [page,   setPage]   = useState(() => readSavedFilters()?.page ?? 1);
 
   const searchRef      = useRef<HTMLInputElement>(null);
   const [fetchTrigger, setFetchTrigger] = useState(0);
+
+  // Keep the saved filters in sync so a remount (navigation / Back) restores them.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({ field, search, page }));
+  }, [field, search, page]);
 
   const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 

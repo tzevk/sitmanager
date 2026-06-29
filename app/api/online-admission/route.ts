@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
       page: Math.max(1, Number(searchParams.get('page')) || 1),
       limit: Math.min(100, Math.max(10, Number(searchParams.get('limit')) || 25)),
       search: searchParams.get('search')?.trim() || '',
+      batchCode: searchParams.get('batchCode')?.trim() || '',
       tab: (validTabs as readonly string[]).includes(rawTab) ? rawTab as typeof validTabs[number] : '',
       dateFrom: searchParams.get('dateFrom') || '',
       dateTo: searchParams.get('dateTo') || '',
