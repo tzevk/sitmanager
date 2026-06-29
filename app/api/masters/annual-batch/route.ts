@@ -3,6 +3,53 @@ import { getPool } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { requirePermission } from '@/lib/api-auth';
 
+type BatchTextField = {
+  column: string;
+  label: string;
+  max: number;
+};
+
+const BATCH_TEXT_FIELDS: BatchTextField[] = [
+  { column: 'Batch_code', label: 'Batch Code', max: 80 },
+  { column: 'Category', label: 'Category', max: 120 },
+  { column: 'Timings', label: 'Timings', max: 255 },
+  { column: 'Duration', label: 'Duration', max: 100 },
+  { column: 'Training_Coordinator', label: 'Training Coordinator', max: 150 },
+  { column: 'CourseName', label: 'Training Name', max: 255 },
+];
+
+function textValue(value: unknown, field: BatchTextField): string | null {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) return null;
+  if (trimmed.length > field.max) {
+    throw new Error(`${field.label} must be ${field.max} characters or less.`);
+  }
+  return trimmed;
+}
+
+function textByColumn(values: Record<string, unknown>) {
+  return Object.fromEntries(BATCH_TEXT_FIELDS.map((field) => [field.column, textValue(values[field.column], field)]));
+}
+
+async function ensureBatchTextColumns(pool: ReturnType<typeof getPool>) {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT COLUMN_NAME, CHARACTER_MAXIMUM_LENGTH
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'batch_mst'
+       AND COLUMN_NAME IN (${BATCH_TEXT_FIELDS.map(() => '?').join(',')})`,
+    BATCH_TEXT_FIELDS.map((field) => field.column)
+  );
+
+  const currentLengths = new Map(rows.map((row) => [String(row.COLUMN_NAME), Number(row.CHARACTER_MAXIMUM_LENGTH || 0)]));
+  for (const field of BATCH_TEXT_FIELDS) {
+    const currentLength = currentLengths.get(field.column) || 0;
+    if (currentLength > 0 && currentLength < field.max) {
+      await pool.query(`ALTER TABLE batch_mst MODIFY COLUMN \`${field.column}\` VARCHAR(${field.max}) NULL`);
+    }
+  }
+}
+
 /* ---------- GET: list batches with optional filters ---------- */
 export async function GET(req: NextRequest) {
   try {
@@ -113,29 +160,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Course is required' }, { status: 400 });
     }
 
+    await ensureBatchTextColumns(pool);
+    const text = textByColumn({ Batch_code, Category, Timings, Duration, Training_Coordinator, CourseName });
+
     const [result] = await pool.query<ResultSetHeader>(
       `INSERT INTO batch_mst 
         (Course_Id, Batch_code, Category, Batch_Category_id, Timings, SDate, ActualDate, Admission_Date, EDate, Duration, Training_Coordinator, INR_Basic, INR_ServiceTax, INR_Total, Dollar_Basic, Dollar_ServiceTax, Dollar_Total, CourseName, Course_description, IsActive, IsDelete, Date_Added)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
       [
         Course_Id,
-        Batch_code || null,
-        Category || null,
+        text.Batch_code,
+        text.Category,
         Batch_Category_id || null,
-        Timings || null,
+        text.Timings,
         SDate || null,
         ActualDate || null,
         Admission_Date || null,
         EDate || null,
-        Duration || null,
-        Training_Coordinator || null,
+        text.Duration,
+        text.Training_Coordinator,
         INR_Basic || null,
         INR_ServiceTax || null,
         INR_Total || null,
         Dollar_Basic || null,
         Dollar_ServiceTax || null,
         Dollar_Total || null,
-        CourseName || null,
+        text.CourseName,
         Course_description || null,
         IsActive ?? 1,
       ]
@@ -186,6 +236,9 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Course is required' }, { status: 400 });
     }
 
+    await ensureBatchTextColumns(pool);
+    const text = textByColumn({ Batch_code, Category, Timings, Duration, Training_Coordinator, CourseName });
+
     await pool.query(
       `UPDATE batch_mst SET
         Course_Id = ?,
@@ -211,23 +264,23 @@ export async function PUT(req: NextRequest) {
        WHERE Batch_Id = ?`,
       [
         Course_Id,
-        Batch_code || null,
-        Category || null,
+        text.Batch_code,
+        text.Category,
         Batch_Category_id || null,
-        Timings || null,
+        text.Timings,
         SDate || null,
         ActualDate || null,
         Admission_Date || null,
         EDate || null,
-        Duration || null,
-        Training_Coordinator || null,
+        text.Duration,
+        text.Training_Coordinator,
         INR_Basic || null,
         INR_ServiceTax || null,
         INR_Total || null,
         Dollar_Basic || null,
         Dollar_ServiceTax || null,
         Dollar_Total || null,
-        CourseName || null,
+        text.CourseName,
         Course_description || null,
         IsActive ?? 1,
         Batch_Id,

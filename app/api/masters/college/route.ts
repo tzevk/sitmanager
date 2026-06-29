@@ -3,6 +3,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
+async function ensureCollegeFollowUpColumns(pool: ReturnType<typeof getPool>) {
+  const [rows] = await pool.query<any[]>(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'awt_college'
+       AND COLUMN_NAME IN ('followup_status', 'followup_date')`
+  );
+  const columns = new Set(rows.map((row) => String(row.COLUMN_NAME)));
+  if (!columns.has('followup_status')) {
+    await pool.query(`ALTER TABLE awt_college ADD COLUMN followup_status VARCHAR(100) NULL AFTER descipline`);
+  }
+  if (!columns.has('followup_date')) {
+    await pool.query(`ALTER TABLE awt_college ADD COLUMN followup_date DATE NULL AFTER followup_status`);
+  }
+}
+
 // GET - fetch all colleges with pagination and search
 export async function GET(req: NextRequest) {
   try {
@@ -68,20 +85,24 @@ export async function POST(req: NextRequest) {
     const {
       college_name, university, contact_person, designation, address, city,
       pin, state, country, telephone, mobile, email, website,
-      remark, purpose, course, batch, refstudentname, refmobile, refemail, descipline
+      remark, purpose, course, batch, refstudentname, refmobile, refemail, descipline,
+      followup_status, followup_date
     } = body;
 
     if (!college_name?.trim()) {
       return NextResponse.json({ error: 'College Name is required' }, { status: 400 });
     }
 
+    await ensureCollegeFollowUpColumns(pool);
+
     const [result] = await pool.query(
       `INSERT INTO awt_college (
         college_name, university, contact_person, designation, address, city,
         pin, state, country, telephone, mobile, email, website,
         remark, purpose, course, batch, refstudentname, refmobile, refemail, descipline,
+        followup_status, followup_date,
         deleted, created_date
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
       [
         college_name.trim(), university?.trim() || null, contact_person?.trim() || null,
         designation?.trim() || null, address?.trim() || null, city?.trim() || null,
@@ -89,7 +110,8 @@ export async function POST(req: NextRequest) {
         telephone?.trim() || null, mobile?.trim() || null, email?.trim() || null,
         website?.trim() || null, remark?.trim() || null, purpose?.trim() || null,
         course?.trim() || null, batch?.trim() || null, refstudentname?.trim() || null,
-        refmobile?.trim() || null, refemail?.trim() || null, descipline?.trim() || null
+        refmobile?.trim() || null, refemail?.trim() || null, descipline?.trim() || null,
+        followup_status?.trim() || null, followup_date || null
       ]
     );
 
@@ -114,7 +136,8 @@ export async function PUT(req: NextRequest) {
     const {
       id, college_name, university, contact_person, designation, address, city,
       pin, state, country, telephone, mobile, email, website,
-      remark, purpose, course, batch, refstudentname, refmobile, refemail, descipline
+      remark, purpose, course, batch, refstudentname, refmobile, refemail, descipline,
+      followup_status, followup_date
     } = body;
 
     if (!id) {
@@ -124,11 +147,14 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'College Name is required' }, { status: 400 });
     }
 
+    await ensureCollegeFollowUpColumns(pool);
+
     await pool.query(
       `UPDATE awt_college SET 
         college_name = ?, university = ?, contact_person = ?, designation = ?, address = ?, city = ?,
         pin = ?, state = ?, country = ?, telephone = ?, mobile = ?, email = ?, website = ?,
         remark = ?, purpose = ?, course = ?, batch = ?, refstudentname = ?, refmobile = ?, refemail = ?, descipline = ?,
+        followup_status = ?, followup_date = ?,
         updated_date = NOW()
        WHERE id = ?`,
       [
@@ -139,6 +165,7 @@ export async function PUT(req: NextRequest) {
         website?.trim() || null, remark?.trim() || null, purpose?.trim() || null,
         course?.trim() || null, batch?.trim() || null, refstudentname?.trim() || null,
         refmobile?.trim() || null, refemail?.trim() || null, descipline?.trim() || null,
+        followup_status?.trim() || null, followup_date || null,
         id
       ]
     );

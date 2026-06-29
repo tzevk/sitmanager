@@ -5,12 +5,14 @@ import { requirePermission } from '@/lib/api-auth';
 
 export const runtime = 'nodejs';
 
-async function getBatchStudents(pool: ReturnType<typeof getPool>, batchId: number) {
+async function getBatchStudents(pool: ReturnType<typeof getPool>, batchId: number, includeHidden = false) {
+  const admissionDeleteCondition = includeHidden ? '(am.IsDelete = 0 OR am.IsDelete IS NULL OR am.IsDelete = 1)' : '(am.IsDelete = 0 OR am.IsDelete IS NULL)';
   const [rows] = await pool.query<any[]>(
     `SELECT
        am.Admission_Id,
        s.Student_Id,
        COALESCE(am.Roll_No, '') AS Roll_No,
+       CASE WHEN am.IsDelete = 1 THEN 1 ELSE 0 END AS Is_Hidden,
        COALESCE(NULLIF(TRIM(s.Student_Name), ''), TRIM(CONCAT_WS(' ', s.FName, s.LName)), CONCAT('Student #', s.Student_Id)) AS Student_Name,
        COALESCE(NULLIF(TRIM(s.Present_Mobile), ''), NULLIF(TRIM(s.Present_Mobile2), '')) AS Mobile,
        COALESCE(NULLIF(TRIM(s.Email), ''), '') AS Email,
@@ -60,7 +62,7 @@ async function getBatchStudents(pool: ReturnType<typeof getPool>, batchId: numbe
        GROUP BY Email_Key
      ) email_dup ON email_dup.Email_Key = LOWER(NULLIF(TRIM(s.Email), ''))
      WHERE am.Batch_Id = ?
-       AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+       AND ${admissionDeleteCondition}
        AND (am.Cancel = 0 OR am.Cancel IS NULL)
        AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
      ORDER BY
@@ -114,11 +116,12 @@ export async function GET(req: NextRequest) {
 
     if (mode === 'students') {
       const batchId = Number(searchParams.get('batchId') || 0);
+      const includeHidden = searchParams.get('includeHidden') === '1';
       if (!batchId) {
         return NextResponse.json({ success: false, error: 'Batch is required.' }, { status: 400 });
       }
 
-      const rows = await getBatchStudents(pool, batchId);
+      const rows = await getBatchStudents(pool, batchId, includeHidden);
       return NextResponse.json({ success: true, rows });
     }
 
@@ -134,7 +137,7 @@ export async function PATCH(req: NextRequest) {
     const auth = await requirePermission(req, 'student.update');
     if (auth instanceof NextResponse) return auth;
 
-    const { action, batchId, admissionId, studentId, rollNo } = await req.json().catch(() => ({}));
+    const { action, batchId, admissionId, studentId, rollNo, includeHidden } = await req.json().catch(() => ({}));
     const bid = Number(batchId || 0);
     const aid = Number(admissionId || 0);
     const sid = Number(studentId || 0);
@@ -213,7 +216,7 @@ export async function PATCH(req: NextRequest) {
         }
 
         await conn.commit();
-        const rows = await getBatchStudents(pool, bid);
+        const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
         return NextResponse.json({ success: true, rows, updated });
       } catch (err) {
         await conn.rollback();
@@ -266,22 +269,93 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ success: false, error: 'Student was not found in this batch.' }, { status: 404 });
       }
 
-      const rows = await getBatchStudents(pool, bid);
+      const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
       return NextResponse.json({ success: true, rows });
+    }
+
+    if (action === 'unhide-student') {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+
+        const [selectedAdmission] = await conn.query<any[]>(
+          `SELECT Admission_Id
+           FROM admission_master
+           WHERE Admission_Id = ?
+             AND Student_Id = ?
+             AND Batch_Id = ?
+             AND IsDelete = 1
+             AND (Cancel = 0 OR Cancel IS NULL)
+           LIMIT 1
+           FOR UPDATE`,
+          [aid, sid, bid]
+        );
+
+        if (selectedAdmission.length === 0) {
+          await conn.rollback();
+          return NextResponse.json({ success: false, error: 'Hidden student was not found in this batch.' }, { status: 404 });
+        }
+
+        await conn.query(
+          `UPDATE admission_master
+           SET IsDelete = 0
+           WHERE Student_Id = ?
+             AND Batch_Id = ?
+             AND IsDelete = 1
+             AND (Cancel = 0 OR Cancel IS NULL)`,
+          [sid, bid]
+        );
+
+        await conn.query(
+          `UPDATE student_attendance
+           SET IsDelete = 0
+           WHERE Batch_Id = ?
+             AND Student_Id = ?
+             AND IsDelete = 1`,
+          [bid, sid]
+        );
+
+        await conn.commit();
+        const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
+        return NextResponse.json({ success: true, rows });
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      } finally {
+        conn.release();
+      }
     }
 
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
 
-      const [result] = await conn.query<any>(
-        `UPDATE admission_master
-         SET IsDelete = 1
+      const [selectedAdmission] = await conn.query<any[]>(
+        `SELECT Admission_Id
+         FROM admission_master
          WHERE Admission_Id = ?
            AND Student_Id = ?
            AND Batch_Id = ?
-           AND (IsDelete = 0 OR IsDelete IS NULL)`,
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+           AND (Cancel = 0 OR Cancel IS NULL)
+         LIMIT 1
+         FOR UPDATE`,
         [aid, sid, bid]
+      );
+
+      if (selectedAdmission.length === 0) {
+        await conn.rollback();
+        return NextResponse.json({ success: false, error: 'Student was not found in this batch.' }, { status: 404 });
+      }
+
+      const [result] = await conn.query<any>(
+        `UPDATE admission_master
+         SET IsDelete = 1
+         WHERE Student_Id = ?
+           AND Batch_Id = ?
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+           AND (Cancel = 0 OR Cancel IS NULL)`,
+        [sid, bid]
       );
 
       if (result.affectedRows === 0) {
@@ -299,7 +373,8 @@ export async function PATCH(req: NextRequest) {
       );
 
       await conn.commit();
-      return NextResponse.json({ success: true });
+      const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
+      return NextResponse.json({ success: true, rows });
     } catch (err) {
       await conn.rollback();
       throw err;

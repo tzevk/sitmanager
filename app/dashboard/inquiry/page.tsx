@@ -130,48 +130,8 @@ export default function InquiryPage() {
   const [puneOnly, setPuneOnly] = useState(() => getInitParam('puneOnly'));
   const [page, setPage] = useState(() => Math.max(1, parseInt(searchParams.get('page') || '1')));
   const [fetchTrigger, setFetchTrigger] = useState(0);
-  const [sendingId, setSendingId] = useState<number | null>(null);
-  const [regeneratingId, setRegeneratingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  type ContactInfo = { count: number; lastAt: string | null };
-  const [rowContacts, setRowContacts] = useState<Record<number, Record<string, ContactInfo>>>({});
-  const [contactBusy, setContactBusy] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-
-  // Record a contact attempt (Call / Mail / WhatsApp / Walk-in). Each click logs a
-  // timestamped entry on the server; the button stays highlighted once any exist.
-  const logContact = async (studentId: number, channel: string) => {
-    const busyKey = `${studentId}:${channel}`;
-    if (contactBusy === busyKey) return;
-    setContactBusy(busyKey);
-    // Optimistic: bump count + timestamp immediately.
-    const nowIso = new Date().toISOString();
-    setRowContacts(prev => {
-      const forRow = { ...(prev[studentId] ?? {}) };
-      const existing = forRow[channel];
-      forRow[channel] = { count: (existing?.count ?? 0) + 1, lastAt: nowIso };
-      return { ...prev, [studentId]: forRow };
-    });
-    try {
-      const res = await fetch('/api/inquiry/contact-log', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId: studentId, channel }),
-      });
-      if (!res.ok) throw new Error('Failed');
-    } catch {
-      // Roll back the optimistic bump on failure.
-      setRowContacts(prev => {
-        const forRow = { ...(prev[studentId] ?? {}) };
-        const existing = forRow[channel];
-        const nextCount = (existing?.count ?? 1) - 1;
-        if (nextCount <= 0) delete forRow[channel];
-        else forRow[channel] = { count: nextCount, lastAt: existing?.lastAt ?? null };
-        return { ...prev, [studentId]: forRow };
-      });
-    } finally {
-      setContactBusy(null);
-    }
-  };
 
   const fetchData = useCallback(async () => {
     abortRef.current?.abort();
@@ -214,23 +174,6 @@ export default function InquiryPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Load the timestamped contact summary for the inquiries on the current page so the
-  // Call/Mail/WhatsApp/Walk-in buttons reflect prior contacts. One batched request.
-  useEffect(() => {
-    const ids = rows.map(r => r.Student_Id).filter(Boolean);
-    if (ids.length === 0) { setRowContacts({}); return; }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/inquiry/contact-log?inquiryIds=${ids.join(',')}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled) setRowContacts(data.contacts ?? {});
-      } catch { /* non-fatal: buttons just start unhighlighted */ }
-    })();
-    return () => { cancelled = true; };
-  }, [rows]);
-
   const syncUrl = (params: Record<string, string>) => {
     const p = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => { if (v) p.set(k, v); });
@@ -272,61 +215,6 @@ export default function InquiryPage() {
     if (page > 1) p.set('page', String(page));
     const qs = p.toString();
     return qs ? `${pathname}?${qs}` : pathname;
-  };
-
-  const handleSendAdmissionForm = async (r: InquiryRow) => {
-    const recipient = String(r.Email || '').trim();
-    if (!recipient) { alert('No email address found. Please update inquiry email first.'); return; }
-    setSendingId(r.Student_Id);
-    try {
-      const prev = await fetch('/api/inquiry/send-admission-form', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId: r.Student_Id, toEmail: recipient, studentName: r.Student_Name, previewOnly: true }),
-      });
-      const pd = await prev.json();
-      if (!prev.ok) throw new Error(pd?.error || 'Failed to load preview');
-      const ok = window.confirm(['Verify before sending:','',`To: ${pd.toEmail}`,`Subject: ${pd.preview?.subject || 'SIT Admission Form'}`,`Link: ${pd.admissionFormUrl}`,'',String(pd.preview?.text || ''),'','Click OK to send.'].join('\n'));
-      if (!ok) return;
-      const send = await fetch('/api/inquiry/send-admission-form', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId: r.Student_Id, toEmail: recipient, studentName: r.Student_Name }),
-      });
-      const sd = await send.json();
-      if (!send.ok) throw new Error(sd?.error || 'Failed to send');
-      alert('Email sent successfully');
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Failed to send');
-    } finally { setSendingId(null); }
-  };
-
-  const handleRegenerateAdmissionLink = async (r: InquiryRow) => {
-    const ok = window.confirm(
-      `Regenerate admission link for ${formatName(r.Student_Name)}?\n\nThis clears the saved online admission form/draft for this inquiry and creates a fresh usable form link.`
-    );
-    if (!ok) return;
-
-    setRegeneratingId(r.Student_Id);
-    try {
-      const res = await fetch('/api/inquiry/regenerate-admission-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId: r.Student_Id }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.success) {
-        throw new Error(data?.error || 'Failed to regenerate admission link');
-      }
-
-      if (data.admissionFormUrl) {
-        await navigator.clipboard.writeText(String(data.admissionFormUrl));
-      }
-      alert('Admission link regenerated successfully. Fresh link copied to clipboard.');
-      setFetchTrigger((t) => t + 1);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Failed to regenerate admission link');
-    } finally {
-      setRegeneratingId(null);
-    }
   };
 
   const handleDeleteInquiry = async (r: InquiryRow) => {
@@ -474,7 +362,7 @@ export default function InquiryPage() {
                 <th className="text-left py-2 px-3 font-bold">Mobile</th>
                 <th className="text-left py-2 px-3 font-bold">Email</th>
                 <th className="text-left py-2 px-3 font-bold">Discipline</th>
-                <th className="text-left py-2 px-3 font-bold">Source</th>
+                <th className="text-left py-2 px-3 font-bold w-[118px]">Source</th>
                 <th className="text-left py-2 px-3 font-bold">Inquiry</th>
                 <th className="text-left py-2 px-3 font-bold">Last Discussion</th>
                 <th className="text-center py-2 px-3 font-bold">Status</th>
@@ -501,29 +389,6 @@ export default function InquiryPage() {
                 const secondarySource = r.Inquiry_From && r.Inquiry_Type && r.Inquiry_From !== r.Inquiry_Type
                   ? r.Inquiry_Type
                   : null;
-                const rowContact = rowContacts[r.Student_Id] ?? {};
-                const tagButtons = [
-                  {
-                    key: 'call',
-                    label: 'Call',
-                    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h2.28a1 1 0 01.95.68l1.03 3.09a1 1 0 01-.5 1.2l-1.52.76a11.04 11.04 0 005.52 5.52l.76-1.52a1 1 0 011.2-.5l3.09 1.03a1 1 0 01.68.95V19a2 2 0 01-2 2h-1C8.82 21 3 15.18 3 8V5z" />,
-                  },
-                  {
-                    key: 'mail',
-                    label: 'Mail',
-                    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />,
-                  },
-                  {
-                    key: 'whatsapp',
-                    label: 'WhatsApp',
-                    icon: <><path strokeLinecap="round" strokeLinejoin="round" d="M8.6 13.4c1.6 1.6 3.2 2.4 4 2.1.5-.2.9-.8 1.1-1.3.1-.3 0-.6-.3-.8l-1.1-.7a.8.8 0 00-.9.1l-.5.5c-.9-.5-1.6-1.2-2.1-2.1l.5-.5a.8.8 0 00.1-.9l-.7-1.1a.8.8 0 00-.8-.3c-.5.2-1.1.6-1.3 1.1-.3.8.5 2.4 2 3.9z" /><path strokeLinecap="round" strokeLinejoin="round" d="M20 11.5a8 8 0 01-11.9 7L4 20l1.5-4.1A8 8 0 1120 11.5z" /></>,
-                  },
-                  {
-                    key: 'personal-inquiry',
-                    label: 'Personal Inquiry',
-                    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M5.121 17.804A9 9 0 1118.88 17.8M15 11a3 3 0 11-6 0 3 3 0 016 0z" />,
-                  },
-                ];
                 return (
                   <tr key={r.Student_Id} className={`border-b border-slate-200 transition-colors ${rowStatusCls}`}>
                     <td className="py-1 px-2 font-semibold font-mono tabular-nums relative pl-3">
@@ -542,22 +407,22 @@ export default function InquiryPage() {
                     <td className="py-1 px-2 whitespace-nowrap">
                       {r.Discipline && r.Discipline !== 'NULL' && r.Discipline !== 'Select' ? r.Discipline : '—'}
                     </td>
-                    <td className="py-1 px-2 min-w-[190px]">
+                    <td className="py-1 px-2 w-[118px] max-w-[118px]">
                       <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-2 whitespace-nowrap">
-                          <span className="font-semibold">{primarySource}</span>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="font-semibold break-words leading-tight">{primarySource}</span>
                           {r.IsMetaAdConverted && (
                             <span
                               title="Converted from Meta Ads"
-                              className="inline-flex items-center rounded-full border border-[#2E3093]/30 bg-[#2E3093]/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#2E3093]"
+                              className="inline-flex items-center rounded-full border border-[#2E3093]/30 bg-[#2E3093]/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-[#2E3093]"
                             >
-                              Meta Converted
+                              Meta
                             </span>
                           )}
                           {r.IsPuneInquiry && (
                             <span
                               title={r.PunePageSource || r.PuneSourceLocation || 'Pune source'}
-                              className="inline-flex items-center rounded-full border border-amber-700 bg-amber-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.14em] text-amber-950 shadow-sm"
+                              className="inline-flex items-center rounded-full border border-amber-700 bg-amber-500 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-amber-950 shadow-sm"
                             >
                               Pune
                             </span>
@@ -581,7 +446,7 @@ export default function InquiryPage() {
                         <span className="text-[9px] text-slate-400">First response: {formatDurationBetween(r.InquirySoftwareTime, r.FirstDiscussionTime)}</span>
                       </div>
                     </td>
-                    <td className="py-1 px-2 max-w-[190px]">
+                    <td className="py-1 px-2 min-w-[300px] max-w-[520px] align-top">
                       {(() => {
                         const raw = (r.Discussion || '').trim();
                         if (!raw || raw === 'NULL') return <span className="text-slate-300">—</span>;
@@ -605,7 +470,7 @@ export default function InquiryPage() {
                                 {r.DiscussionDate && <span className="whitespace-nowrap">{formatDate(r.DiscussionDate)}</span>}
                               </span>
                             )}
-                            <span className="line-clamp-2 text-slate-600 leading-snug">{note}</span>
+                            <span className="block whitespace-pre-wrap break-words text-slate-600 leading-snug">{note}</span>
                           </div>
                         );
                       })()}
@@ -616,32 +481,7 @@ export default function InquiryPage() {
                       </span>
                     </td>
                     <td className="py-1 px-2">
-                      <div className="flex items-center justify-center gap-0.5 flex-nowrap min-w-[210px] whitespace-nowrap">
-                        {tagButtons.map(tag => {
-                          const info = rowContact[tag.key];
-                          const contacted = (info?.count ?? 0) > 0;
-                          const busy = contactBusy === `${r.Student_Id}:${tag.key}`;
-                          const title = contacted
-                            ? `${tag.label} — ${info!.count}× , last ${info!.lastAt ? formatDate(info!.lastAt) : '—'}`
-                            : tag.label;
-                          return (
-                            <button
-                              key={tag.key}
-                              type="button"
-                              title={title}
-                              aria-label={tag.label}
-                              aria-pressed={contacted}
-                              disabled={busy}
-                              onClick={() => logContact(r.Student_Id, tag.key)}
-                              className={`relative inline-flex h-5 w-5 items-center justify-center rounded border transition-colors disabled:opacity-50 ${contacted ? 'border-[#2E3093] bg-[#2E3093]/15 text-[#2E3093]' : 'border-slate-400 text-slate-600 hover:border-[#2A6BB5] hover:bg-blue-50 hover:text-[#2A6BB5]'}`}
-                            >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">{tag.icon}</svg>
-                              {contacted && info!.count > 1 && (
-                                <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-[#2E3093] text-white text-[8px] font-bold leading-[14px] text-center">{info!.count}</span>
-                              )}
-                            </button>
-                          );
-                        })}
+                      <div className="flex items-center justify-center gap-1 flex-nowrap min-w-[48px] whitespace-nowrap">
                         <button
                           title="Edit"
                           onClick={() => {
@@ -653,26 +493,6 @@ export default function InquiryPage() {
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
-                        </button>
-                        <button title="Send admission form" onClick={() => handleSendAdmissionForm(r)}
-                          disabled={!canUpdate || sendingId === r.Student_Id}
-                          className={canUpdate ? 'p-0.5 rounded text-indigo-700 hover:bg-indigo-100 transition-colors disabled:opacity-50' : 'p-0.5 rounded text-slate-400 cursor-not-allowed'}>
-                          {sendingId === r.Student_Id
-                            ? <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                            : <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                              </svg>}
-                        </button>
-                        <button
-                          title="Regenerate admission link"
-                          onClick={() => handleRegenerateAdmissionLink(r)}
-                          disabled={!canUpdate || regeneratingId === r.Student_Id}
-                          className={canUpdate ? 'p-0.5 rounded text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50' : 'p-0.5 rounded text-slate-400 cursor-not-allowed'}>
-                          {regeneratingId === r.Student_Id
-                            ? <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                            : <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                              </svg>}
                         </button>
                         <button
                           title="Delete"

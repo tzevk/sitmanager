@@ -43,6 +43,15 @@ type BatchDetails = {
   IsActive: number;
 };
 
+const TEXT_LIMITS = {
+  batchCode: 80,
+  timings: 255,
+  duration: 100,
+  trainingCoordinator: 150,
+  trainingName: 255,
+  description: 500,
+};
+
 function formatDateForInput(d: string | null | undefined): string {
   if (!d) return '';
   try {
@@ -231,18 +240,19 @@ export default function EditAnnualBatchPage() {
 
   const labelCls = 'block text-[11px] font-semibold text-gray-600 mb-0.5';
   const inputCls =
-    'w-full bg-white border-2 border-gray-300 rounded px-2 py-1.5 text-xs text-gray-900 shadow-sm hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] placeholder:text-gray-400 transition-colors';
+    'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
   const selectCls =
-    'w-full bg-white border-2 border-gray-300 rounded px-2 py-1.5 text-xs text-gray-900 shadow-sm hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] transition-colors';
+    'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors';
   const textareaCls =
-    'w-full bg-white border-2 border-gray-300 rounded px-2 py-1.5 text-xs text-gray-900 shadow-sm hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] placeholder:text-gray-400 transition-colors resize-none';
+    'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors resize-none';
+  const hintCls = 'mt-1 text-[10px] font-medium text-slate-400';
 
   const SectionCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
-    <div className="rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-      <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-3 py-1.5 border-b border-gray-200">
+    <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm">
+      <div className="bg-gradient-to-r from-[#2E3093]/7 to-[#2A6BB5]/7 px-4 py-2 border-b border-slate-200">
         <h3 className="text-[13px] font-bold text-[#2E3093]">{title}</h3>
       </div>
-      <div className="px-3 py-2">{children}</div>
+      <div className="px-4 py-3">{children}</div>
     </div>
   );
 
@@ -389,7 +399,7 @@ export default function EditAnnualBatchPage() {
           </div>
         )}
 
-        <div className="px-3 py-2 bg-gray-50/40">
+        <div className="px-4 py-4 bg-slate-50/60">
           <div className="space-y-3">
             <SectionCard title="Batch Details">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
@@ -415,8 +425,10 @@ export default function EditAnnualBatchPage() {
                     value={courseName}
                     onChange={(e) => setCourseName(e.target.value)}
                     placeholder="Training Name"
+                    maxLength={TEXT_LIMITS.trainingName}
                     className={inputCls}
                   />
+                  <div className={hintCls}>{courseName.length}/{TEXT_LIMITS.trainingName}</div>
                 </div>
 
                 <div>
@@ -439,8 +451,10 @@ export default function EditAnnualBatchPage() {
                     value={batchCode}
                     onChange={(e) => setBatchCode(e.target.value)}
                     placeholder="Batch Code"
+                    maxLength={TEXT_LIMITS.batchCode}
                     className={inputCls}
                   />
+                  <div className={hintCls}>{batchCode.length}/{TEXT_LIMITS.batchCode}</div>
                 </div>
 
                 <div className="col-span-2 md:col-span-3 lg:col-span-4">
@@ -450,8 +464,10 @@ export default function EditAnnualBatchPage() {
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Description"
                     rows={2}
+                    maxLength={TEXT_LIMITS.description}
                     className={textareaCls}
                   />
+                  <div className={hintCls}>{description.length}/{TEXT_LIMITS.description}</div>
                 </div>
 
                 <div>
@@ -484,14 +500,16 @@ export default function EditAnnualBatchPage() {
                   <label className={labelCls}>
                     Duration <span className="text-red-400">*</span>
                   </label>
-                  <input value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="Duration" className={inputCls} />
+                  <input value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="Duration" maxLength={TEXT_LIMITS.duration} className={inputCls} />
+                  <div className={hintCls}>{duration.length}/{TEXT_LIMITS.duration}</div>
                 </div>
 
                 <div className="col-span-2 md:col-span-3">
                   <label className={labelCls}>
                     Timings <span className="text-red-400">*</span>
                   </label>
-                  <input value={timings} onChange={(e) => setTimings(e.target.value)} placeholder="Timings" className={inputCls} />
+                  <input value={timings} onChange={(e) => setTimings(e.target.value)} placeholder="Timings" maxLength={TEXT_LIMITS.timings} className={inputCls} />
+                  <div className={hintCls}>{timings.length}/{TEXT_LIMITS.timings}</div>
                 </div>
 
                 <div>
@@ -500,8 +518,10 @@ export default function EditAnnualBatchPage() {
                     value={trainingCoordinator}
                     onChange={(e) => setTrainingCoordinator(e.target.value)}
                     placeholder="Training Coordinator"
+                    maxLength={TEXT_LIMITS.trainingCoordinator}
                     className={inputCls}
                   />
+                  <div className={hintCls}>{trainingCoordinator.length}/{TEXT_LIMITS.trainingCoordinator}</div>
                 </div>
 
                 <div>

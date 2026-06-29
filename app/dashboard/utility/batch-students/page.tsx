@@ -20,6 +20,7 @@ type StudentRow = {
   Admission_Id: number;
   Student_Id: number;
   Roll_No: string | null;
+  Is_Hidden: number;
   Student_Name: string;
   Mobile: string | null;
   Email: string | null;
@@ -49,8 +50,10 @@ export default function BatchStudentsPage() {
   const [loadingBatches, setLoadingBatches] = useState(false);
   const [loadingRows, setLoadingRows] = useState(false);
   const [hidingAdmissionId, setHidingAdmissionId] = useState<number | null>(null);
+  const [unhidingAdmissionId, setUnhidingAdmissionId] = useState<number | null>(null);
   const [savingRollAdmissionId, setSavingRollAdmissionId] = useState<number | null>(null);
   const [autoGeneratingRolls, setAutoGeneratingRolls] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
   const [rollInputs, setRollInputs] = useState<Record<number, string>>({});
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -63,7 +66,8 @@ export default function BatchStudentsPage() {
     () => batches.find((batch) => String(batch.Batch_Id) === batchId),
     [batches, batchId]
   );
-  const blankRollCount = rows.filter((row) => !String(row.Roll_No || '').trim()).length;
+  const hiddenCount = rows.filter((row) => Number(row.Is_Hidden) === 1).length;
+  const blankRollCount = rows.filter((row) => Number(row.Is_Hidden) !== 1 && !String(row.Roll_No || '').trim()).length;
 
   useEffect(() => {
     let active = true;
@@ -111,7 +115,9 @@ export default function BatchStudentsPage() {
     if (!batchId) return;
 
     const ctrl = new AbortController();
-    fetch(`/api/utility/batch-students?mode=students&batchId=${encodeURIComponent(batchId)}`, { signal: ctrl.signal })
+    const params = new URLSearchParams({ mode: 'students', batchId });
+    if (showHidden) params.set('includeHidden', '1');
+    fetch(`/api/utility/batch-students?${params.toString()}`, { signal: ctrl.signal })
       .then((res) => res.json())
       .then((data) => {
         if (!data?.success) throw new Error(data?.error || 'Failed to load students');
@@ -128,7 +134,7 @@ export default function BatchStudentsPage() {
       .finally(() => setLoadingRows(false));
 
     return () => ctrl.abort();
-  }, [batchId]);
+  }, [batchId, showHidden]);
 
   const handleCourseChange = (value: string) => {
     setCourseId(value);
@@ -167,21 +173,52 @@ export default function BatchStudentsPage() {
           batchId: Number(batchId),
           admissionId: row.Admission_Id,
           studentId: row.Student_Id,
+          includeHidden: showHidden,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.success) throw new Error(data?.error || 'Failed to hide student from batch');
-      setRows((current) => current.filter((student) => student.Admission_Id !== row.Admission_Id));
-      setRollInputs((current) => {
-        const next = { ...current };
-        delete next[row.Admission_Id];
-        return next;
-      });
+      const nextRows = Array.isArray(data.rows) ? data.rows : [];
+      setRows(nextRows);
+      setRollInputs(Object.fromEntries(nextRows.map((student: StudentRow) => [student.Admission_Id, student.Roll_No || ''])));
       setMessage('Student hidden from batch.');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to hide student from batch');
     } finally {
       setHidingAdmissionId(null);
+    }
+  };
+
+  const handleUnhide = async (row: StudentRow) => {
+    if (!canUpdate || !batchId || unhidingAdmissionId) return;
+    const ok = window.confirm(`Unhide ${row.Student_Name || `student #${row.Student_Id}`} in ${selectedBatch?.Batch_code || 'this batch'}?`);
+    if (!ok) return;
+
+    setError('');
+    setMessage('');
+    setUnhidingAdmissionId(row.Admission_Id);
+    try {
+      const res = await fetch('/api/utility/batch-students', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'unhide-student',
+          batchId: Number(batchId),
+          admissionId: row.Admission_Id,
+          studentId: row.Student_Id,
+          includeHidden: showHidden,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) throw new Error(data?.error || 'Failed to unhide student in batch');
+      const nextRows = Array.isArray(data.rows) ? data.rows : [];
+      setRows(nextRows);
+      setRollInputs(Object.fromEntries(nextRows.map((student: StudentRow) => [student.Admission_Id, student.Roll_No || ''])));
+      setMessage('Student unhidden in batch.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to unhide student in batch');
+    } finally {
+      setUnhidingAdmissionId(null);
     }
   };
 
@@ -205,6 +242,7 @@ export default function BatchStudentsPage() {
           admissionId: row.Admission_Id,
           studentId: row.Student_Id,
           rollNo: rollInputs[row.Admission_Id] || '',
+          includeHidden: showHidden,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -236,6 +274,7 @@ export default function BatchStudentsPage() {
         body: JSON.stringify({
           action: 'auto-generate-roll-numbers',
           batchId: Number(batchId),
+          includeHidden: showHidden,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -264,7 +303,7 @@ export default function BatchStudentsPage() {
             <p className="text-[11px] text-white/60 mt-0.5">Select a training course and batch code to manage enrolled students</p>
           </div>
           <span className="rounded-lg bg-white/15 border border-white/20 px-3 py-2 text-xs font-bold text-white">
-            {rows.length} student{rows.length === 1 ? '' : 's'}
+            {rows.length} student{rows.length === 1 ? '' : 's'}{showHidden && hiddenCount ? `, ${hiddenCount} hidden` : ''}
           </span>
         </div>
       </div>
@@ -315,14 +354,20 @@ export default function BatchStudentsPage() {
             </p>
           </div>
           {canUpdate ? (
-            <button
-              type="button"
-              onClick={handleAutoGenerateRollNumbers}
-              disabled={!batchId || !blankRollCount || autoGeneratingRolls}
-              className="inline-flex items-center px-3 py-1.5 rounded-md bg-[#2E3093] text-white text-[11px] font-bold hover:bg-[#252778] disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {autoGeneratingRolls ? 'Generating...' : `Auto Generate${blankRollCount ? ` (${blankRollCount})` : ''}`}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600">
+                <input type="checkbox" checked={showHidden} onChange={(event) => setShowHidden(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-[#2E3093]" />
+                Show Hidden
+              </label>
+              <button
+                type="button"
+                onClick={handleAutoGenerateRollNumbers}
+                disabled={!batchId || !blankRollCount || autoGeneratingRolls}
+                className="inline-flex items-center px-3 py-1.5 rounded-md bg-[#2E3093] text-white text-[11px] font-bold hover:bg-[#252778] disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {autoGeneratingRolls ? 'Generating...' : `Auto Generate${blankRollCount ? ` (${blankRollCount})` : ''}`}
+              </button>
+            </div>
           ) : (
             <span className="text-[11px] font-semibold text-amber-600">Update permission required</span>
           )}
@@ -337,25 +382,27 @@ export default function BatchStudentsPage() {
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Name</th>
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Mobile Number</th>
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Email</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 w-24">Status</th>
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Duplicate Check</th>
                 <th className="text-center py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 w-28">Action</th>
               </tr>
             </thead>
             <tbody>
               {loadingRows && (
-                <tr><td colSpan={7} className="py-8 text-center text-xs text-slate-400">Loading students...</td></tr>
+                <tr><td colSpan={8} className="py-8 text-center text-xs text-slate-400">Loading students...</td></tr>
               )}
               {!loadingRows && !batchId && (
-                <tr><td colSpan={7} className="py-8 text-center text-xs text-slate-400">Select a training course and batch code to view students.</td></tr>
+                <tr><td colSpan={8} className="py-8 text-center text-xs text-slate-400">Select a training course and batch code to view students.</td></tr>
               )}
               {!loadingRows && batchId && !rows.length && !error && (
-                <tr><td colSpan={7} className="py-8 text-center text-xs text-slate-400">No students found for this batch.</td></tr>
+                <tr><td colSpan={8} className="py-8 text-center text-xs text-slate-400">No students found for this batch.</td></tr>
               )}
               {!loadingRows && rows.map((row, index) => {
                 const labels = duplicateLabels(row);
+                const isHidden = Number(row.Is_Hidden) === 1;
                 const hasAllocatedRollNo = Boolean(String(row.Roll_No || '').trim());
                 return (
-                  <tr key={row.Admission_Id} className={labels.length ? 'bg-amber-50/40 hover:bg-amber-50/70 transition-colors' : 'hover:bg-slate-50/70 transition-colors'}>
+                  <tr key={row.Admission_Id} className={isHidden ? 'bg-slate-100/70 text-slate-400 hover:bg-slate-100 transition-colors' : labels.length ? 'bg-amber-50/40 hover:bg-amber-50/70 transition-colors' : 'hover:bg-slate-50/70 transition-colors'}>
                     <td className="py-2 px-3 text-xs text-slate-400 border-b border-slate-100 font-mono">{index + 1}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100">
                       <input
@@ -363,7 +410,7 @@ export default function BatchStudentsPage() {
                         inputMode="numeric"
                         value={rollInputs[row.Admission_Id] ?? row.Roll_No ?? ''}
                         onChange={(event) => handleRollInputChange(row.Admission_Id, event.target.value)}
-                        disabled={!canUpdate || hasAllocatedRollNo || savingRollAdmissionId === row.Admission_Id}
+                        disabled={!canUpdate || isHidden || hasAllocatedRollNo || savingRollAdmissionId === row.Admission_Id}
                         placeholder="Roll no"
                         className="h-8 w-28 rounded-md border border-slate-200 bg-white px-2 font-mono text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
                       />
@@ -371,6 +418,13 @@ export default function BatchStudentsPage() {
                     <td className="py-2 px-3 text-xs border-b border-slate-100 font-semibold text-slate-700">{row.Student_Name || '-'}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono text-slate-600">{row.Mobile || '-'}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100 text-slate-600">{row.Email || '-'}</td>
+                    <td className="py-2 px-3 text-xs border-b border-slate-100">
+                      {isHidden ? (
+                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-500">Hidden</span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Visible</span>
+                      )}
+                    </td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100">
                       {labels.length ? (
                         <div className="flex flex-wrap gap-1.5">
@@ -389,19 +443,30 @@ export default function BatchStudentsPage() {
                         <button
                           type="button"
                           onClick={() => handleSaveRollNumber(row)}
-                          disabled={!canUpdate || hasAllocatedRollNo || savingRollAdmissionId === row.Admission_Id || (rollInputs[row.Admission_Id] ?? '') === (row.Roll_No || '')}
+                          disabled={!canUpdate || isHidden || hasAllocatedRollNo || savingRollAdmissionId === row.Admission_Id || (rollInputs[row.Admission_Id] ?? '') === (row.Roll_No || '')}
                           className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#2E3093]/10 text-[#2E3093] text-[11px] font-semibold hover:bg-[#2E3093]/15 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           {hasAllocatedRollNo ? 'Locked' : 'Save'}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleHide(row)}
-                          disabled={!canUpdate || hidingAdmissionId === row.Admission_Id}
-                          className="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                          Hide
-                        </button>
+                        {isHidden ? (
+                          <button
+                            type="button"
+                            onClick={() => handleUnhide(row)}
+                            disabled={!canUpdate || unhidingAdmissionId === row.Admission_Id}
+                            className="inline-flex items-center px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 text-[11px] font-semibold hover:bg-emerald-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {unhidingAdmissionId === row.Admission_Id ? 'Unhiding...' : 'Unhide'}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleHide(row)}
+                            disabled={!canUpdate || hidingAdmissionId === row.Admission_Id}
+                            className="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            Hide
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -539,6 +539,7 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/dashboard/corporate-inquiry': ['corporate_inquiry.view'],
   '/dashboard/corporate-inquiry/add': ['corporate_inquiry.create'],
   '/dashboard/corporate-inquiry/edit': ['corporate_inquiry.update'],
+  '/dashboard/reports/college-follow-up': ['report_college_followup.view'],
 
   // Role Management
   '/dashboard/role-right': ['role.view'],
@@ -547,6 +548,7 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/dashboard/role-right/users': ['user.view'],
 
   // Utility
+  '/dashboard/utility/festival-photo-upload': ['festival_photo.view'],
   '/dashboard/utility/export-contacts': ['export_contacts.view'],
   '/dashboard/utility/batch-students': ['student.view'],
 };
@@ -606,6 +608,16 @@ export const API_PERMISSIONS: Record<string, Record<string, string[]>> = {
     GET: ['role.view'],
     PUT: ['role.update'],
     DELETE: ['role.delete'],
+  },
+  '/api/utility/export-contacts': {
+    GET: ['export_contacts.view'],
+  },
+  '/api/utility/festival-photos': {
+    GET: ['festival_photo.view'],
+    POST: ['festival_photo.create'],
+  },
+  '/api/reports/college-follow-up': {
+    GET: ['report_college_followup.view'],
   },
 };
 

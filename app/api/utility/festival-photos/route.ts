@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import path from "path";
 import { promises as fs } from "fs";
+import { requirePermission } from "@/lib/api-auth";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB cap to avoid oversized uploads
 
@@ -32,8 +33,11 @@ async function saveMetadata(list: FestivalPhoto[]) {
   await fs.writeFile(metadataPath, JSON.stringify(list, null, 2), "utf8");
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const auth = await requirePermission(request, "festival_photo.view");
+    if (auth instanceof NextResponse) return auth;
+
     const list = await loadMetadata();
     return NextResponse.json({ success: true, data: list });
   } catch (error: unknown) {
@@ -44,6 +48,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requirePermission(request, "festival_photo.create");
+    if (auth instanceof NextResponse) return auth;
+
     const formData = await request.formData();
 
     const startDate = String(formData.get("startDate") || "").trim();
