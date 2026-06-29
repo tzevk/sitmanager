@@ -18,6 +18,7 @@ interface Batch {
   EDate: string | null;
   Duration: string | null;
   Training_Coordinator: string | null;
+  Location: string | null;
   IsActive: number;
 }
 
@@ -120,12 +121,13 @@ export default function AnnualBatchPage() {
   };
 
   const handleExport = () => {
-    const headers = ['Id', 'Training Name', 'Batch No.', 'Category', 'Timings', 'Planned Start Date', 'Actual Start Date', 'Last Date of Admission', 'Training Completion Date', 'Duration', 'Training Coordinator'];
+    const headers = ['Id', 'Training Name', 'Batch No.', 'Category', 'Location', 'Timings', 'Planned Start Date', 'Actual Start Date', 'Last Date of Admission', 'Training Completion Date', 'Duration', 'Training Coordinator'];
     const rows = batches.map((b) => [
       b.Batch_Id,
       b.Course_Name || '',
       b.Batch_code || '',
       b.Category || '',
+      b.Location || '',
       b.Timings || '',
       formatDate(b.SDate),
       formatDate(b.ActualDate),
@@ -296,6 +298,7 @@ export default function AnnualBatchPage() {
                 <th className="text-left px-4 py-3 font-bold text-slate-600">Training Name</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-600">Batch No.</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-600">Category</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-600">Location</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-600">Timings</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-600">Planned Start Date</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-600">Actual Start Date</th>
@@ -309,7 +312,7 @@ export default function AnnualBatchPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-12 text-gray-400">
+                  <td colSpan={13} className="text-center py-12 text-gray-400">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-6 h-6 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                       Loading...
@@ -318,7 +321,7 @@ export default function AnnualBatchPage() {
                 </tr>
               ) : batches.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-12 text-slate-400">
+                  <td colSpan={13} className="text-center py-12 text-slate-400">
                     No batches found
                   </td>
                 </tr>
@@ -329,6 +332,7 @@ export default function AnnualBatchPage() {
                     <td className="px-4 py-3 text-slate-900 font-semibold">{b.Course_Name || '-'}</td>
                     <td className="px-4 py-3 text-slate-700">{b.Batch_code || '-'}</td>
                     <td className="px-4 py-3 text-slate-700">{b.Category || '-'}</td>
+                    <td className="px-4 py-3 text-slate-700">{b.Location || '-'}</td>
                     <td className="px-4 py-3 text-slate-700">{b.Timings || '-'}</td>
                     <td className="px-4 py-3 text-slate-700">{formatDate(b.SDate)}</td>
                     <td className="px-4 py-3 text-slate-700">{formatDate(b.ActualDate)}</td>

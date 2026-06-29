@@ -2,12 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
+async function ensureBatchLocationColumn(pool: ReturnType<typeof getPool>) {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'batch_mst'
+       AND COLUMN_NAME = 'Location'`
+  );
+  if (!rows.length) {
+    await pool.query(`ALTER TABLE batch_mst ADD COLUMN Location VARCHAR(20) NULL`);
+  }
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const pool = getPool();
+    await ensureBatchLocationColumn(pool);
     const { id } = await params;
 
     const [rows] = await pool.query<RowDataPacket[]>(
@@ -24,6 +38,7 @@ export async function GET(
         b.EDate,
         b.Duration,
         b.Training_Coordinator,
+        b.Location,
         b.Max_Students,
         b.Min_Qualification,
         b.No_of_Lectures,

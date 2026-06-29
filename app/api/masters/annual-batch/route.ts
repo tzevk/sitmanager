@@ -31,6 +31,14 @@ function textByColumn(values: Record<string, unknown>) {
   return Object.fromEntries(BATCH_TEXT_FIELDS.map((field) => [field.column, textValue(values[field.column], field)]));
 }
 
+function locationValue(value: unknown): string | null {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'mumbai') return 'Mumbai';
+  if (normalized === 'pune') return 'Pune';
+  throw new Error('Location must be Mumbai or Pune.');
+}
+
 async function ensureBatchTextColumns(pool: ReturnType<typeof getPool>) {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT COLUMN_NAME, CHARACTER_MAXIMUM_LENGTH
@@ -48,6 +56,17 @@ async function ensureBatchTextColumns(pool: ReturnType<typeof getPool>) {
       await pool.query(`ALTER TABLE batch_mst MODIFY COLUMN \`${field.column}\` VARCHAR(${field.max}) NULL`);
     }
   }
+
+  const [locationRows] = await pool.query<RowDataPacket[]>(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'batch_mst'
+       AND COLUMN_NAME = 'Location'`
+  );
+  if (!locationRows.length) {
+    await pool.query(`ALTER TABLE batch_mst ADD COLUMN Location VARCHAR(20) NULL`);
+  }
 }
 
 /* ---------- GET: list batches with optional filters ---------- */
@@ -56,6 +75,7 @@ export async function GET(req: NextRequest) {
     const auth = await requirePermission(req, 'annual_batch.view');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
+    await ensureBatchTextColumns(pool);
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search') || '';
     const courseId = searchParams.get('courseId') || '';
@@ -110,6 +130,7 @@ export async function GET(req: NextRequest) {
         b.EDate,
         b.Duration,
         b.Training_Coordinator,
+        b.Location,
         b.IsActive
        FROM batch_mst b
        LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
@@ -153,6 +174,7 @@ export async function POST(req: NextRequest) {
       Dollar_Total,
       CourseName,
       Course_description,
+      Location,
       IsActive,
     } = body;
 
@@ -162,11 +184,12 @@ export async function POST(req: NextRequest) {
 
     await ensureBatchTextColumns(pool);
     const text = textByColumn({ Batch_code, Category, Timings, Duration, Training_Coordinator, CourseName });
+    const location = locationValue(Location);
 
     const [result] = await pool.query<ResultSetHeader>(
       `INSERT INTO batch_mst 
-        (Course_Id, Batch_code, Category, Batch_Category_id, Timings, SDate, ActualDate, Admission_Date, EDate, Duration, Training_Coordinator, INR_Basic, INR_ServiceTax, INR_Total, Dollar_Basic, Dollar_ServiceTax, Dollar_Total, CourseName, Course_description, IsActive, IsDelete, Date_Added)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
+        (Course_Id, Batch_code, Category, Batch_Category_id, Timings, SDate, ActualDate, Admission_Date, EDate, Duration, Training_Coordinator, Location, INR_Basic, INR_ServiceTax, INR_Total, Dollar_Basic, Dollar_ServiceTax, Dollar_Total, CourseName, Course_description, IsActive, IsDelete, Date_Added)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
       [
         Course_Id,
         text.Batch_code,
@@ -179,6 +202,7 @@ export async function POST(req: NextRequest) {
         EDate || null,
         text.Duration,
         text.Training_Coordinator,
+        location,
         INR_Basic || null,
         INR_ServiceTax || null,
         INR_Total || null,
@@ -226,6 +250,7 @@ export async function PUT(req: NextRequest) {
       Dollar_Total,
       CourseName,
       Course_description,
+      Location,
       IsActive,
     } = body;
 
@@ -238,6 +263,7 @@ export async function PUT(req: NextRequest) {
 
     await ensureBatchTextColumns(pool);
     const text = textByColumn({ Batch_code, Category, Timings, Duration, Training_Coordinator, CourseName });
+    const location = locationValue(Location);
 
     await pool.query(
       `UPDATE batch_mst SET
@@ -252,6 +278,7 @@ export async function PUT(req: NextRequest) {
         EDate = ?,
         Duration = ?,
         Training_Coordinator = ?,
+        Location = ?,
         INR_Basic = ?,
         INR_ServiceTax = ?,
         INR_Total = ?,
@@ -274,6 +301,7 @@ export async function PUT(req: NextRequest) {
         EDate || null,
         text.Duration,
         text.Training_Coordinator,
+        location,
         INR_Basic || null,
         INR_ServiceTax || null,
         INR_Total || null,

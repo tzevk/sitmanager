@@ -46,6 +46,7 @@ export default function AddAnnualBatchPage() {
   const [lastAdmissionDate, setLastAdmissionDate] = useState('');
   const [duration, setDuration] = useState('');
   const [trainingCoordinator, setTrainingCoordinator] = useState('');
+  const [location, setLocation] = useState('');
   const [publish, setPublish] = useState('1');
 
   /* --- dropdown data --- */
@@ -142,6 +143,7 @@ export default function AddAnnualBatchPage() {
           Dollar_Basic: dollarBasic ? Number(dollarBasic) : null,
           CourseName: courseName || null,
           Course_description: description || null,
+          Location: location || null,
           IsActive: Number(publish),
         }),
       });
@@ -269,6 +271,15 @@ export default function AddAnnualBatchPage() {
                     className={inputCls}
                   />
                   <div className={hintCls}>{description.length}/{TEXT_LIMITS.description}</div>
+                </div>
+
+                <div>
+                  <label className={labelCls}>Location</label>
+                  <select value={location} onChange={(e) => setLocation(e.target.value)} className={selectCls}>
+                    <option value="">Select location</option>
+                    <option value="Mumbai">Mumbai</option>
+                    <option value="Pune">Pune</option>
+                  </select>
                 </div>
               </div>
             </SectionCard>

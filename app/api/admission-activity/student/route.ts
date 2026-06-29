@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
          LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
          ${FEES_JOIN}
          WHERE ${BASE_WHERE} ${clause}
-         ORDER BY am.Admission_Id DESC
+         ORDER BY sm.Student_Id DESC, am.Admission_Id DESC
          LIMIT ? OFFSET ?`,
         [...params, limit, offset]
       ).then(([r]) => r),

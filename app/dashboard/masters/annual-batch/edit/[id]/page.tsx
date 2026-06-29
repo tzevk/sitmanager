@@ -39,6 +39,7 @@ type BatchDetails = {
   Dollar_Total: number | null;
   CourseName: string | null;
   Course_description: string | null;
+  Location: string | null;
   Batch_Category_id: number | null;
   IsActive: number;
 };
@@ -94,6 +95,7 @@ export default function EditAnnualBatchPage() {
   const [duration, setDuration] = useState('');
   const [timings, setTimings] = useState('');
   const [trainingCoordinator, setTrainingCoordinator] = useState('');
+  const [location, setLocation] = useState('');
 
   const [publish, setPublish] = useState<'0' | '1'>('1');
 
@@ -181,6 +183,7 @@ export default function EditAnnualBatchPage() {
         setDuration(data.Duration || '');
         setTimings(data.Timings || '');
         setTrainingCoordinator(data.Training_Coordinator || '');
+        setLocation(data.Location || '');
 
         setPublish(String(data.IsActive ?? 1) === '0' ? '0' : '1');
 
@@ -320,6 +323,7 @@ export default function EditAnnualBatchPage() {
           Dollar_Total: toNumberOrNull(dollarTotal),
           CourseName: courseName || null,
           Course_description: description || null,
+          Location: location || null,
           IsActive: Number(publish),
         }),
       });
@@ -455,6 +459,15 @@ export default function EditAnnualBatchPage() {
                     className={inputCls}
                   />
                   <div className={hintCls}>{batchCode.length}/{TEXT_LIMITS.batchCode}</div>
+                </div>
+
+                <div>
+                  <label className={labelCls}>Location</label>
+                  <select value={location} onChange={(e) => setLocation(e.target.value)} className={selectCls}>
+                    <option value="">--Select--</option>
+                    <option value="Mumbai">Mumbai</option>
+                    <option value="Pune">Pune</option>
+                  </select>
                 </div>
 
                 <div className="col-span-2 md:col-span-3 lg:col-span-4">
