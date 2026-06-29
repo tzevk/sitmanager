@@ -193,12 +193,54 @@ export const ALLOWED_INQUIRY_STATUSES: StatusOption[] = [
   { id: 9, label: 'Lost lead' },
 ];
 
-const ALLOWED_INQUIRY_STATUS_IDS = new Set(ALLOWED_INQUIRY_STATUSES.map((status) => status.id));
+const MAIN_INQUIRY_STATUS_LABELS = [
+  'New',
+  'Contacted (interested)',
+  'Contacted (not recieved call)',
+  'Contacted (next batch)',
+  'Follow up pending',
+  'Admission confirmed',
+  'Corporate Reference',
+  'Alumni Reference',
+  'Lost lead',
+  'Irrelevant',
+];
 
-function requireAllowedInquiryStatus(value: unknown): number {
+function parseInquiryStatus(value: unknown): number {
   const statusId = Number(value);
-  if (!Number.isInteger(statusId) || !ALLOWED_INQUIRY_STATUS_IDS.has(statusId)) {
+  if (!Number.isInteger(statusId) || statusId <= 0) {
     const error = new Error('Status is required');
+    (error as { status?: number }).status = 400;
+    throw error;
+  }
+  return statusId;
+}
+
+async function ensureMainInquiryStatuses(pool: ReturnType<typeof getPool>): Promise<void> {
+  for (const status of MAIN_INQUIRY_STATUS_LABELS) {
+    await pool.query(
+      `INSERT INTO status_master (Status, Description, IsActive, IsDelete, PreDefined, SetBy)
+       SELECT ?, ?, 1, 0, NULL, 'User'
+       WHERE NOT EXISTS (
+         SELECT 1 FROM status_master WHERE Status = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+       )`,
+      [status, status, status]
+    );
+  }
+}
+
+async function requireKnownInquiryStatus(value: unknown): Promise<number> {
+  const statusId = parseInquiryStatus(value);
+  const pool = getPool();
+  await ensureMainInquiryStatuses(pool);
+  const [rows] = await pool.query(
+    `SELECT Id FROM status_master
+     WHERE Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) AND (IsActive = 1 OR IsActive IS NULL)
+     LIMIT 1`,
+    [statusId]
+  );
+  if (!(rows as unknown[]).length) {
+    const error = new Error('Unknown status');
     (error as { status?: number }).status = 400;
     throw error;
   }
@@ -607,8 +649,24 @@ async function resolveInquiryMobileExpressions(
 }
 
 async function loadStatusOptions(pool: ReturnType<typeof getPool>): Promise<StatusOption[]> {
-  void pool;
-  return ALLOWED_INQUIRY_STATUSES;
+  await ensureMainInquiryStatuses(pool);
+  const [rows] = await pool.query(
+    `SELECT Id AS id, Status AS label
+     FROM status_master
+     WHERE (IsDelete = 0 OR IsDelete IS NULL)
+       AND (IsActive = 1 OR IsActive IS NULL)
+       AND Status IN (?)
+     ORDER BY FIELD(Status, ?)`,
+    [MAIN_INQUIRY_STATUS_LABELS, MAIN_INQUIRY_STATUS_LABELS]
+  );
+  return (rows as { id: number; label: string }[])
+    .map((r) => ({ id: Number(r.id), label: String(r.label ?? '').trim() }))
+    .filter((s) => Number.isInteger(s.id) && s.id > 0 && s.label.length > 0);
+}
+
+export async function getInquiryStatusOptions(): Promise<StatusOption[]> {
+  const pool = getPool();
+  return cached('inquiry:main-status-options-v1', 5 * 60 * 1000, () => loadStatusOptions(pool));
 }
 
 /**
@@ -619,7 +677,8 @@ async function loadStatusOptions(pool: ReturnType<typeof getPool>): Promise<Stat
  */
 export async function getStatusMasterOptions(): Promise<StatusOption[]> {
   const pool = getPool();
-  return cached('inquiry:status-master-options', 5 * 60 * 1000, async () => {
+  return cached('inquiry:status-master-options-v3', 5 * 60 * 1000, async () => {
+    await ensureMainInquiryStatuses(pool);
     const [rows] = await pool.query(
       `SELECT Id AS id, Status AS label
        FROM status_master
@@ -736,7 +795,7 @@ async function loadInquiryFilterOptions(
 
 export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Promise<number> {
   if (!data.Student_Name?.trim()) throw new Error('Name is required');
-  const statusId = requireAllowedInquiryStatus(data.Status_id);
+  const statusId = await requireKnownInquiryStatus(data.Status_id);
 
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
@@ -1391,7 +1450,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
 
 export async function updateInquiry(id: number, data: UpdateInquiryInput, createdBy = 1): Promise<void> {
   if (!data.Student_Name?.trim()) throw new Error('Name is required');
-  const statusId = requireAllowedInquiryStatus(data.Status_id);
+  const statusId = await requireKnownInquiryStatus(data.Status_id);
 
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);

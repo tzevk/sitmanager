@@ -2,7 +2,20 @@
 import { NextResponse } from 'next/server';
 import { getPool, cached } from '@/lib/db';
 import { logEndpointTiming } from '@/lib/perf-log';
-import { ALLOWED_INQUIRY_STATUSES, getStatusMasterOptions } from '@/lib/services/inquiry.service';
+import { getStatusMasterOptions } from '@/lib/services/inquiry.service';
+
+const MAIN_INQUIRY_STATUS_LABELS = [
+  'New',
+  'Contacted (interested)',
+  'Contacted (not recieved call)',
+  'Contacted (next batch)',
+  'Follow up pending',
+  'Admission confirmed',
+  'Corporate Reference',
+  'Alumni Reference',
+  'Lost lead',
+  'Irrelevant',
+];
 
 let supportsStatementTimeout: boolean | null = null;
 
@@ -44,7 +57,7 @@ export async function GET() {
   try {
     const pool = getPool();
 
-    const options = await cached('inquiry-form-options', 300, async () => {
+    const options = await cached('inquiry-form-options-v3', 300, async () => {
       const [
         coursesRes,
         categoriesRes,
@@ -60,10 +73,10 @@ export async function GET() {
           "SELECT DISTINCT Category FROM batch_mst WHERE IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL) AND Category IS NOT NULL AND Category != '' ORDER BY Category"
         ),
         runGuardedQuery(pool,
-          "SELECT DISTINCT Qualification FROM student_master WHERE Qualification IS NOT NULL AND Qualification != '' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Qualification"
+          "SELECT Education AS Qualification FROM mst_education WHERE Education IS NOT NULL AND Education != '' AND (IsActive = 1 OR IsActive IS NULL) AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Id, Education"
         ),
         runGuardedQuery(pool,
-          "SELECT DISTINCT Discipline FROM student_master WHERE Discipline IS NOT NULL AND Discipline != '' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Discipline"
+          "SELECT Deciplin AS Discipline FROM mst_deciplin WHERE Deciplin IS NOT NULL AND Deciplin != '' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Id, Deciplin"
         ),
         runGuardedQuery(pool,
           "SELECT DISTINCT Nationality FROM student_master WHERE Nationality IS NOT NULL AND Nationality != '' AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Nationality"
@@ -83,9 +96,10 @@ export async function GET() {
       const nationalities = (nationalitiesRes as any[]).map((r) => r.Nationality);
       const countries = (countriesRes as any[]).map((r) => r.Present_Country);
 
-      const statuses = ALLOWED_INQUIRY_STATUSES;
-      // Full admin-managed status list for the discussion-area dropdown.
       const statusMaster = await getStatusMasterOptions();
+      const statuses = MAIN_INQUIRY_STATUS_LABELS
+        .map((label) => statusMaster.find((status) => status.label === label))
+        .filter((status): status is NonNullable<typeof status> => Boolean(status));
 
       const genders = ['Male', 'Female'];
 

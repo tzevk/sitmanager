@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import { promises as fs } from "fs";
 import { requirePermission } from "@/lib/api-auth";
@@ -33,7 +33,7 @@ async function saveMetadata(list: FestivalPhoto[]) {
   await fs.writeFile(metadataPath, JSON.stringify(list, null, 2), "utf8");
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     const auth = await requirePermission(request, "festival_photo.view");
     if (auth instanceof NextResponse) return auth;
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const auth = await requirePermission(request, "festival_photo.create");
     if (auth instanceof NextResponse) return auth;

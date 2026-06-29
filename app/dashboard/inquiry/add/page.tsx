@@ -79,7 +79,15 @@ function fmtDateTime(value?: string | Date | null): string {
 
 const ctrl = 'w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 const lbl  = 'block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5';
-const ALLOWED_STATUS_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 11]);
+
+const contactModeChannels: Record<string, { channel: string; label: string }> = {
+  Call: { channel: 'call', label: 'Call' },
+  WhatsApp: { channel: 'whatsapp', label: 'WhatsApp' },
+  'Walk-In': { channel: 'personal-inquiry', label: 'Walk-In' },
+  Email: { channel: 'mail', label: 'Email' },
+};
+
+const contactActionButtons = Object.entries(contactModeChannels).map(([mode, item]) => ({ mode, ...item }));
 
 export default function AddInquiryPage() {
   const router = useRouter();
@@ -138,6 +146,8 @@ export default function AddInquiryPage() {
   const [error, setError] = useState('');
   const [showMailModal, setShowMailModal] = useState(false);
   const [sendingMail, setSendingMail] = useState(false);
+  const [loggingContact, setLoggingContact] = useState<string | null>(null);
+  const [contactLogged, setContactLogged] = useState(false);
   const [regeneratingLink, setRegeneratingLink] = useState(false);
   const [mailSubject, setMailSubject] = useState('Your SIT Admission Form Link');
   const [mailBody, setMailBody] = useState('');
@@ -166,7 +176,7 @@ export default function AddInquiryPage() {
       setNationality(d.Nationality || '');
       setCountry(d.Present_Country || '');
       setNotes(d.Discussion || '');
-      setStatusId(ALLOWED_STATUS_IDS.has(Number(d.Status_id)) ? Number(d.Status_id) : 1);
+      setStatusId(Number.isInteger(Number(d.Status_id)) && Number(d.Status_id) > 0 ? Number(d.Status_id) : 1);
       setDiscStatusId(Number.isInteger(Number(d.Status_id)) && Number(d.Status_id) > 0 ? Number(d.Status_id) : '');
       setInquiryDate(d.Inquiry_Dt ? String(d.Inquiry_Dt).slice(0,10) : today());
       setInquirySoftwareTime(d.Date_Added ? String(d.Date_Added) : '');
@@ -250,6 +260,29 @@ export default function AddInquiryPage() {
     setDiscLoading(false);
   };
 
+  const logContactAction = async (action: { mode: string; channel: string; label: string }) => {
+    if (!editId) return;
+    setLoggingContact(action.channel);
+    setContactLogged(false);
+    setError('');
+    try {
+      const res = await fetch('/api/inquiry/contact-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquiryId: editId, channel: action.channel }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to log action');
+      setInquiryMode(action.mode);
+      setContactLogged(true);
+      setTimeout(() => setContactLogged(false), 1800);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to log action');
+    } finally {
+      setLoggingContact(null);
+    }
+  };
+
   const handleDiscStatusChange = async (value: number) => {
     if (!editId || !Number.isInteger(value) || value <= 0) return;
     const prev = discStatusId;
@@ -264,8 +297,7 @@ export default function AddInquiryPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Failed to update status');
-      // Keep the main form's status select in sync when the value is one it supports.
-      if (ALLOWED_STATUS_IDS.has(value)) setStatusId(value);
+      setStatusId(value);
       setStatusSaved(true);
       setTimeout(() => setStatusSaved(false), 2000);
     } catch (err: unknown) {
@@ -464,7 +496,7 @@ export default function AddInquiryPage() {
             )}
             <div>
               <label className={lbl}>Mode</label>
-              <select value={inquiryMode} onChange={e => setInquiryMode(e.target.value)} className={ctrl}>
+              <select value={inquiryMode} onChange={e => { setInquiryMode(e.target.value); setContactLogged(false); }} className={ctrl}>
                 <option value="">— Select —</option>
                 {opts?.inquiryModes?.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
@@ -476,6 +508,20 @@ export default function AddInquiryPage() {
                 {opts?.inquiryTypes?.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
+            {editId && (
+              <div className="col-span-2">
+                <label className={lbl}>Log Contact Action</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {contactActionButtons.map((action) => (
+                    <button key={action.channel} type="button" onClick={() => logContactAction(action)} disabled={Boolean(loggingContact)}
+                      className="rounded-lg border border-[#2E3093]/20 bg-[#2E3093]/10 px-2 py-1.5 text-[10px] font-bold text-[#2E3093] hover:bg-[#2E3093]/15 disabled:opacity-60 transition-colors">
+                      {loggingContact === action.channel ? 'Logging…' : action.label}
+                    </button>
+                  ))}
+                </div>
+                {contactLogged && <div className="mt-1 text-[10px] font-semibold text-emerald-600">Action logged</div>}
+              </div>
+            )}
 
             {/* Training */}
             <div className="col-span-4 border-t border-slate-100 mt-0.5" />
@@ -509,13 +555,19 @@ export default function AddInquiryPage() {
             <div className="col-span-4 border-t border-slate-100 mt-0.5" />
             <div>
               <label className={lbl}>Qualification</label>
-              <input list="qual-list" value={qualification} onChange={e => setQualification(e.target.value)} placeholder="Type or select" className={ctrl} />
-              <datalist id="qual-list">{opts?.qualifications?.map(q => <option key={q} value={q} />)}</datalist>
+              <select value={qualification} onChange={e => setQualification(e.target.value)} className={ctrl}>
+                <option value="">— Select Qualification —</option>
+                {qualification && !opts?.qualifications?.includes(qualification) && <option value={qualification}>{qualification}</option>}
+                {opts?.qualifications?.map(q => <option key={q} value={q}>{q}</option>)}
+              </select>
             </div>
             <div>
               <label className={lbl}>Discipline</label>
-              <input list="disc-list" value={discipline} onChange={e => setDiscipline(e.target.value)} placeholder="Type or select" className={ctrl} />
-              <datalist id="disc-list">{opts?.disciplines?.map(d => <option key={d} value={d} />)}</datalist>
+              <select value={discipline} onChange={e => setDiscipline(e.target.value)} className={ctrl}>
+                <option value="">— Select Discipline —</option>
+                {discipline && !opts?.disciplines?.includes(discipline) && <option value={discipline}>{discipline}</option>}
+                {opts?.disciplines?.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
             </div>
             <div>
               <label className={lbl}>Percentage</label>

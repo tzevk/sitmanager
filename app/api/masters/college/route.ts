@@ -5,13 +5,17 @@ import { requirePermission } from '@/lib/api-auth';
 
 async function ensureCollegeFollowUpColumns(pool: ReturnType<typeof getPool>) {
   const [rows] = await pool.query<any[]>(
-    `SELECT COLUMN_NAME
+    `SELECT COLUMN_NAME, DATA_TYPE
      FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
        AND TABLE_NAME = 'awt_college'
-       AND COLUMN_NAME IN ('followup_status', 'followup_date')`
+       AND COLUMN_NAME IN ('descipline', 'followup_status', 'followup_date')`
   );
   const columns = new Set(rows.map((row) => String(row.COLUMN_NAME)));
+  const descipline = rows.find((row) => String(row.COLUMN_NAME) === 'descipline');
+  if (descipline && !/^text$/i.test(String(descipline.DATA_TYPE || ''))) {
+    await pool.query(`ALTER TABLE awt_college MODIFY COLUMN descipline TEXT NULL`);
+  }
   if (!columns.has('followup_status')) {
     await pool.query(`ALTER TABLE awt_college ADD COLUMN followup_status VARCHAR(100) NULL AFTER descipline`);
   }

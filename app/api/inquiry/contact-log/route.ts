@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { apiRateLimiter } from '@/lib/rate-limit';
+import { logTableActivity } from '@/lib/activity-log';
 
 export const runtime = 'nodejs';
 
@@ -107,6 +108,13 @@ export async function POST(req: NextRequest) {
       `INSERT INTO ${CONTACT_LOG_TABLE} (Inquiry_Id, Channel, Created_By) VALUES (?, ?, ?)`,
       [inquiryId, channel, auth.session.userId ?? null]
     ) as [any, any];
+
+    await logTableActivity(req, {
+      tableName: CONTACT_LOG_TABLE,
+      action: 'CREATE',
+      recordId: (result as any).insertId,
+      details: { inquiryId, channel },
+    });
 
     return NextResponse.json({
       success: true,
