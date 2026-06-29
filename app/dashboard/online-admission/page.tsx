@@ -177,13 +177,6 @@ export default function OnlineAdmissionPage() {
 
   // ── Style helpers ──────────────────────────────────────────────────────────
 
-  const statusBadgeCls = (cat: string) =>
-    cat === 'completed'
-      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-      : cat === 'rejected'
-        ? 'bg-red-50 text-red-600 border-red-200'
-        : 'bg-amber-50 text-amber-700 border-amber-200';
-
   const inp = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -278,7 +271,6 @@ export default function OnlineAdmissionPage() {
                     <th className="text-left py-2 px-3 font-bold">Batch</th>
                     <th className="text-left py-2 px-3 font-bold">Payment</th>
                     <th className="text-left py-2 px-3 font-bold">Form</th>
-                    <th className="text-left py-2 px-3 font-bold">Status</th>
                     <th className="text-left py-2 px-3 font-bold whitespace-nowrap">Last Updated</th>
                     <th className="text-center py-2 px-3 font-bold">Actions</th>
                   </tr>
@@ -286,7 +278,7 @@ export default function OnlineAdmissionPage() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={10} className="py-10 text-center">
+                      <td colSpan={9} className="py-10 text-center">
                         <div className="inline-flex flex-col items-center gap-1.5">
                           <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                           <span className="text-xs text-slate-400">Loading…</span>
@@ -295,7 +287,7 @@ export default function OnlineAdmissionPage() {
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="py-12 text-center">
+                      <td colSpan={9} className="py-12 text-center">
                         <div className="inline-flex flex-col items-center gap-2 text-slate-400">
                           <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -367,11 +359,6 @@ export default function OnlineAdmissionPage() {
                                 Submitted
                               </span>
                             )}
-                          </td>
-                          <td className="py-1.5 px-3">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusBadgeCls(r.StatusCategory)}`}>
-                              {r.StatusLabel}
-                            </span>
                           </td>
                           <td className="py-1.5 px-3 text-slate-500 whitespace-nowrap text-[11px]">
                             {fmtDateTime(r.LastActivityAt)}
