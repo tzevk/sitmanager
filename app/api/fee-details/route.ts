@@ -222,7 +222,9 @@ export async function GET(req: NextRequest) {
         `SELECT Student_Id,
            SUM(CASE WHEN TypeR = 'C' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS paid,
            SUM(CASE WHEN TypeR = 'D' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS posted_debit,
-           MAX(CASE WHEN TypeR = 'D' AND LOWER(IFNULL(Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END) AS has_membership_debit
+           MAX(CASE WHEN TypeR = 'D' AND LOWER(IFNULL(Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END) AS has_membership_debit,
+           SUBSTRING_INDEX(GROUP_CONCAT(CASE WHEN TypeR = 'C' AND Fees_Code IS NOT NULL AND Fees_Code <> '' THEN Fees_Id END ORDER BY Fees_Id DESC), ',', 1) AS Latest_Fees_Id,
+           SUBSTRING_INDEX(GROUP_CONCAT(CASE WHEN TypeR = 'C' AND Fees_Code IS NOT NULL AND Fees_Code <> '' THEN Fees_Code END ORDER BY Fees_Id DESC), ',', 1) AS Latest_Fees_Code
          FROM s_fees_mst
          WHERE Student_Id IN (?) AND (IsDelete = 0 OR IsDelete IS NULL)
          GROUP BY Student_Id`,
@@ -250,6 +252,8 @@ export async function GET(req: NextRequest) {
         Total_Fees: tuition + postedDebit + membership,
         Total_Paid: paid,
         Cancelled: Number(admission?.Cancelled ?? 0),
+        Latest_Fees_Id: ledger?.Latest_Fees_Id ? Number(ledger.Latest_Fees_Id) : null,
+        Latest_Fees_Code: ledger?.Latest_Fees_Code ?? null,
       };
     });
 

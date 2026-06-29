@@ -19,6 +19,8 @@ interface RecentReceiptRow {
   Transfered: string;
   Moved_To_Batch_Code: string;
   Cancelled: number;
+  Latest_Fees_Id: number | null;
+  Latest_Fees_Code: string | null;
 }
 
 interface StudentSearchRow {
@@ -64,15 +66,18 @@ const fmtDate = (d: string | null | undefined) => {
 };
 
 export default function FeeDetailsPage() {
-  const { canView, loading: permLoading } = useResourcePermissions('finance');
+  const { canView, canUpdate, loading: permLoading } = useResourcePermissions('finance');
   const [recentRows, setRecentRows] = useState<RecentReceiptRow[]>([]);
   const [recentLoading, setRecentLoading] = useState(false);
   const [recentError, setRecentError] = useState('');
+  const [deletingFeesId, setDeletingFeesId] = useState<number | null>(null);
 
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<StudentSearchRow[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [searchRefreshKey, setSearchRefreshKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -113,26 +118,71 @@ export default function FeeDetailsPage() {
       setResults([]);
       setSearched(false);
       setSearching(false);
+      setSearchError('');
       return;
     }
     setSearching(true);
+    setSearchError('');
     const ctrl = new AbortController();
     const t = setTimeout(async () => {
       try {
         const res = await fetch(`/api/fee-details?q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
         const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Search failed');
         setResults(data.rows ?? []);
         setSearched(true);
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return;
         setResults([]);
+        setSearchError(err instanceof Error ? err.message : 'Search failed');
         setSearched(true);
       } finally {
         setSearching(false);
       }
     }, 300);
     return () => { clearTimeout(t); ctrl.abort(); };
-  }, [search]);
+  }, [search, searchRefreshKey]);
+
+  const handleDeleteRecent = async (row: RecentReceiptRow) => {
+    if (!canUpdate || deletingFeesId) return;
+    if (!window.confirm(`Delete receipt ${row.Fees_Code || `#${row.Fees_Id}`}?`)) return;
+
+    setRecentError('');
+    setDeletingFeesId(row.Fees_Id);
+    try {
+      const res = await fetch(`/api/fee-details/${row.Student_Id}/${row.Fees_Id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to delete receipt');
+      setRecentRows((rows) => rows.filter((r) => r.Fees_Id !== row.Fees_Id));
+      if (search.trim()) setSearchRefreshKey((value) => value + 1);
+    } catch (err) {
+      setRecentError(err instanceof Error ? err.message : 'Failed to delete receipt');
+    } finally {
+      setDeletingFeesId(null);
+    }
+  };
+
+  const handleDeleteSearchReceipt = async (row: StudentSearchRow) => {
+    if (!canUpdate || deletingFeesId || !row.Latest_Fees_Id) return;
+    if (!window.confirm(`Delete receipt ${row.Latest_Fees_Code || `#${row.Latest_Fees_Id}`} for ${row.Student_Name || `student #${row.Student_Id}`}?`)) return;
+
+    setSearchError('');
+    setDeletingFeesId(row.Latest_Fees_Id);
+    try {
+      const res = await fetch(`/api/fee-details/${row.Student_Id}/${row.Latest_Fees_Id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to delete receipt');
+      setRecentRows((rows) => rows.filter((r) => r.Fees_Id !== row.Latest_Fees_Id));
+      setResults((rows) => rows.map((r) => r.Student_Id === row.Student_Id
+        ? { ...r, Latest_Fees_Id: null, Latest_Fees_Code: null }
+        : r));
+      setSearchRefreshKey((value) => value + 1);
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : 'Failed to delete receipt');
+    } finally {
+      setDeletingFeesId(null);
+    }
+  };
 
   if (permLoading) return <PermissionLoading />;
   if (!canView) return <AccessDenied />;
@@ -202,7 +252,10 @@ export default function FeeDetailsPage() {
                 {searching && (
                   <tr><td colSpan={8} className="py-6 text-center text-xs text-slate-400">Searching…</td></tr>
                 )}
-                {!searching && searched && !results.length && (
+                {!searching && searchError && (
+                  <tr><td colSpan={8} className="py-3 text-center text-xs text-amber-600">{searchError}</td></tr>
+                )}
+                {!searching && searched && !searchError && !results.length && (
                   <tr><td colSpan={8} className="py-6 text-center text-xs text-slate-400">No students found</td></tr>
                 )}
                 {!searching && results.map((r) => (
@@ -222,12 +275,25 @@ export default function FeeDetailsPage() {
                     <td className="py-2 px-3 text-xs border-b border-slate-100 text-right font-mono text-emerald-700">{fmt(r.Total_Paid)}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100 text-right font-mono text-red-600">{fmt((Number(r.Total_Fees) || 0) - (Number(r.Total_Paid) || 0))}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100 text-center">
-                      <Link
-                        href={`/dashboard/fee-details/${r.Student_Id}`}
-                        className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#2E3093]/10 text-[#2E3093] text-[11px] font-semibold hover:bg-[#2E3093]/20"
-                      >
-                        View
-                      </Link>
+                      <div className="inline-flex items-center justify-center gap-1.5">
+                        <Link
+                          href={`/dashboard/fee-details/${r.Student_Id}`}
+                          className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#2E3093]/10 text-[#2E3093] text-[11px] font-semibold hover:bg-[#2E3093]/20"
+                        >
+                          View
+                        </Link>
+                        {canUpdate && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSearchReceipt(r)}
+                            disabled={!r.Latest_Fees_Id || deletingFeesId === r.Latest_Fees_Id}
+                            title={r.Latest_Fees_Id ? (r.Latest_Fees_Code ? `Delete ${r.Latest_Fees_Code}` : 'Delete receipt') : 'No receipt to delete'}
+                            className="inline-flex items-center px-2.5 py-1 rounded-md bg-red-50 text-red-600 text-[11px] font-semibold hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {deletingFeesId === r.Latest_Fees_Id ? 'Deleting…' : 'Delete'}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -291,12 +357,24 @@ export default function FeeDetailsPage() {
                   <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{r.PaymentId || ''}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100 text-right font-mono">{fmt(r.Amount)}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100 text-center">
-                    <Link
-                      href={`/dashboard/fee-details/${r.Student_Id}?feesId=${r.Fees_Id}`}
-                      className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#2E3093]/10 text-[#2E3093] text-[11px] font-semibold hover:bg-[#2E3093]/20"
-                    >
-                      View
-                    </Link>
+                    <div className="inline-flex items-center justify-center gap-1.5">
+                      <Link
+                        href={`/dashboard/fee-details/${r.Student_Id}?feesId=${r.Fees_Id}`}
+                        className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#2E3093]/10 text-[#2E3093] text-[11px] font-semibold hover:bg-[#2E3093]/20"
+                      >
+                        View
+                      </Link>
+                      {canUpdate && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRecent(r)}
+                          disabled={deletingFeesId === r.Fees_Id}
+                          className="inline-flex items-center px-2.5 py-1 rounded-md bg-red-50 text-red-600 text-[11px] font-semibold hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {deletingFeesId === r.Fees_Id ? 'Deleting…' : 'Delete'}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
