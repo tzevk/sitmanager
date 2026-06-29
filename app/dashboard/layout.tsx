@@ -79,6 +79,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Placement > Interview Master': '/dashboard/masters/interview-master',
   'Placement > Email Company': '/dashboard/placement/email-company',
   'Utility > Festival Photo Upload': '/dashboard/utility/festival-photo-upload',
+  'Utility > Export Contacts': '/dashboard/utility/export-contacts',
 };
 
 const SUB_MENUS: Record<string, string[]> = {
@@ -291,6 +292,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Placement > Mock Interviews': ['mock_interview.view'],
   'Placement > Email Company': ['placement.view'],
   'Utility > Festival Photo Upload': ['festival_photo.view'],
+  'Utility > Export Contacts': ['export_contacts.view'],
 };
 
 const NAV_ICONS: Record<string, React.ReactNode> = {

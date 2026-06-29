@@ -19,8 +19,6 @@ interface RecentReceiptRow {
   Transfered: string;
   Moved_To_Batch_Code: string;
   Cancelled: number;
-  Latest_Fees_Id: number | null;
-  Latest_Fees_Code: string | null;
 }
 
 interface StudentSearchRow {
@@ -35,6 +33,8 @@ interface StudentSearchRow {
   Transfered: string;
   Moved_To_Batch_Code: string;
   Cancelled: number;
+  Latest_Fees_Id: number | null;
+  Latest_Fees_Code: string | null;
 }
 
 const StatusTag = ({ row }: { row: Pick<RecentReceiptRow, 'Transfered' | 'Moved_To_Batch_Code' | 'Cancelled'> }) => {

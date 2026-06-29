@@ -545,6 +545,9 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/dashboard/role-right/add': ['role.create'],
   '/dashboard/role-right/edit': ['role.update'],
   '/dashboard/role-right/users': ['user.view'],
+
+  // Utility
+  '/dashboard/utility/export-contacts': ['export_contacts.view'],
 };
 
 // ============================================================================
