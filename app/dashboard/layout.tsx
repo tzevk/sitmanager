@@ -80,6 +80,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Placement > Email Company': '/dashboard/placement/email-company',
   'Utility > Festival Photo Upload': '/dashboard/utility/festival-photo-upload',
   'Utility > Export Contacts': '/dashboard/utility/export-contacts',
+  'Utility > Batch Students': '/dashboard/utility/batch-students',
 };
 
 const SUB_MENUS: Record<string, string[]> = {
@@ -200,6 +201,7 @@ const SUB_MENUS: Record<string, string[]> = {
     'Upload Testimonial Photo',
     'Upload Banner Image',
     'Export Contacts',
+    'Batch Students',
     'QMS Does',
     'Mass WhatsApp',
     'Task Managements',
@@ -293,6 +295,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Placement > Email Company': ['placement.view'],
   'Utility > Festival Photo Upload': ['festival_photo.view'],
   'Utility > Export Contacts': ['export_contacts.view'],
+  'Utility > Batch Students': ['student.view'],
 };
 
 const NAV_ICONS: Record<string, React.ReactNode> = {
