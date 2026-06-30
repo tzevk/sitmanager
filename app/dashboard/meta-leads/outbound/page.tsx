@@ -59,7 +59,7 @@ const META_DESTINATION_TYPE_OPTIONS = [
   { value: 'WEBSITE', label: 'Website' },
 ] as const;
 
-const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
+const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/20 focus:border-[#6366F1] placeholder:text-slate-400 transition-colors';
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
@@ -399,7 +399,7 @@ export default function MetaOutboundPage() {
 
               <div className="flex flex-col gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap gap-2">{['Campaign', 'Ad Set', 'Creative', 'Form', 'Ad'].map((l) => <span key={l} className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{l}</span>)}</div>
-                <button type="button" onClick={submitCampaignPublish} disabled={!canUpdate || publishBusy || !publishName.trim()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2E3093] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-[#2E3093]/20 transition-colors hover:bg-[#25277a] disabled:cursor-not-allowed disabled:bg-slate-300 sm:min-w-[180px]">{publishBusy ? <><div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />Publishing...</> : <>Publish Campaign Stack</>}</button>
+                <button type="button" onClick={submitCampaignPublish} disabled={!canUpdate || publishBusy || !publishName.trim()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#6366F1] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-[#6366F1]/20 transition-colors hover:bg-[#25277a] disabled:cursor-not-allowed disabled:bg-slate-300 sm:min-w-[180px]">{publishBusy ? <><div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />Publishing...</> : <>Publish Campaign Stack</>}</button>
               </div>
             </div>
 

@@ -2836,7 +2836,9 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
          m.contact_source AS Inquiry_From,
          m.source_label AS Inquiry_Type,
          COALESCE(CAST(NULLIF(si.OnlineState,'') AS UNSIGNED), m.online_state) AS Status_id,
-         si.Discussion AS Discussion,
+         COALESCE((SELECT d.discussion FROM awt_inquirydiscussion d
+                   WHERE d.Inquiry_id = si.Inquiry_Id AND (d.deleted = 0 OR d.deleted IS NULL)
+                   ORDER BY d.id DESC LIMIT 1), si.Discussion) AS Discussion,
          COALESCE(NULLIF(TRIM(m.campaign_name),''), NULLIF(TRIM(m.campaign_id),'')) AS MetaCampaignName,
          NULLIF(TRIM(m.form_name),'') AS MetaFormName,
          m.tags_json AS LeadTagsJson,
@@ -2904,7 +2906,9 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
              m.contact_source AS Inquiry_From,
              m.source_label AS Inquiry_Type,
              COALESCE(CAST(NULLIF(si.OnlineState,'') AS UNSIGNED), m.online_state) AS Status_id,
-             si.Discussion AS Discussion,
+             COALESCE((SELECT d.discussion FROM awt_inquirydiscussion d
+                   WHERE d.Inquiry_id = si.Inquiry_Id AND (d.deleted = 0 OR d.deleted IS NULL)
+                   ORDER BY d.id DESC LIMIT 1), si.Discussion) AS Discussion,
              COALESCE(NULLIF(TRIM(m.campaign_name),''), NULLIF(TRIM(m.campaign_id),'')) AS MetaCampaignName,
              NULLIF(TRIM(m.form_name),'') AS MetaFormName,
              m.tags_json AS LeadTagsJson,
@@ -3050,7 +3054,9 @@ export async function getMetaLeadDetail(metaLeadId: string): Promise<MetaLeadDet
        m.contact_source AS Inquiry_From,
        m.source_label AS Inquiry_Type,
        CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) AS Status_id,
-       si.Discussion AS Discussion,
+       COALESCE((SELECT d.discussion FROM awt_inquirydiscussion d
+                 WHERE d.Inquiry_id = si.Inquiry_Id AND (d.deleted = 0 OR d.deleted IS NULL)
+                 ORDER BY d.id DESC LIMIT 1), si.Discussion) AS Discussion,
        COALESCE(NULLIF(TRIM(m.campaign_name),''), NULLIF(TRIM(m.campaign_id),'')) AS MetaCampaignName,
        NULLIF(TRIM(m.campaign_id),'') AS MetaCampaignId,
        NULLIF(TRIM(m.form_name),'') AS MetaFormName,

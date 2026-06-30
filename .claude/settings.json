@@ -133,7 +133,10 @@
       "Bash(node -r dotenv/config scripts/db/transfer-single-student-from-legacy.mjs --ids 176538,176540 --apply dotenv_config_path=.env.local)",
       "Bash(node -r dotenv/config scripts/db/dedupe-and-admit-student.mjs --survivor 176540 --remove 176538 dotenv_config_path=.env.local)",
       "Bash(node -r dotenv/config scripts/db/dedupe-and-admit-student.mjs --survivor 176540 --remove 176538 --apply dotenv_config_path=.env.local)",
-      "Bash(node -r dotenv/config scripts/db/_v.mjs dotenv_config_path=.env.local)"
+      "Bash(node -r dotenv/config scripts/db/_v.mjs dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/_mq.mjs dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/_mq2.mjs dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/_mq3.mjs dotenv_config_path=.env.local)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

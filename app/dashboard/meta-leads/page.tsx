@@ -341,7 +341,7 @@ const InlineCell = memo(function InlineCell({ value, leadId, field, isEditing, d
       onChange={(e) => onDraftChange(leadId, field, e.target.value)}
       disabled={disabled}
       placeholder={placeholder}
-      className={`w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 ${isEditing ? 'text-blue-700 font-medium' : 'text-black'}`}
+      className={`w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] focus:outline-none focus:ring-2 focus:ring-[#6366F1]/15 focus:border-[#6366F1] disabled:bg-slate-50 ${isEditing ? 'text-blue-700 font-medium' : 'text-black'}`}
     />
   );
 });
@@ -479,7 +479,7 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#2E3093]/60">Follow Up</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#6366F1]/60">Follow Up</p>
             <h3 className="text-sm font-bold text-slate-900">{formatName(row.Student_Name)}</h3>
           </div>
           <button type="button" onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
@@ -494,7 +494,7 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
               const date = entry.date || entry.createdAt;
               return (
                 <div key={entry.id} className="flex items-start gap-2.5 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#2E3093] shrink-0 mt-1.5" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#6366F1] shrink-0 mt-1.5" />
                   <div className="min-w-0 flex-1">
                     {date && <span className="inline-block mb-1 rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600">{formatDate(date)}</span>}
                     <p className="text-xs text-slate-700 leading-5">{entry.note}</p>
@@ -511,7 +511,7 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
               const text = dateMatch?.[2] ?? bullet;
               return (
                 <div key={i} className="flex items-start gap-2.5 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#2E3093] shrink-0 mt-1.5" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#6366F1] shrink-0 mt-1.5" />
                   <div className="min-w-0 flex-1">
                     {date && <span className="inline-block mb-1 rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600">{date}</span>}
                     <p className="text-xs text-slate-700 leading-5">{text}</p>
@@ -539,8 +539,8 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
           <div className="border-t border-slate-100 px-5 py-4 space-y-3">
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Add Follow-Up Note</p>
             <div className="flex gap-2">
-              <input value={newNote} onChange={(e) => setNewNote(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addBullet()} placeholder="Type a note — today's date will be added automatically…" className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400" />
-              <button type="button" onClick={addBullet} disabled={!newNote.trim()} className="px-3 py-1.5 rounded-lg bg-[#2E3093] text-white text-xs font-semibold hover:bg-[#252880] disabled:bg-slate-200 disabled:text-slate-400 transition-colors">Add</button>
+              <input value={newNote} onChange={(e) => setNewNote(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addBullet()} placeholder="Type a note — today's date will be added automatically…" className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/20 focus:border-[#6366F1] placeholder:text-slate-400" />
+              <button type="button" onClick={addBullet} disabled={!newNote.trim()} className="px-3 py-1.5 rounded-lg bg-[#6366F1] text-white text-xs font-semibold hover:bg-[#252880] disabled:bg-slate-200 disabled:text-slate-400 transition-colors">Add</button>
             </div>
             <div className="flex justify-end gap-2">
               <button type="button" onClick={onClose} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
@@ -637,7 +637,7 @@ function MetaDataModal({ row, onClose }: MetaDataModalProps) {
               <span className="w-24 shrink-0 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 pt-0.5">Form Tags</span>
               <div className="flex flex-wrap gap-1.5">
                 {tags.map((tag, i) => (
-                  <span key={i} className="inline-flex items-center rounded-full bg-[#2E3093]/8 border border-[#2E3093]/20 px-2.5 py-0.5 text-[10px] font-semibold text-[#2E3093]">{tag}</span>
+                  <span key={i} className="inline-flex items-center rounded-full bg-[#6366F1]/8 border border-[#6366F1]/20 px-2.5 py-0.5 text-[10px] font-semibold text-[#6366F1]">{tag}</span>
                 ))}
               </div>
             </div>
@@ -1077,7 +1077,7 @@ export default function MetaLeadsPage() {
                 key={tab}
                 type="button"
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${activeTab === tab ? 'bg-[#2E3093] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                className={`px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${activeTab === tab ? 'bg-[#6366F1] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
               >
                 {tab === 'analytics' ? 'Campaign Analytics' : 'Meta Leads'}
                 {tab === 'leads' && pagination.total > 0 && (
@@ -1202,7 +1202,7 @@ export default function MetaLeadsPage() {
                               <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{c.clicks.toLocaleString()}</td>
                               <td className={`px-3 py-2.5 text-right tabular-nums ${ctrCls(c.ctr)}`}>{c.ctr.toFixed(2)}%</td>
                               <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">₹{c.spend.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                              <td className="px-3 py-2.5 text-right tabular-nums font-bold text-[#2E3093]">{c.leads}</td>
+                              <td className="px-3 py-2.5 text-right tabular-nums font-bold text-[#6366F1]">{c.leads}</td>
                               <td className="px-3 py-2.5 text-right tabular-nums">
                                 {c.costPerLead != null ? <span className={`font-semibold ${tier.text}`}>₹{c.costPerLead.toFixed(0)}</span> : <span className="text-slate-300">—</span>}
                               </td>
@@ -1222,7 +1222,7 @@ export default function MetaLeadsPage() {
                             <td className="px-3 py-2.5 text-right tabular-nums">{metaPerf.totals.clicks.toLocaleString()}</td>
                             <td className={`px-3 py-2.5 text-right tabular-nums ${ctrCls(metaPerf.totals.ctr)}`}>{metaPerf.totals.ctr.toFixed(2)}%</td>
                             <td className="px-3 py-2.5 text-right tabular-nums">₹{metaPerf.totals.spend.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                            <td className="px-3 py-2.5 text-right tabular-nums text-[#2E3093]">{metaPerf.totals.leads}</td>
+                            <td className="px-3 py-2.5 text-right tabular-nums text-[#6366F1]">{metaPerf.totals.leads}</td>
                             <td className="px-3 py-2.5 text-right tabular-nums">{metaPerf.totals.cpl != null ? `₹${metaPerf.totals.cpl.toFixed(0)}` : '—'}</td>
                             <td className="px-3 py-2.5 text-right tabular-nums">{metaPerf.totals.cpl ? `~${Math.round(10000 / metaPerf.totals.cpl)} leads` : '—'}</td>
                           </tr>
@@ -1309,7 +1309,7 @@ export default function MetaLeadsPage() {
                               <td className="px-3 py-2.5 text-slate-600">{rec.courseName}</td>
                               <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{rec.daysToStart}</td>
                               <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{Math.round(rec.seatGap)} / {Math.round(rec.maxStudents || 0)} <span className="text-[10px] text-slate-400">({formatPercentFromRatio(rec.gapRatio)})</span></td>
-                              <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-[#2E3093]">{formatPercentFromRatio(rec.priorityScore)}</td>
+                              <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-[#6366F1]">{formatPercentFromRatio(rec.priorityScore)}</td>
                               <td className="px-3 py-2.5 text-center">
                                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${confidenceBadge(rec.confidenceScore).cls}`}>{confidenceBadge(rec.confidenceScore).label} ({formatPercentFromRatio(rec.confidenceScore)})</span>
                               </td>
@@ -1346,8 +1346,8 @@ export default function MetaLeadsPage() {
             <div className="space-y-4">
               {/* Filter Bar */}
               <FilterBar>
-                <input type="text" value={search} placeholder="Search name, mobile, email…" onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && doSearch()} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors flex-1 min-w-[180px]" />
-                <select value={source} onChange={(e) => setSource(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] transition-colors w-[150px]">
+                <input type="text" value={search} placeholder="Search name, mobile, email…" onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && doSearch()} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/20 focus:border-[#6366F1] placeholder:text-slate-400 transition-colors flex-1 min-w-[180px]" />
+                <select value={source} onChange={(e) => setSource(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/20 focus:border-[#6366F1] transition-colors w-[150px]">
                   <option value="">All Sources</option>
                   {filters.sources.map((item) => <option key={item} value={item}>{item}</option>)}
                 </select>
@@ -1365,18 +1365,18 @@ export default function MetaLeadsPage() {
                 >
                   Facebook
                 </button>
-                <select value={training} onChange={(e) => { setTraining(e.target.value); setPage(1); setFetchTrigger((t) => t + 1); }} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] transition-colors w-[160px]">
+                <select value={training} onChange={(e) => { setTraining(e.target.value); setPage(1); setFetchTrigger((t) => t + 1); }} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/20 focus:border-[#6366F1] transition-colors w-[160px]">
                   <option value="">All Courses</option>
                   {filters.trainings.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
-                <select value={status} onChange={(e) => setStatus(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] transition-colors w-[130px]">
+                <select value={status} onChange={(e) => setStatus(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/20 focus:border-[#6366F1] transition-colors w-[130px]">
                   <option value="">All Statuses</option>
                   {filters.statusOptions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                 </select>
-                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] transition-colors w-[130px]" />
+                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/20 focus:border-[#6366F1] transition-colors w-[130px]" />
                 <span className="text-slate-300 text-xs select-none">–</span>
-                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] transition-colors w-[130px]" />
-                <button onClick={doSearch} className="flex items-center gap-1.5 bg-[#2E3093] text-white px-3.5 py-1.5 rounded-lg text-xs font-bold hover:bg-[#252880] transition-colors shrink-0">
+                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/20 focus:border-[#6366F1] transition-colors w-[130px]" />
+                <button onClick={doSearch} className="flex items-center gap-1.5 bg-[#6366F1] text-white px-3.5 py-1.5 rounded-lg text-xs font-bold hover:bg-[#252880] transition-colors shrink-0">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                   Search
                 </button>
@@ -1422,7 +1422,7 @@ export default function MetaLeadsPage() {
                                   <div className="flex items-center justify-center gap-1.5">
                                     {wa && <a href={wa} target="_blank" rel="noopener noreferrer" title="WhatsApp" className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-green-600 hover:bg-green-50 transition-colors"><svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></a>}
                                     {ur.Present_Mobile && <a href={`tel:${ur.Present_Mobile}`} title="Call" className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg></a>}
-                                    {ur.MetaLead_Id && <button title="Log follow-up" onClick={() => router.push(`/dashboard/meta-leads/${encodeURIComponent(ur.MetaLead_Id)}#followups`)} className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-[#2E3093] hover:bg-[#2E3093]/5 transition-colors"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg></button>}
+                                    {ur.MetaLead_Id && <button title="Log follow-up" onClick={() => router.push(`/dashboard/meta-leads/${encodeURIComponent(ur.MetaLead_Id)}#followups`)} className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-[#6366F1] hover:bg-[#6366F1]/5 transition-colors"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg></button>}
                                   </div>
                                 </td>
                               </tr>
@@ -1570,7 +1570,7 @@ export default function MetaLeadsPage() {
                                   void saveStatusOnly(row, val);
                                 }}
                                 disabled={!canUpdate || isSaving}
-                                className="w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
+                                className="w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/15 focus:border-[#6366F1] disabled:bg-slate-50 disabled:text-slate-400"
                               >
                                 <option value="">— Status</option>
                                 {filters.statusOptions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -1608,7 +1608,7 @@ export default function MetaLeadsPage() {
                                   title={row.Student_Id > 0 ? 'Open linked inquiry' : 'Convert to inquiry'}
                                   onClick={() => void handleConvertLead(row)}
                                   disabled={!row.MetaLead_Id || (row.Student_Id > 0 ? !canUpdate : !canCreate) || convertingLeadId === row.MetaLead_Id}
-                                  className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${row.MetaLead_Id && (row.Student_Id > 0 ? canUpdate : canCreate) ? 'border border-[#2E3093]/20 bg-[#2E3093]/5 text-[#2E3093] hover:bg-[#2E3093]/10' : 'border border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed'}`}
+                                  className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${row.MetaLead_Id && (row.Student_Id > 0 ? canUpdate : canCreate) ? 'border border-[#6366F1]/20 bg-[#6366F1]/5 text-[#6366F1] hover:bg-[#6366F1]/10' : 'border border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed'}`}
                                 >{convertingLeadId === row.MetaLead_Id ? '…' : row.Student_Id > 0 ? 'Open' : 'Convert'}</button>
                               </div>
                             </td>

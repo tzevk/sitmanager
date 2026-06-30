@@ -114,14 +114,14 @@ export async function listTickets(opts: ListTicketsOptions): Promise<SupportTick
     params.push(like, like, like, like);
   }
 
-  const limit = Math.min(Math.max(opts.limit ?? 200, 1), 500);
+  const limit = opts.limit == null ? null : Math.min(Math.max(opts.limit, 1), 500);
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const limitSql = limit == null ? '' : ` LIMIT ${limit}`;
 
   const [rows] = await pool.query(
     `SELECT * FROM support_tickets ${whereSql}
      ORDER BY (status IN ('open','in_progress')) DESC,
-              COALESCE(last_reply_at, created_at) DESC
-     LIMIT ${limit}`,
+              COALESCE(last_reply_at, created_at) DESC${limitSql}`,
     params
   );
   return rows as SupportTicket[];

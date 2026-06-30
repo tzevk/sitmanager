@@ -125,7 +125,7 @@ function statusPill(id: number | null) {
   return 'bg-gray-100 text-gray-500 border border-gray-200';
 }
 
-const ctrl = 'w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors disabled:bg-slate-50 disabled:text-slate-400';
+const ctrl = 'w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/15 focus:border-[#6366F1] placeholder:text-slate-400 transition-colors disabled:bg-slate-50 disabled:text-slate-400';
 
 function KvRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -396,7 +396,7 @@ export default function MetaLeadDetailPage() {
                       <select
                         value={draft.statusId ?? lead.Status_id ?? ''}
                         onChange={(e) => handleStatusClick(Number(e.target.value))}
-                        className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+                        className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/20 focus:border-[#6366F1]"
                       >
                         <option value="" disabled>Change status…</option>
                         {ALL_STATUSES.map((s) => (
@@ -423,10 +423,10 @@ export default function MetaLeadDetailPage() {
                           >
                             <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${
                               isCurrent
-                                ? 'border-[#2E3093] bg-[#2E3093] text-white shadow-md shadow-[#2E3093]/20'
+                                ? 'border-[#6366F1] bg-[#6366F1] text-white shadow-md shadow-[#6366F1]/20'
                                 : isDone
                                 ? 'border-emerald-500 bg-emerald-500 text-white'
-                                : 'border-slate-200 bg-white text-slate-300 group-hover:border-[#2E3093]/40'
+                                : 'border-slate-200 bg-white text-slate-300 group-hover:border-[#6366F1]/40'
                             }`}>
                               {isDone ? (
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
@@ -435,7 +435,7 @@ export default function MetaLeadDetailPage() {
                               )}
                             </div>
                             <span className={`text-[10px] font-bold whitespace-nowrap transition-colors ${
-                              isCurrent ? 'text-[#2E3093]' : isDone ? 'text-emerald-600' : 'text-slate-400'
+                              isCurrent ? 'text-[#6366F1]' : isDone ? 'text-emerald-600' : 'text-slate-400'
                             }`}>{stage.label}</span>
                           </button>
                           {!isLast && (
@@ -457,7 +457,7 @@ export default function MetaLeadDetailPage() {
                       onClick={() => setActiveTab(tab.id)}
                       className={`px-4 py-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
                         activeTab === tab.id
-                          ? 'border-[#2E3093] text-[#2E3093] bg-[#2E3093]/3'
+                          ? 'border-[#6366F1] text-[#6366F1] bg-[#6366F1]/3'
                           : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                       }`}
                     >
@@ -602,7 +602,7 @@ export default function MetaLeadDetailPage() {
                             return (
                               <button key={t} type="button" onClick={() => setFollowUpType(t)}
                                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
-                                  active ? 'bg-[#2E3093] text-white border-[#2E3093]' : 'bg-white text-slate-500 border-slate-200 hover:border-[#2E3093]/30'
+                                  active ? 'bg-[#6366F1] text-white border-[#6366F1]' : 'bg-white text-slate-500 border-slate-200 hover:border-[#6366F1]/30'
                                 }`}>
                                 {icons[t]}{t}
                               </button>
@@ -640,7 +640,7 @@ export default function MetaLeadDetailPage() {
                                 : 'What was discussed? Any outcome or next steps…'
                               }
                               rows={3}
-                              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 resize-none transition-colors"
+                              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/15 focus:border-[#6366F1] placeholder:text-slate-400 resize-none transition-colors"
                             />
                           </div>
                           <div className="shrink-0 space-y-1.5">
@@ -649,12 +649,12 @@ export default function MetaLeadDetailPage() {
                               type="date"
                               value={newNextDate}
                               onChange={(e) => setNewNextDate(e.target.value)}
-                              className="bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors w-[150px]"
+                              className="bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/15 focus:border-[#6366F1] transition-colors w-[150px]"
                             />
                             <button
                               onClick={handleAddNote}
                               disabled={savingNote || !newNote.trim()}
-                              className="w-full px-3 py-2 rounded-lg bg-[#2E3093] text-white text-xs font-bold hover:bg-[#252880] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                              className="w-full px-3 py-2 rounded-lg bg-[#6366F1] text-white text-xs font-bold hover:bg-[#252880] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                             >
                               {savingNote ? 'Saving…' : 'Log Note'}
                             </button>
