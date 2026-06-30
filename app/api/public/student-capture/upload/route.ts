@@ -10,11 +10,10 @@ export const runtime = 'nodejs';
 const MAX_BYTES = 5 * 1024 * 1024;
 const PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const DOCUMENT_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
-const ONGOING_BATCH_SQL = `
+const AVAILABLE_BATCH_SQL = `
   COALESCE(b.IsActive, 1) = 1
   AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
   AND (b.Cancel IS NULL OR b.Cancel = 0)
-  AND (b.SDate IS NULL OR DATE(b.SDate) <= CURDATE())
   AND (b.EDate IS NULL OR DATE(b.EDate) >= CURDATE())
 `;
 
@@ -54,7 +53,7 @@ async function verifyStudentInBatch(studentId: number, batchId: number): Promise
        AND am.IsActive = 1
        AND am.IsDelete = 0
        AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
-       AND ${ONGOING_BATCH_SQL}
+      AND ${AVAILABLE_BATCH_SQL}
        AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
      LIMIT 1`,
     [studentId, batchId]

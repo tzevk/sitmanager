@@ -84,7 +84,7 @@ export default function StudentCapturePage() {
         if (!cancelled) setBatches(Array.isArray(data?.batches) ? data.batches : []);
       })
       .catch(() => {
-        if (!cancelled) setError('Could not load ongoing batches. Please refresh and try again.');
+        if (!cancelled) setError('Could not load batches. Please refresh and try again.');
       })
       .finally(() => {
         if (!cancelled) setLoadingBatches(false);
@@ -110,7 +110,7 @@ export default function StudentCapturePage() {
         if (!cancelled) setStudents(Array.isArray(data?.students) ? data.students : []);
       })
       .catch(() => {
-        if (!cancelled) setError('Could not load students for this ongoing batch.');
+        if (!cancelled) setError('Could not load students for this batch.');
       })
       .finally(() => {
         if (!cancelled) setLoadingStudents(false);
@@ -137,7 +137,7 @@ export default function StudentCapturePage() {
     setSuccess('');
 
     if (!batchId || !studentId) {
-      setError('Select an ongoing batch and student first.');
+      setError('Select a batch and student first.');
       return;
     }
     if (!photoFile) {
@@ -188,7 +188,7 @@ export default function StudentCapturePage() {
             </div>
           </div>
           <div className="hidden rounded-xl bg-emerald-50 px-4 py-2 text-right text-xs font-bold text-emerald-700 ring-1 ring-emerald-100 sm:block">
-            Ongoing batches only
+            Ongoing and upcoming batches
           </div>
         </div>
       </div>
@@ -200,13 +200,13 @@ export default function StudentCapturePage() {
               <div>
                 <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#2E3093]/60">Step 1</p>
                 <h2 className="mt-1 text-lg font-black text-slate-950">Select Student Details</h2>
-                <p className="mt-1 text-sm text-slate-500">Only active students from ongoing batches are shown.</p>
+                <p className="mt-1 text-sm text-slate-500">Only active students from ongoing and upcoming batches are shown.</p>
               </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
-                <span className="mb-1.5 block text-xs font-bold text-slate-600">Ongoing Batch</span>
+                <span className="mb-1.5 block text-xs font-bold text-slate-600">Batch</span>
                 <select
                   value={batchId}
                   onChange={(event) => setBatchId(event.target.value)}
@@ -214,7 +214,7 @@ export default function StudentCapturePage() {
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-800 outline-none ring-[#2E3093]/15 transition focus:border-[#2E3093] focus:ring-4 disabled:bg-slate-50"
                   required
                 >
-                  <option value="">{loadingBatches ? 'Loading ongoing batches...' : 'Select ongoing batch'}</option>
+                  <option value="">{loadingBatches ? 'Loading batches...' : 'Select batch'}</option>
                   {batches.map((batch) => (
                     <option key={batch.id} value={batch.id}>
                       {batch.code} {batch.course ? `- ${batch.course}` : ''} ({batch.studentCount})
@@ -342,7 +342,7 @@ export default function StudentCapturePage() {
           <p className="mt-1 text-xs leading-relaxed text-slate-500">These files will reflect in the student profile and the saved photo will be used by ID-card import.</p>
 
           <div className="mt-4 space-y-2 text-xs font-bold">
-            <div className={`rounded-xl px-3 py-2 ${batchId ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}>Ongoing batch selected</div>
+            <div className={`rounded-xl px-3 py-2 ${batchId ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}>Batch selected</div>
             <div className={`rounded-xl px-3 py-2 ${studentId ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}>Student selected</div>
             <div className={`rounded-xl px-3 py-2 ${photoFile ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}>Photo captured</div>
             <div className={`rounded-xl px-3 py-2 ${selectedDocs.length > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}>{selectedDocs.length} document{selectedDocs.length === 1 ? '' : 's'} selected</div>

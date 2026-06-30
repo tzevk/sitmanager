@@ -229,7 +229,25 @@ export async function GET(req: NextRequest) {
       }));
     }
 
+    // 7. Fees summary — ledger based: debit = charged, credit = paid, pending = balance.
+    //    Mirrors the admin per-student fee page (debit - credit). Student_Id is indexed.
+    let feesSummary = { total: 0, paid: 0, pending: 0 };
+    try {
+      const [feeRows] = await pool.query<any[]>(
+        `SELECT
+           SUM(CASE WHEN TypeR = 'D' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS debit,
+           SUM(CASE WHEN TypeR = 'C' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS credit
+         FROM s_fees_mst
+         WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+        [studentId]
+      );
+      const debit = Number(feeRows[0]?.debit || 0);
+      const credit = Number(feeRows[0]?.credit || 0);
+      feesSummary = { total: Math.round(debit), paid: Math.round(credit), pending: Math.round(debit - credit) };
+    } catch { /* fees optional — never block the dashboard */ }
+
     return NextResponse.json({
+      fees: feesSummary,
       student: {
         student_id: student?.Student_Id,
         student_name: student?.Student_Name,

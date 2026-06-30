@@ -142,7 +142,10 @@
       "Bash(node -e \"console.log\\('docx version:', require\\('docx/package.json'\\).version\\)\")",
       "Bash(node -e \"const d=require\\('docx'\\);console.log\\(['Document','Packer','Paragraph','TextRun','ImageRun','Table','TableRow','TableCell','WidthType','AlignmentType','BorderStyle'].map\\(k=>k+':'+\\(typeof d[k]!=='undefined'\\)\\).join\\(' '\\)\\)\")",
       "Bash(node -r dotenv/config scripts/db/_b.mjs dotenv_config_path=.env.local)",
-      "Bash(curl -s -m 10 -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"http://localhost:3000/api/health\")"
+      "Bash(curl -s -m 10 -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"http://localhost:3000/api/health\")",
+      "Bash(node -r dotenv/config scripts/db/_f.mjs dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/_fq.mjs dotenv_config_path=.env.local)",
+      "Bash(curl -s -m 60 -o /dev/null -w \"HTTP %{http_code} in %{time_total}s\\\\n\" \"http://localhost:3000/api/student-portal/academics\")"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

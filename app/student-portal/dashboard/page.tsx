@@ -6,6 +6,11 @@ import Link from 'next/link';
 import { toBatchNumber } from '@/lib/batch-display';
 
 interface AcademicsData {
+  fees: {
+    total: number;
+    paid: number;
+    pending: number;
+  };
   student: {
     student_id: number;
     student_name: string;
@@ -79,6 +84,10 @@ function fmtDate(s: string) {
   return new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 }
 
+function fmtINR(n: number): string {
+  return '₹' + Math.round(Math.abs(n)).toLocaleString('en-IN');
+}
+
 function fmtTime(value?: string | null): string {
   const t = String(value ?? '').trim();
   if (!t) return '';
@@ -136,6 +145,9 @@ export default function StudentDashboardPage() {
 
   const att    = data?.attendance  ?? { total_lectures: 0, attended: 0, absent: 0, percentage: 0 };
   const assign = data?.assignments ?? { total_given: 0, received: 0, pending: 0, percentage: 0 };
+  const fees   = data?.fees        ?? { total: 0, paid: 0, pending: 0 };
+  const feesCleared = fees.pending <= 0;
+  const paidPct = fees.total > 0 ? Math.min(100, Math.round((fees.paid / fees.total) * 100)) : (feesCleared ? 100 : 0);
   const student       = data?.student;
   const recentLectures     = data?.recent_lectures     ?? [];
   const recentAssignments  = data?.recent_assignments  ?? [];
@@ -233,6 +245,41 @@ export default function StudentDashboardPage() {
           </div>
         </div>
 
+      </div>
+
+      {/* ── Pending fees ───────────────────────────────────── */}
+      <div className="px-4 mt-3">
+        <div className="bg-white rounded-2xl overflow-hidden border border-gray-100" style={{ boxShadow: '0 4px 20px rgba(46,48,147,0.10)' }}>
+          <div className={`h-[3px] w-full ${feesCleared ? 'bg-green-500' : 'bg-red-500'}`} />
+          <div className="p-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Pending Fees</p>
+                {feesCleared ? (
+                  <p className="text-2xl font-black text-green-600 mt-1 leading-none flex items-center gap-1.5">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    Fully Paid
+                  </p>
+                ) : (
+                  <p className="text-3xl font-black text-red-600 mt-1 leading-none">{fmtINR(fees.pending)}</p>
+                )}
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-gray-400">Paid</p>
+                <p className="text-sm font-black text-[#2E3093]">{fmtINR(fees.paid)}</p>
+                {fees.total > 0 && <p className="text-[10px] text-gray-400 mt-0.5">of {fmtINR(fees.total)}</p>}
+              </div>
+            </div>
+            {fees.total > 0 && (
+              <>
+                <div className="mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all ${feesCleared ? 'bg-green-500' : 'bg-[#2E3093]'}`} style={{ width: `${paidPct}%` }} />
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1.5">{paidPct}% paid{!feesCleared ? ` · ${fmtINR(fees.pending)} due` : ''}</p>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ── Recent sessions ───────────────────────────────── */}

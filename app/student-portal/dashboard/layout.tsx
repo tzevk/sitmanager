@@ -67,7 +67,8 @@ export default function StudentDashboardLayout({ children }: { children: React.R
   const initials = (studentName || 'S').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#f0f2f8]">
+    <div className="min-h-screen bg-slate-200 flex justify-center">
+     <div className="relative w-full max-w-[480px] min-h-screen bg-[#f0f2f8] flex flex-col shadow-2xl">
 
       {/* App bar */}
       <header className="sticky top-0 z-20 bg-white border-b border-gray-100">
@@ -99,7 +100,7 @@ export default function StudentDashboardLayout({ children }: { children: React.R
       </main>
 
       {/* Bottom nav */}
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] z-30 bg-white border-t border-gray-100">
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-30 bg-white border-t border-gray-100 shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
         <div className="flex" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           {navItems.map(item => {
             const active = isActive(item.href);
@@ -120,6 +121,7 @@ export default function StudentDashboardLayout({ children }: { children: React.R
           })}
         </div>
       </nav>
+     </div>
     </div>
   );
 }
