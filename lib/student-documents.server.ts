@@ -18,6 +18,12 @@ export interface AdmissionUploadBundle {
   }>;
 }
 
+export interface AdmissionAssetSummary {
+  photo: boolean;
+  documents: boolean;
+  count: number;
+}
+
 function sanitizeSegment(value: string): string {
   return value
     .normalize('NFKD')
@@ -159,9 +165,6 @@ export async function saveAdmissionAssetsForInquiry(
   const pool = getPool();
   await ensureInquiryDocManifestTable(pool);
 
-  // Re-submits replace the prior set.
-  await pool.query(`DELETE FROM ${INQUIRY_DOC_MANIFEST_TABLE} WHERE Inquiry_Id = ?`, [inquiryId]);
-
   for (const doc of bundle.documents) {
     if (!DOCUMENT_TYPES.has(doc.file.type)) {
       throw Object.assign(new Error(`Unsupported file type for ${doc.key}`), { status: 400 });
@@ -172,6 +175,10 @@ export async function saveAdmissionAssetsForInquiry(
     const extension = normaliseExtension(doc.file, '.pdf');
     const filename = `${sanitizeSegment(doc.key)}-${Date.now()}${extension}`;
     const bytes = Buffer.from(await doc.file.arrayBuffer());
+    await pool.query(
+      `DELETE FROM ${INQUIRY_DOC_MANIFEST_TABLE} WHERE Inquiry_Id = ? AND Doc_Key = ? AND Is_Photo = 0`,
+      [inquiryId, doc.key]
+    );
     await pool.query(
       `INSERT INTO ${INQUIRY_DOC_MANIFEST_TABLE} (Inquiry_Id, Doc_Key, Filename, Content_Type, Is_Photo, File_Data) VALUES (?, ?, ?, ?, 0, ?)`,
       [inquiryId, doc.key, filename, doc.file.type || 'application/octet-stream', bytes]
@@ -190,10 +197,37 @@ export async function saveAdmissionAssetsForInquiry(
     const filename = `photo-${Date.now()}${extension}`;
     const bytes = Buffer.from(await photo.arrayBuffer());
     await pool.query(
+      `DELETE FROM ${INQUIRY_DOC_MANIFEST_TABLE} WHERE Inquiry_Id = ? AND Is_Photo = 1`,
+      [inquiryId]
+    );
+    await pool.query(
       `INSERT INTO ${INQUIRY_DOC_MANIFEST_TABLE} (Inquiry_Id, Doc_Key, Filename, Content_Type, Is_Photo, File_Data) VALUES (?, ?, ?, ?, 1, ?)`,
       [inquiryId, 'photo', filename, photo.type || 'image/jpeg', bytes]
     );
   }
+}
+
+export async function getAdmissionInquiryAssetSummary(inquiryId: number): Promise<AdmissionAssetSummary> {
+  if (!inquiryId) return { photo: false, documents: false, count: 0 };
+  const pool = getPool();
+  await ensureInquiryDocManifestTable(pool);
+  const [rows] = await pool.query(
+    `SELECT
+       SUM(CASE WHEN Is_Photo = 1 THEN 1 ELSE 0 END) as PhotoCount,
+       SUM(CASE WHEN Is_Photo = 0 THEN 1 ELSE 0 END) as DocumentCount,
+       COUNT(*) as TotalCount
+     FROM ${INQUIRY_DOC_MANIFEST_TABLE}
+     WHERE Inquiry_Id = ? AND File_Data IS NOT NULL`,
+    [inquiryId]
+  ) as [any[], any];
+  const row = (rows as any[])[0] || {};
+  const photoCount = Number(row.PhotoCount || 0);
+  const documentCount = Number(row.DocumentCount || 0);
+  return {
+    photo: photoCount > 0,
+    documents: documentCount > 0,
+    count: Number(row.TotalCount || 0),
+  };
 }
 
 /** Move inquiry-scoped uploads onto the real student once it exists (on grant). */

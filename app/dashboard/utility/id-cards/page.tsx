@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import { FaIdCard, FaPlus, FaTrashAlt, FaUpload, FaFileWord, FaTimes } from 'react-icons/fa';
+import React, { useState, useCallback, useEffect } from 'react';
+import { FaIdCard, FaPlus, FaTrashAlt, FaUpload, FaFileWord, FaTimes, FaFileImport } from 'react-icons/fa';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -28,6 +28,53 @@ export default function IdCardGeneratorPage() {
   const [cards, setCards] = useState<IdCard[]>([blankCard()]);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
+
+  // Batchwise import
+  const [courses, setCourses] = useState<{ id: number; name: string }[]>([]);
+  const [batches, setBatches] = useState<{ Batch_Id: number; Batch_code: string; Course_Name: string; SDate: string }[]>([]);
+  const [courseId, setCourseId] = useState('');
+  const [batchId, setBatchId] = useState('');
+  const [importing, setImporting] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/inquiry/options').then(r => r.json()).then(d => setCourses(d?.courses || [])).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!courseId) { setBatches([]); setBatchId(''); return; }
+    setBatchId('');
+    fetch(`/api/inquiry/batches?courseId=${courseId}`)
+      .then(r => r.json())
+      .then(d => setBatches(d?.batches || []))
+      .catch(() => setBatches([]));
+  }, [courseId]);
+
+  const importBatch = async () => {
+    if (!batchId) { setError('Select a batch to import.'); return; }
+    setImporting(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/id-cards/students?batchId=${batchId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Import failed');
+      const imported: IdCard[] = (data.students || []).map((s: { name: string; contactNo: string }) => ({
+        id: Math.random().toString(36).slice(2),
+        name: s.name,
+        course: data.course || '',
+        batchNo: data.batchCode || '',
+        contactNo: s.contactNo || '',
+        validUpto: data.validUpto || '',
+        photo: null,
+      }));
+      if (imported.length === 0) { setError('No students found in this batch.'); return; }
+      // Drop empty starter cards, keep any the user already filled, then append.
+      setCards(prev => [...prev.filter(c => c.name.trim() || c.photo), ...imported]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Import failed');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const update = useCallback((id: string, patch: Partial<IdCard>) => {
     setCards(prev => prev.map(c => (c.id === id ? { ...c, ...patch } : c)));
@@ -108,6 +155,42 @@ export default function IdCardGeneratorPage() {
               ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               : <FaFileWord className="w-4 h-4" />}
             {generating ? 'Generating…' : 'Generate DOCX'}
+          </button>
+        </div>
+      </div>
+
+      {/* Batchwise import */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3">
+        <div className="flex items-center gap-2 mb-2">
+          <FaFileImport className="w-3.5 h-3.5 text-[#2E3093]" />
+          <span className="text-[11px] font-black uppercase tracking-wider text-[#2E3093]">Import from Batch</span>
+          <span className="text-[11px] text-slate-400">— pick a program &amp; batch to pre-fill cards (photos added manually)</span>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[200px] flex-1">
+            <label className={lbl}>Training Program</label>
+            <select value={courseId} onChange={(e) => setCourseId(e.target.value)} className={field}>
+              <option value="">— Select Program —</option>
+              {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div className="min-w-[200px] flex-1">
+            <label className={lbl}>Batch Number</label>
+            <select value={batchId} onChange={(e) => setBatchId(e.target.value)} disabled={!courseId} className={field}>
+              <option value="">{courseId ? '— Select Batch —' : 'Select a program first'}</option>
+              {batches.map(b => (
+                <option key={b.Batch_Id} value={b.Batch_Id}>
+                  {b.Batch_code}{b.SDate ? ` — starts ${b.SDate}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button onClick={importBatch} disabled={!batchId || importing}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#2E3093] hover:bg-[#252780] text-white text-sm font-bold transition-colors disabled:opacity-50">
+            {importing
+              ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              : <FaFileImport className="w-3.5 h-3.5" />}
+            {importing ? 'Importing…' : 'Import Students'}
           </button>
         </div>
       </div>

@@ -2,7 +2,7 @@
 import { getPool } from '@/lib/db';
 import { generateFeesReceiptNo } from '@/lib/fees-receipt';
 import { sendOnlineAdmissionSubmissionEmail } from '@/lib/mailer';
-import { hasAdmissionUploads, type AdmissionUploadBundle, saveAdmissionAssetsForStudent, saveAdmissionAssetsForInquiry, attachInquiryAssetsToStudent } from '@/lib/student-documents.server';
+import { getAdmissionInquiryAssetSummary, hasAdmissionUploads, type AdmissionUploadBundle, saveAdmissionAssetsForStudent, saveAdmissionAssetsForInquiry, attachInquiryAssetsToStudent } from '@/lib/student-documents.server';
 
 let inquiryTableNameCache: string | null = null;
 let statusTableNameCache: string | null | undefined;
@@ -1531,6 +1531,16 @@ export async function submitOnlineAdmission(
   if (!siRows.length) throw Object.assign(new Error('Inquiry not found'), { status: 404 });
   const inquiry = siRows[0];
 
+  const savedAssets = await getAdmissionInquiryAssetSummary(inquiryId);
+  const hasPhoto = Boolean(uploads?.photoFile) || savedAssets.photo;
+  const hasDocuments = Boolean(uploads?.documents?.length) || savedAssets.documents;
+  if (!hasPhoto) {
+    throw Object.assign(new Error('Passport size photo is required before submitting the admission form.'), { status: 400 });
+  }
+  if (!hasDocuments) {
+    throw Object.assign(new Error('At least one academic document is required before submitting the admission form.'), { status: 400 });
+  }
+
   // Strip File objects from KT arrays before persisting
   const stripFiles = (arr: any[]) =>
     Array.isArray(arr)
@@ -1585,9 +1595,6 @@ export async function submitOnlineAdmission(
 
   const studentId = await resolveStudentIdForInquiry(pool, inquiryId);
   if (hasAdmissionUploads(uploads)) {
-    // Saving documents must NEVER block the submission — the form data is already
-    // persisted above. If a file fails to save (bad type, too large, storage/DB
-    // issue), log it and let the applicant's submission still go through.
     try {
       if (studentId) {
         await saveAdmissionAssetsForStudent(studentId, uploads);
@@ -1597,7 +1604,8 @@ export async function submitOnlineAdmission(
         await saveAdmissionAssetsForInquiry(inquiryId, uploads);
       }
     } catch (e) {
-      console.warn('[OnlineAdmission] document save failed (submission still accepted):', e);
+      console.error('[OnlineAdmission] document save failed:', e);
+      throw e;
     }
   }
 

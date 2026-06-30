@@ -5,8 +5,17 @@ import { requirePermission } from '@/lib/api-auth';
 import { apiRateLimiter } from '@/lib/rate-limit';
 import { resolveInquiryTableName } from '@/lib/services/inquiry.service';
 import { syncOnlineAdmissionIntoCurrentDb, saveStructuredAdmissionData } from '@/lib/services/online-admission.service';
+import { getAdmissionInquiryAssetSummary, hasAdmissionUploads, saveAdmissionAssetsForInquiry, type AdmissionUploadBundle } from '@/lib/student-documents.server';
 
 const ONLINE_ADMISSION_PAYLOAD_TABLE = 'online_admission_payload';
+
+const STATIC_DOCUMENT_FIELDS = [
+  ['ssc_marksheetFile', 'ssc_marksheet'],
+  ['hsc_marksheetFile', 'hsc_marksheet'],
+  ['diploma_marksheetFile', 'diploma_marksheet'],
+  ['grad_marksheetFile', 'graduation_marksheet'],
+  ['postgrad_marksheetFile', 'postgraduation_marksheet'],
+] as const;
 
 let payloadTableReady = false;
 
@@ -43,6 +52,34 @@ async function resolveStudentMasterTableName(pool: any): Promise<string | null> 
 }
 
 const toStr = (value: unknown): string => (value == null ? '' : String(value));
+
+function getUploadedFile(formData: FormData, key: string): File | null {
+  const value = formData.get(key);
+  return value instanceof File && value.size > 0 ? value : null;
+}
+
+function buildUploads(formData: FormData, body: Record<string, any>): AdmissionUploadBundle {
+  const documents: AdmissionUploadBundle['documents'] = [];
+
+  for (const [field, key] of STATIC_DOCUMENT_FIELDS) {
+    const file = getUploadedFile(formData, field);
+    if (file) documents.push({ key, file });
+  }
+
+  const levels = ['ssc', 'hsc', 'diploma', 'grad', 'postgrad'] as const;
+  for (const level of levels) {
+    const details = Array.isArray(body[`${level}_ktDetails`]) ? body[`${level}_ktDetails`] : [];
+    details.forEach((_: unknown, index: number) => {
+      const file = getUploadedFile(formData, `${level}_ktDetails.${index}.marksheetFile`);
+      if (file) documents.push({ key: `${level}_kt_${index + 1}_marksheet`, file });
+    });
+  }
+
+  return {
+    photoFile: getUploadedFile(formData, 'photoFile'),
+    documents,
+  };
+}
 
 const fallbackStatusMap: Record<number, string> = {
   0: 'New Inquiry', 1: 'Follow Up', 2: 'Interested', 3: 'Confirmed',
@@ -152,11 +189,13 @@ export async function GET(
       }
       const payload = await getPayload(pool, inquiryId);
       const draftMeta = payload?.__draftProgress ?? null;
+      const savedAssets = await getAdmissionInquiryAssetSummary(inquiryId);
       return NextResponse.json({
         success: true,
         inquiryId,
         draft: payload,
         draftMeta,
+        savedAssets,
       });
     }
 
@@ -440,7 +479,19 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid inquiry id' }, { status: 400 });
     }
 
-    const body = await req.json().catch(() => ({}));
+    const contentType = req.headers.get('content-type') || '';
+    let body: Record<string, any>;
+    let uploads: AdmissionUploadBundle | undefined;
+
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await req.formData();
+      const rawPayload = String(formData.get('payload') || '{}');
+      body = { payload: JSON.parse(rawPayload) };
+      uploads = buildUploads(formData, body.payload || {});
+    } else {
+      body = await req.json().catch(() => ({}));
+    }
+
     const payload = body?.payload;
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       return NextResponse.json({ error: 'payload is required' }, { status: 400 });
@@ -468,10 +519,17 @@ export async function POST(
       console.warn('[OnlineAdmission] saveStructuredAdmissionData failed on autosave:', e);
     }
 
+    if (hasAdmissionUploads(uploads)) {
+      await saveAdmissionAssetsForInquiry(inquiryId, uploads);
+    }
+
+    const savedAssets = await getAdmissionInquiryAssetSummary(inquiryId);
+
     return NextResponse.json({
       success: true,
       inquiryId,
       autosavedAt: nextPayload.__draftProgress?.autosavedAt,
+      savedAssets,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to save draft';

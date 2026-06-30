@@ -53,6 +53,12 @@ const ALUMNI_MEMBERSHIP_FEE = 899;
 
 type PaymentSubMethod = '' | 'razorpay' | 'qr' | 'neft';
 
+type SavedAdmissionAssets = {
+  photo: boolean;
+  documents: boolean;
+  count?: number;
+};
+
 const NEFT_BANK_DETAILS = {
   bank: 'Axis Bank Ltd.',
   address: 'City Survey No. 841 to 846, "Florence" Florence CHS. LTD. Vakola, Mumbai - 400 055',
@@ -125,6 +131,7 @@ export default function PublicAdmissionFormPage() {
   const [academicTab, setAcademicTab] = useState<'ssc' | 'hsc' | 'diploma' | 'graduation' | 'postgrad'>('ssc');
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [manualSaving, setManualSaving] = useState(false);
+  const [savedAdmissionAssets, setSavedAdmissionAssets] = useState<SavedAdmissionAssets>({ photo: false, documents: false });
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Set once we load an already-submitted payload — viewing it must not autosave
   // (which would strip submittedAt and revert the application to a draft).
@@ -372,6 +379,13 @@ export default function PublicAdmissionFormPage() {
         if (res.ok && data?.draft && typeof data.draft === 'object') {
           serverData = data.draft as DraftPayload;
           serverProgress = (data.draftMeta as DraftProgress | null) ?? ((serverData as DraftPayload).__draftProgress ?? null);
+          if (data.savedAssets && typeof data.savedAssets === 'object') {
+            setSavedAdmissionAssets({
+              photo: Boolean(data.savedAssets.photo),
+              documents: Boolean(data.savedAssets.documents),
+              count: Number(data.savedAssets.count || 0),
+            });
+          }
           // A finally-submitted form has no __draftProgress; fall back to its
           // submittedAt timestamp so it still wins over a stale/absent local draft.
           const submittedAt = (serverData as { submittedAt?: unknown }).submittedAt;
@@ -505,23 +519,84 @@ export default function PublicAdmissionFormPage() {
 
       localStorage.setItem(draftKey, JSON.stringify({ data: serialisable, progress, savedAt: Date.now() }));
 
-      const res = await fetch(`/api/online-admission/${encodeURIComponent(studentId)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          payload: {
-            ...serialisable,
-            __draftProgress: {
-              ...progress,
-              source: 'public-admission-form',
-            },
-          },
-        }),
-      });
+      const payload = {
+        ...serialisable,
+        __draftProgress: {
+          ...progress,
+          source: 'public-admission-form',
+        },
+      };
+
+      const hasSelectedFiles = Boolean(formData.photoFile)
+        || Boolean(formData.ssc_marksheetFile)
+        || Boolean(formData.hsc_marksheetFile)
+        || Boolean(formData.diploma_marksheetFile)
+        || Boolean(formData.grad_marksheetFile)
+        || Boolean(formData.postgrad_marksheetFile)
+        || formData.ssc_ktDetails.some((detail) => Boolean(detail.marksheetFile))
+        || formData.hsc_ktDetails.some((detail) => Boolean(detail.marksheetFile))
+        || formData.diploma_ktDetails.some((detail) => Boolean(detail.marksheetFile))
+        || formData.grad_ktDetails.some((detail) => Boolean(detail.marksheetFile))
+        || formData.postgrad_ktDetails.some((detail) => Boolean(detail.marksheetFile));
+
+      let res: Response;
+      if (hasSelectedFiles) {
+        const requestBody = new FormData();
+        requestBody.append('payload', JSON.stringify(payload));
+
+        const appendFile = (field: string, file: File | null) => {
+          if (file) requestBody.append(field, file);
+        };
+
+        appendFile('photoFile', formData.photoFile);
+        appendFile('ssc_marksheetFile', formData.ssc_marksheetFile);
+        appendFile('hsc_marksheetFile', formData.hsc_marksheetFile);
+        appendFile('diploma_marksheetFile', formData.diploma_marksheetFile);
+        appendFile('grad_marksheetFile', formData.grad_marksheetFile);
+        appendFile('postgrad_marksheetFile', formData.postgrad_marksheetFile);
+
+        const appendKtFiles = (
+          level: 'ssc' | 'hsc' | 'diploma' | 'grad' | 'postgrad',
+          details: Array<{ marksheetFile: File | null }>
+        ) => {
+          details.forEach((detail, index) => {
+            if (detail.marksheetFile) {
+              requestBody.append(`${level}_ktDetails.${index}.marksheetFile`, detail.marksheetFile);
+            }
+          });
+        };
+
+        appendKtFiles('ssc', formData.ssc_ktDetails);
+        appendKtFiles('hsc', formData.hsc_ktDetails);
+        appendKtFiles('diploma', formData.diploma_ktDetails);
+        appendKtFiles('grad', formData.grad_ktDetails);
+        appendKtFiles('postgrad', formData.postgrad_ktDetails);
+
+        res = await fetch(`/api/online-admission/${encodeURIComponent(studentId)}`, {
+          method: 'POST',
+          body: requestBody,
+        });
+      } else {
+        res = await fetch(`/api/online-admission/${encodeURIComponent(studentId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payload }),
+        });
+      }
+
+      const responseData = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         setAutoSaveStatus('idle');
         return false;
+      }
+
+      if (responseData.savedAssets && typeof responseData.savedAssets === 'object') {
+        setSavedAdmissionAssets({
+          photo: Boolean(responseData.savedAssets.photo),
+          documents: Boolean(responseData.savedAssets.documents),
+          count: Number(responseData.savedAssets.count || 0),
+        });
       }
 
       setAutoSaveStatus('saved');
@@ -1009,6 +1084,20 @@ export default function PublicAdmissionFormPage() {
     });
   };
 
+  const hasSelectedAcademicDocument = () => Boolean(formData.ssc_marksheetFile)
+    || Boolean(formData.hsc_marksheetFile)
+    || Boolean(formData.diploma_marksheetFile)
+    || Boolean(formData.grad_marksheetFile)
+    || Boolean(formData.postgrad_marksheetFile)
+    || formData.ssc_ktDetails.some((detail) => Boolean(detail.marksheetFile))
+    || formData.hsc_ktDetails.some((detail) => Boolean(detail.marksheetFile))
+    || formData.diploma_ktDetails.some((detail) => Boolean(detail.marksheetFile))
+    || formData.grad_ktDetails.some((detail) => Boolean(detail.marksheetFile))
+    || formData.postgrad_ktDetails.some((detail) => Boolean(detail.marksheetFile));
+
+  const hasRequiredPhoto = () => Boolean(formData.photoFile) || savedAdmissionAssets.photo;
+  const hasRequiredAcademicDocument = () => hasSelectedAcademicDocument() || savedAdmissionAssets.documents;
+
   const handleSameAddress = (checked: boolean) => {
     handleChange('sameAsPresent', checked);
     if (checked) {
@@ -1035,8 +1124,16 @@ export default function PublicAdmissionFormPage() {
           alert('Please fill all required fields in Personal Info');
           return false;
         }
+        if (!hasRequiredPhoto()) {
+          alert('Please upload a passport size photo before continuing.');
+          return false;
+        }
         break;
       case 2:
+        if (!hasRequiredAcademicDocument()) {
+          alert('Please upload at least one academic document before continuing.');
+          return false;
+        }
         break;
       case 3:
         if (requiresExperiencedConsent() && !experiencedConsentAcknowledged) {
@@ -1136,6 +1233,16 @@ export default function PublicAdmissionFormPage() {
     if (!formData.firstName || !formData.lastName || !formData.dob || !formData.gender || !formData.email || !formData.mobile) {
       alert('Please complete Step 1: Fill all required fields in Personal Info');
       setCurrentStep(1);
+      return;
+    }
+    if (!hasRequiredPhoto()) {
+      alert('Please complete Step 1: Upload a passport size photo');
+      setCurrentStep(1);
+      return;
+    }
+    if (!hasRequiredAcademicDocument()) {
+      alert('Please complete Step 2: Upload at least one academic document');
+      setCurrentStep(2);
       return;
     }
     if (!formData.trainingProgrammeId || !formData.batchCode) {
@@ -1975,6 +2082,7 @@ export default function PublicAdmissionFormPage() {
                                 onChange={(e) => handleChange('photoFile', e.target.files?.[0] || null)}
                                 accept=".jpg,.jpeg,.png"
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] transition-all"
+                                required={!savedAdmissionAssets.photo}
                               />
                               {formData.photoFile && (
                                 <span className="text-xs text-green-600 flex items-center gap-1 mt-2">

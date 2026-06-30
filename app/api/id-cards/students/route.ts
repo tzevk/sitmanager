@@ -42,17 +42,18 @@ export async function GET(req: NextRequest) {
 
     const batchCode = String(batch.Batch_code || '').trim();
 
+    // Admission-first: start from admission_master (Batch_Id is indexed) and join
+    // student_master by primary key. Avoids a full student_master scan.
     const [studentRows] = await pool.query(
-      `SELECT DISTINCT sm.Student_Id, sm.Student_Name, sm.Present_Mobile
-       FROM student_master sm
-       LEFT JOIN admission_master am
-         ON am.Student_Id = sm.Student_Id
-        AND am.IsActive = 1 AND am.IsDelete = 0
-        AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
-       WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-         AND (am.Batch_Id = ? OR (TRIM(sm.Batch_Code) <> '' AND sm.Batch_Code = ?))
+      `SELECT sm.Student_Id, sm.Student_Name, sm.Present_Mobile
+       FROM admission_master am
+       JOIN student_master sm ON sm.Student_Id = am.Student_Id
+       WHERE am.Batch_Id = ?
+         AND am.IsActive = 1 AND am.IsDelete = 0
+         AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
+         AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
        ORDER BY sm.Student_Name ASC`,
-      [batchId, batchCode]
+      [batchId]
     );
 
     const students = (studentRows as any[]).map((r) => ({
