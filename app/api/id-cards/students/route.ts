@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
 import { getPool } from '@/lib/db';
+import { getTableCols } from '@/lib/db-schema';
 
 export const runtime = 'nodejs';
 
@@ -41,11 +42,14 @@ export async function GET(req: NextRequest) {
     if (!batch) return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
 
     const batchCode = String(batch.Batch_code || '').trim();
+    const studentColumns = await getTableCols(pool, 'student_master');
+    const photoColumn = ['Photo', 'Student_Photo', 'PhotoPath', 'Photo_Path'].find((column) => studentColumns.has(column));
+    const photoSelect = photoColumn ? `, COALESCE(sm.\`${photoColumn}\`, '') AS PhotoUrl` : `, '' AS PhotoUrl`;
 
     // Admission-first: start from admission_master (Batch_Id is indexed) and join
     // student_master by primary key. Avoids a full student_master scan.
     const [studentRows] = await pool.query(
-      `SELECT sm.Student_Id, sm.Student_Name, sm.Present_Mobile
+      `SELECT sm.Student_Id, sm.Student_Name, sm.Present_Mobile${photoSelect}
        FROM admission_master am
        JOIN student_master sm ON sm.Student_Id = am.Student_Id
        WHERE am.Batch_Id = ?
@@ -59,6 +63,7 @@ export async function GET(req: NextRequest) {
     const students = (studentRows as any[]).map((r) => ({
       name: String(r.Student_Name || '').trim(),
       contactNo: String(r.Present_Mobile || '').trim(),
+      photoUrl: String(r.PhotoUrl || '').trim(),
     }));
 
     return NextResponse.json({

@@ -9,6 +9,14 @@ function toInt(value: string | null): number | null {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+const ONGOING_BATCH_SQL = `
+  COALESCE(b.IsActive, 1) = 1
+  AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
+  AND (b.Cancel IS NULL OR b.Cancel = 0)
+  AND (b.SDate IS NULL OR DATE(b.SDate) <= CURDATE())
+  AND (b.EDate IS NULL OR DATE(b.EDate) >= CURDATE())
+`;
+
 export async function GET(req: NextRequest) {
   try {
     const pool = getPool();
@@ -22,11 +30,13 @@ export async function GET(req: NextRequest) {
            COALESCE(sm.Present_Mobile, '') AS Present_Mobile,
            COALESCE(sm.Email, '') AS Email
          FROM admission_master am
+         JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
          JOIN student_master sm ON sm.Student_Id = am.Student_Id
          WHERE am.Batch_Id = ?
            AND am.IsActive = 1
            AND am.IsDelete = 0
            AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
+           AND ${ONGOING_BATCH_SQL}
            AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
          ORDER BY sm.Student_Name ASC`,
         [batchId]
@@ -61,6 +71,7 @@ export async function GET(req: NextRequest) {
         AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
        WHERE (b.IsDelete = 0 OR b.IsDelete IS NULL)
          AND (b.Cancel IS NULL OR b.Cancel = 0)
+         AND ${ONGOING_BATCH_SQL}
        GROUP BY b.Batch_Id, b.Batch_code, c.Course_Name, b.Admission_Date, b.SDate, b.Date_Added
        ORDER BY COALESCE(b.IsActive, 0) DESC,
                 COALESCE(b.Admission_Date, b.SDate, b.Date_Added) DESC,

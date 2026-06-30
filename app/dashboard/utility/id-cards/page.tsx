@@ -23,6 +23,24 @@ const blankCard = (): IdCard => ({
 const field = 'w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400';
 const lbl = 'block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5';
 
+async function imageUrlToDataUrl(url: string): Promise<string | null> {
+  if (!url) return null;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    if (!blob.type.startsWith('image/')) return null;
+    return await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 export default function IdCardGeneratorPage() {
   const { canView, loading } = useResourcePermissions('student');
   const [cards, setCards] = useState<IdCard[]>([blankCard()]);
@@ -57,15 +75,15 @@ export default function IdCardGeneratorPage() {
       const res = await fetch(`/api/id-cards/students?batchId=${batchId}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Import failed');
-      const imported: IdCard[] = (data.students || []).map((s: { name: string; contactNo: string }) => ({
+      const imported: IdCard[] = await Promise.all((data.students || []).map(async (s: { name: string; contactNo: string; photoUrl?: string }) => ({
         id: Math.random().toString(36).slice(2),
         name: s.name,
         course: data.course || '',
         batchNo: data.batchCode || '',
         contactNo: s.contactNo || '',
         validUpto: data.validUpto || '',
-        photo: null,
-      }));
+        photo: s.photoUrl ? await imageUrlToDataUrl(s.photoUrl) : null,
+      })));
       if (imported.length === 0) { setError('No students found in this batch.'); return; }
       // Drop empty starter cards, keep any the user already filled, then append.
       setCards(prev => [...prev.filter(c => c.name.trim() || c.photo), ...imported]);
