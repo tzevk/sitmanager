@@ -147,7 +147,14 @@
       "Bash(node -r dotenv/config scripts/db/_fq.mjs dotenv_config_path=.env.local)",
       "Bash(curl -s -m 60 -o /dev/null -w \"HTTP %{http_code} in %{time_total}s\\\\n\" \"http://localhost:3000/api/student-portal/academics\")",
       "Bash(sed -n '/interface StudentSession/,/}/p' app/api/student-portal/auth/session/route.ts)",
-      "Bash(node -r dotenv/config scripts/db/_sid.mjs dotenv_config_path=.env.local)"
+      "Bash(node -r dotenv/config scripts/db/_sid.mjs dotenv_config_path=.env.local)",
+      "Bash(curl -s -m 90 -o /dev/null -w \"first  HTTP %{http_code} in %{time_total}s\\\\n\" \"http://localhost:3000/admission/176540\")",
+      "Bash(curl -s -m 30 -o /dev/null -w \"second HTTP %{http_code} in %{time_total}s\\\\n\" \"http://localhost:3000/admission/176540\")",
+      "Bash(curl -s -m 20 \"http://localhost:3000/admission/176540\")",
+      "Bash(sed -i '' 's#http://localhost:3000/student-portal/dashboard#http://localhost:3000/admission/176540#' /private/tmp/claude-501/-Users-tanvikadam-Desktop-SIT-sitmanager/1afdaeb2-772f-4878-935b-dc4b3277097a/scratchpad/cdp3.mjs)",
+      "Bash(sed -i '' 's#Network.setCookie'\\\\'',{name:'\\\\''sit_student_session'\\\\'',value:TOK,domain:'\\\\''localhost'\\\\'',path:'\\\\''/'\\\\''}#Network.setCookie'\\\\'',{name:'\\\\''_noop'\\\\'',value:'\\\\''1'\\\\'',domain:'\\\\''localhost'\\\\'',path:'\\\\''/'\\\\''}#' /private/tmp/claude-501/-Users-tanvikadam-Desktop-SIT-sitmanager/1afdaeb2-772f-4878-935b-dc4b3277097a/scratchpad/cdp3.mjs)",
+      "Bash(sed -i '' 's#pendingFees:.*btns:document.querySelectorAll\\('\\\\''a,button'\\\\''\\).length#title:document.title,bodyLen:document.body.innerText.length,hasForm:/admission|payment|programme|Programme/i.test\\(document.body.innerText\\)#' /private/tmp/claude-501/-Users-tanvikadam-Desktop-SIT-sitmanager/1afdaeb2-772f-4878-935b-dc4b3277097a/scratchpad/cdp3.mjs)",
+      "Bash(node /private/tmp/claude-501/-Users-tanvikadam-Desktop-SIT-sitmanager/1afdaeb2-772f-4878-935b-dc4b3277097a/scratchpad/cdp3.mjs)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

@@ -3590,77 +3590,34 @@ export default function PublicAdmissionFormPage() {
                           </div>
                         )}
 
-                        {/* Option 3/4: Loan (Piping / EDD / PDD / Process Weekend) */}
-                        {(isPipingFulltime || is75kPlan || isProcessWeekend) && (() => {
-                          const isSelected = formData.modeOfPayment === 'Loan (0% Interest)';
-                          const loanAdmissionBase = isPipingEngineeringFulltime ? 12000 : ((isEngineeringDesignDraftingFulltime || isProcessWeekend || is75kPlan) ? 15000 : 12000);
-                          const loanAdmission = loanAdmissionBase + ALUMNI_MEMBERSHIP_FEE;
-                          const loanAmount = isProcessWeekend ? 35000 : is75kPlan ? 60000 : 100000;
-                          const loanTuitionFee = loanAdmissionBase + loanAmount;
-                          const loanTotal = loanAdmission + loanAmount;
-                          const fmtLoan = (n: number) => n.toLocaleString('en-IN');
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => handleChange('modeOfPayment', 'Loan (0% Interest)')}
-                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
-                                isSelected
-                                  ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-200 shadow-md'
-                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                              }`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                                  isSelected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'
-                                }`}>
-                                  <i className="fas fa-university text-lg"></i>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className={`text-sm font-bold ${isSelected ? 'text-blue-800' : 'text-gray-800'}`}>0% Interest Loan</span>
-                                    <span className="bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">0% Interest</span>
-                                  </div>
-                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-blue-600' : 'text-gray-500'}`}>
-                                    Pay &#8377;{fmtLoan(loanAdmission)} at admission + &#8377;{fmtLoan(loanAmount)} via financial institution loan
-                                  </div>
-                                </div>
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                                  isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-                                }`}>
-                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />}
-                                </div>
+                        {/* 0% Interest Loan — arranged offline by the admissions team (contact-us note, not an online payment option) */}
+                        {(isPipingFulltime || is75kPlan || isProcessWeekend) && (
+                          <div className="w-full text-left p-4 rounded-xl border-2 border-blue-200 bg-blue-50/60">
+                            <div className="flex items-start gap-3">
+                              <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-100 text-blue-600">
+                                <i className="fas fa-university text-lg"></i>
                               </div>
-                              {isSelected && (
-                                <div className="mt-3 ml-[52px] bg-blue-100/50 rounded-lg p-3 space-y-2">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-blue-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-blue-400"></i>Tuition Fee</span>
-                                    <span className="font-bold text-blue-800">&#8377;{fmtLoan(loanTuitionFee)}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-blue-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-blue-400"></i>One Time Membership Fee (Sitians Alumni Association)</span>
-                                    <span className="font-bold text-blue-800">&#8377;{fmtLoan(ALUMNI_MEMBERSHIP_FEE)}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-blue-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-blue-400"></i>At Admission (pay now)</span>
-                                    <span className="font-bold text-blue-800">&#8377;{fmtLoan(loanAdmission)}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-blue-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-blue-400"></i>Loan (via financial institution)</span>
-                                    <span className="font-bold text-blue-800">&#8377;{fmtLoan(loanAmount)}</span>
-                                  </div>
-                                  <div className="border-t border-blue-200 pt-2 flex items-center justify-between text-xs">
-                                    <span className="text-blue-800 font-bold">Total</span>
-                                    <span className="font-extrabold text-blue-900">&#8377;{fmtLoan(loanTotal)}</span>
-                                  </div>
-                                  <div className="flex items-start gap-1.5 pt-1">
-                                    <i className="fas fa-info-circle text-blue-400 text-[10px] mt-0.5 flex-shrink-0"></i>
-                                    <p className="text-[10px] text-blue-700">Includes &#8377;{ALUMNI_MEMBERSHIP_FEE} One Time Membership Fee (Sitians Alumni Association). Loan approval is subject to the financial institution. If the loan is not approved, the student must pay the remaining fees independently. No refund will be made if the student leaves the batch during the training programme.</p>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm font-bold text-blue-800">0% Interest Loan</span>
+                                  <span className="bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">0% Interest</span>
+                                </div>
+                                <p className="text-xs text-blue-700 mt-1.5 leading-relaxed">
+                                  Our 0% interest financing (a small amount at admission with the balance via a financial-institution loan) is arranged personally by our admissions team and can&#39;t be completed through this online form.
+                                </p>
+                                <div className="mt-2.5 rounded-lg bg-white border border-blue-200 px-3 py-2.5">
+                                  <p className="text-[11px] font-bold uppercase tracking-wider text-blue-500 mb-1.5">Contact us to apply</p>
+                                  <div className="space-y-1.5 text-xs text-gray-700">
+                                    <a href="tel:+912226682290" className="flex items-center gap-2 hover:text-blue-700 transition-colors"><i className="fas fa-phone text-blue-400 text-[11px] w-3.5"></i>(022) 26682290</a>
+                                    <a href="tel:+919821569885" className="flex items-center gap-2 hover:text-blue-700 transition-colors"><i className="fas fa-mobile-alt text-blue-400 text-[11px] w-3.5"></i>+91 98215 69885</a>
+                                    <a href="mailto:enquiry@suvidya.ac.in" className="flex items-center gap-2 hover:text-blue-700 transition-colors"><i className="fas fa-envelope text-blue-400 text-[11px] w-3.5"></i>enquiry@suvidya.ac.in</a>
                                   </div>
                                 </div>
-                              )}
-                            </button>
-                          );
-                        })()}
+                                <p className="text-[10px] text-blue-600/80 mt-2">Or choose another payment option above to complete your admission online right now.</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
 
                         {/* Option: Pay at Office (Password Override) */}
                         {(() => {

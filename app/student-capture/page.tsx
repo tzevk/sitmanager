@@ -10,6 +10,13 @@ type BatchOption = {
   studentCount: number;
 };
 
+type ProgramOption = {
+  id: number;
+  name: string;
+  batchCount: number;
+  studentCount: number;
+};
+
 type StudentOption = {
   id: number;
   name: string;
@@ -57,13 +64,16 @@ function makeEmptyDocuments(): DocumentDraft[] {
 }
 
 export default function StudentCapturePage() {
+  const [programs, setPrograms] = useState<ProgramOption[]>([]);
   const [batches, setBatches] = useState<BatchOption[]>([]);
   const [students, setStudents] = useState<StudentOption[]>([]);
+  const [programId, setProgramId] = useState('');
   const [batchId, setBatchId] = useState('');
   const [studentId, setStudentId] = useState('');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [documents, setDocuments] = useState<DocumentDraft[]>(makeEmptyDocuments);
-  const [loadingBatches, setLoadingBatches] = useState(true);
+  const [loadingPrograms, setLoadingPrograms] = useState(true);
+  const [loadingBatches, setLoadingBatches] = useState(false);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -77,22 +87,53 @@ export default function StudentCapturePage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoadingBatches(true);
+    setLoadingPrograms(true);
     fetch('/api/public/student-capture/options')
       .then((res) => res.json())
       .then((data) => {
-        if (!cancelled) setBatches(Array.isArray(data?.batches) ? data.batches : []);
+        if (!cancelled) setPrograms(Array.isArray(data?.programs) ? data.programs : []);
       })
       .catch(() => {
-        if (!cancelled) setError('Could not load batches. Please refresh and try again.');
+        if (!cancelled) setError('Could not load training programs. Please refresh and try again.');
       })
       .finally(() => {
-        if (!cancelled) setLoadingBatches(false);
+        if (!cancelled) setLoadingPrograms(false);
       });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!programId) {
+      setBatches([]);
+      setBatchId('');
+      setStudents([]);
+      setStudentId('');
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingBatches(true);
+    setBatchId('');
+    setStudents([]);
+    setStudentId('');
+    fetch(`/api/public/student-capture/options?courseId=${encodeURIComponent(programId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setBatches(Array.isArray(data?.batches) ? data.batches : []);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Could not load batches for this training program.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingBatches(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [programId]);
 
   useEffect(() => {
     if (!batchId) {
@@ -136,8 +177,8 @@ export default function StudentCapturePage() {
     setError('');
     setSuccess('');
 
-    if (!batchId || !studentId) {
-      setError('Select a batch and student first.');
+    if (!programId || !batchId || !studentId) {
+      setError('Select a training program, batch code, and student first.');
       return;
     }
     if (!photoFile) {
@@ -204,20 +245,38 @@ export default function StudentCapturePage() {
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 lg:grid-cols-3">
               <label className="block">
-                <span className="mb-1.5 block text-xs font-bold text-slate-600">Batch</span>
+                <span className="mb-1.5 block text-xs font-bold text-slate-600">Training Program</span>
                 <select
-                  value={batchId}
-                  onChange={(event) => setBatchId(event.target.value)}
-                  disabled={loadingBatches}
+                  value={programId}
+                  onChange={(event) => setProgramId(event.target.value)}
+                  disabled={loadingPrograms}
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-800 outline-none ring-[#2E3093]/15 transition focus:border-[#2E3093] focus:ring-4 disabled:bg-slate-50"
                   required
                 >
-                  <option value="">{loadingBatches ? 'Loading batches...' : 'Select batch'}</option>
+                  <option value="">{loadingPrograms ? 'Loading programs...' : 'Select training program'}</option>
+                  {programs.map((program) => (
+                    <option key={program.id} value={program.id}>
+                      {program.name} ({program.batchCount} batches, {program.studentCount} students)
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold text-slate-600">Batch Code</span>
+                <select
+                  value={batchId}
+                  onChange={(event) => setBatchId(event.target.value)}
+                  disabled={!programId || loadingBatches}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-800 outline-none ring-[#2E3093]/15 transition focus:border-[#2E3093] focus:ring-4 disabled:bg-slate-50"
+                  required
+                >
+                  <option value="">{loadingBatches ? 'Loading batches...' : 'Select batch code'}</option>
                   {batches.map((batch) => (
                     <option key={batch.id} value={batch.id}>
-                      {batch.code} {batch.course ? `- ${batch.course}` : ''} ({batch.studentCount})
+                      {batch.code} ({batch.studentCount} students)
                     </option>
                   ))}
                 </select>
@@ -344,6 +403,7 @@ export default function StudentCapturePage() {
           <p className="mt-1 text-xs leading-relaxed text-slate-500">These files will reflect in the student profile and the saved photo will be used by ID-card import.</p>
 
           <div className="mt-4 space-y-2 text-xs font-bold">
+            <div className={`rounded-xl px-3 py-2 ${programId ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}>Training program selected</div>
             <div className={`rounded-xl px-3 py-2 ${batchId ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}>Batch selected</div>
             <div className={`rounded-xl px-3 py-2 ${studentId ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}>Student selected</div>
             <div className={`rounded-xl px-3 py-2 ${photoFile ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-400'}`}>Photo captured</div>
@@ -355,7 +415,7 @@ export default function StudentCapturePage() {
 
           <button
             type="submit"
-            disabled={submitting || !batchId || !studentId || !photoFile || selectedDocs.length === 0}
+            disabled={submitting || !programId || !batchId || !studentId || !photoFile || selectedDocs.length === 0}
             className="mt-4 w-full rounded-xl bg-[#2E3093] px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#252780] disabled:cursor-not-allowed disabled:opacity-45"
           >
             {submitting ? 'Uploading...' : 'Save to Student Profile'}
