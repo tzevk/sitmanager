@@ -121,7 +121,11 @@
       "Bash(curl -s -m 15 -i \"https://suvidya.app/api/webhook/whatsapp\")",
       "Bash(curl -s -m 15 -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://suvidya.app/api/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=TESTWRONG&hub.challenge=12345\")",
       "Bash(curl -s -m 15 -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"http://localhost:3000/api/webhook/whatsapp\")",
-      "Bash(curl -s -m 15 \"http://localhost:3000/api/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=WRONG&hub.challenge=abc123\" -w \"\\\\nHTTP %{http_code}\\\\n\")"
+      "Bash(curl -s -m 15 \"http://localhost:3000/api/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=WRONG&hub.challenge=abc123\" -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -m 20 --cookie sit_session=__CMDSUB_OUTPUT__ http://localhost:3000/api/inquiry/suvidya?inquiryId=62312)",
+      "Bash(sed -i '' \"s|fetch\\('http://localhost:9223/json/new?about:blank'\\)|fetch\\('http://localhost:9223/json/new?about:blank',{method:'PUT'}\\)|\" cdp2.mjs)",
+      "Bash(node cdp2.mjs)",
+      "Bash(sed -i '' \"s|hasSuvidya:document.body.innerText.includes\\('from Suvidya'\\)|hasSuvidyaPanel:/FROM SUVIDYA/i.test\\(document.body.innerText\\)|; s|hasSource:document.body.innerText.includes\\('Page Source'\\)|hasEmail:document.body.innerText.includes\\('belnekaratharv2003'\\),hasCourse:document.body.innerText.includes\\('MEP Engineering'\\),hasSynced:document.body.innerText.includes\\('Synced'\\)|\" cdp2.mjs)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
