@@ -92,7 +92,7 @@ function fmtDateTime(value?: string | Date | null): string {
   return raw;
 }
 
-const ctrl = 'w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
+const ctrl = 'w-full bg-white border border-slate-300 rounded-md px-2.5 py-1 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] hover:border-slate-400 placeholder:text-slate-400 transition-colors';
 const lbl  = 'block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5';
 
 const contactModeChannels: Record<string, { channel: string; label: string }> = {
@@ -453,7 +453,7 @@ export default function AddInquiryPage() {
   if (!editId && !canCreate) return <AccessDenied message="You do not have permission to create inquiries." />;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
 
       {/* Header — title left, actions right */}
       <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-4 py-2 flex items-center gap-3 relative overflow-hidden">
@@ -522,7 +522,7 @@ export default function AddInquiryPage() {
             )}
             <span className="ml-auto text-[10px] text-slate-400 shrink-0">Synced {fmtDateTime(suvidya.syncedAt)}</span>
           </div>
-          <div className="px-4 py-2.5 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2">
+          <div className="px-3 py-2 grid grid-cols-2 sm:grid-cols-4 gap-x-2 gap-y-1.5">
             <ReadField label="Name" value={suvidya.studentName} />
             <ReadField label="Mobile" value={suvidya.mobile} />
             <ReadField label="Email" value={suvidya.email} />
@@ -548,13 +548,14 @@ export default function AddInquiryPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
-          <div className="grid grid-cols-4 gap-x-3 gap-y-2">
+      <div className="bg-white rounded-xl border border-slate-200 px-3 py-2">
+          <div className="grid grid-cols-6 gap-x-2 gap-y-1">
 
             {/* Personal */}
-            <div className="col-span-4 flex items-center gap-2">
-              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 shrink-0">Personal Details</span>
-              <div className="flex-1 border-t border-slate-100" />
+            <div className="col-span-6 flex items-center gap-2 mt-1 first:mt-0">
+              <span className="h-3.5 w-1 rounded-full bg-[#2E3093] shrink-0" />
+              <span className="text-[11px] font-black uppercase tracking-wider text-[#2E3093] shrink-0">Personal Details</span>
+              <div className="flex-1 border-t border-slate-200" />
             </div>
             <div className="col-span-2">
               <label className={lbl}>Name <span className="text-red-400 normal-case">*</span></label>
@@ -585,32 +586,29 @@ export default function AddInquiryPage() {
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email address" className={ctrl} />
             </div>
 
-            <div>
+            <div className="col-span-2">
               <label className={lbl}>Nationality</label>
               <input list="nat-list" value={nationality} onChange={e => setNationality(e.target.value)} placeholder="Type or select" className={ctrl} />
               <datalist id="nat-list">{opts?.nationalities?.map(n => <option key={n} value={n} />)}</datalist>
             </div>
-            <div>
+            <div className="col-span-2">
               <label className={lbl}>Country</label>
               <input list="country-list" value={country} onChange={e => setCountry(e.target.value)} placeholder="Type or select" className={ctrl} />
               <datalist id="country-list">{opts?.countries?.map(c => <option key={c} value={c} />)}</datalist>
             </div>
-            <div className="col-span-2">
-              <label className={lbl}>Notes</label>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any notes…" rows={1} className={`${ctrl} resize-none`} />
-            </div>
 
             {/* Inquiry Details */}
-            <div className="col-span-4 flex items-center gap-2 mt-1">
-              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 shrink-0">Inquiry Details</span>
-              <div className="flex-1 border-t border-slate-100" />
+            <div className="col-span-6 flex items-center gap-2 mt-1 first:mt-0">
+              <span className="h-3.5 w-1 rounded-full bg-[#2E3093] shrink-0" />
+              <span className="text-[11px] font-black uppercase tracking-wider text-[#2E3093] shrink-0">Inquiry Details</span>
+              <div className="flex-1 border-t border-slate-200" />
             </div>
             <div>
               <label className={lbl}>Inquiry Date</label>
               <input type="date" value={inquiryDate} onChange={e => setInquiryDate(e.target.value)} className={ctrl} />
             </div>
             {editId && (
-              <div>
+              <div className="col-span-2">
                 <label className={lbl}>Inquiry in Software</label>
                 <input value={fmtDateTime(inquirySoftwareTime)} readOnly className={`${ctrl} bg-slate-50 text-slate-500`} />
               </div>
@@ -622,7 +620,7 @@ export default function AddInquiryPage() {
                 {opts?.inquiryModes?.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
-            <div className={editId ? '' : 'col-span-2'}>
+            <div className={editId ? 'col-span-2' : 'col-span-4'}>
               <label className={lbl}>How They Know About SIT</label>
               <select value={inquiryType} onChange={e => setInquiryType(e.target.value)} className={ctrl}>
                 <option value="">— Select —</option>
@@ -631,9 +629,10 @@ export default function AddInquiryPage() {
             </div>
 
             {/* Training */}
-            <div className="col-span-4 flex items-center gap-2 mt-1">
-              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 shrink-0">Training</span>
-              <div className="flex-1 border-t border-slate-100" />
+            <div className="col-span-6 flex items-center gap-2 mt-1 first:mt-0">
+              <span className="h-3.5 w-1 rounded-full bg-[#2E3093] shrink-0" />
+              <span className="text-[11px] font-black uppercase tracking-wider text-[#2E3093] shrink-0">Training</span>
+              <div className="flex-1 border-t border-slate-200" />
             </div>
             <div className="col-span-2">
               <label className={lbl}>Course</label>
@@ -642,14 +641,14 @@ export default function AddInquiryPage() {
                 {opts?.courses?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-            <div>
+            <div className="col-span-2">
               <label className={lbl}>Category</label>
               <select value={category} onChange={e => { setCategory(e.target.value); setBatchCode(''); }} className={ctrl}>
                 <option value="">— Select —</option>
                 {opts?.categories?.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <div>
+            <div className="col-span-2">
               <label className={lbl}>Batch</label>
               <select value={batchCode} onChange={e => setBatchCode(e.target.value)} className={ctrl}>
                 <option value="">— Select Batch —</option>
@@ -662,11 +661,12 @@ export default function AddInquiryPage() {
             </div>
 
             {/* Education + Status on same row */}
-            <div className="col-span-4 flex items-center gap-2 mt-1">
-              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 shrink-0">Education & Status</span>
-              <div className="flex-1 border-t border-slate-100" />
+            <div className="col-span-6 flex items-center gap-2 mt-1 first:mt-0">
+              <span className="h-3.5 w-1 rounded-full bg-[#2E3093] shrink-0" />
+              <span className="text-[11px] font-black uppercase tracking-wider text-[#2E3093] shrink-0">Education & Status</span>
+              <div className="flex-1 border-t border-slate-200" />
             </div>
-            <div>
+            <div className="col-span-2">
               <label className={lbl}>Qualification</label>
               <select value={qualification} onChange={e => setQualification(e.target.value)} className={ctrl}>
                 <option value="">— Select Qualification —</option>
@@ -674,7 +674,7 @@ export default function AddInquiryPage() {
                 {opts?.qualifications?.map(q => <option key={q} value={q}>{q}</option>)}
               </select>
             </div>
-            <div>
+            <div className="col-span-2">
               <label className={lbl}>Discipline</label>
               <select value={discipline} onChange={e => setDiscipline(e.target.value)} className={ctrl}>
                 <option value="">— Select Discipline —</option>
@@ -695,7 +695,7 @@ export default function AddInquiryPage() {
           </div>
         </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+      <div className="bg-white rounded-xl border border-slate-200 px-3 py-2">
         <div className="flex items-center justify-between mb-2 gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Follow-up Discussion</span>

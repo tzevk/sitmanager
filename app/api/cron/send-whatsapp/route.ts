@@ -53,6 +53,16 @@ function normalizePhone(mobile: string | null) {
   return digits;
 }
 
+function validateWhatsAppConfig() {
+  if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) {
+    return NextResponse.json(
+      { error: "WhatsApp configuration missing: WHATSAPP_TOKEN and PHONE_NUMBER_ID are required" },
+      { status: 500 }
+    );
+  }
+  return null;
+}
+
 function getCourse(courseName: string | null, campaignName: string | null) {
   const raw = (courseName || campaignName || "").toLowerCase();
   if (raw.includes("piping drafting") || raw.includes("piping design")) return "piping_drafting";
@@ -117,6 +127,27 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const configError = validateWhatsAppConfig();
+  if (configError) return configError;
+
+  const { searchParams } = new URL(req.url);
+  const testPhone = normalizePhone(searchParams.get("testPhone"));
+  if (testPhone) {
+    try {
+      const data = await sendWelcomeTemplate(testPhone, searchParams.get("name") || "Test");
+      return NextResponse.json({ success: true, test: true, phone: testPhone, data });
+    } catch (err) {
+      return NextResponse.json(
+        { success: false, test: true, phone: testPhone, error: errorMessage(err, "WhatsApp test failed") },
+        { status: 502 }
+      );
+    }
+  }
+
+  if (searchParams.has("testPhone")) {
+    return NextResponse.json({ error: "Invalid testPhone. Use country code format, e.g. 918879997431" }, { status: 400 });
+  }
+
   let db;
   try {
     db = await mysql.createConnection(DB_CONFIG);
@@ -128,6 +159,7 @@ export async function GET(req: NextRequest) {
         AND mobile IS NOT NULL
         AND mobile != ''
         AND (wa_stage IS NULL OR wa_stage NOT IN ('opted_out', 'completed'))
+      ORDER BY id ASC
       LIMIT 50
     `);
 

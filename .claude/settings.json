@@ -125,7 +125,10 @@
       "Bash(curl -s -m 20 --cookie sit_session=__CMDSUB_OUTPUT__ http://localhost:3000/api/inquiry/suvidya?inquiryId=62312)",
       "Bash(sed -i '' \"s|fetch\\('http://localhost:9223/json/new?about:blank'\\)|fetch\\('http://localhost:9223/json/new?about:blank',{method:'PUT'}\\)|\" cdp2.mjs)",
       "Bash(node cdp2.mjs)",
-      "Bash(sed -i '' \"s|hasSuvidya:document.body.innerText.includes\\('from Suvidya'\\)|hasSuvidyaPanel:/FROM SUVIDYA/i.test\\(document.body.innerText\\)|; s|hasSource:document.body.innerText.includes\\('Page Source'\\)|hasEmail:document.body.innerText.includes\\('belnekaratharv2003'\\),hasCourse:document.body.innerText.includes\\('MEP Engineering'\\),hasSynced:document.body.innerText.includes\\('Synced'\\)|\" cdp2.mjs)"
+      "Bash(sed -i '' \"s|hasSuvidya:document.body.innerText.includes\\('from Suvidya'\\)|hasSuvidyaPanel:/FROM SUVIDYA/i.test\\(document.body.innerText\\)|; s|hasSource:document.body.innerText.includes\\('Page Source'\\)|hasEmail:document.body.innerText.includes\\('belnekaratharv2003'\\),hasCourse:document.body.innerText.includes\\('MEP Engineering'\\),hasSynced:document.body.innerText.includes\\('Synced'\\)|\" cdp2.mjs)",
+      "Bash(node /private/tmp/claude-501/-Users-tanvikadam-Desktop-SIT-sitmanager/1afdaeb2-772f-4878-935b-dc4b3277097a/scratchpad/cdp2.mjs)",
+      "Bash(sed -i '' \"s|hasSynced:document.body.innerText.includes\\('Synced'\\)|hasSecs:['PERSONAL DETAILS','INQUIRY DETAILS','TRAINING','EDUCATION \\\\& STATUS'].filter\\(s=>document.body.innerText.includes\\(s\\)\\).length|\" cdp2.mjs)",
+      "Bash(sed -i '' \"s|hasEmail:document.body.innerText.includes\\('belnekaratharv2003'\\),hasCourse:document.body.innerText.includes\\('MEP Engineering'\\)|hasNotes:document.body.innerText.includes\\('Notes'\\),hasName:document.body.innerText.includes\\('atharv'\\)|\" cdp2.mjs)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
