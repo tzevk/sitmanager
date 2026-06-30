@@ -198,7 +198,7 @@ export async function GET(
     // Student + latest admission + batch + course (explicit columns — no s.*)
     const [rows] = await pool.query(
       `SELECT
-         s.Student_Id, s.Student_Name, s.FName, s.MName, s.LName,
+         s.Student_Id, s.Student_Name, s.FName, s.MName, s.LName, s.Photo,
          s.DOB, s.Sex, s.Nationality,
          s.Email, s.Present_Mobile, s.Present_Mobile2,
          s.Present_Address, s.Present_City, s.Present_State, s.Present_Pin, s.Present_Country,

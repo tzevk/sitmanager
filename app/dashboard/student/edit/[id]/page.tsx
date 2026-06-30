@@ -56,6 +56,12 @@ function formatDocumentLabel(docName: string, uploadImage: string): string {
   return raw.replace(/\b\w/g, (char) => char.toUpperCase()) || 'Document';
 }
 
+function resolveStudentPhotoSrc(value: unknown, studentId: string): string {
+  const raw = String(value || '').trim();
+  if (raw.startsWith('data:image/') || raw.startsWith('/api/student-photo/') || raw.startsWith('/uploads/')) return raw;
+  return studentId ? `/api/student-photo/${encodeURIComponent(studentId)}` : '';
+}
+
 /* Structured academic ("Education & Enrolment") — mirrors the admission form */
 interface KtDetail { subjectName: string; year: string; semester: string; clearedYear: string; marks: string }
 type EduLevel = 'ssc' | 'hsc' | 'diploma' | 'grad' | 'postgrad';
@@ -155,6 +161,7 @@ export default function EditStudentPage() {
   const [uploadError, setUploadError] = useState('');
 
   /* sidebar stats */
+  const [studentPhotoUrl, setStudentPhotoUrl] = useState('');
   const [batchStartDate, setBatchStartDate] = useState('');
   const [batchEndDate, setBatchEndDate] = useState('');
 
@@ -232,6 +239,7 @@ export default function EditStudentPage() {
         if (!res.ok) throw new Error(data.error || 'Failed to load student');
 
         const s = data.student;
+        setStudentPhotoUrl(resolveStudentPhotoSrc(s.Photo, studentId));
         setForm({
           FName:            s.FName            || '',
           MName:            s.MName            || '',
@@ -811,6 +819,25 @@ export default function EditStudentPage() {
                     </h3>
                   </div>
                   <div className="px-4 py-3 space-y-2.5">
+                    <div>
+                      <p className="text-[10px] font-black text-[#2E3093] uppercase tracking-widest mb-2">Photo</p>
+                      <div className="flex justify-center rounded-xl border border-slate-200 bg-slate-50 p-2">
+                        {studentPhotoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={studentPhotoUrl}
+                            alt="Student photo"
+                            className="h-36 w-28 rounded-lg border border-slate-200 bg-white object-cover shadow-sm"
+                            onError={() => setStudentPhotoUrl('')}
+                          />
+                        ) : (
+                          <div className="flex h-36 w-28 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-center text-[11px] font-semibold text-slate-400">
+                            No photo
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
                     {/* Fees */}
                     <p className="text-[10px] font-black text-[#2E3093] uppercase tracking-widest mb-1">Fees</p>
                     <div className="flex items-center justify-between">
