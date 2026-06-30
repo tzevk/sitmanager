@@ -23,22 +23,36 @@ export async function GET(req: NextRequest) {
 
     if (batchId) {
       const [rows] = await pool.query(
-        `SELECT DISTINCT
-           sm.Student_Id,
-           sm.Student_Name,
-           COALESCE(sm.Present_Mobile, '') AS Present_Mobile,
-           COALESCE(sm.Email, '') AS Email
-         FROM admission_master am
-         JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
-         JOIN student_master sm ON sm.Student_Id = am.Student_Id
-         WHERE am.Batch_Id = ?
-           AND am.IsActive = 1
-           AND am.IsDelete = 0
-           AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
-           AND ${AVAILABLE_BATCH_SQL}
-           AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-         ORDER BY sm.Student_Name ASC`,
-        [batchId]
+        `SELECT DISTINCT Student_Id, Student_Name, Present_Mobile, Email
+         FROM (
+           SELECT
+             sm.Student_Id,
+             sm.Student_Name,
+             COALESCE(sm.Present_Mobile, '') AS Present_Mobile,
+             COALESCE(sm.Email, '') AS Email
+           FROM admission_master am
+           JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
+           JOIN student_master sm ON sm.Student_Id = am.Student_Id
+           WHERE am.Batch_Id = ?
+             AND am.IsActive = 1
+             AND am.IsDelete = 0
+             AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
+             AND ${AVAILABLE_BATCH_SQL}
+             AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+           UNION
+           SELECT
+             sm.Student_Id,
+             sm.Student_Name,
+             COALESCE(sm.Present_Mobile, '') AS Present_Mobile,
+             COALESCE(sm.Email, '') AS Email
+           FROM batch_mst b
+           JOIN student_master sm ON TRIM(sm.Batch_Code) = TRIM(b.Batch_code)
+           WHERE b.Batch_Id = ?
+             AND ${AVAILABLE_BATCH_SQL}
+             AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+         ) linked_students
+         ORDER BY Student_Name ASC`,
+        [batchId, batchId]
       );
 
       return NextResponse.json({
@@ -57,21 +71,29 @@ export async function GET(req: NextRequest) {
          b.Batch_Id,
          b.Batch_code,
          COALESCE(c.Course_Name, '') AS Course_Name,
-         COUNT(DISTINCT am.Student_Id) AS StudentCount
+         COUNT(DISTINCT linked.Student_Id) AS StudentCount
        FROM batch_mst b
        LEFT JOIN course_mst c ON c.Course_Id = b.Course_Id
-       JOIN admission_master am
-         ON am.Batch_Id = b.Batch_Id
-        AND am.IsActive = 1
-        AND am.IsDelete = 0
-        AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
-       JOIN student_master sm
-         ON sm.Student_Id = am.Student_Id
-        AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+       LEFT JOIN (
+         SELECT DISTINCT CAST(am.Batch_Id AS UNSIGNED) AS Batch_Id, CAST(am.Student_Id AS UNSIGNED) AS Student_Id
+         FROM admission_master am
+         JOIN student_master sm
+           ON sm.Student_Id = am.Student_Id
+          AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+         WHERE am.IsActive = 1
+           AND am.IsDelete = 0
+           AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
+         UNION
+         SELECT DISTINCT b2.Batch_Id, sm.Student_Id
+         FROM batch_mst b2
+         JOIN student_master sm ON TRIM(sm.Batch_Code) = TRIM(b2.Batch_code)
+         WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+       ) linked ON linked.Batch_Id = b.Batch_Id
        WHERE (b.IsDelete = 0 OR b.IsDelete IS NULL)
          AND (b.Cancel IS NULL OR b.Cancel = 0)
          AND ${AVAILABLE_BATCH_SQL}
        GROUP BY b.Batch_Id, b.Batch_code, c.Course_Name, b.Admission_Date, b.SDate, b.Date_Added
+       HAVING StudentCount > 0
        ORDER BY COALESCE(b.IsActive, 0) DESC,
                 COALESCE(b.Admission_Date, b.SDate, b.Date_Added) DESC,
                 b.Batch_Id DESC

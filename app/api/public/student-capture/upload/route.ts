@@ -44,16 +44,23 @@ async function verifyStudentInBatch(studentId: number, batchId: number): Promise
   const pool = getPool();
   const [rows] = await pool.query(
     `SELECT 1
-     FROM admission_master am
-     JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
-     JOIN student_master sm ON sm.Student_Id = am.Student_Id
-     WHERE am.Student_Id = ?
-       AND am.Batch_Id = ?
-       AND am.IsActive = 1
-       AND am.IsDelete = 0
-       AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
-      AND ${AVAILABLE_BATCH_SQL}
+     FROM batch_mst b
+     JOIN student_master sm ON sm.Student_Id = ?
+     WHERE b.Batch_Id = ?
+       AND ${AVAILABLE_BATCH_SQL}
        AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+       AND (
+         TRIM(sm.Batch_Code) = TRIM(b.Batch_code)
+         OR EXISTS (
+           SELECT 1
+           FROM admission_master am
+           WHERE am.Student_Id = sm.Student_Id
+             AND am.Batch_Id = b.Batch_Id
+             AND am.IsActive = 1
+             AND am.IsDelete = 0
+             AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
+         )
+       )
      LIMIT 1`,
     [studentId, batchId]
   );
