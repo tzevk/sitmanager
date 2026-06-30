@@ -112,16 +112,24 @@ export async function GET(req: NextRequest) {
     }
 
     if (mode === 'students') {
-      // No LIMIT: this powers the Add Fee Receipt page's client-side name/ID
-      // search, which needs the full roster or older students silently
-      // disappear from search once the active count passes the cap.
+      const studentParams: any[] = [];
+      const studentConditions = [
+        '(IsDelete = 0 OR IsDelete IS NULL)',
+        "COALESCE(NULLIF(TRIM(Student_Name), ''), '') <> ''",
+      ];
+      if (q) {
+        studentConditions.push('(Student_Name LIKE ? OR Student_Id = ? OR Batch_Code LIKE ?)');
+        studentParams.push(`%${q}%`, Number(q) || 0, `%${q}%`);
+      }
+      const requestedLimit = Number(searchParams.get('limit')) || 0;
+      const limit = q ? Math.max(1, Math.min(requestedLimit || 50, 100)) : 0;
       const studentRows = await runGuardedQuery(getPool(),
         `SELECT Student_Id, Student_Name, Batch_Code AS Batch_code
          FROM student_master
-         WHERE (IsDelete = 0 OR IsDelete IS NULL)
-           AND COALESCE(NULLIF(TRIM(Student_Name), ''), '') <> ''
-         ORDER BY Student_Name ASC`,
-        [],
+         WHERE ${studentConditions.join(' AND ')}
+         ORDER BY ${q ? 'Student_Id DESC' : 'Student_Name ASC'}
+         ${limit ? `LIMIT ${limit}` : ''}`,
+        studentParams,
         10
       );
       return NextResponse.json({ rows: studentRows });

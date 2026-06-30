@@ -96,6 +96,7 @@ export default function FeeDetailsEditPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [students, setStudents] = useState<StudentOption[]>([]);
+  const [studentSearchLoading, setStudentSearchLoading] = useState(false);
   const [studentNameInput, setStudentNameInput] = useState('');
   const [targetStudentId, setTargetStudentId] = useState<number | null>(null);
 
@@ -111,13 +112,6 @@ export default function FeeDetailsEditPage() {
   const [taxType, setTaxType] = useState('');
   const [receiptNo, setReceiptNo] = useState('');
   const [suggestedReceiptNo, setSuggestedReceiptNo] = useState('');
-
-  useEffect(() => {
-    fetch('/api/fee-details?mode=students')
-      .then((res) => res.json())
-      .then((payload) => setStudents(Array.isArray(payload.rows) ? payload.rows : []))
-      .catch(() => setStudents([]));
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -164,6 +158,38 @@ export default function FeeDetailsEditPage() {
     return students.find((student) => student.Student_Name.toLowerCase() === lowered)?.Student_Id ?? null;
   };
 
+  useEffect(() => {
+    if (!data?.record) return;
+    const query = studentNameInput.trim();
+    const idFromLabel = query.match(/#(\d+)\)?$/)?.[1];
+    if (query.length < 2 && !idFromLabel) {
+      setStudents([]);
+      setStudentSearchLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setStudentSearchLoading(true);
+      try {
+        const searchValue = idFromLabel || query;
+        const res = await fetch(`/api/fee-details?mode=students&q=${encodeURIComponent(searchValue)}&limit=30`, { signal: controller.signal });
+        const payload = await res.json();
+        if (!controller.signal.aborted) setStudents(Array.isArray(payload.rows) ? payload.rows : []);
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        setStudents([]);
+      } finally {
+        if (!controller.signal.aborted) setStudentSearchLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [data?.record, studentNameInput]);
+
   useEffect(() => { load(); }, [load]);
 
   const handleParticularChange = (val: string) => {
@@ -183,7 +209,7 @@ export default function FeeDetailsEditPage() {
         setError('Transaction number is required for this payment type.');
         return;
       }
-      if (data?.record && (!targetStudentId || !students.some((student) => student.Student_Id === targetStudentId))) {
+      if (data?.record && !targetStudentId) {
         setError('Select a valid student before assigning this receipt.');
         return;
       }
@@ -570,6 +596,7 @@ ${copy('Student Copy')}
                     ))}
                   </datalist>
                 )}
+                {data.record && studentSearchLoading && <span className="text-[10px] text-slate-400">Searching students...</span>}
               </div>
               <div className="flex flex-col gap-1">
                 <label className={label}>Student Id</label>
