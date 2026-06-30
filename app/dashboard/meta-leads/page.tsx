@@ -462,41 +462,18 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
   }
 
   async function handleSave() {
-    const pending = newNote.trim();
-    const today = formatDate(new Date().toISOString());
-    const pendingEntry = pending ? `[${today}] ${pending}` : null;
-    const discussion = pendingEntry
-      ? (draft.discussion ? `${draft.discussion}\n${pendingEntry}` : pendingEntry)
-      : draft.discussion;
-    const draftToSave: LeadRowDraft = { ...draft, discussion };
+    // Persist whatever is still typed in the input (covers "type then Save" without
+    // pressing Add). Notes added via the Add button are already saved by persistNote.
+    const ok = await persistNote(newNote);
+    if (!ok) return;
+    setNewNote('');
 
-    if (pendingEntry) {
-      onDraftChange(row.MetaLead_Id, 'discussion', discussion);
-      setNewNote('');
+    // Legacy fallback only when there is no server lead id to attach notes to.
+    if (!row.MetaLead_Id && !usesServerEntries) {
+      const saved = await onSave(row, draft);
+      if (!saved) return;
     }
-
-    let ok = true;
-    if (pending && canUpdate && row.MetaLead_Id) {
-      try {
-        const res = await fetch(`/api/meta-ads/leads/${encodeURIComponent(row.MetaLead_Id)}/discussions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ note: pending, nextDate: null }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data?.error || 'Failed to save follow-up note');
-        await loadEntries();
-      } catch (error: unknown) {
-        setNoteError(error instanceof Error ? error.message : 'Failed to save follow-up note');
-        ok = false;
-      }
-    }
-
-    // Keep legacy text discussion path for deployments where follow-up history isn't available yet.
-    if (!usesServerEntries) {
-      ok = ok && await onSave(row, draftToSave);
-    }
-    if (ok) onClose();
+    onClose();
   }
 
   return (
@@ -1511,7 +1488,7 @@ export default function MetaLeadsPage() {
                         const baseBgCls = rowBg(row.Status_id, row.StatusLabel);
                         const hasFollowUp = normalizedFollowUpLines(draft.discussion).length > 0 || hasLatestFollowUp(row);
                         const isPending = isPendingFollowUp(row);
-                        const bgCls = hasFollowUp ? 'bg-purple-800 hover:bg-purple-900' : baseBgCls;
+                        const bgCls = hasFollowUp ? 'bg-purple-100 hover:bg-purple-200' : baseBgCls;
                         const age = leadAge(row.Inquiry_Dt);
                         const wa = waLink(row.Present_Mobile, row.Student_Name, row.CourseName);
                         const isSaving = savingLeadId === row.MetaLead_Id;
@@ -1520,7 +1497,7 @@ export default function MetaLeadsPage() {
                         const tdBase = 'py-1.5 px-2 border-b border-r border-slate-100';
 
                         return (
-                          <tr key={`${row.MetaLead_Id}-${index}`} className={`transition-colors group ${bgCls} ${hasFollowUp ? '[&>td]:text-purple-50' : isPending ? '[&>td]:text-purple-900' : '[&>td]:text-red-700'}`}>
+                          <tr key={`${row.MetaLead_Id}-${index}`} className={`transition-colors group ${bgCls} ${hasFollowUp ? '[&>td]:text-purple-900' : isPending ? '[&>td]:text-purple-900' : '[&>td]:text-red-700'}`}>
                             <td className={`${tdBase} pl-4 relative`}>
                               <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${statusBar(row.Status_id, row.StatusLabel)} rounded-r`} />
                               <span className="font-mono tabular-nums text-[10px] text-slate-400">{(pagination.page - 1) * pagination.limit + index + 1}</span>

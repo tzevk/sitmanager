@@ -136,7 +136,8 @@
       "Bash(node -r dotenv/config scripts/db/_v.mjs dotenv_config_path=.env.local)",
       "Bash(node -r dotenv/config scripts/db/_mq.mjs dotenv_config_path=.env.local)",
       "Bash(node -r dotenv/config scripts/db/_mq2.mjs dotenv_config_path=.env.local)",
-      "Bash(node -r dotenv/config scripts/db/_mq3.mjs dotenv_config_path=.env.local)"
+      "Bash(node -r dotenv/config scripts/db/_mq3.mjs dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/_clean.mjs dotenv_config_path=.env.local)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
