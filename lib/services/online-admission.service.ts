@@ -292,7 +292,6 @@ async function ensureStudentMasterRemarkColumn(pool: ReturnType<typeof getPool>,
 
   const column = (rows as any[])[0];
   const dataType = String(column?.DATA_TYPE || '').toLowerCase();
-  const maxLength = Number(column?.CHARACTER_MAXIMUM_LENGTH || 0);
 
   if (column && dataType !== 'text' && dataType !== 'mediumtext' && dataType !== 'longtext') {
     await pool.query(`ALTER TABLE \`${tableName}\` MODIFY COLUMN Remark TEXT NULL`);
