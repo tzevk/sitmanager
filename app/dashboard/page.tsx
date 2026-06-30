@@ -120,9 +120,22 @@ export default function DashboardPage() {
   const [showFollowupReminder, setShowFollowupReminder] = useState(false);
   const [newFollowupCount, setNewFollowupCount] = useState(0);
   const resolvedDepartment = resolveDashboardDepartment(session?.department, session?.role, session?.dashboardDepartment);
-  const canSwitchDepartmentDashboard = isSuperAdmin;
+  const canSwitchDepartmentDashboard = isSuperAdmin || session?.dashboardDepartment === 'all';
   const [adminSelectedDepartment, setAdminSelectedDepartment] = useState<DashboardDepartment>('administration');
   const activeDepartment: DashboardDepartment = canSwitchDepartmentDashboard ? adminSelectedDepartment : resolvedDepartment;
+  const dashboardDepartmentOptions: { value: DashboardDepartment; label: string }[] = [
+    { value: 'administration', label: 'Administration' },
+    { value: 'cbd', label: 'CBD Department' },
+    { value: 'corporate_training', label: 'Corporate Training' },
+    { value: 'placement', label: 'Placement Department' },
+    { value: 'training_and_development', label: 'Training and Development' },
+    ...(isSuperAdmin
+      ? [
+          { value: 'accounts' as DashboardDepartment, label: 'Finance / Accounts' },
+          { value: 'finance' as DashboardDepartment, label: 'Finance Dashboard' },
+        ]
+      : []),
+  ];
   const showConsultancyFollowupPopup = activeDepartment === 'placement' || activeDepartment === 'cbd';
   const followupStorageKey = `sit-${activeDepartment}-followups-last-seen-id`;
   const followupPopupTitle = activeDepartment === 'cbd' ? 'Recent Inquiry Follow-ups' : 'Recent Consultancy Follow-ups';
@@ -305,13 +318,9 @@ export default function DashboardPage() {
             className="mt-2 w-full sm:w-auto max-w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25 text-gray-700"
             aria-label="Switch dashboard department"
           >
-            <option value="administration">Administration</option>
-            <option value="cbd">CBD Department</option>
-            <option value="corporate_training">Corporate Training</option>
-            <option value="placement">Placement Department</option>
-            <option value="training_and_development">Training and Development</option>
-            <option value="accounts">Finance / Accounts</option>
-            <option value="finance">Finance Dashboard</option>
+            {dashboardDepartmentOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
         )}
       </div>
@@ -453,13 +462,9 @@ export default function DashboardPage() {
                   className="mt-2 w-full sm:w-auto max-w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/25 text-gray-700"
                   aria-label="Switch dashboard department"
                 >
-                  <option value="administration">Administration</option>
-                  <option value="cbd">CBD Department</option>
-                  <option value="corporate_training">Corporate Training</option>
-                  <option value="placement">Placement Department</option>
-                  <option value="training_and_development">Training and Development</option>
-                  <option value="accounts">Finance / Accounts</option>
-                  <option value="finance">Finance Dashboard</option>
+                  {dashboardDepartmentOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
               )}
             </div>
