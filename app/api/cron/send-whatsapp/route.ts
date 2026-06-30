@@ -77,25 +77,6 @@ async function resolvePhoneNumberId() {
   return data?.data?.[0]?.id || PHONE_NUMBER_ID;
 }
 
-async function validateSendablePhoneNumberId(phoneNumberId: string) {
-  const response = await fetch(
-    `https://graph.facebook.com/v19.0/${phoneNumberId}?fields=id,display_phone_number`,
-    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
-  );
-  if (response.ok) return null;
-
-  const data = await response.json().catch(() => null);
-  return NextResponse.json(
-    {
-      error: "Invalid WhatsApp phone number ID. Set PHONE_NUMBER_ID to the sendable phone-number ID, not the WhatsApp Business Account ID.",
-      configuredId: PHONE_NUMBER_ID,
-      resolvedId: phoneNumberId,
-      metaError: data?.error?.message || "Unable to load WhatsApp phone-number object",
-    },
-    { status: 500 }
-  );
-}
-
 function getCourse(courseName: string | null, campaignName: string | null) {
   const raw = (courseName || campaignName || "").toLowerCase();
   if (raw.includes("piping drafting") || raw.includes("piping design")) return "piping_drafting";
@@ -167,8 +148,6 @@ export async function GET(req: NextRequest) {
   if (!phoneNumberId) {
     return NextResponse.json({ error: "WhatsApp phone number ID is required" }, { status: 500 });
   }
-  const phoneNumberError = await validateSendablePhoneNumberId(phoneNumberId);
-  if (phoneNumberError) return phoneNumberError;
 
   const { searchParams } = new URL(req.url);
   const testPhone = normalizePhone(searchParams.get("testPhone"));
