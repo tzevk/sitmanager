@@ -34,8 +34,8 @@ const DB_CONFIG = {
   database: process.env.DB_NAME,
 };
 
-const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
-const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+const WHATSAPP_TOKEN = process.env.META_WHATSAPP_TOKEN || process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN;
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID;
 
 // Template name — must match exactly what you created in Meta WhatsApp Manager
 const WELCOME_TEMPLATE = "sit_welcome_message";
@@ -56,7 +56,7 @@ function normalizePhone(mobile: string | null) {
 function validateWhatsAppConfig() {
   if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) {
     return NextResponse.json(
-      { error: "WhatsApp configuration missing: WHATSAPP_TOKEN and PHONE_NUMBER_ID are required" },
+      { error: "WhatsApp configuration missing: WHATSAPP_TOKEN/META_ACCESS_TOKEN and PHONE_NUMBER_ID are required" },
       { status: 500 }
     );
   }
