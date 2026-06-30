@@ -27,6 +27,7 @@
     "@types/pdfkit": "^0.17.6",
     "cors": "^2.8.6",
     "critters": "^0.0.23",
+    "docx": "^9.7.1",
     "dotenv": "^17.2.4",
     "exceljs": "^3.4.0",
     "express": "^5.2.1",

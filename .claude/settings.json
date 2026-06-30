@@ -137,7 +137,10 @@
       "Bash(node -r dotenv/config scripts/db/_mq.mjs dotenv_config_path=.env.local)",
       "Bash(node -r dotenv/config scripts/db/_mq2.mjs dotenv_config_path=.env.local)",
       "Bash(node -r dotenv/config scripts/db/_mq3.mjs dotenv_config_path=.env.local)",
-      "Bash(node -r dotenv/config scripts/db/_clean.mjs dotenv_config_path=.env.local)"
+      "Bash(node -r dotenv/config scripts/db/_clean.mjs dotenv_config_path=.env.local)",
+      "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\(Object.keys\\({...p.dependencies,...p.devDependencies}\\).filter\\(d=>/docx|pdf|xlsx|excel|sharp|image|zip|puppeteer|word/i.test\\(d\\)\\).join\\(', '\\)||'none matched'\\)\")",
+      "Bash(node -e \"console.log\\('docx version:', require\\('docx/package.json'\\).version\\)\")",
+      "Bash(node -e \"const d=require\\('docx'\\);console.log\\(['Document','Packer','Paragraph','TextRun','ImageRun','Table','TableRow','TableCell','WidthType','AlignmentType','BorderStyle'].map\\(k=>k+':'+\\(typeof d[k]!=='undefined'\\)\\).join\\(' '\\)\\)\")"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
