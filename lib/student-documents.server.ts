@@ -51,7 +51,7 @@ function hasUploads(bundle?: AdmissionUploadBundle | null): bundle is AdmissionU
   return Boolean(bundle && (bundle.photoFile || bundle.documents.length > 0));
 }
 
-async function updateStudentPhoto(studentId: number, photoUrl: string): Promise<void> {
+export async function updateStudentPhoto(studentId: number, photoUrl: string): Promise<void> {
   const pool = getPool();
   const cols = await getTableCols(pool, 'student_master');
   const column = ['Photo', 'Student_Photo', 'PhotoPath', 'Photo_Path'].find((candidate) => cols.has(candidate));
