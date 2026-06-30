@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { getRolePermissions } from '@/lib/api-auth';
 import { getPool } from '@/lib/db';
-import type { RowDataPacket } from 'mysql2';
+import type { RowDataPacket } from 'mysql2/promise';
+
+interface RoleDashboardRow extends RowDataPacket {
+  dashboard_department: string | null;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,16 +25,16 @@ export async function GET(request: NextRequest) {
     let dashboardDepartment = session.dashboardDepartment || null;
     try {
       const pool = getPool();
-      const [[role]] = await Promise.all([
-        pool.execute<(RowDataPacket & { dashboard_department: string | null })[]>(
+      const [roleResult, rolePermissions] = await Promise.all([
+        pool.execute<RoleDashboardRow[]>(
           'SELECT dashboard_department FROM role WHERE id = ? LIMIT 1',
           [session.role]
         ),
-        getRolePermissions(session.role).then((rolePermissions) => {
-          permissions = rolePermissions;
-        }),
+        getRolePermissions(session.role),
       ]);
-      dashboardDepartment = role[0]?.dashboard_department || dashboardDepartment;
+      const [roleRows] = roleResult;
+      permissions = rolePermissions;
+      dashboardDepartment = roleRows[0]?.dashboard_department || dashboardDepartment;
     } catch (error) {
       console.error('Failed to load session permissions:', error);
       permissions = [];
