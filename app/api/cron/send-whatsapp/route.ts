@@ -35,10 +35,11 @@ const DB_CONFIG = {
 };
 
 const WHATSAPP_TOKEN = process.env.META_WHATSAPP_TOKEN || process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN;
-const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID;
+const PHONE_NUMBER_ID = process.env.META_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
 
 // Template name — must match exactly what you created in Meta WhatsApp Manager
 const WELCOME_TEMPLATE = "sit_welcome_message";
+const WELCOME_TEMPLATE_LANGUAGE = "en";
 
 function errorMessage(error: unknown, fallback = "Unknown error") {
   return error instanceof Error ? error.message : fallback;
@@ -63,6 +64,17 @@ function validateWhatsAppConfig() {
   return null;
 }
 
+async function resolvePhoneNumberId() {
+  if (!PHONE_NUMBER_ID) return null;
+  const response = await fetch(
+    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/phone_numbers?fields=id&limit=1`,
+    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+  );
+  if (!response.ok) return PHONE_NUMBER_ID;
+  const data = await response.json();
+  return data?.data?.[0]?.id || PHONE_NUMBER_ID;
+}
+
 function getCourse(courseName: string | null, campaignName: string | null) {
   const raw = (courseName || campaignName || "").toLowerCase();
   if (raw.includes("piping drafting") || raw.includes("piping design")) return "piping_drafting";
@@ -79,14 +91,14 @@ function getCourse(courseName: string | null, campaignName: string | null) {
   return "general";
 }
 
-async function sendWelcomeTemplate(toPhone: string, studentName: string | null) {
+async function sendWelcomeTemplate(toPhone: string, studentName: string | null, phoneNumberId: string) {
   const payload = {
     messaging_product: "whatsapp",
     to: toPhone,
     type: "template",
     template: {
       name: WELCOME_TEMPLATE,
-      language: { code: "en" },
+      language: { code: WELCOME_TEMPLATE_LANGUAGE },
       components: [
         {
           type: "body",
@@ -103,7 +115,7 @@ async function sendWelcomeTemplate(toPhone: string, studentName: string | null) 
   };
 
   const response = await fetch(
-    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+    `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
     {
       method: "POST",
       headers: {
@@ -130,15 +142,20 @@ export async function GET(req: NextRequest) {
   const configError = validateWhatsAppConfig();
   if (configError) return configError;
 
+  const phoneNumberId = await resolvePhoneNumberId();
+  if (!phoneNumberId) {
+    return NextResponse.json({ error: "WhatsApp phone number ID is required" }, { status: 500 });
+  }
+
   const { searchParams } = new URL(req.url);
   const testPhone = normalizePhone(searchParams.get("testPhone"));
   if (testPhone) {
     try {
-      const data = await sendWelcomeTemplate(testPhone, searchParams.get("name") || "Test");
-      return NextResponse.json({ success: true, test: true, phone: testPhone, data });
+      const data = await sendWelcomeTemplate(testPhone, searchParams.get("name") || "Test", phoneNumberId);
+      return NextResponse.json({ success: true, test: true, phone: testPhone, template: WELCOME_TEMPLATE, language: WELCOME_TEMPLATE_LANGUAGE, data });
     } catch (err) {
       return NextResponse.json(
-        { success: false, test: true, phone: testPhone, error: errorMessage(err, "WhatsApp test failed") },
+        { success: false, test: true, phone: testPhone, template: WELCOME_TEMPLATE, language: WELCOME_TEMPLATE_LANGUAGE, error: errorMessage(err, "WhatsApp test failed") },
         { status: 502 }
       );
     }
@@ -184,7 +201,7 @@ export async function GET(req: NextRequest) {
       const course = getCourse(lead.course_name, lead.campaign_name);
 
       try {
-        await sendWelcomeTemplate(phone, lead.student_name);
+        await sendWelcomeTemplate(phone, lead.student_name, phoneNumberId);
 
         await db.execute(
           `UPDATE meta_ads_lead_sync
