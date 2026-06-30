@@ -9,11 +9,9 @@ export const runtime = 'nodejs';
 const MAX_BYTES = 5 * 1024 * 1024;
 const PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const DOCUMENT_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
-const AVAILABLE_BATCH_SQL = `
-  COALESCE(b.IsActive, 1) = 1
-  AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
+const VISIBLE_BATCH_SQL = `
+  (b.IsDelete = 0 OR b.IsDelete IS NULL)
   AND (b.Cancel IS NULL OR b.Cancel = 0)
-  AND (b.EDate IS NULL OR DATE(b.EDate) >= CURDATE())
 `;
 
 function sanitize(value: string): string {
@@ -47,7 +45,7 @@ async function verifyStudentInBatch(studentId: number, batchId: number): Promise
      FROM batch_mst b
      JOIN student_master sm ON sm.Student_Id = ?
      WHERE b.Batch_Id = ?
-       AND ${AVAILABLE_BATCH_SQL}
+      AND ${VISIBLE_BATCH_SQL}
        AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
        AND (
          TRIM(sm.Batch_Code) = TRIM(b.Batch_code)

@@ -229,7 +229,7 @@ export default function StudentCapturePage() {
             </div>
           </div>
           <div className="hidden rounded-xl bg-emerald-50 px-4 py-2 text-right text-xs font-bold text-emerald-700 ring-1 ring-emerald-100 sm:block">
-            Ongoing and upcoming batches
+            All batches
           </div>
         </div>
       </div>
@@ -241,7 +241,7 @@ export default function StudentCapturePage() {
               <div>
                 <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#2E3093]/60">Step 1</p>
                 <h2 className="mt-1 text-lg font-black text-slate-950">Select Student Details</h2>
-                <p className="mt-1 text-sm text-slate-500">Only active students from ongoing and upcoming batches are shown.</p>
+                <p className="mt-1 text-sm text-slate-500">Select a training program, batch code, and student from all available batches.</p>
               </div>
             </div>
 
