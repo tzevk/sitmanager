@@ -66,12 +66,12 @@ export default function PendingAdmissionFormsPage() {
   }, [fetchRows]);
 
   const handleDelete = useCallback(async (r: DraftRow) => {
-    const ok = window.confirm(`Delete admission form for ${r.Student_Name || `Inquiry #${r.Inquiry_Id}`}? This cannot be undone.`);
+    const ok = window.confirm(`Delete admission form for ${r.Student_Name || `Inquiry #${r.Inquiry_Id}`}? The student entry will remain.`);
     if (!ok) return;
 
     setDeletingId(r.Inquiry_Id);
     try {
-      const res = await fetch(`/api/inquiry/${r.Inquiry_Id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/online-admission/${r.Inquiry_Id}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.success) {
         throw new Error(data?.error || 'Failed to delete admission form');
