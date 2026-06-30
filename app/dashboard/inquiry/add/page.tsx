@@ -37,21 +37,6 @@ interface Discussion {
   created_date: string;
 }
 
-interface SuvidyaData {
-  sourceTable: string | null;
-  sourceInquiryId: number | null;
-  studentName: string | null;
-  email: string | null;
-  mobile: string | null;
-  courseName: string | null;
-  qualification: string | null;
-  location: string | null;
-  pageSource: string | null;
-  createdDate: string | null;
-  syncedAt: string | null;
-  extraFields: { key: string; label: string; value: string }[];
-}
-
 const today = () => new Date().toISOString().slice(0, 10);
 
 function fmtDate(value?: string | Date | null): string {
@@ -117,16 +102,6 @@ function ContactActionIcon({ channel }: { channel: string }) {
   return <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.9 5.25a2 2 0 002.2 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>;
 }
 
-function ReadField({ label, value }: { label: string; value?: string | null }) {
-  if (!value || String(value).trim() === '') return null;
-  return (
-    <div className="min-w-0">
-      <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">{label}</span>
-      <span className="block text-xs text-slate-700 break-words">{value}</span>
-    </div>
-  );
-}
-
 export default function AddInquiryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -167,8 +142,6 @@ export default function AddInquiryPage() {
   const [qualification, setQualification] = useState('');
   const [discipline, setDiscipline] = useState('');
   const [percentage, setPercentage] = useState('');
-
-  const [suvidya, setSuvidya] = useState<SuvidyaData | null>(null);
 
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
   const [newDiscussion, setNewDiscussion] = useState('');
@@ -264,14 +237,6 @@ export default function AddInquiryPage() {
   }, [editId]);
 
   useEffect(() => { if (editId) fetchDiscussions(); }, [editId, fetchDiscussions]);
-
-  useEffect(() => {
-    if (!editId) { setSuvidya(null); return; }
-    fetch(`/api/inquiry/suvidya?inquiryId=${editId}`)
-      .then(r => r.json())
-      .then(d => setSuvidya(d?.found ? d.data : null))
-      .catch(() => setSuvidya(null));
-  }, [editId]);
 
   const firstDiscussionTime = discussions.length > 0 ? discussions[0]?.created_date : null;
 
@@ -504,49 +469,6 @@ export default function AddInquiryPage() {
           </button>
         </div>
       </div>
-
-      {/* Website Inquiry — details fetched from the Suvidya website */}
-      {editId && suvidya && (
-        <div className="bg-white rounded-xl border border-emerald-200 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100">
-            <span className="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-600 shrink-0">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0zM3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 010 18M12 3a15 15 0 000 18" />
-              </svg>
-            </span>
-            <span className="text-[11px] font-black uppercase tracking-wider text-emerald-700">Website Inquiry · from Suvidya</span>
-            {suvidya.sourceTable && (
-              <span className="text-[10px] font-semibold text-emerald-600/70 truncate">
-                {suvidya.sourceTable}{suvidya.sourceInquiryId ? ` #${suvidya.sourceInquiryId}` : ''}
-              </span>
-            )}
-            <span className="ml-auto text-[10px] text-slate-400 shrink-0">Synced {fmtDateTime(suvidya.syncedAt)}</span>
-          </div>
-          <div className="px-3 py-2 grid grid-cols-2 sm:grid-cols-4 gap-x-2 gap-y-1.5">
-            <ReadField label="Name" value={suvidya.studentName} />
-            <ReadField label="Mobile" value={suvidya.mobile} />
-            <ReadField label="Email" value={suvidya.email} />
-            <ReadField label="Course" value={suvidya.courseName} />
-            <ReadField label="Qualification" value={suvidya.qualification} />
-            <ReadField label="Location" value={suvidya.location} />
-            <ReadField label="Submitted On" value={suvidya.createdDate ? fmtDateTime(suvidya.createdDate) : null} />
-            {suvidya.pageSource && (
-              <div className="min-w-0">
-                <span className={lbl}>Page Source</span>
-                {/^https?:\/\//i.test(suvidya.pageSource) ? (
-                  <a href={suvidya.pageSource} target="_blank" rel="noreferrer"
-                    className="block text-xs text-[#2A6BB5] hover:underline truncate" title={suvidya.pageSource}>
-                    {suvidya.pageSource}
-                  </a>
-                ) : (
-                  <span className="block text-xs text-slate-700 truncate" title={suvidya.pageSource}>{suvidya.pageSource}</span>
-                )}
-              </div>
-            )}
-            {suvidya.extraFields.map(f => <ReadField key={f.key} label={f.label} value={f.value} />)}
-          </div>
-        </div>
-      )}
 
       <div className="bg-white rounded-xl border border-slate-200 px-3 py-2">
           <div className="grid grid-cols-6 gap-x-2 gap-y-1">

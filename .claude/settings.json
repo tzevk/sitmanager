@@ -128,7 +128,12 @@
       "Bash(sed -i '' \"s|hasSuvidya:document.body.innerText.includes\\('from Suvidya'\\)|hasSuvidyaPanel:/FROM SUVIDYA/i.test\\(document.body.innerText\\)|; s|hasSource:document.body.innerText.includes\\('Page Source'\\)|hasEmail:document.body.innerText.includes\\('belnekaratharv2003'\\),hasCourse:document.body.innerText.includes\\('MEP Engineering'\\),hasSynced:document.body.innerText.includes\\('Synced'\\)|\" cdp2.mjs)",
       "Bash(node /private/tmp/claude-501/-Users-tanvikadam-Desktop-SIT-sitmanager/1afdaeb2-772f-4878-935b-dc4b3277097a/scratchpad/cdp2.mjs)",
       "Bash(sed -i '' \"s|hasSynced:document.body.innerText.includes\\('Synced'\\)|hasSecs:['PERSONAL DETAILS','INQUIRY DETAILS','TRAINING','EDUCATION \\\\& STATUS'].filter\\(s=>document.body.innerText.includes\\(s\\)\\).length|\" cdp2.mjs)",
-      "Bash(sed -i '' \"s|hasEmail:document.body.innerText.includes\\('belnekaratharv2003'\\),hasCourse:document.body.innerText.includes\\('MEP Engineering'\\)|hasNotes:document.body.innerText.includes\\('Notes'\\),hasName:document.body.innerText.includes\\('atharv'\\)|\" cdp2.mjs)"
+      "Bash(sed -i '' \"s|hasEmail:document.body.innerText.includes\\('belnekaratharv2003'\\),hasCourse:document.body.innerText.includes\\('MEP Engineering'\\)|hasNotes:document.body.innerText.includes\\('Notes'\\),hasName:document.body.innerText.includes\\('atharv'\\)|\" cdp2.mjs)",
+      "Bash(node -r dotenv/config scripts/db/transfer-single-student-from-legacy.mjs --ids 176538,176540 dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/transfer-single-student-from-legacy.mjs --ids 176538,176540 --apply dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/dedupe-and-admit-student.mjs --survivor 176540 --remove 176538 dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/dedupe-and-admit-student.mjs --survivor 176540 --remove 176538 --apply dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/_v.mjs dotenv_config_path=.env.local)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
