@@ -1964,7 +1964,7 @@ async function findDuplicateInquiry(
   };
 }
 
-function resolveMetaCourseName(fields: Record<string, string | null>, formName: string | null): string | null {
+function resolveMetaCourseFieldValue(fields: Record<string, string | null>): string | null {
   return firstValue(fields, [
     'course',
     'course_name',
@@ -1975,7 +1975,11 @@ function resolveMetaCourseName(fields: Record<string, string | null>, formName: 
     'program_name',
     'preferred_course',
     'preferred_program',
-  ]) || formName;
+  ]);
+}
+
+function resolveMetaCourseName(fields: Record<string, string | null>, formName: string | null): string | null {
+  return resolveMetaCourseFieldValue(fields) || formName;
 }
 
 function resolveMetaLeadSource(input: {
@@ -3406,19 +3410,6 @@ export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<Meta
     tags = Array.isArray(parsed) ? parsed.map((tag) => String(tag)).filter(Boolean) : [];
   } catch {}
 
-  const ctx: MetaLeadContext = {
-    formId: normalizeText(row.form_id),
-    formName: normalizeText(row.form_name),
-    pageId: normalizeText(row.page_id),
-    pageName: normalizeText(row.page_name),
-    adId: normalizeText(row.ad_id),
-    adName: normalizeText(row.ad_name),
-    adsetId: normalizeText(row.adset_id),
-    adsetName: normalizeText(row.adset_name),
-    campaignId: normalizeText(row.campaign_id),
-    campaignName: normalizeText(row.campaign_name),
-  };
-
   const fallbackName = [firstValue(fields, ['first_name']), firstValue(fields, ['last_name'])]
     .filter(Boolean)
     .join(' ')
@@ -3426,15 +3417,12 @@ export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<Meta
 
   const sourceLabel = normalizeText(row.source_label) || META_SOURCE_LABEL;
   const contactSource = normalizeText(row.contact_source) || META_CONTACT_SOURCE;
-  const studentName = normalizeText(row.student_name)
-    ?? firstValue(fields, ['full_name', 'full_name_1', 'name'])
-    ?? (fallbackName || null)
-    ?? 'Meta Lead';
-  const courseName = normalizeText(row.course_name) ?? resolveMetaCourseName(fields, ctx.formName);
-  const mobile = normalizeDigits(row.mobile)
-    ?? normalizeDigits(firstValue(fields, ['phone_number', 'phone', 'mobile', 'whatsapp_number', 'whatsapp']));
-  const email = normalizeEmail(row.email)
-    ?? normalizeEmail(firstValue(fields, ['email', 'email_address']));
+  const metaStudentName = firstValue(fields, ['full_name', 'full_name_1', 'name'])
+    ?? (fallbackName || null);
+  const studentName = metaStudentName ?? 'Meta Lead';
+  const courseName = resolveMetaCourseFieldValue(fields);
+  const mobile = normalizeDigits(firstValue(fields, ['phone_number', 'phone', 'mobile', 'whatsapp_number', 'whatsapp']));
+  const email = normalizeEmail(firstValue(fields, ['email', 'email_address']));
   const qualification = firstValue(fields, ['educational_qualification', 'qualification_', 'what_is_your_qualification_', 'qualification', 'highest_qualification', 'education_level', 'education']);
   const discipline = firstValue(fields, ['discipline', 'stream']);
   const percentage = parseNumber(firstValue(fields, ['percentage', 'marks_percentage']));
@@ -3455,7 +3443,7 @@ export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<Meta
         : 'Matched existing inquiry by email during manual conversion';
 
     await updateInquiry(inquiryId, {
-      Student_Name: studentName || duplicate.studentName || 'Meta Lead',
+      Student_Name: metaStudentName || duplicate.studentName || 'Meta Lead',
       Present_Mobile: mobile || duplicate.presentMobile,
       Email: email || duplicate.email,
       Inquiry_Dt: inquiryDate,
