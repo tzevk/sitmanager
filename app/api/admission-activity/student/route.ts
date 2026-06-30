@@ -4,10 +4,21 @@ import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { ensureStudentTransferColumns } from '@/lib/student-transfer';
 
+// A transferred student belongs to their destination batch (Moved_To_Batch_Code).
+// Fall back to their own/admission batch code when not transferred. Used for both
+// display and search so a transferred student shows under the NEW batch code.
+const EFFECTIVE_BATCH_CODE = `COALESCE(
+  CASE WHEN LOWER(TRIM(COALESCE(sm.Transfered, ''))) = 'yes'
+            AND TRIM(COALESCE(sm.Moved_To_Batch_Code, '')) <> ''
+       THEN TRIM(sm.Moved_To_Batch_Code) END,
+  NULLIF(TRIM(sm.Batch_Code), ''),
+  bm.Batch_code
+)`;
+
 // Columns the "Select Search" dropdown can target → safe column mapping
 const SEARCH_FIELDS: Record<string, string> = {
   studentId: 'sm.Student_Id',
-  batchCode: "COALESCE(NULLIF(TRIM(sm.Batch_Code),''), bm.Batch_code)",
+  batchCode: EFFECTIVE_BATCH_CODE,
   name:      'sm.Student_Name',
   email:     'sm.Email',
   mobile:    'sm.Present_Mobile',
@@ -50,7 +61,7 @@ function buildSearch(field: string, value: string) {
   return {
     clause: `AND (
       CAST(sm.Student_Id AS CHAR) LIKE ?
-      OR COALESCE(NULLIF(TRIM(sm.Batch_Code),''), bm.Batch_code) LIKE ?
+      OR ${EFFECTIVE_BATCH_CODE} LIKE ?
       OR sm.Student_Name LIKE ?
       OR sm.Email LIKE ?
       OR sm.Present_Mobile LIKE ?
@@ -81,7 +92,7 @@ export async function GET(req: NextRequest) {
         `SELECT
             am.Admission_Id,
            sm.Student_Id,
-           COALESCE(NULLIF(TRIM(sm.Batch_Code), ''), bm.Batch_code) AS Batch_Code,
+           ${EFFECTIVE_BATCH_CODE} AS Batch_Code,
            sm.Student_Name,
            sm.Present_Address,
            sm.Email,

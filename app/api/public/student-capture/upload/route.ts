@@ -48,7 +48,7 @@ async function verifyStudentInBatch(studentId: number, batchId: number): Promise
       AND ${VISIBLE_BATCH_SQL}
        AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
        AND (
-         TRIM(sm.Batch_Code) = TRIM(b.Batch_code)
+         sm.Batch_Code = b.Batch_code
          OR EXISTS (
            SELECT 1
            FROM admission_master am

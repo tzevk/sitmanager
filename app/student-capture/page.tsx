@@ -14,7 +14,6 @@ type ProgramOption = {
   id: number;
   name: string;
   batchCount: number;
-  studentCount: number;
 };
 
 type StudentOption = {
@@ -258,7 +257,7 @@ export default function StudentCapturePage() {
                   <option value="">{loadingPrograms ? 'Loading programs...' : 'Select training program'}</option>
                   {programs.map((program) => (
                     <option key={program.id} value={program.id}>
-                      {program.name} ({program.batchCount} batches, {program.studentCount} students)
+                      {program.name} ({program.batchCount} batches)
                     </option>
                   ))}
                 </select>
@@ -276,7 +275,7 @@ export default function StudentCapturePage() {
                   <option value="">{loadingBatches ? 'Loading batches...' : 'Select batch code'}</option>
                   {batches.map((batch) => (
                     <option key={batch.id} value={batch.id}>
-                      {batch.code} ({batch.studentCount} students)
+                      {batch.code}
                     </option>
                   ))}
                 </select>

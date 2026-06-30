@@ -14,22 +14,6 @@ const VISIBLE_BATCH_SQL = `
   AND (b.Cancel IS NULL OR b.Cancel = 0)
 `;
 
-const LINKED_STUDENTS_SQL = `
-  SELECT DISTINCT CAST(am.Batch_Id AS UNSIGNED) AS Batch_Id, CAST(am.Student_Id AS UNSIGNED) AS Student_Id
-  FROM admission_master am
-  JOIN student_master sm
-    ON sm.Student_Id = am.Student_Id
-   AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-  WHERE am.IsActive = 1
-    AND am.IsDelete = 0
-    AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
-  UNION
-  SELECT DISTINCT b2.Batch_Id, sm.Student_Id
-  FROM batch_mst b2
-  JOIN student_master sm ON TRIM(sm.Batch_Code) = TRIM(b2.Batch_code)
-  WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-`;
-
 export async function GET(req: NextRequest) {
   try {
     const pool = getPool();
@@ -62,7 +46,7 @@ export async function GET(req: NextRequest) {
              COALESCE(sm.Present_Mobile, '') AS Present_Mobile,
              COALESCE(sm.Email, '') AS Email
            FROM batch_mst b
-           JOIN student_master sm ON TRIM(sm.Batch_Code) = TRIM(b.Batch_code)
+           JOIN student_master sm ON sm.Batch_Code = b.Batch_code
            WHERE b.Batch_Id = ?
              AND ${VISIBLE_BATCH_SQL}
              AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
@@ -88,15 +72,13 @@ export async function GET(req: NextRequest) {
            b.Batch_Id,
            b.Batch_code,
            COALESCE(c.Course_Name, '') AS Course_Name,
-           COUNT(DISTINCT linked.Student_Id) AS StudentCount
+           0 AS StudentCount
          FROM batch_mst b
          LEFT JOIN course_mst c ON c.Course_Id = b.Course_Id
-         LEFT JOIN (${LINKED_STUDENTS_SQL}) linked ON linked.Batch_Id = b.Batch_Id
          WHERE b.Course_Id = ?
            AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
            AND (b.Cancel IS NULL OR b.Cancel = 0)
            AND ${VISIBLE_BATCH_SQL}
-         GROUP BY b.Batch_Id, b.Batch_code, c.Course_Name, b.Admission_Date, b.SDate, b.Date_Added
          ORDER BY COALESCE(b.IsActive, 0) DESC,
                   COALESCE(b.Admission_Date, b.SDate, b.Date_Added) DESC,
                   b.Batch_Id DESC
@@ -120,16 +102,15 @@ export async function GET(req: NextRequest) {
          c.Course_Id,
          COALESCE(c.Course_Name, '') AS Course_Name,
          COUNT(DISTINCT b.Batch_Id) AS BatchCount,
-         COUNT(DISTINCT linked.Student_Id) AS StudentCount
+         0 AS StudentCount
        FROM batch_mst b
        JOIN course_mst c ON c.Course_Id = b.Course_Id
-       LEFT JOIN (${LINKED_STUDENTS_SQL}) linked ON linked.Batch_Id = b.Batch_Id
        WHERE (c.IsDelete = 0 OR c.IsDelete IS NULL)
          AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
          AND (b.Cancel IS NULL OR b.Cancel = 0)
          AND ${VISIBLE_BATCH_SQL}
        GROUP BY c.Course_Id, c.Course_Name
-      HAVING BatchCount > 0
+       HAVING BatchCount > 0
        ORDER BY c.Course_Name ASC
        LIMIT 250`
     );
