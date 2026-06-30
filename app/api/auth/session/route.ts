@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { getRolePermissions } from '@/lib/api-auth';
 import { getPool } from '@/lib/db';
+import type { RowDataPacket } from 'mysql2';
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
     try {
       const pool = getPool();
       const [[role]] = await Promise.all([
-        pool.execute<{ dashboard_department: string | null }[]>(
+        pool.execute<(RowDataPacket & { dashboard_department: string | null })[]>(
           'SELECT dashboard_department FROM role WHERE id = ? LIMIT 1',
           [session.role]
         ),
