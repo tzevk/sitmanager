@@ -234,7 +234,9 @@ export default function StudentCapturePage() {
                 >
                   <option value="">{loadingStudents ? 'Loading students...' : 'Select student'}</option>
                   {students.map((student) => (
-                    <option key={student.id} value={student.id}>{student.name || `Student ${student.id}`}</option>
+                    <option key={student.id} value={student.id}>
+                      {student.name || `Student ${student.id}`} {student.mobile ? `- ${student.mobile}` : ''} (ID: {student.id})
+                    </option>
                   ))}
                 </select>
               </label>
