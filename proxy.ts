@@ -55,6 +55,7 @@ const PUBLIC_PREFIXES = [
   '/favicon',
   '/static',
   '/api/cron',
+  '/api/webhook',
   '/student-portal',
   '/company',
   '/api/public',

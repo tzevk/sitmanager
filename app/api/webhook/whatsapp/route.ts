@@ -6,9 +6,11 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { query } from "@/lib/db";
 
 // --- Config ---
-const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
-const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
-const WEBHOOK_VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN;
+// Env var names are aligned with the META_* convention used across the app
+// (see .env). Fallbacks keep the older unprefixed names working if still set.
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || process.env.META_WHATSAPP_TOKEN || process.env.META_ACCESS_TOKEN;
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || process.env.META_PHONE_NUMBER_ID;
+const WEBHOOK_VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || process.env.META_WEBHOOK_VERIFY_TOKEN;
 
 const ADMIN_NUMBER = "919167219404";
 

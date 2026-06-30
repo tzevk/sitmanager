@@ -117,7 +117,11 @@
       "Bash(ls node_modules/.bin 2>/dev/null | grep -iE \"playwright|puppeteer\" ; ls node_modules 2>/dev/null | grep -iE \"^\\(playwright|puppeteer\\)\" ; echo \"---chrome---\"; ls \"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" 2>/dev/null && echo \"chrome-present\")",
       "Read(//Applications/Google Chrome.app/Contents/MacOS/**)",
       "Bash(node -e \"console.log\\('node', process.version, 'WebSocket?', typeof WebSocket\\)\")",
-      "Bash(node /private/tmp/claude-501/-Users-tanvikadam-Desktop-SIT-sitmanager/1afdaeb2-772f-4878-935b-dc4b3277097a/scratchpad/cdp.mjs)"
+      "Bash(node /private/tmp/claude-501/-Users-tanvikadam-Desktop-SIT-sitmanager/1afdaeb2-772f-4878-935b-dc4b3277097a/scratchpad/cdp.mjs)",
+      "Bash(curl -s -m 15 -i \"https://suvidya.app/api/webhook/whatsapp\")",
+      "Bash(curl -s -m 15 -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://suvidya.app/api/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=TESTWRONG&hub.challenge=12345\")",
+      "Bash(curl -s -m 15 -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"http://localhost:3000/api/webhook/whatsapp\")",
+      "Bash(curl -s -m 15 \"http://localhost:3000/api/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=WRONG&hub.challenge=abc123\" -w \"\\\\nHTTP %{http_code}\\\\n\")"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
