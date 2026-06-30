@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { mkdir, writeFile } from 'fs/promises';
-import { extname, join } from 'path';
+import { extname } from 'path';
 import { getPool } from '@/lib/db';
 import { getTableCols } from '@/lib/db-schema';
 
@@ -9,6 +8,7 @@ const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const DOCUMENT_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 const PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MANAGED_DOC_PREFIX = 'oa:';
+const STUDENT_PHOTO_COLUMNS = ['Photo', 'Student_Photo', 'PhotoPath', 'Photo_Path'];
 
 export interface AdmissionUploadBundle {
   photoFile?: File | null;
@@ -33,10 +33,6 @@ function sanitizeSegment(value: string): string {
     .slice(0, 80) || 'file';
 }
 
-function resolvePhotoUploadsRoot(): string {
-  return join(process.cwd(), 'public', 'uploads', 'students');
-}
-
 function normaliseExtension(file: File, fallback = '.bin'): string {
   const ext = extname(file.name || '').toLowerCase();
   if (ext) return ext;
@@ -54,10 +50,76 @@ function hasUploads(bundle?: AdmissionUploadBundle | null): bundle is AdmissionU
 export async function updateStudentPhoto(studentId: number, photoUrl: string): Promise<void> {
   const pool = getPool();
   const cols = await getTableCols(pool, 'student_master');
-  const column = ['Photo', 'Student_Photo', 'PhotoPath', 'Photo_Path'].find((candidate) => cols.has(candidate));
+  const column = STUDENT_PHOTO_COLUMNS.find((candidate) => cols.has(candidate));
   if (!column) return;
 
+  const [columnInfo] = await pool.query(
+    `SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'student_master' AND COLUMN_NAME = ?
+     LIMIT 1`,
+    [column]
+  ) as [any[], any];
+  const info = columnInfo[0];
+  if (info && String(info.DATA_TYPE).toLowerCase() === 'varchar' && Number(info.CHARACTER_MAXIMUM_LENGTH || 0) < 255) {
+    await pool.query(`ALTER TABLE student_master MODIFY COLUMN \`${column}\` VARCHAR(255) NULL`);
+  }
+
   await pool.query(`UPDATE student_master SET \`${column}\` = ? WHERE Student_Id = ?`, [photoUrl, studentId]);
+}
+
+let studentPhotoBlobColumnsReady = false;
+export async function ensureStudentPhotoBlobColumns(pool: ReturnType<typeof getPool>): Promise<void> {
+  if (studentPhotoBlobColumnsReady) return;
+  const [cols] = await pool.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'student_master'`
+  ) as [any[], any];
+  const existing = new Set((cols as any[]).map((r) => String(r.COLUMN_NAME)));
+  const additions: string[] = [];
+  if (!existing.has('Photo_Data')) additions.push('ADD COLUMN Photo_Data LONGBLOB NULL');
+  if (!existing.has('Photo_Content_Type')) additions.push('ADD COLUMN Photo_Content_Type VARCHAR(100) NULL');
+  if (!existing.has('Photo_File_Name')) additions.push('ADD COLUMN Photo_File_Name VARCHAR(255) NULL');
+  if (additions.length) {
+    await pool.query(`ALTER TABLE student_master ${additions.join(', ')}`);
+  }
+  studentPhotoBlobColumnsReady = true;
+}
+
+export async function saveStudentPhotoBlob(
+  studentId: number,
+  bytes: Buffer,
+  contentType: string,
+  filename: string,
+): Promise<string> {
+  const pool = getPool();
+  await ensureStudentPhotoBlobColumns(pool);
+  const photoSrc = `/api/student-photo/${studentId}`;
+  await updateStudentPhoto(studentId, photoSrc);
+  await pool.query(
+    `UPDATE student_master
+     SET Photo_Data = ?, Photo_Content_Type = ?, Photo_File_Name = ?
+     WHERE Student_Id = ?`,
+    [bytes, contentType || 'image/jpeg', filename, studentId]
+  );
+  return photoSrc;
+}
+
+export async function getStudentPhotoDataUrl(studentId: number): Promise<string | null> {
+  const pool = getPool();
+  await ensureStudentPhotoBlobColumns(pool);
+  const [rows] = await pool.query(
+    `SELECT Photo_Data, Photo_Content_Type
+     FROM student_master
+     WHERE Student_Id = ? AND Photo_Data IS NOT NULL
+     LIMIT 1`,
+    [studentId]
+  ) as [any[], any];
+  const row = rows[0];
+  if (!row?.Photo_Data) return null;
+  const bytes = Buffer.from(row.Photo_Data);
+  const contentType = String(row.Photo_Content_Type || 'image/jpeg');
+  return `data:${contentType};base64,${bytes.toString('base64')}`;
 }
 
 // Documents are stored directly in the DB (LONGBLOB) rather than on the Plesk file
@@ -117,13 +179,10 @@ export async function saveAdmissionAssetsForStudent(studentId: number, bundle?: 
       throw Object.assign(new Error('Photo is too large. Maximum size is 5 MB.'), { status: 400 });
     }
 
-    const photoDir = resolvePhotoUploadsRoot();
-    await mkdir(photoDir, { recursive: true });
     const extension = normaliseExtension(photo, '.jpg');
     const filename = `student_${studentId}_${Date.now()}${extension}`;
-    const bytes = await photo.arrayBuffer();
-    await writeFile(join(photoDir, filename), Buffer.from(bytes));
-    await updateStudentPhoto(studentId, `/uploads/students/${filename}`);
+    const bytes = Buffer.from(await photo.arrayBuffer());
+    await saveStudentPhotoBlob(studentId, bytes, photo.type || 'image/jpeg', filename);
   }
 }
 
@@ -251,13 +310,9 @@ export async function attachInquiryAssetsToStudent(inquiryId: number, studentId:
     if (!data) continue;
 
     if (Number(row.Is_Photo) === 1) {
-      // Profile photo stays a static URL on the student record.
-      const photoDir = resolvePhotoUploadsRoot();
-      await mkdir(photoDir, { recursive: true });
       const ext = extname(String(row.Filename)) || '.jpg';
       const filename = `student_${studentId}_${Date.now()}${ext}`;
-      await writeFile(join(photoDir, filename), data);
-      await updateStudentPhoto(studentId, `/uploads/students/${filename}`);
+      await saveStudentPhotoBlob(studentId, data, row.Content_Type || 'image/jpeg', filename);
     } else {
       await pool.query(
         `INSERT INTO documents (upload_image, doc_name, Student_id, File_Data, Content_Type) VALUES (?, ?, ?, ?, ?)`,

@@ -75,14 +75,14 @@ export default function IdCardGeneratorPage() {
       const res = await fetch(`/api/id-cards/students?batchId=${batchId}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Import failed');
-      const imported: IdCard[] = await Promise.all((data.students || []).map(async (s: { name: string; contactNo: string; photoUrl?: string }) => ({
+      const imported: IdCard[] = await Promise.all((data.students || []).map(async (s: { name: string; contactNo: string; photo?: string | null; photoUrl?: string }) => ({
         id: Math.random().toString(36).slice(2),
         name: s.name,
         course: data.course || '',
         batchNo: data.batchCode || '',
         contactNo: s.contactNo || '',
         validUpto: data.validUpto || '',
-        photo: s.photoUrl ? await imageUrlToDataUrl(s.photoUrl) : null,
+        photo: s.photo || (s.photoUrl ? await imageUrlToDataUrl(s.photoUrl) : null),
       })));
       if (imported.length === 0) { setError('No students found in this batch.'); return; }
       // Drop empty starter cards, keep any the user already filled, then append.

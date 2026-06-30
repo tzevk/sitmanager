@@ -1,9 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { mkdir, writeFile } from 'fs/promises';
-import { extname, join } from 'path';
+import { extname } from 'path';
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
-import { ensureDocumentBlobColumns, updateStudentPhoto } from '@/lib/student-documents.server';
+import { ensureDocumentBlobColumns, saveStudentPhotoBlob } from '@/lib/student-documents.server';
 
 export const runtime = 'nodejs';
 
@@ -101,11 +100,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const photoDir = join(process.cwd(), 'public', 'uploads', 'students');
-    await mkdir(photoDir, { recursive: true });
     const photoFilename = `student_${studentId}_${Date.now()}${extensionFor(photo, '.jpg')}`;
-    await writeFile(join(photoDir, photoFilename), Buffer.from(await photo.arrayBuffer()));
-    await updateStudentPhoto(studentId, `/uploads/students/${photoFilename}`);
+    const photoUrl = await saveStudentPhotoBlob(
+      studentId,
+      Buffer.from(await photo.arrayBuffer()),
+      photo.type || 'image/jpeg',
+      photoFilename
+    );
 
     const pool = getPool();
     await ensureDocumentBlobColumns(pool);
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Student photo and documents uploaded successfully.',
-      photoUrl: `/uploads/students/${photoFilename}`,
+      photoUrl,
       documents: uploadedDocuments,
     });
   } catch (error) {

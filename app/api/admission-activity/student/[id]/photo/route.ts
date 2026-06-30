@@ -1,9 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { saveStudentPhotoBlob } from '@/lib/student-documents.server';
 
 export async function POST(
   req: NextRequest,
@@ -14,7 +11,10 @@ export async function POST(
     if (auth instanceof NextResponse) return auth;
 
     const { id } = await params;
-    const pool = getPool();
+    const studentId = Number(id);
+    if (!Number.isInteger(studentId) || studentId <= 0) {
+      return NextResponse.json({ error: 'Invalid student id' }, { status: 400 });
+    }
 
     const formData = await req.formData();
     const file = formData.get('photo') as File | null;
@@ -32,30 +32,10 @@ export async function POST(
       return NextResponse.json({ error: 'Only JPEG, PNG and WebP images are allowed' }, { status: 400 });
     }
 
-    // Save file to public/uploads/students/
     const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
     const filename = `student_${id}_${Date.now()}.${ext}`;
-    const uploadDir = join(process.cwd(), 'public', 'uploads', 'students');
-
-    await mkdir(uploadDir, { recursive: true });
-
-    const bytes = await file.arrayBuffer();
-    await writeFile(join(uploadDir, filename), Buffer.from(bytes));
-
-    const photoUrl = `/uploads/students/${filename}`;
-
-    // Persist to student_master — try common column names
-    // The actual column must exist in the DB; update to match your schema.
-    // Typical names: Photo, Student_Photo, PhotoPath, Photo_Path
-    try {
-      await pool.query(
-        `UPDATE student_master SET Photo = ? WHERE Student_Id = ?`,
-        [photoUrl, id]
-      );
-    } catch (dbErr: any) {
-      // Column might have a different name — return the URL anyway so UI can display it
-      console.warn('Could not update photo column:', dbErr?.message);
-    }
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const photoUrl = await saveStudentPhotoBlob(studentId, bytes, file.type || 'image/jpeg', filename);
 
     return NextResponse.json({ photoUrl });
   } catch (err: unknown) {

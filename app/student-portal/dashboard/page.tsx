@@ -118,15 +118,14 @@ export default function StudentDashboardPage() {
   const [today, setToday] = useState('');
 
   useEffect(() => {
-    const h = new Date().getHours();
-    setGreeting(h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening');
-    setToday(new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long' }));
-  }, []);
-
-  useEffect(() => {
     (async () => {
+      // Time-based greeting is set here (after the first await) rather than in a
+      // synchronous effect body — keeps it client-only and avoids cascading renders.
       try {
         const res = await fetch('/api/student-portal/academics');
+        const h = new Date().getHours();
+        setGreeting(h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening');
+        setToday(new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long' }));
         if (res.status === 401) { router.push('/student-portal/signin'); return; }
         const json = await res.json();
         setData(json);
