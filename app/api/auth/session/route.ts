@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { getRolePermissions } from '@/lib/api-auth';
+import { getPool } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,8 +17,19 @@ export async function GET(request: NextRequest) {
     }
 
     let permissions: string[] = [];
+    let dashboardDepartment = session.dashboardDepartment || null;
     try {
-      permissions = await getRolePermissions(session.role);
+      const pool = getPool();
+      const [[role]] = await Promise.all([
+        pool.execute<{ dashboard_department: string | null }[]>(
+          'SELECT dashboard_department FROM role WHERE id = ? LIMIT 1',
+          [session.role]
+        ),
+        getRolePermissions(session.role).then((rolePermissions) => {
+          permissions = rolePermissions;
+        }),
+      ]);
+      dashboardDepartment = role[0]?.dashboard_department || dashboardDepartment;
     } catch (error) {
       console.error('Failed to load session permissions:', error);
       permissions = [];
@@ -35,7 +47,7 @@ export async function GET(request: NextRequest) {
           department: session.department,
           role: session.role,
           permissions,
-          dashboardDepartment: session.dashboardDepartment || null,
+          dashboardDepartment,
         },
         user: {
           id: session.userId,
@@ -45,6 +57,7 @@ export async function GET(request: NextRequest) {
           department: session.department,
           role: session.role,
           permissions,
+          dashboardDepartment,
         },
       },
       {

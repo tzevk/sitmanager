@@ -421,14 +421,39 @@ function FollowUpModal({ row, draft, canUpdate, saving, onDraftChange, onSave, o
 
   const usesServerEntries = entries.length > 0;
 
-  function addBullet() {
-    const note = newNote.trim();
-    if (!note) return;
+  // Persist a single follow-up note. Meta leads always have a server lead id, so
+  // notes are saved as durable discussion rows (awt_inquirydiscussion). The local
+  // bullet-text fallback is only used when there is no server id / no permission.
+  async function persistNote(text: string): Promise<boolean> {
+    const note = text.trim();
+    if (!note) return true;
+    if (row.MetaLead_Id && canUpdate) {
+      try {
+        const res = await fetch(`/api/meta-ads/leads/${encodeURIComponent(row.MetaLead_Id)}/discussions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note, nextDate: null }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || 'Failed to save follow-up note');
+        await loadEntries();
+        setNoteError('');
+        return true;
+      } catch (error: unknown) {
+        setNoteError(error instanceof Error ? error.message : 'Failed to save follow-up note');
+        return false;
+      }
+    }
     const today = formatDate(new Date().toISOString());
     const entry = `[${today}] ${note}`;
     const updated = draft.discussion ? `${draft.discussion}\n${entry}` : entry;
     onDraftChange(row.MetaLead_Id, 'discussion', updated);
-    setNewNote('');
+    return true;
+  }
+
+  async function addBullet() {
+    const ok = await persistNote(newNote);
+    if (ok) setNewNote('');
   }
 
   function removeBullet(index: number) {
