@@ -338,6 +338,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   },
 
   // -------------------------------------------------------------------------
+  // SUPPORT / TICKETS
+  // -------------------------------------------------------------------------
+  {
+    id: 'support',
+    name: 'Support Tickets',
+    description: 'Raise queries and manage the support ticket inbox',
+    icon: 'lifebuoy',
+    permissions: [
+      ...createPermissions('support_ticket', 'Support Ticket'),
+      {
+        id: 'support_ticket.manage',
+        name: 'Manage All Tickets',
+        description: 'View every account\'s tickets and reply to them (super admin inbox)',
+        resource: 'support_ticket',
+        action: 'manage',
+      },
+    ],
+  },
+
+  // -------------------------------------------------------------------------
   // CBD / MARKETING
   // -------------------------------------------------------------------------
   {

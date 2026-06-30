@@ -17,6 +17,7 @@ const MENU_ITEMS = [
   'Reports',
   'Role Right',
   'Utility',
+  'Support',
 ] as const;
 
 const SUB_MENU_ROUTES: Record<string, string> = {
@@ -82,6 +83,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Utility > Festival Photo Upload': '/dashboard/utility/festival-photo-upload',
   'Utility > Export Contacts': '/dashboard/utility/export-contacts',
   'Utility > Batch Students': '/dashboard/utility/batch-students',
+  'Support > Support Tickets': '/dashboard/support',
 };
 
 const SUB_MENUS: Record<string, string[]> = {
@@ -229,6 +231,9 @@ const SUB_MENUS: Record<string, string[]> = {
     'Add Employee',
     'Portal Accounts',
   ],
+  'Support': [
+    'Support Tickets',
+  ],
 };
 
 const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
@@ -356,6 +361,11 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
     </svg>
   ),
+  'Support': (
+    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-6 0a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  ),
 };
 
 const WELCOME_QUOTES: Array<{ text: string; author: string }> = [
@@ -430,6 +440,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     if (path.startsWith('/dashboard/portal-accounts')) return 'Role Right';
     if (path.startsWith('/dashboard/corporate-inquiry')) return 'Corporate Training';
     if (path.startsWith('/dashboard/utility')) return 'Utility';
+    if (path.startsWith('/dashboard/support')) return 'Support';
     if (path.startsWith('/dashboard/inquiry') || path.startsWith('/dashboard/meta-leads') || path.startsWith('/dashboard/online-admission') || path.startsWith('/dashboard/student')) return 'Admission Activity';
     if (path.startsWith('/dashboard/placement') || path.startsWith('/dashboard/cv-shortlisted')) return 'Placement';
     return 'Dashboard';
@@ -439,6 +450,10 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
 
   const canAccessSubMenu = useCallback((menuKey: string, subItem: string) => {
     if (isSuperAdmin) return true;
+
+    // Support tickets are open to every authenticated account — anyone can raise
+    // a query. The inbox itself is permission-aware (own tickets vs. all tickets).
+    if (menuKey === 'Support') return true;
 
     const routeKey = `${menuKey} > ${subItem}`;
     const route = SUB_MENU_ROUTES[routeKey];

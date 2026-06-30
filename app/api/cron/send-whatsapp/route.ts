@@ -1,18 +1,14 @@
+// @
 // /api/cron/send-whatsapp/route.ts
-// Runs via Vercel cron
+// Runs every 2 mins via Vercel cron
 // Picks uncontacted leads and sends first WhatsApp template message
 
-import { NextRequest, NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import mysql from "mysql2/promise";
+import type { RowDataPacket } from "mysql2/promise";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
-const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
-const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
-
-// Template names — must match exactly what you create in Meta WhatsApp Manager
-// One single template for all leads regardless of course
-const WELCOME_TEMPLATE = "sit_welcome_message";
-
-interface Lead {
+interface MetaAdsLeadRow extends RowDataPacket {
   id: number;
   student_name: string | null;
   mobile: string | null;
@@ -20,19 +16,35 @@ interface Lead {
   campaign_name: string | null;
 }
 
-function isAuthorizedCronRequest(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) return false;
-
-  const authHeader = req.headers.get("authorization");
-  const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-  const headerSecret = req.headers.get("x-cron-secret")?.trim() || "";
-  const querySecret = req.nextUrl.searchParams.get("secret")?.trim() || "";
-
-  return bearer === secret || headerSecret === secret || querySecret === secret;
+interface SendResult {
+  id: number;
+  phone: string;
+  course: string;
 }
 
-function normalizePhone(mobile: string | null): string | null {
+interface FailedResult {
+  id: number;
+  reason: string;
+}
+
+const DB_CONFIG = {
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+};
+
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+
+// Template name — must match exactly what you created in Meta WhatsApp Manager
+const WELCOME_TEMPLATE = "sit_welcome_message";
+
+function errorMessage(error: unknown, fallback = "Unknown error") {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function normalizePhone(mobile: string | null) {
   if (!mobile) return null;
   let digits = mobile.replace(/\D/g, "");
   if (digits.startsWith("0")) digits = digits.slice(1);
@@ -41,19 +53,23 @@ function normalizePhone(mobile: string | null): string | null {
   return digits;
 }
 
-function getCourse(courseName: string | null, campaignName: string | null): string {
+function getCourse(courseName: string | null, campaignName: string | null) {
   const raw = (courseName || campaignName || "").toLowerCase();
+  if (raw.includes("piping drafting") || raw.includes("piping design")) return "piping_drafting";
   if (raw.includes("piping")) return "piping";
   if (raw.includes("edd") || raw.includes("engineering design")) return "edd";
   if (raw.includes("hvac")) return "hvac";
+  if (raw.includes("rotating")) return "rotating";
   if (raw.includes("mep")) return "mep";
-  if (raw.includes("process")) return "process";
-  if (raw.includes("structural")) return "structural";
   if (raw.includes("mechanical design")) return "mechanical_design";
+  if (raw.includes("instrumentation")) return "pic";
+  if (raw.includes("electrical")) return "electrical";
+  if (raw.includes("structural")) return "structural";
+  if (raw.includes("process")) return "process";
   return "general";
 }
 
-async function sendWelcomeTemplate(toPhone: string, studentName: string | null): Promise<unknown> {
+async function sendWelcomeTemplate(toPhone: string, studentName: string | null) {
   const payload = {
     messaging_product: "whatsapp",
     to: toPhone,
@@ -65,7 +81,11 @@ async function sendWelcomeTemplate(toPhone: string, studentName: string | null):
         {
           type: "body",
           parameters: [
-            { type: "text", text: studentName?.split(" ")[0] || "there" },
+            {
+              type: "text",
+              parameter_name: "name",
+              text: studentName?.split(" ")[0] || "there",
+            },
           ],
         },
       ],
@@ -92,19 +112,16 @@ async function sendWelcomeTemplate(toPhone: string, studentName: string | null):
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAuthorizedCronRequest(req)) {
+  const authHeader = req.headers.get("authorization");
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) {
-    return NextResponse.json(
-      { error: "WhatsApp credentials are not configured" },
-      { status: 500 }
-    );
-  }
-
+  let db;
   try {
-    const leads = await query<Lead>(`
+    db = await mysql.createConnection(DB_CONFIG);
+
+    const [leads] = await db.execute<MetaAdsLeadRow[]>(`
       SELECT id, student_name, mobile, course_name, campaign_name
       FROM meta_ads_lead_sync
       WHERE notifications_sent_at IS NULL
@@ -118,17 +135,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ message: "No new leads to contact" });
     }
 
-    const results: {
-      sent: { id: number; phone: string; course: string }[];
-      failed: { id: number; reason: string }[];
-    } = { sent: [], failed: [] };
+    const results: { sent: SendResult[]; failed: FailedResult[] } = { sent: [], failed: [] };
 
     for (const lead of leads) {
       const phone = normalizePhone(lead.mobile);
 
       if (!phone) {
         results.failed.push({ id: lead.id, reason: "Invalid phone number" });
-        await query(
+        await db.execute(
           `UPDATE meta_ads_lead_sync SET last_error = ? WHERE id = ?`,
           ["Invalid phone number format", lead.id]
         );
@@ -140,8 +154,7 @@ export async function GET(req: NextRequest) {
       try {
         await sendWelcomeTemplate(phone, lead.student_name);
 
-        // Mark as contacted, set first stage, store course in wa_data
-        await query(
+        await db.execute(
           `UPDATE meta_ads_lead_sync
            SET notifications_sent_at = NOW(),
                wa_stage = 'awaiting_choice',
@@ -151,13 +164,13 @@ export async function GET(req: NextRequest) {
         );
 
         results.sent.push({ id: lead.id, phone, course });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "WhatsApp send failed";
-        await query(
+      } catch (err) {
+        const reason = errorMessage(err, "WhatsApp API error");
+        await db.execute(
           `UPDATE meta_ads_lead_sync SET last_error = ? WHERE id = ?`,
-          [message, lead.id]
+          [reason, lead.id]
         );
-        results.failed.push({ id: lead.id, reason: message });
+        results.failed.push({ id: lead.id, reason });
       }
     }
 
@@ -167,9 +180,10 @@ export async function GET(req: NextRequest) {
       failed: results.failed.length,
       details: results,
     });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Cron job failed";
+  } catch (err) {
     console.error("Cron job error:", err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(err, "Cron job failed") }, { status: 500 });
+  } finally {
+    if (db) await db.end();
   }
 }

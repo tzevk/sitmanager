@@ -143,7 +143,7 @@ export default function PublicAdmissionFormPage() {
   const [batchCategories, setBatchCategories] = useState<string[]>([]);
   const [availableBatches, setAvailableBatches] = useState<{ batchCode: string; timings: string | null; totalFees: number | null; feesFullPayment: number | null; feesInstallment: number | null }[]>([]);
   const [batchFees, setBatchFees] = useState<number | null>(null);
-  const [batchFeesFullPayment, setBatchFeesFullPayment] = useState<number | null>(null);
+  const [, setBatchFeesFullPayment] = useState<number | null>(null);
   const [batchFeesInstallment, setBatchFeesInstallment] = useState<number | null>(null);
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
@@ -832,8 +832,10 @@ export default function PublicAdmissionFormPage() {
   // category are both selected, fetch the matching batches — regardless of HOW the
   // category got set (dropdown, restored draft, or the hydrate effect). This fixes
   // "Select Batch Code" staying empty when the category wasn't picked via its onChange.
+  const trainingProgrammeId = formData.trainingProgrammeId;
+  const trainingCategory = formData.trainingCategory;
+
   useEffect(() => {
-    const { trainingProgrammeId, trainingCategory } = formData;
     if (!trainingProgrammeId || !trainingCategory) {
       loadedBatchKeyRef.current = '';
       return;
@@ -842,7 +844,7 @@ export default function PublicAdmissionFormPage() {
     if (loadedBatchKeyRef.current === key) return;
     loadedBatchKeyRef.current = key;
     void loadBatchesForCategory(trainingProgrammeId, trainingCategory);
-  }, [formData.trainingProgrammeId, formData.trainingCategory, loadBatchesForCategory]);
+  }, [trainingProgrammeId, trainingCategory, loadBatchesForCategory]);
 
   const handleProgrammeChange = async (courseId: string) => {
     const course = courses.find((c) => String(c.Course_Id) === courseId);
@@ -1949,6 +1951,7 @@ export default function PublicAdmissionFormPage() {
                             <div className="flex-shrink-0">
                               {formData.photoFile ? (
                                 <div className="relative w-32 h-40 border-2 border-[#2A6BB5] rounded-lg overflow-hidden shadow-md">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img src={URL.createObjectURL(formData.photoFile)} alt="Preview" className="w-full h-full object-cover" />
                                   <button
                                     type="button"
