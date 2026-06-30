@@ -62,13 +62,31 @@ async function hasNextDateColumn(pool: any): Promise<boolean> {
 }
 
 async function resolveInquiryLink(pool: any, inquiryTable: string, inquiryIdNum: number) {
+  const exactRows = await runGuardedQuery(pool,
+    `SELECT Inquiry_Id, Student_Id
+     FROM ${inquiryTable}
+     WHERE Inquiry_Id = ?
+       AND (IsDelete = 0 OR IsDelete IS NULL)
+     LIMIT 1`,
+    [inquiryIdNum]
+  );
+
+  const exact = (exactRows as any[])[0];
+  if (exact) {
+    return {
+      canonicalInquiryId: Number(exact.Inquiry_Id),
+      canonicalStudentId: exact.Student_Id == null ? null : Number(exact.Student_Id),
+    };
+  }
+
   const mapRows = await runGuardedQuery(pool,
     `SELECT Inquiry_Id, Student_Id
      FROM ${inquiryTable}
-     WHERE Inquiry_Id = ? OR Student_Id = ?
+     WHERE Student_Id = ?
+       AND (IsDelete = 0 OR IsDelete IS NULL)
      ORDER BY Inquiry_Id DESC
      LIMIT 1`,
-    [inquiryIdNum, inquiryIdNum]
+    [inquiryIdNum]
   );
 
   const mapped = (mapRows as any[])[0] || {};
@@ -108,16 +126,19 @@ export async function GET(req: NextRequest) {
     const withNextDate = await hasNextDateColumn(pool);
     const nextDateSelect = withNextDate ? 'd.nextdate' : 'NULL as nextdate';
     const cacheKey = `api:inquiry:discussions:${canonicalInquiryId}:${canonicalStudentId ?? inquiryIdNum}`;
+    const discussionIds = [canonicalInquiryId];
+    if (canonicalStudentId && canonicalStudentId !== canonicalInquiryId) discussionIds.push(canonicalStudentId);
+    const discussionPlaceholders = discussionIds.map(() => '?').join(',');
     const rows = await cached(cacheKey, 10_000, async () => runGuardedQuery(
       pool,
       `SELECT d.id, d.date, ${nextDateSelect}, d.discussion, d.created_by, d.created_date,
               COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.firstname, ''), ' ', COALESCE(u.lastname, ''))), ''), u.username) AS created_by_name
        FROM awt_inquirydiscussion d
        LEFT JOIN awt_adminuser u ON u.id = d.created_by
-       WHERE (d.Inquiry_id = ? OR d.student_id = ?) AND (d.deleted = 0 OR d.deleted IS NULL)
+       WHERE (d.Inquiry_id IN (${discussionPlaceholders}) OR d.student_id IN (${discussionPlaceholders})) AND (d.deleted = 0 OR d.deleted IS NULL)
          AND d.date IS NOT NULL AND TRIM(COALESCE(d.date, '')) <> ''
        ORDER BY d.id ASC`,
-      [canonicalInquiryId, canonicalStudentId ?? inquiryIdNum],
+      [...discussionIds, ...discussionIds],
       5,
     ));
 
