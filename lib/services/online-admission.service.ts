@@ -7,6 +7,7 @@ import { hasAdmissionUploads, type AdmissionUploadBundle, saveAdmissionAssetsFor
 let inquiryTableNameCache: string | null = null;
 let statusTableNameCache: string | null | undefined;
 let studentMasterTableNameCache: string | null | undefined;
+let studentMasterRemarkReady = false;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -274,6 +275,30 @@ async function resolveStudentMasterTableName(pool: ReturnType<typeof getPool>): 
   }
 
   return studentMasterTableNameCache;
+}
+
+async function ensureStudentMasterRemarkColumn(pool: ReturnType<typeof getPool>, tableName: string): Promise<void> {
+  if (studentMasterRemarkReady) return;
+
+  const [rows] = await pool.query(
+    `SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?
+       AND COLUMN_NAME = 'Remark'
+     LIMIT 1`,
+    [tableName]
+  ) as [any[], any];
+
+  const column = (rows as any[])[0];
+  const dataType = String(column?.DATA_TYPE || '').toLowerCase();
+  const maxLength = Number(column?.CHARACTER_MAXIMUM_LENGTH || 0);
+
+  if (column && dataType !== 'text' && dataType !== 'mediumtext' && dataType !== 'longtext') {
+    await pool.query(`ALTER TABLE \`${tableName}\` MODIFY COLUMN Remark TEXT NULL`);
+  }
+
+  studentMasterRemarkReady = true;
 }
 
 async function ensurePayloadTable(pool: ReturnType<typeof getPool>): Promise<void> {
@@ -749,6 +774,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
   const inquiryTable = await resolveInquiryTableName(pool);
   const studentMasterTable = await resolveStudentMasterTableName(pool);
   if (!studentMasterTable) return;
+  await ensureStudentMasterRemarkColumn(pool, studentMasterTable);
 
   const [inquiryRows] = await pool.query(
     `SELECT Inquiry_Id, Student_Id, Student_Name, Email, Present_Mobile, Batch_Code, Course_Id, OnlineState
