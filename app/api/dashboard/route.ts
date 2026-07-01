@@ -145,18 +145,42 @@ async function fetchDashboardData(dept?: string) {
   const needsAdminWidgets = isAdmin;
   const needsQuickStats = isGeneral || isAdmin;
 
-  // batch_mst.SDate is stored in mixed formats — parse before comparing/sorting.
+  // batch_mst date columns are varchar and stored in mixed formats; parse before comparing/sorting.
   const BATCH_SDATE_EXPR = `COALESCE(
     STR_TO_DATE(CAST(b.SDate AS CHAR), '%Y-%m-%d'),
     STR_TO_DATE(CAST(b.SDate AS CHAR), '%d-%m-%Y'),
     STR_TO_DATE(CAST(b.SDate AS CHAR), '%d/%m/%Y'),
     STR_TO_DATE(CAST(b.SDate AS CHAR), '%m/%d/%Y')
   )`;
+  const BATCH_ACTUALDATE_EXPR = `COALESCE(
+    STR_TO_DATE(CAST(b.ActualDate AS CHAR), '%Y-%m-%d'),
+    STR_TO_DATE(CAST(b.ActualDate AS CHAR), '%d-%m-%Y'),
+    STR_TO_DATE(CAST(b.ActualDate AS CHAR), '%d/%m/%Y'),
+    STR_TO_DATE(CAST(b.ActualDate AS CHAR), '%m/%d/%Y')
+  )`;
+  const BATCH_PENDING_START_EXPR = `COALESCE(
+    CASE WHEN DATE(${BATCH_ACTUALDATE_EXPR}) >= '1901-01-01' THEN ${BATCH_ACTUALDATE_EXPR} END,
+    ${BATCH_SDATE_EXPR}
+  )`;
+  const BATCH_DURATION_VALUE_EXPR = `CAST(COALESCE(NULLIF(REGEXP_SUBSTR(CAST(b.Duration AS CHAR), '[0-9]+'), ''), '1') AS UNSIGNED)`;
+  const BATCH_DURATION_END_EXPR = `CASE
+    WHEN ${BATCH_PENDING_START_EXPR} IS NULL THEN NULL
+    WHEN LOWER(CAST(COALESCE(b.Duration, '') AS CHAR)) LIKE '%year%' THEN DATE_ADD(${BATCH_PENDING_START_EXPR}, INTERVAL ${BATCH_DURATION_VALUE_EXPR} YEAR)
+    WHEN LOWER(CAST(COALESCE(b.Duration, '') AS CHAR)) LIKE '%month%' THEN DATE_ADD(${BATCH_PENDING_START_EXPR}, INTERVAL ${BATCH_DURATION_VALUE_EXPR} MONTH)
+    WHEN LOWER(CAST(COALESCE(b.Duration, '') AS CHAR)) LIKE '%week%' THEN DATE_ADD(${BATCH_PENDING_START_EXPR}, INTERVAL ${BATCH_DURATION_VALUE_EXPR} WEEK)
+    WHEN LOWER(CAST(COALESCE(b.Duration, '') AS CHAR)) LIKE '%day%' THEN DATE_ADD(${BATCH_PENDING_START_EXPR}, INTERVAL ${BATCH_DURATION_VALUE_EXPR} DAY)
+    ELSE NULL
+  END`;
   const BATCH_EDATE_EXPR = `COALESCE(
     STR_TO_DATE(CAST(b.EDate AS CHAR), '%Y-%m-%d'),
     STR_TO_DATE(CAST(b.EDate AS CHAR), '%d-%m-%Y'),
     STR_TO_DATE(CAST(b.EDate AS CHAR), '%d/%m/%Y'),
     STR_TO_DATE(CAST(b.EDate AS CHAR), '%m/%d/%Y')
+  )`;
+  const BATCH_PENDING_END_EXPR = `GREATEST(
+    COALESCE(${BATCH_EDATE_EXPR}, DATE('1000-01-01')),
+    COALESCE(bll.last_lecture_date, DATE('1000-01-01')),
+    COALESCE(CASE WHEN ${BATCH_EDATE_EXPR} IS NULL OR ${BATCH_EDATE_EXPR} < ${BATCH_PENDING_START_EXPR} THEN ${BATCH_DURATION_END_EXPR} END, DATE('1000-01-01'))
   )`;
 
   // The online admission form store may not exist on a fresh database; ensure it so
@@ -940,6 +964,19 @@ async function fetchDashboardData(dept?: string) {
         WHERE (f.IsDelete = 0 OR f.IsDelete IS NULL)
         GROUP BY f.Student_Id
       ),
+      batch_last_lecture AS (
+        SELECT
+          blm.batch_id,
+          MAX(COALESCE(
+            STR_TO_DATE(CAST(blm.date AS CHAR), '%Y-%m-%d'),
+            STR_TO_DATE(CAST(blm.date AS CHAR), '%d-%m-%Y'),
+            STR_TO_DATE(CAST(blm.date AS CHAR), '%d/%m/%Y'),
+            STR_TO_DATE(CAST(blm.date AS CHAR), '%m/%d/%Y')
+          )) AS last_lecture_date
+        FROM batch_lecture_master blm
+        WHERE blm.deleted IS NULL OR blm.deleted = 0
+        GROUP BY blm.batch_id
+      ),
       student_balance AS (
         SELECT
           aa.batch_id,
@@ -979,21 +1016,22 @@ async function fetchDashboardData(dept?: string) {
         SUM(sb.balance + sb.paid_amount) AS total_fee,
         SUM(sb.paid_amount) AS paid_amount,
         SUM(sb.balance) AS amount,
-        DATE_FORMAT(${BATCH_SDATE_EXPR}, '%Y-%m-%d') AS start_date,
-        DATE_FORMAT(${BATCH_EDATE_EXPR}, '%Y-%m-%d') AS end_date,
+        DATE_FORMAT(${BATCH_PENDING_START_EXPR}, '%Y-%m-%d') AS start_date,
+        DATE_FORMAT(${BATCH_PENDING_END_EXPR}, '%Y-%m-%d') AS end_date,
         CASE
-          -- Ongoing = start date has begun AND end date has not passed, using the
-          -- Annual Batch master (batch_mst) dates. Both dates must be present.
-          WHEN ${BATCH_SDATE_EXPR} IS NOT NULL
-           AND ${BATCH_SDATE_EXPR} <= CURDATE()
-           AND ${BATCH_EDATE_EXPR} IS NOT NULL
-           AND ${BATCH_EDATE_EXPR} >= CURDATE()
+          -- Ongoing = actual start date has begun AND effective end date has not passed.
+          -- ActualDate may be blank or a 1900 placeholder, so fall back to SDate.
+          -- EDate may be stale/invalid, so use last lecture date or Duration as a fallback.
+          WHEN ${BATCH_PENDING_START_EXPR} IS NOT NULL
+           AND ${BATCH_PENDING_START_EXPR} <= CURDATE()
+           AND ${BATCH_PENDING_END_EXPR} >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
           THEN 1 ELSE 0
         END AS is_ongoing
       FROM student_balance sb
       LEFT JOIN batch_mst b ON b.Batch_Id = sb.batch_id
+      LEFT JOIN batch_last_lecture bll ON bll.batch_id = sb.batch_id
       WHERE sb.balance > 0
-      GROUP BY sb.batch_id, sb.batch_code, sb.course_name, b.SDate, b.EDate
+      GROUP BY sb.batch_id, sb.batch_code, sb.course_name, b.SDate, b.ActualDate, b.EDate, b.Duration, bll.last_lecture_date
       HAVING amount > 0
       -- Surface ongoing batches first so the "Ongoing batches only" view is never
       -- starved by long-ended batches that carry the largest accumulated balances.

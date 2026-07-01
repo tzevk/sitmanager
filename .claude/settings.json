@@ -169,7 +169,8 @@
       "Bash(\" | head -30)",
       "Bash(grep -viE \"hidden md:|overflow-hidden|hidden sm:|className|hidden lg:|hidden xl:|group-hover|sr-only|hidden'|hidden \\\\\"|hidden`\" | head -30)",
       "Bash(node -r dotenv/config scripts/db/_h.mjs dotenv_config_path=.env.local)",
-      "Bash(node -r dotenv/config scripts/db/_hid.mjs dotenv_config_path=.env.local)"
+      "Bash(node -r dotenv/config scripts/db/_hid.mjs dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/_ad.mjs dotenv_config_path=.env.local)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
