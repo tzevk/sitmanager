@@ -280,7 +280,7 @@ export default function FeeDetailsPage() {
                         >
                           View
                         </Link>
-                        {canUpdate && (!!r.Latest_Fees_Id || deletingFeesId === r.Latest_Fees_Id) && (
+                        {canUpdate && !!r.Latest_Fees_Id && (
                           <button
                             type="button"
                             onClick={() => handleDeleteSearchReceipt(r)}

@@ -294,7 +294,8 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    const dedupedRows = dedupeByPerson(rows, (row) => {
+    const rowsWithReceipts = rows.filter((row) => row.Latest_Fees_Id);
+    const dedupedRows = dedupeByPerson(rowsWithReceipts, (row) => {
       const hasReceipt = row.Latest_Fees_Id ? 1_000_000_000_000 : 0;
       const paidWeight = Number(row.Total_Paid ?? 0);
       return hasReceipt + (Number(row.Latest_Fees_Id) || 0) + paidWeight + (Number(row.Student_Id) || 0) / 1_000_000;
