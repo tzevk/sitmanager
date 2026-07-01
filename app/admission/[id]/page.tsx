@@ -734,15 +734,17 @@ export default function PublicAdmissionFormPage() {
     const eligibleBackgrounds = COURSE_ELIGIBILITY[formData.trainingProgrammeName];
     if (!eligibleBackgrounds) return true; // No restrictions if course not in map
     
-    // Check graduation degree and specialization
     const gradDegree = formData.grad_degree?.toUpperCase() || '';
     const gradSpec = formData.grad_specialization || '';
+    const diplomaSpec = formData.diploma_specialization || '';
+    const postgradSpec = formData.postgrad_specialization || '';
     const hscStream = formData.hsc_stream || '';
-    
-    // Check if any eligible background matches
-    return eligibleBackgrounds.some(bg => 
-      gradDegree.includes(bg.toUpperCase()) || 
-      gradSpec.includes(bg) || 
+
+    return eligibleBackgrounds.some(bg =>
+      gradDegree.includes(bg.toUpperCase()) ||
+      gradSpec.includes(bg) ||
+      diplomaSpec.includes(bg) ||
+      postgradSpec.includes(bg) ||
       hscStream.includes(bg)
     );
   };
