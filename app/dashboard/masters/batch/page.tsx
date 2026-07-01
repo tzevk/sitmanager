@@ -46,7 +46,7 @@ export default function BatchPage() {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const res = await fetch('/api/masters/batch-category?limit=100');
+        const res = await fetch('/api/masters/batch-category?mode=master&limit=100');
         const data = await res.json();
         const cats = (data.rows || []).map((r: { batch: string }) => r.batch).filter(Boolean);
         setCategories(cats);

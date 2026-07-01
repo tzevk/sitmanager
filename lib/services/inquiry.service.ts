@@ -805,13 +805,13 @@ async function loadInquiryFilterOptions(
            WHERE c.Course_Name IS NOT NULL AND c.Course_Name != ''
              AND (si.IsDelete = 0 OR si.IsDelete IS NULL) ORDER BY c.Course_Name`
         ),
-        // Inquiries store Batch_Category_id as the mst_batchcategory id. Only surface the
-        // four standard categories (Full Time, Part Time, Weekend, Online) as filter options.
+        // Inquiries store Batch_Category_id as the mst_batchcategory id. Surface every
+        // active category from the batch-category master as filter options.
         pool.query(
           `SELECT id, BatchCategory FROM mst_batchcategory
            WHERE (IsDelete = 0 OR IsDelete IS NULL) AND (IsActive = 1 OR IsActive IS NULL)
-             AND BatchCategory IN ('Full Time', 'Part Time', 'Weekend Batches', 'ONLINE')
-           ORDER BY FIELD(BatchCategory, 'Full Time', 'Part Time', 'Weekend Batches', 'ONLINE')`
+             AND BatchCategory IS NOT NULL AND BatchCategory != ''
+           ORDER BY BatchCategory`
         ),
         loadStatusOptions(pool),
       ]);

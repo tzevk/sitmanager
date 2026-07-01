@@ -55,12 +55,11 @@ export async function GET() {
          ORDER BY Inquiry_From`
       ),
       pool.query(
-        `SELECT DISTINCT b.Category
-         FROM ${inquiryTable} si
-         JOIN batch_mst b ON si.Batch_Code = b.Batch_Id
-         WHERE (si.IsDelete = 0 OR si.IsDelete IS NULL)
-           AND b.Category IS NOT NULL AND b.Category != ''
-         ORDER BY b.Category`
+        `SELECT BatchCategory AS Category
+         FROM mst_batchcategory
+         WHERE IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL)
+           AND BatchCategory IS NOT NULL AND BatchCategory != ''
+         ORDER BY BatchCategory`
       ),
     ]);
 

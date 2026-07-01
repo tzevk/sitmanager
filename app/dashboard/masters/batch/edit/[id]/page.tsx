@@ -179,10 +179,10 @@ const TABS = [
   { id: 'site-visit',            label: 'Site Visit / Final Exam Details' },
 ];
 
-/* Shared styles - compact */
-const labelCls = 'block text-[10px] font-semibold text-gray-600 mb-0.5';
-const inputCls = 'max-w-[280px] w-full bg-white border-[1.5px] border-gray-300 rounded px-2 py-2 text-xs text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] placeholder:text-gray-400';
-const selectCls = 'max-w-[280px] w-full bg-white border-[1.5px] border-gray-300 rounded px-2 py-2 text-xs text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093]';
+/* Shared styles */
+const labelCls = 'block text-[11px] font-semibold text-slate-600 mb-1';
+const inputCls = 'w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 shadow-sm hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-500';
+const selectCls = 'w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 shadow-sm hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-100 disabled:text-slate-500';
 
 /* Format date for input */
 const formatDateForInput = (d: string | null) => {
@@ -1151,12 +1151,14 @@ export default function EditBatchPage() {
 
   /* Tab Content: Batch Details */
   const BatchDetailsTab = () => (
-    <div className="grid grid-cols-4 gap-2">
-      {/* Column 1-3: Form fields in rows */}
-      <div className="col-span-3 space-y-2">
-        {/* Row 1 */}
-        <div className="grid grid-cols-3 gap-2">
-          <div>
+    <div className="space-y-5">
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
+          <h3 className="text-sm font-bold text-slate-800">Core Batch Information</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Training, category, location and enrollment details.</p>
+        </div>
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="md:col-span-2 xl:col-span-2">
             <label className={labelCls}>Training Name <span className="text-red-500">*</span></label>
             <select
               value={formData.Course_Id}
@@ -1204,42 +1206,6 @@ export default function EditBatchPage() {
               <option value="Pune">Pune</option>
             </select>
           </div>
-        </div>
-
-        {/* Row 2 */}
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <label className={labelCls}>Eligibility</label>
-            <input
-              type="text"
-              value={formData.Min_Qualification}
-              onChange={(e) => handleChange('Min_Qualification', e.target.value)}
-              className={inputCls}
-              placeholder="Eligibility"
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Duration From</label>
-            <input
-              type="date"
-              value={formData.SDate}
-              onChange={(e) => handleChange('SDate', e.target.value)}
-              className={inputCls}
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Last Date of Admission</label>
-            <input
-              type="date"
-              value={formData.Admission_Date}
-              onChange={(e) => handleChange('Admission_Date', e.target.value)}
-              className={inputCls}
-            />
-          </div>
-        </div>
-
-        {/* Row 3 */}
-        <div className="grid grid-cols-3 gap-2">
           <div>
             <label className={labelCls}>Target Student <span className="text-red-500">*</span></label>
             <input
@@ -1248,73 +1214,6 @@ export default function EditBatchPage() {
               onChange={(e) => handleChange('Max_Students', e.target.value)}
               className={inputCls}
               placeholder="Target Student"
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Training Coordinator</label>
-            <input
-              type="text"
-              value={formData.Training_Coordinator}
-              onChange={(e) => handleChange('Training_Coordinator', e.target.value)}
-              className={inputCls}
-              placeholder="Training Coordinator"
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Documents required <span className="text-red-500">*</span></label>
-            <input
-              type="text"
-              value={formData.Documents_Required}
-              onChange={(e) => handleChange('Documents_Required', e.target.value)}
-              className={inputCls}
-              placeholder="Documents required"
-            />
-          </div>
-        </div>
-
-        {/* Row 4 */}
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <label className={labelCls}>Training Name (if changed)</label>
-            <input
-              type="text"
-              value={formData.CourseName}
-              onChange={(e) => handleChange('CourseName', e.target.value)}
-              className={inputCls}
-              placeholder="Training Name"
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Duration</label>
-            <input
-              type="text"
-              value={formData.Duration}
-              onChange={(e) => handleChange('Duration', e.target.value)}
-              className={inputCls}
-              placeholder="Duration"
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Passing Criteria <span className="text-red-500">*</span></label>
-            <input
-              type="text"
-              value={formData.Passing_Criteria}
-              onChange={(e) => handleChange('Passing_Criteria', e.target.value)}
-              className={inputCls}
-              placeholder="0.6"
-            />
-          </div>
-        </div>
-
-        {/* Row 5 */}
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <label className={labelCls}>To (End Date)</label>
-            <input
-              type="date"
-              value={formData.EDate}
-              onChange={(e) => handleChange('EDate', e.target.value)}
-              className={inputCls}
             />
           </div>
           <div>
@@ -1328,37 +1227,140 @@ export default function EditBatchPage() {
             />
           </div>
           <div>
-            <label className={labelCls}>Timings</label>
+            <label className={labelCls}>Training Coordinator</label>
             <input
               type="text"
-              value={formData.Timings}
-              onChange={(e) => handleChange('Timings', e.target.value)}
+              value={formData.Training_Coordinator}
+              onChange={(e) => handleChange('Training_Coordinator', e.target.value)}
               className={inputCls}
-              placeholder="Timings"
+              placeholder="Training Coordinator"
             />
           </div>
         </div>
       </div>
 
-      {/* Column 4: Comments & Brief stacked vertically */}
-      <div className="col-span-1 space-y-2">
-        <div>
-          <label className={labelCls}>Comments</label>
-          <textarea
-            value={formData.Comments}
-            onChange={(e) => handleChange('Comments', e.target.value)}
-            className={inputCls + ' resize-none h-[100px] text-xs'}
-            placeholder="Comments"
-          />
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-5">
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
+            <h3 className="text-sm font-bold text-slate-800">Schedule & Requirements</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Dates, timing, eligibility and completion rules.</p>
+          </div>
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div>
+              <label className={labelCls}>Eligibility</label>
+              <input
+                type="text"
+                value={formData.Min_Qualification}
+                onChange={(e) => handleChange('Min_Qualification', e.target.value)}
+                className={inputCls}
+                placeholder="Eligibility"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Duration From</label>
+              <input
+                type="date"
+                value={formData.SDate}
+                onChange={(e) => handleChange('SDate', e.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>To (End Date)</label>
+              <input
+                type="date"
+                value={formData.EDate}
+                onChange={(e) => handleChange('EDate', e.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Last Date of Admission</label>
+              <input
+                type="date"
+                value={formData.Admission_Date}
+                onChange={(e) => handleChange('Admission_Date', e.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Duration</label>
+              <input
+                type="text"
+                value={formData.Duration}
+                onChange={(e) => handleChange('Duration', e.target.value)}
+                className={inputCls}
+                placeholder="Duration"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Timings</label>
+              <input
+                type="text"
+                value={formData.Timings}
+                onChange={(e) => handleChange('Timings', e.target.value)}
+                className={inputCls}
+                placeholder="Timings"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className={labelCls}>Documents required <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={formData.Documents_Required}
+                onChange={(e) => handleChange('Documents_Required', e.target.value)}
+                className={inputCls}
+                placeholder="Documents required"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Passing Criteria <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={formData.Passing_Criteria}
+                onChange={(e) => handleChange('Passing_Criteria', e.target.value)}
+                className={inputCls}
+                placeholder="0.6"
+              />
+            </div>
+            <div className="md:col-span-2 xl:col-span-3">
+              <label className={labelCls}>Training Name (if changed)</label>
+              <input
+                type="text"
+                value={formData.CourseName}
+                onChange={(e) => handleChange('CourseName', e.target.value)}
+                className={inputCls}
+                placeholder="Training Name"
+              />
+            </div>
+          </div>
         </div>
-        <div>
-          <label className={labelCls}>Brief <span className="text-red-500">*</span></label>
-          <textarea
-            value={formData.Course_description}
-            onChange={(e) => handleChange('Course_description', e.target.value)}
-            className={inputCls + ' resize-none h-[100px] text-xs'}
-            placeholder="Brief Description"
-          />
+
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
+            <h3 className="text-sm font-bold text-slate-800">Notes</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Internal comments and course brief.</p>
+          </div>
+          <div className="p-4 space-y-4">
+            <div>
+              <label className={labelCls}>Comments</label>
+              <textarea
+                value={formData.Comments}
+                onChange={(e) => handleChange('Comments', e.target.value)}
+                className={`${inputCls} min-h-[120px] resize-y`}
+                placeholder="Comments"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Brief <span className="text-red-500">*</span></label>
+              <textarea
+                value={formData.Course_description}
+                onChange={(e) => handleChange('Course_description', e.target.value)}
+                className={`${inputCls} min-h-[150px] resize-y`}
+                placeholder="Brief Description"
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -3818,7 +3820,7 @@ export default function EditBatchPage() {
                   <th className="px-3 py-2 text-left font-semibold text-gray-700 w-12">*</th>
                   <th className="px-3 py-2 text-left font-semibold text-gray-700">Start From</th>
                   <th className="px-3 py-2 text-left font-semibold text-gray-700">End To</th>
-                  <th className="px-3 py-2 text-left font-semibold text-gray-700">Garde</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-700">Grade</th>
                   <th className="px-3 py-2 text-left font-semibold text-gray-700">Action</th>
                 </tr>
               </thead>
@@ -4005,28 +4007,29 @@ export default function EditBatchPage() {
   if (!canUpdate) return <AccessDenied message="You do not have permission to edit batches." />;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-4 py-2.5 shadow-sm">
-        <div className="flex items-center gap-3">
+      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-4 shadow-md">
+        <div className="flex items-center gap-4">
           <button
             onClick={() => router.push('/dashboard/masters/batch')}
-            className="p-1 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
+            className="p-2 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
+            aria-label="Back to batch list"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
           <div className="flex-1">
-            <h2 className="text-base font-bold text-white">Edit Batch</h2>
+            <h2 className="text-lg font-bold text-white tracking-tight">Edit Batch</h2>
             <p className="text-xs text-white/70">
               Masters &gt; Batch &gt; Edit &gt; {batchData?.Batch_code || batchId}
             </p>
           </div>
           {batchData && (
-            <div className="text-right">
-              <p className="text-sm font-semibold text-white">{batchData.Course_Name}</p>
-              <p className="text-xs text-white/70">{batchData.Category}</p>
+            <div className="hidden md:block text-right rounded-lg bg-white/10 px-4 py-2 border border-white/15">
+              <p className="text-sm font-semibold text-white max-w-[360px] truncate">{batchData.Course_Name}</p>
+              <p className="text-xs text-white/70">{batchData.Category || 'Uncategorized'}</p>
             </div>
           )}
         </div>
@@ -4043,18 +4046,18 @@ export default function EditBatchPage() {
       )}
 
       {/* Main Card with Tabs */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         {/* Tab Navigation */}
-        <div className="border-b border-gray-200 bg-gray-50/50">
-          <div className="flex overflow-x-auto scrollbar-hide">
+        <div className="border-b border-slate-200 bg-slate-50 px-3 pt-3">
+          <div className="flex overflow-x-auto scrollbar-hide gap-1">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-3 py-2 text-[10px] font-semibold whitespace-nowrap border-b-2 transition-colors ${
+                className={`px-3 py-2 text-xs font-semibold whitespace-nowrap rounded-t-lg border border-b-0 transition-colors ${
                   activeTab === tab.id
-                    ? 'border-[#2E3093] text-[#2E3093] bg-white'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100/50'
+                    ? 'border-slate-200 text-[#2E3093] bg-white shadow-sm'
+                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/70'
                 }`}
               >
                 {tab.label}
@@ -4064,16 +4067,22 @@ export default function EditBatchPage() {
         </div>
 
         {/* Tab Content */}
-        <div className="p-3">
+        <div className="p-4 bg-slate-50/40">
           {renderTabContent()}
         </div>
 
         {/* Footer Actions */}
-        <div className="px-3 py-2 border-t border-gray-100 bg-gray-50/30 flex items-center gap-2">
+        <div className="px-4 py-3 border-t border-slate-200 bg-white flex items-center justify-end gap-2">
+          <button
+            onClick={() => router.push('/dashboard/masters/batch')}
+            className="px-4 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-all"
+          >
+            Cancel
+          </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center justify-center gap-1.5 bg-[#2E3093] hover:bg-[#252780] text-white px-4 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm disabled:opacity-50"
+            className="flex items-center justify-center gap-1.5 bg-[#2E3093] hover:bg-[#252780] text-white px-5 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm disabled:opacity-50"
           >
             {saving ? (
               <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -4083,12 +4092,6 @@ export default function EditBatchPage() {
               </svg>
             )}
             Save
-          </button>
-          <button
-            onClick={() => router.push('/dashboard/masters/batch')}
-            className="px-4 py-1.5 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all"
-          >
-            Cancel
           </button>
         </div>
       </div>

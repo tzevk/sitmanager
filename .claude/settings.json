@@ -158,7 +158,8 @@
       "Bash(cd /Users/tanvikadam/Desktop/SIT/sitmanager *)",
       "Bash(node -r dotenv/config scripts/db/curate-batch-categories.mjs dotenv_config_path=.env.local)",
       "Bash(node -r dotenv/config scripts/db/curate-batch-categories.mjs --apply dotenv_config_path=.env.local)",
-      "Bash(node -r dotenv/config scripts/db/_iq.mjs dotenv_config_path=.env.local)"
+      "Bash(node -r dotenv/config scripts/db/_iq.mjs dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/_tk8.mjs dotenv_config_path=.env.local)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

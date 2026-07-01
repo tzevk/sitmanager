@@ -70,7 +70,7 @@ export async function GET() {
           "SELECT Course_Id, Course_Name FROM course_mst WHERE IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Course_Name"
         ),
         runGuardedQuery(pool,
-          "SELECT DISTINCT Category FROM batch_mst WHERE IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL) AND Category IS NOT NULL AND Category != '' ORDER BY Category"
+          "SELECT BatchCategory AS Category FROM mst_batchcategory WHERE IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL) AND BatchCategory IS NOT NULL AND BatchCategory != '' ORDER BY BatchCategory"
         ),
         runGuardedQuery(pool,
           "SELECT Education AS Qualification FROM mst_education WHERE Education IS NOT NULL AND Education != '' AND (IsActive = 1 OR IsActive IS NULL) AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Id, Education"
