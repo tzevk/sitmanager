@@ -1322,15 +1322,18 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
        LEFT JOIN (
          SELECT si_map.Inquiry_Id as InquiryId, MAX(d.id) as max_id
          FROM \`${inquiryTable}\` si_map
+         LEFT JOIN \`${inquiryTable}\` si_sibling
+           ON si_sibling.Student_Id = si_map.Student_Id
+          AND (si_sibling.IsDelete = 0 OR si_sibling.IsDelete IS NULL)
          INNER JOIN awt_inquirydiscussion d
            ON d.deleted = 0
           AND ${manualDiscussionSqlCondition('d')}
           AND si_map.Student_Id IS NOT NULL
-          AND (d.Inquiry_id = si_map.Student_Id OR d.student_id = si_map.Student_Id)
+          AND (d.Inquiry_id = si_map.Student_Id OR d.student_id = si_map.Student_Id OR d.Inquiry_id = si_sibling.Inquiry_Id)
          WHERE si_map.Inquiry_Id IN (${ph})
          GROUP BY si_map.Inquiry_Id
        ) tld_legacy ON tld_legacy.InquiryId = si.Inquiry_Id
-       LEFT JOIN awt_inquirydiscussion ld ON ld.id = COALESCE(tld_primary.max_id, tld_legacy.max_id)
+       LEFT JOIN awt_inquirydiscussion ld ON ld.id = GREATEST(COALESCE(tld_primary.max_id, 0), COALESCE(tld_legacy.max_id, 0))
        LEFT JOIN (
          SELECT d.Inquiry_id as InquiryId, MIN(d.id) as min_id
          FROM awt_inquirydiscussion d
@@ -1341,10 +1344,13 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
        LEFT JOIN (
          SELECT si_map.Inquiry_Id as InquiryId, MIN(d.id) as min_id
          FROM \`${inquiryTable}\` si_map
+         LEFT JOIN \`${inquiryTable}\` si_sibling
+           ON si_sibling.Student_Id = si_map.Student_Id
+          AND (si_sibling.IsDelete = 0 OR si_sibling.IsDelete IS NULL)
          INNER JOIN awt_inquirydiscussion d
            ON d.deleted = 0
           AND si_map.Student_Id IS NOT NULL
-          AND (d.Inquiry_id = si_map.Student_Id OR d.student_id = si_map.Student_Id)
+          AND (d.Inquiry_id = si_map.Student_Id OR d.student_id = si_map.Student_Id OR d.Inquiry_id = si_sibling.Inquiry_Id)
          WHERE si_map.Inquiry_Id IN (${ph})
          GROUP BY si_map.Inquiry_Id
        ) tfd_legacy ON tfd_legacy.InquiryId = si.Inquiry_Id

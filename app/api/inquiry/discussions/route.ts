@@ -73,9 +73,22 @@ async function resolveInquiryLink(pool: any, inquiryTable: string, inquiryIdNum:
 
   const exact = (exactRows as any[])[0];
   if (exact) {
+    const canonicalStudentId = exact.Student_Id == null ? null : Number(exact.Student_Id);
+    const linkedInquiryIds = canonicalStudentId && Number.isFinite(canonicalStudentId) && canonicalStudentId > 0
+      ? await runGuardedQuery(pool,
+          `SELECT Inquiry_Id
+           FROM ${inquiryTable}
+           WHERE Student_Id = ?
+             AND (IsDelete = 0 OR IsDelete IS NULL)`,
+          [canonicalStudentId]
+        )
+      : [];
+
     return {
       canonicalInquiryId: Number(exact.Inquiry_Id),
-      canonicalStudentId: exact.Student_Id == null ? null : Number(exact.Student_Id),
+      canonicalStudentId,
+      linkedInquiryIds: [Number(exact.Inquiry_Id), ...(linkedInquiryIds as any[]).map((row) => Number(row.Inquiry_Id))]
+        .filter((value, index, values) => Number.isFinite(value) && value > 0 && values.indexOf(value) === index),
     };
   }
 
@@ -90,9 +103,22 @@ async function resolveInquiryLink(pool: any, inquiryTable: string, inquiryIdNum:
   );
 
   const mapped = (mapRows as any[])[0] || {};
+  const canonicalStudentId = mapped.Student_Id == null ? null : Number(mapped.Student_Id);
+  const linkedInquiryIds = canonicalStudentId && Number.isFinite(canonicalStudentId) && canonicalStudentId > 0
+    ? await runGuardedQuery(pool,
+        `SELECT Inquiry_Id
+         FROM ${inquiryTable}
+         WHERE Student_Id = ?
+           AND (IsDelete = 0 OR IsDelete IS NULL)`,
+        [canonicalStudentId]
+      )
+    : [];
+
   return {
     canonicalInquiryId: Number(mapped.Inquiry_Id || inquiryIdNum),
-    canonicalStudentId: mapped.Student_Id == null ? null : Number(mapped.Student_Id),
+    canonicalStudentId,
+    linkedInquiryIds: [Number(mapped.Inquiry_Id || inquiryIdNum), ...(linkedInquiryIds as any[]).map((row) => Number(row.Inquiry_Id))]
+      .filter((value, index, values) => Number.isFinite(value) && value > 0 && values.indexOf(value) === index),
   };
 }
 
@@ -121,14 +147,15 @@ export async function GET(req: NextRequest) {
     // Canonicalize inquiry id: discussions are stored against a canonical Inquiry_Id.
     // Accept callers providing either Inquiry_Id or Student_Id, but resolve to a single
     // canonical Inquiry_Id to avoid pulling discussions for other linked inquiries.
-    const { canonicalInquiryId, canonicalStudentId } = await resolveInquiryLink(pool, inquiryTable, inquiryIdNum);
+    const { canonicalInquiryId, canonicalStudentId, linkedInquiryIds } = await resolveInquiryLink(pool, inquiryTable, inquiryIdNum);
 
     const withNextDate = await hasNextDateColumn(pool);
     const nextDateSelect = withNextDate ? 'd.nextdate' : 'NULL as nextdate';
-    const cacheKey = `api:inquiry:discussions:${canonicalInquiryId}:${canonicalStudentId ?? inquiryIdNum}`;
-    const discussionIds = [canonicalInquiryId];
+    const discussionIds = linkedInquiryIds.length > 0 ? [...linkedInquiryIds] : [canonicalInquiryId];
     if (canonicalStudentId && canonicalStudentId !== canonicalInquiryId) discussionIds.push(canonicalStudentId);
-    const discussionPlaceholders = discussionIds.map(() => '?').join(',');
+    const uniqueDiscussionIds = discussionIds.filter((value, index, values) => values.indexOf(value) === index);
+    const cacheKey = `api:inquiry:discussions:${uniqueDiscussionIds.join(',')}`;
+    const discussionPlaceholders = uniqueDiscussionIds.map(() => '?').join(',');
     const rows = await cached(cacheKey, 10_000, async () => runGuardedQuery(
       pool,
       `SELECT d.id, d.date, ${nextDateSelect}, d.discussion, d.created_by, d.created_date,
@@ -137,7 +164,7 @@ export async function GET(req: NextRequest) {
        LEFT JOIN awt_adminuser u ON u.id = d.created_by
        WHERE (d.Inquiry_id IN (${discussionPlaceholders}) OR d.student_id IN (${discussionPlaceholders})) AND (d.deleted = 0 OR d.deleted IS NULL)
        ORDER BY d.id ASC`,
-      [...discussionIds, ...discussionIds],
+      [...uniqueDiscussionIds, ...uniqueDiscussionIds],
       5,
     ));
 
