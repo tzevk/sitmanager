@@ -979,9 +979,12 @@ async function fetchDashboardData(dept?: string) {
         SUM(sb.balance) AS amount,
         DATE_FORMAT(${BATCH_SDATE_EXPR}, '%Y-%m-%d') AS start_date,
         CASE
+          -- Ongoing = start date has begun AND end date has not passed, using the
+          -- Annual Batch master (batch_mst) dates. Both dates must be present.
           WHEN ${BATCH_SDATE_EXPR} IS NOT NULL
            AND ${BATCH_SDATE_EXPR} <= CURDATE()
-           AND (${BATCH_EDATE_EXPR} IS NULL OR ${BATCH_EDATE_EXPR} >= CURDATE())
+           AND ${BATCH_EDATE_EXPR} IS NOT NULL
+           AND ${BATCH_EDATE_EXPR} >= CURDATE()
           THEN 1 ELSE 0
         END AS is_ongoing
       FROM student_balance sb

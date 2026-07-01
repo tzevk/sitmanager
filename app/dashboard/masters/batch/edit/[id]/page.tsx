@@ -180,9 +180,9 @@ const TABS = [
 ];
 
 /* Shared styles */
-const labelCls = 'block text-[11px] font-semibold text-slate-600 mb-1';
-const inputCls = 'w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 shadow-sm hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-500';
-const selectCls = 'w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 shadow-sm hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-100 disabled:text-slate-500';
+const labelCls = 'block text-[10px] font-semibold text-slate-600 mb-0.5';
+const inputCls = 'w-full bg-white border border-slate-300 rounded-md px-2.5 py-1.5 text-xs text-slate-900 shadow-sm hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-500';
+const selectCls = 'w-full bg-white border border-slate-300 rounded-md px-2.5 py-1.5 text-xs text-slate-900 shadow-sm hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-100 disabled:text-slate-500';
 
 /* Format date for input */
 const formatDateForInput = (d: string | null) => {
@@ -1029,7 +1029,7 @@ export default function EditBatchPage() {
               }
             });
           }
-        } catch (e) {
+        } catch {
           // Parsing failed, will use defaults
         }
 
@@ -1151,13 +1151,12 @@ export default function EditBatchPage() {
 
   /* Tab Content: Batch Details */
   const BatchDetailsTab = () => (
-    <div className="space-y-5">
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
-          <h3 className="text-sm font-bold text-slate-800">Core Batch Information</h3>
-          <p className="text-xs text-slate-500 mt-0.5">Training, category, location and enrollment details.</p>
+    <div className="space-y-3">
+      <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="border-b border-slate-100 bg-slate-50 px-3 py-2">
+          <h3 className="text-xs font-bold text-slate-800">Core Batch Information</h3>
         </div>
-        <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="p-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2.5">
           <div className="md:col-span-2 xl:col-span-2">
             <label className={labelCls}>Training Name <span className="text-red-500">*</span></label>
             <select
@@ -1239,13 +1238,12 @@ export default function EditBatchPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-5">
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
-            <h3 className="text-sm font-bold text-slate-800">Schedule & Requirements</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Dates, timing, eligibility and completion rules.</p>
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-3">
+        <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-100 bg-slate-50 px-3 py-2">
+            <h3 className="text-xs font-bold text-slate-800">Schedule & Requirements</h3>
           </div>
-          <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="p-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
             <div>
               <label className={labelCls}>Eligibility</label>
               <input
@@ -1336,18 +1334,17 @@ export default function EditBatchPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
-            <h3 className="text-sm font-bold text-slate-800">Notes</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Internal comments and course brief.</p>
+        <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-100 bg-slate-50 px-3 py-2">
+            <h3 className="text-xs font-bold text-slate-800">Notes</h3>
           </div>
-          <div className="p-4 space-y-4">
+          <div className="p-3 space-y-2.5">
             <div>
               <label className={labelCls}>Comments</label>
               <textarea
                 value={formData.Comments}
                 onChange={(e) => handleChange('Comments', e.target.value)}
-                className={`${inputCls} min-h-[120px] resize-y`}
+                className={`${inputCls} min-h-[82px] resize-y`}
                 placeholder="Comments"
               />
             </div>
@@ -1356,7 +1353,7 @@ export default function EditBatchPage() {
               <textarea
                 value={formData.Course_description}
                 onChange={(e) => handleChange('Course_description', e.target.value)}
-                className={`${inputCls} min-h-[150px] resize-y`}
+                className={`${inputCls} min-h-[104px] resize-y`}
                 placeholder="Brief Description"
               />
             </div>
@@ -3725,12 +3722,7 @@ export default function EditBatchPage() {
 
   /* Tab Content: Result Structure */
   const ResultStructureTab = () => {
-    const handleAddBoundary = () => {
-      const newId = Math.max(...gradeBoundaries.map(b => b.id), 0) + 1;
-      setGradeBoundaries([...gradeBoundaries, { id: newId, startFrom: 0, endTo: 0, grade: '' }]);
-    };
-
-    const handleUpdateBoundary = (id: number, field: string, value: any) => {
+    const handleUpdateBoundary = (id: number, field: 'startFrom' | 'endTo' | 'grade', value: string) => {
       setGradeBoundaries(gradeBoundaries.map(b => 
         b.id === id ? { ...b, [field]: field === 'grade' ? value : Number(value) || 0 } : b
       ));
@@ -4007,27 +3999,27 @@ export default function EditBatchPage() {
   if (!canUpdate) return <AccessDenied message="You do not have permission to edit batches." />;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Header */}
-      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-4 shadow-md">
-        <div className="flex items-center gap-4">
+      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-4 py-3 shadow-md">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => router.push('/dashboard/masters/batch')}
-            className="p-2 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
+            className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
             aria-label="Back to batch list"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
           <div className="flex-1">
-            <h2 className="text-lg font-bold text-white tracking-tight">Edit Batch</h2>
+            <h2 className="text-base font-bold text-white tracking-tight">Edit Batch</h2>
             <p className="text-xs text-white/70">
               Masters &gt; Batch &gt; Edit &gt; {batchData?.Batch_code || batchId}
             </p>
           </div>
           {batchData && (
-            <div className="hidden md:block text-right rounded-lg bg-white/10 px-4 py-2 border border-white/15">
+            <div className="hidden md:block text-right rounded-lg bg-white/10 px-3 py-1.5 border border-white/15">
               <p className="text-sm font-semibold text-white max-w-[360px] truncate">{batchData.Course_Name}</p>
               <p className="text-xs text-white/70">{batchData.Category || 'Uncategorized'}</p>
             </div>
@@ -4046,15 +4038,15 @@ export default function EditBatchPage() {
       )}
 
       {/* Main Card with Tabs */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-visible">
         {/* Tab Navigation */}
-        <div className="border-b border-slate-200 bg-slate-50 px-3 pt-3">
+        <div className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 px-2 pt-2 shadow-sm">
           <div className="flex overflow-x-auto scrollbar-hide gap-1">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-3 py-2 text-xs font-semibold whitespace-nowrap rounded-t-lg border border-b-0 transition-colors ${
+                className={`px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap rounded-t-md border border-b-0 transition-colors ${
                   activeTab === tab.id
                     ? 'border-slate-200 text-[#2E3093] bg-white shadow-sm'
                     : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/70'
@@ -4067,22 +4059,22 @@ export default function EditBatchPage() {
         </div>
 
         {/* Tab Content */}
-        <div className="p-4 bg-slate-50/40">
+        <div className="p-3 bg-slate-50/40">
           {renderTabContent()}
         </div>
 
         {/* Footer Actions */}
-        <div className="px-4 py-3 border-t border-slate-200 bg-white flex items-center justify-end gap-2">
+        <div className="px-3 py-2 border-t border-slate-200 bg-white flex items-center justify-end gap-2">
           <button
             onClick={() => router.push('/dashboard/masters/batch')}
-            className="px-4 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-all"
+            className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-all"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center justify-center gap-1.5 bg-[#2E3093] hover:bg-[#252780] text-white px-5 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm disabled:opacity-50"
+            className="flex items-center justify-center gap-1.5 bg-[#2E3093] hover:bg-[#252780] text-white px-4 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm disabled:opacity-50"
           >
             {saving ? (
               <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
