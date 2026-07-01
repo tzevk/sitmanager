@@ -376,6 +376,19 @@ function toManualDiscussion(value: string | null | undefined): string | null {
   return merged || null;
 }
 
+function manualDiscussionSqlCondition(alias: string): string {
+  const discussionExpr = `LOWER(TRIM(COALESCE(${alias}.discussion, '')))`;
+  return `
+    NULLIF(TRIM(COALESCE(${alias}.discussion, '')), '') IS NOT NULL
+    AND ${discussionExpr} NOT IN ('null', 'nil', 'n/a', 'na', 'none', 'no discussion', 'no remarks', 'wa number not provided', 'whatsapp number not provided', 'number not provided', 'duplicate enquiry', 'duplicate inquiry')
+    AND ${discussionExpr} NOT LIKE 'imported from suvidya%'
+    AND ${discussionExpr} NOT LIKE 'imported from meta%'
+    AND ${discussionExpr} NOT LIKE 'synced from meta%'
+    AND ${discussionExpr} NOT LIKE 'http://%'
+    AND ${discussionExpr} NOT LIKE 'https://%'
+  `;
+}
+
 interface InquiryFilterOptions {
   disciplines: string[];
   inquiryTypes: string[];
@@ -1302,6 +1315,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
          SELECT d.Inquiry_id as InquiryId, MAX(d.id) as max_id
          FROM awt_inquirydiscussion d
          WHERE d.deleted = 0
+           AND ${manualDiscussionSqlCondition('d')}
            AND d.Inquiry_id IN (${ph})
          GROUP BY d.Inquiry_id
        ) tld_primary ON tld_primary.InquiryId = si.Inquiry_Id
@@ -1310,6 +1324,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
          FROM \`${inquiryTable}\` si_map
          INNER JOIN awt_inquirydiscussion d
            ON d.deleted = 0
+          AND ${manualDiscussionSqlCondition('d')}
           AND si_map.Student_Id IS NOT NULL
           AND (d.Inquiry_id = si_map.Student_Id OR d.student_id = si_map.Student_Id)
          WHERE si_map.Inquiry_Id IN (${ph})

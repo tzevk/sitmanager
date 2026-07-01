@@ -136,7 +136,6 @@ export async function GET(req: NextRequest) {
        FROM awt_inquirydiscussion d
        LEFT JOIN awt_adminuser u ON u.id = d.created_by
        WHERE (d.Inquiry_id IN (${discussionPlaceholders}) OR d.student_id IN (${discussionPlaceholders})) AND (d.deleted = 0 OR d.deleted IS NULL)
-         AND d.date IS NOT NULL AND TRIM(COALESCE(d.date, '')) <> ''
        ORDER BY d.id ASC`,
       [...discussionIds, ...discussionIds],
       5,
@@ -213,6 +212,7 @@ export async function POST(req: NextRequest) {
 
     const insertId = (result as any).insertId;
     invalidateCache('api:inquiry:discussions');
+    invalidateCache('api:inquiry');
     return NextResponse.json({ success: true, id: insertId });
   } catch (error: any) {
     perfStatus = 'error';
@@ -260,6 +260,7 @@ export async function PUT(req: NextRequest) {
     );
 
     invalidateCache('api:inquiry:discussions');
+    invalidateCache('api:inquiry');
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
@@ -308,6 +309,7 @@ export async function DELETE(req: NextRequest) {
     );
 
     invalidateCache('api:inquiry:discussions');
+    invalidateCache('api:inquiry');
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
