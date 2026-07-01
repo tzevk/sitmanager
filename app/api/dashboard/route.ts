@@ -978,6 +978,7 @@ async function fetchDashboardData(dept?: string) {
         SUM(sb.paid_amount) AS paid_amount,
         SUM(sb.balance) AS amount,
         DATE_FORMAT(${BATCH_SDATE_EXPR}, '%Y-%m-%d') AS start_date,
+        DATE_FORMAT(${BATCH_EDATE_EXPR}, '%Y-%m-%d') AS end_date,
         CASE
           -- Ongoing = start date has begun AND end date has not passed, using the
           -- Annual Batch master (batch_mst) dates. Both dates must be present.
@@ -992,7 +993,9 @@ async function fetchDashboardData(dept?: string) {
       WHERE sb.balance > 0
       GROUP BY sb.batch_id, sb.batch_code, sb.course_name, b.SDate, b.EDate
       HAVING amount > 0
-      ORDER BY amount DESC
+      -- Surface ongoing batches first so the "Ongoing batches only" view is never
+      -- starved by long-ended batches that carry the largest accumulated balances.
+      ORDER BY is_ongoing DESC, amount DESC
       LIMIT 100
     `, []) : Promise.resolve([]),
 

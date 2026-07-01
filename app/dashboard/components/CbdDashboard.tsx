@@ -351,6 +351,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
       batchName: row.course_name || '',
       batchNo: row.batch_code ? toBatchNumber(row.batch_code) : '',
       startDate: row.start_date ? String(row.start_date).slice(0, 10) : '',
+      endDate: row.end_date ? String(row.end_date).slice(0, 10) : '',
       ongoing: Number(row.is_ongoing) === 1,
       balance: Number(row.amount || 0),
     }))
@@ -430,6 +431,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                 <Th>Batch Name</Th>
                 <Th center>Batch No</Th>
                 <Th center>Start Date</Th>
+                <Th center>End Date</Th>
                 <Th center>Balance Fees</Th>
               </tr>
             </thead>
@@ -447,13 +449,14 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                   </td>
                   <td className="px-3 py-2 text-center text-xs font-mono text-gray-500 whitespace-nowrap">{row.batchNo}</td>
                   <td className="px-3 py-2 text-center text-[11px] tabular-nums text-gray-500 whitespace-nowrap">{row.startDate ? `${row.startDate.slice(8)}/${row.startDate.slice(5,7)}/${row.startDate.slice(0,4)}` : '—'}</td>
+                  <td className="px-3 py-2 text-center text-[11px] tabular-nums text-gray-500 whitespace-nowrap">{row.endDate ? `${row.endDate.slice(8)}/${row.endDate.slice(5,7)}/${row.endDate.slice(0,4)}` : '—'}</td>
                   <td className="px-3 py-2 text-right text-xs font-black tabular-nums text-red-700">₹ {Number(row.balance || 0).toLocaleString('en-IN')}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-gray-200 bg-red-50/60">
-                <td className="px-3 py-2.5 text-right text-xs font-black uppercase tracking-wide text-gray-700" colSpan={4}>Balance Fees &gt;&gt;&gt;</td>
+                <td className="px-3 py-2.5 text-right text-xs font-black uppercase tracking-wide text-gray-700" colSpan={5}>Balance Fees &gt;&gt;&gt;</td>
                 <td className="px-3 py-2.5 text-right text-sm font-black tabular-nums text-red-700">₹ {totalPendingFeeAmount.toLocaleString('en-IN')}</td>
               </tr>
             </tfoot>

@@ -160,7 +160,16 @@
       "Bash(node -r dotenv/config scripts/db/curate-batch-categories.mjs --apply dotenv_config_path=.env.local)",
       "Bash(node -r dotenv/config scripts/db/_iq.mjs dotenv_config_path=.env.local)",
       "Bash(node -r dotenv/config scripts/db/_tk8.mjs dotenv_config_path=.env.local)",
-      "Bash(node -r dotenv/config scripts/db/_ong.mjs dotenv_config_path=.env.local)"
+      "Bash(node -r dotenv/config scripts/db/_ong.mjs dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/_pf.mjs dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/_bal.mjs dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/_bal2.mjs dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/_scan.mjs dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/_dc.mjs dotenv_config_path=.env.local)",
+      "Bash(\" | head -30)",
+      "Bash(grep -viE \"hidden md:|overflow-hidden|hidden sm:|className|hidden lg:|hidden xl:|group-hover|sr-only|hidden'|hidden \\\\\"|hidden`\" | head -30)",
+      "Bash(node -r dotenv/config scripts/db/_h.mjs dotenv_config_path=.env.local)",
+      "Bash(node -r dotenv/config scripts/db/_hid.mjs dotenv_config_path=.env.local)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
