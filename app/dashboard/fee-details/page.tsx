@@ -173,9 +173,7 @@ export default function FeeDetailsPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Failed to delete receipt');
       setRecentRows((rows) => rows.filter((r) => r.Fees_Id !== row.Latest_Fees_Id));
-      setResults((rows) => rows.map((r) => r.Student_Id === row.Student_Id
-        ? { ...r, Latest_Fees_Id: null, Latest_Fees_Code: null }
-        : r));
+      setResults((rows) => rows.filter((r) => r.Student_Id !== row.Student_Id));
       setSearchRefreshKey((value) => value + 1);
     } catch (err) {
       setSearchError(err instanceof Error ? err.message : 'Failed to delete receipt');
@@ -282,11 +280,11 @@ export default function FeeDetailsPage() {
                         >
                           View
                         </Link>
-                        {canUpdate && (
+                        {canUpdate && (!!r.Latest_Fees_Id || deletingFeesId === r.Latest_Fees_Id) && (
                           <button
                             type="button"
                             onClick={() => handleDeleteSearchReceipt(r)}
-                            disabled={!r.Latest_Fees_Id || deletingFeesId === r.Latest_Fees_Id}
+                            disabled={!r.Latest_Fees_Id || (!!r.Latest_Fees_Id && deletingFeesId === r.Latest_Fees_Id)}
                             title={r.Latest_Fees_Id ? (r.Latest_Fees_Code ? `Delete ${r.Latest_Fees_Code}` : 'Delete receipt') : 'No receipt to delete'}
                             className="inline-flex items-center px-2.5 py-1 rounded-md bg-red-50 text-red-600 text-[11px] font-semibold hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed"
                           >

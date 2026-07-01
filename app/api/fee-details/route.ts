@@ -138,6 +138,7 @@ export async function GET(req: NextRequest) {
       const studentParams: any[] = [];
       const studentConditions = [
         '(IsDelete = 0 OR IsDelete IS NULL)',
+        '(IsActive = 1 OR IsActive IS NULL)',
         "COALESCE(NULLIF(TRIM(Student_Name), ''), '') <> ''",
       ];
       if (q) {
@@ -147,7 +148,7 @@ export async function GET(req: NextRequest) {
       const requestedLimit = Number(searchParams.get('limit')) || 0;
       const limit = q ? Math.max(1, Math.min(requestedLimit || 50, 100)) : 0;
       const studentRows = await runGuardedQuery(getPool(),
-        `SELECT Student_Id, Student_Name, Batch_Code AS Batch_code
+        `SELECT Student_Id, Student_Name, Present_Mobile, Email, Batch_Code AS Batch_code
          FROM student_master
          WHERE ${studentConditions.join(' AND ')}
          ORDER BY ${q ? 'Student_Id DESC' : 'Student_Name ASC'}

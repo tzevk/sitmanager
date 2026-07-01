@@ -179,7 +179,6 @@ async function fetchDashboardData(dept?: string) {
   )`;
   const BATCH_PENDING_END_EXPR = `GREATEST(
     COALESCE(${BATCH_EDATE_EXPR}, DATE('1000-01-01')),
-    COALESCE(bll.last_lecture_date, DATE('1000-01-01')),
     COALESCE(CASE WHEN ${BATCH_EDATE_EXPR} IS NULL OR ${BATCH_EDATE_EXPR} < ${BATCH_PENDING_START_EXPR} THEN ${BATCH_DURATION_END_EXPR} END, DATE('1000-01-01'))
   )`;
 
@@ -901,7 +900,7 @@ async function fetchDashboardData(dept?: string) {
           sm.Student_Id AS student_id,
           COALESCE(c.Course_Name, '') AS course_name,
           bm.Batch_Id AS batch_id,
-          COALESCE(NULLIF(TRIM(sm.Batch_Code), ''), bm.Batch_code, '') AS batch_code
+          COALESCE(bm.Batch_code, NULLIF(TRIM(sm.Batch_Code), ''), '') AS batch_code
         FROM admission_master am
         JOIN (
           SELECT Student_Id, MAX(Admission_Id) AS Admission_Id
@@ -964,19 +963,6 @@ async function fetchDashboardData(dept?: string) {
         WHERE (f.IsDelete = 0 OR f.IsDelete IS NULL)
         GROUP BY f.Student_Id
       ),
-      batch_last_lecture AS (
-        SELECT
-          blm.batch_id,
-          MAX(COALESCE(
-            STR_TO_DATE(CAST(blm.date AS CHAR), '%Y-%m-%d'),
-            STR_TO_DATE(CAST(blm.date AS CHAR), '%d-%m-%Y'),
-            STR_TO_DATE(CAST(blm.date AS CHAR), '%d/%m/%Y'),
-            STR_TO_DATE(CAST(blm.date AS CHAR), '%m/%d/%Y')
-          )) AS last_lecture_date
-        FROM batch_lecture_master blm
-        WHERE blm.deleted IS NULL OR blm.deleted = 0
-        GROUP BY blm.batch_id
-      ),
       student_balance AS (
         SELECT
           aa.batch_id,
@@ -1021,17 +1007,16 @@ async function fetchDashboardData(dept?: string) {
         CASE
           -- Ongoing = actual start date has begun AND effective end date has not passed.
           -- ActualDate may be blank or a 1900 placeholder, so fall back to SDate.
-          -- EDate may be stale/invalid, so use last lecture date or Duration as a fallback.
+          -- EDate may be stale/invalid, so use Duration as a fallback.
           WHEN ${BATCH_PENDING_START_EXPR} IS NOT NULL
-           AND ${BATCH_PENDING_START_EXPR} <= CURDATE()
+           AND ${BATCH_PENDING_START_EXPR} < CURDATE()
            AND ${BATCH_PENDING_END_EXPR} >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
           THEN 1 ELSE 0
         END AS is_ongoing
       FROM student_balance sb
       LEFT JOIN batch_mst b ON b.Batch_Id = sb.batch_id
-      LEFT JOIN batch_last_lecture bll ON bll.batch_id = sb.batch_id
       WHERE sb.balance > 0
-      GROUP BY sb.batch_id, sb.batch_code, sb.course_name, b.SDate, b.ActualDate, b.EDate, b.Duration, bll.last_lecture_date
+      GROUP BY sb.batch_id, sb.batch_code, sb.course_name, b.SDate, b.ActualDate, b.EDate, b.Duration
       HAVING amount > 0
       -- Surface ongoing batches first so the "Ongoing batches only" view is never
       -- starved by long-ended batches that carry the largest accumulated balances.
