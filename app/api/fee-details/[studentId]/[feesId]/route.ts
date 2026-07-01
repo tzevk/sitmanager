@@ -95,16 +95,29 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ studentI
     if (!sid || !fid) return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
 
     const pool = getPool();
+    const [rows] = await pool.query<any[]>(
+      `SELECT Fees_Id, Student_Id, IsDelete FROM s_fees_mst WHERE Fees_Id = ? LIMIT 1`,
+      [fid]
+    );
+
+    if (!rows.length) {
+      return NextResponse.json({ error: 'Record not found' }, { status: 404 });
+    }
+
+    if (Number(rows[0].IsDelete ?? 0) === 1) {
+      return NextResponse.json({ success: true, alreadyDeleted: true, Student_Id: rows[0].Student_Id });
+    }
+
     const [result] = await pool.query<any>(
-      `UPDATE s_fees_mst SET IsDelete = 1 WHERE Fees_Id = ? AND Student_Id = ?`,
-      [fid, sid]
+      `UPDATE s_fees_mst SET IsDelete = 1 WHERE Fees_Id = ?`,
+      [fid]
     );
 
     if (result.affectedRows === 0) {
       return NextResponse.json({ error: 'Record not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, Student_Id: rows[0].Student_Id });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Server error' }, { status: 500 });
   }

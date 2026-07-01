@@ -131,14 +131,39 @@ export default function AddFeeDetailsPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  // Load student list
+  // Search student_master through the API so hidden rows and duplicate people are
+  // filtered before the dropdown renders.
   useEffect(() => {
-    setLoadingStudents(true);
-    fetch('/api/fee-details?mode=students')
-      .then(r => r.json())
-      .then(d => setStudents(d.rows ?? []))
-      .finally(() => setLoadingStudents(false));
-  }, []);
+    const q = search.trim();
+    if (q.length < 1 || selectedStudent) {
+      setStudents([]);
+      setLoadingStudents(false);
+      return;
+    }
+
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setLoadingStudents(true);
+      try {
+        const res = await fetch(`/api/fee-details?mode=students&q=${encodeURIComponent(q)}&limit=30`, {
+          cache: 'no-store',
+          signal: ctrl.signal,
+        });
+        const d = await res.json();
+        if (!ctrl.signal.aborted) setStudents(d.rows ?? []);
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        setStudents([]);
+      } finally {
+        if (!ctrl.signal.aborted) setLoadingStudents(false);
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [search, selectedStudent]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -151,13 +176,7 @@ export default function AddFeeDetailsPage() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Filter students by search term
-  const filteredStudents = search.trim().length >= 1
-    ? students.filter(s =>
-        s.Student_Name.toLowerCase().includes(search.toLowerCase()) ||
-        String(s.Student_Id).includes(search.trim())
-      ).slice(0, 20)
-    : [];
+  const filteredStudents = search.trim().length >= 1 && !selectedStudent ? students.slice(0, 20) : [];
 
   // Load form data when student changes
   const loadFormData = useCallback(async (sid: string) => {
@@ -427,10 +446,9 @@ export default function AddFeeDetailsPage() {
             <input
               type="text"
               value={search}
-              onChange={e => { setSearch(e.target.value); setShowDropdown(true); }}
+              onChange={e => { setSearch(e.target.value); setSelectedStudent(null); setStudentId(''); setData(null); setShowDropdown(true); }}
               onFocus={() => search.trim().length >= 1 && setShowDropdown(true)}
               placeholder={loadingStudents ? 'Loading students…' : 'Search by name or student ID…'}
-              disabled={loadingStudents}
               className={`${ctrl} pl-8`}
             />
             {showDropdown && filteredStudents.length > 0 && (

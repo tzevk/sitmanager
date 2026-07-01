@@ -893,11 +893,20 @@ async function fetchDashboardData(dept?: string) {
     // per-student balances is accurate; multiplying one structure fee × headcount
     // was not (students in a batch can have different fees). Cancelled excluded.
     needsPendingFees ? safeQuery(pool, `
-      WITH active_admissions AS (
+      WITH active_admissions_raw AS (
         SELECT
           am.Admission_Id AS id,
           am.Fees AS admission_fees,
           sm.Student_Id AS student_id,
+          CASE
+            WHEN LENGTH(RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(sm.Present_Mobile, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 10)) = 10
+              THEN CONCAT('m:', RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(sm.Present_Mobile, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 10), '|n:', LOWER(TRIM(IFNULL(sm.Student_Name, ''))))
+            WHEN INSTR(LOWER(TRIM(IFNULL(sm.Email, ''))), '@') > 0
+              THEN CONCAT('e:', LOWER(TRIM(sm.Email)))
+            WHEN TRIM(IFNULL(sm.Student_Name, '')) <> ''
+              THEN CONCAT('n:', LOWER(TRIM(sm.Student_Name)), '|b:', LOWER(TRIM(IFNULL(sm.Batch_Code, ''))))
+            ELSE CONCAT('id:', sm.Student_Id)
+          END AS person_key,
           COALESCE(c.Course_Name, '') AS course_name,
           bm.Batch_Id AS batch_id,
           COALESCE(bm.Batch_code, NULLIF(TRIM(sm.Batch_Code), ''), '') AS batch_code
@@ -929,7 +938,17 @@ async function fetchDashboardData(dept?: string) {
         AND LOWER(TRIM(CAST(COALESCE(bm.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
         WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
           AND sm.Student_Id IS NOT NULL
+          AND COALESCE(NULLIF(TRIM(sm.Student_Name), ''), '') <> ''
           AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+      ),
+      active_admissions AS (
+        SELECT aar.*
+        FROM active_admissions_raw aar
+        JOIN (
+          SELECT person_key, MAX(id) AS id
+          FROM active_admissions_raw
+          GROUP BY person_key
+        ) keep_one ON keep_one.person_key = aar.person_key AND keep_one.id = aar.id
       ),
       batch_fees AS (
         SELECT
