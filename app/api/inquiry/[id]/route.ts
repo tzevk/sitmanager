@@ -15,12 +15,16 @@ async function resolveInquiryTableName(pool: any): Promise<string> {
   return String((rows as any[])[0]?.TABLE_NAME || '').trim() || 'Student_Inquiry';
 }
 
+function sqlPlaceholders(values: unknown[]): string {
+  return values.map(() => '?').join(',');
+}
+
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requirePermission(req, ['inquiry.delete', 'inquiry.update']);
+    const auth = await requirePermission(req, ['inquiry.delete', 'inquiry.update', 'inquiry.edit']);
     if (auth instanceof NextResponse) return auth;
 
     const pool = getPool();
@@ -32,47 +36,85 @@ export async function DELETE(
       return NextResponse.json({ error: 'Valid inquiry id is required' }, { status: 400 });
     }
 
-    const inquiryIdStr = String(inquiryId);
+    const deleteDuplicates = req.nextUrl.searchParams.get('deleteDuplicates') === '1';
 
-    // The listing collapses every inquiry row that shares a linked Student_Id into a
-    // single row (repeated imports/syncs create many Inquiry_Ids for one person).
-    // So deleting just this Inquiry_Id would leave the next duplicate to immediately
-    // resurface in the list, making the delete look like it did nothing. Resolve the
-    // linked Student_Id first and soft-delete the whole group so the row truly goes away.
-    const [studentRows] = await pool.query(
-      `SELECT Student_Id FROM ${inquiryTable} WHERE Inquiry_Id = ? LIMIT 1`,
+    const [sourceRows] = await pool.query(
+      `SELECT
+         Inquiry_Id,
+         Student_Id,
+         RIGHT(REGEXP_REPLACE(COALESCE(Present_Mobile,''), '[^0-9]', ''), 10) AS PresentMobileKey,
+         RIGHT(REGEXP_REPLACE(COALESCE(Present_Mobile2,''), '[^0-9]', ''), 10) AS PresentMobile2Key,
+         LOWER(TRIM(COALESCE(Email,''))) AS EmailKey
+       FROM ${inquiryTable}
+       WHERE Inquiry_Id = ?
+       LIMIT 1`,
       [inquiryId]
     );
-    const sourceStudentId = (studentRows as any[])[0]?.Student_Id;
-    const sourceStudentIdStr = sourceStudentId === null || sourceStudentId === undefined
-      ? null
-      : String(sourceStudentId).trim();
-    const hasLinkedStudent = Boolean(sourceStudentIdStr && !['', '0'].includes(sourceStudentIdStr));
-
-    if (hasLinkedStudent) {
-      // Soft-delete every inquiry row for this person, plus the row itself as a safety net.
-      await pool.query(
-        `UPDATE ${inquiryTable} SET IsDelete = 1
-         WHERE Inquiry_Id = ? OR TRIM(CAST(Student_Id AS CHAR)) = ?`,
-        [inquiryId, sourceStudentIdStr]
-      );
-    } else {
-      await pool.query(`UPDATE ${inquiryTable} SET IsDelete = 1 WHERE Inquiry_Id = ?`, [inquiryId]);
+    const sourceRow = (sourceRows as any[])[0];
+    if (!sourceRow) {
+      return NextResponse.json({ success: true, message: 'Inquiry deleted successfully' });
     }
 
+    const sourceStudentIdStr = sourceRow.Student_Id === null || sourceRow.Student_Id === undefined
+      ? null
+      : String(sourceRow.Student_Id).trim();
+    const hasLinkedStudent = Boolean(sourceStudentIdStr && !['', '0'].includes(sourceStudentIdStr));
+    const mobileKeys = [sourceRow.PresentMobileKey, sourceRow.PresentMobile2Key]
+      .map((value) => String(value ?? '').trim())
+      .filter((value, index, values) => value.length === 10 && values.indexOf(value) === index);
+    const emailKey = String(sourceRow.EmailKey ?? '').trim();
+
+    const matchConditions = ['Inquiry_Id = ?'];
+    const matchParams: any[] = [inquiryId];
+
     if (hasLinkedStudent) {
+      matchConditions.push('TRIM(CAST(Student_Id AS CHAR)) = ?');
+      matchParams.push(sourceStudentIdStr);
+    }
+
+    if (deleteDuplicates) {
+      if (mobileKeys.length > 0) {
+        matchConditions.push(`(
+          RIGHT(REGEXP_REPLACE(COALESCE(Present_Mobile,''), '[^0-9]', ''), 10) IN (${sqlPlaceholders(mobileKeys)})
+          OR RIGHT(REGEXP_REPLACE(COALESCE(Present_Mobile2,''), '[^0-9]', ''), 10) IN (${sqlPlaceholders(mobileKeys)})
+        )`);
+        matchParams.push(...mobileKeys, ...mobileKeys);
+      }
+      if (emailKey && emailKey.includes('@')) {
+        matchConditions.push('LOWER(TRIM(COALESCE(Email,\'\'))) = ?');
+        matchParams.push(emailKey);
+      }
+    }
+
+    const [matchedRows] = await pool.query(
+      `SELECT Inquiry_Id, Student_Id
+       FROM ${inquiryTable}
+       WHERE (IsDelete = 0 OR IsDelete IS NULL)
+         AND (${matchConditions.join(' OR ')})`,
+      matchParams
+    );
+    const matched = matchedRows as any[];
+    const inquiryIds = matched.length > 0
+      ? matched.map((row) => Number(row.Inquiry_Id)).filter((value) => Number.isFinite(value) && value > 0)
+      : [inquiryId];
+    const discussionLookupIds = Array.from(new Set(
+      matched.flatMap((row) => [row.Inquiry_Id, row.Student_Id])
+        .map((value) => String(value ?? '').trim())
+        .filter((value) => value && value !== '0')
+    ));
+
+    await pool.query(
+      `UPDATE ${inquiryTable} SET IsDelete = 1 WHERE Inquiry_Id IN (${sqlPlaceholders(inquiryIds)})`,
+      inquiryIds
+    );
+
+    if (discussionLookupIds.length > 0) {
       await pool.query(
         `UPDATE awt_inquirydiscussion
          SET deleted = 1
-         WHERE CAST(Inquiry_id AS CHAR) = ? OR CAST(Inquiry_id AS CHAR) = ?`,
-        [inquiryIdStr, sourceStudentIdStr]
-      );
-    } else {
-      await pool.query(
-        `UPDATE awt_inquirydiscussion
-         SET deleted = 1
-         WHERE CAST(Inquiry_id AS CHAR) = ?`,
-        [inquiryIdStr]
+         WHERE CAST(Inquiry_id AS CHAR) IN (${sqlPlaceholders(discussionLookupIds)})
+            OR CAST(student_id AS CHAR) IN (${sqlPlaceholders(discussionLookupIds)})`,
+        [...discussionLookupIds, ...discussionLookupIds]
       );
     }
 
