@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { usePermissions, useResourcePermissions } from '@/lib/permissions-context';
+import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 import { PageHeader, FilterBar, PrimaryBtn, GhostBtn } from '@/components/ui/PageHeader';
 
@@ -113,8 +113,6 @@ export default function InquiryPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { canView, canUpdate, canDelete, canCreate, loading: permLoading } = useResourcePermissions('inquiry');
-  const { hasPermission } = usePermissions();
-  const canDeleteInquiry = canDelete || canUpdate || hasPermission('inquiry.edit');
   const [rows, setRows] = useState<InquiryRow[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
   const [filters, setFilters] = useState<Filters>({ disciplines: [], inquiryTypes: [], trainings: [], batchCategories: [], statusOptions: [] });
@@ -501,8 +499,8 @@ export default function InquiryPage() {
                         <button
                           title="Delete"
                           onClick={() => handleDeleteInquiry(r)}
-                          disabled={!canDeleteInquiry || deletingId === r.Student_Id}
-                          className={canDeleteInquiry ? 'p-0.5 rounded text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50' : 'p-0.5 rounded text-slate-400 cursor-not-allowed'}
+                          disabled={!canDelete || deletingId === r.Student_Id}
+                          className={canDelete ? 'p-0.5 rounded text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50' : 'p-0.5 rounded text-slate-400 cursor-not-allowed'}
                         >
                           {deletingId === r.Student_Id ? (
                             <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
