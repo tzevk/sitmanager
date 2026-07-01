@@ -335,7 +335,6 @@ export default function StudentCapturePage() {
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
-                  capture="user"
                   onChange={(event) => setPhotoFile(event.target.files?.[0] || null)}
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-[#2E3093]/10 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-[#2E3093]"
                   required
@@ -377,7 +376,6 @@ export default function StudentCapturePage() {
                           <input
                             type="file"
                             accept="application/pdf,image/jpeg,image/png,image/webp"
-                            capture="environment"
                             onChange={(event) => updateDocumentFile(slot.key, event.target.files?.[0] || null)}
                             className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs file:mr-2 file:rounded-md file:border-0 file:bg-[#2E3093]/10 file:px-2.5 file:py-1 file:text-[11px] file:font-bold file:text-[#2E3093]"
                           />
