@@ -39,6 +39,13 @@ const INDEXES = [
     sql: 'ALTER TABLE s_fees_mst ADD INDEX idx_sfees_code (Fees_Code)',
     why: 'receipt-number generation range-scans s_fees_mst WHERE Fees_Code LIKE \'R-MM/%\'',
   },
+  {
+    table: 's_fees_mst',
+    name: 'idx_sfees_type_feesid',
+    column: 'TypeR, Fees_Id',
+    sql: 'ALTER TABLE s_fees_mst ADD INDEX idx_sfees_type_feesid (TypeR, Fees_Id)',
+    why: 'fee-details recent receipts filters TypeR and orders by latest Fees_Id',
+  },
 ];
 
 async function indexExists(conn, dbName, table, name) {

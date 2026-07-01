@@ -885,19 +885,65 @@ async function fetchDashboardData(dept?: string) {
       ) x
     `, []) : Promise.resolve([]),
 
-    // 9. Pending fees — one row per batch. Balance is summed from each student's
-    // outstanding balance computed the SAME way as the fee-details ledger
-    // (api/fee-details/[studentId]): tuition (admission.Fees first, then fee
-    // structure / batch fallbacks) + ₹899 membership fee (unless already posted as
-    // a debit) + any posted debit rows − all credit payments. Aggregating the real
-    // per-student balances is accurate; multiplying one structure fee × headcount
-    // was not (students in a batch can have different fees). Cancelled excluded.
+    // 9. Pending fees — one row per ongoing batch. Batch-first keeps this scoped to
+    // the small active set, then computes each visible student's due fee minus paid
+    // ledger credits. Deduping avoids phantom student duplicates inflating totals.
     needsPendingFees ? safeQuery(pool, `
-      WITH active_admissions_raw AS (
+      WITH ongoing_batches AS (
         SELECT
-          am.Admission_Id AS id,
-          am.Fees AS admission_fees,
-          sm.Student_Id AS student_id,
+          b.Batch_Id,
+          b.Batch_code,
+          b.Course_Id,
+          b.CourseName,
+          b.SDate,
+          b.ActualDate,
+          b.EDate,
+          b.Duration,
+          COALESCE(
+            NULLIF(CAST(REPLACE(IFNULL(fs.actualfees, ''), ',', '') AS DECIMAL(15,2)), 0),
+            NULLIF(CAST(REPLACE(IFNULL(fs.fullfees, ''), ',', '') AS DECIMAL(15,2)), 0),
+            NULLIF(CAST(REPLACE(IFNULL(fs.total_inr, ''), ',', '') AS DECIMAL(15,2)), 0),
+            NULLIF(CAST(REPLACE(IFNULL(b.Actual_Fees_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
+            NULLIF(CAST(REPLACE(IFNULL(b.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
+            NULLIF(CAST(REPLACE(IFNULL(b.INR_Total, ''), ',', '') AS DECIMAL(15,2)), 0),
+            NULLIF(CAST(REPLACE(IFNULL(b.INR_Basic, ''), ',', '') AS DECIMAL(15,2)), 0) + IFNULL(CAST(REPLACE(IFNULL(b.INR_ServiceTax, ''), ',', '') AS DECIMAL(15,2)), 0),
+            0
+          ) AS batch_fee
+        FROM batch_mst b
+        LEFT JOIN (
+          SELECT batch_id, MAX(id) AS id
+          FROM fees_structure
+          WHERE deleted = 0 OR deleted IS NULL
+          GROUP BY batch_id
+        ) latest_fs ON latest_fs.batch_id = b.Batch_Id
+        LEFT JOIN fees_structure fs ON fs.id = latest_fs.id
+        WHERE COALESCE(NULLIF(TRIM(b.Batch_code), ''), '') <> ''
+          AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
+          AND LOWER(TRIM(CAST(COALESCE(b.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+          AND ${BATCH_PENDING_START_EXPR} IS NOT NULL
+          AND ${BATCH_PENDING_START_EXPR} < CURDATE()
+          AND ${BATCH_PENDING_END_EXPR} >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+      ),
+      latest_admission AS (
+        SELECT am.Student_Id, MAX(am.Admission_Id) AS Admission_Id
+        FROM admission_master am
+        JOIN ongoing_batches ob ON ob.Batch_Id = am.Batch_Id
+        WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
+          AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+        GROUP BY am.Student_Id
+      ),
+      student_paid AS (
+        SELECT
+          f.Student_Id AS Student_Id,
+          SUM(CASE WHEN f.TypeR = 'C' THEN COALESCE(f.Total_Amt, f.Amount, 0) ELSE 0 END) AS paid_amount
+        FROM s_fees_mst f FORCE INDEX (idx_sfees_student)
+        JOIN latest_admission la ON la.Student_Id = f.Student_Id
+        WHERE (f.IsDelete = 0 OR f.IsDelete IS NULL)
+        GROUP BY f.Student_Id
+      ),
+      visible_students AS (
+        SELECT
+          sm.Student_Id,
           CASE
             WHEN LENGTH(RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(sm.Present_Mobile, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 10)) = 10
               THEN CONCAT('m:', RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(sm.Present_Mobile, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), 10), '|n:', LOWER(TRIM(IFNULL(sm.Student_Name, ''))))
@@ -907,138 +953,51 @@ async function fetchDashboardData(dept?: string) {
               THEN CONCAT('n:', LOWER(TRIM(sm.Student_Name)), '|b:', LOWER(TRIM(IFNULL(sm.Batch_Code, ''))))
             ELSE CONCAT('id:', sm.Student_Id)
           END AS person_key,
-          COALESCE(c.Course_Name, '') AS course_name,
-          bm.Batch_Id AS batch_id,
-          COALESCE(bm.Batch_code, NULLIF(TRIM(sm.Batch_Code), ''), '') AS batch_code
-        FROM admission_master am
-        JOIN (
-          SELECT Student_Id, MAX(Admission_Id) AS Admission_Id
-          FROM admission_master
-          WHERE (IsDelete = 0 OR IsDelete IS NULL)
-            AND LOWER(TRIM(CAST(COALESCE(Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
-          GROUP BY Student_Id
-        ) latest ON latest.Admission_Id = am.Admission_Id
-        LEFT JOIN student_master sm ON sm.Student_Id = am.Student_Id
-          AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-          AND (sm.IsActive = 1 OR sm.IsActive IS NULL)   -- exclude hidden (deactivated) students
-        LEFT JOIN course_mst c ON c.Course_Id = sm.Course_Id
-        LEFT JOIN batch_mst bm ON bm.Batch_Id = COALESCE(
-          am.Batch_Id,
-          (
-            SELECT bm_lookup.Batch_Id
-            FROM batch_mst bm_lookup
-            WHERE NULLIF(TRIM(sm.Batch_Code), '') IS NOT NULL
-              AND LOWER(TRIM(bm_lookup.Batch_code)) = LOWER(TRIM(sm.Batch_Code))
-              AND (bm_lookup.IsDelete = 0 OR bm_lookup.IsDelete IS NULL)
-            ORDER BY bm_lookup.Batch_Id DESC
-            LIMIT 1
-          )
-        )
-        AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
-        AND LOWER(TRIM(CAST(COALESCE(bm.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
-        WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
-          AND sm.Student_Id IS NOT NULL
+          ob.Batch_Id,
+          ob.Batch_code,
+          ob.Course_Id,
+          COALESCE(NULLIF(CAST(REPLACE(IFNULL(am.Fees, ''), ',', '') AS DECIMAL(15,2)), 0), NULLIF(ob.batch_fee, 0), 0) AS due_amount,
+          COALESCE(sp.paid_amount, 0) AS paid_amount
+        FROM latest_admission la
+        JOIN admission_master am ON am.Admission_Id = la.Admission_Id
+        JOIN ongoing_batches ob ON ob.Batch_Id = am.Batch_Id
+        JOIN student_master sm ON sm.Student_Id = la.Student_Id
+        LEFT JOIN student_paid sp ON sp.Student_Id = sm.Student_Id
+        WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+          AND (sm.IsActive = 1 OR sm.IsActive IS NULL)
           AND COALESCE(NULLIF(TRIM(sm.Student_Name), ''), '') <> ''
-          AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
       ),
-      active_admissions AS (
-        SELECT aar.*
-        FROM active_admissions_raw aar
+      deduped_students AS (
+        SELECT vs.*
+        FROM visible_students vs
         JOIN (
-          SELECT person_key, MAX(id) AS id
-          FROM active_admissions_raw
+          SELECT person_key, MAX(Student_Id) AS Student_Id
+          FROM visible_students
           GROUP BY person_key
-        ) keep_one ON keep_one.person_key = aar.person_key AND keep_one.id = aar.id
-      ),
-      batch_fees AS (
-        SELECT
-          bm.Batch_Id AS batch_id,
-          COALESCE(
-            NULLIF(CAST(REPLACE(IFNULL(fs.actualfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(fs.fullfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(fs.total_inr, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(bm.Actual_Fees_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(bm.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(bm.INR_Total, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(bm.INR_Basic, ''), ',', '') AS DECIMAL(15,2)), 0) + IFNULL(CAST(REPLACE(IFNULL(bm.INR_ServiceTax, ''), ',', '') AS DECIMAL(15,2)), 0),
-            0
-          ) AS fee_per_student
-        FROM batch_mst bm
-        LEFT JOIN (
-          SELECT batch_id, MAX(id) AS id
-          FROM fees_structure
-          WHERE deleted = 0 OR deleted IS NULL
-          GROUP BY batch_id
-        ) latest_fs ON latest_fs.batch_id = bm.Batch_Id
-        LEFT JOIN fees_structure fs ON fs.id = latest_fs.id
-      ),
-      student_ledger AS (
-        SELECT
-          f.Student_Id AS student_id,
-          SUM(CASE WHEN f.TypeR = 'D' THEN IFNULL(f.Total_Amt, f.Amount) ELSE 0 END) AS posted_debit,
-          SUM(CASE WHEN f.TypeR = 'C' THEN IFNULL(f.Total_Amt, f.Amount) ELSE 0 END) AS credit,
-          MAX(CASE WHEN f.TypeR = 'D' AND LOWER(IFNULL(f.Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END) AS has_membership_debit
-        FROM s_fees_mst f
-        WHERE (f.IsDelete = 0 OR f.IsDelete IS NULL)
-        GROUP BY f.Student_Id
-      ),
-      student_balance AS (
-        SELECT
-          aa.batch_id,
-          aa.batch_code,
-          aa.course_name,
-          aa.student_id,
-          (
-            COALESCE(
-              NULLIF(CAST(REPLACE(IFNULL(aa.admission_fees, ''), ',', '') AS DECIMAL(15,2)), 0),
-              NULLIF(bf.fee_per_student, 0),
-              0
-            )
-            + CASE
-                WHEN COALESCE(
-                       NULLIF(CAST(REPLACE(IFNULL(aa.admission_fees, ''), ',', '') AS DECIMAL(15,2)), 0),
-                       NULLIF(bf.fee_per_student, 0),
-                       0
-                     ) > 0
-                 AND IFNULL(sl.has_membership_debit, 0) = 0
-                THEN 899 ELSE 0
-              END
-            + IFNULL(sl.posted_debit, 0)
-            - IFNULL(sl.credit, 0)
-          ) AS balance,
-          IFNULL(sl.credit, 0) AS paid_amount
-        FROM active_admissions aa
-        JOIN batch_fees bf ON bf.batch_id = aa.batch_id
-        LEFT JOIN student_ledger sl ON sl.student_id = aa.student_id
-        WHERE aa.batch_id IS NOT NULL
+        ) keep_one ON keep_one.person_key = vs.person_key AND keep_one.Student_Id = vs.Student_Id
       )
       SELECT
-        sb.batch_id AS id,
-        sb.batch_id,
-        sb.batch_code,
-        sb.course_name,
-        COUNT(DISTINCT sb.student_id) AS student_count,
-        SUM(sb.balance + sb.paid_amount) AS total_fee,
-        SUM(sb.paid_amount) AS paid_amount,
-        SUM(sb.balance) AS amount,
+        b.Batch_Id AS id,
+        b.Batch_Id AS batch_id,
+        b.Batch_code AS batch_code,
+        COALESCE(c.Course_Name, b.CourseName, '') AS course_name,
+        COUNT(DISTINCT ds.Student_Id) AS student_count,
+        SUM(ds.due_amount) AS total_fee,
+        SUM(ds.paid_amount) AS paid_amount,
+        SUM(ds.due_amount - ds.paid_amount) AS amount,
         DATE_FORMAT(${BATCH_PENDING_START_EXPR}, '%Y-%m-%d') AS start_date,
         DATE_FORMAT(${BATCH_PENDING_END_EXPR}, '%Y-%m-%d') AS end_date,
         CASE
-          -- Ongoing = actual start date has begun AND effective end date has not passed.
-          -- ActualDate may be blank or a 1900 placeholder, so fall back to SDate.
-          -- EDate may be stale/invalid, so use Duration as a fallback.
           WHEN ${BATCH_PENDING_START_EXPR} IS NOT NULL
            AND ${BATCH_PENDING_START_EXPR} < CURDATE()
            AND ${BATCH_PENDING_END_EXPR} >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
           THEN 1 ELSE 0
         END AS is_ongoing
-      FROM student_balance sb
-      LEFT JOIN batch_mst b ON b.Batch_Id = sb.batch_id
-      WHERE sb.balance > 0
-      GROUP BY sb.batch_id, sb.batch_code, sb.course_name, b.SDate, b.ActualDate, b.EDate, b.Duration
+      FROM ongoing_batches b
+      JOIN deduped_students ds ON ds.Batch_Id = b.Batch_Id
+      LEFT JOIN course_mst c ON c.Course_Id = b.Course_Id
+      GROUP BY b.Batch_Id, b.Batch_code, COALESCE(c.Course_Name, b.CourseName, ''), b.SDate, b.ActualDate, b.EDate, b.Duration
       HAVING amount > 0
-      -- Surface ongoing batches first so the "Ongoing batches only" view is never
-      -- starved by long-ended batches that carry the largest accumulated balances.
       ORDER BY is_ongoing DESC, amount DESC
       LIMIT 100
     `, []) : Promise.resolve([]),

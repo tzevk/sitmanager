@@ -336,7 +336,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
   // Apply the Pending Fees filters (ongoing batches + batch start-date range).
   const anyOngoingPendingFee = pendingFees.some((r: any) => Number(r.is_ongoing) === 1);
   const filteredPendingFees = pendingFees.filter((row: any) => {
-    if (pfOngoingOnly && Number(row.is_ongoing) !== 1) return false;
+    if (pfOngoingOnly && anyOngoingPendingFee && Number(row.is_ongoing) !== 1) return false;
     const sd = row.start_date ? String(row.start_date).slice(0, 10) : '';
     if (pfStartFrom && (!sd || sd < pfStartFrom)) return false;
     if (pfStartTo && (!sd || sd > pfStartTo)) return false;

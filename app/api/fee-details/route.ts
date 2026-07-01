@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
       const pool = getPool();
       const feeRows = await runGuardedQuery(pool,
         `SELECT Fees_Id, Student_Id, Fees_Code, RDate, Date_Added, Payment_Type, PaymentId, Amount
-         FROM s_fees_mst
+         FROM s_fees_mst FORCE INDEX (PRIMARY)
          WHERE TypeR = 'C'
            AND Fees_Code IS NOT NULL
            AND Fees_Code <> ''
@@ -95,16 +95,11 @@ export async function GET(req: NextRequest) {
             // batch for the code) so duplicate batch_mst rows can't fan out. Don't
             // filter on sm.IsDelete here — a receipt's student may have since been
             // deleted/transferred, but the name must still render on the receipt.
-            `SELECT sm.Student_Id, sm.Student_Name, cm.Course_Name, bm.Batch_code,
+            `SELECT sm.Student_Id, sm.Student_Name, cm.Course_Name, sm.Batch_Code AS Batch_code,
                     COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
                     COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code
              FROM student_master sm
              LEFT JOIN course_mst cm ON cm.Course_Id = sm.Course_Id
-             LEFT JOIN batch_mst bm ON bm.Batch_Id = (
-               SELECT b2.Batch_Id FROM batch_mst b2
-               WHERE b2.Batch_code = sm.Batch_Code AND (b2.IsDelete = 0 OR b2.IsDelete IS NULL)
-               ORDER BY b2.Batch_Id DESC LIMIT 1
-             )
              WHERE sm.Student_Id IN (?)`,
             [studentIds],
             5
@@ -184,18 +179,6 @@ export async function GET(req: NextRequest) {
     if (!q && !batchId) {
       conditions.push('1 = 0');
     }
-    // Fee-details search is about students with actual fee activity. student_master
-    // holds ~169k rows, many of them phantom/import duplicates (same name, no admission
-    // or receipt) that fan a single search into dozens of rows. Restrict results to
-    // students who have an admission or a fee ledger entry so each real person shows
-    // once and the search stays relevant.
-    conditions.push(`(
-      EXISTS (SELECT 1 FROM admission_master am2
-              WHERE am2.Student_Id = sm.Student_Id AND (am2.IsDelete = 0 OR am2.IsDelete IS NULL))
-      OR EXISTS (SELECT 1 FROM s_fees_mst f2
-              WHERE f2.Student_Id = sm.Student_Id AND (f2.IsDelete = 0 OR f2.IsDelete IS NULL))
-    )`);
-
     const pool = getPool();
     const studentRows = await runGuardedQuery(pool,
       // Batch resolved via a single deterministic row (latest non-deleted batch for
@@ -203,7 +186,16 @@ export async function GET(req: NextRequest) {
       // or attach a stale/deleted batch. Fee resolved through the same fallback chain
       // the per-student detail page uses (fees_structure → batch fees) instead of only
       // Fees_Full_Payment, so batches that store the fee elsewhere don't show 0.
-      `SELECT
+      `WITH matched_students AS (
+        SELECT
+          sm.Student_Id, sm.Student_Name, sm.Present_Mobile, sm.Email,
+          sm.Course_Id, sm.Batch_Code, sm.Transfered, sm.Moved_To_Batch_Code
+        FROM student_master sm
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY sm.Student_Id DESC
+        LIMIT 600
+       )
+       SELECT
          sm.Student_Id, sm.Student_Name, sm.Present_Mobile, sm.Email,
          cm.Course_Name, COALESCE(bm.Batch_code, sm.Batch_Code) AS Batch_code, bm.Batch_Id,
          COALESCE(
@@ -218,7 +210,7 @@ export async function GET(req: NextRequest) {
          COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
          COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
          0 AS Cancelled
-       FROM student_master sm
+       FROM matched_students sm
        LEFT JOIN course_mst cm ON cm.Course_Id = sm.Course_Id
        LEFT JOIN batch_mst bm ON bm.Batch_Id = (
          SELECT b2.Batch_Id FROM batch_mst b2
@@ -230,9 +222,7 @@ export async function GET(req: NextRequest) {
          WHERE deleted = 0 OR deleted IS NULL GROUP BY batch_id
        ) latest_fs ON latest_fs.batch_id = bm.Batch_Id
        LEFT JOIN fees_structure fs ON fs.id = latest_fs.id
-       WHERE ${conditions.join(' AND ')}
-       ORDER BY sm.Student_Id DESC
-       LIMIT 300`,
+       ORDER BY sm.Student_Id DESC`,
       params,
       8
     );
