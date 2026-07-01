@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
          AND am.IsActive = 1 AND am.IsDelete = 0
          AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
          AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+         AND (sm.IsActive = 1 OR sm.IsActive IS NULL)
        ORDER BY sm.Student_Name ASC`,
       [batchId]
     );

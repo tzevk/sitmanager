@@ -179,7 +179,8 @@
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/meta-ads/leads/[leadId]",
       "/tmp",
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/dashboard/student/edit/[id]",
-      "/Users/tanvikadam/Desktop/SIT/sitmanager/app/dashboard/masters/batch/edit/[id]"
+      "/Users/tanvikadam/Desktop/SIT/sitmanager/app/dashboard/masters/batch/edit/[id]",
+      "/private/tmp/claude-501/-Users-tanvikadam-Desktop-SIT-sitmanager/*/scratchpad"
     ]
   }
 }

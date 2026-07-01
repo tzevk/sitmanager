@@ -886,7 +886,9 @@ async function fetchDashboardData(dept?: string) {
             AND LOWER(TRIM(CAST(COALESCE(Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
           GROUP BY Student_Id
         ) latest ON latest.Admission_Id = am.Admission_Id
-        LEFT JOIN student_master sm ON sm.Student_Id = am.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+        LEFT JOIN student_master sm ON sm.Student_Id = am.Student_Id
+          AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+          AND (sm.IsActive = 1 OR sm.IsActive IS NULL)   -- exclude hidden (deactivated) students
         LEFT JOIN course_mst c ON c.Course_Id = sm.Course_Id
         LEFT JOIN batch_mst bm ON bm.Batch_Id = COALESCE(
           am.Batch_Id,

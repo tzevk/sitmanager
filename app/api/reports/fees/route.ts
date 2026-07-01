@@ -89,7 +89,10 @@ export async function GET(req: NextRequest) {
         // even those whose admission_master.Batch_Id wasn't synced.
         // The student's batch is the authoritative sm.Batch_Code column
         // (same pattern used by fee-details/route.ts).
-        const smConditions: string[] = ['(sm.IsDelete = 0 OR sm.IsDelete IS NULL)'];
+        const smConditions: string[] = [
+          '(sm.IsDelete = 0 OR sm.IsDelete IS NULL)',
+          '(sm.IsActive = 1 OR sm.IsActive IS NULL)', // exclude hidden (deactivated) students
+        ];
         const smParams: any[] = [];
         if (courseId) { smConditions.push('bm.Course_Id = ?');  smParams.push(Number(courseId)); }
         if (batchId)  { smConditions.push('bm.Batch_Id = ?');   smParams.push(Number(batchId)); }

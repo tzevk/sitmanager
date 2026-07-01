@@ -160,7 +160,10 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const conditions = ['(sm.IsDelete = 0 OR sm.IsDelete IS NULL)'];
+    const conditions = [
+      '(sm.IsDelete = 0 OR sm.IsDelete IS NULL)',
+      '(sm.IsActive = 1 OR sm.IsActive IS NULL)', // hidden (deactivated) students excluded everywhere
+    ];
     const params: any[] = [];
 
     if (q) {
