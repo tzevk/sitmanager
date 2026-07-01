@@ -120,6 +120,7 @@ interface BatchData {
   Course_Name: string | null;
   Batch_code: string | null;
   Category: string | null;
+  Location: string | null;
   Timings: string | null;
   SDate: string | null;
   EDate: string | null;
@@ -567,6 +568,7 @@ export default function EditBatchPage() {
     Course_Id: '',
     Batch_code: '',
     Category: '',
+    Location: '',
     Min_Qualification: '',
     SDate: '',
     Admission_Date: '',
@@ -622,7 +624,7 @@ export default function EditBatchPage() {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const res = await fetch('/api/masters/batch-category?limit=100');
+        const res = await fetch('/api/masters/batch-category?mode=master&limit=100');
         const json = await res.json();
         const cats = (json.rows || []).map((r: { batch: string }) => r.batch).filter(Boolean);
         setCategories(cats);
@@ -957,6 +959,7 @@ export default function EditBatchPage() {
           Course_Id: d.Course_Id?.toString() || '',
           Batch_code: d.Batch_code || '',
           Category: d.Category || '',
+          Location: d.Location || '',
           Min_Qualification: d.Min_Qualification || '',
           SDate: formatDateForInput(d.SDate),
           Admission_Date: formatDateForInput(d.Admission_Date),
@@ -1096,6 +1099,7 @@ export default function EditBatchPage() {
           Course_Id: formData.Course_Id ? Number(formData.Course_Id) : null,
           Batch_code: formData.Batch_code,
           Category: formData.Category,
+          Location: formData.Location,
           Min_Qualification: formData.Min_Qualification,
           SDate: formData.SDate || null,
           Admission_Date: formData.Admission_Date || null,
@@ -1186,6 +1190,18 @@ export default function EditBatchPage() {
               {categories.map(c => (
                 <option key={c} value={c}>{c}</option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Location</label>
+            <select
+              value={formData.Location}
+              onChange={(e) => handleChange('Location', e.target.value)}
+              className={selectCls}
+            >
+              <option value="">Select Location</option>
+              <option value="Mumbai">Mumbai</option>
+              <option value="Pune">Pune</option>
             </select>
           </div>
         </div>

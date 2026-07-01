@@ -23,6 +23,7 @@ export default function AddBatchPage() {
     Course_Id: '',
     Batch_code: '',
     Category: '',
+    Location: '',
     Min_Qualification: '',
     SDate: '',
     Admission_Date: '',
@@ -68,7 +69,7 @@ export default function AddBatchPage() {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const res = await fetch('/api/masters/batch-category?limit=100');
+        const res = await fetch('/api/masters/batch-category?mode=master&limit=100');
         const data = await res.json();
         const cats = (data.rows || []).map((r: { batch: string }) => r.batch).filter(Boolean);
         setCategories(cats);
@@ -101,6 +102,7 @@ export default function AddBatchPage() {
           Course_Id: formData.Course_Id ? Number(formData.Course_Id) : null,
           Batch_code: formData.Batch_code,
           Category: formData.Category,
+          Location: formData.Location,
           Min_Qualification: formData.Min_Qualification,
           SDate: formData.SDate || null,
           Admission_Date: formData.Admission_Date || null,
@@ -221,6 +223,14 @@ export default function AddBatchPage() {
                           {categories.map(c => (
                             <option key={c} value={c}>{c}</option>
                           ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Location</label>
+                        <select value={formData.Location} onChange={(e) => handleChange('Location', e.target.value)} className={selectCls}>
+                          <option value="">Select Location</option>
+                          <option value="Mumbai">Mumbai</option>
+                          <option value="Pune">Pune</option>
                         </select>
                       </div>
                     </div>

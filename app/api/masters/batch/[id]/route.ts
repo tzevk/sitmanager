@@ -11,7 +11,7 @@ export async function GET(
 
     const sql = `
       SELECT
-        b.Batch_Id, b.Batch_code, b.Category, b.Timings,
+        b.Batch_Id, b.Batch_code, b.Category, b.Location, b.Timings,
         b.No_of_Lectures,
         IFNULL(b.UnitTestWtg, 0) AS UnitTestWtg,
         IFNULL(b.AssignWtg, 0)   AS AssignWtg,
@@ -60,7 +60,7 @@ export async function PUT(
 
     // Build dynamic update query based on provided fields
     const allowedFields = [
-      'Course_Id', 'Batch_code', 'Category', 'Timings', 'SDate', 'EDate',
+      'Course_Id', 'Batch_code', 'Category', 'Location', 'Timings', 'SDate', 'EDate',
       'Admission_Date', 'ActualDate', 'Duration', 'Training_Coordinator',
       'Min_Qualification', 'Documents_Required', 'Passing_Criteria',
       'Fees_Full_Payment', 'Fees_Installment_Payment', 'Actual_Fees_Payment',

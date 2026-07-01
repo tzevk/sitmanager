@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const {
-      Course_Id, Batch_code, Category, Timings, SDate, EDate,
+      Course_Id, Batch_code, Category, Location, Timings, SDate, EDate,
       Admission_Date, Duration, Training_Coordinator,
       Min_Qualification, Documents_Required, Passing_Criteria,
       Max_Students, Course_description, CourseName, Comments,
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
 
     const sql = `
       INSERT INTO batch_mst (
-        Course_Id, Batch_code, Category, Timings, SDate, EDate,
+        Course_Id, Batch_code, Category, Location, Timings, SDate, EDate,
         Admission_Date, Duration, Training_Coordinator,
         Min_Qualification, Documents_Required, Passing_Criteria,
         Max_Students, Course_description, CourseName, Comments,
@@ -137,12 +137,13 @@ export async function POST(req: NextRequest) {
         Dollar_Basic, Dollar_ServiceTax, Dollar_Total,
         Actual_Fees_Payment, Fees_Full_Payment, Fees_Installment_Payment,
         IsActive, IsDelete
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)
     `;
     const [result] = await pool.query<any>(sql, [
       Course_Id ? Number(Course_Id) : null,
       Batch_code?.trim() || null,
       Category?.trim() || null,
+      Location?.trim() || null,
       Timings?.trim() || null,
       SDate || null,
       EDate || null,

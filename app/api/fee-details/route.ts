@@ -33,6 +33,29 @@ async function runGuardedQuery(pool: ReturnType<typeof getPool>, sql: string, pa
   }
 }
 
+function personKey(row: any): string {
+  const name = String(row.Student_Name ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const mobile = String(row.Present_Mobile ?? row.Mobile ?? '').replace(/\D/g, '').slice(-10);
+  if (mobile.length === 10) return `m:${mobile}|n:${name}`;
+
+  const email = String(row.Email ?? '').trim().toLowerCase();
+  if (email.includes('@')) return `e:${email}`;
+
+  const batch = String(row.Batch_code ?? row.Batch_Code ?? '').trim().toLowerCase();
+  return name ? `n:${name}|b:${batch}` : `id:${Number(row.Student_Id) || 0}`;
+}
+
+function dedupeByPerson<T extends Record<string, any>>(rows: T[], scoreRow: (row: T) => number): T[] {
+  const bestByKey = new Map<string, { row: T; score: number }>();
+  for (const row of rows) {
+    const key = personKey(row);
+    const score = scoreRow(row);
+    const existing = bestByKey.get(key);
+    if (!existing || score > existing.score) bestByKey.set(key, { row, score });
+  }
+  return Array.from(bestByKey.values()).map((entry) => entry.row);
+}
+
 export async function GET(req: NextRequest) {
   const auth = await requirePermission(req, ['report_fees.view', 'finance.view']);
   if (auth instanceof NextResponse) return auth;
@@ -132,7 +155,9 @@ export async function GET(req: NextRequest) {
         studentParams,
         10
       );
-      return NextResponse.json({ rows: studentRows });
+      return NextResponse.json({
+        rows: dedupeByPerson(studentRows, (row) => Number(row.Student_Id) || 0),
+      });
     }
 
     const conditions = ['(sm.IsDelete = 0 OR sm.IsDelete IS NULL)'];
@@ -265,7 +290,13 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return NextResponse.json({ rows });
+    const dedupedRows = dedupeByPerson(rows, (row) => {
+      const hasReceipt = row.Latest_Fees_Id ? 1_000_000_000_000 : 0;
+      const paidWeight = Number(row.Total_Paid ?? 0);
+      return hasReceipt + (Number(row.Latest_Fees_Id) || 0) + paidWeight + (Number(row.Student_Id) || 0) / 1_000_000;
+    });
+
+    return NextResponse.json({ rows: dedupedRows });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Server error' }, { status: 500 });
   }

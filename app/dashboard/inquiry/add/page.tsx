@@ -136,6 +136,7 @@ export default function AddInquiryPage() {
   const [inquirySoftwareTime, setInquirySoftwareTime] = useState('');
   const [inquiryMode, setInquiryMode] = useState('');
   const [inquiryType, setInquiryType] = useState('');
+  const [preferredLocation, setPreferredLocation] = useState('');
   const [courseId, setCourseId] = useState('');
   const [category, setCategory] = useState('');
   const [batchCode, setBatchCode] = useState('');
@@ -205,6 +206,7 @@ export default function AddInquiryPage() {
       setInquirySoftwareTime(d.Date_Added ? String(d.Date_Added) : '');
       setInquiryMode(d.Inquiry_From || '');
       setInquiryType(d.Inquiry_Type || '');
+      setPreferredLocation(d.Preferred_Location || '');
       setCourseId(d.Course_Id ? String(d.Course_Id) : '');
       setCategory(d.Batch_Category_id || '');
       setBatchCode(d.Batch_Code || '');
@@ -255,7 +257,8 @@ export default function AddInquiryPage() {
           Email: email || null, Nationality: nationality || null, Present_Country: country || null,
           Discussion: notes || null, Status_id: statusId,
           Inquiry_Dt: inquiryDate || today(), Inquiry_From: inquiryMode || null,
-          Inquiry_Type: inquiryType || null, Course_Id: courseId ? parseInt(courseId) : null,
+          Inquiry_Type: inquiryType || null, Preferred_Location: preferredLocation || null,
+          Course_Id: courseId ? parseInt(courseId) : null,
           Batch_Category_id: category || null, Batch_Code: batchCode || null,
           Qualification: qualification || null, Discipline: discipline || null,
           Percentage: percentage ? parseFloat(percentage) : null,
@@ -542,7 +545,15 @@ export default function AddInquiryPage() {
                 {opts?.inquiryModes?.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
-            <div className={editId ? 'col-span-2' : 'col-span-4'}>
+            <div>
+              <label className={lbl}>Preferred Location</label>
+              <select value={preferredLocation} onChange={e => setPreferredLocation(e.target.value)} className={ctrl}>
+                <option value="">— Select —</option>
+                <option value="Mumbai">Mumbai</option>
+                <option value="Pune">Pune</option>
+              </select>
+            </div>
+            <div className={editId ? 'col-span-1' : 'col-span-3'}>
               <label className={lbl}>How They Know About SIT</label>
               <select value={inquiryType} onChange={e => setInquiryType(e.target.value)} className={ctrl}>
                 <option value="">— Select —</option>

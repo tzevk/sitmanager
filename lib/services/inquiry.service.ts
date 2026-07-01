@@ -124,6 +124,7 @@ export interface CreateInquiryInput {
   Qualification?: string | null;
   Discipline?: string | null;
   Percentage?: string | null;
+  Preferred_Location?: string | null;
 }
 
 export interface UpdateInquiryInput extends Omit<CreateInquiryInput, 'Student_Name'> {
@@ -495,6 +496,25 @@ async function ensureInquiryDateColumn(pool: ReturnType<typeof getPool>, inquiry
   }
 }
 
+// Preferred training location captured on the inquiry (Mumbai / Pune). Added on
+// demand so no migration file is needed; cached so it only checks once.
+async function ensureInquiryPreferredLocationColumn(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<void> {
+  await cached(`schema:inquiry_preferred_location:${inquiryTable}`, 60 * 60 * 1000, async () => {
+    const [rows] = await pool.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'Preferred_Location'`,
+      [inquiryTable]
+    );
+    if ((rows as any[]).length === 0) {
+      // student_inquiry is near InnoDB's 8126-byte row limit, so a VARCHAR would
+      // overflow it. TEXT is stored off-page (only a pointer counts) — this is the
+      // remedy MySQL itself recommends for "Row size too large".
+      await pool.query(`ALTER TABLE \`${inquiryTable}\` ADD COLUMN Preferred_Location TEXT NULL`);
+    }
+    return true;
+  });
+}
+
 async function ensureSchemaIndexes(
   pool: ReturnType<typeof getPool>,
   indexes: InquirySchemaIndexSpec[]
@@ -823,15 +843,16 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
 
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
+  await ensureInquiryPreferredLocationColumn(pool, inquiryTable);
   const [result] = await pool.query(
     `INSERT INTO \`${inquiryTable}\` (
        Student_Name, Sex, DOB, Present_Mobile, Present_Mobile2,
        Email, Nationality, Present_Country, Discussion,
        OnlineState, Inquiry_Dt, Inquiry_From, Inquiry_Type,
        Course_Id, Batch_Category_id, Batch_Code,
-       Qualification, Discipline, Percentage,
+       Qualification, Discipline, Percentage, Preferred_Location,
        IsDelete, Inquiry, Date_Added
-     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'Inquiry',NOW())`,
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'Inquiry',NOW())`,
     [
       data.Student_Name.trim(),
       data.Sex ?? null,
@@ -852,6 +873,7 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
       data.Qualification ?? null,
       data.Discipline ?? null,
       data.Percentage ?? null,
+      data.Preferred_Location ?? null,
     ]
   );
   const insertId = (result as any).insertId as number;
@@ -872,6 +894,7 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
 export async function getInquiryById(id: number): Promise<any | null> {
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
+  await ensureInquiryPreferredLocationColumn(pool, inquiryTable);
   const disciplineTable = await resolveDisciplineTableName(pool);
   const disciplineJoin = disciplineTable
     ? `LEFT JOIN \`${disciplineTable}\` md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)`
@@ -888,6 +911,7 @@ export async function getInquiryById(id: number): Promise<any | null> {
         si.Inquiry_Dt, si.Date_Added, si.Inquiry_From, si.Inquiry_Type,
        si.Course_Id, si.Batch_Category_id, si.Batch_Code,
        si.Qualification, si.Discipline, ${disciplineExpr} as DisciplineName, si.Percentage,
+       si.Preferred_Location,
        c.Course_Name as CourseName
     FROM \`${inquiryTable}\` si
      LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
@@ -1492,6 +1516,7 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
 
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
+  await ensureInquiryPreferredLocationColumn(pool, inquiryTable);
   await pool.query(
     `UPDATE \`${inquiryTable}\` SET
        Student_Name=?, Sex=?, DOB=?,
@@ -1500,7 +1525,7 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
        Discussion=?, OnlineState=?, Inquiry_Dt=?,
        Inquiry_From=?, Inquiry_Type=?,
        Course_Id=?, Batch_Category_id=?, Batch_Code=?,
-       Qualification=?, Discipline=?, Percentage=?
+       Qualification=?, Discipline=?, Percentage=?, Preferred_Location=?
      WHERE Inquiry_Id=?`,
     [
       data.Student_Name.trim(),
@@ -1522,6 +1547,7 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
       data.Qualification ?? null,
       data.Discipline ?? null,
       data.Percentage ?? null,
+      data.Preferred_Location ?? null,
       id,
     ]
   );
