@@ -1354,9 +1354,10 @@ export async function listOnlineAdmissions(
   }
   const defaultDateExpr = `COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), ''), si.Inquiry_Dt, oap.Updated_At, oap.Created_At)`;
   const listDateExpr = defaultDateExpr;
-  const effectiveStatusExpr = studentMasterTable
-    ? `COALESCE(NULLIF(TRIM(si.OnlineState), ''), sm.Status_id)`
-    : `NULLIF(TRIM(si.OnlineState), '')`;
+  // Tab membership must use the online-admission decision state only. Student
+  // master Status_id belongs to a different status domain in some deployments
+  // (for example, Status_id=9 can mean Accepted there, while OnlineState=9 means Left).
+  const effectiveStatusExpr = `NULLIF(TRIM(si.OnlineState), '')`;
   const hasAdmissionActivityExpr = `(
     NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.submittedAt')), '') IS NOT NULL
     OR NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.__draftProgress.autosavedAt')), '') IS NOT NULL
