@@ -428,6 +428,10 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileOpenSection, setMobileOpenSection] = useState<string | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
+  // Support tickets: navbar badge count + super-admin popup for open tickets.
+  const [ticketAttention, setTicketAttention] = useState(0);
+  const [ticketOpen, setTicketOpen] = useState(0);
+  const [showTicketPopup, setShowTicketPopup] = useState(false);
   const menuButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const menuScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -586,6 +590,40 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
       sessionStorage.setItem('sit-admin-welcome-seen', '1');
     } catch {}
   }, [session, showWelcome]);
+
+  // Poll the support-ticket count for the navbar badge, and (for super admins)
+  // surface a one-time-per-session popup when there are open tickets.
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const res = await fetch('/api/support/tickets/count');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !data?.success) return;
+        const attention = Number(data.attention) || 0;
+        const open = Number(data.open) || 0;
+        setTicketAttention(attention);
+        setTicketOpen(open);
+        if (isSuperAdmin && open > 0) {
+          let seen = false;
+          try { seen = sessionStorage.getItem('sit-support-ticket-popup-seen') === '1'; } catch {}
+          if (!seen) setShowTicketPopup(true);
+        }
+      } catch {}
+    };
+
+    load();
+    const timer = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [session, isSuperAdmin]);
+
+  const dismissTicketPopup = useCallback(() => {
+    setShowTicketPopup(false);
+    try { sessionStorage.setItem('sit-support-ticket-popup-seen', '1'); } catch {}
+  }, []);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -777,6 +815,11 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
               >
                 {NAV_ICONS[item]}
                 <span>{item}</span>
+                {item === 'Support' && ticketAttention > 0 && (
+                  <span className="ml-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[#FAE452] text-[#2E3093] text-[10px] font-extrabold leading-none">
+                    {ticketAttention > 99 ? '99+' : ticketAttention}
+                  </span>
+                )}
                 {SUB_MENUS[item] && (
                   <svg className={`w-2.5 h-2.5 opacity-70 transition-transform duration-150 ${openDropdown === item ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
@@ -827,7 +870,14 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
                           : 'text-slate-700 hover:bg-slate-100'
                       }`}
                     >
-                      <span className="truncate text-left">{item}</span>
+                      <span className="truncate text-left flex items-center gap-1.5">
+                        {item}
+                        {item === 'Support' && ticketAttention > 0 && (
+                          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#2E3093] text-white text-[10px] font-extrabold leading-none">
+                            {ticketAttention > 99 ? '99+' : ticketAttention}
+                          </span>
+                        )}
+                      </span>
                       {hasSubMenu && (
                         <svg
                           className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
@@ -861,7 +911,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
                                       setMobileMenuOpen(false);
                                     }}
                                     disabled={!route}
-                                    className={`w-full text-left px-3 py-2 rounded-md text-[13px] transition-colors ${
+                                    className={`w-full text-left px-3 py-2 rounded-md text-[13px] transition-colors flex items-center justify-between gap-2 ${
                                       !route
                                         ? 'text-slate-400 cursor-not-allowed'
                                         : isActive
@@ -870,6 +920,11 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
                                     }`}
                                   >
                                     <span className="block truncate">{subItem}</span>
+                                    {subItem === 'Support Tickets' && ticketAttention > 0 && (
+                                      <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#2E3093] text-white text-[10px] font-extrabold leading-none">
+                                        {ticketAttention > 99 ? '99+' : ticketAttention}
+                                      </span>
+                                    )}
                                   </button>
                                 );
                               })}
@@ -928,7 +983,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
                   }}
                   disabled={!route}
                   title={route ? subItem : 'Not configured'}
-                  className={`w-full text-left px-4 py-2 text-[13px] font-medium transition-colors whitespace-nowrap ${
+                  className={`w-full text-left px-4 py-2 text-[13px] font-medium transition-colors whitespace-nowrap flex items-center justify-between gap-2 ${
                     route
                       ? isActive
                         ? 'bg-[#2E3093]/8 text-[#2E3093]'
@@ -937,6 +992,11 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
                   }`}
                 >
                   <span className="block truncate">{subItem}</span>
+                  {subItem === 'Support Tickets' && ticketAttention > 0 && (
+                    <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#2E3093] text-white text-[10px] font-extrabold leading-none">
+                      {ticketAttention > 99 ? '99+' : ticketAttention}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -1077,6 +1137,46 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Super-admin support ticket popup */}
+      {showTicketPopup && isSuperAdmin && ticketOpen > 0 && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 backdrop-blur-[2px] p-4" onClick={dismissTicketPopup}>
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white shadow-[0_24px_60px_rgba(15,23,42,0.35)] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white">
+              <div className="shrink-0 mt-0.5 w-9 h-9 rounded-full bg-white/15 flex items-center justify-center">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold">Support tickets need attention</p>
+                <p className="text-xs text-white/80 mt-0.5">
+                  There {ticketOpen === 1 ? 'is' : 'are'} <span className="font-bold">{ticketOpen}</span> open support ticket{ticketOpen === 1 ? '' : 's'} awaiting a response.
+                </p>
+              </div>
+            </div>
+            <div className="px-5 py-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={dismissTicketPopup}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+              >
+                Dismiss
+              </button>
+              <button
+                type="button"
+                onClick={() => { dismissTicketPopup(); router.push('/dashboard/support'); }}
+                className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-[#2E3093] hover:bg-[#24267A] transition-colors"
+              >
+                View Tickets
+              </button>
             </div>
           </div>
         </div>

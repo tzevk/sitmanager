@@ -128,6 +128,7 @@ interface DuplicateMatch {
   presentMobile: string | null;
   email: string | null;
   courseId: number | null;
+  statusId: number | null;
 }
 
 interface DuplicateMatchOptions {
@@ -1906,7 +1907,8 @@ async function findDuplicateInquiry(
        si.Student_Name as studentName,
        si.Present_Mobile as presentMobile,
        si.Email as email,
-       CAST(NULLIF(si.Course_Id,'') AS UNSIGNED) as courseId
+       CAST(NULLIF(si.Course_Id,'') AS UNSIGNED) as courseId,
+       CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) as statusId
      FROM \`${inquiryTable}\` si
      WHERE (si.IsDelete = 0 OR si.IsDelete IS NULL)
        AND (${duplicateMatchConditions.join(' OR ')})
@@ -1928,6 +1930,7 @@ async function findDuplicateInquiry(
         presentMobile: normalizeText(row.presentMobile),
         email: normalizeText(row.email),
         courseId: parseNumber(row.courseId),
+        statusId: parseNumber(row.statusId),
         mobileMatch,
         emailMatch,
         nameMatch,
@@ -1961,6 +1964,7 @@ async function findDuplicateInquiry(
     presentMobile: selected.presentMobile,
     email: selected.email,
     courseId: selected.courseId,
+    statusId: selected.statusId,
   };
 }
 
@@ -2391,6 +2395,7 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
       Inquiry_From: sourceInfo.contactSource,
       Inquiry_Type: sourceInfo.sourceLabel,
       Course_Id: duplicate.courseId || courseId,
+      Status_id: duplicate.statusId || 1,
     });
   } else {
     const createPayload: CreateInquiryInput = {
@@ -3453,6 +3458,7 @@ export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<Meta
       Qualification: qualification,
       Discipline: discipline,
       Percentage: percentage != null ? String(percentage) : null,
+      Status_id: duplicate.statusId || 1,
     });
   } else {
     inquiryId = await createInquiry({
