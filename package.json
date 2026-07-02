@@ -15,7 +15,8 @@
     "db:import-consultancy-excel": "node scripts/db/import-consultancy-excel.mjs",
     "db:sync-ct-enquires": "node scripts/db/sync-ct-training-enquires-to-corporate-inquiry.mjs",
     "db:convert-student-inquiry-innodb": "node scripts/db/convert-student-inquiry-innodb.mjs",
-    "db:fix-invalid-inquiry-phones": "node scripts/db/fix-invalid-inquiry-phones.mjs"
+    "db:fix-invalid-inquiry-phones": "node scripts/db/fix-invalid-inquiry-phones.mjs",
+    "db:fix-synced-discussion-dates": "node scripts/db/fix-synced-discussion-dates.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-ses": "^3.1025.0",

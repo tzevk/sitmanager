@@ -11,8 +11,6 @@ const MAIN_INQUIRY_STATUS_LABELS = [
   'Contacted (next batch)',
   'Follow up pending',
   'Admission confirmed',
-  'Corporate Reference',
-  'Alumni Reference',
   'Lost lead',
   'Irrelevant',
 ];
@@ -57,7 +55,7 @@ export async function GET() {
   try {
     const pool = getPool();
 
-    const options = await cached('inquiry-form-options-v3', 300, async () => {
+    const options = await cached('inquiry-form-options-v5', 300, async () => {
       const [
         coursesRes,
         categoriesRes,
@@ -70,7 +68,7 @@ export async function GET() {
           "SELECT Course_Id, Course_Name FROM course_mst WHERE IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Course_Name"
         ),
         runGuardedQuery(pool,
-          "SELECT BatchCategory AS Category FROM mst_batchcategory WHERE IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL) AND BatchCategory IS NOT NULL AND BatchCategory != '' ORDER BY BatchCategory"
+          "SELECT BatchCategory AS Category FROM mst_batchcategory WHERE IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL) AND BatchCategory IS NOT NULL AND BatchCategory != '' AND LOWER(TRIM(BatchCategory)) <> 'offline' ORDER BY BatchCategory"
         ),
         runGuardedQuery(pool,
           "SELECT Education AS Qualification FROM mst_education WHERE Education IS NOT NULL AND Education != '' AND (IsActive = 1 OR IsActive IS NULL) AND (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Id, Education"
@@ -124,6 +122,8 @@ export async function GET() {
         'Website / Google Search',
         'Social Media Posts (Not ads)',
         'Newspaper / Poster',
+        'Corporate Reference',
+        'Alumni Reference',
       ];
 
       return {

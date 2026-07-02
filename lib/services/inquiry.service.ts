@@ -201,10 +201,13 @@ const MAIN_INQUIRY_STATUS_LABELS = [
   'Contacted (next batch)',
   'Follow up pending',
   'Admission confirmed',
-  'Corporate Reference',
-  'Alumni Reference',
   'Lost lead',
   'Irrelevant',
+];
+
+const MAIN_INQUIRY_TYPE_OPTIONS = [
+  'Corporate Reference',
+  'Alumni Reference',
 ];
 
 const LEGACY_MAIN_STATUS_LABELS: Record<number, string> = {
@@ -496,7 +499,7 @@ async function ensureInquiryDateColumn(pool: ReturnType<typeof getPool>, inquiry
   }
 }
 
-// Preferred training location captured on the inquiry (Mumbai / Pune). Added on
+// Preferred training location captured on the inquiry (Mumbai / Pune / ONLINE). Added on
 // demand so no migration file is needed; cached so it only checks once.
 async function ensureInquiryPreferredLocationColumn(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<void> {
   await cached(`schema:inquiry_preferred_location:${inquiryTable}`, 60 * 60 * 1000, async () => {
@@ -710,7 +713,7 @@ async function loadStatusOptions(pool: ReturnType<typeof getPool>): Promise<Stat
 
 export async function getInquiryStatusOptions(): Promise<StatusOption[]> {
   const pool = getPool();
-  return cached('inquiry:main-status-options-v1', 5 * 60 * 1000, () => loadStatusOptions(pool));
+  return cached('inquiry:main-status-options-v2', 5 * 60 * 1000, () => loadStatusOptions(pool));
 }
 
 /**
@@ -781,7 +784,7 @@ async function loadInquiryFilterOptions(
   disciplineExpr: string,
 ): Promise<InquiryFilterOptions> {
   return cached(
-    `inquiry:filters:${inquiryTable}:${disciplineJoin ? 'with-discipline' : 'without-discipline'}`,
+    `inquiry:filters:v3:${inquiryTable}:${disciplineJoin ? 'with-discipline' : 'without-discipline'}`,
     5 * 60 * 1000,
     async () => {
       const [disciplinesResult, typesResult, trainingsResult, batchCategoriesResult, statusOptions] = await Promise.all([
@@ -811,6 +814,7 @@ async function loadInquiryFilterOptions(
           `SELECT id, BatchCategory FROM mst_batchcategory
            WHERE (IsDelete = 0 OR IsDelete IS NULL) AND (IsActive = 1 OR IsActive IS NULL)
              AND BatchCategory IS NOT NULL AND BatchCategory != ''
+             AND LOWER(TRIM(BatchCategory)) <> 'offline'
            ORDER BY BatchCategory`
         ),
         loadStatusOptions(pool),
@@ -823,7 +827,10 @@ async function loadInquiryFilterOptions(
 
       return {
         disciplines: (disciplinesResult[0] as any[]).map((d: any) => String(d.Discipline).trim()),
-        inquiryTypes: (typesResult[0] as any[]).map((t: any) => String(t.Inquiry_Type).trim()),
+        inquiryTypes: Array.from(new Set([
+          ...(typesResult[0] as any[]).map((t: any) => String(t.Inquiry_Type).trim()),
+          ...MAIN_INQUIRY_TYPE_OPTIONS,
+        ])).sort((a, b) => a.localeCompare(b)),
         trainings: (trainingsResult[0] as any[]).map((r: any) => String(r.Course_Name).trim()),
         batchCategories: (batchCategoriesResult[0] as any[]).map((r: any) => {
           const name = String(r.BatchCategory).trim();
@@ -983,7 +990,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   }
   const offset = (page - 1) * limit;
 
-  const ALLOWED_LOCATIONS = new Set(['pune', 'mumbai']);
+  const ALLOWED_LOCATIONS = new Set(['pune', 'mumbai', 'online']);
   const normalizedLocation = location.trim().toLowerCase();
   if (normalizedLocation && !ALLOWED_LOCATIONS.has(normalizedLocation)) {
     throw Object.assign(new Error('Invalid location filter'), { status: 400 });

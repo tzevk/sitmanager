@@ -10,6 +10,7 @@ export async function GET() {
       `SELECT id, BatchCategory, Batch_Type, Prefix, Description
        FROM mst_batchcategory
        WHERE IsActive = 1 AND (IsDelete IS NULL OR IsDelete = 0)
+         AND LOWER(TRIM(BatchCategory)) <> 'offline'
        ORDER BY BatchCategory`
     );
     return NextResponse.json(rows);

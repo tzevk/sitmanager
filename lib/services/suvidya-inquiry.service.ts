@@ -387,8 +387,8 @@ async function insertInquiry(
 
   await connection.query(
     `INSERT INTO awt_inquirydiscussion (Inquiry_id, date, discussion, deleted, created_by, created_date)
-     VALUES (?, CURDATE(), ?, 0, 1, NOW())`,
-    [insertId, discussion]
+     VALUES (?, ?, ?, 0, 1, NOW())`,
+    [insertId, payload.inquiryDate, discussion]
   );
 
   return insertId;

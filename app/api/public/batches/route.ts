@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
          FROM batch_mst
          WHERE Course_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
            AND TRIM(Category) != ''
+           AND LOWER(TRIM(Category)) <> 'offline'
            AND LOWER(TRIM(Category)) NOT LIKE '%corporate%'
            AND (Cancel IS NULL OR Cancel = 0)
          ORDER BY TRIM(Category) ASC`,

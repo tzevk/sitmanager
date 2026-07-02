@@ -551,6 +551,7 @@ export default function AddInquiryPage() {
                 <option value="">— Select —</option>
                 <option value="Mumbai">Mumbai</option>
                 <option value="Pune">Pune</option>
+                <option value="ONLINE">ONLINE</option>
               </select>
             </div>
             <div className={editId ? 'col-span-1' : 'col-span-3'}>

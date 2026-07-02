@@ -1,6 +1,6 @@
 /**
  * Curate mst_batchcategory down to exactly the approved set:
- *   Online, Weekend, Offline, Full Time, Part Time
+ *   Online, Weekend, Full Time, Part Time
  *
  * - Renames near matches to the canonical label (e.g. "Weekend Batches" -> "Weekend",
  *   "ONLINE" -> "Online") so existing prefix/type metadata is preserved.
@@ -13,7 +13,7 @@ import 'dotenv/config';
 import mysql from 'mysql2/promise';
 
 const apply = process.argv.includes('--apply');
-const TARGETS = ['Online', 'Weekend', 'Offline', 'Full Time', 'Part Time'];
+const TARGETS = ['Online', 'Weekend', 'Full Time', 'Part Time'];
 
 function canonical(name) {
   const n = String(name || '').trim().toLowerCase();
@@ -21,7 +21,6 @@ function canonical(name) {
   if (n === 'part time' || n === 'parttime') return 'Part Time';
   if (n.includes('weekend')) return 'Weekend';
   if (n.includes('online')) return 'Online';
-  if (n.includes('offline')) return 'Offline';
   return null; // not an approved category -> remove
 }
 

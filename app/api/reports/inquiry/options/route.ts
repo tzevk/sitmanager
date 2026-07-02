@@ -19,7 +19,7 @@ async function resolveInquiryTableName(pool: any): Promise<string> {
 export async function GET() {
   try {
     const startedAt = Date.now();
-    const cacheKey = 'report:inquiry:options';
+    const cacheKey = 'report:inquiry:options:v2';
     const cachedData = await cache.get<any>(cacheKey);
     if (cachedData) {
       logReportCacheTiming('inquiry.options', startedAt, 'HIT');
@@ -59,6 +59,7 @@ export async function GET() {
          FROM mst_batchcategory
          WHERE IsActive = 1 AND (IsDelete = 0 OR IsDelete IS NULL)
            AND BatchCategory IS NOT NULL AND BatchCategory != ''
+           AND LOWER(TRIM(BatchCategory)) <> 'offline'
          ORDER BY BatchCategory`
       ),
     ]);

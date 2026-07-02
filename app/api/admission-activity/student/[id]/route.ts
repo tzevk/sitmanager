@@ -365,6 +365,7 @@ export async function GET(
       const [rows] = await pool.query(
         `SELECT id, BatchCategory AS label FROM mst_batchcategory
          WHERE (IsDelete = 0 OR IsDelete IS NULL) AND (IsActive = 1 OR IsActive IS NULL)
+            AND LOWER(TRIM(BatchCategory)) <> 'offline'
          ORDER BY id`
       ) as [any[], any];
       batchCategories = rows;
@@ -373,6 +374,7 @@ export async function GET(
         `SELECT DISTINCT Batch_Category_id AS id, Category AS label FROM batch_mst
          WHERE Batch_Category_id IS NOT NULL AND Category IS NOT NULL AND Category != ''
            AND (IsDelete = 0 OR IsDelete IS NULL)
+           AND LOWER(TRIM(Category)) <> 'offline'
          ORDER BY Batch_Category_id`
       ) as [any[], any];
       batchCategories = rows;
