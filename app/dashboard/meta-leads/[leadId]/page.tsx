@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 import { GhostBtn, PageHeader } from '@/components/ui/PageHeader';
-import { useResourcePermissions } from '@/lib/permissions-context';
+import { useResourcePermissions, usePermissions } from '@/lib/permissions-context';
 
 interface MetaLeadDetail {
   MetaLead_Id: string;
@@ -147,6 +147,8 @@ export default function MetaLeadDetailPage() {
   const canView = inqPerms.canView || metaPerms.canView;
   const canUpdate = inqPerms.canUpdate || metaPerms.canUpdate;
   const canCreate = inqPerms.canCreate || metaPerms.canCreate;
+  const { hasAnyPermission, isSuperAdmin } = usePermissions();
+  const canConvert = isSuperAdmin || canCreate || hasAnyPermission(['meta_lead.convert']);
   const [lead, setLead] = useState<MetaLeadDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -341,11 +343,8 @@ export default function MetaLeadDetailPage() {
   async function handleConvertAndOpen() {
     const leadId = lead?.MetaLead_Id || params?.leadId;
     if (!leadId || converting) return;
-    const alreadyLinked = (lead?.Student_Id ?? 0) > 0;
-    if (!(alreadyLinked ? canUpdate : canCreate)) {
-      setError(alreadyLinked
-        ? 'You do not have permission to open the linked inquiry.'
-        : 'You do not have permission to create inquiries from Meta leads.');
+    if (!canConvert) {
+      setError('You do not have permission to convert Meta leads into inquiries.');
       return;
     }
     setConverting(true); setError('');
@@ -410,11 +409,12 @@ export default function MetaLeadDetailPage() {
                   <GhostBtn href={`/dashboard/inquiry/add?editId=${lead.Student_Id}&returnTo=${encodeURIComponent(`/dashboard/meta-leads/${lead.MetaLead_Id}`)}`}>
                     Edit Inquiry
                   </GhostBtn>
-                ) : canCreate ? (
+                ) : null}
+                {canConvert && (
                   <GhostBtn onClick={handleConvertAndOpen}>
                     {converting ? 'Converting…' : 'Convert to Inquiry'}
                   </GhostBtn>
-                ) : null}
+                )}
                 <GhostBtn onClick={() => router.push('/dashboard/meta-leads')}>Back To Leads</GhostBtn>
               </>
             }

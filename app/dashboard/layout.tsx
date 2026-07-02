@@ -259,7 +259,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Admin/Accounts > Asset Category': ['asset_category.view'],
   'Admin/Accounts > Fees Details': ['finance.view'],
   'Admission Activity > Inquiry': ['inquiry.view'],
-  'Admission Activity > Meta Leads': ['inquiry.view'],
+  'Admission Activity > Meta Leads': ['inquiry.view', 'meta_lead.view'],
   'Admission Activity > Online Admission': ['online_admission.view'],
   'Admission Activity > Student': ['student.view'],
   'Corporate Training > Corporate Inquiry': ['corporate_inquiry.view'],

@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useResourcePermissions } from '@/lib/permissions-context';
+import { useResourcePermissions, usePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 import { FilterBar, GhostBtn, PageHeader } from '@/components/ui/PageHeader';
 
@@ -671,6 +671,8 @@ export default function MetaLeadsPage() {
   const canView = inqPerms.canView || metaPerms.canView;
   const canCreate = inqPerms.canCreate || metaPerms.canCreate;
   const canUpdate = inqPerms.canUpdate || metaPerms.canUpdate;
+  const { hasAnyPermission, isSuperAdmin } = usePermissions();
+  const canConvert = isSuperAdmin || canCreate || hasAnyPermission(['meta_lead.convert']);
 
   const [activeTab, setActiveTab] = useState<'analytics' | 'leads'>('analytics');
   const [rows, setRows] = useState<InquiryRow[]>([]);
@@ -830,11 +832,11 @@ export default function MetaLeadsPage() {
   const handleConvertLead = useCallback(async (row: InquiryRow) => {
     if (!row.MetaLead_Id) return;
     const returnTo = encodeURIComponent(buildMetaReturnTo());
-    const canProceed = row.Student_Id > 0 ? canUpdate : canCreate;
+    const canProceed = row.Student_Id > 0 ? (canUpdate || canConvert) : canConvert;
     if (!canProceed) {
       setConvertError(row.Student_Id > 0
         ? 'You do not have permission to open/update linked inquiries from Meta leads.'
-        : 'You do not have permission to create inquiries from Meta leads.');
+        : 'You do not have permission to convert Meta leads into inquiries.');
       return;
     }
 
@@ -876,7 +878,7 @@ export default function MetaLeadsPage() {
     } finally {
       setConvertingLeadId(null);
     }
-  }, [buildMetaReturnTo, canCreate, canUpdate, rowDrafts, router]);
+  }, [buildMetaReturnTo, canConvert, canUpdate, rowDrafts, router]);
 
   const updateRowDraft = useCallback((leadId: string, patch: Partial<LeadRowDraft>) => {
     setRowDrafts((prev) => {

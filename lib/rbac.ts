@@ -130,6 +130,13 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         action: 'update',
       },
       ...createPermissions('meta_lead', 'Meta Lead', ['view', 'create', 'update']),
+      {
+        id: 'meta_lead.convert',
+        name: 'Convert Meta Lead',
+        description: 'Can convert a Meta lead into an inquiry',
+        resource: 'meta_lead',
+        action: 'create',
+      },
       ...createPermissions('online_admission', 'Online Admission'),
       ...createPermissions('student', 'Student'),
     ],
