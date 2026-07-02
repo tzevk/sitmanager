@@ -162,6 +162,10 @@ export default function MetaLeadDetailPage() {
   const [newNextDate, setNewNextDate] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [noteError, setNoteError] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [editingNote, setEditingNote] = useState('');
+  const [editingNextDate, setEditingNextDate] = useState('');
+  const [deletingNoteId, setDeletingNoteId] = useState<number | null>(null);
   const [followUpType, setFollowUpType] = useState<'Note' | 'Call' | 'WhatsApp' | 'Email'>('Note');
   const [callOutcome, setCallOutcome] = useState<'Connected' | 'No Answer' | 'Busy' | 'Wrong Number'>('Connected');
 
@@ -225,19 +229,6 @@ export default function MetaLeadDetailPage() {
       .finally(() => { if (!cancelled) setFollowUpsLoading(false); });
     return () => { cancelled = true; };
   }, [activeTab, params?.leadId]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const applyHash = () => {
-      const hash = window.location.hash.toLowerCase();
-      if (hash === '#followups' || hash === '#follow-ups') {
-        setActiveTab('followups');
-      }
-    };
-    applyHash();
-    window.addEventListener('hashchange', applyHash);
-    return () => window.removeEventListener('hashchange', applyHash);
-  }, []);
 
   const editableFieldEntries = useMemo(
     () => Object.entries(draft.fields || {}).sort(([a], [b]) => a.localeCompare(b)),
@@ -338,6 +329,58 @@ export default function MetaLeadDetailPage() {
     }
   }
 
+  function handleStartEditNote(entry: FollowUpEntry) {
+    setEditingNoteId(entry.id);
+    setEditingNote(entry.note);
+    setEditingNextDate(entry.nextDate || '');
+    setNoteError('');
+  }
+
+  async function handleSaveEditNote() {
+    if (!editingNoteId || !editingNote.trim() || !lead || !canUpdate) return;
+    setSavingNote(true);
+    setNoteError('');
+    try {
+      const res = await fetch(`/api/meta-ads/leads/${encodeURIComponent(lead.MetaLead_Id)}/discussions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editingNoteId, note: editingNote.trim(), nextDate: editingNextDate || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to update note');
+      setFollowUps(data.entries ?? []);
+      setEditingNoteId(null);
+      setEditingNote('');
+      setEditingNextDate('');
+    } catch (err: unknown) {
+      setNoteError(err instanceof Error ? err.message : 'Failed to update note');
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
+  async function handleDeleteNote(entryId: number) {
+    if (!lead || !canUpdate) return;
+    if (!window.confirm('Delete this follow-up note?')) return;
+    setDeletingNoteId(entryId);
+    setNoteError('');
+    try {
+      const res = await fetch(`/api/meta-ads/leads/${encodeURIComponent(lead.MetaLead_Id)}/discussions?id=${entryId}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to delete note');
+      setFollowUps(data.entries ?? []);
+      if (editingNoteId === entryId) {
+        setEditingNoteId(null);
+        setEditingNote('');
+        setEditingNextDate('');
+      }
+    } catch (err: unknown) {
+      setNoteError(err instanceof Error ? err.message : 'Failed to delete note');
+    } finally {
+      setDeletingNoteId(null);
+    }
+  }
+
   // Convert the Meta lead into a real inquiry (persisting any edits first), then
   // open the inquiry form pre-filled with all the lead's details.
   async function handleConvertAndOpen() {
@@ -383,7 +426,6 @@ export default function MetaLeadDetailPage() {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview',   label: 'Overview' },
-    { id: 'followups',  label: `Follow Ups${followUps.length ? ` (${followUps.length})` : ''}` },
   ];
 
   return (
@@ -762,6 +804,8 @@ export default function MetaLeadDetailPage() {
                               Email:     { icon: <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>, bg: 'bg-blue-100', text: 'text-blue-700', label: 'Email' },
                             };
                             const tc = typeConfig[noteType];
+                            const isEditing = editingNoteId === entry.id;
+                            const isDeleting = deletingNoteId === entry.id;
 
                             return (
                               <div key={entry.id} className="px-4 py-3.5 flex gap-4">
@@ -778,13 +822,50 @@ export default function MetaLeadDetailPage() {
                                 <div className="w-px bg-slate-200 shrink-0" />
                                 {/* Content */}
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1.5">
-                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${tc.bg} ${tc.text}`}>
-                                      {tc.icon}{tc.label}
-                                    </span>
+                                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${tc.bg} ${tc.text}`}>
+                                        {tc.icon}{tc.label}
+                                      </span>
+                                    </div>
+                                    {canUpdate && !isEditing && (
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        <button type="button" onClick={() => handleStartEditNote(entry)} className="px-2 py-0.5 rounded-md border border-slate-200 bg-white text-[10px] font-bold text-slate-500 hover:border-[#6366F1]/40 hover:text-[#6366F1] transition-colors">
+                                          Edit
+                                        </button>
+                                        <button type="button" onClick={() => handleDeleteNote(entry.id)} disabled={isDeleting} className="px-2 py-0.5 rounded-md border border-red-100 bg-white text-[10px] font-bold text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors">
+                                          {isDeleting ? 'Deleting…' : 'Delete Discussion'}
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
-                                  <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{cleanNote}</p>
-                                  {entry.nextDate && (
+                                  {isEditing ? (
+                                    <div className="space-y-2">
+                                      <textarea
+                                        value={editingNote}
+                                        onChange={(e) => setEditingNote(e.target.value)}
+                                        rows={3}
+                                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/15 focus:border-[#6366F1] placeholder:text-slate-400 resize-none transition-colors"
+                                      />
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <input
+                                          type="date"
+                                          value={editingNextDate}
+                                          onChange={(e) => setEditingNextDate(e.target.value)}
+                                          className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/15 focus:border-[#6366F1] transition-colors"
+                                        />
+                                        <button type="button" onClick={handleSaveEditNote} disabled={savingNote || !editingNote.trim()} className="px-3 py-1.5 rounded-lg bg-[#6366F1] text-white text-xs font-bold hover:bg-[#252880] disabled:opacity-40 transition-colors">
+                                          {savingNote ? 'Saving…' : 'Save'}
+                                        </button>
+                                        <button type="button" onClick={() => { setEditingNoteId(null); setEditingNote(''); setEditingNextDate(''); }} className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors">
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{cleanNote}</p>
+                                  )}
+                                  {!isEditing && entry.nextDate && (
                                     <div className="mt-2 inline-flex items-center gap-1.5">
                                       <svg className="w-3 h-3 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
                                       <span className={`text-[11px] font-semibold ${

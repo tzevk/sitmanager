@@ -221,6 +221,15 @@ const LEGACY_MAIN_STATUS_LABELS: Record<number, string> = {
   9: 'Lost lead',
 };
 
+function normalizeInquiryText(value: unknown): string | null {
+  if (value == null) return null;
+  const normalized = String(value)
+    .normalize('NFKC')
+    .replace(/[\u{10000}-\u{10FFFF}]/gu, '')
+    .trim();
+  return normalized || null;
+}
+
 function parseInquiryStatus(value: unknown): number {
   const statusId = Number(value);
   if (!Number.isInteger(statusId) || statusId <= 0) {
@@ -845,7 +854,8 @@ async function loadInquiryFilterOptions(
 // ── Public service functions ──────────────────────────────────────────────────
 
 export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Promise<number> {
-  if (!data.Student_Name?.trim()) throw new Error('Name is required');
+  const studentName = normalizeInquiryText(data.Student_Name);
+  if (!studentName) throw new Error('Name is required');
   const statusId = await requireKnownInquiryStatus(data.Status_id);
 
   const pool = getPool();
@@ -861,7 +871,7 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
        IsDelete, Inquiry, Date_Added
      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'Inquiry',NOW())`,
     [
-      data.Student_Name.trim(),
+      studentName,
       data.Sex ?? null,
       data.DOB ?? null,
       data.Present_Mobile ?? null,
@@ -1518,7 +1528,8 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
 }
 
 export async function updateInquiry(id: number, data: UpdateInquiryInput, createdBy = 1): Promise<void> {
-  if (!data.Student_Name?.trim()) throw new Error('Name is required');
+  const studentName = normalizeInquiryText(data.Student_Name);
+  if (!studentName) throw new Error('Name is required');
   const statusId = await requireKnownInquiryStatus(data.Status_id);
 
   const pool = getPool();
@@ -1535,7 +1546,7 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
        Qualification=?, Discipline=?, Percentage=?, Preferred_Location=?
      WHERE Inquiry_Id=?`,
     [
-      data.Student_Name.trim(),
+      studentName,
       data.Sex ?? null,
       data.DOB ?? null,
       data.Present_Mobile ?? null,

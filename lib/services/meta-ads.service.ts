@@ -3642,3 +3642,112 @@ export async function addMetaLeadDiscussionNote(
     [note.trim(), canonicalInquiryId]
   );
 }
+
+async function getMetaLeadDiscussionScope(metaLeadId: string): Promise<{ inquiryIds: number[]; studentId: number | null }> {
+  await ensureMetaLeadTables();
+  const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
+  const [leadRows] = await pool.query(
+    `SELECT inquiry_id FROM ${META_LEADS_TABLE} WHERE meta_lead_id = ? LIMIT 1`,
+    [metaLeadId]
+  );
+  const lead = (leadRows as any[])[0];
+  if (!lead?.inquiry_id) return { inquiryIds: [], studentId: null };
+
+  const [rows] = await pool.query(
+    `SELECT Inquiry_Id, Student_Id
+     FROM \`${inquiryTable}\`
+     WHERE Inquiry_Id = ? OR Student_Id = ?
+     ORDER BY Inquiry_Id DESC`,
+    [lead.inquiry_id, lead.inquiry_id]
+  );
+  const inquiryRows = rows as any[];
+  const inquiryIds = Array.from(new Set([
+    Number(lead.inquiry_id),
+    ...inquiryRows.map((row) => Number(row.Inquiry_Id)),
+  ].filter((id) => Number.isFinite(id) && id > 0)));
+  const studentId = inquiryRows
+    .map((row) => Number(row.Student_Id))
+    .find((id) => Number.isFinite(id) && id > 0) ?? null;
+
+  return { inquiryIds, studentId };
+}
+
+export async function updateMetaLeadDiscussionNote(
+  metaLeadId: string,
+  discussionId: number,
+  note: string,
+  nextDate: string | null,
+): Promise<void> {
+  const trimmed = note.trim();
+  if (!trimmed) throw Object.assign(new Error('Note is required'), { status: 400 });
+  if (!Number.isInteger(discussionId) || discussionId <= 0) throw Object.assign(new Error('Valid discussion id is required'), { status: 400 });
+
+  const pool = getPool();
+  const { inquiryIds, studentId } = await getMetaLeadDiscussionScope(metaLeadId);
+  if (inquiryIds.length === 0 && !studentId) throw Object.assign(new Error('Meta lead is not linked to an inquiry'), { status: 404 });
+
+  const hasStudentIdColumn = await hasTableColumn(pool, 'awt_inquirydiscussion', 'student_id');
+  const hasNextDateColumn = await hasTableColumn(pool, 'awt_inquirydiscussion', 'nextdate');
+  const safeNext = nextDate && /^\d{4}-\d{2}-\d{2}$/.test(nextDate) ? nextDate : null;
+  const scopeConditions: string[] = [];
+  const scopeParams: any[] = [];
+
+  if (inquiryIds.length > 0) {
+    scopeConditions.push(`Inquiry_id IN (${inquiryIds.map(() => '?').join(',')})`);
+    scopeParams.push(...inquiryIds);
+  }
+  if (hasStudentIdColumn && studentId) {
+    scopeConditions.push('student_id = ?');
+    scopeParams.push(studentId);
+  }
+
+  const setClause = hasNextDateColumn ? 'discussion = ?, nextdate = ?' : 'discussion = ?';
+  const params = hasNextDateColumn ? [trimmed, safeNext, discussionId, ...scopeParams] : [trimmed, discussionId, ...scopeParams];
+  const [result] = await pool.query(
+    `UPDATE awt_inquirydiscussion
+     SET ${setClause}
+     WHERE id = ?
+       AND (deleted = 0 OR deleted IS NULL)
+       AND (${scopeConditions.join(' OR ')})`,
+    params
+  );
+
+  if (Number((result as any).affectedRows || 0) === 0) {
+    throw Object.assign(new Error('Discussion not found'), { status: 404 });
+  }
+}
+
+export async function deleteMetaLeadDiscussionNote(metaLeadId: string, discussionId: number): Promise<void> {
+  if (!Number.isInteger(discussionId) || discussionId <= 0) throw Object.assign(new Error('Valid discussion id is required'), { status: 400 });
+
+  const pool = getPool();
+  const { inquiryIds, studentId } = await getMetaLeadDiscussionScope(metaLeadId);
+  if (inquiryIds.length === 0 && !studentId) throw Object.assign(new Error('Meta lead is not linked to an inquiry'), { status: 404 });
+
+  const hasStudentIdColumn = await hasTableColumn(pool, 'awt_inquirydiscussion', 'student_id');
+  const scopeConditions: string[] = [];
+  const scopeParams: any[] = [];
+
+  if (inquiryIds.length > 0) {
+    scopeConditions.push(`Inquiry_id IN (${inquiryIds.map(() => '?').join(',')})`);
+    scopeParams.push(...inquiryIds);
+  }
+  if (hasStudentIdColumn && studentId) {
+    scopeConditions.push('student_id = ?');
+    scopeParams.push(studentId);
+  }
+
+  const [result] = await pool.query(
+    `UPDATE awt_inquirydiscussion
+     SET deleted = 1
+     WHERE id = ?
+       AND (deleted = 0 OR deleted IS NULL)
+       AND (${scopeConditions.join(' OR ')})`,
+    [discussionId, ...scopeParams]
+  );
+
+  if (Number((result as any).affectedRows || 0) === 0) {
+    throw Object.assign(new Error('Discussion not found'), { status: 404 });
+  }
+}

@@ -721,8 +721,9 @@ export default function AddInquiryPage() {
                           <button onClick={() => { setEditingDiscId(d.id); setEditingDiscText(d.discussion); }} title="Edit" className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-[#2E3093] transition-colors">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 0l.172.172a2 2 0 010 2.828L12 16H9v-3z" /></svg>
                           </button>
-                          <button onClick={() => handleDeleteDisc(d.id)} title="Delete" className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-red-500 transition-colors">
+                          <button onClick={() => handleDeleteDisc(d.id)} title="Delete discussion" className="inline-flex items-center gap-1 px-2 py-1 rounded border border-red-100 bg-white text-[10px] font-semibold text-red-500 hover:bg-red-50 transition-colors">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            Delete Discussion
                           </button>
                         </div>
                       )}

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
-import { addMetaLeadDiscussionNote, getMetaLeadDiscussions } from '@/lib/services/meta-ads.service';
+import {
+  addMetaLeadDiscussionNote,
+  deleteMetaLeadDiscussionNote,
+  getMetaLeadDiscussions,
+  updateMetaLeadDiscussionNote,
+} from '@/lib/services/meta-ads.service';
 
 export async function GET(
   req: NextRequest,
@@ -36,5 +41,46 @@ export async function POST(
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to add note';
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ leadId: string }> }
+) {
+  try {
+    const auth = await requirePermission(req, ['inquiry.update', 'meta_lead.update']);
+    if (auth instanceof NextResponse) return auth;
+    const { leadId } = await params;
+    const body = await req.json().catch(() => ({}));
+    const id = Number(body?.id);
+    const note = typeof body?.note === 'string' ? body.note.trim() : '';
+    const nextDate = typeof body?.nextDate === 'string' ? body.nextDate : null;
+    await updateMetaLeadDiscussionNote(leadId, id, note, nextDate);
+    const entries = await getMetaLeadDiscussions(leadId);
+    return NextResponse.json({ entries });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to update note';
+    const status = (error as { status?: number }).status ?? 500;
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ leadId: string }> }
+) {
+  try {
+    const auth = await requirePermission(req, ['inquiry.update', 'meta_lead.update']);
+    if (auth instanceof NextResponse) return auth;
+    const { leadId } = await params;
+    const id = Number(req.nextUrl.searchParams.get('id'));
+    await deleteMetaLeadDiscussionNote(leadId, id);
+    const entries = await getMetaLeadDiscussions(leadId);
+    return NextResponse.json({ entries });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to delete note';
+    const status = (error as { status?: number }).status ?? 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
