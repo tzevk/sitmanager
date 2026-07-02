@@ -29,7 +29,8 @@ export interface LoginResult {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const DEPARTMENT_ROLE_MAP: Record<string, number[]> = {
-  'Career Building Department': [11, 14],
+  'Career Building Department': [11, 14, 21],
+  'Placement': [14, 21],
   'Corporate Training': [19],
   'Training and Development': [12],
   'Accounts': [13],

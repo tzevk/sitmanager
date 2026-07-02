@@ -139,11 +139,12 @@ function KvRow({ label, value }: { label: string; value: React.ReactNode }) {
 export default function MetaLeadDetailPage() {
   const params = useParams<{ leadId: string }>();
   const router = useRouter();
-  const { canView, canUpdate, loading: permLoading } = useResourcePermissions('inquiry');
+  const { canView, canUpdate, canCreate, loading: permLoading } = useResourcePermissions('inquiry');
   const [lead, setLead] = useState<MetaLeadDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [converting, setConverting] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [followUps, setFollowUps] = useState<FollowUpEntry[]>([]);
@@ -151,6 +152,7 @@ export default function MetaLeadDetailPage() {
   const [newNote, setNewNote] = useState('');
   const [newNextDate, setNewNextDate] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [noteError, setNoteError] = useState('');
   const [followUpType, setFollowUpType] = useState<'Note' | 'Call' | 'WhatsApp' | 'Email'>('Note');
   const [callOutcome, setCallOutcome] = useState<'Connected' | 'No Answer' | 'Busy' | 'Wrong Number'>('Connected');
 
@@ -300,6 +302,7 @@ export default function MetaLeadDetailPage() {
   async function handleAddNote() {
     if (!newNote.trim() || !lead || !canUpdate) return;
     setSavingNote(true);
+    setNoteError('');
     const prefix = followUpType === 'Call'
       ? `[Call · ${callOutcome}] `
       : followUpType !== 'Note'
@@ -320,9 +323,53 @@ export default function MetaLeadDetailPage() {
       setFollowUpType('Note');
       setCallOutcome('Connected');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to save note');
+      setNoteError(err instanceof Error ? err.message : 'Failed to save note');
     } finally {
       setSavingNote(false);
+    }
+  }
+
+  // Convert the Meta lead into a real inquiry (persisting any edits first), then
+  // open the inquiry form pre-filled with all the lead's details.
+  async function handleConvertAndOpen() {
+    const leadId = lead?.MetaLead_Id || params?.leadId;
+    if (!leadId || converting) return;
+    const alreadyLinked = (lead?.Student_Id ?? 0) > 0;
+    if (!(alreadyLinked ? canUpdate : canCreate)) {
+      setError(alreadyLinked
+        ? 'You do not have permission to open the linked inquiry.'
+        : 'You do not have permission to create inquiries from Meta leads.');
+      return;
+    }
+    setConverting(true); setError('');
+    const returnTo = encodeURIComponent(`/dashboard/meta-leads/${leadId}`);
+    try {
+      // Save current edits so the created inquiry reflects what's on screen.
+      if (canUpdate) {
+        await fetch(`/api/meta-ads/leads/${encodeURIComponent(leadId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentName: draft.studentName,
+            courseName: draft.courseName,
+            mobile: draft.mobile,
+            email: draft.email,
+            statusId: draft.statusId,
+            fields: draft.fields,
+            utm: draft.utm,
+          }),
+        }).catch(() => {});
+      }
+
+      const res = await fetch(`/api/meta-ads/leads/${encodeURIComponent(leadId)}/convert`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to convert Meta lead');
+      const inquiryId = Number(data?.lead?.Student_Id || 0);
+      if (!inquiryId) throw new Error('Meta lead converted but no inquiry id was returned');
+      router.push(`/dashboard/inquiry/add?editId=${inquiryId}&returnTo=${returnTo}`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to convert Meta lead');
+      setConverting(false);
     }
   }
 
@@ -355,6 +402,10 @@ export default function MetaLeadDetailPage() {
                 {lead?.Student_Id ? (
                   <GhostBtn href={`/dashboard/inquiry/add?editId=${lead.Student_Id}&returnTo=${encodeURIComponent(`/dashboard/meta-leads/${lead.MetaLead_Id}`)}`}>
                     Edit Inquiry
+                  </GhostBtn>
+                ) : canCreate ? (
+                  <GhostBtn onClick={handleConvertAndOpen}>
+                    {converting ? 'Converting…' : 'Convert to Inquiry'}
                   </GhostBtn>
                 ) : null}
                 <GhostBtn onClick={() => router.push('/dashboard/meta-leads')}>Back To Leads</GhostBtn>
@@ -660,6 +711,9 @@ export default function MetaLeadDetailPage() {
                             </button>
                           </div>
                         </div>
+                        {noteError && (
+                          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{noteError}</div>
+                        )}
                       </div>
                     )}
 

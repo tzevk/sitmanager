@@ -30,7 +30,7 @@ export async function POST(
     const note = typeof body?.note === 'string' ? body.note.trim() : '';
     const nextDate = typeof body?.nextDate === 'string' ? body.nextDate : null;
     if (!note) return NextResponse.json({ error: 'Note is required' }, { status: 400 });
-    await addMetaLeadDiscussionNote(leadId, note, nextDate);
+    await addMetaLeadDiscussionNote(leadId, note, nextDate, auth.session.userId);
     const entries = await getMetaLeadDiscussions(leadId);
     return NextResponse.json({ entries });
   } catch (error: unknown) {

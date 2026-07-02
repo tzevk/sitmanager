@@ -3559,8 +3559,10 @@ export async function getMetaLeadDiscussions(metaLeadId: string): Promise<Discus
 export async function addMetaLeadDiscussionNote(
   metaLeadId: string,
   note: string,
-  nextDate: string | null
+  nextDate: string | null,
+  createdBy = 1
 ): Promise<void> {
+  const authorId = Number.isFinite(createdBy) && createdBy > 0 ? createdBy : 1;
   await ensureMetaLeadTables();
   const pool = getPool();
   let [leadRows] = await pool.query(
@@ -3604,26 +3606,26 @@ export async function addMetaLeadDiscussionNote(
   if (hasStudentIdColumn && hasNextDateColumn) {
     await pool.query(
       `INSERT INTO awt_inquirydiscussion (Inquiry_id, student_id, date, nextdate, discussion, deleted, created_by, created_date)
-       VALUES (?, ?, CURDATE(), ?, ?, 0, 1, NOW())`,
-      [canonicalInquiryId, canonicalStudentId, safeNext, note.trim()]
+       VALUES (?, ?, CURDATE(), ?, ?, 0, ?, NOW())`,
+      [canonicalInquiryId, canonicalStudentId, safeNext, note.trim(), authorId]
     );
   } else if (hasStudentIdColumn) {
     await pool.query(
       `INSERT INTO awt_inquirydiscussion (Inquiry_id, student_id, date, discussion, deleted, created_by, created_date)
-       VALUES (?, ?, CURDATE(), ?, 0, 1, NOW())`,
-      [canonicalInquiryId, canonicalStudentId, note.trim()]
+       VALUES (?, ?, CURDATE(), ?, 0, ?, NOW())`,
+      [canonicalInquiryId, canonicalStudentId, note.trim(), authorId]
     );
   } else if (hasNextDateColumn) {
     await pool.query(
       `INSERT INTO awt_inquirydiscussion (Inquiry_id, date, nextdate, discussion, deleted, created_by, created_date)
-       VALUES (?, CURDATE(), ?, ?, 0, 1, NOW())`,
-      [canonicalInquiryId, safeNext, note.trim()]
+       VALUES (?, CURDATE(), ?, ?, 0, ?, NOW())`,
+      [canonicalInquiryId, safeNext, note.trim(), authorId]
     );
   } else {
     await pool.query(
       `INSERT INTO awt_inquirydiscussion (Inquiry_id, date, discussion, deleted, created_by, created_date)
-       VALUES (?, CURDATE(), ?, 0, 1, NOW())`,
-      [canonicalInquiryId, note.trim()]
+       VALUES (?, CURDATE(), ?, 0, ?, NOW())`,
+      [canonicalInquiryId, note.trim(), authorId]
     );
   }
 

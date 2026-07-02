@@ -129,6 +129,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         resource: 'inquiry',
         action: 'update',
       },
+      ...createPermissions('meta_lead', 'Meta Lead', ['view', 'create', 'update']),
       ...createPermissions('online_admission', 'Online Admission'),
       ...createPermissions('student', 'Student'),
     ],
