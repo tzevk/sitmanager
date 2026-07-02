@@ -18,7 +18,7 @@ function normalizeStringArray(value: unknown): string[] {
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requirePermission(req, ['inquiry.view', 'report_inquiry.view']);
+    const auth = await requirePermission(req, ['inquiry.view', 'report_inquiry.view', 'meta_lead.view']);
     if (auth instanceof NextResponse) return auth;
 
     const limit = Number(req.nextUrl.searchParams.get('limit') || '10');
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = await requirePermission(req, ['inquiry.update']);
+    const auth = await requirePermission(req, ['inquiry.update', 'meta_lead.update']);
     if (auth instanceof NextResponse) return auth;
 
     const body = await req.json().catch(() => ({}));

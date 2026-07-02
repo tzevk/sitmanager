@@ -7,7 +7,7 @@ export async function POST(
   { params }: { params: Promise<{ leadId: string }> }
 ) {
   try {
-    const auth = await requirePermission(req, ['inquiry.create', 'inquiry.update']);
+    const auth = await requirePermission(req, ['inquiry.create', 'inquiry.update', 'meta_lead.create', 'meta_lead.update']);
     if (auth instanceof NextResponse) return auth;
 
     const { leadId } = await params;

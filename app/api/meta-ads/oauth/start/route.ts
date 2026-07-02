@@ -3,7 +3,7 @@ import { requirePermission } from '@/lib/api-auth';
 import { buildMetaOAuthAuthorizeUrl } from '@/lib/services/meta-ads.service';
 
 export async function GET(req: NextRequest) {
-  const auth = await requirePermission(req, ['inquiry.view', 'inquiry.update']);
+  const auth = await requirePermission(req, ['inquiry.view', 'inquiry.update', 'meta_lead.view', 'meta_lead.update']);
   if (auth instanceof NextResponse) return auth;
 
   const redirectTo = req.nextUrl.searchParams.get('redirectTo') || '/dashboard/meta-leads';

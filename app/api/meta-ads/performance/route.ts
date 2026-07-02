@@ -20,7 +20,7 @@ interface CampaignRow {
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requirePermission(req, ['inquiry.view', 'report_inquiry.view']);
+    const auth = await requirePermission(req, ['inquiry.view', 'report_inquiry.view', 'meta_lead.view']);
     if (auth instanceof NextResponse) return auth;
 
     const url = req.nextUrl;

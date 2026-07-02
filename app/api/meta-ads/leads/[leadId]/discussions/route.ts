@@ -7,7 +7,7 @@ export async function GET(
   { params }: { params: Promise<{ leadId: string }> }
 ) {
   try {
-    const auth = await requirePermission(req, ['inquiry.view', 'report_inquiry.view']);
+    const auth = await requirePermission(req, ['inquiry.view', 'report_inquiry.view', 'meta_lead.view']);
     if (auth instanceof NextResponse) return auth;
     const { leadId } = await params;
     const entries = await getMetaLeadDiscussions(leadId);
@@ -23,7 +23,7 @@ export async function POST(
   { params }: { params: Promise<{ leadId: string }> }
 ) {
   try {
-    const auth = await requirePermission(req, ['inquiry.update']);
+    const auth = await requirePermission(req, ['inquiry.update', 'meta_lead.update']);
     if (auth instanceof NextResponse) return auth;
     const { leadId } = await params;
     const body = await req.json().catch(() => ({}));

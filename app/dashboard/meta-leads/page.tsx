@@ -663,7 +663,14 @@ function MetaDataModal({ row, onClose }: MetaDataModalProps) {
 export default function MetaLeadsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { canView, canCreate, canUpdate, loading: permLoading } = useResourcePermissions('inquiry');
+  // Meta Leads access is granted by either the Inquiry permission (legacy) or the
+  // dedicated Meta Lead permission, whichever the role has.
+  const inqPerms = useResourcePermissions('inquiry');
+  const metaPerms = useResourcePermissions('meta_lead');
+  const permLoading = inqPerms.loading || metaPerms.loading;
+  const canView = inqPerms.canView || metaPerms.canView;
+  const canCreate = inqPerms.canCreate || metaPerms.canCreate;
+  const canUpdate = inqPerms.canUpdate || metaPerms.canUpdate;
 
   const [activeTab, setActiveTab] = useState<'analytics' | 'leads'>('analytics');
   const [rows, setRows] = useState<InquiryRow[]>([]);

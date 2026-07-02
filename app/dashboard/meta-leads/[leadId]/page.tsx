@@ -139,7 +139,14 @@ function KvRow({ label, value }: { label: string; value: React.ReactNode }) {
 export default function MetaLeadDetailPage() {
   const params = useParams<{ leadId: string }>();
   const router = useRouter();
-  const { canView, canUpdate, canCreate, loading: permLoading } = useResourcePermissions('inquiry');
+  // Meta Leads access is granted by either the Inquiry permission (legacy) or the
+  // dedicated Meta Lead permission, whichever the role has.
+  const inqPerms = useResourcePermissions('inquiry');
+  const metaPerms = useResourcePermissions('meta_lead');
+  const permLoading = inqPerms.loading || metaPerms.loading;
+  const canView = inqPerms.canView || metaPerms.canView;
+  const canUpdate = inqPerms.canUpdate || metaPerms.canUpdate;
+  const canCreate = inqPerms.canCreate || metaPerms.canCreate;
   const [lead, setLead] = useState<MetaLeadDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

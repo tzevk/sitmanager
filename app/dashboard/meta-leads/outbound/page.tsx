@@ -75,7 +75,13 @@ function formatDate(dateStr: string | null): string {
 }
 
 export default function MetaOutboundPage() {
-  const { canView, canUpdate, loading: permLoading } = useResourcePermissions('inquiry');
+  // Meta Leads access is granted by either the Inquiry permission (legacy) or the
+  // dedicated Meta Lead permission, whichever the role has.
+  const inqPerms = useResourcePermissions('inquiry');
+  const metaPerms = useResourcePermissions('meta_lead');
+  const permLoading = inqPerms.loading || metaPerms.loading;
+  const canView = inqPerms.canView || metaPerms.canView;
+  const canUpdate = inqPerms.canUpdate || metaPerms.canUpdate;
   const [publishName, setPublishName] = useState('');
   const [publishObjective, setPublishObjective] = useState<string>('OUTCOME_LEADS');
   const [publishSpecialCategory, setPublishSpecialCategory] = useState<string>('NONE');

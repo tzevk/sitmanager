@@ -8,7 +8,7 @@ const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'meta-ads', 'cre
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = await requirePermission(req, ['inquiry.update']);
+    const auth = await requirePermission(req, ['inquiry.update', 'meta_lead.update']);
     if (auth instanceof NextResponse) return auth;
 
     const formData = await req.formData();
