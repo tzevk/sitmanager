@@ -8,6 +8,7 @@ const MAIN_INQUIRY_STATUS_LABELS = [
   'New',
   'Contacted (interested)',
   'Contacted (not recieved call)',
+  'Contacted (Not Interested)',
   'Contacted (next batch)',
   'Follow up pending',
   'Admission confirmed',
@@ -55,7 +56,7 @@ export async function GET() {
   try {
     const pool = getPool();
 
-    const options = await cached('inquiry-form-options-v5', 300, async () => {
+    const options = await cached('inquiry-form-options-v6', 300, async () => {
       const [
         coursesRes,
         categoriesRes,

@@ -187,7 +187,7 @@ export const ALLOWED_INQUIRY_STATUSES: StatusOption[] = [
   { id: 3, label: 'Contacted (interested)' },
   { id: 4, label: 'Contacted (next batch)' },
   { id: 5, label: 'Contacted - eligible' },
-  { id: 11, label: 'Contacted - Not Interested' },
+  { id: 11, label: 'Contacted (Not Interested)' },
   { id: 6, label: 'Irrelevant' },
   { id: 7, label: 'Follow up pending' },
   { id: 8, label: 'Admission confirmed' },
@@ -198,6 +198,7 @@ const MAIN_INQUIRY_STATUS_LABELS = [
   'New',
   'Contacted (interested)',
   'Contacted (not recieved call)',
+  'Contacted (Not Interested)',
   'Contacted (next batch)',
   'Follow up pending',
   'Admission confirmed',
@@ -722,7 +723,7 @@ async function loadStatusOptions(pool: ReturnType<typeof getPool>): Promise<Stat
 
 export async function getInquiryStatusOptions(): Promise<StatusOption[]> {
   const pool = getPool();
-  return cached('inquiry:main-status-options-v2', 5 * 60 * 1000, () => loadStatusOptions(pool));
+  return cached('inquiry:main-status-options-v3', 5 * 60 * 1000, () => loadStatusOptions(pool));
 }
 
 /**
@@ -733,7 +734,7 @@ export async function getInquiryStatusOptions(): Promise<StatusOption[]> {
  */
 export async function getStatusMasterOptions(): Promise<StatusOption[]> {
   const pool = getPool();
-  return cached('inquiry:status-master-options-v3', 5 * 60 * 1000, async () => {
+  return cached('inquiry:status-master-options-v4', 5 * 60 * 1000, async () => {
     await ensureMainInquiryStatuses(pool);
     const [rows] = await pool.query(
       `SELECT Id AS id, Status AS label
