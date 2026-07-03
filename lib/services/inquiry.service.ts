@@ -1371,7 +1371,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
            ON d.deleted = 0
           AND ${manualDiscussionSqlCondition('d')}
           AND si_map.Student_Id IS NOT NULL
-          AND (d.Inquiry_id = si_map.Student_Id OR d.student_id = si_map.Student_Id OR d.Inquiry_id = si_sibling.Inquiry_Id)
+          AND (d.student_id = si_map.Student_Id OR d.Inquiry_id = si_sibling.Inquiry_Id)
          WHERE si_map.Inquiry_Id IN (${ph})
          GROUP BY si_map.Inquiry_Id
        ) tld_legacy ON tld_legacy.InquiryId = si.Inquiry_Id
@@ -1392,7 +1392,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
          INNER JOIN awt_inquirydiscussion d
            ON d.deleted = 0
           AND si_map.Student_Id IS NOT NULL
-          AND (d.Inquiry_id = si_map.Student_Id OR d.student_id = si_map.Student_Id OR d.Inquiry_id = si_sibling.Inquiry_Id)
+          AND (d.student_id = si_map.Student_Id OR d.Inquiry_id = si_sibling.Inquiry_Id)
          WHERE si_map.Inquiry_Id IN (${ph})
          GROUP BY si_map.Inquiry_Id
        ) tfd_legacy ON tfd_legacy.InquiryId = si.Inquiry_Id

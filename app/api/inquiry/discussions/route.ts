@@ -151,20 +151,43 @@ export async function GET(req: NextRequest) {
 
     const withNextDate = await hasNextDateColumn(pool);
     const nextDateSelect = withNextDate ? 'd.nextdate' : 'NULL as nextdate';
-    const discussionIds = linkedInquiryIds.length > 0 ? [...linkedInquiryIds] : [canonicalInquiryId];
-    if (canonicalStudentId && canonicalStudentId !== canonicalInquiryId) discussionIds.push(canonicalStudentId);
-    const uniqueDiscussionIds = discussionIds.filter((value, index, values) => values.indexOf(value) === index);
-    const cacheKey = `api:inquiry:discussions:${uniqueDiscussionIds.join(',')}`;
-    const discussionPlaceholders = uniqueDiscussionIds.map(() => '?').join(',');
+
+    // CRITICAL: Inquiry_Id and Student_Id are two SEPARATE numeric id spaces that
+    // overlap in value. They must never be cross-matched, otherwise an inquiry
+    // whose Student_Id happens to equal an unrelated inquiry's Inquiry_Id pulls
+    // that other candidate's discussions. Match Inquiry_id only against real
+    // Inquiry_Ids, and student_id only against real Student_Ids.
+    const inquiryIds = (linkedInquiryIds.length > 0 ? linkedInquiryIds : [canonicalInquiryId])
+      .filter((value, index, values) => Number.isFinite(value) && value > 0 && values.indexOf(value) === index);
+    const studentIds = (canonicalStudentId && Number.isFinite(canonicalStudentId) && canonicalStudentId > 0)
+      ? [canonicalStudentId]
+      : [];
+
+    const conditions: string[] = [];
+    const params: number[] = [];
+    if (inquiryIds.length > 0) {
+      conditions.push(`d.Inquiry_id IN (${inquiryIds.map(() => '?').join(',')})`);
+      params.push(...inquiryIds);
+    }
+    if (studentIds.length > 0) {
+      conditions.push(`d.student_id IN (${studentIds.map(() => '?').join(',')})`);
+      params.push(...studentIds);
+    }
+    // No matchable ids → no discussions (never fall back to matching everything).
+    if (conditions.length === 0) {
+      return NextResponse.json({ discussions: [] });
+    }
+
+    const cacheKey = `api:inquiry:discussions:i:${inquiryIds.join(',')}:s:${studentIds.join(',')}`;
     const rows = await cached(cacheKey, 10_000, async () => runGuardedQuery(
       pool,
       `SELECT d.id, d.date, ${nextDateSelect}, d.discussion, d.created_by, d.created_date,
               COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.firstname, ''), ' ', COALESCE(u.lastname, ''))), ''), u.username) AS created_by_name
        FROM awt_inquirydiscussion d
        LEFT JOIN awt_adminuser u ON u.id = d.created_by
-       WHERE (d.Inquiry_id IN (${discussionPlaceholders}) OR d.student_id IN (${discussionPlaceholders})) AND (d.deleted = 0 OR d.deleted IS NULL)
+       WHERE (${conditions.join(' OR ')}) AND (d.deleted = 0 OR d.deleted IS NULL)
        ORDER BY d.id ASC`,
-      [...uniqueDiscussionIds, ...uniqueDiscussionIds],
+      params,
       5,
     ));
 
