@@ -134,13 +134,21 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // Build WHERE — no inquiry table join; student_master is the source of truth
+      // Build filter conditions. student_master is the source of truth for names.
+      // Two alias sets are kept in sync: (a/s) for the COUNT, and (a2/s2) for the
+      // inner per-student pick in the data query.
       const conditions: string[] = [
         'a.Batch_Id = ?',
         '(a.IsDelete = 0 OR a.IsDelete IS NULL)',
         '(a.Cancel   = 0 OR a.Cancel   IS NULL)',
       ];
+      const innerConditions: string[] = [
+        'a2.Batch_Id = ?',
+        '(a2.IsDelete = 0 OR a2.IsDelete IS NULL)',
+        '(a2.Cancel   = 0 OR a2.Cancel   IS NULL)',
+      ];
       const params: (string | number)[] = [batchIdNum];
+      const innerParams: (string | number)[] = [batchIdNum];
 
       if (search) {
         const like = `%${search}%`;
@@ -152,11 +160,22 @@ export async function GET(req: NextRequest) {
           OR CAST(a.Student_Code AS CHAR) LIKE ?
         )`);
         params.push(like, like, like, like, like);
+        innerConditions.push(`(
+          s2.Student_Name LIKE ?
+          OR s2.FName LIKE ?
+          OR s2.Email LIKE ?
+          OR CAST(s2.Student_Id AS CHAR) LIKE ?
+          OR CAST(a2.Student_Code AS CHAR) LIKE ?
+        )`);
+        innerParams.push(like, like, like, like, like);
       }
 
       const where = conditions.join(' AND ');
+      const innerWhere = innerConditions.join(' AND ');
 
-      // COUNT(DISTINCT Student_Id) matches the GROUP BY in the data query
+      // COUNT(DISTINCT Student_Id) matches the one-row-per-student data query,
+      // so `total` is the real number of students regardless of duplicate
+      // admission_master or student_master rows.
       const [countRows] = await pool.query<any[]>(
         `SELECT COUNT(DISTINCT a.Student_Id) AS total
          FROM admission_master a
@@ -166,11 +185,14 @@ export async function GET(req: NextRequest) {
       );
       total = Number(countRows[0]?.total ?? 0);
 
-      // Rows — deduplicated on Student_Id to prevent showing duplicates caused
-      // by multiple admission_master rows for the same student+batch.
       const rollNoSelect = rollNoColumnExists
         ? `COALESCE(a.Roll_No, '')`
         : `''`;
+
+      // Rows: pick ONE deterministic admission row (MAX Admission_Id) per student
+      // via an inner subquery, then order by a UNIQUE key (studentName, Student_Id)
+      // so pagination never repeats or drops a student across pages. The outer
+      // GROUP BY a.Admission_Id guards against duplicate student_master rows.
       const [dataRows] = await pool.query<any[]>(
         `SELECT
            a.Admission_Id AS id,
@@ -183,14 +205,20 @@ export async function GET(req: NextRequest) {
            COALESCE(a.Admission_Date, s.Admission_Dt)                 AS admissionDate,
            COALESCE(NULLIF(TRIM(a.Phase),''), NULLIF(TRIM(b.Category),''), 'Not Set') AS phase,
            ${rollNoSelect}                                             AS rollNo
-         FROM admission_master a
+         FROM (
+           SELECT MAX(a2.Admission_Id) AS Admission_Id
+           FROM admission_master a2
+           LEFT JOIN student_master s2 ON s2.Student_Id = a2.Student_Id
+           WHERE ${innerWhere}
+           GROUP BY a2.Student_Id
+         ) picked
+         JOIN admission_master a ON a.Admission_Id = picked.Admission_Id
          LEFT JOIN student_master s ON s.Student_Id = a.Student_Id
          JOIN  batch_mst b          ON b.Batch_Id   = a.Batch_Id
-         WHERE ${where}
-         GROUP BY a.Student_Id
-         ORDER BY studentName ASC
+         GROUP BY a.Admission_Id
+         ORDER BY studentName ASC, a.Student_Id ASC
          LIMIT ? OFFSET ?`,
-        [...params, limit, offset]
+        [...innerParams, limit, offset]
       );
       rows = dataRows;
     }

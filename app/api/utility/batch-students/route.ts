@@ -131,6 +131,44 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// Hard-delete specific admission entries. Removes ONLY the given admission_master
+// row(s) by Admission_Id — the particular entry linked to the student in this
+// batch — not other duplicates or the student's rows in other batches. Physical
+// delete (no soft-delete flag). Accepts a single `admissionId` or a
+// comma-separated `admissionIds` list for bulk deletes.
+export async function DELETE(req: NextRequest) {
+  try {
+    const auth = await requirePermission(req, 'student.delete');
+    if (auth instanceof NextResponse) return auth;
+
+    const pool = getPool();
+    const { searchParams } = new URL(req.url);
+    const batchId = Number(searchParams.get('batchId') || 0);
+
+    const raw = searchParams.get('admissionIds') || searchParams.get('admissionId') || '';
+    const admissionIds = [...new Set(
+      raw.split(',').map((v) => Number(v.trim())).filter((n) => Number.isFinite(n) && n > 0)
+    )];
+
+    if (admissionIds.length === 0) {
+      return NextResponse.json({ success: false, error: 'admissionId or admissionIds is required.' }, { status: 400 });
+    }
+
+    const placeholders = admissionIds.map(() => '?').join(',');
+    const [result] = await pool.query<any>(
+      `DELETE FROM admission_master WHERE Admission_Id IN (${placeholders})`,
+      admissionIds
+    );
+    const deleted = Number(result?.affectedRows ?? 0);
+
+    const rows = batchId ? await getBatchStudents(pool, batchId, false) : [];
+    return NextResponse.json({ success: true, deleted, rows });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Server error';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
+  }
+}
+
 export async function PATCH(req: NextRequest) {
   try {
     const auth = await requirePermission(req, 'student.update');

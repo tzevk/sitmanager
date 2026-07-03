@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
+import { PageHeader, GhostBtn } from '@/components/ui/PageHeader';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -29,7 +30,7 @@ interface AllocatedBatch {
 
 interface Student {
   id: number;          // Admission_Id
-  studentCode: number; // Student_Id
+  studentCode: number; // Student_Code
   studentName: string;
   admissionDate: string | null;
   phase: string | null;
@@ -72,10 +73,12 @@ export default function AllotRollNumberPage() {
   const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [hasEdits, setHasEdits] = useState(false);
 
+
   /* ---- Misc ---- */
   const [initialLoad, setInitialLoad] = useState(true); // eslint-disable-line @typescript-eslint/no-unused-vars
   const searchRef = useRef<HTMLInputElement>(null);
   const [fetchTrigger, setFetchTrigger] = useState(0);
+  const [showAllocated, setShowAllocated] = useState(false);
 
   /* ================================================================ */
   /*  Fetch courses on mount                                          */
@@ -299,61 +302,62 @@ export default function AllotRollNumberPage() {
   if (permLoading) return <PermissionLoading />;
   if (!canView) return <AccessDenied message="You do not have permission to view roll number allotment." />;
 
+  const hasSelection = Boolean(courseId && batchId);
+  const startIdx = (page - 1) * pagination.limit;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
 
-      {/* ──── Page Header ──── */}
-      <div className="flex items-center gap-3">
-        <div className="p-2.5 bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] rounded-xl shadow-lg">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-          </svg>
-        </div>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold text-gray-800 tracking-tight">Allot Roll Number</h1>
-          <p className="text-xs text-gray-400">Daily Activities / Allot Roll Number</p>
-        </div>
-      </div>
+      {/* ──── Header ──── */}
+      <PageHeader
+        title="Allot Roll Number"
+        breadcrumbs={[{ label: 'Daily Activities' }, { label: 'Allot Roll Number' }]}
+        meta={hasSelection ? `${selectedBatchCode} · ${pagination.total} student${pagination.total !== 1 ? 's' : ''}` : undefined}
+        action={
+          hasSelection && rows.length > 0 ? (
+            <>
+              <GhostBtn onClick={handleAutoGenerate}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Auto-Generate
+              </GhostBtn>
+              <GhostBtn onClick={handleExport}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export
+              </GhostBtn>
+              {canUpdate && (
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !hasEdits}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2E3093] text-white text-xs font-semibold hover:bg-[#24267A] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {saving ? (
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  )}
+                  {hasEdits ? 'Save Roll Numbers' : 'Saved'}
+                </button>
+              )}
+            </>
+          ) : undefined
+        }
+      />
 
-      {/* ──── Previously Allocated Batches ──── */}
-      {allocatedBatches.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-          <h3 className="text-xs font-bold text-[#2E3093] uppercase tracking-wider mb-3 flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Roll No. Allocated Batches
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {allocatedBatches.map(ab => (
-              <button
-                key={ab.Batch_Id}
-                onClick={() => {
-                  // Quick-jump: set the exact course first, then select batch once loaded.
-                  setPendingBatchId(String(ab.Batch_Id));
-                  setCourseId(String(ab.Course_Id));
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-50 text-green-700 border border-green-200 rounded-full hover:bg-green-100 transition-colors cursor-pointer"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                {ab.Batch_code}
-                <span className="text-green-500">({ab.Course_Name})</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ──── Selection Card ──── */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
-          {/* Course */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-semibold text-[#2E3093]">Select Training</label>
+      {/* ──── Selection strip ──── */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1 min-w-[220px] flex-1">
+            <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Training</label>
             <select
               value={courseId}
               onChange={(e) => setCourseId(e.target.value)}
-              className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] transition bg-white"
+              className="h-9 w-full rounded-lg border border-gray-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] transition"
             >
               <option value="">— Choose Training —</option>
               {courses.map(c => (
@@ -362,14 +366,13 @@ export default function AllotRollNumberPage() {
             </select>
           </div>
 
-          {/* Batch */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-semibold text-[#2E3093]">Select Batch Code</label>
+          <div className="flex flex-col gap-1 min-w-[220px] flex-1">
+            <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Batch Code</label>
             <select
               value={batchId}
               onChange={(e) => { setBatchId(e.target.value); setPage(1); }}
               disabled={!courseId}
-              className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] transition bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-9 w-full rounded-lg border border-gray-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="">— Choose Batch —</option>
               {batches.map(b => (
@@ -382,154 +385,135 @@ export default function AllotRollNumberPage() {
               ))}
             </select>
           </div>
+
+          {/* Search — only meaningful once a batch is chosen */}
+          <div className="flex flex-col gap-1 min-w-[200px]">
+            <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Search Student</label>
+            <div className="relative">
+              <input
+                ref={searchRef}
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { setPage(1); setFetchTrigger((t) => t + 1); } }}
+                disabled={!hasSelection}
+                placeholder="Name or code, press Enter"
+                className="h-9 w-full pl-8 pr-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              <svg className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
         </div>
 
-        {/* Selection summary */}
-        {courseId && batchId && (
-          <div className="mt-4 flex items-center gap-2 text-xs">
-            <span className="px-2.5 py-1 rounded-full bg-[#2E3093]/10 text-[#2E3093] font-semibold">
-              {selectedCourseName}
-            </span>
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-gray-300" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-            <span className="px-2.5 py-1 rounded-full bg-[#2A6BB5]/10 text-[#2A6BB5] font-semibold">
-              {selectedBatchCode}
-            </span>
-            <span className="ml-auto text-gray-400">
-              Batch strength: {selectedBatchStudentCount} | Loaded: {pagination.total} student{pagination.total !== 1 ? 's' : ''}
-            </span>
+        {/* Previously allocated batches — collapsible quick-jump */}
+        {allocatedBatches.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <button
+              onClick={() => setShowAllocated(v => !v)}
+              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 hover:text-[#2E3093] transition-colors"
+            >
+              <svg className={`w-3.5 h-3.5 transition-transform ${showAllocated ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                Already allocated ({allocatedBatches.length})
+              </span>
+            </button>
+            {showAllocated && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {allocatedBatches.map(ab => (
+                  <button
+                    key={ab.Batch_Id}
+                    onClick={() => { setPendingBatchId(String(ab.Batch_Id)); setCourseId(String(ab.Course_Id)); }}
+                    title={ab.Course_Name}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium bg-green-50 text-green-700 border border-green-200 rounded-full hover:bg-green-100 transition-colors"
+                  >
+                    {ab.Batch_code}
+                    <span className="text-green-500/70 max-w-[140px] truncate">{ab.Course_Name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* ──── Empty / Prompt state ──── */}
-      {!courseId || !batchId ? (
+      {/* ──── Save banner ──── */}
+      {saveMsg && (
+        <div className={`px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 ${
+          saveMsg.type === 'success'
+            ? 'bg-green-50 border border-green-200 text-green-700'
+            : 'bg-red-50 border border-red-200 text-red-600'
+        }`}>
+          {saveMsg.type === 'success' ? (
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          )}
+          {saveMsg.text}
+          <button onClick={() => setSaveMsg(null)} className="ml-auto text-xs opacity-60 hover:opacity-100">Dismiss</button>
+        </div>
+      )}
+
+      {/* ──── Content ──── */}
+      {!hasSelection ? (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
           <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#2E3093]/10 to-[#2A6BB5]/10 flex items-center justify-center mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-[#2E3093]/40" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#2E3093]/10 to-[#2A6BB5]/10 flex items-center justify-center mb-4">
+              <svg className="w-7 h-7 text-[#2E3093]/40" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
               </svg>
             </div>
-            <h3 className="text-sm font-semibold text-gray-600 mb-1">Select Training & Batch</h3>
+            <h3 className="text-sm font-semibold text-gray-600 mb-1">
+              {courseId ? 'Choose a batch code' : 'Select a training to begin'}
+            </h3>
             <p className="text-xs text-gray-400 max-w-xs">
-              Choose a training and batch code above to view the student list and allot roll numbers.
+              Pick a training and batch above to load its students, then auto-generate or edit roll numbers.
             </p>
           </div>
         </div>
       ) : (
-        /* ──── Student List Card ──── */
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
 
-          {/* Toolbar */}
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap flex-shrink-0">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold text-[#2E3093] bg-[#2E3093]/10 rounded-full px-2 py-0.5">
-                Allot Roll Number List ({pagination.total})
+          {/* Sub-toolbar: count + unsaved indicator */}
+          <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-bold text-[#2E3093] bg-[#2E3093]/10 rounded-full px-2.5 py-0.5">
+              {pagination.total} student{pagination.total !== 1 ? 's' : ''}
+            </span>
+            {selectedCourseName && (
+              <span className="text-[11px] text-gray-500 font-medium truncate max-w-[280px]" title={selectedCourseName}>
+                {selectedCourseName}
               </span>
-              {hasEdits && (
-                <span className="text-[10px] font-medium text-amber-600 bg-amber-50 rounded-full px-2 py-0.5 animate-pulse">
-                  Unsaved changes
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Auto Generate */}
-              <button
-                onClick={handleAutoGenerate}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#2A6BB5] text-[#2A6BB5] hover:bg-[#2A6BB5]/5 transition-colors"
-                title="Auto-generate roll numbers in YY + batchNo + 0001 format"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Generate
-              </button>
-
-              {/* Export */}
-              <button
-                onClick={handleExport}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Export
-              </button>
-
-              {/* Search */}
-              <div className="relative">
-                <input
-                  ref={searchRef}
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { setPage(1); setFetchTrigger((t) => t + 1); } }}
-                  placeholder="Search…"
-                  className="w-44 pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-400"
-                />
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-
-              {/* Save (Allot Roll Number) */}
-              {rows.length > 0 && canUpdate && (
-                <button
-                  onClick={handleSave}
-                  disabled={saving || !hasEdits}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-[#2E3093] hover:bg-[#23257A] rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition"
-                >
-                  {saving && (
-                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  )}
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Allot Roll Number
-                </button>
-              )}
-            </div>
+            )}
+            <span className="text-[11px] text-gray-400">
+              · Batch strength {selectedBatchStudentCount}
+            </span>
+            {hasEdits && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                Unsaved changes
+              </span>
+            )}
           </div>
 
-          {/* Success / Error banner */}
-          {saveMsg && (
-            <div className={`mx-4 mt-3 px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 ${
-              saveMsg.type === 'success'
-                ? 'bg-green-50 border border-green-200 text-green-700'
-                : 'bg-red-50 border border-red-200 text-red-600'
-            }`}>
-              {saveMsg.type === 'success' ? (
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              )}
-              {saveMsg.text}
-              <button
-                onClick={() => setSaveMsg(null)}
-                className="ml-auto text-xs opacity-60 hover:opacity-100"
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
-
           {/* Table */}
-          <div className="overflow-x-auto flex-1">
-            <table className="dashboard-table w-full text-sm min-w-[800px]">
-              <thead className="sticky top-0 bg-gradient-to-r from-gray-50 to-gray-100/80 z-10">
+          <div className="overflow-x-auto">
+            <table className="dashboard-table w-full text-sm min-w-[760px]">
+              <thead className="bg-gray-50/80">
                 <tr className="text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                  <th className="py-3 px-4 border-b border-gray-200 w-12">Sr.</th>
-                  <th className="py-3 px-4 border-b border-gray-200">Student Code</th>
-                  <th className="py-3 px-4 border-b border-gray-200">Student Name</th>
-                  <th className="py-3 px-4 border-b border-gray-200">Admission Date</th>
-                  <th className="py-3 px-4 border-b border-gray-200">Phase</th>
-                  <th className="py-3 px-4 border-b border-gray-200 w-48">Roll No.</th>
+                  <th className="py-2.5 px-4 border-b border-gray-200 w-12">Sr.</th>
+                  <th className="py-2.5 px-4 border-b border-gray-200 w-32">Student Code</th>
+                  <th className="py-2.5 px-4 border-b border-gray-200">Student Name</th>
+                  <th className="py-2.5 px-4 border-b border-gray-200 w-36">Admission Date</th>
+                  <th className="py-2.5 px-4 border-b border-gray-200 w-28">Phase</th>
+                  <th className="py-2.5 px-4 border-b border-gray-200 w-52">Roll No.</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -538,7 +522,7 @@ export default function AllotRollNumberPage() {
                     <td colSpan={6} className="py-12 text-center">
                       <div className="flex justify-center items-center gap-2 text-gray-400">
                         <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
-                        Loading students...
+                        Loading students…
                       </div>
                     </td>
                   </tr>
@@ -550,27 +534,23 @@ export default function AllotRollNumberPage() {
                   </tr>
                 ) : (
                   rows.map((s, idx) => (
-                    <tr key={s.id} className="border-b border-gray-50 hover:bg-blue-50/30 transition-colors">
-                      <td className="py-2.5 px-4 text-gray-400 font-mono text-xs">
-                        {(page - 1) * pagination.limit + idx + 1}
-                      </td>
-                      <td className="py-2.5 px-4">
+                    <tr key={s.id} className="hover:bg-blue-50/40 transition-colors">
+                      <td className="py-2 px-4 text-gray-400 font-mono text-xs">{startIdx + idx + 1}</td>
+                      <td className="py-2 px-4">
                         <span className="inline-flex items-center px-2 py-0.5 text-xs font-mono font-semibold bg-[#2E3093]/8 text-[#2E3093] rounded">
                           {s.studentCode}
                         </span>
                       </td>
-                      <td className="py-2.5 px-4 font-semibold text-gray-800">{formatStudentName(s.studentName)}</td>
-                      <td className="py-2.5 px-4 text-gray-600 text-xs">{formatDate(s.admissionDate)}</td>
-                      <td className="py-2.5 px-4">
+                      <td className="py-2 px-4 font-semibold text-gray-800">{formatStudentName(s.studentName)}</td>
+                      <td className="py-2 px-4 text-gray-600 text-xs">{formatDate(s.admissionDate)}</td>
+                      <td className="py-2 px-4">
                         {s.phase ? (
-                          <span className="inline-block px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 rounded">
-                            {s.phase}
-                          </span>
+                          <span className="inline-block px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 rounded">{s.phase}</span>
                         ) : (
                           <span className="text-gray-300">—</span>
                         )}
                       </td>
-                      <td className="py-2.5 px-4">
+                      <td className="py-2 px-4">
                         <input
                           type="text"
                           value={rollEdits[s.id] ?? s.rollNo}
@@ -578,8 +558,9 @@ export default function AllotRollNumberPage() {
                             setRollEdits(prev => ({ ...prev, [s.id]: e.target.value }));
                             setHasEdits(true);
                           }}
+                          disabled={!canUpdate}
                           placeholder="Enter roll no."
-                          className="w-full h-8 px-2.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 transition"
+                          className="w-full h-8 px-2.5 text-xs font-mono border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 disabled:bg-gray-50 disabled:text-gray-400 transition"
                         />
                       </td>
                     </tr>
@@ -589,59 +570,34 @@ export default function AllotRollNumberPage() {
             </table>
           </div>
 
-          {/* Footer: Pagination + Save Button */}
-          <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-t border-gray-100">
-            {/* Pagination */}
-            <div className="flex items-center gap-3">
-              {totalPages > 1 && (
-                <>
-                  <span className="text-xs text-gray-400">
-                    Page {page} of {totalPages}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setPage(1)}
-                      disabled={page === 1}
-                      className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={page === 1}
-                      className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                      disabled={page === totalPages}
-                      className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => setPage(totalPages)}
-                      disabled={page === totalPages}
-                      className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  </div>
-                </>
-              )}
+          {/* Footer: Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-2.5 border-t border-gray-100">
+              <span className="text-xs text-gray-400">
+                Showing {startIdx + 1}–{Math.min(startIdx + pagination.limit, pagination.total)} of {pagination.total}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">Page {page} of {totalPages}</span>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setPage(1)} disabled={page === 1} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
+                  </button>
+                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                  </button>
+                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                  </button>
+                  <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
+
     </div>
   );
 }

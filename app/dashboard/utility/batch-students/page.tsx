@@ -42,7 +42,7 @@ function duplicateLabels(row: StudentRow) {
 }
 
 export default function BatchStudentsPage() {
-  const { canView, canUpdate, loading: permLoading } = useResourcePermissions('student');
+  const { canView, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('student');
   const [courses, setCourses] = useState<Course[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [rows, setRows] = useState<StudentRow[]>([]);
@@ -51,14 +51,16 @@ export default function BatchStudentsPage() {
   const [loadingCourses, setLoadingCourses] = useState(true);
   const [loadingBatches, setLoadingBatches] = useState(false);
   const [loadingRows, setLoadingRows] = useState(false);
-  const [hidingAdmissionId, setHidingAdmissionId] = useState<number | null>(null);
-  const [unhidingAdmissionId, setUnhidingAdmissionId] = useState<number | null>(null);
   const [savingRollAdmissionId, setSavingRollAdmissionId] = useState<number | null>(null);
   const [autoGeneratingRolls, setAutoGeneratingRolls] = useState(false);
-  const [showHidden, setShowHidden] = useState(false);
   const [rollInputs, setRollInputs] = useState<Record<number, string>>({});
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+
+  /* ---- Hard delete ---- */
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [deleteTargets, setDeleteTargets] = useState<StudentRow[] | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const selectedCourse = useMemo(
     () => courses.find((course) => String(course.Course_Id) === courseId),
@@ -68,8 +70,7 @@ export default function BatchStudentsPage() {
     () => batches.find((batch) => String(batch.Batch_Id) === batchId),
     [batches, batchId]
   );
-  const hiddenCount = rows.filter((row) => Number(row.Is_Hidden) === 1).length;
-  const blankRollCount = rows.filter((row) => Number(row.Is_Hidden) !== 1 && !String(row.Roll_No || '').trim()).length;
+  const blankRollCount = rows.filter((row) => !String(row.Roll_No || '').trim()).length;
 
   useEffect(() => {
     let active = true;
@@ -118,7 +119,6 @@ export default function BatchStudentsPage() {
 
     const ctrl = new AbortController();
     const params = new URLSearchParams({ mode: 'students', batchId });
-    if (showHidden) params.set('includeHidden', '1');
     fetch(`/api/utility/batch-students?${params.toString()}`, { signal: ctrl.signal })
       .then((res) => res.json())
       .then((data) => {
@@ -126,6 +126,7 @@ export default function BatchStudentsPage() {
         const nextRows = Array.isArray(data.rows) ? data.rows : [];
         setRows(nextRows);
         setRollInputs(Object.fromEntries(nextRows.map((row: StudentRow) => [row.Admission_Id, row.Roll_No || ''])));
+        setSelectedIds(new Set());
       })
       .catch((err: unknown) => {
         if (err instanceof Error && err.name === 'AbortError') return;
@@ -136,7 +137,7 @@ export default function BatchStudentsPage() {
       .finally(() => setLoadingRows(false));
 
     return () => ctrl.abort();
-  }, [batchId, showHidden]);
+  }, [batchId]);
 
   const handleCourseChange = (value: string) => {
     setCourseId(value);
@@ -159,68 +160,53 @@ export default function BatchStudentsPage() {
     setLoadingRows(Boolean(value));
   };
 
-  const handleHide = async (row: StudentRow) => {
-    if (!canUpdate || !batchId || hidingAdmissionId) return;
-    const ok = window.confirm(`Hide ${row.Student_Name || `student #${row.Student_Id}`} from ${selectedBatch?.Batch_code || 'this batch'}?`);
-    if (!ok) return;
-
-    setError('');
-    setMessage('');
-    setHidingAdmissionId(row.Admission_Id);
-    try {
-      const res = await fetch('/api/utility/batch-students', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          batchId: Number(batchId),
-          admissionId: row.Admission_Id,
-          studentId: row.Student_Id,
-          includeHidden: showHidden,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.success) throw new Error(data?.error || 'Failed to hide student from batch');
-      const nextRows = Array.isArray(data.rows) ? data.rows : [];
-      setRows(nextRows);
-      setRollInputs(Object.fromEntries(nextRows.map((student: StudentRow) => [student.Admission_Id, student.Roll_No || ''])));
-      setMessage('Student hidden from batch.');
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to hide student from batch');
-    } finally {
-      setHidingAdmissionId(null);
-    }
+  const toggleSelect = (admissionId: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(admissionId)) next.delete(admissionId);
+      else next.add(admissionId);
+      return next;
+    });
   };
 
-  const handleUnhide = async (row: StudentRow) => {
-    if (!canUpdate || !batchId || unhidingAdmissionId) return;
-    const ok = window.confirm(`Unhide ${row.Student_Name || `student #${row.Student_Id}`} in ${selectedBatch?.Batch_code || 'this batch'}?`);
-    if (!ok) return;
+  const allSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.Admission_Id));
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) rows.forEach((row) => next.delete(row.Admission_Id));
+      else rows.forEach((row) => next.add(row.Admission_Id));
+      return next;
+    });
+  };
+
+  const selectedRows = rows.filter((row) => selectedIds.has(row.Admission_Id));
+
+  const handleDelete = async () => {
+    if (!canDelete || !batchId || !deleteTargets || deleteTargets.length === 0) return;
 
     setError('');
     setMessage('');
-    setUnhidingAdmissionId(row.Admission_Id);
+    setDeleting(true);
+    const admissionIds = [...new Set(deleteTargets.map((t) => t.Admission_Id))];
     try {
-      const res = await fetch('/api/utility/batch-students', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'unhide-student',
-          batchId: Number(batchId),
-          admissionId: row.Admission_Id,
-          studentId: row.Student_Id,
-          includeHidden: showHidden,
-        }),
-      });
+      const params = new URLSearchParams({ batchId, admissionIds: admissionIds.join(',') });
+      const res = await fetch(`/api/utility/batch-students?${params.toString()}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.success) throw new Error(data?.error || 'Failed to unhide student in batch');
+      if (!res.ok || !data?.success) throw new Error(data?.error || 'Failed to delete student entry');
       const nextRows = Array.isArray(data.rows) ? data.rows : [];
       setRows(nextRows);
       setRollInputs(Object.fromEntries(nextRows.map((student: StudentRow) => [student.Admission_Id, student.Roll_No || ''])));
-      setMessage('Student unhidden in batch.');
+      setSelectedIds(new Set());
+      const who = deleteTargets.length === 1
+        ? (deleteTargets[0].Student_Name || `student #${deleteTargets[0].Student_Id}`)
+        : `${admissionIds.length} entries`;
+      setMessage(`Permanently deleted ${who} (${data.deleted} record${data.deleted !== 1 ? 's' : ''} removed).`);
+      setDeleteTargets(null);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to unhide student in batch');
+      setError(err instanceof Error ? err.message : 'Failed to delete student entry');
+      setDeleteTargets(null);
     } finally {
-      setUnhidingAdmissionId(null);
+      setDeleting(false);
     }
   };
 
@@ -244,7 +230,6 @@ export default function BatchStudentsPage() {
           admissionId: row.Admission_Id,
           studentId: row.Student_Id,
           rollNo: rollInputs[row.Admission_Id] || '',
-          includeHidden: showHidden,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -276,7 +261,6 @@ export default function BatchStudentsPage() {
         body: JSON.stringify({
           action: 'auto-generate-roll-numbers',
           batchId: Number(batchId),
-          includeHidden: showHidden,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -305,7 +289,7 @@ export default function BatchStudentsPage() {
             <p className="text-[11px] text-white/60 mt-0.5">Select a training course and batch code to manage enrolled students</p>
           </div>
           <span className="rounded-lg bg-white/15 border border-white/20 px-3 py-2 text-xs font-bold text-white">
-            {rows.length} student{rows.length === 1 ? '' : 's'}{showHidden && hiddenCount ? `, ${hiddenCount} hidden` : ''}
+            {rows.length} student{rows.length === 1 ? '' : 's'}
           </span>
         </div>
       </div>
@@ -355,12 +339,20 @@ export default function BatchStudentsPage() {
               {selectedCourse?.Course_Name || 'No course selected'}{selectedBatch?.Batch_code ? ` - ${selectedBatch.Batch_code}` : ''}
             </p>
           </div>
-          {canUpdate ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600">
-                <input type="checkbox" checked={showHidden} onChange={(event) => setShowHidden(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-[#2E3093]" />
-                Show Hidden
-              </label>
+          <div className="flex flex-wrap items-center gap-2">
+            {canDelete && selectedIds.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setDeleteTargets(selectedRows)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-600 text-white text-[11px] font-bold hover:bg-red-700"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete Selected ({selectedIds.size})
+              </button>
+            )}
+            {canUpdate ? (
               <button
                 type="button"
                 onClick={handleAutoGenerateRollNumbers}
@@ -369,42 +361,62 @@ export default function BatchStudentsPage() {
               >
                 {autoGeneratingRolls ? 'Generating...' : `Auto Generate${blankRollCount ? ` (${blankRollCount})` : ''}`}
               </button>
-            </div>
-          ) : (
-            <span className="text-[11px] font-semibold text-amber-600">Update permission required</span>
-          )}
+            ) : (
+              <span className="text-[11px] font-semibold text-amber-600">Update permission required</span>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 min-h-0 overflow-auto">
           <table className="w-full min-w-[980px]">
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-slate-200">
+                {canDelete && (
+                  <th className="py-2 px-3 bg-slate-50 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      title="Select all"
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-red-600 focus:ring-red-500/30 cursor-pointer"
+                    />
+                  </th>
+                )}
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 w-20">Sr No</th>
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Roll Number</th>
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Name</th>
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Mobile Number</th>
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Email</th>
-                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 w-24">Status</th>
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Duplicate Check</th>
                 <th className="text-center py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 w-28">Action</th>
               </tr>
             </thead>
             <tbody>
               {loadingRows && (
-                <tr><td colSpan={8} className="py-8 text-center text-xs text-slate-400">Loading students...</td></tr>
+                <tr><td colSpan={canDelete ? 8 : 7} className="py-8 text-center text-xs text-slate-400">Loading students...</td></tr>
               )}
               {!loadingRows && !batchId && (
-                <tr><td colSpan={8} className="py-8 text-center text-xs text-slate-400">Select a training course and batch code to view students.</td></tr>
+                <tr><td colSpan={canDelete ? 8 : 7} className="py-8 text-center text-xs text-slate-400">Select a training course and batch code to view students.</td></tr>
               )}
               {!loadingRows && batchId && !rows.length && !error && (
-                <tr><td colSpan={8} className="py-8 text-center text-xs text-slate-400">No students found for this batch.</td></tr>
+                <tr><td colSpan={canDelete ? 8 : 7} className="py-8 text-center text-xs text-slate-400">No students found for this batch.</td></tr>
               )}
               {!loadingRows && rows.map((row, index) => {
                 const labels = duplicateLabels(row);
-                const isHidden = Number(row.Is_Hidden) === 1;
                 const hasAllocatedRollNo = Boolean(String(row.Roll_No || '').trim());
+                const isSelected = selectedIds.has(row.Admission_Id);
                 return (
-                  <tr key={row.Admission_Id} className={isHidden ? 'bg-slate-100/70 text-slate-400 hover:bg-slate-100 transition-colors' : labels.length ? 'bg-amber-50/40 hover:bg-amber-50/70 transition-colors' : 'hover:bg-slate-50/70 transition-colors'}>
+                  <tr key={row.Admission_Id} className={isSelected ? 'bg-red-50/60 transition-colors' : labels.length ? 'bg-amber-50/40 hover:bg-amber-50/70 transition-colors' : 'hover:bg-slate-50/70 transition-colors'}>
+                    {canDelete && (
+                      <td className="py-2 px-3 border-b border-slate-100 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelect(row.Admission_Id)}
+                          className="h-3.5 w-3.5 rounded border-slate-300 text-red-600 focus:ring-red-500/30 cursor-pointer"
+                        />
+                      </td>
+                    )}
                     <td className="py-2 px-3 text-xs text-slate-400 border-b border-slate-100 font-mono">{index + 1}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100">
                       <input
@@ -412,7 +424,7 @@ export default function BatchStudentsPage() {
                         inputMode="numeric"
                         value={rollInputs[row.Admission_Id] ?? row.Roll_No ?? ''}
                         onChange={(event) => handleRollInputChange(row.Admission_Id, event.target.value)}
-                        disabled={!canUpdate || isHidden || hasAllocatedRollNo || savingRollAdmissionId === row.Admission_Id}
+                        disabled={!canUpdate || hasAllocatedRollNo || savingRollAdmissionId === row.Admission_Id}
                         placeholder="Roll no"
                         className="h-8 w-28 rounded-md border border-slate-200 bg-white px-2 font-mono text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
                       />
@@ -420,13 +432,6 @@ export default function BatchStudentsPage() {
                     <td className="py-2 px-3 text-xs border-b border-slate-100 font-semibold text-slate-700">{row.Student_Name || '-'}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono text-slate-600">{row.Mobile || '-'}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100 text-slate-600">{row.Email || '-'}</td>
-                    <td className="py-2 px-3 text-xs border-b border-slate-100">
-                      {isHidden ? (
-                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-500">Hidden</span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Visible</span>
-                      )}
-                    </td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100">
                       {labels.length ? (
                         <div className="flex flex-wrap gap-1.5">
@@ -445,28 +450,22 @@ export default function BatchStudentsPage() {
                         <button
                           type="button"
                           onClick={() => handleSaveRollNumber(row)}
-                          disabled={!canUpdate || isHidden || hasAllocatedRollNo || savingRollAdmissionId === row.Admission_Id || (rollInputs[row.Admission_Id] ?? '') === (row.Roll_No || '')}
+                          disabled={!canUpdate || hasAllocatedRollNo || savingRollAdmissionId === row.Admission_Id || (rollInputs[row.Admission_Id] ?? '') === (row.Roll_No || '')}
                           className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#2E3093]/10 text-[#2E3093] text-[11px] font-semibold hover:bg-[#2E3093]/15 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           {hasAllocatedRollNo ? 'Locked' : 'Save'}
                         </button>
-                        {isHidden ? (
+                        {canDelete && (
                           <button
                             type="button"
-                            onClick={() => handleUnhide(row)}
-                            disabled={!canUpdate || unhidingAdmissionId === row.Admission_Id}
-                            className="inline-flex items-center px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 text-[11px] font-semibold hover:bg-emerald-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                            onClick={() => setDeleteTargets([row])}
+                            title="Permanently delete this entry"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-red-50 text-red-600 text-[11px] font-semibold hover:bg-red-100"
                           >
-                            {unhidingAdmissionId === row.Admission_Id ? 'Unhiding...' : 'Unhide'}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleHide(row)}
-                            disabled={!canUpdate || hidingAdmissionId === row.Admission_Id}
-                            className="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 disabled:opacity-60 disabled:cursor-not-allowed"
-                          >
-                            Hide
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Delete
                           </button>
                         )}
                       </div>
@@ -478,6 +477,71 @@ export default function BatchStudentsPage() {
           </table>
         </div>
       </div>
+
+      {/* Hard-delete confirmation */}
+      {deleteTargets && deleteTargets.length > 0 && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 backdrop-blur-[2px] p-4" onClick={() => !deleting && setDeleteTargets(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-[0_24px_60px_rgba(15,23,42,0.35)] overflow-hidden" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start gap-3 px-5 py-4 border-b border-slate-100">
+              <div className="shrink-0 w-9 h-9 rounded-full bg-red-50 flex items-center justify-center">
+                <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-800">
+                  {deleteTargets.length === 1 ? 'Delete this entry permanently?' : `Delete ${deleteTargets.length} entries permanently?`}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">This cannot be undone.</p>
+              </div>
+            </div>
+            <div className="px-5 py-4 text-sm text-slate-600">
+              {deleteTargets.length === 1 ? (
+                <p>
+                  <span className="font-semibold text-slate-800">{deleteTargets[0].Student_Name || `Student #${deleteTargets[0].Student_Id}`}</span>{' '}
+                  <span className="font-mono text-xs text-slate-400">#{deleteTargets[0].Student_Id}</span> — only this batch entry
+                  {selectedBatch?.Batch_code ? <> in <span className="font-semibold">{selectedBatch.Batch_code}</span></> : null} is
+                  hard-deleted. Other duplicate entries and other batches are not touched.
+                </p>
+              ) : (
+                <>
+                  <p className="mb-2">
+                    These <span className="font-semibold text-slate-800">{deleteTargets.length}</span> batch entries will be
+                    hard-deleted. Only the selected entries are removed — no other duplicates or batches.
+                  </p>
+                  <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-100 divide-y divide-slate-50">
+                    {deleteTargets.map((t) => (
+                      <div key={t.Admission_Id} className="flex items-center gap-2 px-3 py-1.5 text-xs">
+                        <span className="font-mono text-slate-400">#{t.Student_Id}</span>
+                        <span className="text-slate-700 truncate">{t.Student_Name || `Student #${t.Student_Id}`}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="px-5 py-4 flex items-center justify-end gap-2 bg-slate-50/60">
+              <button
+                type="button"
+                onClick={() => setDeleteTargets(null)}
+                disabled={deleting}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {deleting && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                {deleteTargets.length === 1 ? 'Delete Permanently' : `Delete ${deleteTargets.length} Permanently`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
