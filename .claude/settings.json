@@ -172,7 +172,8 @@
       "Bash(node -r dotenv/config scripts/db/_hid.mjs dotenv_config_path=.env.local)",
       "Bash(node -r dotenv/config scripts/db/_ad.mjs dotenv_config_path=.env.local)",
       "Bash(node scripts/db/fix-synced-discussion-dates.mjs --dry-run)",
-      "Bash(node scripts/db/fix-synced-discussion-dates.mjs)"
+      "Bash(node scripts/db/fix-synced-discussion-dates.mjs)",
+      "Bash(node -e \"console.log\\(require\\('exceljs/package.json'\\).version\\)\")"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

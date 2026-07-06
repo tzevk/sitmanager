@@ -179,8 +179,11 @@ export default function AnnualBatchPage() {
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'SIT Manager';
       workbook.created = new Date();
-      workbook.subject = 'Annual Batch Report';
-      workbook.title = 'Annual Batch Breakdown';
+      // ExcelJS exposes these document properties at runtime but omits them from
+      // its type definitions, so assign them through a narrow cast.
+      const workbookMeta = workbook as unknown as { subject: string; title: string };
+      workbookMeta.subject = 'Annual Batch Report';
+      workbookMeta.title = 'Annual Batch Breakdown';
 
       const fill = (argb: string): ExcelJS.Fill => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
       const border = (argb: string): ExcelJS.Border => ({ style: 'thin', color: { argb } });
