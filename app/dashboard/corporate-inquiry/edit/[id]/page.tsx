@@ -1116,26 +1116,49 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
 
             {activeTab === 'discussion' && (
               <>
-                <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-                  <h2 className="text-sm font-bold text-[#2A6BB5] uppercase">Training Requirements</h2>
-                  <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm">
-                    {([
-                      { key: 'meeting', label: 'Meeting Details' },
-                      { key: 'discussion', label: 'Requirements' },
-                      { key: 'contacts', label: 'Follow Up' },
-                    ] as const).map((t) => (
+                <div className="flex items-center gap-1 border-b border-gray-200 mb-4 overflow-x-auto">
+                  {([
+                    {
+                      key: 'meeting',
+                      label: 'Meetings',
+                      icon: (
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      ),
+                    },
+                    {
+                      key: 'discussion',
+                      label: 'Requirements',
+                      icon: (
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      ),
+                    },
+                    {
+                      key: 'contacts',
+                      label: 'Follow-ups',
+                      icon: (
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4z" />
+                      ),
+                    },
+                  ] as const).map((t) => {
+                    const active = discussionSubTab === t.key;
+                    return (
                       <button
                         key={t.key}
                         type="button"
                         onClick={() => setDiscussionSubTab(t.key)}
-                        className={`px-3 py-2 text-xs font-semibold transition-colors border-r border-gray-200 last:border-r-0 ${
-                          discussionSubTab === t.key ? 'bg-[#2A6BB5] text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                        className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
+                          active
+                            ? 'border-[#2A6BB5] text-[#2A6BB5]'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                         }`}
                       >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          {t.icon}
+                        </svg>
                         {t.label}
                       </button>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
 
                 {discussionSubTab === 'meeting' && (
@@ -1182,7 +1205,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                     <div className="flex gap-2 justify-end">
                       <button
                         type="button"
-                        className="px-4 py-2 rounded-lg bg-[#2A6BB5] text-white text-sm font-semibold"
+                        className="px-4 py-2 rounded-md bg-[#2A6BB5] hover:bg-[#2360A0] text-white text-sm font-semibold transition-colors"
                         onClick={() => {
                           const hasAny = Boolean(meetingDraft.meetingDate || meetingDraft.meetingAgenda || meetingDraft.attendeeClient || meetingDraft.attendeeSIT);
                           if (!hasAny) return;
@@ -1196,7 +1219,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                       {editingMeetingIndex !== null && (
                         <button
                           type="button"
-                          className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-semibold"
+                          className="px-4 py-2 rounded-md border border-gray-200 text-sm font-semibold hover:bg-gray-50 transition-colors"
                           onClick={() => {
                             setMeetingDraft({ meetingDate: '', attendeeClient: '', attendeeSIT: '', meetingAgenda: '' });
                             setEditingMeetingIndex(null);
@@ -1242,7 +1265,49 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                 )}
 
                 {discussionSubTab === 'discussion' && (
-                  <div className="space-y-4">
+                  <div className="space-y-4 max-w-4xl">
+                    {/* Key details in one compact row */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      <div>
+                        <label className={labelClass}>Disciplines</label>
+                        <input
+                          type="text"
+                          name="business"
+                          value={form.business}
+                          onChange={handleChange}
+                          className={inputClass}
+                          placeholder="e.g. Piping, Mechanical"
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Preferred Dates</label>
+                        <input
+                          type="text"
+                          name="TrainingDates"
+                          value={form.TrainingDates}
+                          onChange={handleChange}
+                          className={inputClass}
+                          placeholder="e.g. 15-20 May"
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Outcome</label>
+                        <div className="inline-flex rounded-md border border-gray-200 overflow-hidden bg-white">
+                          {(['Awarded', 'Regretted', 'On Hold'] as const).map((opt) => (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => setDiscussionOutcome(opt)}
+                              className={`px-3 py-1.5 text-xs font-semibold transition-colors ${discussionOutcome === opt ? 'bg-[#2A6BB5] text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Notes */}
                     <div>
                       <label className={labelClass}>Requirement Notes</label>
                       <textarea
@@ -1250,145 +1315,108 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                         value={form.Discussion}
                         onChange={handleChange}
                         className={textareaClass}
-                        rows={8}
-                        placeholder="Enter requirement details"
+                        rows={6}
+                        placeholder="What the client needs / what was discussed"
                       />
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className={labelClass}>Requirement Disciplines</label>
-                        <input
-                          type="text"
-                          name="business"
-                          value={form.business}
-                          onChange={handleChange}
-                          className={inputClass}
-                          placeholder="e.g. Piping, Mechanical, Process"
-                        />
-                      </div>
-
-                      <div>
-                        <label className={labelClass}>Preferred Training Dates</label>
-                        <input
-                          type="text"
-                          name="TrainingDates"
-                          value={form.TrainingDates}
-                          onChange={handleChange}
-                          className={inputClass}
-                          placeholder="e.g. 15-20 May / Next month"
-                        />
-                      </div>
-                    </div>
-
                     <div>
-                      <label className={labelClass}>Requirement Details Shared by Company</label>
+                      <label className={labelClass}>Details Shared by Company</label>
                       <textarea
                         name="Remark"
                         value={form.Remark}
                         onChange={handleChange}
                         className={textareaClass}
-                        rows={5}
-                        placeholder="Enter requirement details shared by company"
+                        rows={4}
+                        placeholder="Specifications or details the company shared"
                       />
-                    </div>
-
-                    <div>
-                      <label className={labelClass}>Discussion Outcome</label>
-                      <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm">
-                        {(['Awarded', 'Regretted', 'On Hold'] as const).map((opt) => (
-                          <button
-                            key={opt}
-                            type="button"
-                            onClick={() => setDiscussionOutcome(opt)}
-                            className={`px-4 py-2 text-sm font-semibold ${discussionOutcome === opt ? 'bg-[#2A6BB5] text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                          >
-                            {opt}
-                          </button>
-                        ))}
-                      </div>
                     </div>
                   </div>
                 )}
 
                 {discussionSubTab === 'contacts' && (
                   <div className="space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div><label className={labelClass}>Date</label><input type="date" className={inputClass} value={followUpDraft.date} onChange={(e) => setFollowUpDraft((d) => ({ ...d, date: e.target.value }))} /></div>
-                      <div><label className={labelClass}>Next Date</label><input type="date" className={inputClass} value={followUpDraft.nextDate || ''} onChange={(e) => setFollowUpDraft((d) => ({ ...d, nextDate: e.target.value }))} /></div>
-                      <div><label className={labelClass}>Contact Person</label><input className={inputClass} value={followUpDraft.contactPerson} onChange={(e) => setFollowUpDraft((d) => ({ ...d, contactPerson: e.target.value }))} /></div>
-                      <div><label className={labelClass}>Designation</label><input className={inputClass} value={followUpDraft.designation} onChange={(e) => setFollowUpDraft((d) => ({ ...d, designation: e.target.value }))} /></div>
-                      <div>
-                        <label className={labelClass}>Mobile</label>
-                        <textarea
-                          className={textareaClass}
-                          rows={2}
-                          value={followUpDraft.mobile}
-                          onChange={(e) => setFollowUpDraft((d) => ({ ...d, mobile: e.target.value }))}
-                          placeholder="Multiple numbers: comma or new line"
-                        />
+                    <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-3 space-y-3">
+                      <div className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                        {editingFollowUpIndex === null ? 'Add Follow-up' : 'Edit Follow-up'}
                       </div>
+
+                      <Section title="Follow-up">
+                        <div className={fieldGrid}>
+                          <div><label className={labelClass}>Date</label><input type="date" className={inputClass} value={followUpDraft.date} onChange={(e) => setFollowUpDraft((d) => ({ ...d, date: e.target.value }))} /></div>
+                          <div><label className={labelClass}>Next Date</label><input type="date" className={inputClass} value={followUpDraft.nextDate || ''} onChange={(e) => setFollowUpDraft((d) => ({ ...d, nextDate: e.target.value }))} /></div>
+                          <div>
+                            <label className={labelClass}>Purpose</label>
+                            <select
+                              className={inputClass}
+                              value={followUpDraft.purpose}
+                              onChange={(e) => setFollowUpDraft((d) => ({ ...d, purpose: e.target.value, purposeOther: e.target.value === 'Others' ? d.purposeOther : '' }))}
+                            >
+                              <option value="">--Select Purpose--</option>
+                              {FOLLOWUP_PURPOSES.map((p) => (
+                                <option key={p} value={p}>{p}</option>
+                              ))}
+                            </select>
+                            {followUpDraft.purpose === 'Others' && (
+                              <input
+                                className={`${inputClass} mt-2`}
+                                value={followUpDraft.purposeOther}
+                                onChange={(e) => setFollowUpDraft((d) => ({ ...d, purposeOther: e.target.value }))}
+                                placeholder="Enter purpose name"
+                              />
+                            )}
+                          </div>
+                          <div>
+                            <label className={labelClass}>Course</label>
+                            <select className={inputClass} value={followUpDraft.course} onChange={(e) => setFollowUpDraft((d) => ({ ...d, course: e.target.value }))}>
+                              <option value="">--Select Course--</option>
+                              {courses.map((c) => (
+                                <option key={c.Course_Id} value={c.Course_Name}>{c.Course_Name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </Section>
+
+                      <Section title="Contact">
+                        <div className={fieldGrid}>
+                          <div><label className={labelClass}>Contact Person</label><input className={inputClass} value={followUpDraft.contactPerson} onChange={(e) => setFollowUpDraft((d) => ({ ...d, contactPerson: e.target.value }))} /></div>
+                          <div><label className={labelClass}>Designation</label><input className={inputClass} value={followUpDraft.designation} onChange={(e) => setFollowUpDraft((d) => ({ ...d, designation: e.target.value }))} /></div>
+                          <div><label className={labelClass}>Direct Line</label><input className={inputClass} value={followUpDraft.directLine} onChange={(e) => setFollowUpDraft((d) => ({ ...d, directLine: e.target.value }))} /></div>
+                          <div>
+                            <label className={labelClass}>Mobile</label>
+                            <textarea className={textareaClass} rows={2} value={followUpDraft.mobile} onChange={(e) => setFollowUpDraft((d) => ({ ...d, mobile: e.target.value }))} placeholder="Comma / new line for multiple" />
+                          </div>
+                          <div>
+                            <label className={labelClass}>Email</label>
+                            <textarea className={textareaClass} rows={2} value={followUpDraft.email} onChange={(e) => setFollowUpDraft((d) => ({ ...d, email: e.target.value }))} placeholder="Comma / new line for multiple" />
+                          </div>
+                        </div>
+                      </Section>
+
                       <div>
-                        <label className={labelClass}>Email</label>
-                        <textarea
-                          className={textareaClass}
-                          rows={2}
-                          value={followUpDraft.email}
-                          onChange={(e) => setFollowUpDraft((d) => ({ ...d, email: e.target.value }))}
-                          placeholder="Multiple emails: comma or new line"
-                        />
+                        <label className={labelClass}>Remarks</label>
+                        <input className={inputClass} value={followUpDraft.remark} onChange={(e) => setFollowUpDraft((d) => ({ ...d, remark: e.target.value }))} />
                       </div>
-                      <div>
-                        <label className={labelClass}>Purpose</label>
-                        <select
-                          className={inputClass}
-                          value={followUpDraft.purpose}
-                          onChange={(e) => setFollowUpDraft((d) => ({ ...d, purpose: e.target.value, purposeOther: e.target.value === 'Others' ? d.purposeOther : '' }))}
+
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          type="button"
+                          className="px-4 py-2 rounded-md bg-[#2A6BB5] hover:bg-[#2360A0] text-white text-sm font-semibold transition-colors"
+                          onClick={() => {
+                            const hasAny = Boolean(followUpDraft.date || followUpDraft.contactPerson?.trim() || followUpDraft.email?.trim() || followUpDraft.remark?.trim());
+                            if (!hasAny) return;
+                            const nextFollowUp = normalizeFollowUpPurpose(followUpDraft);
+                            setFollowUps((prev) => (editingFollowUpIndex === null ? [...prev, nextFollowUp] : prev.map((m, i) => (i === editingFollowUpIndex ? nextFollowUp : m))));
+                            setFollowUpDraft({ date: '', nextDate: '', contactPerson: '', designation: '', mobile: '', email: '', purpose: '', purposeOther: '', course: '', directLine: '', remark: '' });
+                            setEditingFollowUpIndex(null);
+                          }}
                         >
-                          <option value="">--Select Purpose--</option>
-                          {FOLLOWUP_PURPOSES.map((p) => (
-                            <option key={p} value={p}>{p}</option>
-                          ))}
-                        </select>
-                        {followUpDraft.purpose === 'Others' && (
-                          <input
-                            className={`${inputClass} mt-2`}
-                            value={followUpDraft.purposeOther}
-                            onChange={(e) => setFollowUpDraft((d) => ({ ...d, purposeOther: e.target.value }))}
-                            placeholder="Enter purpose name"
-                          />
+                          {editingFollowUpIndex === null ? 'Add Follow-up' : 'Update Follow-up'}
+                        </button>
+                        {editingFollowUpIndex !== null && (
+                          <button type="button" className="px-4 py-2 rounded-md border border-gray-200 text-sm font-semibold hover:bg-gray-50 transition-colors" onClick={() => { setFollowUpDraft({ date: '', nextDate: '', contactPerson: '', designation: '', mobile: '', email: '', purpose: '', purposeOther: '', course: '', directLine: '', remark: '' }); setEditingFollowUpIndex(null); }}>Cancel</button>
                         )}
                       </div>
-                      <div>
-                        <label className={labelClass}>Course</label>
-                        <select className={inputClass} value={followUpDraft.course} onChange={(e) => setFollowUpDraft((d) => ({ ...d, course: e.target.value }))}>
-                          <option value="">--Select Course--</option>
-                          {courses.map((c) => (
-                            <option key={c.Course_Id} value={c.Course_Name}>{c.Course_Name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div><label className={labelClass}>Direct Line</label><input className={inputClass} value={followUpDraft.directLine} onChange={(e) => setFollowUpDraft((d) => ({ ...d, directLine: e.target.value }))} /></div>
-                      <div className="md:col-span-3"><label className={labelClass}>Remarks</label><input className={inputClass} value={followUpDraft.remark} onChange={(e) => setFollowUpDraft((d) => ({ ...d, remark: e.target.value }))} /></div>
-                    </div>
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        type="button"
-                        className="px-4 py-2 rounded-lg bg-[#2A6BB5] text-white text-sm font-semibold"
-                        onClick={() => {
-                          const hasAny = Boolean(followUpDraft.date || followUpDraft.contactPerson?.trim() || followUpDraft.email?.trim() || followUpDraft.remark?.trim());
-                          if (!hasAny) return;
-                          const nextFollowUp = normalizeFollowUpPurpose(followUpDraft);
-                          setFollowUps((prev) => (editingFollowUpIndex === null ? [...prev, nextFollowUp] : prev.map((m, i) => (i === editingFollowUpIndex ? nextFollowUp : m))));
-                          setFollowUpDraft({ date: '', nextDate: '', contactPerson: '', designation: '', mobile: '', email: '', purpose: '', purposeOther: '', course: '', directLine: '', remark: '' });
-                          setEditingFollowUpIndex(null);
-                        }}
-                      >
-                        {editingFollowUpIndex === null ? 'Add Follow Up' : 'Update Follow Up'}
-                      </button>
-                      {editingFollowUpIndex !== null && (
-                        <button type="button" className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-semibold" onClick={() => { setFollowUpDraft({ date: '', nextDate: '', contactPerson: '', designation: '', mobile: '', email: '', purpose: '', purposeOther: '', course: '', directLine: '', remark: '' }); setEditingFollowUpIndex(null); }}>Cancel</button>
-                      )}
                     </div>
                     <div className="overflow-x-auto rounded-lg border border-gray-200">
                       <table className="min-w-full text-xs">

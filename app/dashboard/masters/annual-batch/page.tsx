@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import ExcelJS from 'exceljs';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -27,6 +28,25 @@ interface Course {
   Course_Name: string;
 }
 
+async function loadImageAsDataUrl(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') resolve(reader.result);
+        else reject(new Error('Failed to load image'));
+      };
+      reader.onerror = () => reject(new Error('Failed to read image'));
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 export default function AnnualBatchPage() {
   const router = useRouter();
   const { canView, canCreate, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('annual_batch');
@@ -41,6 +61,8 @@ export default function AnnualBatchPage() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
@@ -120,38 +142,187 @@ export default function AnnualBatchPage() {
     setDeleteId(null);
   };
 
-  const handleExport = () => {
-    const headers = ['Id', 'Training Name', 'Batch No.', 'Category', 'Location', 'Timings', 'Planned Start Date', 'Actual Start Date', 'Last Date of Admission', 'Training Completion Date', 'Duration', 'Training Coordinator'];
-    const rows = batches.map((b) => [
-      b.Batch_Id,
-      b.Course_Name || '',
-      b.Batch_code || '',
-      b.Category || '',
-      b.Location || '',
-      b.Timings || '',
-      formatDate(b.SDate),
-      formatDate(b.ActualDate),
-      formatDate(b.Admission_Date),
-      formatDate(b.EDate),
-      b.Duration || '',
-      b.Training_Coordinator || '',
-    ]);
-    const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'annual-batches.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const formatDate = (d: string | null) => {
     if (!d) return '-';
     try {
       return new Date(d).toLocaleDateString('en-GB');
     } catch {
       return d;
+    }
+  };
+
+  const fetchExportBatches = async () => {
+    const params = new URLSearchParams();
+    params.set('page', '1');
+    params.set('limit', String(Math.max(total || 0, 10000)));
+    if (courseId) params.set('courseId', courseId);
+    if (fromDate) params.set('fromDate', fromDate);
+    if (toDate) params.set('toDate', toDate);
+    if (search) params.set('search', search);
+
+    const res = await fetch(`/api/masters/annual-batch?${params.toString()}`);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json?.error || 'Failed to load export data');
+    return (json.data || []) as Batch[];
+  };
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    setExportError('');
+    try {
+      const exportRows = await fetchExportBatches();
+      if (exportRows.length === 0) {
+        setExportError('No batches available to export.');
+        return;
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'SIT Manager';
+      workbook.created = new Date();
+      workbook.subject = 'Annual Batch Report';
+      workbook.title = 'Annual Batch Breakdown';
+
+      const fill = (argb: string): ExcelJS.Fill => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+      const border = (argb: string): ExcelJS.Border => ({ style: 'thin', color: { argb } });
+      const borders = (argb: string) => ({ top: border(argb), bottom: border(argb), left: border(argb), right: border(argb) });
+      const selectedCourseName = courses.find((c) => String(c.Course_Id) === courseId)?.Course_Name || 'All Courses';
+      const reportPeriod = `${fromDate ? formatDate(fromDate) : 'All'} to ${toDate ? formatDate(toDate) : 'All'}`;
+
+      const addHeader = async (sheet: ExcelJS.Worksheet, title: string, totalCols: number) => {
+        sheet.mergeCells(1, 1, 1, totalCols);
+        sheet.mergeCells(2, 1, 2, totalCols);
+        sheet.mergeCells(3, 1, 3, totalCols);
+        sheet.getRow(1).height = 30;
+        sheet.getRow(2).height = 22;
+        sheet.getRow(3).height = 20;
+        sheet.getCell('A1').value = 'SUVIDYA INSTITUTE OF TECHNOLOGY';
+        sheet.getCell('A1').font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+        sheet.getCell('A1').fill = fill('FF2E3093');
+        sheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
+        sheet.getCell('A2').value = title;
+        sheet.getCell('A2').font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+        sheet.getCell('A2').fill = fill('FF2A6BB5');
+        sheet.getCell('A2').alignment = { horizontal: 'center', vertical: 'middle' };
+        sheet.getCell('A3').value = `Period: ${reportPeriod}   |   Course: ${selectedCourseName}   |   Total Batches: ${exportRows.length}   |   Generated: ${new Date().toLocaleString('en-IN')}`;
+        sheet.getCell('A3').font = { name: 'Calibri', size: 9, color: { argb: 'FF374151' } };
+        sheet.getCell('A3').fill = fill('FFEBECF5');
+        sheet.getCell('A3').alignment = { horizontal: 'center', vertical: 'middle' };
+        sheet.getRow(4).height = 6;
+
+        const logoData = await loadImageAsDataUrl('/sit.png');
+        if (logoData) {
+          const imageId = workbook.addImage({ base64: logoData, extension: 'png' });
+          sheet.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 88, height: 42 } });
+        }
+      };
+
+      const details = workbook.addWorksheet('Batch Details', {
+        views: [{ state: 'frozen', ySplit: 5 }],
+        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+      });
+      await addHeader(details, 'Annual Batch Detailed Report', 13);
+      const headers = ['Sr', 'Batch Id', 'Training Name', 'Batch No.', 'Category', 'Location', 'Timings', 'Planned Start', 'Actual Start', 'Last Admission', 'Completion', 'Duration', 'Training Coordinator'];
+      details.columns = [
+        { key: 'sr', width: 7 }, { key: 'id', width: 10 }, { key: 'course', width: 36 }, { key: 'batch', width: 16 },
+        { key: 'category', width: 18 }, { key: 'location', width: 14 }, { key: 'timings', width: 20 }, { key: 'planned', width: 14 },
+        { key: 'actual', width: 14 }, { key: 'admission', width: 15 }, { key: 'completion', width: 14 }, { key: 'duration', width: 16 }, { key: 'coordinator', width: 24 },
+      ];
+      const headerRow = details.getRow(5);
+      headers.forEach((header, index) => {
+        const cell = headerRow.getCell(index + 1);
+        cell.value = header;
+        cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = fill('FF2A6BB5');
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.border = borders('FF1A5A9E');
+      });
+      headerRow.height = 26;
+
+      exportRows.forEach((batch, index) => {
+        const row = details.getRow(6 + index);
+        const stripe = index % 2 === 0 ? 'FFFFFFFF' : 'FFF7F8FD';
+        row.values = [
+          index + 1,
+          batch.Batch_Id,
+          batch.Course_Name || '-',
+          batch.Batch_code || '-',
+          batch.Category || '-',
+          batch.Location || '-',
+          batch.Timings || '-',
+          formatDate(batch.SDate),
+          formatDate(batch.ActualDate),
+          formatDate(batch.Admission_Date),
+          formatDate(batch.EDate),
+          batch.Duration || '-',
+          batch.Training_Coordinator || '-',
+        ];
+        row.eachCell((cell, columnNumber) => {
+          cell.font = { name: 'Calibri', size: 9, color: { argb: 'FF1F2937' } };
+          cell.fill = fill(stripe);
+          cell.border = borders('FFE5E7EB');
+          cell.alignment = { vertical: 'top', horizontal: columnNumber <= 2 ? 'center' : 'left', wrapText: true };
+        });
+      });
+
+      const buildSummary = (sheetName: string, title: string, getKey: (batch: Batch) => string) => {
+        const counts = new Map<string, number>();
+        exportRows.forEach((batch) => {
+          const key = getKey(batch).trim() || 'Not Specified';
+          counts.set(key, (counts.get(key) || 0) + 1);
+        });
+        const rows = Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+        const sheet = workbook.addWorksheet(sheetName, { views: [{ state: 'frozen', ySplit: 5 }] });
+        sheet.columns = [{ key: 'label', width: 42 }, { key: 'count', width: 14 }, { key: 'pct', width: 14 }];
+        return addHeader(sheet, title, 3).then(() => {
+          ['Breakdown', 'Batches', 'Share'].forEach((header, index) => {
+            const cell = sheet.getRow(5).getCell(index + 1);
+            cell.value = header;
+            cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = fill('FF2A6BB5');
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            cell.border = borders('FF1A5A9E');
+          });
+          rows.forEach(([label, count], index) => {
+            const row = sheet.getRow(6 + index);
+            row.values = [label, count, count / exportRows.length];
+            row.getCell(3).numFmt = '0.0%';
+            row.eachCell((cell, columnNumber) => {
+              cell.font = { name: 'Calibri', size: 9, color: { argb: 'FF1F2937' } };
+              cell.fill = fill(index % 2 === 0 ? 'FFFFFFFF' : 'FFF7F8FD');
+              cell.border = borders('FFE5E7EB');
+              cell.alignment = { horizontal: columnNumber === 1 ? 'left' : 'center', vertical: 'middle' };
+            });
+          });
+        });
+      };
+
+      await buildSummary('By Training', 'Annual Batch Breakdown By Training', (batch) => batch.Course_Name || 'Not Specified');
+      await buildSummary('By Category', 'Annual Batch Breakdown By Category', (batch) => batch.Category || 'Not Specified');
+      await buildSummary('By Location', 'Annual Batch Breakdown By Location', (batch) => batch.Location || 'Not Specified');
+      await buildSummary('By Month', 'Annual Batch Breakdown By Planned Start Month', (batch) => {
+        if (!batch.SDate) return 'Not Specified';
+        const date = new Date(batch.SDate);
+        return Number.isNaN(date.getTime()) ? 'Not Specified' : date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+      });
+
+      workbook.eachSheet((sheet) => {
+        sheet.eachRow((row) => row.eachCell((cell) => {
+          cell.protection = { locked: false };
+        }));
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `Annual_Batch_Report_${fromDate || 'all'}_to_${toDate || 'all'}.xlsx`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      setExportError(err instanceof Error ? err.message : 'Failed to export Excel report');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -262,13 +433,14 @@ export default function AnnualBatchPage() {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={handleExport}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl text-[#2E3093] bg-white hover:border-[#2E3093]/30 transition-colors"
+              onClick={handleExportExcel}
+              disabled={exporting || total === 0}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl text-[#2E3093] bg-white hover:border-[#2E3093]/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              Export
+              {exporting ? 'Preparing Excel...' : 'Export Excel'}
             </button>
             <div className="relative">
               <input
@@ -287,6 +459,9 @@ export default function AnnualBatchPage() {
               </svg>
             </div>
           </div>
+          {exportError && (
+            <div className="basis-full text-xs font-semibold text-red-600 text-right">{exportError}</div>
+          )}
         </div>
 
         {/* Table */}
