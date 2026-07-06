@@ -69,6 +69,14 @@ interface StudentRow {
   status: string;
 }
 
+type CourseOption = { Course_Id: number; Course_Name: string };
+
+function sortCoursesByName(rows: CourseOption[]): CourseOption[] {
+  return [...rows].sort((a, b) =>
+    String(a.Course_Name || '').trim().localeCompare(String(b.Course_Name || '').trim(), undefined, { sensitivity: 'base', numeric: true })
+  );
+}
+
 const FOLLOWUP_PURPOSES = ['Meeting', 'Seminar', 'Internship', 'Trainer', 'Placements', 'Placements Received', 'Candidate Placed', 'Training', 'Project', 'Projects', 'Proposal', 'Others'] as const;
 
 const toDateInput = (v: string | null | undefined) => {
@@ -98,7 +106,7 @@ export default function EditConsultancyPage() {
   const [activeTab, setActiveTab] = useState<'details' | 'student' | 'branches' | 'followups'>('details');
 
   /* courses for dropdowns */
-  const [courses, setCourses] = useState<{ Course_Id: number; Course_Name: string }[]>([]);
+  const [courses, setCourses] = useState<CourseOption[]>([]);
 
   /* ---- consultancy details ---- */
   const [form, setForm] = useState({
@@ -143,7 +151,7 @@ export default function EditConsultancyPage() {
   useEffect(() => {
     fetch('/api/masters/course?limit=100')
       .then(r => r.json())
-      .then(d => setCourses(d.rows ?? []))
+      .then(d => setCourses(sortCoursesByName(d.rows ?? [])))
       .catch(() => {});
   }, []);
 

@@ -128,6 +128,7 @@ export default function EditStudentPage() {
   const [loading, setLoading]     = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]          = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   /* dropdown options */
   const [courses,  setCourses]  = useState<Course[]>([]);
@@ -429,9 +430,9 @@ export default function EditStudentPage() {
   /* ------------------------------------------------------------------ */
   /*  Save                                                                */
   /* ------------------------------------------------------------------ */
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const saveStudent = async ({ redirect }: { redirect: boolean }) => {
     setError('');
+    setSuccessMessage('');
     setSubmitting(true);
     try {
       const transfered = String(form.Transfered).trim().toLowerCase() === 'yes';
@@ -445,12 +446,21 @@ export default function EditStudentPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
-      router.push('/dashboard/student');
+      if (redirect) {
+        router.push('/dashboard/student');
+      } else {
+        setSuccessMessage('Placement details saved successfully.');
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await saveStudent({ redirect: true });
   };
 
   if (permLoading || loading) return <PermissionLoading />;
@@ -596,6 +606,14 @@ export default function EditStudentPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
             {error}
+          </div>
+        )}
+        {successMessage && (
+          <div className="mx-3 mt-3 px-3 py-2 rounded-md bg-green-50 border border-green-200 text-xs text-green-700 font-medium flex items-center gap-2">
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            {successMessage}
           </div>
         )}
 
@@ -1573,6 +1591,23 @@ export default function EditStudentPage() {
                       placeholder="Placement status, notes…"
                     />
                   </div>
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => saveStudent({ redirect: false })}
+                    disabled={submitting}
+                    className="inline-flex items-center justify-center gap-1.5 bg-[#2E3093] hover:bg-[#252780] text-white px-4 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm disabled:opacity-50"
+                  >
+                    {submitting ? (
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                    Save Placement Details
+                  </button>
                 </div>
               </SectionCard>
 
