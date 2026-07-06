@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { FaPlus, FaFileExport, FaEdit, FaSearch, FaChevronLeft, FaChevronRight, FaTimesCircle, FaCheckCircle, FaFileSignature } from 'react-icons/fa';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
-import { PageHeader, GhostBtn, PrimaryBtn } from '@/components/ui/PageHeader';
+import { PageHeader, FilterBar, GhostBtn, PrimaryBtn } from '@/components/ui/PageHeader';
 
 interface CorporateInquiry {
   Id: number;
@@ -24,6 +23,7 @@ interface CorporateInquiry {
   Mobile: string;
   Email: string;
   Course_Id: string;
+  CourseName?: string | null;
   Place: string;
   business: string;
   Remark: string;
@@ -48,58 +48,84 @@ interface Pagination {
   totalPages: number;
 }
 
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
+  try {
+    const raw = String(dateStr).trim();
+    let date = new Date(raw);
+    if (Number.isNaN(date.getTime())) {
+      const match = raw.match(/^(\d{2})[-/](\d{2})[-/](\d{4})/);
+      if (match) date = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+    }
+    if (Number.isNaN(date.getTime())) return '—';
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${String(date.getDate()).padStart(2, '0')} ${months[date.getMonth()]} ${date.getFullYear()}`;
+  } catch { return '—'; }
+}
+
+function displayName(inq: CorporateInquiry): string {
+  return inq.FullName || `${inq.Fname || ''} ${inq.Lname || ''}`.trim() || '—';
+}
+
+function displayCourse(inq: CorporateInquiry): string {
+  return inq.CourseName || inq.Course_Id || '—';
+}
+
 function StatusBadge({ status }: { status: string | null | undefined }) {
-  if (!status) return <span className="text-xs text-gray-400">—</span>;
+  if (!status) return <span className="text-xs text-slate-400">—</span>;
   const map: Record<string, { label: string; cls: string }> = {
-    Rejected:        { label: 'Cancelled',   cls: 'bg-red-100 text-red-700 border border-red-200' },
-    Final:           { label: 'Converted',   cls: 'bg-green-100 text-green-700 border border-green-200' },
-    UnderDiscussion: { label: 'In Discussion', cls: 'bg-blue-100 text-blue-700 border border-blue-200' },
+    Rejected:        { label: 'Cancelled',   cls: 'border-red-300 bg-white/70 text-red-700' },
+    Final:           { label: 'Converted',   cls: 'border-emerald-300 bg-white/70 text-emerald-700' },
+    UnderDiscussion: { label: 'In Discussion', cls: 'border-blue-300 bg-white/70 text-blue-700' },
   };
-  const s = map[status] ?? { label: status, cls: 'bg-gray-100 text-gray-600 border border-gray-200' };
+  const s = map[status] ?? { label: status, cls: 'border-slate-300 bg-white/70 text-slate-700' };
   return (
-    <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${s.cls}`}>
+    <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-full border whitespace-nowrap ${s.cls}`}>
       {s.label}
     </span>
   );
 }
 
-function rowColor(status: string | null | undefined, idx: number) {
-  if (status === 'Rejected')        return 'bg-red-50 hover:bg-red-100';
-  if (status === 'Final')           return 'bg-green-50 hover:bg-green-100';
-  if (status === 'UnderDiscussion') return 'bg-blue-50 hover:bg-blue-100';
-  return idx % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-gray-50/40 hover:bg-gray-50';
+function rowColor(status: string | null | undefined) {
+  if (status === 'Rejected')        return 'bg-red-100 hover:bg-red-200/80 [&>td]:text-red-950';
+  if (status === 'Final')           return 'bg-emerald-100 hover:bg-emerald-200/80 [&>td]:text-emerald-950';
+  if (status === 'UnderDiscussion') return 'bg-blue-100 hover:bg-blue-200/80 [&>td]:text-blue-950';
+  return 'bg-white hover:bg-slate-50 [&>td]:text-slate-800';
 }
 
 function DiscussionOutcomeBadge({ outcome }: { outcome: string | null | undefined }) {
-  if (!outcome) return <span className="text-xs text-gray-400">—</span>;
+  if (!outcome) return null;
   const map: Record<string, { label: string; cls: string }> = {
-    Awarded: { label: 'Awarded', cls: 'bg-emerald-100 text-emerald-700 border border-emerald-200' },
-    Regretted: { label: 'Regretted', cls: 'bg-rose-100 text-rose-700 border border-rose-200' },
-    'On Hold': { label: 'On Hold', cls: 'bg-amber-100 text-amber-700 border border-amber-200' },
+    Awarded: { label: 'Awarded', cls: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+    Regretted: { label: 'Regretted', cls: 'border-rose-200 bg-rose-50 text-rose-700' },
+    'On Hold': { label: 'On Hold', cls: 'border-amber-200 bg-amber-50 text-amber-700' },
   };
-  const badge = map[outcome] ?? { label: outcome, cls: 'bg-gray-100 text-gray-600 border border-gray-200' };
+  const badge = map[outcome] ?? { label: outcome, cls: 'border-slate-200 bg-slate-50 text-slate-600' };
   return (
-    <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${badge.cls}`}>
+    <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-full border whitespace-nowrap ${badge.cls}`}>
       {badge.label}
     </span>
   );
 }
+
+const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 
 export default function CorporateInquiryPage() {
   const router = useRouter();
   const { canView, canCreate, canUpdate, loading: permLoading } = useResourcePermissions('corporate_inquiry');
   const [inquiries, setInquiries] = useState<CorporateInquiry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [error, setError] = useState('');
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
   const [updating, setUpdating] = useState<number | null>(null);
   const [fetchTrigger, setFetchTrigger] = useState(0);
-  const searchRef = useRef<HTMLInputElement>(null);
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchInquiries = useCallback(async () => {
     setLoading(true);
     try {
+      setError('');
       const params = new URLSearchParams({
         page: String(pagination.page),
         limit: String(pagination.limit),
@@ -107,6 +133,7 @@ export default function CorporateInquiryPage() {
       });
       const res = await fetch(`/api/admission-activity/corporate-inquiry?${params}`);
       const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed to fetch corporate inquiries');
       setInquiries(data.rows || []);
       setPagination((prev) => ({
         ...prev,
@@ -116,26 +143,31 @@ export default function CorporateInquiryPage() {
     } catch (e) {
       console.error('Fetch error:', e);
       setInquiries([]);
+      setError(e instanceof Error ? e.message : 'Failed to load corporate inquiries');
     } finally {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.page, pagination.limit, fetchTrigger]);
+  }, [pagination.page, pagination.limit, fetchTrigger, search]);
 
   useEffect(() => { fetchInquiries(); }, [fetchInquiries]);
-
-  useEffect(() => {
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    searchDebounceRef.current = setTimeout(() => {
-      setPagination((prev) => ({ ...prev, page: 1 }));
-      setFetchTrigger((t) => t + 1);
-    }, 400);
-    return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
-  }, [search]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= pagination.totalPages)
       setPagination((prev) => ({ ...prev, page: newPage }));
+  };
+
+  const doSearch = () => {
+    setSearch(searchInput.trim());
+    setPagination((prev) => ({ ...prev, page: 1 }));
+    setFetchTrigger((t) => t + 1);
+  };
+
+  const doClear = () => {
+    setSearchInput('');
+    setSearch('');
+    setPagination((prev) => ({ ...prev, page: 1 }));
+    setFetchTrigger((t) => t + 1);
   };
 
   const updateStatus = async (id: number, status: 'Rejected' | 'Final') => {
@@ -175,7 +207,7 @@ export default function CorporateInquiryPage() {
       ...inquiries.map((inq) => [
         inq.Id,
         `"${String(inq.Idate || '').replace(/"/g,'""')}"`,
-        `"${String(inq.Course_Id || '').replace(/"/g,'""')}"`,
+        `"${String(displayCourse(inq) === '—' ? '' : displayCourse(inq)).replace(/"/g,'""')}"`,
         `"${String(inq.CompanyName || '').replace(/"/g,'""')}"`,
         `"${String(inq.Place || '').replace(/"/g,'""')}"`,
         `"${String(inq.CompanyType || '').replace(/"/g,'""')}"`,
@@ -202,7 +234,7 @@ export default function CorporateInquiryPage() {
   if (!canView) return <AccessDenied message="You do not have permission to view corporate inquiries." />;
 
   return (
-    <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3 space-y-6">
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 space-y-6">
 
       <PageHeader
         title="Corporate Inquiry"
@@ -210,206 +242,185 @@ export default function CorporateInquiryPage() {
         meta={`${pagination.total.toLocaleString()} records`}
         action={<>
           <GhostBtn onClick={handleExport}>
-            <FaFileExport className="w-3 h-3" /> Export
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 12l-4-4m4 4l4-4M4 20h16" />
+            </svg>
+            Export
           </GhostBtn>
           {canCreate && (
             <PrimaryBtn onClick={() => router.push('/dashboard/corporate-inquiry/add')}>
-              <FaPlus className="w-3 h-3" /> Add Inquiry
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add Inquiry
             </PrimaryBtn>
           )}
         </>}
       />
 
-      {/* ── Table Card ── */}
-      <div className="bg-white rounded-xl border border-[#2E3093]/10 overflow-hidden flex flex-col">
+      <FilterBar>
+        <input
+          type="text"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && doSearch()}
+          placeholder="Search company, contact, mobile, email..."
+          className={`${ctrl} flex-1 min-w-[220px] h-8 py-1`}
+        />
+        <button onClick={doSearch} className="h-8 flex items-center gap-1 bg-[#2E3093] text-white px-2.5 py-1 rounded-lg text-xs font-bold hover:bg-[#252880] transition-colors">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          Search
+        </button>
+        <button onClick={doClear} className="h-8 px-2.5 py-1 text-xs font-semibold text-slate-600 border border-zinc-300 rounded-lg hover:bg-slate-50 transition-colors">
+          Clear
+        </button>
+        <span className="ml-auto text-[11px] font-medium text-slate-400 tabular-nums">
+          {inquiries.length} shown
+        </span>
+      </FilterBar>
 
-        {/* Search bar */}
-        <div className="px-3 py-2 border-b border-zinc-100 bg-zinc-50 flex items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
-            <FaSearch className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              ref={searchRef}
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, company, email..."
-              className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 bg-white"
-            />
-          </div>
-          <span className="text-xs text-gray-400 ml-auto">
-            {inquiries.length} shown
-          </span>
+      {error && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {error}
         </div>
+      )}
 
-        {/* Table */}
+      <div className="bg-white rounded-xl border border-slate-300 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-xs border-collapse [&_th]:border-r [&_th]:border-slate-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-slate-200 [&_td:last-child]:border-r-0">
             <thead>
-              <tr className="text-[10px] uppercase tracking-wider text-[#2A6BB5]/60 bg-zinc-50 border-b border-zinc-200">
-                <th className="text-left py-2 px-3 font-semibold w-10 font-mono">#</th>
-                <th className="text-left py-3 px-4 font-semibold">Date</th>
-                <th className="text-left py-3 px-4 font-semibold">Training Programme</th>
-                <th className="text-left py-3 px-4 font-semibold">Company</th>
-                <th className="text-left py-3 px-4 font-semibold">Contact Person</th>
-                <th className="text-left py-3 px-4 font-semibold">Training Info</th>
-                <th className="text-left py-3 px-4 font-semibold">Participants</th>
-                <th className="text-left py-3 px-4 font-semibold">Requirement</th>
-                <th className="text-center py-3 px-4 font-semibold">Status</th>
-                <th className="text-center py-3 px-4 font-semibold">Actions</th>
+              <tr className="text-[10px] uppercase tracking-wider text-slate-700 bg-slate-200 border-b border-slate-300">
+                <th className="text-left py-2 px-3 font-bold">#</th>
+                <th className="text-left py-2 px-3 font-bold">Inquiry</th>
+                <th className="text-left py-2 px-3 font-bold">Training Programme</th>
+                <th className="text-left py-2 px-3 font-bold">Company</th>
+                <th className="text-left py-2 px-3 font-bold">Contact Person</th>
+                <th className="text-left py-2 px-3 font-bold">Training Info</th>
+                <th className="text-left py-2 px-3 font-bold">Participants</th>
+                <th className="text-center py-2 px-3 font-bold">Status</th>
+                <th className="text-center py-2 px-3 font-bold">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-7 h-7 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
-                      <span className="text-sm text-gray-400">Loading...</span>
+                  <td colSpan={9} className="py-10 text-center">
+                    <div className="inline-flex flex-col items-center gap-1.5">
+                      <div className="w-6 h-6 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                      <span className="text-xs text-slate-400">Loading...</span>
                     </div>
                   </td>
                 </tr>
               ) : inquiries.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center">
-                    <div className="flex flex-col items-center gap-2 text-gray-300">
-                      <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                      </svg>
-                      <p className="text-sm">No inquiries found</p>
-                    </div>
-                  </td>
+                  <td colSpan={9} className="py-10 text-center text-xs text-slate-400">No corporate inquiries found</td>
                 </tr>
               ) : inquiries.map((inq, idx) => {
-                const name = inq.FullName || `${inq.Fname || ''} ${inq.Lname || ''}`.trim();
+                const name = displayName(inq);
+                const participantCount = Number(inq.Participants_Fresher || 0) + Number(inq.Participants_Experienced || 0);
                 return (
-                  <tr key={inq.Id} className={`border-b border-gray-100 transition-colors ${rowColor(inq.InquiryStatus, idx)}`}>
-
-                    {/* # */}
-                    <td className="py-3 px-4 text-gray-400 text-xs">{inq.Id}</td>
-
-                    {/* Date */}
-                    <td className="py-3 px-4 text-gray-600 whitespace-nowrap text-xs">
-                      {inq.Idate ? String(inq.Idate).slice(0, 10) : '—'}
+                  <tr key={inq.Id} className={`border-b border-slate-200 transition-colors ${rowColor(inq.InquiryStatus)}`}>
+                    <td className="py-1 px-2 font-semibold font-mono tabular-nums relative pl-3">
+                      {(pagination.page - 1) * pagination.limit + idx + 1}
                     </td>
-
-                    {/* Training Programme */}
-                    <td className="py-3 px-4">
-                      <p className="font-semibold text-gray-800 text-sm leading-tight">{inq.Course_Id || '—'}</p>
-                      {inq.TrainingDates && <p className="text-xs text-gray-400 mt-0.5">{inq.TrainingDates}</p>}
+                    <td className="py-1 px-2 whitespace-nowrap min-w-[108px]">
+                      <div className="flex flex-col leading-tight">
+                        <span className="font-semibold text-slate-700">{formatDate(inq.Idate)}</span>
+                        <span className="text-[9px] text-slate-400 font-mono">#{inq.Id}</span>
+                      </div>
                     </td>
-
-                    {/* Company */}
-                    <td className="py-3 px-4">
-                      <p className="font-semibold text-gray-800 text-sm leading-tight">{inq.CompanyName || '—'}</p>
-                      {inq.Place && <p className="text-xs text-gray-400 mt-0.5">{inq.Place}</p>}
+                    <td className="py-1 px-2 max-w-[180px] align-top">
+                      <span className="truncate block font-semibold text-red-600">{displayCourse(inq)}</span>
+                      {inq.TrainingDates && <span className="truncate block text-[10px] text-slate-500">{inq.TrainingDates}</span>}
+                    </td>
+                    <td className="py-1 px-2 max-w-[180px] align-top">
+                      <span className="truncate block font-semibold">{inq.CompanyName || '—'}</span>
+                      <span className="truncate block text-[10px] text-slate-500">{inq.Place || inq.City || '—'}</span>
                       {inq.CompanyType && (
-                        <span className="inline-block mt-1 text-[10px] font-medium px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">
+                        <span className="inline-flex mt-0.5 rounded-full border border-slate-300 bg-white/70 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
                           {inq.CompanyType}
                         </span>
                       )}
                     </td>
-
-                    {/* Contact Person */}
-                    <td className="py-3 px-4 min-w-[180px]">
-                      {name && <p className="font-semibold text-gray-800 text-sm leading-tight">{name}</p>}
-                      {inq.Designation && <p className="text-xs text-gray-500">{inq.Designation}</p>}
-                      {(inq.Mobile || inq.Phone) && (
-                        <p className="text-xs text-gray-500 mt-0.5">📞 {inq.Mobile || inq.Phone}</p>
-                      )}
-                      {inq.Email && <p className="text-xs text-gray-400">{inq.Email}</p>}
+                    <td className="py-1 px-2 min-w-[170px] max-w-[220px] align-top">
+                      <span className="truncate block font-semibold">{name}</span>
+                      {inq.Designation && <span className="truncate block text-[10px] text-slate-500">{inq.Designation}</span>}
+                      <span className="truncate block text-[10px] text-slate-600 font-mono">{inq.Mobile || inq.Phone || '—'}</span>
+                      {inq.Email && <span className="truncate block text-[10px] text-slate-500">{inq.Email}</span>}
                     </td>
-
-                    {/* Training Info */}
-                    <td className="py-3 px-4 min-w-[160px]">
-                      {inq.TrainingMode && (
-                        <p className="text-xs text-gray-600"><span className="font-medium text-gray-700">Mode:</span> {inq.TrainingMode}</p>
-                      )}
-                      {inq.TrainingLocation && (
-                        <p className="text-xs text-gray-600 mt-0.5"><span className="font-medium text-gray-700">Location:</span> {inq.TrainingLocation}</p>
-                      )}
-                      {inq.CompanyAuthority && (
-                        <p className="text-xs text-gray-600 mt-0.5"><span className="font-medium text-gray-700">Authority:</span> {inq.CompanyAuthority}</p>
-                      )}
-                    </td>
-
-                    {/* Participants */}
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <div className="flex flex-col gap-0.5">
-                        {(inq.Participants_Fresher != null) && (
-                          <span className="text-xs text-gray-600">
-                            <span className="font-medium text-gray-700">F:</span> {inq.Participants_Fresher}
-                          </span>
-                        )}
-                        {(inq.Participants_Experienced != null) && (
-                          <span className="text-xs text-gray-600">
-                            <span className="font-medium text-gray-700">E:</span> {inq.Participants_Experienced}
-                          </span>
-                        )}
+                    <td className="py-1 px-2 min-w-[150px] align-top">
+                      <div className="flex flex-col leading-tight">
+                        <span className="font-semibold">{inq.TrainingMode || '—'}</span>
+                        <span className="text-[10px] text-slate-500">{inq.TrainingLocation || '—'}</span>
+                        {inq.CompanyAuthority && <span className="truncate text-[10px] text-slate-500">{inq.CompanyAuthority}</span>}
                       </div>
                     </td>
-
-                    {/* Requirement */}
-                    <td className="py-3 px-4 min-w-[200px]">
-                      {inq.business && (
-                        <p className="text-xs text-gray-600"><span className="font-medium text-gray-700">Disciplines:</span> {inq.business}</p>
-                      )}
-                      {(inq.Discussion || inq.Remark) && (
-                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{inq.Discussion || inq.Remark}</p>
-                      )}
+                    <td className="py-1 px-2 whitespace-nowrap align-top">
+                      {participantCount > 0 ? (
+                        <div className="flex flex-col leading-tight">
+                          <span className="font-semibold tabular-nums">{participantCount}</span>
+                          <span className="text-[10px] text-slate-500">F {inq.Participants_Fresher ?? 0} / E {inq.Participants_Experienced ?? 0}</span>
+                        </div>
+                      ) : '—'}
                     </td>
-
-                    {/* Status */}
-                    <td className="py-3 px-4 text-center">
+                    <td className="py-1 px-2 text-center align-top">
                       <div className="flex flex-col items-center gap-1">
                         <StatusBadge status={inq.InquiryStatus} />
                         <DiscussionOutcomeBadge outcome={inq.DiscussionOutcome} />
                       </div>
                     </td>
-
-                    {/* Actions */}
-                    <td className="py-3 px-4">
-                      <div className="flex items-center justify-center gap-1">
+                    <td className="py-1.5 px-2 align-top">
+                      <div className="flex items-center justify-center gap-1.5 flex-nowrap whitespace-nowrap">
                         {canUpdate && (
                           <button
                             onClick={() => router.push(`/dashboard/corporate-inquiry/edit/${inq.Id}`)}
-                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-[#2A6BB5] transition-colors"
-                            title="Edit"
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-md text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                            title="Edit inquiry"
                           >
-                            <FaEdit className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {canUpdate && (
-                          <button
-                            onClick={() => updateStatus(inq.Id, 'Rejected')}
-                            disabled={updating === inq.Id || inq.InquiryStatus === 'Rejected'}
-                            className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                            title="Cancel Inquiry"
-                          >
-                            <FaTimesCircle className="w-3.5 h-3.5" />
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
                           </button>
                         )}
                         {canUpdate && (
                           <button
                             onClick={() => updateStatus(inq.Id, 'Final')}
                             disabled={updating === inq.Id || inq.InquiryStatus === 'Final'}
-                            className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-md text-white bg-[#2E3093] border border-[#2E3093] hover:bg-[#24267A] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Convert to Execution"
                           >
-                            <FaCheckCircle className="w-3.5 h-3.5" />
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
                           </button>
                         )}
                         {canUpdate && (
                           <button
                             onClick={() => router.push(`/dashboard/corporate-inquiry/proposal/${inq.Id}`)}
-                            className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors"
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-md text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors"
                             title="Make Proposal"
                           >
-                            <FaFileSignature className="w-3.5 h-3.5" />
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </button>
+                        )}
+                        {canUpdate && (
+                          <button
+                            onClick={() => updateStatus(inq.Id, 'Rejected')}
+                            disabled={updating === inq.Id || inq.InquiryStatus === 'Rejected'}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-md text-red-700 bg-red-50 border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Cancel Inquiry"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
                           </button>
                         )}
                       </div>
                     </td>
-
                   </tr>
                 );
               })}
@@ -417,33 +428,33 @@ export default function CorporateInquiryPage() {
           </table>
         </div>
 
-        {/* Pagination footer */}
-        <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between bg-gray-50/50">
-          <p className="text-xs text-gray-500">
-            Showing {inquiries.length ? (pagination.page - 1) * pagination.limit + 1 : 0}–
-            {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
+        <div className="flex items-center justify-between px-4 py-2 border-t border-slate-100 bg-slate-50/50">
+          <p className="text-[11px] text-slate-400">
+            {inquiries.length ? (pagination.page - 1) * pagination.limit + 1 : 0}–{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total.toLocaleString()}
           </p>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => handlePageChange(pagination.page - 1)}
-              disabled={pagination.page <= 1}
-              className="p-1.5 rounded-lg bg-white border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition text-gray-600"
-            >
-              <FaChevronLeft className="w-3 h-3" />
+          <div className="flex items-center gap-1">
+            <button onClick={() => handlePageChange(1)} disabled={pagination.page <= 1} className="px-2 py-0.5 text-[11px] rounded border border-slate-200 hover:bg-white disabled:opacity-30 font-semibold text-slate-600">First</button>
+            <button onClick={() => handlePageChange(pagination.page - 1)} disabled={pagination.page <= 1} className="px-1.5 py-0.5 rounded border border-slate-200 hover:bg-white disabled:opacity-30 text-slate-600">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
             </button>
-            <span className="text-xs text-gray-600 px-2">
-              Page {pagination.page} of {pagination.totalPages || 1}
-            </span>
-            <button
-              onClick={() => handlePageChange(pagination.page + 1)}
-              disabled={pagination.page >= pagination.totalPages}
-              className="p-1.5 rounded-lg bg-white border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition text-gray-600"
-            >
-              <FaChevronRight className="w-3 h-3" />
+            {(() => {
+              const current = pagination.page;
+              const total = pagination.totalPages || 1;
+              const pages = [];
+              for (let p = Math.max(1, current - 2); p <= Math.min(total, current + 2); p++) pages.push(p);
+              return pages.map((p) => (
+                <button key={p} onClick={() => handlePageChange(p)}
+                  className={`w-6 h-6 text-[11px] rounded border font-semibold ${p === current ? 'bg-[#2E3093] text-white border-[#2E3093]' : 'border-slate-200 hover:bg-white text-slate-600'}`}>
+                  {p}
+                </button>
+              ));
+            })()}
+            <button onClick={() => handlePageChange(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages} className="px-1.5 py-0.5 rounded border border-slate-200 hover:bg-white disabled:opacity-30 text-slate-600">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
             </button>
+            <button onClick={() => handlePageChange(pagination.totalPages || 1)} disabled={pagination.page >= pagination.totalPages} className="px-2 py-0.5 text-[11px] rounded border border-slate-200 hover:bg-white disabled:opacity-30 font-semibold text-slate-600">Last</button>
           </div>
         </div>
-
       </div>
     </div>
   );

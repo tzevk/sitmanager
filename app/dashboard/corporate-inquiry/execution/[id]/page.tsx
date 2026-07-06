@@ -1,54 +1,32 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
+import { GhostBtn, PageHeader } from '@/components/ui/PageHeader';
 
-const labelCls = 'block text-[11px] font-semibold text-gray-600 mb-0.5';
-const inputCls =
-  'w-full bg-white border border-gray-300 rounded-md px-2.5 py-1.5 text-xs text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] placeholder:text-gray-400 transition-colors';
-const selectCls =
-  'w-full bg-white border border-gray-300 rounded-md px-2.5 py-1.5 text-xs text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] transition-colors';
-const textareaCls =
-  'w-full bg-white border border-gray-300 rounded-md px-2.5 py-1.5 text-xs text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] placeholder:text-gray-400 transition-colors resize-none';
+const labelCls = 'block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1';
+const inputCls = 'w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors disabled:bg-slate-50 disabled:text-slate-500';
+const textareaCls = `${inputCls} resize-none`;
 
 type Inquiry = {
   Id: number;
-  Consultancy_Id?: number | string | null;
-  FullName?: string | null;
   CompanyName?: string | null;
+  FullName?: string | null;
   Email?: string | null;
   Mobile?: string | null;
   Phone?: string | null;
   Course_Id?: string | null;
   Place?: string | null;
-
-  Idate?: string | null;
-  CompanyType?: string | null;
-  CompanyAuthority?: string | null;
-  Designation?: string | null;
-  TrainingMode?: string | null;
-  Participants_Fresher?: number | string | null;
-  Participants_Experienced?: number | string | null;
   TrainingLocation?: string | null;
-  business?: string | null;
-  Remark?: string | null;
-
+  TrainingMode?: string | null;
   InquiryStatus?: string | null;
-
   TrainingNumber?: string | null;
-  TrainingDate?: string | null;
   TrainerName?: string | null;
   NumberOfDays?: number | null;
   TotalStudents?: number | null;
   TrainingCoordinator?: string | null;
-
-  DiscussionOutcome?: 'Awarded' | 'Regretted' | 'On Hold' | null;
-
-  Discussion?: string | null;
-  FollowUp?: string | null;
-
   ConfirmDate?: string | null;
   PerformanceEvaluation_PreTest?: string | null;
   PerformanceEvaluation_Assessment?: string | null;
@@ -59,24 +37,6 @@ type Inquiry = {
   SitCertIssuedOnPerformanceOnAttendance?: string | null;
 };
 
-type MeetingDetailsItem = {
-  meetingDate: string;
-  attendeeClient: string;
-  attendeeSIT: string;
-  meetingAgenda: string;
-};
-
-type FollowUpItem = {
-  date: string;
-  nextDate?: string;
-  remarks: string;
-};
-
-type ConsultancyFollowupRow = {
-  Followup_Date?: string | null;
-  Remarks?: string | null;
-};
-
 type EvalKey = 'pre_test' | 'assessment' | 'final_test' | 'training_material' | 'attendance';
 
 type EvalItem = {
@@ -84,17 +44,27 @@ type EvalItem = {
   remarks: string;
 };
 
-const toDateInput = (v: string | null | undefined) => {
-  if (!v) return '';
-  try {
-    return new Date(v).toISOString().slice(0, 10);
-  } catch {
-    return '';
-  }
-};
+const evalItems: { key: EvalKey; label: string }[] = [
+  { key: 'pre_test', label: 'Pre Test' },
+  { key: 'assessment', label: 'Assessment' },
+  { key: 'final_test', label: 'Final Test' },
+  { key: 'training_material', label: 'Training Material' },
+  { key: 'attendance', label: 'Attendance' },
+];
 
-const followupKey = (f: FollowUpItem) =>
-  `${toDateInput(f.date) || ''}|${toDateInput(f.nextDate) || ''}|${String(f.remarks || '').trim().toLowerCase()}`;
+const defaultEval = (): Record<EvalKey, EvalItem> => ({
+  pre_test: { completed: false, remarks: '' },
+  assessment: { completed: false, remarks: '' },
+  final_test: { completed: false, remarks: '' },
+  training_material: { completed: false, remarks: '' },
+  attendance: { completed: false, remarks: '' },
+});
+
+function toDateInput(value: string | null | undefined) {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+}
 
 function parseEvalItem(value: string | null | undefined): EvalItem {
   if (!value) return { completed: false, remarks: '' };
@@ -109,143 +79,35 @@ function parseEvalItem(value: string | null | undefined): EvalItem {
   }
 }
 
-const defaultEval = (): Record<EvalKey, EvalItem> => ({
-  pre_test: { completed: false, remarks: '' },
-  assessment: { completed: false, remarks: '' },
-  final_test: { completed: false, remarks: '' },
-  training_material: { completed: false, remarks: '' },
-  attendance: { completed: false, remarks: '' },
-});
-
-function splitList(value: string | null | undefined): string[] {
-  if (!value) return [];
-  return value
-    .split(/\r?\n|,/g)
-    .map((x) => x.trim())
-    .filter(Boolean);
+function SummaryItem({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="mt-0.5 truncate text-sm font-semibold text-slate-700">{value?.trim() || '-'}</div>
+    </div>
+  );
 }
 
-function parseFollowUpJson(raw: string | null | undefined): { meetingDetails: MeetingDetailsItem[]; followUps: FollowUpItem[] } {
-  if (!raw || !raw.trim()) return { meetingDetails: [], followUps: [] };
-  let obj: any = null;
-  try {
-    obj = JSON.parse(raw);
-  } catch {
-    return { meetingDetails: [], followUps: [] };
-  }
-
-  const meetingDetailsRaw = obj && Array.isArray(obj.meetingDetails) ? obj.meetingDetails : [];
-  let meetingDetails: MeetingDetailsItem[] = meetingDetailsRaw
-    .map((rec: any) => ({
-      meetingDate: typeof rec?.meetingDate === 'string' ? rec.meetingDate : '',
-      attendeeClient: typeof rec?.attendeeClient === 'string' ? rec.attendeeClient : '',
-      attendeeSIT:
-        typeof rec?.attendeeSIT === 'string'
-          ? rec.attendeeSIT
-          : typeof rec?.attendeeSit === 'string'
-            ? rec.attendeeSit
-            : '',
-      meetingAgenda: typeof rec?.meetingAgenda === 'string' ? rec.meetingAgenda : '',
-    }))
-    .filter((x: MeetingDetailsItem) => Boolean(x.meetingDate || x.attendeeClient || x.attendeeSIT || x.meetingAgenda));
-
-  if (
-    meetingDetails.length === 0 &&
-    (typeof obj?.meetingDate === 'string' || typeof obj?.attendeeClient === 'string' || typeof obj?.attendeeSIT === 'string' || typeof obj?.meetingAgenda === 'string')
-  ) {
-    meetingDetails = [
-      {
-        meetingDate: typeof obj?.meetingDate === 'string' ? obj.meetingDate : '',
-        attendeeClient: typeof obj?.attendeeClient === 'string' ? obj.attendeeClient : '',
-        attendeeSIT:
-          typeof obj?.attendeeSIT === 'string'
-            ? obj.attendeeSIT
-            : typeof obj?.attendeeSit === 'string'
-              ? obj.attendeeSit
-              : '',
-        meetingAgenda: typeof obj?.meetingAgenda === 'string' ? obj.meetingAgenda : '',
-      },
-    ].filter((x) => Boolean(x.meetingDate || x.attendeeClient || x.attendeeSIT || x.meetingAgenda));
-  }
-
-  const followUpsRaw =
-    obj && Array.isArray(obj.followUps)
-      ? obj.followUps
-      : obj && Array.isArray(obj.followup)
-        ? obj.followup
-      : obj && Array.isArray(obj.meetings)
-        ? obj.meetings
-        : [];
-
-  const followUps: FollowUpItem[] = followUpsRaw
-    .map((rec: any) => ({
-      date:
-        typeof rec?.date === 'string'
-          ? rec.date
-          : typeof rec?.followupDate === 'string'
-            ? rec.followupDate
-            : '',
-      nextDate:
-        typeof rec?.nextDate === 'string'
-          ? rec.nextDate
-          : typeof rec?.nextFollowUpDate === 'string'
-            ? rec.nextFollowUpDate
-            : typeof rec?.next_follow_up_date === 'string'
-              ? rec.next_follow_up_date
-              : undefined,
-      remarks:
-        typeof rec?.remarks === 'string'
-          ? rec.remarks
-          : typeof rec?.remark === 'string'
-            ? rec.remark
-            : '',
-    }))
-    .filter((x: FollowUpItem) => Boolean(x.date || x.nextDate || x.remarks));
-
-  return { meetingDetails, followUps };
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wide text-[#2E3093]">{title}</h3>
+      {children}
+    </section>
+  );
 }
 
 export default function TrainingExecutionPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { id } = useParams<{ id: string }>();
   const inquiryId = useMemo(() => Number(id), [id]);
-
   const { canUpdate, loading: permLoading } = useResourcePermissions('corporate_inquiry');
-
-  const [activeTab, setActiveTab] = useState<'inquiry' | 'discussion' | 'execution' | 'feedback' | 'certificate'>('inquiry');
-    useEffect(() => {
-      const tab = (searchParams.get('tab') || '').toLowerCase();
-      if (tab === 'execution') {
-        setActiveTab('execution');
-        return;
-      }
-      if (tab === 'discussion') {
-        setActiveTab('discussion');
-        return;
-      }
-      if (tab === 'feedback') {
-        setActiveTab('feedback');
-        return;
-      }
-      if (tab === 'certificate') {
-        setActiveTab('certificate');
-        return;
-      }
-      if (tab === 'inquiry') {
-        setActiveTab('inquiry');
-      }
-    }, [searchParams]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
   const [inquiry, setInquiry] = useState<Inquiry | null>(null);
-  const [meetingDetails, setMeetingDetails] = useState<MeetingDetailsItem[]>([]);
-  const [followUps, setFollowUps] = useState<FollowUpItem[]>([]);
-
   const [executionForm, setExecutionForm] = useState({
     TrainingNumber: '',
     TrainerName: '',
@@ -260,89 +122,46 @@ export default function TrainingExecutionPage() {
 
   useEffect(() => {
     if (!inquiryId) return;
-    (async () => {
+
+    let cancelled = false;
+    async function loadInquiry() {
       setLoading(true);
       setError('');
       try {
         const res = await fetch(`/api/admission-activity/corporate-inquiry/${inquiryId}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to load inquiry');
-        const r = data.inquiry as Inquiry;
-        setInquiry(r);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || 'Failed to load inquiry');
 
-        const parsedFU = parseFollowUpJson(r.FollowUp);
-        setMeetingDetails(parsedFU.meetingDetails);
-
-        let mergedFollowUps = parsedFU.followUps;
-        const consultancyId = Number(r.Consultancy_Id);
-        if (Number.isFinite(consultancyId) && consultancyId > 0) {
-          try {
-            const params = new URLSearchParams({ constId: String(consultancyId) });
-            const fuRes = await fetch(`/api/masters/consultancy/followups?${params.toString()}`);
-            const fuData = await fuRes.json().catch(() => ({}));
-            const rows = Array.isArray(fuData?.rows) ? (fuData.rows as ConsultancyFollowupRow[]) : [];
-            const mapped: FollowUpItem[] = rows
-              .map((row) => ({
-                date: toDateInput(row.Followup_Date),
-                nextDate: '',
-                remarks: String(row.Remarks || '').trim(),
-              }))
-              .filter((x) => Boolean(x.date || x.nextDate || x.remarks));
-            mergedFollowUps = Array.from(
-              new Map([...parsedFU.followUps, ...mapped].map((f) => [followupKey(f), f] as const)).values(),
-            );
-          } catch {
-            // non-blocking: keep inquiry followups only
-          }
-        } else {
-          try {
-            const params = new URLSearchParams({ inquiryId: String(inquiryId) });
-            if (r.CompanyName) params.set('companyName', String(r.CompanyName));
-            const fuRes = await fetch(`/api/masters/consultancy/followups?${params.toString()}`);
-            const fuData = await fuRes.json().catch(() => ({}));
-            const rows = Array.isArray(fuData?.rows) ? (fuData.rows as ConsultancyFollowupRow[]) : [];
-            const mapped: FollowUpItem[] = rows
-              .map((row) => ({
-                date: toDateInput(row.Followup_Date),
-                nextDate: '',
-                remarks: String(row.Remarks || '').trim(),
-              }))
-              .filter((x) => Boolean(x.date || x.nextDate || x.remarks));
-            mergedFollowUps = Array.from(
-              new Map([...parsedFU.followUps, ...mapped].map((f) => [followupKey(f), f] as const)).values(),
-            );
-          } catch {
-            // non-blocking: keep inquiry followups only
-          }
-        }
-        setFollowUps(mergedFollowUps);
-
+        const next = data.inquiry as Inquiry;
+        if (cancelled) return;
+        setInquiry(next);
         setExecutionForm({
-          TrainingNumber: r.TrainingNumber || '',
-          TrainerName: r.TrainerName || '',
-          NumberOfDays: r.NumberOfDays === null || r.NumberOfDays === undefined ? '' : String(r.NumberOfDays),
-          TotalStudents: r.TotalStudents === null || r.TotalStudents === undefined ? '' : String(r.TotalStudents),
-          TrainingCoordinator: r.TrainingCoordinator || '',
+          TrainingNumber: next.TrainingNumber || '',
+          TrainerName: next.TrainerName || '',
+          NumberOfDays: next.NumberOfDays == null ? '' : String(next.NumberOfDays),
+          TotalStudents: next.TotalStudents == null ? '' : String(next.TotalStudents),
+          TrainingCoordinator: next.TrainingCoordinator || '',
         });
-
         setEvaluation({
-          pre_test: parseEvalItem(r.PerformanceEvaluation_PreTest),
-          assessment: parseEvalItem(r.PerformanceEvaluation_Assessment),
-          final_test: parseEvalItem(r.PerformanceEvaluation_FinalExam),
-          training_material: parseEvalItem(r.PerformanceEvaluation_TrainingMaterial),
-          attendance: parseEvalItem(r.PerformanceEvaluation_Attendance),
+          pre_test: parseEvalItem(next.PerformanceEvaluation_PreTest),
+          assessment: parseEvalItem(next.PerformanceEvaluation_Assessment),
+          final_test: parseEvalItem(next.PerformanceEvaluation_FinalExam),
+          training_material: parseEvalItem(next.PerformanceEvaluation_TrainingMaterial),
+          attendance: parseEvalItem(next.PerformanceEvaluation_Attendance),
         });
-
-        setFeedback(r.TrainingFeedbackObtained || '');
-        const certRaw = (r.SitCertIssuedOnPerformanceOnAttendance || '').trim();
+        setFeedback(next.TrainingFeedbackObtained || '');
+        const certRaw = (next.SitCertIssuedOnPerformanceOnAttendance || '').trim();
         setCertificate(certRaw === 'Yes' || certRaw === 'No' ? certRaw : '');
-        setConfirmDate(toDateInput(r.ConfirmDate));
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Failed to load inquiry');
+        setConfirmDate(toDateInput(next.ConfirmDate));
+      } catch (err: unknown) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load inquiry');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    })();
+    }
+
+    loadInquiry();
+    return () => { cancelled = true; };
   }, [inquiryId]);
 
   const handleSave = async () => {
@@ -356,29 +175,26 @@ export default function TrainingExecutionPage() {
         body: JSON.stringify({
           Id: inquiryId,
           InquiryStatus: inquiry?.InquiryStatus || 'Final',
-
           TrainingNumber: executionForm.TrainingNumber,
           TrainerName: executionForm.TrainerName,
           NumberOfDays: executionForm.NumberOfDays,
           TotalStudents: executionForm.TotalStudents,
           TrainingCoordinator: executionForm.TrainingCoordinator,
-
           PerformanceEvaluation_PreTest: JSON.stringify(evaluation.pre_test),
           PerformanceEvaluation_Assessment: JSON.stringify(evaluation.assessment),
           PerformanceEvaluation_FinalExam: JSON.stringify(evaluation.final_test),
           PerformanceEvaluation_TrainingMaterial: JSON.stringify(evaluation.training_material),
           PerformanceEvaluation_Attendance: JSON.stringify(evaluation.attendance),
-
           TrainingFeedbackObtained: feedback,
           SitCertIssuedOnPerformanceOnAttendance: certificate,
           ConfirmDate: confirmDate,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Save failed');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Save failed');
       setSuccess('Training execution saved');
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
     }
@@ -388,386 +204,125 @@ export default function TrainingExecutionPage() {
   if (!canUpdate) return <AccessDenied message="You do not have permission to update training execution." />;
 
   return (
-    <div className="space-y-3">
-      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-4 shadow-md">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push('/dashboard/corporate-inquiry/execution')}
-            className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
-            title="Back"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <div className="flex-1">
-            <h2 className="text-base font-bold text-white">Training Execution</h2>
-            <p className="text-xs text-white/70">
-              Corporate Inquiry #{inquiryId}{inquiry?.CompanyName ? ` • ${inquiry.CompanyName}` : ''}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => router.push(`/dashboard/corporate-inquiry/edit/${inquiryId}`)}
-              className="px-4 py-2 rounded-lg bg-white text-[#2E3093] text-sm font-semibold hover:bg-white/90 transition-colors"
-              title="Inquiry details"
-            >
-              Inquiry Details
-            </button>
-            <button
-              onClick={() => router.push(`/dashboard/corporate-inquiry/edit/${inquiryId}?tab=discussion`)}
-              className="px-4 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-sm font-semibold transition-colors"
-              title="Under discussion"
-            >
-              Under Discussion
-            </button>
-          </div>
+    <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+      <PageHeader
+        title="Training Execution"
+        breadcrumbs={[{ label: 'Corporate Training' }, { label: 'Execution' }]}
+        meta={`Inquiry #${inquiryId}`}
+        action={(
+          <>
+            <GhostBtn onClick={() => router.push('/dashboard/corporate-inquiry/execution')}>Back</GhostBtn>
+            <GhostBtn onClick={() => router.push(`/dashboard/corporate-inquiry/edit/${inquiryId}`)}>Inquiry Details</GhostBtn>
+          </>
+        )}
+      />
+
+      {(error || success) && (
+        <div className="space-y-2">
+          {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>}
+          {success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{success}</div>}
         </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+        <SummaryItem label="Company" value={inquiry?.CompanyName} />
+        <SummaryItem label="Training" value={inquiry?.Course_Id} />
+        <SummaryItem label="Location" value={inquiry?.TrainingLocation || inquiry?.Place} />
+        <SummaryItem label="Contact" value={inquiry?.FullName || inquiry?.Mobile || inquiry?.Phone || inquiry?.Email} />
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="flex border-b border-gray-200 px-5 bg-gray-50/80">
-          {([
-            ['inquiry', 'Inquiry Details'],
-            ['discussion', 'Under Discussion Details'],
-            ['execution', 'Execution Details'],
-            ['feedback', 'Training Feedback'],
-            ['certificate', 'SIT Certificate'],
-          ] as const).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={`px-4 py-3 text-sm font-bold border-b-2 transition-all ${
-                activeTab === key
-                  ? 'border-[#2E3093] text-[#2E3093] bg-white -mb-px rounded-t-lg'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {label}
-            </button>
+      <Section title="Execution Details">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div>
+            <label className={labelCls}>Trainer Name</label>
+            <input className={inputCls} value={executionForm.TrainerName} onChange={(e) => setExecutionForm((form) => ({ ...form, TrainerName: e.target.value }))} />
+          </div>
+          <div>
+            <label className={labelCls}>Number Of Days</label>
+            <input type="number" min={0} className={inputCls} value={executionForm.NumberOfDays} onChange={(e) => setExecutionForm((form) => ({ ...form, NumberOfDays: e.target.value }))} />
+          </div>
+          <div>
+            <label className={labelCls}>Total Students</label>
+            <input type="number" min={0} className={inputCls} value={executionForm.TotalStudents} onChange={(e) => setExecutionForm((form) => ({ ...form, TotalStudents: e.target.value }))} />
+          </div>
+          <div>
+            <label className={labelCls}>Training Co-ordinator</label>
+            <input className={inputCls} value={executionForm.TrainingCoordinator} onChange={(e) => setExecutionForm((form) => ({ ...form, TrainingCoordinator: e.target.value }))} />
+          </div>
+          <div>
+            <label className={labelCls}>Training Number</label>
+            <input className={inputCls} value={executionForm.TrainingNumber} onChange={(e) => setExecutionForm((form) => ({ ...form, TrainingNumber: e.target.value }))} />
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Performance Evaluation">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-5">
+          {evalItems.map(({ key, label }) => (
+            <div key={key} className="rounded-lg border border-slate-200 p-3">
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={evaluation[key].completed}
+                  onChange={(e) => setEvaluation((items) => ({ ...items, [key]: { ...items[key], completed: e.target.checked } }))}
+                />
+                {label}
+              </label>
+              <input
+                className={`${inputCls} mt-2`}
+                value={evaluation[key].remarks}
+                onChange={(e) => setEvaluation((items) => ({ ...items, [key]: { ...items[key], remarks: e.target.value } }))}
+                placeholder="Remarks"
+              />
+            </div>
           ))}
         </div>
+      </Section>
 
-        {(error || success) && (
-          <div className="p-4">
-            {error && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2 text-sm text-red-700">{error}</div>}
-            {success && <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-sm text-green-700">{success}</div>}
+      <Section title="Feedback And Certificate">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="md:col-span-3">
+            <label className={labelCls}>Feedback</label>
+            <textarea className={textareaCls} rows={4} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="Training feedback" />
           </div>
-        )}
-
-        <div className="p-5">
-          {activeTab === 'inquiry' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
-              <div>
-                <label className={labelCls}>Enquiry Date</label>
-                <input className={inputCls} value={toDateInput(inquiry?.Idate) || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Company</label>
-                <input className={inputCls} value={inquiry?.CompanyName || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Coordinator</label>
-                <input className={inputCls} value={inquiry?.FullName || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Training Programme</label>
-                <input className={inputCls} value={inquiry?.Course_Id || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Company Location</label>
-                <input className={inputCls} value={inquiry?.Place || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Company Type</label>
-                <input className={inputCls} value={inquiry?.CompanyType || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Company Authority</label>
-                <input className={inputCls} value={inquiry?.CompanyAuthority || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Designation</label>
-                <input className={inputCls} value={inquiry?.Designation || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Email</label>
-                <input className={inputCls} value={inquiry?.Email || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Phone</label>
-                <input className={inputCls} value={inquiry?.Mobile || inquiry?.Phone || ''} disabled />
-              </div>
-
-              <div>
-                <label className={labelCls}>Training Mode</label>
-                <input className={inputCls} value={inquiry?.TrainingMode || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Participants (Fresher)</label>
-                <input className={inputCls} value={inquiry?.Participants_Fresher === null || inquiry?.Participants_Fresher === undefined ? '' : String(inquiry.Participants_Fresher)} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Participants (Experienced)</label>
-                <input className={inputCls} value={inquiry?.Participants_Experienced === null || inquiry?.Participants_Experienced === undefined ? '' : String(inquiry.Participants_Experienced)} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Training Location</label>
-                <input className={inputCls} value={inquiry?.TrainingLocation || ''} disabled />
-              </div>
-
-              <div className="md:col-span-3">
-                <label className={labelCls}>Disciplines</label>
-                <textarea className={textareaCls} rows={3} value={(inquiry?.business || '').trim()} disabled />
-              </div>
-              <div className="md:col-span-3">
-                <label className={labelCls}>Remarks</label>
-                <textarea className={textareaCls} rows={3} value={(inquiry?.Remark || '').trim()} disabled />
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'discussion' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
-              <div>
-                <label className={labelCls}>Trainer Name</label>
-                <input className={inputCls} value={inquiry?.TrainerName || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Number Of Days</label>
-                <input className={inputCls} value={inquiry?.NumberOfDays === null || inquiry?.NumberOfDays === undefined ? '' : String(inquiry.NumberOfDays)} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Total Students</label>
-                <input className={inputCls} value={inquiry?.TotalStudents === null || inquiry?.TotalStudents === undefined ? '' : String(inquiry.TotalStudents)} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Training Co-ordinator</label>
-                <input className={inputCls} value={inquiry?.TrainingCoordinator || ''} disabled />
-              </div>
-              <div>
-                <label className={labelCls}>Discussion Outcome</label>
-                <input className={inputCls} value={inquiry?.DiscussionOutcome || ''} disabled />
-              </div>
-              </div>
-
-              <div>
-                <label className={labelCls}>Minutes of Meeting</label>
-                <textarea className={textareaCls} rows={5} value={(inquiry?.Discussion || '').trim()} disabled />
-              </div>
-
-              <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-                <table className="min-w-full text-xs">
-                  <thead className="bg-gray-50 text-gray-700">
-                    <tr className="border-b border-gray-100">
-                      <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Meeting Date</th>
-                      <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Attendee (Client)</th>
-                      <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Attendee (SIT)</th>
-                      <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Meeting Agenda</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {meetingDetails.length === 0 ? (
-                      <tr>
-                        <td className="px-3 py-3 text-gray-500" colSpan={4}>
-                          No meeting details
-                        </td>
-                      </tr>
-                    ) : (
-                      meetingDetails.map((m, idx) => (
-                        <tr
-                          key={`${m.meetingDate}-${idx}`}
-                          className={`hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
-                        >
-                          <td className="px-3 py-2 text-gray-900">{toDateInput(m.meetingDate) || '—'}</td>
-                          <td className="px-3 py-2 text-gray-900">
-                            {splitList(m.attendeeClient).length === 0 ? (
-                              <span className="text-gray-400">—</span>
-                            ) : (
-                              <ul className="list-disc pl-4 space-y-0.5">
-                                {splitList(m.attendeeClient).map((x, i) => (
-                                  <li key={i} className="text-gray-900">
-                                    {x}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-gray-900">
-                            {splitList(m.attendeeSIT).length === 0 ? (
-                              <span className="text-gray-400">—</span>
-                            ) : (
-                              <ul className="list-disc pl-4 space-y-0.5">
-                                {splitList(m.attendeeSIT).map((x, i) => (
-                                  <li key={i} className="text-gray-900">
-                                    {x}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-gray-900 whitespace-pre-wrap">{(m.meetingAgenda || '').trim() || '—'}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-                <table className="min-w-full text-xs">
-                  <thead className="bg-gray-50 text-gray-700">
-                    <tr className="border-b border-gray-100">
-                      <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Follow Up Date</th>
-                      <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Next Follow Up Date</th>
-                      <th className="px-3 py-3 text-left font-semibold text-[11px] uppercase tracking-wider text-gray-400">Remarks</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {followUps.length === 0 ? (
-                      <tr>
-                        <td className="px-3 py-3 text-gray-500" colSpan={3}>
-                          No follow ups
-                        </td>
-                      </tr>
-                    ) : (
-                      followUps.map((f, idx) => (
-                        <tr
-                          key={`${f.date}-${idx}`}
-                          className={`hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
-                        >
-                          <td className="px-3 py-2 text-gray-900">{toDateInput(f.date) || '—'}</td>
-                          <td className="px-3 py-2 text-gray-900">{toDateInput(f.nextDate) || '—'}</td>
-                          <td className="px-3 py-2 text-gray-900 whitespace-pre-wrap">{(f.remarks || '').trim() || '—'}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'execution' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
-                <div>
-                  <label className={labelCls}>Trainer Name</label>
-                  <input className={inputCls} value={executionForm.TrainerName} onChange={(e) => setExecutionForm((f) => ({ ...f, TrainerName: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={labelCls}>Number Of Days</label>
-                  <input type="number" min={0} className={inputCls} value={executionForm.NumberOfDays} onChange={(e) => setExecutionForm((f) => ({ ...f, NumberOfDays: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={labelCls}>Total Students</label>
-                  <input type="number" min={0} className={inputCls} value={executionForm.TotalStudents} onChange={(e) => setExecutionForm((f) => ({ ...f, TotalStudents: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={labelCls}>Training Co-ordinator</label>
-                  <input className={inputCls} value={executionForm.TrainingCoordinator} onChange={(e) => setExecutionForm((f) => ({ ...f, TrainingCoordinator: e.target.value }))} />
-                </div>
-              </div>
-
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
-                  <h3 className="text-sm font-bold text-gray-800">Performance Evaluation</h3>
-                  <p className="text-xs text-gray-500">Pre Test, Assessment, Final Test, Training Material, Attendance</p>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-[11px] uppercase tracking-wider text-gray-400 bg-white border-b border-gray-100">
-                        <th className="text-left py-2 px-4 font-semibold">Item</th>
-                        <th className="text-left py-2 px-4 font-semibold">Completed</th>
-                        <th className="text-left py-2 px-4 font-semibold">Remarks</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {([
-                        { key: 'pre_test', label: 'Pre Test' },
-                        { key: 'assessment', label: 'Assessment' },
-                        { key: 'final_test', label: 'Final Test' },
-                        { key: 'training_material', label: 'Training Material' },
-                        { key: 'attendance', label: 'Attendance' },
-                      ] as const).map(({ key, label }, idx) => (
-                        <tr key={key} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                          <td className="py-2 px-4 text-gray-700">{label}</td>
-                          <td className="py-2 px-4">
-                            <label className="inline-flex items-center gap-2 text-xs text-gray-700">
-                              <input
-                                type="checkbox"
-                                checked={evaluation[key].completed}
-                                onChange={(e) => setEvaluation((ev) => ({ ...ev, [key]: { ...ev[key], completed: e.target.checked } }))}
-                              />
-                              Completed
-                            </label>
-                          </td>
-                          <td className="py-2 px-4">
-                            <input
-                              className={inputCls}
-                              value={evaluation[key].remarks}
-                              onChange={(e) => setEvaluation((ev) => ({ ...ev, [key]: { ...ev[key], remarks: e.target.value } }))}
-                              placeholder="Remarks"
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'feedback' && (
-            <div>
-              <label className={labelCls}>Feedback</label>
-              <textarea className={textareaCls} rows={5} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="Training feedback" />
-            </div>
-          )}
-
-          {activeTab === 'certificate' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2">
-              <div>
-                <label className={labelCls}>Confirm Certificate</label>
-                <select
-                  className={selectCls}
-                  value={certificate}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setCertificate(v === 'Yes' || v === 'No' ? v : '');
-                  }}
-                >
-                  <option value="">Select...</option>
-                  <option value="Yes">Yes</option>
-                  <option value="No">No</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Confirm Date</label>
-                <input type="date" className={inputCls} value={confirmDate} onChange={(e) => setConfirmDate(e.target.value)} />
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end mt-5 gap-2">
-            <button
-              onClick={() => router.push('/dashboard/corporate-inquiry/execution')}
-              className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50"
+          <div>
+            <label className={labelCls}>Certificate Issued</label>
+            <select
+              className={inputCls}
+              value={certificate}
+              onChange={(e) => {
+                const value = e.target.value;
+                setCertificate(value === 'Yes' || value === 'No' ? value : '');
+              }}
             >
-              Close
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-6 py-2 rounded-lg bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white text-sm font-semibold shadow hover:shadow-md transition-all disabled:opacity-60"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
+              <option value="">Select...</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Confirm Date</label>
+            <input type="date" className={inputCls} value={confirmDate} onChange={(e) => setConfirmDate(e.target.value)} />
           </div>
         </div>
+      </Section>
+
+      <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+        <button
+          type="button"
+          onClick={() => router.push('/dashboard/corporate-inquiry/execution')}
+          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+        >
+          Close
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="rounded-lg bg-[#2E3093] px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-[#252880] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Save Execution'}
+        </button>
       </div>
     </div>
   );

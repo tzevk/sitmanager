@@ -115,6 +115,27 @@ async function ensureConsultancyCompanyTypeColumn(pool: ReturnType<typeof getPoo
   if ((rows?.[0]?.cnt ?? 0) === 0) {
     await pool.query(`ALTER TABLE consultant_mst ADD COLUMN Company_Type VARCHAR(20) NULL`);
   }
+
+  await ensureMinVarcharLength(pool, 'consultant_mst', 'EMail', 255);
+}
+
+async function ensureMinVarcharLength(
+  pool: ReturnType<typeof getPool>, tableName: string, columnName: string, minLength: number
+) {
+  const [rows] = await pool.query<any[]>(
+    `SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?
+     LIMIT 1`,
+    [tableName, columnName]
+  );
+  const column = rows?.[0];
+  const currentLength = Number(column?.CHARACTER_MAXIMUM_LENGTH || 0);
+  if (String(column?.DATA_TYPE || '').toLowerCase() !== 'varchar' || currentLength >= minLength) return;
+
+  const nullable = column?.IS_NULLABLE === 'NO' ? 'NOT NULL' : 'NULL';
+  await pool.query(`ALTER TABLE \`${tableName}\` MODIFY COLUMN \`${columnName}\` VARCHAR(${minLength}) ${nullable}`);
+  COLUMN_LENGTH_CACHE.delete(`${tableName}.${columnName}`);
 }
 
 const COLUMN_LENGTH_CACHE = new Map<string, Promise<number | null>>();
@@ -149,6 +170,8 @@ async function normalizeToColumnLength(
 }
 
 export async function ensureCorporateInquiryColumns(pool: ReturnType<typeof getPool>) {
+  await ensureMinVarcharLength(pool, 'corporate_inquiry', 'Email', 255);
+
   const wanted = [
     'Consultancy_Id','CompanyType','CompanyAuthority','TrainingMode',
     'Participants_Fresher','Participants_Experienced','TrainingLocation','TrainingDates',
@@ -502,7 +525,7 @@ export async function listCorporateInquiries(
   const [rows] = await pool.query<any[]>(
     `SELECT c.Id, c.Fname, c.Lname, c.MName, c.FullName, c.CompanyName, c.Designation,
        c.Address, c.City, c.State, c.Country, c.Pin, c.Phone, c.Mobile, c.Email,
-       c.Course_Id, c.Place, c.business, c.Remark, c.Idate, c.IsActive,
+       c.Course_Id, cm.Course_Name AS CourseName, c.Place, c.business, c.Remark, c.Idate, c.IsActive,
        c.Consultancy_Id, c.CompanyType, c.CompanyAuthority, c.TrainingMode,
        c.Participants_Fresher, c.Participants_Experienced, c.TrainingLocation, c.TrainingDates,
        c.Discussion, c.FollowUp, c.InitialFollowUpDate, c.NextFollowUpDate, c.InquiryStatus,
@@ -514,6 +537,7 @@ export async function listCorporateInquiries(
        c.TrainingFeedbackObtained, c.SitCertIssuedOnPerformanceOnAttendance, c.CtTrainingEnquiryId
      FROM corporate_inquiry c
      INNER JOIN (${dedupSql}) dedup ON dedup.latest_id = c.Id
+     LEFT JOIN course_mst cm ON cm.Course_Id = CAST(NULLIF(TRIM(c.Course_Id), '') AS UNSIGNED)
      ORDER BY c.Id DESC LIMIT ? OFFSET ?`,
     [...queryParams, limit, offset]
   );

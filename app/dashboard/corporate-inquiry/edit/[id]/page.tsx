@@ -327,7 +327,7 @@ function parseFollowUpJson(raw: string | null | undefined): FollowUpData {
   }
 }
 
-const FOLLOWUP_PURPOSES = ['Meeting', 'Seminar', 'Internship', 'Trainer', 'Placements', 'Placements Received', 'Candidate Placed', 'Training', 'Project', 'Others'] as const;
+const FOLLOWUP_PURPOSES = ['Meeting', 'Seminar', 'Internship', 'Trainer', 'Placements', 'Placements Received', 'Candidate Placed', 'Training', 'Project', 'Projects', 'Others'] as const;
 
 const normalizeFollowUpPurpose = (item: CorporateFollowUpItem): CorporateFollowUpItem => {
   const purpose = String(item.purpose || '').trim();
@@ -350,6 +350,20 @@ const normalizeFollowUpPurpose = (item: CorporateFollowUpItem): CorporateFollowU
 
 const displayFollowUpPurpose = (item: CorporateFollowUpItem) =>
   item.purpose === 'Others' ? String(item.purposeOther || '').trim() || 'Others' : item.purpose;
+
+/** Titled form section — gives the long form clear, scannable groups. */
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h3 className="text-[10px] font-bold uppercase tracking-wide text-[#2A6BB5] mb-1.5 pb-1 border-b border-gray-100">
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+const fieldGrid = 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2';
 
 export default function EditCorporateInquiryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -808,15 +822,15 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
   };
 
   const inputClass =
-    'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 bg-white shadow-sm';
-  const labelClass = 'block text-[11px] uppercase tracking-wider text-gray-400 font-semibold mb-1';
+    'w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 bg-white';
+  const labelClass = 'block text-[10px] uppercase tracking-wide text-gray-400 font-semibold mb-0.5';
   const textareaClass =
-    'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 bg-white shadow-sm';
+    'w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300 bg-white';
 
   const tabBtn = (isActive: boolean) =>
     isActive
-      ? 'px-4 py-2 rounded-lg bg-[#2E3093] text-white text-sm font-semibold shadow-sm'
-      : 'px-4 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-sm font-semibold text-gray-700 shadow-sm';
+      ? 'px-3 py-1.5 rounded-md bg-[#2E3093] text-white text-xs font-semibold'
+      : 'px-3 py-1.5 rounded-md border border-gray-200 bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700';
 
   if (permLoading) return <PermissionLoading />;
   if (!canUpdate) return <AccessDenied message="You do not have permission to edit corporate inquiries." />;
@@ -833,42 +847,33 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
   }
 
   return (
-    <div className="space-y-3">
-      {/* Header Container */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <div className="flex flex-col gap-4">
-          {/* Title Row */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-gray-800">Edit Corporate Inquiry</h2>
-              <p className="text-sm text-gray-400">Update inquiry details below</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="submit"
-                form="edit-corporate-inquiry-form"
-                disabled={saving}
-                className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#2A6BB5] hover:bg-[#2360A0] text-white font-semibold text-sm shadow-sm transition-colors disabled:opacity-50"
-              >
-                <FaSave className="w-4 h-4" /> {saving ? 'Saving...' : 'Update Inquiry'}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => router.push('/dashboard/corporate-inquiry')}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 font-semibold text-sm shadow-sm transition"
-              >
-                <FaTimes className="w-4 h-4" /> Cancel
-              </button>
-            </div>
-          </div>
+    <div className="space-y-2.5">
+      {/* Header bar */}
+      <div className="flex items-center justify-between gap-3 bg-white rounded-lg border border-gray-200 shadow-sm px-3 py-2">
+        <h2 className="text-sm font-bold text-gray-800">Edit Corporate Inquiry</h2>
+        <div className="flex items-center gap-2">
+          <button
+            type="submit"
+            form="edit-corporate-inquiry-form"
+            disabled={saving}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[#2A6BB5] hover:bg-[#2360A0] text-white font-semibold text-xs transition-colors disabled:opacity-50"
+          >
+            <FaSave className="w-3 h-3" /> {saving ? 'Saving...' : 'Update Inquiry'}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push('/dashboard/corporate-inquiry')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 font-semibold text-xs transition"
+          >
+            <FaTimes className="w-3 h-3" /> Cancel
+          </button>
         </div>
       </div>
 
       {/* Form */}
-      <form id="edit-corporate-inquiry-form" onSubmit={handleSubmit} className="space-y-4">
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+      <form id="edit-corporate-inquiry-form" onSubmit={handleSubmit} className="space-y-2.5">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" className={tabBtn(activeTab === 'details')} onClick={() => setActiveTab('details')}>
                 Inquiry Details
@@ -879,11 +884,11 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
             </div>
           </div>
 
-          <div className="p-5">
+          <div className="p-3">
             {activeTab === 'details' && (
-              <>
-                <h2 className="text-sm font-bold text-[#2A6BB5] mb-4 uppercase">Inquiry Details</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-3">
+                <Section title="Inquiry">
+                <div className={fieldGrid}>
                   <div>
                     <label className={labelClass}>Status</label>
                     <select name="InquiryStatus" value={form.InquiryStatus} onChange={handleChange} className={inputClass}>
@@ -910,8 +915,12 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                       ))}
                     </select>
                   </div>
+                </div>
+                </Section>
 
-                  <div>
+                <Section title="Company">
+                <div className={fieldGrid}>
+                  <div className="col-span-2">
                     <label className={labelClass}>Company Name</label>
                     <select
                       name="Consultancy_Id"
@@ -974,7 +983,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                             key={opt}
                             type="button"
                             onClick={() => setForm((prev) => ({ ...prev, CompanyType: opt }))}
-                            className={`px-4 py-2 text-sm font-semibold transition-colors ${
+                            className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
                               active ? 'bg-[#2A6BB5] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
                             }`}
                           >
@@ -985,13 +994,12 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                     </div>
                   </div>
 
-                  <div className="sm:col-span-2 lg:col-span-3">
-                    <div className="pt-2 mt-1 border-t border-gray-100">
-                      <div className="text-xs font-bold text-gray-700 uppercase tracking-wider">Company Authority</div>
-                    </div>
-                    <input type="hidden" name="CompanyAuthority" value={form.CompanyAuthority} />
-                  </div>
+                </div>
+                </Section>
 
+                <Section title="Contact Person">
+                <input type="hidden" name="CompanyAuthority" value={form.CompanyAuthority} />
+                <div className={fieldGrid}>
                   <div>
                     <label className={labelClass}>Full Name</label>
                     <input type="text" name="FullName" value={form.FullName} onChange={handleChange} className={inputClass} />
@@ -1021,10 +1029,14 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                     <label className={labelClass}>Phone</label>
                     <input type="text" name="Phone" value={form.Phone} onChange={handleChange} className={inputClass} />
                   </div>
+                </div>
+                </Section>
 
-                  <div>
+                <Section title="Training Requirement">
+                <div className={fieldGrid}>
+                  <div className="col-span-2">
                     <label className={labelClass}>Training Mode</label>
-                    <div className="flex items-center gap-4 pt-1">
+                    <div className="flex items-center gap-3 flex-wrap pt-1">
                       <label className="flex items-center gap-1 text-xs text-gray-700">
                         <input
                           type="radio"
@@ -1098,7 +1110,8 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                     />
                   </div>
                 </div>
-              </>
+                </Section>
+              </div>
             )}
 
             {activeTab === 'discussion' && (

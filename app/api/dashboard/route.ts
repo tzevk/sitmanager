@@ -353,13 +353,7 @@ async function fetchDashboardData(dept?: string) {
         COUNT(DISTINCT CASE WHEN (
           oap.Inquiry_Id IS NOT NULL
           AND (si.OnlineState = 8 OR sm.Student_Id IS NOT NULL)
-        ) THEN si.Inquiry_Id END) AS Confirmed_Admissions,
-        COALESCE(am.Enrolled, 0) AS Enrolled,
-        COALESCE(
-          NULLIF(am.Enrolled, 0),
-          NULLIF(CAST(REPLACE(IFNULL(NULLIF(TRIM(CAST(b.NoStudent AS CHAR)), ''), '0'), ',', '') AS UNSIGNED), 0),
-          0
-        ) AS Filled_Students
+        ) THEN si.Inquiry_Id END) AS Confirmed_Admissions
       FROM batch_mst b
       LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
       LEFT JOIN student_inquiry si
@@ -372,28 +366,6 @@ async function fetchDashboardData(dept?: string) {
       LEFT JOIN online_admission_payload oap ON oap.Inquiry_Id = si.Inquiry_Id
       LEFT JOIN student_master sm
         ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-      LEFT JOIN (
-        SELECT
-          resolved_batch.Batch_Id,
-          COUNT(DISTINCT resolved_batch.Student_Id) AS Enrolled
-        FROM (
-          SELECT
-            COALESCE(am.Batch_Id, bm_lookup.Batch_Id) AS Batch_Id,
-            am.Student_Id
-          FROM admission_master am
-          INNER JOIN student_master sm_enrolled
-            ON sm_enrolled.Student_Id = am.Student_Id
-           AND (sm_enrolled.IsDelete = 0 OR sm_enrolled.IsDelete IS NULL)
-          LEFT JOIN batch_mst bm_lookup
-            ON bm_lookup.Batch_code = sm_enrolled.Batch_Code
-           AND (bm_lookup.IsDelete = 0 OR bm_lookup.IsDelete IS NULL)
-           AND LOWER(TRIM(CAST(COALESCE(bm_lookup.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
-          WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
-            AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
-        ) resolved_batch
-        WHERE resolved_batch.Batch_Id IS NOT NULL
-        GROUP BY resolved_batch.Batch_Id
-      ) am ON b.Batch_Id = am.Batch_Id
       WHERE ${BATCH_SDATE_EXPR} >= CURDATE()
         AND ${BATCH_SDATE_EXPR} <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
         AND (b.IsDelete IS NULL OR b.IsDelete = 0)
@@ -411,8 +383,7 @@ async function fetchDashboardData(dept?: string) {
         b.Admission_Date,
         CAST(REPLACE(IFNULL(NULLIF(TRIM(CAST(b.Max_Students AS CHAR)), ''), '0'), ',', '') AS UNSIGNED),
         CAST(REPLACE(IFNULL(NULLIF(TRIM(CAST(b.NoStudent AS CHAR)), ''), '0'), ',', '') AS UNSIGNED),
-        COALESCE(c.Course_Name, b.CourseName, ''),
-        am.Enrolled
+        COALESCE(c.Course_Name, b.CourseName, '')
       ORDER BY ${BATCH_SDATE_EXPR} ASC, Enquiries_Received DESC
       LIMIT 50
     `, []) : Promise.resolve([]),

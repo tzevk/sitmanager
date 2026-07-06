@@ -597,7 +597,10 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                   <tr><td colSpan={8}><Empty text="No upcoming batches for the next 3 months" /></td></tr>
                 ) : (
                   upcomingBatches.map((b: any, i: number) => {
-                    const enrolled  = Number(b.Filled_Students ?? b.Enrolled ?? b.NoStudent ?? 0);
+                    // "% Filled" reflects confirmed admissions (students who submitted an
+                    // online form and were admitted/linked), matching the Confirmed
+                    // Admissions column — not raw admission_master rows.
+                    const enrolled  = Number(b.Confirmed_Admissions ?? 0);
                     const max       = Number(b.Max_Students || 0);
                     const fillPct   = max > 0 ? (enrolled / max) * 100 : 0;
                     const sDate     = b.SDate ? String(b.SDate).slice(0, 10) : null;
