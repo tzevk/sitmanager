@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     //   • converted  → that form was accepted into a student (Admitted / linked)
     const HAS_DISCUSSION = `(
       disc_inq.k IS NOT NULL
-      OR (si.Student_Id IS NOT NULL AND (disc_leg.k IS NOT NULL OR disc_stu.k IS NOT NULL))
+      OR (si.Student_Id IS NOT NULL AND disc_stu.k IS NOT NULL)
     )`;
     const HAS_ADMISSION_FORM = `oap.Inquiry_Id IS NOT NULL`;
     const CONVERTED_TO_STUDENT = `(
@@ -94,10 +94,6 @@ export async function GET(request: NextRequest) {
          SELECT Inquiry_id AS k FROM awt_inquirydiscussion
          WHERE deleted = 0 AND Inquiry_id IS NOT NULL GROUP BY Inquiry_id
        ) disc_inq ON disc_inq.k = si.Inquiry_Id
-       LEFT JOIN (
-         SELECT Inquiry_id AS k FROM awt_inquirydiscussion
-         WHERE deleted = 0 AND Inquiry_id IS NOT NULL GROUP BY Inquiry_id
-       ) disc_leg ON si.Student_Id IS NOT NULL AND disc_leg.k = si.Student_Id
        LEFT JOIN (
          SELECT student_id AS k FROM awt_inquirydiscussion
          WHERE deleted = 0 AND student_id IS NOT NULL GROUP BY student_id

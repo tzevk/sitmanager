@@ -1145,20 +1145,6 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
           WHERE d.deleted = 0
             AND d.nextdate IS NOT NULL
             AND d.nextdate <= CURDATE()
-            AND d.Inquiry_id = si.Student_Id
-            AND d.id = (
-              SELECT MAX(d2.id)
-              FROM awt_inquirydiscussion d2
-              WHERE d2.deleted = 0
-                AND d2.Inquiry_id = si.Student_Id
-            )
-        )
-        OR EXISTS (
-          SELECT 1
-          FROM awt_inquirydiscussion d
-          WHERE d.deleted = 0
-            AND d.nextdate IS NOT NULL
-            AND d.nextdate <= CURDATE()
             AND d.student_id = si.Student_Id
             AND d.id = (
               SELECT MAX(d2.id)
@@ -1536,6 +1522,12 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
   await ensureInquiryPreferredLocationColumn(pool, inquiryTable);
+  const previousRows = await pool.query(
+    `SELECT Discussion FROM \`${inquiryTable}\` WHERE Inquiry_Id = ? LIMIT 1`,
+    [id]
+  );
+  const previousDiscussion = normalizeInquiryText(((previousRows[0] as any[])[0] as any)?.Discussion);
+  const nextDiscussion = normalizeInquiryText(data.Discussion);
   await pool.query(
     `UPDATE \`${inquiryTable}\` SET
        Student_Name=?, Sex=?, DOB=?,
@@ -1555,7 +1547,7 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
       data.Email?.trim() ?? null,
       data.Nationality ?? null,
       data.Present_Country ?? null,
-      data.Discussion?.trim() ?? null,
+      nextDiscussion,
       statusId,
       data.Inquiry_Dt ?? null,
       data.Inquiry_From ?? null,
@@ -1571,11 +1563,11 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
     ]
   );
 
-  if (data.Discussion?.trim()) {
+  if (nextDiscussion && nextDiscussion !== previousDiscussion) {
     await pool.query(
       `INSERT INTO awt_inquirydiscussion (Inquiry_id, date, discussion, deleted, created_by, created_date)
        VALUES (?, CURDATE(), ?, 0, ?, NOW())`,
-      [id, data.Discussion.trim(), createdBy]
+      [id, nextDiscussion, createdBy]
     );
   }
 

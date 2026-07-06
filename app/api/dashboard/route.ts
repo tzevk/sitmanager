@@ -347,7 +347,7 @@ async function fetchDashboardData(dept?: string) {
         COUNT(DISTINCT si.Inquiry_Id) AS Enquiries_Received,
         COUNT(DISTINCT CASE WHEN (
           d_inq.id IS NOT NULL
-          OR (si.Student_Id IS NOT NULL AND (d_leg.id IS NOT NULL OR d_stu.id IS NOT NULL))
+          OR (si.Student_Id IS NOT NULL AND d_stu.id IS NOT NULL)
         ) THEN si.Inquiry_Id END) AS Enquiries_Contacted,
         COUNT(DISTINCT CASE WHEN oap.Inquiry_Id IS NOT NULL THEN si.Inquiry_Id END) AS Interested_Students,
         COUNT(DISTINCT CASE WHEN (
@@ -367,8 +367,6 @@ async function fetchDashboardData(dept?: string) {
        AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
       LEFT JOIN awt_inquirydiscussion d_inq
         ON d_inq.deleted = 0 AND d_inq.Inquiry_id = si.Inquiry_Id
-      LEFT JOIN awt_inquirydiscussion d_leg
-        ON si.Student_Id IS NOT NULL AND d_leg.deleted = 0 AND d_leg.Inquiry_id = si.Student_Id
       LEFT JOIN awt_inquirydiscussion d_stu
         ON si.Student_Id IS NOT NULL AND d_stu.deleted = 0 AND d_stu.student_id = si.Student_Id
       LEFT JOIN online_admission_payload oap ON oap.Inquiry_Id = si.Inquiry_Id

@@ -3529,15 +3529,11 @@ export async function getMetaLeadDiscussions(metaLeadId: string): Promise<Discus
   const hasStudentIdColumn = await hasTableColumn(pool, 'awt_inquirydiscussion', 'student_id');
   const hasNextDateColumn = await hasTableColumn(pool, 'awt_inquirydiscussion', 'nextdate');
   const nextDateSelect = hasNextDateColumn ? 'd.nextdate AS nextDate' : 'NULL AS nextDate';
-  const canonicalInquiryByStudentIdSubquery = `
-    SELECT si2.Inquiry_Id
-    FROM \`${inquiryTable}\` si2
-    WHERE si2.Student_Id = m.inquiry_id
-    ORDER BY si2.Inquiry_Id DESC
-    LIMIT 1
-  `;
+  // Inquiry_Id and Student_Id are separate numeric id spaces — never cross-match
+  // them, or a lead pulls an unrelated candidate's discussions. m.inquiry_id is a
+  // real Inquiry_Id; si.Student_Id is a real Student_Id.
   const studentJoin = hasStudentIdColumn
-    ? 'OR (d.student_id IS NOT NULL AND (d.student_id = si.Student_Id OR d.student_id = m.inquiry_id))'
+    ? 'OR (d.student_id IS NOT NULL AND d.student_id > 0 AND si.Student_Id IS NOT NULL AND si.Student_Id > 0 AND d.student_id = si.Student_Id)'
     : '';
   const [rows] = await pool.query(
     `SELECT d.id, d.date, ${nextDateSelect}, d.discussion AS note, d.created_date AS createdAt
@@ -3545,7 +3541,6 @@ export async function getMetaLeadDiscussions(metaLeadId: string): Promise<Discus
      LEFT JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
      INNER JOIN awt_inquirydiscussion d ON (
        d.Inquiry_id = m.inquiry_id
-       OR d.Inquiry_id = (${canonicalInquiryByStudentIdSubquery})
        ${studentJoin}
      )
      WHERE m.meta_lead_id = ?
