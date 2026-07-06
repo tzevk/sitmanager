@@ -434,7 +434,7 @@ export default function AnnualBatchPage() {
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={handleExportExcel}
-              disabled={exporting || total === 0}
+              disabled={exporting}
               className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl text-[#2E3093] bg-white hover:border-[#2E3093]/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

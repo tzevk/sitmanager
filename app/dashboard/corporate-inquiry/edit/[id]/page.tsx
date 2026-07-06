@@ -1163,6 +1163,10 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
 
                 {discussionSubTab === 'meeting' && (
                   <div className="space-y-3">
+                    <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-3 space-y-3">
+                      <div className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                        {editingMeetingIndex === null ? 'Add Meeting' : 'Edit Meeting'}
+                      </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className={labelClass}>Meeting Date</label>
@@ -1228,6 +1232,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                           Cancel
                         </button>
                       )}
+                    </div>
                     </div>
 
                     <div className="overflow-x-auto rounded-lg border border-gray-200">
