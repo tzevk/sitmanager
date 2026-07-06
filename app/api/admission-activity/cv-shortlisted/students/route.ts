@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     if (courseId && !batchCode) {
       const [batches] = await pool.query<any[]>(
         `SELECT Batch_Id, Batch_Code FROM batch_mst
-         WHERE Course_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) AND (Cancel = 0 OR Cancel IS NULL)
+         WHERE Course_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
          ORDER BY Batch_Code DESC`,
         [courseId]
       );
