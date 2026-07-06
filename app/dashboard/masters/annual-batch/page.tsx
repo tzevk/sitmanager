@@ -166,11 +166,20 @@ export default function AnnualBatchPage() {
     return (json.data || []) as Batch[];
   };
 
+  const plannedStartTime = (batch: Batch) => {
+    if (!batch.SDate) return 0;
+    const time = new Date(batch.SDate).getTime();
+    return Number.isNaN(time) ? 0 : time;
+  };
+
   const handleExportExcel = async () => {
     setExporting(true);
     setExportError('');
     try {
-      const exportRows = await fetchExportBatches();
+      const exportRows = (await fetchExportBatches()).sort((a, b) => {
+        const dateDiff = plannedStartTime(b) - plannedStartTime(a);
+        return dateDiff || b.Batch_Id - a.Batch_Id;
+      });
       if (exportRows.length === 0) {
         setExportError('No batches available to export.');
         return;
