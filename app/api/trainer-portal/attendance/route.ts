@@ -23,12 +23,11 @@ async function syncLectureForSession(
     dateIso: string;
     session: 'first_half' | 'second_half';
     topic: string | null;
-    subtopic: string | null;
     activityType: string | null;
   }
 ) {
   const lectureStart = input.session === 'second_half' ? '02:00PM' : '09:00AM';
-  const displayTopic = [input.topic, input.subtopic ? `(${input.subtopic})` : ''].filter(Boolean).join(' ').trim() || null;
+  const displayTopic = input.topic;
   const { assignGiven, testGiven } = activityFlags(input.activityType);
 
   const [batchRowsRaw] = await pool.query(
@@ -139,7 +138,7 @@ export async function POST(req: NextRequest) {
 
     const pool = getPool();
     const body = await req.json();
-    const { action, remarks, batchId, sessions } = body; // action: 'check_in' | 'check_out'
+    const { action, batchId, sessions } = body; // action: 'check_in' | 'check_out'
     const facultyId = session.facultyId;
 
     if (!action || !['check_in', 'check_out'].includes(action)) {
@@ -158,9 +157,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Already checked in today' }, { status: 400 });
       }
       await pool.query(
-        `INSERT INTO trainer_attendance (Faculty_Id, Attend_Date, Check_In, Status, Remarks)
-         VALUES (?, CURDATE(), CURTIME(), 'Present', ?)`,
-        [facultyId, remarks || null]
+        `INSERT INTO trainer_attendance (Faculty_Id, Attend_Date, Check_In, Status)
+         VALUES (?, CURDATE(), CURTIME(), 'Present')`,
+        [facultyId]
       );
       return NextResponse.json({ success: true, action: 'check_in' });
     }
@@ -172,18 +171,19 @@ export async function POST(req: NextRequest) {
       if (existing[0].Check_Out) {
         return NextResponse.json({ error: 'Already checked out today' }, { status: 400 });
       }
+      const fh = (sessions && typeof sessions === 'object' && sessions.first_half) || {};
+      const sh = (sessions && typeof sessions === 'object' && sessions.second_half) || {};
+      const combinedRemarks = [normalizeText(fh.topic), normalizeText(sh.topic)].filter(Boolean).join(' / ') || null;
+
       await pool.query(
         `UPDATE trainer_attendance SET Check_Out = CURTIME(), Remarks = COALESCE(?, Remarks)
          WHERE Faculty_Id = ? AND Attend_Date = CURDATE()`,
-        [remarks || null, facultyId]
+        [combinedRemarks, facultyId]
       );
 
       const normalizedBatchId = Number(batchId);
-      if (Number.isFinite(normalizedBatchId) && normalizedBatchId > 0 && sessions && typeof sessions === 'object') {
+      if (Number.isFinite(normalizedBatchId) && normalizedBatchId > 0) {
         const todayIso = new Date().toISOString().slice(0, 10);
-
-        const fh = sessions.first_half || {};
-        const sh = sessions.second_half || {};
 
         await syncLectureForSession(pool, {
           facultyId,
@@ -191,7 +191,6 @@ export async function POST(req: NextRequest) {
           dateIso: todayIso,
           session: 'first_half',
           topic: normalizeText(fh.topic),
-          subtopic: normalizeText(fh.subtopic),
           activityType: normalizeText(fh.activityType),
         });
 
@@ -201,7 +200,6 @@ export async function POST(req: NextRequest) {
           dateIso: todayIso,
           session: 'second_half',
           topic: normalizeText(sh.topic),
-          subtopic: normalizeText(sh.subtopic),
           activityType: normalizeText(sh.activityType),
         });
       }

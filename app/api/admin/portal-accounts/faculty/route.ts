@@ -38,6 +38,24 @@ async function ensureTimeColumn(pool: any, columnName: 'InTime' | 'OutTime', def
   );
 }
 
+async function ensureTrainerAuthTable(pool: any) {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS trainer_portal_auth (
+      Id INT NOT NULL AUTO_INCREMENT,
+      Faculty_Id INT NOT NULL,
+      Username VARCHAR(100) NOT NULL,
+      Password_Hash CHAR(32) NOT NULL,
+      IsActive TINYINT NOT NULL DEFAULT 1,
+      Created_Date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      Last_Login DATETIME DEFAULT NULL,
+      PRIMARY KEY (Id),
+      UNIQUE KEY uniq_username (Username),
+      INDEX idx_faculty_id (Faculty_Id),
+      INDEX idx_isactive (IsActive)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+}
+
 async function ensureScheduleOverrideTable(pool: any) {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS trainer_schedule_override (
@@ -89,23 +107,36 @@ export async function GET(req: NextRequest) {
     await ensureBreakTimeColumn(pool);
     await ensureTimeColumn(pool, 'InTime', '08:00:00');
     await ensureTimeColumn(pool, 'OutTime', '17:30:00');
+    await ensureTrainerAuthTable(pool);
     if (date) await ensureScheduleOverrideTable(pool);
+
+    // Only faculty who have actually been scheduled or recorded to teach a lecture count as
+    // "trainers" here — faculty_master also holds interview candidates and stale records that
+    // were never real trainers, so a plain non-deleted list pulls in far more than the roster.
+    const trainerFilter = `
+      (fm.Faculty_Id IN (SELECT DISTINCT faculty_id FROM batch_slecture_master WHERE faculty_id IS NOT NULL)
+        OR fm.Faculty_Id IN (SELECT DISTINCT Faculty_Id FROM lecture_taken_master WHERE Faculty_Id IS NOT NULL))
+    `;
 
     const [rows] = await pool.query(
       date
         ? `SELECT fm.Faculty_Id, fm.Faculty_Name, fm.IsActive, fm.BreakTimeMinutes,
                   fm.InTime, fm.OutTime,
-                  tso.InTime as OverrideInTime, tso.OutTime as OverrideOutTime
+                  tso.InTime as OverrideInTime, tso.OutTime as OverrideOutTime,
+                  tpa.Username as ExistingUsername, tpa.IsActive as AccountActive
            FROM faculty_master fm
            LEFT JOIN trainer_schedule_override tso
              ON tso.Faculty_Id = fm.Faculty_Id
             AND tso.Work_Date = ?
-           WHERE (IsDelete = 0 OR IsDelete IS NULL)
+           LEFT JOIN trainer_portal_auth tpa ON tpa.Faculty_Id = fm.Faculty_Id
+           WHERE (fm.IsDelete = 0 OR fm.IsDelete IS NULL) AND ${trainerFilter}
            ORDER BY fm.Faculty_Id DESC`
         : `SELECT fm.Faculty_Id, fm.Faculty_Name, fm.IsActive, fm.BreakTimeMinutes,
-                  fm.InTime, fm.OutTime
+                  fm.InTime, fm.OutTime,
+                  tpa.Username as ExistingUsername, tpa.IsActive as AccountActive
            FROM faculty_master fm
-           WHERE (IsDelete = 0 OR IsDelete IS NULL)
+           LEFT JOIN trainer_portal_auth tpa ON tpa.Faculty_Id = fm.Faculty_Id
+           WHERE (fm.IsDelete = 0 OR fm.IsDelete IS NULL) AND ${trainerFilter}
            ORDER BY fm.Faculty_Id DESC`,
       date ? [date] : []
     );

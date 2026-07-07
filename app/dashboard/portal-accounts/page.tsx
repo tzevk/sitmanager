@@ -67,7 +67,7 @@ export default function PortalAccountsPage() {
   const [copiedTrainerId, setCopiedTrainerId] = useState<number | null>(null);
 
   const [facultySearch, setFacultySearch] = useState('');
-  const [scheduleDate, setScheduleDate] = useState(getTodayIsoDate());
+  const scheduleDate = getTodayIsoDate();
 
   const [facultyLoading, setFacultyLoading] = useState(false);
   const [facultyRows, setFacultyRows] = useState<
@@ -80,6 +80,8 @@ export default function PortalAccountsPage() {
       OutTime?: string | null;
       OverrideInTime?: string | null;
       OverrideOutTime?: string | null;
+      ExistingUsername?: string | null;
+      AccountActive?: number | null;
     }>
   >(
     []
@@ -87,6 +89,8 @@ export default function PortalAccountsPage() {
   const [trainerActiveByFacultyId, setTrainerActiveByFacultyId] = useState<Record<number, boolean>>({});
   const [breakSavingId, setBreakSavingId] = useState<number | null>(null);
   const [timeSavingId, setTimeSavingId] = useState<number | null>(null);
+  const [bulkTrainerCreating, setBulkTrainerCreating] = useState(false);
+  const [trainerSubTab, setTrainerSubTab] = useState<'toCreate' | 'created'>('toCreate');
 
   const labelCls = 'block text-[10px] font-semibold text-gray-600 mb-0.5';
   const inputCls =
@@ -299,6 +303,56 @@ export default function PortalAccountsPage() {
     });
   }, [facultyRows, facultySearch, suggestUsername]);
 
+  const createdFacultyRows = useMemo(
+    () => filteredFacultyRows.filter((f) => Boolean(f.ExistingUsername)),
+    [filteredFacultyRows]
+  );
+  const toCreateFacultyRows = useMemo(
+    () => filteredFacultyRows.filter((f) => !f.ExistingUsername),
+    [filteredFacultyRows]
+  );
+
+  async function createTrainerAccountsInBulk(rows: typeof facultyRows) {
+    if (!rows.length) return;
+    setBulkTrainerCreating(true);
+    setError('');
+    setSuccess('');
+    let created = 0;
+    try {
+      for (const f of rows) {
+        const facultyId = Number(f.Faculty_Id);
+        const facultyName = String(f.Faculty_Name ?? '').trim();
+        if (!Number.isFinite(facultyId) || facultyId <= 0) continue;
+        const username = suggestUsername(facultyName, facultyId);
+        try {
+          const res = await fetch('/api/admin/portal-accounts/trainer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              facultyId,
+              username,
+              password: DEFAULT_TRAINER_PASSWORD,
+              isActive: trainerActiveByFacultyId[facultyId] ?? true,
+            }),
+          });
+          if (res.ok) created += 1;
+        } catch {
+          // keep going — report the overall count at the end
+        }
+      }
+      setSuccess(`Created ${created} of ${rows.length} trainer account(s).`);
+      setFacultyRows((prev) =>
+        prev.map((r) => {
+          const match = rows.find((x) => Number(x.Faculty_Id) === Number(r.Faculty_Id));
+          if (!match) return r;
+          return { ...r, ExistingUsername: suggestUsername(String(r.Faculty_Name ?? '').trim(), Number(r.Faculty_Id)) };
+        })
+      );
+    } finally {
+      setBulkTrainerCreating(false);
+    }
+  }
+
   async function createTrainerAccountForFaculty(facultyId: number, facultyName: string) {
     if (!Number.isFinite(facultyId) || facultyId <= 0) return;
     setError('');
@@ -325,11 +379,163 @@ export default function PortalAccountsPage() {
       if (!res.ok) throw new Error(data?.message || data?.error || 'Failed to create trainer account');
 
       setSuccess(`Trainer account saved for username: ${username}`);
+      setFacultyRows((prev) =>
+        prev.map((r) => (Number(r.Faculty_Id) === facultyId ? { ...r, ExistingUsername: username } : r))
+      );
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to create trainer account');
     } finally {
       setSaving(false);
     }
+  }
+
+  function renderTrainerRow(f: (typeof facultyRows)[number]) {
+    const facultyId = Number(f.Faculty_Id);
+    const facultyName = String(f.Faculty_Name ?? '').trim();
+    const breakMinutes = f.BreakTimeMinutes === null || f.BreakTimeMinutes === undefined ? '' : String(f.BreakTimeMinutes);
+    const username = f.ExistingUsername || suggestUsername(facultyName, facultyId);
+    const password = DEFAULT_TRAINER_PASSWORD;
+    const defaultIn = (f.InTime ? String(f.InTime).slice(0, 5) : DEFAULT_IN_TIME) || DEFAULT_IN_TIME;
+    const defaultOut = (f.OutTime ? String(f.OutTime).slice(0, 5) : DEFAULT_OUT_TIME) || DEFAULT_OUT_TIME;
+    const overrideIn = f.OverrideInTime ? String(f.OverrideInTime).slice(0, 5) : '';
+    const overrideOut = f.OverrideOutTime ? String(f.OverrideOutTime).slice(0, 5) : '';
+    const inTimeValue = (overrideIn || defaultIn) || DEFAULT_IN_TIME;
+    const outTimeValue = (overrideOut || defaultOut) || DEFAULT_OUT_TIME;
+    const hasAccount = Boolean(f.ExistingUsername);
+
+    return (
+      <tr key={facultyId} className="border-t border-gray-100 hover:bg-gray-50/40">
+        <td className="px-3 py-2 text-gray-900 font-semibold">{facultyId}</td>
+        <td className="px-3 py-2 text-gray-800">{facultyName || '—'}</td>
+        <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
+          <input
+            className="w-28 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093]"
+            type="time"
+            step={60}
+            value={inTimeValue}
+            disabled={facultyLoading || timeSavingId === facultyId}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFacultyRows((prev) =>
+                prev.map((r) => (Number(r.Faculty_Id) === facultyId ? { ...r, OverrideInTime: v || null } : r))
+              );
+            }}
+            title="Schedule in time for selected date"
+          />
+        </td>
+        <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
+          <input
+            className="w-28 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093]"
+            type="time"
+            step={60}
+            value={outTimeValue}
+            disabled={facultyLoading || timeSavingId === facultyId}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFacultyRows((prev) =>
+                prev.map((r) => (Number(r.Faculty_Id) === facultyId ? { ...r, OverrideOutTime: v || null } : r))
+              );
+            }}
+            title="Schedule out time for selected date"
+          />
+        </td>
+        <td className="px-3 py-2">
+          <input
+            className="w-24 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093]"
+            type="number"
+            min={0}
+            max={600}
+            value={breakMinutes}
+            disabled={facultyLoading || breakSavingId === facultyId}
+            onChange={(e) => {
+              const v = e.target.value;
+              const parsed = v === '' ? null : Number(v);
+              setFacultyRows((prev) =>
+                prev.map((r) =>
+                  Number(r.Faculty_Id) === facultyId
+                    ? { ...r, BreakTimeMinutes: parsed === null || Number.isFinite(parsed) ? parsed : r.BreakTimeMinutes ?? null }
+                    : r
+                )
+              );
+            }}
+            onBlur={(e) => {
+              const v = e.target.value;
+              const next = v === '' ? null : Number(v);
+              void saveBreakTimeMinutes(facultyId, Number.isFinite(next) ? next : null);
+            }}
+            title="Break time in minutes"
+          />
+        </td>
+        <td className="px-3 py-2 text-gray-700 font-medium">{username}</td>
+        <td className="px-3 py-2">
+          <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+            {password}
+          </span>
+        </td>
+        <td className="px-3 py-2">
+          <div className="flex items-center gap-3">
+            <label className="inline-flex items-center gap-2 select-none">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={trainerActiveByFacultyId[facultyId] ?? true}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setTrainerActiveByFacultyId((prev) => ({ ...prev, [facultyId]: checked }));
+                }}
+                disabled={saving}
+              />
+              <span
+                className="relative w-10 h-5 rounded-full bg-gray-200 border border-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#2E3093]/30 peer-checked:bg-[#2E3093] peer-checked:border-[#2E3093] peer-disabled:opacity-60 peer-disabled:cursor-not-allowed transition-colors"
+                aria-hidden="true"
+              >
+                <span className="absolute top-[2px] left-[2px] w-4 h-4 rounded-full bg-white border border-gray-300 shadow-sm transition-transform peer-checked:translate-x-5" />
+              </span>
+              <span
+                className={
+                  (trainerActiveByFacultyId[facultyId] ?? true)
+                    ? 'px-2 py-0.5 rounded-full border text-[10px] font-semibold bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'px-2 py-0.5 rounded-full border text-[10px] font-semibold bg-gray-50 text-gray-600 border-gray-200'
+                }
+              >
+                {(trainerActiveByFacultyId[facultyId] ?? true) ? 'Active' : 'Not Active'}
+              </span>
+            </label>
+            <button
+              type="button"
+              className={btnGhost}
+              onClick={() => { void copyTrainerCredentials(facultyId, facultyName); }}
+              title="Copy login name and password"
+            >
+              {copiedTrainerId === facultyId ? 'Copied' : 'Copy'}
+            </button>
+            <button
+              type="button"
+              className={btnGhost}
+              onClick={() => { void saveScheduleOverride(facultyId, inTimeValue, outTimeValue); }}
+              disabled={facultyLoading || timeSavingId === facultyId}
+              title="Save schedule override for selected date"
+            >
+              {timeSavingId === facultyId ? 'Saving…' : 'Save'}
+            </button>
+            {hasAccount ? (
+              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
+                Account created
+              </span>
+            ) : (
+              <button
+                type="button"
+                className={btnPrimarySm}
+                onClick={() => { void createTrainerAccountForFaculty(facultyId, facultyName); }}
+                disabled={saving}
+              >
+                Create Account
+              </button>
+            )}
+          </div>
+        </td>
+      </tr>
+    );
   }
 
   async function copyTrainerCredentials(facultyId: number, facultyName: string) {
@@ -597,23 +803,35 @@ export default function PortalAccountsPage() {
 
             <div className="px-3 py-3">
               {tab === 'trainer' ? (
-                <div className="space-y-3">
+                <div className="space-y-4">
+                  {/* ── To Be Created / Accounts Created tabs ── */}
                   <div className="rounded-lg border border-gray-200 bg-white overflow-hidden shadow-sm">
-                    <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-                      <div>
-                        <div className="text-[12px] font-bold text-gray-800">Trainer List</div>
-                        <div className="text-[11px] text-gray-600">Username = trainer name, password = Suvidya@2026</div>
+                    <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setTrainerSubTab('toCreate')}
+                          className={
+                            trainerSubTab === 'toCreate'
+                              ? 'px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold'
+                              : 'px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50'
+                          }
+                        >
+                          To Be Created ({facultyLoading ? '…' : toCreateFacultyRows.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTrainerSubTab('created')}
+                          className={
+                            trainerSubTab === 'created'
+                              ? 'px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold'
+                              : 'px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50'
+                          }
+                        >
+                          Accounts Created ({facultyLoading ? '…' : createdFacultyRows.length})
+                        </button>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap justify-end">
-                        <div className="flex items-center gap-2 rounded-lg border border-[#2E3093]/25 bg-gradient-to-r from-[#2E3093]/10 to-[#2A6BB5]/10 px-2.5 py-1.5">
-                          <div className="text-[11px] text-[#2E3093] font-bold">Schedule Date</div>
-                          <input
-                            className="bg-white border border-[#2E3093]/30 rounded-md px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/25 focus:border-[#2E3093]"
-                            type="date"
-                            value={scheduleDate}
-                            onChange={(e) => setScheduleDate(e.target.value)}
-                          />
-                        </div>
                         <input
                           className="w-56 bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093]"
                           placeholder="Search trainer…"
@@ -629,17 +847,20 @@ export default function PortalAccountsPage() {
                         >
                           Export CSV
                         </button>
-                        <div className="text-[11px] text-gray-500">
-                          {facultyLoading ? 'Loading…' : `${filteredFacultyRows.length} trainers`}
-                        </div>
+                        {trainerSubTab === 'toCreate' && (
+                          <button
+                            type="button"
+                            className={btnPrimarySm}
+                            onClick={() => { void createTrainerAccountsInBulk(toCreateFacultyRows); }}
+                            disabled={bulkTrainerCreating || facultyLoading || toCreateFacultyRows.length === 0}
+                          >
+                            {bulkTrainerCreating ? 'Creating…' : `Create Accounts For All (${toCreateFacultyRows.length})`}
+                          </button>
+                        )}
                       </div>
                     </div>
 
-                    <div className="px-3 py-2 border-b border-gray-100 bg-amber-50/60 text-[11px] text-amber-800">
-                      Trainers sign in with <span className="font-semibold">their full name</span> and default password <span className="font-semibold">Suvidya@2026</span>.
-                    </div>
-
-                    <div className="relative h-[60vh] overflow-x-auto overflow-y-scroll overscroll-contain [-webkit-overflow-scrolling:touch]">
+                    <div className="relative max-h-[55vh] overflow-x-auto overflow-y-scroll overscroll-contain [-webkit-overflow-scrolling:touch]">
                       <table className="min-w-[1020px] w-full text-xs">
                         <thead className="bg-gray-50">
                           <tr className="text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">
@@ -654,159 +875,18 @@ export default function PortalAccountsPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredFacultyRows.map((f) => {
-                            const facultyId = Number(f.Faculty_Id);
-                            const facultyName = String(f.Faculty_Name ?? '').trim();
-                            const breakMinutes = f.BreakTimeMinutes === null || f.BreakTimeMinutes === undefined ? '' : String(f.BreakTimeMinutes);
-                            const username = suggestUsername(facultyName, facultyId);
-                            const password = DEFAULT_TRAINER_PASSWORD;
-                            const defaultIn = (f.InTime ? String(f.InTime).slice(0, 5) : DEFAULT_IN_TIME) || DEFAULT_IN_TIME;
-                            const defaultOut = (f.OutTime ? String(f.OutTime).slice(0, 5) : DEFAULT_OUT_TIME) || DEFAULT_OUT_TIME;
-                            const overrideIn = f.OverrideInTime ? String(f.OverrideInTime).slice(0, 5) : '';
-                            const overrideOut = f.OverrideOutTime ? String(f.OverrideOutTime).slice(0, 5) : '';
-                            const inTimeValue = (overrideIn || defaultIn) || DEFAULT_IN_TIME;
-                            const outTimeValue = (overrideOut || defaultOut) || DEFAULT_OUT_TIME;
-
-                            return (
-                              <tr key={facultyId} className="border-t border-gray-100 hover:bg-gray-50/40">
-                                <td className="px-3 py-2 text-gray-900 font-semibold">{facultyId}</td>
-                                <td className="px-3 py-2 text-gray-800">{facultyName || '—'}</td>
-                                <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
-                                  <input
-                                    className="w-28 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093]"
-                                    type="time"
-                                    step={60}
-                                    value={inTimeValue}
-                                    disabled={facultyLoading || timeSavingId === facultyId}
-                                    onChange={(e) => {
-                                      const v = e.target.value;
-                                      setFacultyRows((prev) =>
-                                        prev.map((r) =>
-                                          Number(r.Faculty_Id) === facultyId ? { ...r, OverrideInTime: v || null } : r
-                                        )
-                                      );
-                                    }}
-                                    title="Schedule in time for selected date"
-                                  />
-                                </td>
-                                <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
-                                  <input
-                                    className="w-28 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093]"
-                                    type="time"
-                                    step={60}
-                                    value={outTimeValue}
-                                    disabled={facultyLoading || timeSavingId === facultyId}
-                                    onChange={(e) => {
-                                      const v = e.target.value;
-                                      setFacultyRows((prev) =>
-                                        prev.map((r) =>
-                                          Number(r.Faculty_Id) === facultyId ? { ...r, OverrideOutTime: v || null } : r
-                                        )
-                                      );
-                                    }}
-                                    title="Schedule out time for selected date"
-                                  />
-                                </td>
-                                <td className="px-3 py-2">
-                                  <input
-                                    className="w-24 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093]"
-                                    type="number"
-                                    min={0}
-                                    max={600}
-                                    value={breakMinutes}
-                                    disabled={facultyLoading || breakSavingId === facultyId}
-                                    onChange={(e) => {
-                                      const v = e.target.value;
-                                      const parsed = v === '' ? null : Number(v);
-                                      setFacultyRows((prev) =>
-                                        prev.map((r) =>
-                                          Number(r.Faculty_Id) === facultyId
-                                            ? { ...r, BreakTimeMinutes: parsed === null || Number.isFinite(parsed) ? parsed : r.BreakTimeMinutes ?? null }
-                                            : r
-                                        )
-                                      );
-                                    }}
-                                    onBlur={(e) => {
-                                      const v = e.target.value;
-                                      const next = v === '' ? null : Number(v);
-                                      void saveBreakTimeMinutes(facultyId, Number.isFinite(next) ? next : null);
-                                    }}
-                                    title="Break time in minutes"
-                                  />
-                                </td>
-                                <td className="px-3 py-2 text-gray-700 font-medium">{username}</td>
-                                <td className="px-3 py-2">
-                                  <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                                    {password}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2">
-                                  <div className="flex items-center gap-3">
-                                    <label className="inline-flex items-center gap-2 select-none">
-                                      <input
-                                        type="checkbox"
-                                        className="sr-only peer"
-                                        checked={trainerActiveByFacultyId[facultyId] ?? true}
-                                        onChange={(e) => {
-                                          const checked = e.target.checked;
-                                          setTrainerActiveByFacultyId((prev) => ({ ...prev, [facultyId]: checked }));
-                                        }}
-                                        disabled={saving}
-                                      />
-                                      <span
-                                        className="relative w-10 h-5 rounded-full bg-gray-200 border border-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#2E3093]/30 peer-checked:bg-[#2E3093] peer-checked:border-[#2E3093] peer-disabled:opacity-60 peer-disabled:cursor-not-allowed transition-colors"
-                                        aria-hidden="true"
-                                      >
-                                        <span className="absolute top-[2px] left-[2px] w-4 h-4 rounded-full bg-white border border-gray-300 shadow-sm transition-transform peer-checked:translate-x-5" />
-                                      </span>
-                                      <span
-                                        className={
-                                          (trainerActiveByFacultyId[facultyId] ?? true)
-                                            ? 'px-2 py-0.5 rounded-full border text-[10px] font-semibold bg-emerald-50 text-emerald-700 border-emerald-200'
-                                            : 'px-2 py-0.5 rounded-full border text-[10px] font-semibold bg-gray-50 text-gray-600 border-gray-200'
-                                        }
-                                      >
-                                        {(trainerActiveByFacultyId[facultyId] ?? true) ? 'Active' : 'Not Active'}
-                                      </span>
-                                    </label>
-                                    <button
-                                      type="button"
-                                      className={btnGhost}
-                                      onClick={() => { void copyTrainerCredentials(facultyId, facultyName); }}
-                                      title="Copy login name and password"
-                                    >
-                                      {copiedTrainerId === facultyId ? 'Copied' : 'Copy'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className={btnGhost}
-                                      onClick={() => {
-                                        void saveScheduleOverride(facultyId, inTimeValue, outTimeValue);
-                                      }}
-                                      disabled={facultyLoading || timeSavingId === facultyId}
-                                      title="Save schedule override for selected date"
-                                    >
-                                      {timeSavingId === facultyId ? 'Saving…' : 'Save'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className={btnPrimarySm}
-                                      onClick={() => {
-                                        void createTrainerAccountForFaculty(facultyId, facultyName);
-                                      }}
-                                      disabled={saving}
-                                    >
-                                      Create Account
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                          {!facultyLoading && facultyRows.length === 0 && (
+                          {(trainerSubTab === 'toCreate' ? toCreateFacultyRows : createdFacultyRows).map(renderTrainerRow)}
+                          {!facultyLoading && trainerSubTab === 'toCreate' && toCreateFacultyRows.length === 0 && (
                             <tr>
                               <td className="px-3 py-3 text-gray-500" colSpan={8}>
-                                No trainers found.
+                                Every trainer already has an account.
+                              </td>
+                            </tr>
+                          )}
+                          {!facultyLoading && trainerSubTab === 'created' && createdFacultyRows.length === 0 && (
+                            <tr>
+                              <td className="px-3 py-3 text-gray-500" colSpan={8}>
+                                No trainer accounts created yet.
                               </td>
                             </tr>
                           )}
@@ -814,7 +894,6 @@ export default function PortalAccountsPage() {
                       </table>
                     </div>
                   </div>
-
                 </div>
               ) : (
                 <div className="space-y-3">

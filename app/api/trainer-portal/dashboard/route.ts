@@ -126,8 +126,8 @@ export async function GET(req: NextRequest) {
        LIMIT 20`,
       [facultyId, facultyId]
     );
-    const currentBatches = (batchRows || []).filter((b) => Number(b.Is_Closed || 0) === 0);
-    const closedBatches = (batchRows || []).filter((b) => Number(b.Is_Closed || 0) === 1);
+    // Only ongoing batches (today falls within the batch's start/end dates) belong on the dashboard.
+    const currentBatches = (batchRows || []).filter((b) => Number(b.Is_Current || 0) === 1);
 
     // Total lectures taken this month
     const [lectureCountRows] = await pool.query<any[]>(
@@ -204,7 +204,6 @@ export async function GET(req: NextRequest) {
         hourlyRate: Number.isFinite(hourlyRate) ? hourlyRate : null,
       },
       batches: currentBatches,
-      closed_batches: closedBatches,
       total_lectures: totalLectures,
       recent_lectures: recentLectures,
       this_month_attendance: thisMonthAttendance,

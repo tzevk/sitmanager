@@ -171,7 +171,7 @@ export default function InquiryPage() {
     }
     finally { setLoading(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, fetchTrigger, search, inquiryType, status, dateFrom, dateTo, training, batchCategory, puneOnly]);
+  }, [page, fetchTrigger]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -203,16 +203,12 @@ export default function InquiryPage() {
     setPage(1); setFetchTrigger(t => t + 1);
   };
 
+  // Built from the URL (last *applied* search via doSearch/doClear), not the live filter
+  // inputs — otherwise a filter changed but not yet searched would leak into the edit
+  // return-to link and could show "No inquiries found" on an unrelated combination.
   const buildReturnTo = () => {
-    const p = new URLSearchParams();
-    if (search) p.set('search', search);
-    if (inquiryType) p.set('inquiryType', inquiryType);
-    if (status) p.set('status', status);
-    if (dateFrom) p.set('dateFrom', dateFrom);
-    if (dateTo) p.set('dateTo', dateTo);
-    if (training) p.set('training', training);
-    if (batchCategory) p.set('batchCategory', batchCategory);
-    if (puneOnly) p.set('puneOnly', puneOnly);
+    const p = new URLSearchParams(searchParams.toString());
+    p.delete('page');
     if (page > 1) p.set('page', String(page));
     const qs = p.toString();
     return qs ? `${pathname}?${qs}` : pathname;

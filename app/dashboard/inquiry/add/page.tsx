@@ -110,7 +110,11 @@ export default function AddInquiryPage() {
   const { canCreate, canUpdate, loading: permLoading } = useResourcePermissions('inquiry');
 
   const goBackToList = useCallback(() => {
-    const decoded = returnToParam ? decodeURIComponent(returnToParam) : '';
+    // searchParams.get() already decodes the query-string value once; decoding again here
+    // corrupts any encoded reserved character still inside the nested URL (e.g. an "&" in
+    // a training/course name), turning it into a literal delimiter that truncates the
+    // next query string when we push it.
+    const decoded = returnToParam;
     // Guard against open redirects; only allow returning inside inquiry listing.
     if (decoded.startsWith('/dashboard/inquiry')) {
       router.push(decoded);
