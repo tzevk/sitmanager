@@ -578,7 +578,6 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // Utility
   '/dashboard/utility/festival-photo-upload': ['festival_photo.view'],
   '/dashboard/utility/export-contacts': ['export_contacts.view'],
-  '/dashboard/utility/batch-students': ['student.view'],
 };
 
 // ============================================================================

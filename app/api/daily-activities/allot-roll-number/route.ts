@@ -3,333 +3,422 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
-// Track Roll_No column state — checked once per cold start
-let rollNoColumnReady = false;
-let rollNoColumnExists = false;
+export const runtime = 'nodejs';
 
-async function ensureRollNoColumn(pool: ReturnType<typeof getPool>) {
-  if (rollNoColumnReady) return;
-  try {
-    const [cols] = await pool.query(
-      "SHOW COLUMNS FROM admission_master LIKE 'Roll_No'"
-    );
-    if ((cols as any[]).length > 0) {
-      rollNoColumnExists = true;
-    } else {
-      try {
-        await pool.query(
-          `ALTER TABLE admission_master ADD COLUMN Roll_No VARCHAR(50) NULL`
-        );
-        rollNoColumnExists = true;
-      } catch {
-        // No ALTER TABLE permission — column will be omitted from queries
-        rollNoColumnExists = false;
-      }
-    }
-  } catch {
-    rollNoColumnExists = false;
-  }
-  rollNoColumnReady = true;
+async function getBatchStudents(pool: ReturnType<typeof getPool>, batchId: number, includeHidden = false) {
+  const admissionDeleteCondition = includeHidden ? '(am.IsDelete = 0 OR am.IsDelete IS NULL OR am.IsDelete = 1)' : '(am.IsDelete = 0 OR am.IsDelete IS NULL)';
+  const [rows] = await pool.query<any[]>(
+    `SELECT
+       am.Admission_Id,
+       s.Student_Id,
+       COALESCE(am.Roll_No, '') AS Roll_No,
+       CASE WHEN am.IsDelete = 1 THEN 1 ELSE 0 END AS Is_Hidden,
+       COALESCE(NULLIF(TRIM(s.Student_Name), ''), TRIM(CONCAT_WS(' ', s.FName, s.LName)), CONCAT('Student #', s.Student_Id)) AS Student_Name,
+       COALESCE(NULLIF(TRIM(s.Present_Mobile), ''), NULLIF(TRIM(s.Present_Mobile2), '')) AS Mobile,
+       COALESCE(NULLIF(TRIM(s.Email), ''), '') AS Email,
+       COALESCE(roll_dup.Duplicate_Count, 1) AS Roll_No_Duplicate_Count,
+       COALESCE(mobile_dup.Duplicate_Count, 1) AS Mobile_Duplicate_Count,
+       COALESCE(email_dup.Duplicate_Count, 1) AS Email_Duplicate_Count
+     FROM admission_master am
+     JOIN student_master s ON s.Student_Id = am.Student_Id
+     LEFT JOIN (
+       SELECT Roll_No_Key, COUNT(*) AS Duplicate_Count
+       FROM (
+         SELECT NULLIF(TRIM(CAST(Roll_No AS CHAR)), '') AS Roll_No_Key
+         FROM admission_master
+         WHERE Batch_Id = ?
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+           AND (Cancel = 0 OR Cancel IS NULL)
+       ) rolls
+       WHERE Roll_No_Key IS NOT NULL AND Roll_No_Key <> ''
+       GROUP BY Roll_No_Key
+     ) roll_dup ON roll_dup.Roll_No_Key = NULLIF(TRIM(CAST(am.Roll_No AS CHAR)), '')
+     LEFT JOIN (
+       SELECT Mobile_Key, COUNT(*) AS Duplicate_Count
+       FROM (
+         SELECT COALESCE(NULLIF(TRIM(s2.Present_Mobile), ''), NULLIF(TRIM(s2.Present_Mobile2), '')) AS Mobile_Key
+         FROM admission_master am2
+         JOIN student_master s2 ON s2.Student_Id = am2.Student_Id
+         WHERE am2.Batch_Id = ?
+           AND (am2.IsDelete = 0 OR am2.IsDelete IS NULL)
+           AND (am2.Cancel = 0 OR am2.Cancel IS NULL)
+           AND (s2.IsDelete = 0 OR s2.IsDelete IS NULL)
+       ) mobiles
+       WHERE Mobile_Key IS NOT NULL AND Mobile_Key <> ''
+       GROUP BY Mobile_Key
+     ) mobile_dup ON mobile_dup.Mobile_Key = COALESCE(NULLIF(TRIM(s.Present_Mobile), ''), NULLIF(TRIM(s.Present_Mobile2), ''))
+     LEFT JOIN (
+       SELECT Email_Key, COUNT(*) AS Duplicate_Count
+       FROM (
+         SELECT LOWER(NULLIF(TRIM(s3.Email), '')) AS Email_Key
+         FROM admission_master am3
+         JOIN student_master s3 ON s3.Student_Id = am3.Student_Id
+         WHERE am3.Batch_Id = ?
+           AND (am3.IsDelete = 0 OR am3.IsDelete IS NULL)
+           AND (am3.Cancel = 0 OR am3.Cancel IS NULL)
+           AND (s3.IsDelete = 0 OR s3.IsDelete IS NULL)
+       ) emails
+       WHERE Email_Key IS NOT NULL AND Email_Key <> ''
+       GROUP BY Email_Key
+     ) email_dup ON email_dup.Email_Key = LOWER(NULLIF(TRIM(s.Email), ''))
+     WHERE am.Batch_Id = ?
+       AND ${admissionDeleteCondition}
+       AND (am.Cancel = 0 OR am.Cancel IS NULL)
+       AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
+     ORDER BY
+       CASE WHEN COALESCE(roll_dup.Duplicate_Count, 1) > 1 OR COALESCE(mobile_dup.Duplicate_Count, 1) > 1 OR COALESCE(email_dup.Duplicate_Count, 1) > 1 THEN 0 ELSE 1 END,
+       Student_Name ASC,
+       am.Admission_Id ASC`,
+     [batchId, batchId, batchId, batchId]
+  );
+  return rows;
 }
 
 export async function GET(req: NextRequest) {
   try {
     const auth = await requirePermission(req, 'roll_number.view');
     if (auth instanceof NextResponse) return auth;
+
     const pool = getPool();
-    await ensureRollNoColumn(pool);
     const { searchParams } = new URL(req.url);
+    const mode = searchParams.get('mode') || 'courses';
 
-    const courseId = searchParams.get('courseId')?.trim() || '';
-    const batchId  = searchParams.get('batchId')?.trim()  || '';
-    const search   = searchParams.get('search')?.trim()   || '';
-    const page     = Math.max(1, Number(searchParams.get('page'))  || 1);
-    const limit    = Math.min(100, Math.max(10, Number(searchParams.get('limit')) || 25));
-    const offset   = (page - 1) * limit;
-
-    // ── Courses dropdown ───────────────────────────────────────────────────
-    const [courses] = await pool.query<any[]>(
-      `SELECT Course_Id, Course_Name
-       FROM course_mst
-       WHERE (IsDelete = 0 OR IsDelete IS NULL)
-       ORDER BY Course_Name`
-    );
-
-    // ── Batches for selected course (simple COUNT from admission_master) ───
-    let batches: any[] = [];
-    if (courseId) {
-      const [batchRows] = await pool.query<any[]>(
-        `SELECT
-           b.Batch_Id,
-           b.Batch_code,
-           b.Category,
-           b.Timings,
-           COUNT(DISTINCT a.Student_Id) AS StudentCount
-         FROM batch_mst b
-         LEFT JOIN admission_master a
-           ON a.Batch_Id = b.Batch_Id
-           AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
-           AND (a.Cancel   = 0 OR a.Cancel   IS NULL)
-         WHERE b.Course_Id = ?
-           AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
-         GROUP BY b.Batch_Id, b.Batch_code, b.Category, b.Timings
-         ORDER BY b.Batch_Id DESC`,
-        [Number(courseId)]
-      );
-      batches = batchRows;
+    if (mode === 'courses') {
+      const [courses] = await pool.query<any[]>(`
+        SELECT Course_Id, Course_Name
+        FROM course_mst
+        WHERE (IsDelete = 0 OR IsDelete IS NULL)
+        ORDER BY Course_Name
+      `);
+      return NextResponse.json({ success: true, courses }, {
+        headers: { 'Cache-Control': 'private, max-age=60' },
+      });
     }
 
-    // ── Allocated batches (already have at least one Roll_No) ─────────────
-    const allocatedRows: any[] = rollNoColumnExists ? await (async () => {
-      const [r] = await pool.query<any[]>(
-        `SELECT DISTINCT b.Batch_Id, b.Batch_code, b.Course_Id, c.Course_Name
-         FROM admission_master a
-         JOIN batch_mst b  ON b.Batch_Id  = a.Batch_Id
-         JOIN course_mst c ON c.Course_Id = b.Course_Id
-         WHERE a.Roll_No IS NOT NULL AND a.Roll_No != ''
-           AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
-           AND (a.Cancel   = 0 OR a.Cancel   IS NULL)
-         ORDER BY b.Batch_Id DESC
-         LIMIT 20`
+    if (mode === 'batches') {
+      const courseId = Number(searchParams.get('courseId') || 0);
+      if (!courseId) return NextResponse.json({ success: true, batches: [] });
+
+      const [batches] = await pool.query<any[]>(
+        `SELECT Batch_Id, Batch_code, Category, Timings, IsDelete, Cancel
+         FROM batch_mst
+         WHERE Course_Id = ?
+           AND Batch_code IS NOT NULL
+           AND TRIM(Batch_code) <> ''
+         ORDER BY Batch_Id DESC`,
+        [courseId]
       );
-      return r;
-    })() : [];
-
-    // ── Students list (only when course + batch both selected) ────────────
-    let rows: any[] = [];
-    let total = 0;
-
-    if (courseId && batchId) {
-      const batchIdNum = Number(batchId);
-
-      // Auto-enrol students linked via student_master.Batch_Code but missing
-      // from admission_master — do it in one transaction to save connections.
-      const [batchCodeRows] = await pool.query<any[]>(
-        `SELECT Batch_code FROM batch_mst WHERE Batch_Id = ? LIMIT 1`,
-        [batchIdNum]
-      );
-      const thisBatchCode = batchCodeRows[0]?.Batch_code;
-
-      if (thisBatchCode) {
-        // Single atomic INSERT … SELECT — no race condition, no duplicates.
-        // If two requests hit simultaneously, the NOT EXISTS prevents double-inserts.
-        try {
-          await pool.query(
-            `INSERT INTO admission_master (Student_Id, Batch_Id, Admission_Date, IsActive, Cancel, IsDelete)
-             SELECT s.Student_Id, ?, CURDATE(), 1, 0, 0
-             FROM student_master s
-             WHERE TRIM(s.Batch_Code) = TRIM(?)
-               AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
-               AND NOT EXISTS (
-                 SELECT 1 FROM admission_master a2
-                 WHERE a2.Student_Id = s.Student_Id
-                   AND a2.Batch_Id   = ?
-                   AND (a2.IsDelete = 0 OR a2.IsDelete IS NULL)
-                   AND (a2.Cancel   = 0 OR a2.Cancel   IS NULL)
-               )`,
-            [batchIdNum, thisBatchCode, batchIdNum]
-          );
-        } catch (e) {
-          console.warn('[allot-roll-number] auto-enrol skipped:', (e as Error)?.message);
-        }
-      }
-
-      // Build filter conditions. student_master is the source of truth for names.
-      // Two alias sets are kept in sync: (a/s) for the COUNT, and (a2/s2) for the
-      // inner per-student pick in the data query.
-      const conditions: string[] = [
-        'a.Batch_Id = ?',
-        '(a.IsDelete = 0 OR a.IsDelete IS NULL)',
-        '(a.Cancel   = 0 OR a.Cancel   IS NULL)',
-      ];
-      const innerConditions: string[] = [
-        'a2.Batch_Id = ?',
-        '(a2.IsDelete = 0 OR a2.IsDelete IS NULL)',
-        '(a2.Cancel   = 0 OR a2.Cancel   IS NULL)',
-      ];
-      const params: (string | number)[] = [batchIdNum];
-      const innerParams: (string | number)[] = [batchIdNum];
-
-      if (search) {
-        const like = `%${search}%`;
-        conditions.push(`(
-          s.Student_Name LIKE ?
-          OR s.FName LIKE ?
-          OR s.Email LIKE ?
-          OR CAST(s.Student_Id AS CHAR) LIKE ?
-          OR CAST(a.Student_Code AS CHAR) LIKE ?
-        )`);
-        params.push(like, like, like, like, like);
-        innerConditions.push(`(
-          s2.Student_Name LIKE ?
-          OR s2.FName LIKE ?
-          OR s2.Email LIKE ?
-          OR CAST(s2.Student_Id AS CHAR) LIKE ?
-          OR CAST(a2.Student_Code AS CHAR) LIKE ?
-        )`);
-        innerParams.push(like, like, like, like, like);
-      }
-
-      const where = conditions.join(' AND ');
-      const innerWhere = innerConditions.join(' AND ');
-
-      // COUNT(DISTINCT Student_Id) matches the one-row-per-student data query,
-      // so `total` is the real number of students regardless of duplicate
-      // admission_master or student_master rows.
-      const [countRows] = await pool.query<any[]>(
-        `SELECT COUNT(DISTINCT a.Student_Id) AS total
-         FROM admission_master a
-         LEFT JOIN student_master s ON s.Student_Id = a.Student_Id
-         WHERE ${where}`,
-        params
-      );
-      total = Number(countRows[0]?.total ?? 0);
-
-      const rollNoSelect = rollNoColumnExists
-        ? `COALESCE(a.Roll_No, '')`
-        : `''`;
-
-      // Rows: pick ONE deterministic admission row (MAX Admission_Id) per student
-      // via an inner subquery, then order by a UNIQUE key (studentName, Student_Id)
-      // so pagination never repeats or drops a student across pages. The outer
-      // GROUP BY a.Admission_Id guards against duplicate student_master rows.
-      const [dataRows] = await pool.query<any[]>(
-        `SELECT
-           a.Admission_Id AS id,
-           a.Student_Code AS studentCode,
-           COALESCE(
-             NULLIF(TRIM(s.Student_Name), ''),
-             TRIM(CONCAT_WS(' ', s.FName, s.LName)),
-             CONCAT('Student #', CAST(a.Student_Id AS CHAR))
-           )                                                           AS studentName,
-           COALESCE(a.Admission_Date, s.Admission_Dt)                 AS admissionDate,
-           COALESCE(NULLIF(TRIM(a.Phase),''), NULLIF(TRIM(b.Category),''), 'Not Set') AS phase,
-           ${rollNoSelect}                                             AS rollNo
-         FROM (
-           SELECT MAX(a2.Admission_Id) AS Admission_Id
-           FROM admission_master a2
-           LEFT JOIN student_master s2 ON s2.Student_Id = a2.Student_Id
-           WHERE ${innerWhere}
-           GROUP BY a2.Student_Id
-         ) picked
-         JOIN admission_master a ON a.Admission_Id = picked.Admission_Id
-         LEFT JOIN student_master s ON s.Student_Id = a.Student_Id
-         JOIN  batch_mst b          ON b.Batch_Id   = a.Batch_Id
-         GROUP BY a.Admission_Id
-         ORDER BY studentName ASC, a.Student_Id ASC
-         LIMIT ? OFFSET ?`,
-        [...innerParams, limit, offset]
-      );
-      rows = dataRows;
+      return NextResponse.json({ success: true, batches }, {
+        headers: { 'Cache-Control': 'private, max-age=60' },
+      });
     }
 
-    return NextResponse.json({
-      courses,
-      batches,
-      allocatedBatches: allocatedRows,
-      rows,
-      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
-    });
+    if (mode === 'students') {
+      const batchId = Number(searchParams.get('batchId') || 0);
+      const includeHidden = searchParams.get('includeHidden') === '1';
+      if (!batchId) {
+        return NextResponse.json({ success: false, error: 'Batch is required.' }, { status: 400 });
+      }
+
+      const rows = await getBatchStudents(pool, batchId, includeHidden);
+      return NextResponse.json({ success: true, rows });
+    }
+
+    return NextResponse.json({ success: false, error: 'Invalid mode.' }, { status: 400 });
   } catch (err: unknown) {
-    console.error('Allot Roll Number GET error:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 }
-    );
+    const message = err instanceof Error ? err.message : 'Server error';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
-export async function PUT(req: NextRequest) {
+// Hard-delete specific admission entries. Removes ONLY the given admission_master
+// row(s) by Admission_Id — the particular entry linked to the student in this
+// batch — not other duplicates or the student's rows in other batches. Physical
+// delete (no soft-delete flag). Accepts a single `admissionId` or a
+// comma-separated `admissionIds` list for bulk deletes.
+export async function DELETE(req: NextRequest) {
+  try {
+    const auth = await requirePermission(req, 'roll_number.delete');
+    if (auth instanceof NextResponse) return auth;
+
+    const pool = getPool();
+    const { searchParams } = new URL(req.url);
+    const batchId = Number(searchParams.get('batchId') || 0);
+
+    const raw = searchParams.get('admissionIds') || searchParams.get('admissionId') || '';
+    const admissionIds = [...new Set(
+      raw.split(',').map((v) => Number(v.trim())).filter((n) => Number.isFinite(n) && n > 0)
+    )];
+
+    if (admissionIds.length === 0) {
+      return NextResponse.json({ success: false, error: 'admissionId or admissionIds is required.' }, { status: 400 });
+    }
+
+    const placeholders = admissionIds.map(() => '?').join(',');
+    const [result] = await pool.query<any>(
+      `DELETE FROM admission_master WHERE Admission_Id IN (${placeholders})`,
+      admissionIds
+    );
+    const deleted = Number(result?.affectedRows ?? 0);
+
+    const rows = batchId ? await getBatchStudents(pool, batchId, false) : [];
+    return NextResponse.json({ success: true, deleted, rows });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Server error';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
   try {
     const auth = await requirePermission(req, 'roll_number.update');
     if (auth instanceof NextResponse) return auth;
+
+    const { action, batchId, admissionId, studentId, rollNo, includeHidden } = await req.json().catch(() => ({}));
+    const bid = Number(batchId || 0);
+    const aid = Number(admissionId || 0);
+    const sid = Number(studentId || 0);
+
+    if (!bid) {
+      return NextResponse.json({ success: false, error: 'Batch is required.' }, { status: 400 });
+    }
+
     const pool = getPool();
-    await ensureRollNoColumn(pool);
-    const body = await req.json();
 
-    const { batchId, rollNumbers } = body as {
-      batchId: number;
-      rollNumbers: { admissionId: number; rollNo: string }[];
-    };
+    if (action === 'auto-generate-roll-numbers') {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
 
-    if (!batchId || !rollNumbers?.length) {
-      return NextResponse.json(
-        { error: 'batchId and rollNumbers are required' },
-        { status: 400 }
-      );
-    }
-
-    const rollValues = rollNumbers.map((r) => r.rollNo?.trim()).filter(Boolean);
-
-    // Validate format: digits only, min 5 chars (relaxed from the prior strict regex)
-    const invalid = rollValues.filter((v) => !/^\d{5,}$/.test(v));
-    if (invalid.length > 0) {
-      return NextResponse.json(
-        { error: `Invalid roll number format: ${invalid.slice(0, 10).join(', ')}. Must be numeric, at least 5 digits.` },
-        { status: 400 }
-      );
-    }
-
-    // Check for duplicates within this save
-    const duplicates = rollValues.filter((v, i) => rollValues.indexOf(v) !== i);
-    if (duplicates.length > 0) {
-      return NextResponse.json(
-        { error: `Duplicate roll numbers: ${[...new Set(duplicates)].join(', ')}` },
-        { status: 400 }
-      );
-    }
-
-    if (!rollNoColumnExists) {
-      return NextResponse.json(
-        { error: 'Roll_No column is not available in this database. Contact your administrator.' },
-        { status: 503 }
-      );
-    }
-
-    // Check for roll numbers already used by OTHER admission records in this batch
-    if (rollValues.length > 0) {
-      const admissionIds = rollNumbers.map((r) => Number(r.admissionId)).filter(Number.isFinite);
-      const [existing] = await pool.query<any[]>(
-        `SELECT Admission_Id, Roll_No
-         FROM admission_master
-         WHERE Batch_Id = ?
-           AND Roll_No IN (${rollValues.map(() => '?').join(',')})
-           AND Admission_Id NOT IN (${(admissionIds.length ? admissionIds : [0]).map(() => '?').join(',')})`,
-        [batchId, ...rollValues, ...(admissionIds.length ? admissionIds : [0])]
-      );
-      if ((existing as any[]).length > 0) {
-        const taken = [...new Set((existing as any[]).map((r) => String(r.Roll_No)))];
-        return NextResponse.json(
-          { error: `Roll number(s) already used in this batch: ${taken.join(', ')}` },
-          { status: 400 }
+        const [admissions] = await conn.query<any[]>(
+          `SELECT
+             am.Admission_Id,
+             COALESCE(TRIM(CAST(am.Roll_No AS CHAR)), '') AS Roll_No,
+             COALESCE(NULLIF(TRIM(s.Student_Name), ''), TRIM(CONCAT_WS(' ', s.FName, s.LName)), CONCAT('Student #', s.Student_Id)) AS Student_Name
+           FROM admission_master am
+           JOIN student_master s ON s.Student_Id = am.Student_Id
+           WHERE am.Batch_Id = ?
+             AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+             AND (am.Cancel = 0 OR am.Cancel IS NULL)
+             AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
+           ORDER BY Student_Name ASC, am.Admission_Id ASC
+           FOR UPDATE`,
+          [bid]
         );
+
+        const usedRolls = new Set<string>();
+        let maxRoll = 0;
+        let rollWidth = 5;
+
+        for (const admission of admissions) {
+          const currentRoll = String(admission.Roll_No || '').trim();
+          if (!currentRoll) continue;
+          usedRolls.add(currentRoll);
+          if (/^\d+$/.test(currentRoll)) {
+            const numericRoll = Number(currentRoll);
+            if (numericRoll > maxRoll) {
+              maxRoll = numericRoll;
+              rollWidth = Math.max(5, currentRoll.length);
+            }
+          }
+        }
+
+        if (!maxRoll) {
+          await conn.rollback();
+          return NextResponse.json({ success: false, error: 'Allocate the first roll number manually, then auto-generate the remaining roll numbers.' }, { status: 400 });
+        }
+
+        let nextRoll = maxRoll + 1;
+        let updated = 0;
+        for (const admission of admissions) {
+          if (String(admission.Roll_No || '').trim()) continue;
+
+          let nextRollNo = String(nextRoll).padStart(rollWidth, '0');
+          while (usedRolls.has(nextRollNo)) {
+            nextRoll += 1;
+            nextRollNo = String(nextRoll).padStart(rollWidth, '0');
+          }
+
+          await conn.query(
+            `UPDATE admission_master
+             SET Roll_No = ?
+             WHERE Admission_Id = ?
+               AND Batch_Id = ?
+               AND (Roll_No IS NULL OR TRIM(CAST(Roll_No AS CHAR)) = '')`,
+            [nextRollNo, admission.Admission_Id, bid]
+          );
+          usedRolls.add(nextRollNo);
+          nextRoll += 1;
+          updated += 1;
+        }
+
+        await conn.commit();
+        const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
+        return NextResponse.json({ success: true, rows, updated });
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      } finally {
+        conn.release();
       }
     }
 
-    // Save all roll numbers in one transaction
+    if (!aid || !sid) {
+      return NextResponse.json({ success: false, error: 'Admission and student are required.' }, { status: 400 });
+    }
+
+    if (action === 'save-roll-number') {
+      const nextRollNo = String(rollNo ?? '').trim();
+      if (nextRollNo && !/^\d{5,}$/.test(nextRollNo)) {
+        return NextResponse.json({ success: false, error: 'Roll number must be numeric and at least 5 digits.' }, { status: 400 });
+      }
+
+      if (nextRollNo) {
+        const [existing] = await pool.query<any[]>(
+          `SELECT Admission_Id
+           FROM admission_master
+           WHERE Batch_Id = ?
+             AND Admission_Id <> ?
+             AND TRIM(CAST(Roll_No AS CHAR)) = ?
+             AND (IsDelete = 0 OR IsDelete IS NULL)
+             AND (Cancel = 0 OR Cancel IS NULL)
+           LIMIT 1`,
+          [bid, aid, nextRollNo]
+        );
+
+        if (existing.length > 0) {
+          return NextResponse.json({ success: false, error: `Roll number ${nextRollNo} is already used in this batch.` }, { status: 400 });
+        }
+      }
+
+      const [result] = await pool.query<any>(
+        `UPDATE admission_master
+         SET Roll_No = ?
+         WHERE Admission_Id = ?
+           AND Student_Id = ?
+           AND Batch_Id = ?
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+           AND (Cancel = 0 OR Cancel IS NULL)`,
+        [nextRollNo || null, aid, sid, bid]
+      );
+
+      if (result.affectedRows === 0) {
+        return NextResponse.json({ success: false, error: 'Student was not found in this batch.' }, { status: 404 });
+      }
+
+      const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
+      return NextResponse.json({ success: true, rows });
+    }
+
+    if (action === 'unhide-student') {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+
+        const [selectedAdmission] = await conn.query<any[]>(
+          `SELECT Admission_Id
+           FROM admission_master
+           WHERE Admission_Id = ?
+             AND Student_Id = ?
+             AND Batch_Id = ?
+             AND IsDelete = 1
+             AND (Cancel = 0 OR Cancel IS NULL)
+           LIMIT 1
+           FOR UPDATE`,
+          [aid, sid, bid]
+        );
+
+        if (selectedAdmission.length === 0) {
+          await conn.rollback();
+          return NextResponse.json({ success: false, error: 'Hidden student was not found in this batch.' }, { status: 404 });
+        }
+
+        await conn.query(
+          `UPDATE admission_master
+           SET IsDelete = 0
+           WHERE Student_Id = ?
+             AND Batch_Id = ?
+             AND IsDelete = 1
+             AND (Cancel = 0 OR Cancel IS NULL)`,
+          [sid, bid]
+        );
+
+        await conn.query(
+          `UPDATE student_attendance
+           SET IsDelete = 0
+           WHERE Batch_Id = ?
+             AND Student_Id = ?
+             AND IsDelete = 1`,
+          [bid, sid]
+        );
+
+        await conn.commit();
+        const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
+        return NextResponse.json({ success: true, rows });
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      } finally {
+        conn.release();
+      }
+    }
+
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
-      for (const { admissionId, rollNo } of rollNumbers) {
-        await conn.query(
-          `UPDATE admission_master SET Roll_No = ? WHERE Admission_Id = ? AND Batch_Id = ?`,
-          [rollNo?.trim() || null, admissionId, batchId]
-        );
+
+      const [selectedAdmission] = await conn.query<any[]>(
+        `SELECT Admission_Id
+         FROM admission_master
+         WHERE Admission_Id = ?
+           AND Student_Id = ?
+           AND Batch_Id = ?
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+           AND (Cancel = 0 OR Cancel IS NULL)
+         LIMIT 1
+         FOR UPDATE`,
+        [aid, sid, bid]
+      );
+
+      if (selectedAdmission.length === 0) {
+        await conn.rollback();
+        return NextResponse.json({ success: false, error: 'Student was not found in this batch.' }, { status: 404 });
       }
+
+      const [result] = await conn.query<any>(
+        `UPDATE admission_master
+         SET IsDelete = 1
+         WHERE Student_Id = ?
+           AND Batch_Id = ?
+           AND (IsDelete = 0 OR IsDelete IS NULL)`,
+        [sid, bid]
+      );
+
+      if (result.affectedRows === 0) {
+        await conn.rollback();
+        return NextResponse.json({ success: false, error: 'Student was not found in this batch.' }, { status: 404 });
+      }
+
+      await conn.query(
+        `UPDATE student_attendance
+         SET IsDelete = 1
+         WHERE Batch_Id = ?
+           AND Student_Id = ?
+           AND (IsDelete = 0 OR IsDelete IS NULL)`,
+        [bid, sid]
+      );
+
       await conn.commit();
-    } catch (txErr) {
+      const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
+      return NextResponse.json({ success: true, rows });
+    } catch (err) {
       await conn.rollback();
-      throw txErr;
+      throw err;
     } finally {
       conn.release();
     }
-
-    return NextResponse.json({ success: true, updated: rollNumbers.length });
   } catch (err: unknown) {
-    console.error('Allot Roll Number PUT error:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 }
-    );
+    const message = err instanceof Error ? err.message : 'Server error';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
