@@ -154,7 +154,7 @@ export default function PublicInquiryPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           Student_Name: fullName,
-          Inquiry_Type: 'Online Inquiry',
+          Inquiry_Type: 'Website',
           Course_Name: inquiryAbout || null,
           Course_Type: courseType || null,
           Course_Id: null,
