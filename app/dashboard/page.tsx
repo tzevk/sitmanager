@@ -494,8 +494,8 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
-        <CbdDashboard data={data} loading={loading} />
         {changelogWidget}
+        <CbdDashboard data={data} loading={loading} />
         {showFollowupPopup && (
           <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="w-full max-w-2xl rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.3)] overflow-hidden">
