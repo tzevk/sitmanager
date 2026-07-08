@@ -84,24 +84,6 @@ function normalizeText(value: unknown): string | null {
   return text || null;
 }
 
-function normalizeMobileForDedup(value: unknown): string | null {
-  // The phone itself is stored verbatim (see extractPhoneForSync). For matching
-  // an inquiry against an already-synced one, only a genuine 10-digit Indian
-  // mobile is a reliable key — take the last 10 digits to drop any country code.
-  // Anything else (overflow values, partial/garbage numbers) is NOT used as a
-  // dedup key, so distinct people are never merged onto one another.
-  const digits = (normalizeText(value) ?? '').replace(/\D/g, '');
-  const tail = digits.length > 10 ? digits.slice(-10) : digits;
-  return /^[6-9]\d{9}$/.test(tail) ? tail : null;
-}
-
-function normalizeEmailForDedup(value: unknown): string | null {
-  const text = normalizeText(value);
-  if (!text) return null;
-  const lowered = text.toLowerCase();
-  return lowered.includes('@') ? lowered : null;
-}
-
 // Ordered list of field names to try when extracting a phone number.
 // More specific names come first so we don't accidentally pick up a
 // "contact" field that stores free-text rather than a number.
@@ -226,41 +208,6 @@ function summarizeInquirySource(pageSource: string | null): string | null {
   } catch {
     return pageSource;
   }
-}
-
-// Only treat an existing inquiry as a duplicate of an incoming lead if it is recent —
-// otherwise a phone/email that was reused (or coincidentally matches) years apart silently
-// swallows a genuinely new inquiry into a long-dead record instead of creating a new one.
-const DUPLICATE_MATCH_WINDOW_DAYS = 90;
-
-async function getInquiryRecencyDateExpr(
-  queryable: mysql.Pool | mysql.PoolConnection,
-  inquiryTable: string
-): Promise<string> {
-  const hasGeneratedColumn = await cached(
-    `schema:student-inquiry-has-inquiry-date:${inquiryTable}`,
-    60 * 60 * 1000,
-    async () => {
-      const [rows] = await queryable.query(
-        `SELECT COUNT(*) as cnt
-         FROM INFORMATION_SCHEMA.COLUMNS
-         WHERE TABLE_SCHEMA = DATABASE()
-           AND TABLE_NAME = ?
-           AND COLUMN_NAME = '_inquiry_date'`,
-        [inquiryTable]
-      );
-      return Number((rows as Array<{ cnt?: unknown }>)[0]?.cnt ?? 0) > 0;
-    }
-  );
-
-  if (hasGeneratedColumn) return '_inquiry_date';
-
-  return (
-    `COALESCE(` +
-    `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),19),'%Y-%m-%d %H:%i:%s'),` +
-    `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),10),'%Y-%m-%d'),` +
-    `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),10),'%d/%m/%Y'))`
-  );
 }
 
 async function getStudentInquiryColumnMaxLength(
@@ -559,58 +506,6 @@ export async function syncSuvidyaInquiries(
       }
     }
 
-    // Batch-check existing inquiry contacts so we do not create duplicates when
-    // Suvidya sends the same lead with a new source id.
-    const incomingMobiles = Array.from(new Set(
-      validRecords
-        .map(({ record }) => normalizeMobileForDedup(extractPhoneForSync(record)))
-        .filter((v): v is string => Boolean(v))
-    ));
-    const incomingEmails = Array.from(new Set(
-      validRecords
-        .map(({ record }) => normalizeEmailForDedup(record.email_id))
-        .filter((v): v is string => Boolean(v))
-    ));
-
-    const existingInquiryByMobile = new Map<string, number>();
-    const existingInquiryByEmail = new Map<string, number>();
-    if (incomingMobiles.length > 0 || incomingEmails.length > 0) {
-      const conditions: string[] = [];
-      const params: Array<string | number> = [];
-
-      if (incomingMobiles.length > 0) {
-        const ph = incomingMobiles.map(() => '?').join(', ');
-        conditions.push(`RIGHT(REGEXP_REPLACE(COALESCE(Present_Mobile,''),'[^0-9]',''), 10) IN (${ph})`);
-        params.push(...incomingMobiles);
-      }
-      if (incomingEmails.length > 0) {
-        const ph = incomingEmails.map(() => '?').join(', ');
-        conditions.push(`LOWER(TRIM(COALESCE(Email,''))) IN (${ph})`);
-        params.push(...incomingEmails);
-      }
-
-      const recencyDateExpr = await getInquiryRecencyDateExpr(syncConnection, inquiryTable);
-
-      const [existingInquiryRows] = await syncConnection.query(
-        `SELECT Inquiry_Id, Present_Mobile, Email
-         FROM \`${inquiryTable}\`
-         WHERE (IsDelete = 0 OR IsDelete IS NULL)
-           AND (${conditions.join(' OR ')})
-           AND ${recencyDateExpr} >= (CURDATE() - INTERVAL ${DUPLICATE_MATCH_WINDOW_DAYS} DAY)
-         ORDER BY Inquiry_Id DESC`,
-        params
-      );
-
-      for (const row of existingInquiryRows as Array<{ Inquiry_Id: number; Present_Mobile: string | null; Email: string | null }>) {
-        const inquiryId = Number(row.Inquiry_Id);
-        if (!Number.isFinite(inquiryId) || inquiryId <= 0) continue;
-        const mobileKey = normalizeMobileForDedup(row.Present_Mobile);
-        const emailKey = normalizeEmailForDedup(row.Email);
-        if (mobileKey && !existingInquiryByMobile.has(mobileKey)) existingInquiryByMobile.set(mobileKey, inquiryId);
-        if (emailKey && !existingInquiryByEmail.has(emailKey)) existingInquiryByEmail.set(emailKey, inquiryId);
-      }
-    }
-
     for (const { record, sourceId, tableName, studentName } of validRecords) {
       const existing = existingRowsByKey.get(`${tableName}:${sourceId}`);
       if (existing) {
@@ -664,57 +559,6 @@ export async function syncSuvidyaInquiries(
         courseName,
         matchedCourseId,
       });
-
-      const mobileDedupKey = normalizeMobileForDedup(mobile);
-      const emailDedupKey = normalizeEmailForDedup(email);
-      const duplicateInquiryId =
-        (mobileDedupKey ? existingInquiryByMobile.get(mobileDedupKey) : undefined)
-        ?? (emailDedupKey ? existingInquiryByEmail.get(emailDedupKey) : undefined)
-        ?? null;
-
-      if (duplicateInquiryId) {
-        if (mobile) {
-          await syncConnection.query(
-            `UPDATE \`${inquiryTable}\`
-             SET Present_Mobile = COALESCE(NULLIF(Present_Mobile, ''), ?)
-             WHERE Inquiry_Id = ?`,
-            [mobile, duplicateInquiryId]
-          );
-        }
-        await syncConnection.query(
-          `INSERT INTO suvidya_inquiry_sync (
-             source_table_name,
-             source_inquiry_id,
-             inquiry_id,
-             student_name,
-             email,
-             mobile,
-             course_name,
-             page_source,
-             created_date,
-             payload_json
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE
-             inquiry_id = COALESCE(inquiry_id, VALUES(inquiry_id)),
-             email = COALESCE(NULLIF(email, ''), VALUES(email)),
-             mobile = COALESCE(NULLIF(mobile, ''), VALUES(mobile)),
-             payload_json = VALUES(payload_json)`,
-          [
-            tableName,
-            sourceId,
-            duplicateInquiryId,
-            studentName,
-            email,
-            mobile,
-            courseName,
-            pageSource,
-            inquiryDate,
-            JSON.stringify(record),
-          ]
-        );
-        summary.skippedExisting += 1;
-        continue;
-      }
 
       try {
         const inquiryId = await insertInquiry(syncConnection, inquiryTable, {
