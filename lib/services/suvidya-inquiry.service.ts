@@ -203,7 +203,7 @@ function isPuneRecord(record: SuvidyaInquiryRecord): boolean {
 
 function mapInquiryType(tableName: string | null): string {
   if (tableName === 'quick_enquiry_form') return 'Quick Inquiry';
-  return 'Online Inquiry';
+  return 'Website';
 }
 
 function summarizeInquirySource(pageSource: string | null): string | null {
@@ -226,6 +226,41 @@ function summarizeInquirySource(pageSource: string | null): string | null {
   } catch {
     return pageSource;
   }
+}
+
+// Only treat an existing inquiry as a duplicate of an incoming lead if it is recent —
+// otherwise a phone/email that was reused (or coincidentally matches) years apart silently
+// swallows a genuinely new inquiry into a long-dead record instead of creating a new one.
+const DUPLICATE_MATCH_WINDOW_DAYS = 90;
+
+async function getInquiryRecencyDateExpr(
+  queryable: mysql.Pool | mysql.PoolConnection,
+  inquiryTable: string
+): Promise<string> {
+  const hasGeneratedColumn = await cached(
+    `schema:student-inquiry-has-inquiry-date:${inquiryTable}`,
+    60 * 60 * 1000,
+    async () => {
+      const [rows] = await queryable.query(
+        `SELECT COUNT(*) as cnt
+         FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = ?
+           AND COLUMN_NAME = '_inquiry_date'`,
+        [inquiryTable]
+      );
+      return Number((rows as Array<{ cnt?: unknown }>)[0]?.cnt ?? 0) > 0;
+    }
+  );
+
+  if (hasGeneratedColumn) return '_inquiry_date';
+
+  return (
+    `COALESCE(` +
+    `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),19),'%Y-%m-%d %H:%i:%s'),` +
+    `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),10),'%Y-%m-%d'),` +
+    `STR_TO_DATE(LEFT(NULLIF(TRIM(Inquiry_Dt),''),10),'%d/%m/%Y'))`
+  );
 }
 
 async function getStudentInquiryColumnMaxLength(
@@ -554,11 +589,14 @@ export async function syncSuvidyaInquiries(
         params.push(...incomingEmails);
       }
 
+      const recencyDateExpr = await getInquiryRecencyDateExpr(syncConnection, inquiryTable);
+
       const [existingInquiryRows] = await syncConnection.query(
         `SELECT Inquiry_Id, Present_Mobile, Email
          FROM \`${inquiryTable}\`
          WHERE (IsDelete = 0 OR IsDelete IS NULL)
            AND (${conditions.join(' OR ')})
+           AND ${recencyDateExpr} >= (CURDATE() - INTERVAL ${DUPLICATE_MATCH_WINDOW_DAYS} DAY)
          ORDER BY Inquiry_Id DESC`,
         params
       );

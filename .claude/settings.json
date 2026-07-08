@@ -178,7 +178,8 @@
       "Bash(sed -n '/CREATE TABLE `faculty_master`/,/^\\) ENGINE/p' /Users/tanvikadam/Desktop/SIT/sitmanager/docs/db-schema-dump/current-schema.sql)",
       "Bash(grep -n \"CREATE TABLE \\\\`.*employee.*\\\\`\\\\|CREATE TABLE \\\\`.*staff.*\\\\`\\\\|CREATE TABLE \\\\`.*hr_.*\\\\`\" /Users/tanvikadam/Desktop/SIT/sitmanager/docs/db-schema-dump/current-schema.sql -i)",
       "Bash(grep -n \"CREATE TABLE \\\\`faculty_master\\\\`\" -A 60 docs/db-schema-dump/current-schema.sql)",
-      "Bash(grep -n \"FROM \\\\\\\\\\\\\\\\\\\\`\\\\${inquiryTable}\\\\\\\\\\\\\\\\\\\\`\\\\|JOIN course_mst\\\\|_inquiry_date\\\\|GENERATED\\\\|inquiryDateColumnAvailable\" /Users/tanvikadam/Desktop/SIT/sitmanager/lib/services/inquiry.service.ts)"
+      "Bash(grep -n \"FROM \\\\\\\\\\\\\\\\\\\\`\\\\${inquiryTable}\\\\\\\\\\\\\\\\\\\\`\\\\|JOIN course_mst\\\\|_inquiry_date\\\\|GENERATED\\\\|inquiryDateColumnAvailable\" /Users/tanvikadam/Desktop/SIT/sitmanager/lib/services/inquiry.service.ts)",
+      "Bash(curl -s -m 20 \"https://suvidya.ac.in/admission/GetInquiry.php\" -H \"Accept: application/json\")"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
