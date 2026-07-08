@@ -88,6 +88,7 @@ function printSummary(s) {
   console.log(`  Matched by name   :${pad(s.byName)}`);
   console.log(`  Not found         :${pad(s.notFound)}`);
   console.log(`  Skipped (exists)  :${pad(s.skipped)}`);
+  console.log(`  Skipped (dupe)    :${pad(s.duplicateSkip)}`);
   console.log(`  ${s.commit ? 'Updated' : 'Would update'}          :${pad(s.updated)}`);
   console.log(line());
 }
@@ -169,12 +170,34 @@ async function main() {
       if (!byName.has(nameKey)) byName.set(nameKey, r);
     }
 
+    // Roll numbers already assigned per batch in the new DB — anything here is
+    // "taken" and must not be handed to a second, different student.
+    const takenPerBatch = new Map(); // Batch_Id -> Set<Roll_No>
+    for (const r of newRows) {
+      const existing = String(r.Roll_No || '').trim();
+      if (!existing) continue;
+      if (!takenPerBatch.has(r.Batch_Id)) takenPerBatch.set(r.Batch_Id, new Set());
+      takenPerBatch.get(r.Batch_Id).add(existing);
+    }
+
+    // Duplicates within the old DB's own source data: the same roll number
+    // assigned to more than one student in the same batch. We can't tell which
+    // one is correct, so every row sharing such a pair is skipped entirely.
+    const sourceDupeCounts = new Map(); // "Batch_Id::Roll_No" -> count
+    for (const old of oldRows) {
+      const rollNo = String(old.Roll_No).trim();
+      if (!rollNo) continue;
+      const key = `${old.Batch_Id}::${rollNo}`;
+      sourceDupeCounts.set(key, (sourceDupeCounts.get(key) || 0) + 1);
+    }
+
     // ── 3. Match and plan ──────────────────────────────────────────
     console.log('\n  Matching records...\n');
 
-    const toUpdate  = [];
-    const notFound  = [];
-    const skipped   = [];
+    const toUpdate      = [];
+    const notFound      = [];
+    const skipped       = [];
+    const duplicateSkip = [];
     let byIdCount   = 0;
     let byNameCount = 0;
 
@@ -204,8 +227,30 @@ async function main() {
         continue;
       }
 
+      // Source duplicate: this roll number appears more than once for this
+      // batch in the old DB itself — ambiguous, skip rather than guess.
+      const sourceDupeKey = `${old.Batch_Id}::${rollNo}`;
+      if (sourceDupeCounts.get(sourceDupeKey) > 1) {
+        duplicateSkip.push({ rollNo, name: old.Student_Name, batch: old.Batch_code, reason: 'duplicated in old DB for this batch' });
+        continue;
+      }
+
+      // Target duplicate: another student in this batch already holds this
+      // roll number in the new DB (and it isn't the same admission we're
+      // about to update, which would happen when re-running with --force).
+      const taken = takenPerBatch.get(match.Batch_Id);
+      if (taken && taken.has(rollNo) && existing !== rollNo) {
+        duplicateSkip.push({ rollNo, name: old.Student_Name, batch: old.Batch_code, reason: 'already used by another student in this batch (new DB)' });
+        continue;
+      }
+
       if (strategy === 'id')         byIdCount++;
       else if (strategy === 'name+batch') byNameCount++;
+
+      // Claim this roll number for the batch so a later old-DB row targeting a
+      // different student can't also be assigned it in the same run.
+      if (!takenPerBatch.has(match.Batch_Id)) takenPerBatch.set(match.Batch_Id, new Set());
+      takenPerBatch.get(match.Batch_Id).add(rollNo);
 
       toUpdate.push({
         admissionId : match.Admission_Id,
@@ -217,7 +262,15 @@ async function main() {
       });
     }
 
-    // ── 4. Print not-found / skipped detail ───────────────────────
+    // ── 4. Print not-found / skipped / duplicate detail ────────────
+    if (duplicateSkip.length) {
+      console.log(`  ⛔ Skipped — duplicate roll number (${duplicateSkip.length}):`);
+      for (const r of duplicateSkip) {
+        console.log(`     ${r.rollNo.padEnd(20)} ${r.name.padEnd(30)} [${r.batch}] — ${r.reason}`);
+      }
+      console.log();
+    }
+
     if (notFound.length) {
       console.log(`  ⚠  Not matched in new DB (${notFound.length}):`);
       for (const r of notFound) {
@@ -277,6 +330,7 @@ async function main() {
       byName   : byNameCount,
       notFound : notFound.length,
       skipped  : skipped.length,
+      duplicateSkip: duplicateSkip.length,
       updated  : COMMIT ? actuallyUpdated : toUpdate.length,
     });
 

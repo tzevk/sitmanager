@@ -269,9 +269,8 @@ export async function GET(req: NextRequest) {
              AND (IsDelete = 0 OR IsDelete IS NULL)
            GROUP BY Student_Id
          ) att ON att.Student_Id = a.Student_Id
-         ORDER BY
-           CASE WHEN a.Roll_No IS NULL OR a.Roll_No = '' THEN 1 ELSE 0 END,
-           a.Roll_No + 0, s.Student_Name`,
+         WHERE a.Roll_No IS NOT NULL AND a.Roll_No <> ''
+         ORDER BY a.Roll_No + 0, s.Student_Name`,
         [Number(batchId), Number(batchId), date, session]
       );
 
