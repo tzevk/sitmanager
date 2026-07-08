@@ -305,6 +305,38 @@ export default function AllotRollNumberPage() {
     }
   };
 
+  const handleExportFacescan = () => {
+    if (!rows.length) return;
+    const w = window.open('', '_blank', 'width=900,height=1000');
+    if (!w) return;
+
+    const courseName = selectedCourse?.Course_Name || '';
+    const batchCode = selectedBatch?.Batch_code || '';
+    const escape = (v: unknown) => String(v ?? '').replace(/</g, '&lt;');
+
+    const bodyRows = rows.map((r) => `<tr><td>${escape(r.Student_Id)}</td><td>${escape(r.Student_Name)}</td></tr>`).join('');
+
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Student Facescan</title><style>
+      *{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif}
+      body{padding:24px;color:#111}
+      h1{font-size:16px;margin-bottom:14px}
+      .header{display:flex;justify-content:space-between;font-size:13px;margin-bottom:16px}
+      table{width:100%;border-collapse:collapse;font-size:12px}
+      th,td{border:1px solid #333;padding:6px 10px;text-align:left}
+      th{background:#f1f1f1}
+      @media print{@page{size:A4;margin:12mm}}
+    </style></head><body>
+      <h1>Student Facescan</h1>
+      <div class="header">
+        <span>Training Programme : ${escape(courseName)}</span>
+        <span>Batch No. : ${escape(batchCode)}</span>
+      </div>
+      <table><thead><tr><th>Student ID No.</th><th>Student Name</th></tr></thead><tbody>${bodyRows}</tbody></table>
+      <script>window.onload=()=>{setTimeout(()=>window.print(),400)}<\/script>
+    </body></html>`);
+    w.document.close();
+  };
+
   if (permLoading) return <PermissionLoading />;
   if (!canView) return <AccessDenied message="You do not have permission to view roll number allotment." />;
 
@@ -395,6 +427,14 @@ export default function AllotRollNumberPage() {
                 Delete Duplicates{duplicateRowsToDelete.length ? ` (${duplicateRowsToDelete.length})` : ''}
               </button>
             )}
+            <button
+              type="button"
+              onClick={handleExportFacescan}
+              disabled={!rows.length}
+              className="inline-flex items-center px-3 py-1.5 rounded-md border border-slate-200 bg-white text-slate-700 text-[11px] font-bold hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Export Facescan
+            </button>
             {canUpdate ? (
               <button
                 type="button"

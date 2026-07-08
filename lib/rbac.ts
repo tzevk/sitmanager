@@ -166,6 +166,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     permissions: [
       ...createPermissions('attendance', 'Attendance'),
       ...createPermissions('roll_number', 'Roll Number Allotment'),
+      ...createPermissions('study_material', 'Study Material Record', ['view']),
       ...createPermissions('lecture', 'Lecture'),
       ...createPermissions('assignment', 'Assignment'),
       ...createPermissions('unit_test', 'Unit Test'),
