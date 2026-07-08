@@ -3592,34 +3592,67 @@ export default function PublicAdmissionFormPage() {
                           </div>
                         )}
 
-                        {/* 0% Interest Loan — arranged offline by the admissions team (contact-us note, not an online payment option) */}
-                        {(isPipingFulltime || is75kPlan || isProcessWeekend) && (
-                          <div className="w-full text-left p-4 rounded-xl border-2 border-blue-200 bg-blue-50/60">
-                            <div className="flex items-start gap-3">
-                              <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-100 text-blue-600">
-                                <i className="fas fa-university text-lg"></i>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-sm font-bold text-blue-800">0% Interest Loan</span>
-                                  <span className="bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">0% Interest</span>
+                        {/* 0% Interest Loan — selectable like the other plans; student pays the initial
+                            admission amount online now, and contacts the admissions team to arrange
+                            the remaining balance as a 0% interest loan through a financial institution. */}
+                        {(isPipingFulltime || is75kPlan || isProcessWeekend) && (() => {
+                          const isSelected = formData.modeOfPayment === 'Loan (0% Interest)';
+                          return (
+                            <div className={`w-full rounded-xl border-2 transition-all duration-200 ${
+                              isSelected
+                                ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-200 shadow-md'
+                                : 'bg-blue-50/60 border-blue-200 hover:border-blue-300 hover:shadow-sm'
+                            }`}>
+                              <button
+                                type="button"
+                                onClick={() => handleChange('modeOfPayment', 'Loan (0% Interest)')}
+                                className="w-full text-left p-4"
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-100 text-blue-600">
+                                    <i className="fas fa-university text-lg"></i>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-sm font-bold text-blue-800">0% Interest Loan</span>
+                                      <span className="bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">0% Interest</span>
+                                    </div>
+                                    <p className="text-xs text-blue-700 mt-1.5 leading-relaxed">
+                                      Pay &#8377;{fmt(payableNow)} now to confirm your admission — the remaining balance is arranged as a 0% interest loan through a financial institution, coordinated personally by our admissions team.
+                                    </p>
+                                  </div>
+                                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                    isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                                  }`}>
+                                    {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />}
+                                  </div>
                                 </div>
-                                <p className="text-xs text-blue-700 mt-1.5 leading-relaxed">
-                                  Our 0% interest financing (a small amount at admission with the balance via a financial-institution loan) is arranged personally by our admissions team and can&#39;t be completed through this online form.
-                                </p>
-                                <div className="mt-2.5 rounded-lg bg-white border border-blue-200 px-3 py-2.5">
-                                  <p className="text-[11px] font-bold uppercase tracking-wider text-blue-500 mb-1.5">Contact us to apply</p>
+                              </button>
+                              <div className="px-4 pb-4">
+                                {isSelected && (
+                                  <div className="mb-3 bg-blue-100/50 rounded-lg p-3 space-y-2">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className="text-blue-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-blue-400"></i>Payable Now</span>
+                                      <span className="font-semibold text-blue-900">&#8377;{fmt(payableNow)}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-xs border-t border-blue-200 pt-2">
+                                      <span className="text-blue-800 font-bold">Remaining balance (via loan)</span>
+                                      <span className="font-extrabold text-blue-900">&#8377;{isProcessWeekend ? '35,000' : is75kPlan ? '60,000' : '1,00,000'}</span>
+                                    </div>
+                                  </div>
+                                )}
+                                <div className="rounded-lg bg-white border border-blue-200 px-3 py-2.5">
+                                  <p className="text-[11px] font-bold uppercase tracking-wider text-blue-500 mb-1.5">Contact us to arrange the loan</p>
                                   <div className="space-y-1.5 text-xs text-gray-700">
                                     <a href="tel:+912226682290" className="flex items-center gap-2 hover:text-blue-700 transition-colors"><i className="fas fa-phone text-blue-400 text-[11px] w-3.5"></i>(022) 26682290</a>
                                     <a href="tel:+919821569885" className="flex items-center gap-2 hover:text-blue-700 transition-colors"><i className="fas fa-mobile-alt text-blue-400 text-[11px] w-3.5"></i>+91 98215 69885</a>
                                     <a href="mailto:enquiry@suvidya.ac.in" className="flex items-center gap-2 hover:text-blue-700 transition-colors"><i className="fas fa-envelope text-blue-400 text-[11px] w-3.5"></i>enquiry@suvidya.ac.in</a>
                                   </div>
                                 </div>
-                                <p className="text-[10px] text-blue-600/80 mt-2">Or choose another payment option above to complete your admission online right now.</p>
                               </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
 
                         {/* Option: Pay at Office (Password Override) */}
                         {(() => {
