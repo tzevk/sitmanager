@@ -318,6 +318,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       ...createPermissions('mass_whatsapp', 'Mass WhatsApp', ['view', 'create']),
       ...createPermissions('task_management', 'Task Management'),
       ...createPermissions('email_master', 'Email Master'),
+      ...createPermissions('changelog', 'Software Changelog', ['view', 'create']),
     ],
   },
 

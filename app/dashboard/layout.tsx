@@ -83,6 +83,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Utility > Festival Photo Upload': '/dashboard/utility/festival-photo-upload',
   'Utility > Export Contacts': '/dashboard/utility/export-contacts',
   'Utility > ID Card Generator': '/dashboard/utility/id-cards',
+  'Utility > Software Changelog': '/dashboard/changelog',
   'Support > Support Tickets': '/dashboard/support',
 };
 
@@ -209,6 +210,7 @@ const SUB_MENUS: Record<string, string[]> = {
     'Mass WhatsApp',
     'Task Managements',
     'Email Master',
+    'Software Changelog',
   ],
   'Placement': [
     'Job Postings',
@@ -303,6 +305,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Utility > Festival Photo Upload': ['festival_photo.view'],
   'Utility > Export Contacts': ['export_contacts.view'],
   'Utility > ID Card Generator': ['student.view'],
+  'Utility > Software Changelog': ['changelog.view'],
 };
 
 const NAV_ICONS: Record<string, React.ReactNode> = {

@@ -17,6 +17,7 @@ import TrainingDevelopmentDashboard from './components/TrainingDevelopmentDashbo
 import AdministrationDashboard from './components/AdministrationDashboard';
 import PlacementDepartmentDashboard from './components/PlacementDepartmentDashboard';
 import FinanceFullDashboard from './components/FinanceFullDashboard';
+import ChangelogWidget from './components/ChangelogWidget';
 
 interface TodoItem {
   id: string;
@@ -350,6 +351,8 @@ export default function DashboardPage() {
     </div>
   );
 
+  const changelogWidget = <ChangelogWidget />;
+
   // Fetch dashboard data live from the API and refresh on an interval.
   useEffect(() => {
     let cancelled = false;
@@ -492,6 +495,7 @@ export default function DashboardPage() {
           </div>
         </div>
         <CbdDashboard data={data} loading={loading} />
+        {changelogWidget}
         {showFollowupPopup && (
           <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="w-full max-w-2xl rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.3)] overflow-hidden">
@@ -549,6 +553,7 @@ export default function DashboardPage() {
     return (
       <div className="space-y-4">
         {profileHeader}
+        {changelogWidget}
         <FinanceFullDashboard />
       </div>
     );
@@ -558,6 +563,7 @@ export default function DashboardPage() {
     return (
       <div className="space-y-4">
         {profileHeader}
+        {changelogWidget}
         <TrainingDevelopmentDashboard data={data} loading={loading} />
       </div>
     );
@@ -567,6 +573,7 @@ export default function DashboardPage() {
     return (
       <div className="space-y-4">
         {profileHeader}
+        {changelogWidget}
         <AdministrationDashboard
           data={data}
           loading={loading}
@@ -583,6 +590,7 @@ export default function DashboardPage() {
     return (
       <div className="space-y-4">
         {profileHeader}
+        {changelogWidget}
         <PlacementDepartmentDashboard data={data} loading={loading} />
         {showFollowupPopup && (
           <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
@@ -644,6 +652,7 @@ export default function DashboardPage() {
         className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_rgba(46,48,147,0.08),_transparent_55%),radial-gradient(ellipse_at_top_right,_rgba(42,107,181,0.08),_transparent_55%),radial-gradient(ellipse_at_bottom_left,_rgba(250,228,82,0.10),_transparent_50%)]"
       />
       {profileHeader}
+        {changelogWidget}
       {/* ── Quick Stats Row ── */}
       {widgetConfig.quickStats && (loading ? (
         <QuickStatsSkeleton />

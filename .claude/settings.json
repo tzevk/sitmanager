@@ -183,7 +183,14 @@
       "Bash(grep -n \"CREATE TABLE \\\\`admission_master\\\\`\" -A 60 /Users/tanvikadam/Desktop/SIT/sitmanager/docs/db-schema-dump/current-schema.sql)",
       "Bash(grep -n \"CREATE TABLE \\\\`batch_mst\\\\`\" -A 100 /Users/tanvikadam/Desktop/SIT/sitmanager/docs/db-schema-dump/current-schema.sql)",
       "Bash(git -C /Users/tanvikadam/Desktop/SIT/sitmanager log --oneline -- scripts/migrate-roll-numbers.mjs scripts/check-not-found-rolls.mjs)",
-      "Bash(grep -n \"Auto Generate\\\\${blankRollCount\" /Users/tanvikadam/Desktop/SIT/sitmanager/app/dashboard/daily-activities/allot-roll-number/page.tsx)"
+      "Bash(grep -n \"Auto Generate\\\\${blankRollCount\" /Users/tanvikadam/Desktop/SIT/sitmanager/app/dashboard/daily-activities/allot-roll-number/page.tsx)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts',{}\\), indent=2\\)\\)\")",
+      "Bash(node scripts/log-change.mjs --title \"Test entry\" --category Update --description \"Verifying the changelog logging script works end-to-end.\")",
+      "Bash(node scripts/log-change.mjs --title \"Redesigned trainer portal dashboard\" --category Improvement --description \"Simplified and professionalized the trainer dashboard: only ongoing batches are shown, attendance data was corrected, and signing in/out now includes a simple typable lecture-topic field tied to first/second half sessions.\")",
+      "Bash(node scripts/log-change.mjs --title \"Trainer accounts page now shows only real trainers\" --category Improvement --description \"The trainer portal accounts page previously listed every faculty_master record \\(including old interview candidates\\). It now only shows faculty who have actually taught a lecture, split into 'To Be Created' and 'Accounts Created' tabs with bulk account creation.\")",
+      "Bash(node scripts/log-change.mjs --title \"Inquiry list filters now require Search, matching Student Master\" --category Improvement --description \"Changing a filter \\(status, training, dates, etc.\\) on the Inquiry Listing no longer auto-searches instantly — you now click Search or press Enter, consistent with the Student Master list.\")",
+      "Bash(node scripts/log-change.mjs --title \"Fixed inquiry edit-and-return losing filtered results\" --category Fix --description \"Editing an inquiry while filtered to a training programme containing a special character \\(e.g. 'Piping Design & Drafting'\\) could return to an empty list. Caused by a redundant URL decode step corrupting the encoded ampersand.\")",
+      "Bash(node scripts/log-change.mjs --title \"Fixed website inquiries being mislabeled and duplicate leads swallowing new ones\" --category Fix --description \"The suvidya.ac.in website sync was tagging new leads as 'Online Inquiry' instead of 'Website', and separately was merging genuinely new inquiries into old/unrelated existing records by phone or email match instead of creating new ones. Both are fixed; going forward every incoming lead creates its own inquiry record.\")"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
