@@ -230,7 +230,8 @@
       "Bash(curl -s \"http://localhost:3000/api/admission-activity/student?page=1&limit=25\" -H \"Cookie: $\\(cat ~/.sitmanager_session_cookie || echo ''\\)\")",
       "Bash(ls -la /Users/tanvikadam/Desktop/student-master-audit.xlsx)",
       "Bash(grep -n \"CREATE TABLE \\\\`s_fees_mst\\\\`\" -A 40 /Users/tanvikadam/Desktop/SIT/sitmanager/docs/db-schema-dump/current-schema.sql)",
-      "Bash(grep -n \"CREATE TABLE \\\\`finance_loans\\\\`\" -A 30 /Users/tanvikadam/Desktop/SIT/sitmanager/docs/db-schema-dump/current-schema.sql)"
+      "Bash(grep -n \"CREATE TABLE \\\\`finance_loans\\\\`\" -A 30 /Users/tanvikadam/Desktop/SIT/sitmanager/docs/db-schema-dump/current-schema.sql)",
+      "Bash(node scripts/log-change.mjs --title \"New Installments tab for loan/installment-plan students\" --category Feature --description \"Added an 'Installments' tab on the Edit Student page, shown only for students on an installment or loan payment plan \\(50% Installment, 2-Payment Plan, 3-Installment Plan, 6-Installment Plan, Loan 0% Interest\\). Staff can auto-generate an evenly-split schedule from the batch fee \\(installment count derived from the plan name\\), then adjust due dates/amounts, add extra installments manually, mark each as Paid/Pending, or delete one. New student_installment_plan table is created automatically on first use.\")"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

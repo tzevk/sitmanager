@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 import { StudentTransferBadge } from '../../../../../components/ui/StudentTransferBadge';
+import { INSTALLMENT_PAYMENT_TYPES } from '@/lib/student-installments';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
@@ -30,6 +31,15 @@ interface PlacementRow {
   Status: string | null;
   InterviewDate: string | null;
   Result: string | null;
+}
+interface InstallmentRow {
+  Installment_Id: number;
+  Installment_No: number;
+  Due_Date: string | null;
+  Amount: number;
+  Status: string;
+  Paid_Date: string | null;
+  Notes: string | null;
 }
 interface DocumentRow {
   id: number;
@@ -81,6 +91,7 @@ const TABS = [
   { id: 'alumni',       label: 'Alumni Registration' },
   { id: 'company',      label: 'Company Information' },
   { id: 'transfer',     label: 'Transfer / Cancel' },
+  { id: 'installments', label: 'Installments' },
   { id: 'discussion',   label: 'Discussion' },
   { id: 'placement',    label: 'Placement' },
   { id: 'documents',    label: 'Documents' },
@@ -150,6 +161,17 @@ export default function EditStudentPage() {
 
   /* fees */
   const [fees, setFees] = useState<{ total: number; paid: number; balance: number }>({ total: 0, paid: 0, balance: 0 });
+
+  /* installments */
+  const [paymentType, setPaymentType] = useState('');
+  const [installments, setInstallments] = useState<InstallmentRow[]>([]);
+  const [instLoading, setInstLoading] = useState(false);
+  const [instError, setInstError] = useState('');
+  const [instLoaded, setInstLoaded] = useState(false);
+  const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [addingInstallment, setAddingInstallment] = useState(false);
+  const [newInstallment, setNewInstallment] = useState({ dueDate: '', amount: '', notes: '' });
+  const showInstallmentsTab = (INSTALLMENT_PAYMENT_TYPES as readonly string[]).includes(paymentType);
 
   /* documents */
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
@@ -294,6 +316,7 @@ export default function EditStudentPage() {
 
         setBatchStartDate(s.Batch_StartDate ? String(s.Batch_StartDate).slice(0, 10) : '');
         setBatchEndDate(s.Batch_EndDate ? String(s.Batch_EndDate).slice(0, 10) : '');
+        setPaymentType(s.Payment_Type || '');
 
         // Structured academic data (admission payload)
         const e = (data.education ?? {}) as Record<string, unknown>;
@@ -374,6 +397,108 @@ export default function EditStudentPage() {
       setDiscError(e instanceof Error ? e.message : 'Failed to add discussion');
     } finally {
       setAddingDiscussion(false);
+    }
+  };
+
+  /* ------------------------------------------------------------------ */
+  /*  Fetch installments (lazy — only when the Installments tab is opened) */
+  /* ------------------------------------------------------------------ */
+  const fetchInstallments = useCallback(async () => {
+    if (!studentId) return;
+    setInstLoading(true);
+    setInstError('');
+    try {
+      const res  = await fetch(`/api/admission-activity/student/${studentId}/installments`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setInstallments(data.installments ?? []);
+      setInstLoaded(true);
+    } catch (e: unknown) {
+      setInstError(e instanceof Error ? e.message : 'Failed to load installments');
+    }
+    setInstLoading(false);
+  }, [studentId]);
+
+  useEffect(() => {
+    if (activeTab === 'installments' && studentId && !instLoaded) {
+      fetchInstallments();
+    }
+  }, [activeTab, studentId, instLoaded, fetchInstallments]);
+
+  const handleGeneratePlan = async () => {
+    if (!studentId) return;
+    setGeneratingPlan(true);
+    setInstError('');
+    try {
+      const res = await fetch(`/api/admission-activity/student/${studentId}/installments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'generate' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate schedule');
+      setInstallments(data.installments ?? []);
+    } catch (e: unknown) {
+      setInstError(e instanceof Error ? e.message : 'Failed to generate schedule');
+    } finally {
+      setGeneratingPlan(false);
+    }
+  };
+
+  const handleAddInstallment = async () => {
+    if (!studentId || !newInstallment.amount) return;
+    setAddingInstallment(true);
+    setInstError('');
+    try {
+      const res = await fetch(`/api/admission-activity/student/${studentId}/installments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dueDate: newInstallment.dueDate || null,
+          amount: Number(newInstallment.amount),
+          notes: newInstallment.notes,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add installment');
+      setInstallments(data.installments ?? []);
+      setNewInstallment({ dueDate: '', amount: '', notes: '' });
+    } catch (e: unknown) {
+      setInstError(e instanceof Error ? e.message : 'Failed to add installment');
+    } finally {
+      setAddingInstallment(false);
+    }
+  };
+
+  const handleToggleInstallmentPaid = async (row: InstallmentRow) => {
+    if (!studentId) return;
+    const markPaid = row.Status !== 'Paid';
+    try {
+      const res = await fetch(`/api/admission-activity/student/${studentId}/installments/${row.Installment_Id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markPaid }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update installment');
+      await fetchInstallments();
+    } catch (e: unknown) {
+      setInstError(e instanceof Error ? e.message : 'Failed to update installment');
+    }
+  };
+
+  const handleDeleteInstallment = async (row: InstallmentRow) => {
+    if (!studentId) return;
+    if (!window.confirm(`Delete installment #${row.Installment_No}?`)) return;
+    try {
+      const res = await fetch(`/api/admission-activity/student/${studentId}/installments/${row.Installment_Id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete installment');
+      await fetchInstallments();
+    } catch (e: unknown) {
+      setInstError(e instanceof Error ? e.message : 'Failed to delete installment');
     }
   };
 
@@ -585,7 +710,7 @@ export default function EditStudentPage() {
       <form onSubmit={handleSave} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         {/* Tabs */}
         <div className="flex border-b border-slate-200 px-4 bg-slate-50/80 overflow-x-auto">
-          {TABS.map((tab) => (
+          {TABS.filter((tab) => tab.id !== 'installments' || showInstallmentsTab).map((tab) => (
             <button
               key={tab.id}
               type="button"
@@ -1477,6 +1602,146 @@ export default function EditStudentPage() {
             </div>
           )}
 
+          {/* ==== INSTALLMENTS ==== */}
+          {activeTab === 'installments' && showInstallmentsTab && (
+            <div className="space-y-3">
+              <SectionCard
+                title={`Installment Schedule — ${paymentType}`}
+                icon={
+                  <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                }
+              >
+                {instError && (
+                  <p className="text-xs text-red-500 mb-2">{instError}</p>
+                )}
+                {instLoading ? (
+                  <div className="flex justify-center py-6">
+                    <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : installments.length === 0 ? (
+                  <div className="text-center py-6 space-y-3">
+                    <p className="text-xs text-gray-400">No installment schedule yet for this student.</p>
+                    <button
+                      type="button"
+                      onClick={handleGeneratePlan}
+                      disabled={!canUpdate || generatingPlan}
+                      className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-[#2E3093] text-white text-xs font-bold hover:bg-[#252780] disabled:opacity-50"
+                    >
+                      {generatingPlan && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                      Generate Schedule
+                    </button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-200">
+                          <th className="py-1.5 pr-3">#</th>
+                          <th className="py-1.5 pr-3">Due Date</th>
+                          <th className="py-1.5 pr-3 text-right">Amount</th>
+                          <th className="py-1.5 pr-3">Status</th>
+                          <th className="py-1.5 pr-3">Paid Date</th>
+                          <th className="py-1.5 pr-3">Notes</th>
+                          <th className="py-1.5 pr-3 text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {installments.map((row) => (
+                          <tr key={row.Installment_Id} className="border-b border-slate-100">
+                            <td className="py-1.5 pr-3 font-mono">{row.Installment_No}</td>
+                            <td className="py-1.5 pr-3">{row.Due_Date ? String(row.Due_Date).slice(0, 10) : '—'}</td>
+                            <td className="py-1.5 pr-3 text-right font-mono">{Number(row.Amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td className="py-1.5 pr-3">
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                row.Status === 'Paid' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}>
+                                {row.Status}
+                              </span>
+                            </td>
+                            <td className="py-1.5 pr-3">{row.Paid_Date ? String(row.Paid_Date).slice(0, 10) : '—'}</td>
+                            <td className="py-1.5 pr-3 text-slate-500">{row.Notes || '—'}</td>
+                            <td className="py-1.5 pr-3 text-center">
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={!canUpdate}
+                                  onClick={() => handleToggleInstallmentPaid(row)}
+                                  className="text-[11px] font-semibold text-[#2E3093] hover:underline disabled:opacity-50"
+                                >
+                                  {row.Status === 'Paid' ? 'Mark Pending' : 'Mark Paid'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={!canUpdate}
+                                  onClick={() => handleDeleteInstallment(row)}
+                                  className="text-[11px] font-semibold text-red-600 hover:underline disabled:opacity-50"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </SectionCard>
+
+              <SectionCard
+                title="Add Installment"
+                icon={
+                  <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                }
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                  <div>
+                    <label className={labelCls}>Due Date</label>
+                    <input
+                      type="date"
+                      value={newInstallment.dueDate}
+                      onChange={(e) => setNewInstallment((v) => ({ ...v, dueDate: e.target.value }))}
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Amount</label>
+                    <input
+                      type="number"
+                      value={newInstallment.amount}
+                      onChange={(e) => setNewInstallment((v) => ({ ...v, amount: e.target.value }))}
+                      className={inputCls}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="sm:col-span-1">
+                    <label className={labelCls}>Notes</label>
+                    <input
+                      type="text"
+                      value={newInstallment.notes}
+                      onChange={(e) => setNewInstallment((v) => ({ ...v, notes: e.target.value }))}
+                      className={inputCls}
+                      placeholder="Optional"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddInstallment}
+                    disabled={!canUpdate || addingInstallment || !newInstallment.amount}
+                    className="inline-flex items-center justify-center gap-2 h-9 px-4 rounded-lg bg-[#2E3093] text-white text-xs font-bold hover:bg-[#252780] disabled:opacity-50"
+                  >
+                    {addingInstallment && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                    Add
+                  </button>
+                </div>
+              </SectionCard>
+            </div>
+          )}
+
           {/* ==== DISCUSSION ==== */}
           {activeTab === 'discussion' && (
             <div className="space-y-3">
@@ -1831,8 +2096,8 @@ export default function EditStudentPage() {
             </div>
           )}
 
-          {/* ── Action buttons (shown on all tabs except discussion / placement / documents) ── */}
-          {activeTab !== 'discussion' && activeTab !== 'placement' && activeTab !== 'documents' && (
+          {/* ── Action buttons (shown on all tabs except discussion / placement / documents / installments) ── */}
+          {activeTab !== 'discussion' && activeTab !== 'placement' && activeTab !== 'documents' && activeTab !== 'installments' && (
             <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200">
               <button
                 type="submit"

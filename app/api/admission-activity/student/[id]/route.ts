@@ -217,7 +217,7 @@ export async function GET(
          s.Refered_By,
          s.Alumni_Registered,
          s.SitPerformance, s.PlacementRemark,
-         a.Admission_Id, a.Batch_Id, a.Admission_Date, a.Cancel,
+         a.Admission_Id, a.Batch_Id, a.Admission_Date, a.Cancel, a.Payment_Type,
          COALESCE(b.Batch_code, b2.Batch_code) AS Batch_code,
          COALESCE(mtc.Course_Name, '')        AS Moved_To_Course_Name,
          COALESCE(b.SDate, b2.SDate)           AS Batch_StartDate,
