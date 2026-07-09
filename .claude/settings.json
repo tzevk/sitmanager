@@ -203,7 +203,8 @@
       "Bash(grep -n \"fetch\\(\\\\`/api/fee-details\" /Users/tanvikadam/Desktop/SIT/sitmanager/app/dashboard/fee-details/add/page.tsx /Users/tanvikadam/Desktop/SIT/sitmanager/app/dashboard/reports/fees/page.tsx)",
       "Bash(node scripts/log-change.mjs --title \"Transferred badge now shows source batch\" --category Improvement --description \"The Transferred tag now displays the batch a student was moved FROM in addition to the destination batch, across Fees Report \\(table/Excel/PDF\\), attendance, Edit Student, and fee receipts.\")",
       "Bash(node scripts/db/import-legacy-cancel-transfer-tags.mjs)",
-      "Bash(node scripts/db/import-legacy-cancel-transfer-tags.mjs --apply)"
+      "Bash(node scripts/db/import-legacy-cancel-transfer-tags.mjs --apply)",
+      "Bash(node scripts/log-change.mjs --title \"Student Master shows Cancelled/Transferred tags; legacy data imported\" --category Improvement --description \"Student Master list now shows Cancelled and Transferred \\(from→to batch\\) tags, including previously-cancelled students that were formerly hidden from the list. Also ran a one-time import backfilling Cancelled/Transferred status for students whose cancellation or batch transfer only ever happened in the legacy system \\(16 cancellations + 680 transfers imported\\).\")"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
