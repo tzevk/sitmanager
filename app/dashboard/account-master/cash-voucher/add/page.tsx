@@ -1,0 +1,264 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useResourcePermissions } from '@/lib/permissions-context';
+import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
+import { CASH_VOUCHER_COMPANIES } from '@/lib/cash-voucher';
+
+const labelCls = 'block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-0.5';
+const inputCls = 'w-full border-2 border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-gray-700 placeholder:text-gray-300';
+
+interface AccountHead { id: number; title: string }
+interface LineItem {
+  date: string;
+  accountHead: string;
+  amount: string;
+  description: string;
+  billNo: string;
+}
+
+const emptyItem = (): LineItem => ({ date: '', accountHead: '', amount: '', description: '', billNo: '' });
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+export default function AddCashVoucherPage() {
+  const router = useRouter();
+  const { canCreate, loading: permLoading } = useResourcePermissions('finance');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const [accountHeads, setAccountHeads] = useState<AccountHead[]>([]);
+
+  const [company, setCompany] = useState<string>(CASH_VOUCHER_COMPANIES[0]);
+  const [date, setDate] = useState(todayISO());
+  const [paidTo, setPaidTo] = useState('');
+  const [openingBalance, setOpeningBalance] = useState('');
+  const [paidBy, setPaidBy] = useState('');
+  const [preparedBy, setPreparedBy] = useState('');
+  const [items, setItems] = useState<LineItem[]>([emptyItem()]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/account-master/cash-voucher/account-heads');
+        const data = await res.json();
+        setAccountHeads(data.accountHeads ?? []);
+      } catch { /* ignore */ }
+    })();
+  }, []);
+
+  const updateItem = (index: number, patch: Partial<LineItem>) => {
+    setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+  };
+
+  const addItemRow = () => setItems((prev) => [...prev, emptyItem()]);
+  const removeItemRow = (index: number) => setItems((prev) => prev.filter((_, i) => i !== index));
+
+  const totalAmount = items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
+  const closingBalance = (Number(openingBalance) || 0) - totalAmount;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!date) { setError('Date is required'); return; }
+    if (!paidTo.trim()) { setError('Paid To is required'); return; }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/account-master/cash-voucher', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company,
+          date,
+          paidTo,
+          openingBalance: openingBalance === '' ? null : Number(openingBalance),
+          paidBy,
+          preparedBy,
+          items: items
+            .filter((it) => Number(it.amount) > 0)
+            .map((it) => ({
+              date: it.date || date,
+              accountHead: it.accountHead,
+              amount: Number(it.amount),
+              description: it.description,
+              billNo: it.billNo,
+            })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save');
+      router.push('/dashboard/account-master/cash-voucher');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to save');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (permLoading) return <PermissionLoading />;
+  if (!canCreate) return <AccessDenied message="You do not have permission to create cash vouchers." />;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 p-4">
+      <div className="mb-3">
+        <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
+          <span>Dashboard</span>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+          <span>Admin/Accounts</span>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+          <button onClick={() => router.push('/dashboard/account-master/cash-voucher')} className="hover:text-[#2E3093]">
+            Cash Voucher
+          </button>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+          <span className="text-[#2E3093] font-medium">Add</span>
+        </div>
+        <h1 className="text-xl font-bold text-gray-800">Add Cash Voucher Details</h1>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-3">
+        {error && (
+          <div className="px-3 py-2 rounded-md bg-red-50 border border-red-200 text-xs text-red-600 font-medium">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] px-4 py-2">
+            <h3 className="text-xs font-bold text-white tracking-wide">Add Cash Voucher Details</h3>
+          </div>
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div>
+              <label className={labelCls}>Company</label>
+              <select value={company} onChange={(e) => setCompany(e.target.value)} className={inputCls}>
+                {CASH_VOUCHER_COMPANIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Sr. No.</label>
+              <input type="text" value="Auto-generated on save" disabled className={`${inputCls} bg-gray-50 text-gray-400`} />
+            </div>
+            <div>
+              <label className={labelCls}>Date *</label>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} required />
+            </div>
+            <div>
+              <label className={labelCls}>Paid To *</label>
+              <input type="text" value={paidTo} onChange={(e) => setPaidTo(e.target.value)} className={inputCls} placeholder="Paid to" required />
+            </div>
+            <div>
+              <label className={labelCls}>Opening Balance</label>
+              <input type="number" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} className={inputCls} placeholder="0.00" />
+            </div>
+            <div>
+              <label className={labelCls}>Paid By</label>
+              <input type="text" value={paidBy} onChange={(e) => setPaidBy(e.target.value)} className={inputCls} placeholder="e.g. Cash" />
+            </div>
+            <div>
+              <label className={labelCls}>Prepared By</label>
+              <input type="text" value={preparedBy} onChange={(e) => setPreparedBy(e.target.value)} className={inputCls} placeholder="Prepared by" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] px-4 py-2 flex items-center justify-between">
+            <h3 className="text-xs font-bold text-white tracking-wide">Expense Line Items</h3>
+            <button
+              type="button"
+              onClick={addItemRow}
+              className="text-[11px] font-semibold text-white/90 hover:text-white flex items-center gap-1"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add Row
+            </button>
+          </div>
+          <div className="p-4 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-200">
+                  <th className="py-1.5 pr-2">Date</th>
+                  <th className="py-1.5 pr-2">Account Head</th>
+                  <th className="py-1.5 pr-2 text-right">Amount</th>
+                  <th className="py-1.5 pr-2">Description</th>
+                  <th className="py-1.5 pr-2">Bill No.</th>
+                  <th className="py-1.5 pr-2 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it, i) => (
+                  <tr key={i} className="border-b border-slate-100">
+                    <td className="py-1.5 pr-2">
+                      <input type="date" value={it.date} onChange={(e) => updateItem(i, { date: e.target.value })} className={`${inputCls} w-36`} />
+                    </td>
+                    <td className="py-1.5 pr-2">
+                      <select value={it.accountHead} onChange={(e) => updateItem(i, { accountHead: e.target.value })} className={`${inputCls} min-w-[180px]`}>
+                        <option value="">Select…</option>
+                        {accountHeads.map((h) => (
+                          <option key={h.id} value={h.title}>{h.title}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="py-1.5 pr-2">
+                      <input type="number" value={it.amount} onChange={(e) => updateItem(i, { amount: e.target.value })} className={`${inputCls} w-24 text-right`} placeholder="0.00" />
+                    </td>
+                    <td className="py-1.5 pr-2">
+                      <input type="text" value={it.description} onChange={(e) => updateItem(i, { description: e.target.value })} className={`${inputCls} min-w-[180px]`} placeholder="Being cash paid for…" />
+                    </td>
+                    <td className="py-1.5 pr-2">
+                      <input type="text" value={it.billNo} onChange={(e) => updateItem(i, { billNo: e.target.value })} className={`${inputCls} w-24`} />
+                    </td>
+                    <td className="py-1.5 pr-2 text-center">
+                      <button
+                        type="button"
+                        onClick={() => removeItemRow(i)}
+                        disabled={items.length === 1}
+                        className="text-[11px] font-semibold text-red-600 hover:underline disabled:opacity-40"
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div className="mt-3 flex justify-end gap-6 text-xs font-semibold">
+              <span className="text-gray-500">Total Expenses: <span className="text-gray-900">{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+              <span className="text-gray-500">Closing Balance: <span className="text-gray-900">{closingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="inline-flex items-center gap-2 h-9 px-5 rounded-lg bg-[#2E3093] text-white text-xs font-bold hover:bg-[#252780] disabled:opacity-50"
+          >
+            {submitting && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+            Save Cash Voucher
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push('/dashboard/account-master/cash-voucher')}
+            className="h-9 px-5 rounded-lg border border-gray-300 text-gray-600 text-xs font-semibold hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}

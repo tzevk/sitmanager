@@ -10,13 +10,21 @@ export const INSTALLMENT_PAYMENT_TYPES = [
   'Loan (0% Interest)',
 ] as const;
 
-// How many installments to generate by default for each plan. "Loan (0% Interest)"
-// has no count in its name, so it defaults to 2 (same as the other 2-part plans) —
-// staff can add/remove rows after generating.
+// How many installments to generate by default for each plan. An explicit lookup
+// rather than parsing the leading number out of the label — "50% Installment" is a
+// percentage (it's actually a 2-part plan, per the "Pay in 2 Installments" label
+// used elsewhere for the same value), not a count, so naively regex-matching the
+// first digit sequence in the string previously misread it as 50 installments.
+const INSTALLMENT_COUNTS: Record<string, number> = {
+  '50% Installment': 2,
+  '2-Payment Plan': 2,
+  '3-Installment Plan': 3,
+  '6-Installment Plan': 6,
+  'Loan (0% Interest)': 2,
+};
+
 export function defaultInstallmentCount(paymentType: string | null | undefined): number {
-  const m = String(paymentType ?? '').match(/(\d+)/);
-  if (m) return Math.max(2, Math.min(12, Number(m[1])));
-  return 2;
+  return INSTALLMENT_COUNTS[String(paymentType ?? '').trim()] ?? 2;
 }
 
 let tableReady = false;
