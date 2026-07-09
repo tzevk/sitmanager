@@ -137,9 +137,23 @@ export async function GET(req: NextRequest) {
 
     const total = (countRows as any[])[0]?.total || 0;
 
+    // "Total Student" header figure: reproduces the legacy app's own count exactly
+    // (appp.js /nodeapp/getAllStudent countQuery — COUNT(*) of admission_master rows
+    // with IsDelete=0 AND IsActive=1, no Status_id filter, no per-student dedup).
+    // Deliberately a separate, unfiltered, global count from `total` above: `total`
+    // drives real pagination against the deduped (one row per student) list, so it
+    // can't be swapped for this raw admission-row count without breaking paging.
+    const [[{ legacyTotal }]] = await pool.query<any[]>(
+      `SELECT COUNT(*) AS legacyTotal
+       FROM admission_master am
+       LEFT JOIN student_master sm ON sm.Student_Id = am.Student_Id
+       WHERE am.IsDelete = 0 AND am.IsActive = 1`
+    );
+
     return NextResponse.json({
       rows,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      legacyTotalStudentCount: legacyTotal || 0,
     });
   } catch (err: unknown) {
     console.error('Student API error:', err);

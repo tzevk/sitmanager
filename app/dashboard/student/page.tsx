@@ -56,6 +56,7 @@ export default function StudentPage() {
   const { canView, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('student');
   const [rows, setRows]             = useState<StudentRow[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
+  const [legacyTotalStudentCount, setLegacyTotalStudentCount] = useState(0);
   const [loading, setLoading]       = useState(true);
   const [busyId, setBusyId]         = useState<number | null>(null);
 
@@ -87,6 +88,7 @@ export default function StudentPage() {
       const data = await res.json();
       setRows(data.rows ?? []);
       setPagination(data.pagination ?? { page: 1, limit: 25, total: 0, totalPages: 0 });
+      setLegacyTotalStudentCount(data.legacyTotalStudentCount ?? 0);
     } catch (e) {
       console.error('Failed to fetch students', e);
     } finally {
@@ -173,7 +175,7 @@ export default function StudentPage() {
         <div className="flex items-center justify-between relative z-10">
           <div>
             <h2 className="text-sm font-black text-white tracking-tight leading-none">Student</h2>
-            <p className="text-[11px] text-white/60 mt-0.5">Total Student: {pagination.total.toLocaleString()}</p>
+            <p className="text-[11px] text-white/60 mt-0.5">Total Student: {legacyTotalStudentCount.toLocaleString()}</p>
           </div>
           <button onClick={handleExport}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white/15 text-white border border-white/20 hover:bg-white/25 transition-all">
