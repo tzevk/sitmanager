@@ -230,6 +230,10 @@ export async function GET(req: NextRequest) {
       //    (e.g. cancelled + re-admitted). GROUP BY Student_Id picks MIN(Admission_Id).
       // 2. student_attendance: stale duplicate rows before the unique key existed.
       //    GROUP BY Student_Id picks the latest (MAX) attendance record.
+      // Cancelled admissions are no longer hard-excluded — same convention as the
+      // batch-wise fees report: show them with a "Cancelled"/"Transferred" badge
+      // instead of silently disappearing, so staff reviewing attendance can tell
+      // a withdrawn/moved student apart from someone who was just marked absent.
       const [students] = await pool.query<any[]>(
         `SELECT
            a.Admission_Id,
@@ -241,20 +245,25 @@ export async function GET(req: NextRequest) {
            COALESCE(att.Status, '') AS attendanceStatus,
            att.Attendance_Id,
            att.In_Time,
-           att.Out_Time
+           att.Out_Time,
+           a.Cancel,
+           s.Transfered,
+           s.Moved_To_Batch_Code,
+           mtc.Course_Name AS movedToCourseName
          FROM (
            SELECT
              MIN(Admission_Id) AS Admission_Id,
              Student_Id,
              MAX(Student_Code) AS Student_Code,
-             MAX(Roll_No)      AS Roll_No
+             MAX(Roll_No)      AS Roll_No,
+             MAX(Cancel)       AS Cancel
            FROM admission_master
            WHERE Batch_Id = ?
              AND (IsDelete = 0 OR IsDelete IS NULL)
-             AND (Cancel   = 0 OR Cancel   IS NULL)
            GROUP BY Student_Id
          ) a
          JOIN student_master s ON a.Student_Id = s.Student_Id
+         LEFT JOIN course_mst mtc ON mtc.Course_Id = s.Moved_To_Course_Id
          LEFT JOIN (
            SELECT
              Student_Id,

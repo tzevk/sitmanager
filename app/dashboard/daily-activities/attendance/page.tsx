@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { PermissionGate } from '@/components/ui/PermissionGate';
+import { StudentTransferBadge } from '@/components/ui/StudentTransferBadge';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
@@ -16,6 +17,10 @@ interface Student {
   studentName: string;
   rollNo: string;
   mobile: string;
+  Cancel?: number | null;
+  Transfered?: string | null;
+  Moved_To_Batch_Code?: string | null;
+  movedToCourseName?: string | null;
 }
 
 interface AttendanceStudentRow {
@@ -26,6 +31,10 @@ interface AttendanceStudentRow {
   rollNo: string;
   mobile: string;
   attendanceStatus?: AttStatus;
+  Cancel?: number | null;
+  Transfered?: string | null;
+  Moved_To_Batch_Code?: string | null;
+  movedToCourseName?: string | null;
 }
 
 type AttStatus = 'P' | 'A' | 'L' | '';
@@ -311,6 +320,10 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
         studentName:  st.studentName,
         rollNo:       st.rollNo,
         mobile:       st.mobile,
+        Cancel:       st.Cancel,
+        Transfered:   st.Transfered,
+        Moved_To_Batch_Code: st.Moved_To_Batch_Code,
+        movedToCourseName:   st.movedToCourseName,
       }));
       setStudents(s);
 
@@ -991,8 +1004,14 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                   <div key={student.Student_Id} className="px-4 py-3 space-y-2">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 truncate">{student.studentName}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">Roll: {student.rollNo || '—'} · Code: {student.Student_Code || '—'}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-sm font-semibold text-gray-800 truncate">{student.studentName}</p>
+                          {Number(student.Cancel) === 1 && (
+                            <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">Cancelled</span>
+                          )}
+                          <StudentTransferBadge transferred={student.Transfered} movedToCourseName={student.movedToCourseName} movedToBatchCode={student.Moved_To_Batch_Code} />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">Roll: {student.rollNo || '—'}</p>
                         <p className="text-xs text-gray-400 mt-0.5">Mobile: {student.mobile || '—'}</p>
                       </div>
                       <span className="inline-flex items-center justify-center w-8 h-6 text-xs font-bold bg-[#2E3093]/8 text-[#2E3093] rounded-full shrink-0">{idx + 1}</span>
@@ -1067,7 +1086,6 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                 <tr className="text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                   <th className="py-3 px-4 border-b border-gray-200 w-14 text-center">Sr</th>
                   <th className="py-3 px-4 border-b border-gray-200 w-20">Roll</th>
-                  <th className="py-3 px-4 border-b border-gray-200 w-28">Code</th>
                   <th className="py-3 px-4 border-b border-gray-200">Name</th>
                   <th className="py-3 px-4 border-b border-gray-200 w-32">Mobile</th>
                   <th className="py-3 px-4 border-b border-gray-200 text-center bg-blue-50/60 border-l border-blue-100">
@@ -1102,8 +1120,15 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                           <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold bg-[#2E3093]/8 text-[#2E3093] rounded">{student.rollNo}</span>
                         ) : <span className="text-gray-300 text-xs">—</span>}
                       </td>
-                      <td className="py-2.5 px-4 text-xs font-mono text-gray-500">{student.Student_Code || <span className="text-gray-300">—</span>}</td>
-                      <td className="py-2.5 px-4 font-semibold text-gray-800 text-sm">{student.studentName}</td>
+                      <td className="py-2.5 px-4 font-semibold text-gray-800 text-sm">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{student.studentName}</span>
+                          {Number(student.Cancel) === 1 && (
+                            <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">Cancelled</span>
+                          )}
+                          <StudentTransferBadge transferred={student.Transfered} movedToCourseName={student.movedToCourseName} movedToBatchCode={student.Moved_To_Batch_Code} />
+                        </div>
+                      </td>
                       <td className="py-2.5 px-4 text-xs text-gray-500 tabular-nums">{student.mobile || <span className="text-gray-300">—</span>}</td>
 
                       {/* First Half */}

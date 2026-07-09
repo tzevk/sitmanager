@@ -1117,6 +1117,41 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       console.warn('[OnlineAdmission] attach inquiry documents failed:', e);
     }
 
+    // Full Payment mode gives a 5% discount on tuition (matches the client-side
+    // calculation in app/admission/[id]/page.tsx: fullPayAmount = round(baseFees *
+    // 0.95)). Log the discount as its own ledger credit so the balance nets to
+    // zero and the discount is visible on the student's fee-details page instead
+    // of being an invisible gap between the base fee and what was collected.
+    // Dedupe on Admission_Id so re-granting / re-syncing never double-logs it.
+    const modeOfPaymentValue = normalizeText(input.modeOfPayment);
+    if (modeOfPaymentValue === 'Full Payment' && batchFees && batchFees > 0) {
+      const fullPayAmount = Math.round(batchFees * 0.95);
+      const discountAmount = batchFees - fullPayAmount;
+      if (discountAmount > 0) {
+        const [existingDiscount] = await pool.query(
+          `SELECT Fees_Id FROM s_fees_mst
+           WHERE Admission_Id = ? AND Payment_Type = 'Discount' AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+          [admissionId]
+        ) as [any[], any];
+
+        if (!existingDiscount.length) {
+          const now = new Date();
+          await pool.query(
+            `INSERT INTO s_fees_mst (
+               Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type,
+               Amount, Total_Amt, TypeR, Notes, RDate, Date_Added, FeesMonth, FeesYear,
+               IsActive, IsDelete
+             ) VALUES (?, ?, ?, ?, 'Discount', ?, ?, 'C', ?, ?, ?, ?, ?, 1, 0)`,
+            [
+              resolvedStudentId, courseId, batchId, admissionId,
+              discountAmount, discountAmount, 'Full Payment Discount (5%)',
+              admissionDate, now, now.getMonth() + 1, now.getFullYear(),
+            ]
+          );
+        }
+      }
+    }
+
     // If the applicant paid online during the admission form, record it in the
     // fees ledger so it shows up as "Paid" on the student page. Dedupe on
     // PaymentId so re-granting / re-syncing doesn't create duplicate entries.

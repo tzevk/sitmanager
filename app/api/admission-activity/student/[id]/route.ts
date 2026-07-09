@@ -453,12 +453,20 @@ export async function PUT(
 
     const fullName = Student_Name ||
       [FName, MName, LName].filter(Boolean).join(' ') || null;
-    const resolvedBatchCode = Batch_Code || Batch_code || null;
-    const resolvedCourseId = Course_Id ? parseInt(Course_Id) : null;
-    const resolvedBatchCategoryId = await resolveBatchCategoryId(pool, resolvedBatchCode, Batch_Category_id || null);
     const resolvedTransfered = String(Transfered ?? '').trim().toLowerCase() === 'yes' ? 'Yes' : null;
     const resolvedMovedToCourseId = Moved_To_Course_Id ? parseInt(Moved_To_Course_Id) : null;
     const resolvedMovedToBatchCode = String(Moved_To_Batch_Code ?? '').trim() || null;
+    // A transfer's destination batch/course becomes the student's actual current
+    // batch/course — otherwise admission_master never follows them to the new
+    // batch, and they silently vanish from that batch's attendance/roll-number
+    // pages while Moved_To_* stays a purely informational, unused annotation.
+    const resolvedBatchCode = (resolvedTransfered && resolvedMovedToBatchCode)
+      ? resolvedMovedToBatchCode
+      : (Batch_Code || Batch_code || null);
+    const resolvedCourseId = (resolvedTransfered && resolvedMovedToCourseId)
+      ? resolvedMovedToCourseId
+      : (Course_Id ? parseInt(Course_Id) : null);
+    const resolvedBatchCategoryId = await resolveBatchCategoryId(pool, resolvedBatchCode, Batch_Category_id || null);
 
     // ── 1. Core UPDATE — columns guaranteed to exist in all deployments ───
     await pool.query(
@@ -604,6 +612,18 @@ export async function PUT(
             [...setVals, admissionId]
           );
         }
+      } else if (batchId !== null) {
+        // No active admission row to update — e.g. a transferred student whose only
+        // prior admission was cancelled/deleted. Without this, the sync above is a
+        // no-op and the student never appears under the new batch anywhere
+        // (attendance, allot roll number, etc). Roll_No is left blank; it gets
+        // allotted for the new batch the normal way via Allot Roll Number.
+        await pool.query(
+          `INSERT INTO admission_master (
+             Student_Id, Course_Id, Batch_Id, Admission_Date, IsActive, Cancel, IsDelete
+           ) VALUES (?, ?, ?, ?, 1, 0, 0)`,
+          [id, resolvedCourseId, batchId, Admission_Dt || new Date().toISOString().slice(0, 10)]
+        );
       }
     } catch (admErr) {
       console.warn('Student PUT: admission_master sync skipped:', (admErr as Error)?.message);
