@@ -379,6 +379,11 @@ export default function FeeDetailsEditPage() {
           <div>Receipt No.: <span class="strong">${receiptInput.receiptNoVal}</span></div>
           <div>Date : <span class="strong">${receiptDateFmt}</span></div>
         </div>
+        ${data.student.Cancel || data.student.Transfered.toLowerCase() === 'yes' ? `
+        <div class="status-line">
+          ${data.student.Cancel ? '<span class="status-tag status-cancelled">CANCELLED</span>' : ''}
+          ${data.student.Transfered.toLowerCase() === 'yes' ? `<span class="status-tag status-transferred">TRANSFERRED${data.student.Moved_To_Batch_Code ? ` &rarr; ${data.student.Moved_To_Batch_Code}` : ''}</span>` : ''}
+        </div>` : ''}
         <div class="body">
           <div class="line-row">Received with thanks from <span class="fill name">${data.student.Student_Name}</span></div>
           <div class="line-row">the sum of rupees <span class="fill words">${amtWords}</span> as</div>
@@ -421,6 +426,10 @@ export default function FeeDetailsEditPage() {
   .org-name { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
   .org-addr { font-size: 12px; line-height: 1.4; }
   .meta-line { display: flex; justify-content: space-between; margin-top: 44px; font-size: 14px; }
+  .status-line { display: flex; gap: 10px; margin-top: 10px; }
+  .status-tag { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; border: 1.5px solid; }
+  .status-cancelled { color: #B91C1C; border-color: #B91C1C; background: #FEE2E2; }
+  .status-transferred { color: #A16207; border-color: #A16207; background: #FEF3C7; }
   .strong { font-size: 16px; font-weight: 400; margin-left: 24px; }
   .body { margin-top: 24px; }
   .line-row, .course-row, .note-row { display: flex; align-items: baseline; gap: 8px; margin-top: 24px; white-space: nowrap; }

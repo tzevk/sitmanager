@@ -39,16 +39,25 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'batchId is required' }, { status: 400 });
     }
 
+    // Same base data source and de-dup as the Excel export / on-screen table
+    // (app/api/reports/fees/route.ts, batch-wise-fees subtab): anchor on
+    // student_master so every enrolled student appears, and pick exactly one
+    // admission_master row per (Student_Id, Batch_Id) — the old admission_master-
+    // anchored query here could double-count a student who has more than one
+    // active admission row (e.g. a historically transferred student), and never
+    // filtered out students with no roll number allotted.
     const conditions: string[] = [
-      '(am.IsDelete = 0 OR am.IsDelete IS NULL)',
-      'am.Batch_Id = ?',
+      '(sm.IsDelete = 0 OR sm.IsDelete IS NULL)',
+      '(sm.IsActive = 1 OR sm.IsActive IS NULL)',
+      'bm.Batch_Id = ?',
+      `NULLIF(TRIM(am.Roll_No), '') IS NOT NULL`,
     ];
     const params: any[] = [Number(batchId)];
     if (courseId) { conditions.push('bm.Course_Id = ?'); params.push(Number(courseId)); }
 
     const [students] = await pool.query<any[]>(
       `SELECT
-         am.Student_Id, MAX(am.Admission_Date) AS Admission_Date, MAX(am.Fees) AS Fees,
+         sm.Student_Id, MAX(am.Admission_Date) AS Admission_Date, MAX(am.Fees) AS Fees,
          COALESCE(MAX(sm.Student_Name), MAX(CONCAT_WS(' ', sm.FName, sm.MName, sm.LName)), '') AS Student_Name,
          COALESCE(MAX(bm.Batch_code),'') AS Batch_Code, MAX(bm.Fees_Full_Payment) AS Fees_Full_Payment,
          MAX(bm.SDate) AS SDate, MAX(bm.EDate) AS EDate,
@@ -56,12 +65,18 @@ export async function GET(req: NextRequest) {
          COALESCE(MAX(sm.Moved_To_Batch_Code), '') AS Moved_To_Batch_Code,
          COALESCE(NULLIF(TRIM(MAX(sm.Transfered)), ''), '') AS Transfered,
          CASE WHEN LOWER(TRIM(CAST(MAX(COALESCE(am.Cancel,'')) AS CHAR))) IN ('yes','1','true') THEN 1 ELSE 0 END AS Cancelled
-       FROM admission_master am
-       LEFT JOIN student_master sm ON sm.Student_Id = am.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-       LEFT JOIN batch_mst bm ON bm.Batch_Id = am.Batch_Id
+       FROM student_master sm
+       LEFT JOIN batch_mst bm ON bm.Batch_code = sm.Batch_Code AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
        LEFT JOIN course_mst cm ON cm.Course_Id = bm.Course_Id
+       LEFT JOIN (
+         SELECT Student_Id, Batch_Id, MAX(Admission_Id) AS Admission_Id
+         FROM admission_master
+         WHERE (IsDelete = 0 OR IsDelete IS NULL)
+         GROUP BY Student_Id, Batch_Id
+       ) am_pick ON am_pick.Student_Id = sm.Student_Id AND am_pick.Batch_Id = bm.Batch_Id
+       LEFT JOIN admission_master am ON am.Admission_Id = am_pick.Admission_Id
        WHERE ${conditions.join(' AND ')}
-       GROUP BY am.Student_Id
+       GROUP BY sm.Student_Id
        ORDER BY Student_Name ASC`,
       params
     );

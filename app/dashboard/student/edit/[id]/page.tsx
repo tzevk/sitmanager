@@ -185,7 +185,7 @@ export default function EditStudentPage() {
     /* Inquiry meta */
     Inquiry_From: '', Inquiry_Type: '', Inquiry_Dt: '',
     /* Status */
-    Status_id: '', Status_date: '',
+    Status_id: '', Status_date: '', Cancel: '',
     /* Transfer / move-to */
     Transfered: '', Moved_To_Course_Id: '', Moved_To_Batch_Code: '',
     /* Admission */
@@ -279,6 +279,7 @@ export default function EditStudentPage() {
           Inquiry_Dt:       s.Inquiry_Dt ? String(s.Inquiry_Dt).slice(0, 10) : '',
           Status_id:        s.Status_id != null ? String(s.Status_id) : '',
           Status_date:      s.Status_date ? String(s.Status_date).slice(0, 10) : '',
+          Cancel:           Number(s.Cancel) === 1 ? '1' : '',
           Transfered:       s.Transfered || '',
           Moved_To_Course_Id: s.Moved_To_Course_Id != null ? String(s.Moved_To_Course_Id) : '',
           Moved_To_Batch_Code: s.Moved_To_Batch_Code || '',
@@ -1429,18 +1430,32 @@ export default function EditStudentPage() {
                     <input type="date" value={form.Status_date} onChange={(e) => set('Status_date', e.target.value)} className={inputCls} />
                   </div>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
+                      // admission_master.Cancel is the field every Cancelled badge/report
+                      // (fees report, attendance, receipts) actually reads — Status_id is
+                      // a separate, unrelated field and was never enough on its own.
+                      set('Cancel', '1');
                       const cancelStatus = statuses.find((s) => s.label.toLowerCase().includes('cancel'));
                       if (cancelStatus) set('Status_id', String(cancelStatus.id));
                       set('Status_date', new Date().toISOString().slice(0, 10));
                     }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+                    disabled={form.Cancel === '1'}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Mark As Cancelled
                   </button>
+                  {form.Cancel === '1' && (
+                    <button
+                      type="button"
+                      onClick={() => set('Cancel', '')}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+                    >
+                      Un-cancel
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -1451,6 +1466,9 @@ export default function EditStudentPage() {
                   >
                     Clear Status
                   </button>
+                  {form.Cancel === '1' && (
+                    <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">Cancelled</span>
+                  )}
                 </div>
               </SectionCard>
             </div>

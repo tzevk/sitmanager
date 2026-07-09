@@ -92,6 +92,7 @@ export async function GET(req: NextRequest) {
         const smConditions: string[] = [
           '(sm.IsDelete = 0 OR sm.IsDelete IS NULL)',
           '(sm.IsActive = 1 OR sm.IsActive IS NULL)', // exclude hidden (deactivated) students
+          `NULLIF(TRIM(am.Roll_No), '') IS NOT NULL`, // no roll number allotted yet — don't show them
         ];
         const smParams: any[] = [];
         if (courseId) { smConditions.push('bm.Course_Id = ?');  smParams.push(Number(courseId)); }
@@ -121,9 +122,13 @@ export async function GET(req: NextRequest) {
              AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
            LEFT JOIN course_mst cm ON cm.Course_Id = bm.Course_Id
            LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
-           LEFT JOIN admission_master am
-             ON am.Student_Id = sm.Student_Id
-             AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+           LEFT JOIN (
+             SELECT Student_Id, Batch_Id, MAX(Admission_Id) AS Admission_Id
+             FROM admission_master
+             WHERE (IsDelete = 0 OR IsDelete IS NULL)
+             GROUP BY Student_Id, Batch_Id
+           ) am_pick ON am_pick.Student_Id = sm.Student_Id AND am_pick.Batch_Id = bm.Batch_Id
+           LEFT JOIN admission_master am ON am.Admission_Id = am_pick.Admission_Id
            LEFT JOIN s_fees_mst sfm
              ON sfm.Student_Id = sm.Student_Id
              AND sfm.Batch_Id  = bm.Batch_Id

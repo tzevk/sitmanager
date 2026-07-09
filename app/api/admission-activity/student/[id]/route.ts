@@ -217,7 +217,7 @@ export async function GET(
          s.Refered_By,
          s.Alumni_Registered,
          s.SitPerformance, s.PlacementRemark,
-         a.Admission_Id, a.Batch_Id, a.Admission_Date,
+         a.Admission_Id, a.Batch_Id, a.Admission_Date, a.Cancel,
          COALESCE(b.Batch_code, b2.Batch_code) AS Batch_code,
          COALESCE(mtc.Course_Name, '')        AS Moved_To_Course_Name,
          COALESCE(b.SDate, b2.SDate)           AS Batch_StartDate,
@@ -441,6 +441,9 @@ export async function PUT(
       Inquiry_From, Inquiry_Type, Inquiry_Dt,
       // Status
       Status_id, Status_date,
+      // Admission cancellation (admission_master.Cancel — the column every
+      // Cancelled badge/report actually reads, separate from Status_id)
+      Cancel,
       // Student portal / referral
       Login_Password, Refered_By,
       // Admission date
@@ -454,6 +457,7 @@ export async function PUT(
     const fullName = Student_Name ||
       [FName, MName, LName].filter(Boolean).join(' ') || null;
     const resolvedTransfered = String(Transfered ?? '').trim().toLowerCase() === 'yes' ? 'Yes' : null;
+    const resolvedCancel = Cancel === undefined ? null : (['1', 1, true, 'yes', 'Yes'].includes(Cancel) ? 1 : 0);
     const resolvedMovedToCourseId = Moved_To_Course_Id ? parseInt(Moved_To_Course_Id) : null;
     const resolvedMovedToBatchCode = String(Moved_To_Batch_Code ?? '').trim() || null;
     // A transfer's destination batch/course becomes the student's actual current
@@ -586,12 +590,16 @@ export async function PUT(
         batchId = batchRows[0]?.Batch_Id ? Number(batchRows[0].Batch_Id) : null;
       }
 
-      // Find the latest active admission for this student
+      // Find the latest admission for this student — same lookup as the GET
+      // handler (MAX(Admission_Id), IsDelete only). Deliberately NOT excluding
+      // Cancel=1 rows here: excluding them meant that once an admission was
+      // cancelled, this sync could never find it again on a later save (e.g. to
+      // un-cancel it, or edit an unrelated field), and would instead fall into
+      // the "no active admission" branch and create a stray duplicate row.
       const [admRows] = await pool.query(
         `SELECT Admission_Id FROM admission_master
          WHERE Student_Id = ?
            AND (IsDelete = 0 OR IsDelete IS NULL)
-           AND (Cancel   = 0 OR Cancel   IS NULL)
          ORDER BY Admission_Id DESC
          LIMIT 1`,
         [id]
@@ -605,6 +613,7 @@ export async function PUT(
         if (batchId !== null)        { setClauses.push('Batch_Id = ?');       setVals.push(batchId); }
         if (resolvedCourseId !== null){ setClauses.push('Course_Id = ?');      setVals.push(resolvedCourseId); }
         if (Admission_Dt)            { setClauses.push('Admission_Date = ?');  setVals.push(Admission_Dt); }
+        if (resolvedCancel !== null) { setClauses.push('Cancel = ?');          setVals.push(resolvedCancel); }
 
         if (setClauses.length) {
           await pool.query(
