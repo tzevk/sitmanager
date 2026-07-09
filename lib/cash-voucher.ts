@@ -21,6 +21,17 @@ export async function ensureCashVoucherColumns(pool: Pool): Promise<void> {
     await pool.query(`ALTER TABLE awt_cashvoucher ADD COLUMN opening_balance DECIMAL(12,2) NULL`);
   }
 
+  // awt_cashvoucherchild (21,000+ rows) has no index on voucherid — every list-page
+  // load was doing an unindexed join/lookup against the whole child table to total
+  // up each voucher's line items, taking ~9.5s. Index it once.
+  const [existingIdx] = await pool.query(
+    `SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'awt_cashvoucherchild' AND COLUMN_NAME = 'voucherid'`
+  ) as [Array<{ INDEX_NAME: string }>, unknown];
+  if (!existingIdx.length) {
+    await pool.query(`ALTER TABLE awt_cashvoucherchild ADD INDEX idx_cashvoucherchild_voucherid (voucherid, deleted)`);
+  }
+
   columnsReady = true;
 }
 

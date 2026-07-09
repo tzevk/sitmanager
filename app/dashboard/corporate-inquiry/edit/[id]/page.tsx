@@ -408,6 +408,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
     Id: 0,
     Idate: '',
     Course_Id: '',
+    CourseOther: '',
     Consultancy_Id: '',
     CompanyName: '',
     Place: '',
@@ -473,6 +474,7 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
               Id: Number(inq?.Id) || 0,
               Idate: toDateInputValue(inq?.Idate),
               Course_Id: String(inq?.Course_Id ?? ''),
+              CourseOther: String(inq?.CourseOther ?? '').trim(),
               Consultancy_Id: consultancyId,
               CompanyName: companyName,
               Place: String(inq?.Place ?? '').trim(),
@@ -914,6 +916,16 @@ export default function EditCorporateInquiryPage({ params }: { params: Promise<{
                         </option>
                       ))}
                     </select>
+                    {courses.find((c) => String(c.Course_Id) === form.Course_Id)?.Course_Name === 'Others' && (
+                      <input
+                        type="text"
+                        name="CourseOther"
+                        value={form.CourseOther}
+                        onChange={handleChange}
+                        placeholder="Enter actual programme name"
+                        className={`${inputClass} mt-2`}
+                      />
+                    )}
                   </div>
                 </div>
                 </Section>

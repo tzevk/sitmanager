@@ -511,9 +511,13 @@ function NewTicketModal({ onClose, onCreated }: { onClose: () => void; onCreated
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">Category</label>
-              <input value={category} onChange={(e) => setCategory(e.target.value)} maxLength={80}
-                placeholder="e.g. Fees, Login, Reports"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]" />
+              <select value={category} onChange={(e) => setCategory(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
+                <option value="">Select…</option>
+                <option value="Admin">Admin</option>
+                <option value="Software">Software</option>
+                <option value="Others">Others</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">Priority</label>

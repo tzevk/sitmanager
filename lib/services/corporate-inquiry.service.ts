@@ -21,7 +21,7 @@ export interface CreateCorporateInquiryInput {
   Fname?: string; MName?: string; Lname?: string; FullName?: string;
   CompanyName?: string; Designation?: string; Address?: string;
   City?: string; State?: string; Country?: string; Pin?: string;
-  Phone?: string; Mobile?: string; Email?: string; Course_Id?: string;
+  Phone?: string; Mobile?: string; Email?: string; Course_Id?: string; CourseOther?: string;
   Place?: string; business?: string; Remark?: string; Idate?: string;
   Consultancy_Id?: number | null; CompanyType?: string;
   CompanyAuthority?: string; TrainingMode?: string;
@@ -181,7 +181,7 @@ export async function ensureCorporateInquiryColumns(pool: ReturnType<typeof getP
     'ConfirmDate','PerformanceEvaluation_PreTest','PerformanceEvaluation_Assessment',
     'PerformanceEvaluation_Assignment','PerformanceEvaluation_FinalExam',
     'PerformanceEvaluation_TrainingMaterial','PerformanceEvaluation_Attendance',
-    'TrainingFeedbackObtained','SitCertIssuedOnPerformanceOnAttendance',
+    'TrainingFeedbackObtained','SitCertIssuedOnPerformanceOnAttendance','CourseOther',
   ] as const;
 
   const [rows] = await pool.query<any[]>(
@@ -208,6 +208,7 @@ export async function ensureCorporateInquiryColumns(pool: ReturnType<typeof getP
     ['PerformanceEvaluation_FinalExam','TEXT NULL'], ['PerformanceEvaluation_TrainingMaterial','TEXT NULL'],
     ['PerformanceEvaluation_Attendance','TEXT NULL'], ['TrainingFeedbackObtained','TEXT NULL'],
     ['SitCertIssuedOnPerformanceOnAttendance','TEXT NULL'],
+    ['CourseOther','VARCHAR(255) NULL'],
   ];
 
   for (const [col, def] of alters) {
@@ -525,7 +526,7 @@ export async function listCorporateInquiries(
   const [rows] = await pool.query<any[]>(
     `SELECT c.Id, c.Fname, c.Lname, c.MName, c.FullName, c.CompanyName, c.Designation,
        c.Address, c.City, c.State, c.Country, c.Pin, c.Phone, c.Mobile, c.Email,
-       c.Course_Id, cm.Course_Name AS CourseName, c.Place, c.business, c.Remark, c.Idate, c.IsActive,
+       c.Course_Id, cm.Course_Name AS CourseName, c.CourseOther, c.Place, c.business, c.Remark, c.Idate, c.IsActive,
        c.Consultancy_Id, c.CompanyType, c.CompanyAuthority, c.TrainingMode,
        c.Participants_Fresher, c.Participants_Experienced, c.TrainingLocation, c.TrainingDates,
        c.Discussion, c.FollowUp, c.InitialFollowUpDate, c.NextFollowUpDate, c.InquiryStatus,
@@ -669,15 +670,15 @@ export async function createCorporateInquiry(data: CreateCorporateInquiryInput):
   const [result] = await pool.query(
     `INSERT INTO corporate_inquiry (
        Fname,Lname,MName,FullName,CompanyName,Designation,Address,City,State,Country,Pin,
-       Phone,Mobile,Email,Course_Id,Place,business,Remark,Idate,
+       Phone,Mobile,Email,Course_Id,CourseOther,Place,business,Remark,Idate,
        Consultancy_Id,CompanyType,CompanyAuthority,TrainingMode,
        Participants_Fresher,Participants_Experienced,TrainingLocation,TrainingDates,
        Discussion,FollowUp,InitialFollowUpDate,NextFollowUpDate,IsActive,IsDelete
-     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(?,CURDATE()),?,?,?,?,?,?,?,?,?,?,?,?,1,0)`,
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(?,CURDATE()),?,?,?,?,?,?,?,?,?,?,?,?,1,0)`,
     [(Fname??FullName)||null, data.Lname||null, data.MName||null, FullName||null,
      data.CompanyName||null, data.Designation||null, data.Address||null, data.City||null,
      data.State||null, data.Country||null, data.Pin||null, data.Phone||null, data.Mobile||null,
-     data.Email||null, data.Course_Id||null, Place||null, data.business||null,
+     data.Email||null, data.Course_Id||null, data.CourseOther||null, Place||null, data.business||null,
      data.Remark||data.Discussion||null, data.Idate||null,
      Consultancy_Id, data.CompanyType||null, data.CompanyAuthority||null,
      parseTrainingMode(data.TrainingMode)||null,
@@ -738,7 +739,7 @@ export async function updateCorporateInquiry(data: UpdateCorporateInquiryInput):
     `UPDATE corporate_inquiry SET
        Fname=?,Lname=?,MName=?,FullName=?,CompanyName=?,Designation=?,
        Address=?,City=?,State=?,Country=?,Pin=?,Phone=?,Mobile=?,
-       Email=?,Course_Id=?,Place=?,business=?,Remark=?,Idate=?,
+       Email=?,Course_Id=?,CourseOther=?,Place=?,business=?,Remark=?,Idate=?,
        Consultancy_Id=?,CompanyType=?,CompanyAuthority=?,TrainingMode=?,
        Participants_Fresher=?,Participants_Experienced=?,TrainingLocation=?,TrainingDates=?,
        Discussion=?,FollowUp=?,InitialFollowUpDate=?,NextFollowUpDate=?,
@@ -748,7 +749,7 @@ export async function updateCorporateInquiry(data: UpdateCorporateInquiryInput):
     [(data.Fname??FullName)||null, data.Lname||null, data.MName||null, FullName||null,
      data.CompanyName||null, data.Designation||null, data.Address||null, data.City||null,
      data.State||null, data.Country||null, data.Pin||null, data.Phone||null, data.Mobile||null,
-     data.Email||null, data.Course_Id||null, normalizedPlace||null, data.business||null,
+     data.Email||null, data.Course_Id||null, data.CourseOther||null, normalizedPlace||null, data.business||null,
      data.Remark||data.Discussion||null, data.Idate||null, Consultancy_Id,
      data.CompanyType||null, data.CompanyAuthority||null, parseTrainingMode(data.TrainingMode)||null,
      toNullableInt(data.Participants_Fresher), toNullableInt(data.Participants_Experienced),

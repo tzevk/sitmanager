@@ -59,6 +59,7 @@ export default function AddCorporateInquiryPage() {
   const [form, setForm] = useState({
     Idate: todayISO(),
     Course_Id: '',
+    CourseOther: '',
     Consultancy_Id: '',
     CompanyName: '',
     Place: '',
@@ -237,6 +238,16 @@ export default function AddCorporateInquiryPage() {
                     <option key={c.Course_Id} value={String(c.Course_Id)}>{c.Course_Name}</option>
                   ))}
                 </select>
+                {courses.find((c) => String(c.Course_Id) === form.Course_Id)?.Course_Name === 'Others' && (
+                  <input
+                    type="text"
+                    name="CourseOther"
+                    value={form.CourseOther}
+                    onChange={handleChange}
+                    placeholder="Enter actual programme name"
+                    className={`${inputClass} mt-2`}
+                  />
+                )}
               </div>
 
               <div>

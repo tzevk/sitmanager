@@ -6,8 +6,8 @@ import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 import { CASH_VOUCHER_COMPANIES } from '@/lib/cash-voucher';
 
-const labelCls = 'block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-0.5';
-const inputCls = 'w-full border-2 border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#2E3093]/20 focus:border-[#2E3093] text-gray-700 placeholder:text-gray-300';
+const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors w-full';
+const lbl = 'text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5';
 
 interface AccountHead { id: number; title: string }
 interface LineItem {
@@ -37,6 +37,7 @@ export default function AddCashVoucherPage() {
   const [paidBy, setPaidBy] = useState('');
   const [preparedBy, setPreparedBy] = useState('');
   const [items, setItems] = useState<LineItem[]>([emptyItem()]);
+  const [nextVoucherno, setNextVoucherno] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -47,6 +48,21 @@ export default function AddCashVoucherPage() {
       } catch { /* ignore */ }
     })();
   }, []);
+
+  // Preview only — the real Sr. No. is (re)computed fresh at save time, so this can
+  // shift if another voucher is saved for the same month in the meantime.
+  useEffect(() => {
+    if (!date) { setNextVoucherno(''); return; }
+    const ctrl = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch(`/api/account-master/cash-voucher/next-voucherno?date=${date}`, { signal: ctrl.signal });
+        const data = await res.json();
+        setNextVoucherno(data.voucherno || '');
+      } catch { /* ignore */ }
+    })();
+    return () => ctrl.abort();
+  }, [date]);
 
   const updateItem = (index: number, patch: Partial<LineItem>) => {
     setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
@@ -101,82 +117,75 @@ export default function AddCashVoucherPage() {
   if (!canCreate) return <AccessDenied message="You do not have permission to create cash vouchers." />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 p-4">
-      <div className="mb-3">
-        <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-          <span>Dashboard</span>
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-          </svg>
-          <span>Admin/Accounts</span>
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-          </svg>
-          <button onClick={() => router.push('/dashboard/account-master/cash-voucher')} className="hover:text-[#2E3093]">
-            Cash Voucher
+    <div className="flex flex-col gap-3">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-3 shadow-[0_4px_14px_rgba(46,48,147,0.18)] relative overflow-hidden">
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
+        <div className="relative z-10 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-black text-white tracking-tight leading-none">Add Cash Voucher Details</h2>
+            <p className="text-[11px] text-white/60 mt-0.5">Company, date, paid to and opening balance, then itemize the expenses below.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push('/dashboard/account-master/cash-voucher')}
+            className="h-9 px-4 rounded-lg border border-white/40 bg-white/10 text-white text-xs font-bold hover:bg-white/20"
+          >
+            Back
           </button>
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-          </svg>
-          <span className="text-[#2E3093] font-medium">Add</span>
         </div>
-        <h1 className="text-xl font-bold text-gray-800">Add Cash Voucher Details</h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-3">
-        {error && (
-          <div className="px-3 py-2 rounded-md bg-red-50 border border-red-200 text-xs text-red-600 font-medium">
-            {error}
-          </div>
-        )}
+      {error && <div className="rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2">{error}</div>}
 
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] px-4 py-2">
-            <h3 className="text-xs font-bold text-white tracking-wide">Add Cash Voucher Details</h3>
-          </div>
-          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <div>
-              <label className={labelCls}>Company</label>
-              <select value={company} onChange={(e) => setCompany(e.target.value)} className={inputCls}>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        {/* Voucher details card */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-5">
+          <h3 className="text-xs font-bold text-slate-700 mb-3">Voucher Details</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className={lbl}>Company</label>
+              <select value={company} onChange={(e) => setCompany(e.target.value)} className={ctrl}>
                 {CASH_VOUCHER_COMPANIES.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
             </div>
-            <div>
-              <label className={labelCls}>Sr. No.</label>
-              <input type="text" value="Auto-generated on save" disabled className={`${inputCls} bg-gray-50 text-gray-400`} />
+            <div className="flex flex-col gap-1">
+              <label className={lbl}>Sr. No.</label>
+              <input type="text" value={nextVoucherno || 'Loading…'} disabled className={`${ctrl} bg-slate-50 text-slate-500 font-mono font-semibold`} />
             </div>
-            <div>
-              <label className={labelCls}>Date *</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} required />
+            <div className="flex flex-col gap-1">
+              <label className={lbl}>Date *</label>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={ctrl} required />
             </div>
-            <div>
-              <label className={labelCls}>Paid To *</label>
-              <input type="text" value={paidTo} onChange={(e) => setPaidTo(e.target.value)} className={inputCls} placeholder="Paid to" required />
+            <div className="flex flex-col gap-1">
+              <label className={lbl}>Paid To *</label>
+              <input type="text" value={paidTo} onChange={(e) => setPaidTo(e.target.value)} className={ctrl} placeholder="Paid to" required />
             </div>
-            <div>
-              <label className={labelCls}>Opening Balance</label>
-              <input type="number" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} className={inputCls} placeholder="0.00" />
+            <div className="flex flex-col gap-1">
+              <label className={lbl}>Opening Balance</label>
+              <input type="number" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} className={ctrl} placeholder="0.00" />
             </div>
-            <div>
-              <label className={labelCls}>Paid By</label>
-              <input type="text" value={paidBy} onChange={(e) => setPaidBy(e.target.value)} className={inputCls} placeholder="e.g. Cash" />
+            <div className="flex flex-col gap-1">
+              <label className={lbl}>Paid By</label>
+              <input type="text" value={paidBy} onChange={(e) => setPaidBy(e.target.value)} className={ctrl} placeholder="e.g. Cash" />
             </div>
-            <div>
-              <label className={labelCls}>Prepared By</label>
-              <input type="text" value={preparedBy} onChange={(e) => setPreparedBy(e.target.value)} className={inputCls} placeholder="Prepared by" />
+            <div className="flex flex-col gap-1">
+              <label className={lbl}>Prepared By</label>
+              <input type="text" value={preparedBy} onChange={(e) => setPreparedBy(e.target.value)} className={ctrl} placeholder="Prepared by" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] px-4 py-2 flex items-center justify-between">
-            <h3 className="text-xs font-bold text-white tracking-wide">Expense Line Items</h3>
+        {/* Expense line items card */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-bold text-slate-700">Expense Line Items</h3>
             <button
               type="button"
               onClick={addItemRow}
-              className="text-[11px] font-semibold text-white/90 hover:text-white flex items-center gap-1"
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2E3093] hover:underline"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -184,7 +193,7 @@ export default function AddCashVoucherPage() {
               Add Row
             </button>
           </div>
-          <div className="p-4 overflow-x-auto">
+          <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-200">
@@ -200,10 +209,10 @@ export default function AddCashVoucherPage() {
                 {items.map((it, i) => (
                   <tr key={i} className="border-b border-slate-100">
                     <td className="py-1.5 pr-2">
-                      <input type="date" value={it.date} onChange={(e) => updateItem(i, { date: e.target.value })} className={`${inputCls} w-36`} />
+                      <input type="date" value={it.date} onChange={(e) => updateItem(i, { date: e.target.value })} className={`${ctrl} w-36`} />
                     </td>
                     <td className="py-1.5 pr-2">
-                      <select value={it.accountHead} onChange={(e) => updateItem(i, { accountHead: e.target.value })} className={`${inputCls} min-w-[180px]`}>
+                      <select value={it.accountHead} onChange={(e) => updateItem(i, { accountHead: e.target.value })} className={`${ctrl} min-w-[180px]`}>
                         <option value="">Select…</option>
                         {accountHeads.map((h) => (
                           <option key={h.id} value={h.title}>{h.title}</option>
@@ -211,13 +220,13 @@ export default function AddCashVoucherPage() {
                       </select>
                     </td>
                     <td className="py-1.5 pr-2">
-                      <input type="number" value={it.amount} onChange={(e) => updateItem(i, { amount: e.target.value })} className={`${inputCls} w-24 text-right`} placeholder="0.00" />
+                      <input type="number" value={it.amount} onChange={(e) => updateItem(i, { amount: e.target.value })} className={`${ctrl} w-24 text-right`} placeholder="0.00" />
                     </td>
                     <td className="py-1.5 pr-2">
-                      <input type="text" value={it.description} onChange={(e) => updateItem(i, { description: e.target.value })} className={`${inputCls} min-w-[180px]`} placeholder="Being cash paid for…" />
+                      <input type="text" value={it.description} onChange={(e) => updateItem(i, { description: e.target.value })} className={`${ctrl} min-w-[180px]`} placeholder="Being cash paid for…" />
                     </td>
                     <td className="py-1.5 pr-2">
-                      <input type="text" value={it.billNo} onChange={(e) => updateItem(i, { billNo: e.target.value })} className={`${inputCls} w-24`} />
+                      <input type="text" value={it.billNo} onChange={(e) => updateItem(i, { billNo: e.target.value })} className={`${ctrl} w-24`} />
                     </td>
                     <td className="py-1.5 pr-2 text-center">
                       <button
@@ -235,8 +244,8 @@ export default function AddCashVoucherPage() {
             </table>
 
             <div className="mt-3 flex justify-end gap-6 text-xs font-semibold">
-              <span className="text-gray-500">Total Expenses: <span className="text-gray-900">{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
-              <span className="text-gray-500">Closing Balance: <span className="text-gray-900">{closingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+              <span className="text-slate-500">Total Expenses: <span className="text-slate-900">{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+              <span className="text-slate-500">Closing Balance: <span className="text-slate-900">{closingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
             </div>
           </div>
         </div>
@@ -253,7 +262,7 @@ export default function AddCashVoucherPage() {
           <button
             type="button"
             onClick={() => router.push('/dashboard/account-master/cash-voucher')}
-            className="h-9 px-5 rounded-lg border border-gray-300 text-gray-600 text-xs font-semibold hover:bg-gray-50"
+            className="h-9 px-5 rounded-lg border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50"
           >
             Cancel
           </button>

@@ -28,15 +28,17 @@ export async function GET(req: NextRequest) {
     }
     const where = conditions.join(' AND ');
 
+    // Paginate the header table first (cheap, PK-ordered), then look up each of the
+    // ~25 rows' totals via an indexed scalar subquery — avoids joining/grouping
+    // across the entire (21,000+ row) child table on every request.
     const [rows, [countRows]] = await Promise.all([
       pool.query(
         `SELECT v.id, v.company, v.voucherno, v.date, v.paidto, v.paidby,
                 v.prepaired_by, v.approved_by, v.checked_by, v.opening_balance,
-                COALESCE(SUM(c.amount), 0) AS total_amount
+                (SELECT COALESCE(SUM(c.amount), 0) FROM awt_cashvoucherchild c
+                 WHERE c.voucherid = v.id AND c.deleted = 0) AS total_amount
          FROM awt_cashvoucher v
-         LEFT JOIN awt_cashvoucherchild c ON c.voucherid = v.id AND c.deleted = 0
          WHERE ${where}
-         GROUP BY v.id
          ORDER BY v.id DESC
          LIMIT ? OFFSET ?`,
         [...params, limit, offset]
