@@ -54,7 +54,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
     const student = studentRows[0];
 
     const admissionPromise = pool.query<any[]>(
-      `SELECT Admission_Id, Fees, Cancel,
+      `SELECT Admission_Id, Fees, Cancel, Payment_Type,
               DATE_FORMAT(Admission_Date, '%Y-%m-%d') AS Admission_Date
        FROM admission_master
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
@@ -110,6 +110,52 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
     const dueDate = feeRow?.duedate ?? admission?.Admission_Date ?? feeRow?.Batch_SDate_Direct ?? student.Batch_SDate ?? null;
     const banks = banksResult[0];
     const ledgerRows = ledgerResult[0];
+
+    // Self-heal: a student on Full Payment mode should always have their 5% discount
+    // logged as its own ledger credit (matches lib/services/online-admission.service.ts,
+    // which only logs it at the moment an admission is first accepted — a student
+    // admitted before that logic existed, or whose Payment_Type was set outside that
+    // exact flow, would otherwise never get it). Log it here too so viewing the page
+    // is enough to make it appear, instead of requiring a re-grant.
+    const batchFeesFull = Number(student.Fees_Full_Payment ?? feeRow?.Fees_Full_Payment ?? 0);
+    if (admission?.Payment_Type === 'Full Payment' && batchFeesFull > 0) {
+      const alreadyLogged = ledgerRows.some((r) => r.Payment_Type === 'Discount');
+      if (!alreadyLogged) {
+        const fullPayAmount = Math.round(batchFeesFull * 0.95);
+        const discountAmount = batchFeesFull - fullPayAmount;
+        if (discountAmount > 0) {
+          const now = new Date();
+          const [insertResult] = await pool.query<any>(
+            `INSERT INTO s_fees_mst (
+               Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type,
+               Amount, Total_Amt, TypeR, Notes, RDate, Date_Added, FeesMonth, FeesYear,
+               IsActive, IsDelete
+             ) VALUES (?, ?, ?, ?, 'Discount', ?, ?, 'C', ?, ?, ?, ?, ?, 1, 0)`,
+            [
+              sid, student.Course_Id, student.Batch_Id, admission.Admission_Id,
+              discountAmount, discountAmount, 'Full Payment Discount (5%)',
+              admission.Admission_Date, now, now.getMonth() + 1, now.getFullYear(),
+            ]
+          );
+          ledgerRows.push({
+            Fees_Id: insertResult.insertId,
+            Fees_Code: null,
+            Date_Added: now,
+            RDate: admission.Admission_Date,
+            Payment_Type: 'Discount',
+            Cheque_No: null,
+            PaymentId: null,
+            Cheque_Bank: null,
+            Cheque_Branch: null,
+            Cheque_Date: null,
+            Amount: discountAmount,
+            Total_Amt: discountAmount,
+            TypeR: 'C',
+            Notes: 'Full Payment Discount (5%)',
+          });
+        }
+      }
+    }
 
     const ledger = ledgerRows
       .map((r) => {

@@ -83,7 +83,6 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Utility > Festival Photo Upload': '/dashboard/utility/festival-photo-upload',
   'Utility > Export Contacts': '/dashboard/utility/export-contacts',
   'Utility > ID Card Generator': '/dashboard/utility/id-cards',
-  'Utility > Software Changelog': '/dashboard/changelog',
   'Support > Support Tickets': '/dashboard/support',
 };
 
@@ -210,7 +209,6 @@ const SUB_MENUS: Record<string, string[]> = {
     'Mass WhatsApp',
     'Task Managements',
     'Email Master',
-    'Software Changelog',
   ],
   'Placement': [
     'Job Postings',
@@ -305,7 +303,6 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Utility > Festival Photo Upload': ['festival_photo.view'],
   'Utility > Export Contacts': ['export_contacts.view'],
   'Utility > ID Card Generator': ['student.view'],
-  'Utility > Software Changelog': ['changelog.view'],
 };
 
 const NAV_ICONS: Record<string, React.ReactNode> = {
@@ -738,21 +735,15 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
 
             <div className="w-px h-4 bg-white/15 mx-0.5" />
 
-            <button
-              onClick={() => {
-                if ('Notification' in window) {
-                  Notification.requestPermission().then(p => {
-                    if (p === 'granted') new Notification('SIT Manager', { body: 'Notifications enabled!' });
-                  });
-                }
-              }}
+            <a
+              href="/dashboard/changelog"
               className="p-1.5 rounded-lg text-white/80 hover:bg-white/15 hover:text-white transition-colors"
-              title="Notifications"
+              title="Software Changelog"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-            </button>
+            </a>
 
             <button
               onClick={openResetModal}
