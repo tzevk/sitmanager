@@ -225,7 +225,10 @@
       "Bash(sleep 5; ls -la /Users/tanvikadam/Desktop/student-master-audit.xlsx 2>&1)",
       "Bash(node scripts/log-change.mjs --title \"Student Master pagination now matches legacy total count\" --category Fix --description \"Pagination \\('1-25 of X'\\) now shows the same legacy-formula total as the 'Total Student' header when no search is active, instead of a smaller deduped count. Searching still shows the actual number of matching results, since the legacy global count wouldn't make sense next to a handful of search matches.\")",
       "Bash(ls -la /Users/tanvikadam/Desktop/student-master-audit.xlsx 2>&1)",
-      "Bash(node scripts/log-change.mjs --title \"Navbar changelog link now labeled 'Software Updates'\" --category Improvement --description \"The changelog navbar icon now shows the full label 'Software Updates' next to the icon, instead of being icon-only.\")"
+      "Bash(node scripts/log-change.mjs --title \"Navbar changelog link now labeled 'Software Updates'\" --category Improvement --description \"The changelog navbar icon now shows the full label 'Software Updates' next to the icon, instead of being icon-only.\")",
+      "Read(//Users/tanvikadam/**)",
+      "Bash(curl -s \"http://localhost:3000/api/admission-activity/student?page=1&limit=25\" -H \"Cookie: $\\(cat ~/.sitmanager_session_cookie || echo ''\\)\")",
+      "Bash(ls -la /Users/tanvikadam/Desktop/student-master-audit.xlsx)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
