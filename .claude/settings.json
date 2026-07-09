@@ -228,7 +228,9 @@
       "Bash(node scripts/log-change.mjs --title \"Navbar changelog link now labeled 'Software Updates'\" --category Improvement --description \"The changelog navbar icon now shows the full label 'Software Updates' next to the icon, instead of being icon-only.\")",
       "Read(//Users/tanvikadam/**)",
       "Bash(curl -s \"http://localhost:3000/api/admission-activity/student?page=1&limit=25\" -H \"Cookie: $\\(cat ~/.sitmanager_session_cookie || echo ''\\)\")",
-      "Bash(ls -la /Users/tanvikadam/Desktop/student-master-audit.xlsx)"
+      "Bash(ls -la /Users/tanvikadam/Desktop/student-master-audit.xlsx)",
+      "Bash(grep -n \"CREATE TABLE \\\\`s_fees_mst\\\\`\" -A 40 /Users/tanvikadam/Desktop/SIT/sitmanager/docs/db-schema-dump/current-schema.sql)",
+      "Bash(grep -n \"CREATE TABLE \\\\`finance_loans\\\\`\" -A 30 /Users/tanvikadam/Desktop/SIT/sitmanager/docs/db-schema-dump/current-schema.sql)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
