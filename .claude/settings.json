@@ -204,7 +204,12 @@
       "Bash(node scripts/log-change.mjs --title \"Transferred badge now shows source batch\" --category Improvement --description \"The Transferred tag now displays the batch a student was moved FROM in addition to the destination batch, across Fees Report \\(table/Excel/PDF\\), attendance, Edit Student, and fee receipts.\")",
       "Bash(node scripts/db/import-legacy-cancel-transfer-tags.mjs)",
       "Bash(node scripts/db/import-legacy-cancel-transfer-tags.mjs --apply)",
-      "Bash(node scripts/log-change.mjs --title \"Student Master shows Cancelled/Transferred tags; legacy data imported\" --category Improvement --description \"Student Master list now shows Cancelled and Transferred \\(from→to batch\\) tags, including previously-cancelled students that were formerly hidden from the list. Also ran a one-time import backfilling Cancelled/Transferred status for students whose cancellation or batch transfer only ever happened in the legacy system \\(16 cancellations + 680 transfers imported\\).\")"
+      "Bash(node scripts/log-change.mjs --title \"Student Master shows Cancelled/Transferred tags; legacy data imported\" --category Improvement --description \"Student Master list now shows Cancelled and Transferred \\(from→to batch\\) tags, including previously-cancelled students that were formerly hidden from the list. Also ran a one-time import backfilling Cancelled/Transferred status for students whose cancellation or batch transfer only ever happened in the legacy system \\(16 cancellations + 680 transfers imported\\).\")",
+      "Bash(grep -n \"from Student_Master\\\\|FROM Student_Master\\\\|from \\\\`Student_Master\\\\`\" /Users/tanvikadam/Desktop/SIT/sitmanager/appp.js)",
+      "Bash(grep -n \"FROM Student_Master\\\\|from Student_Master\\\\|from \\\\`Student_Master\\\\`\\\\|FROM \\\\`Student_Master\\\\`\" /Users/tanvikadam/Desktop/SIT/sitmanager/appp.js)",
+      "Bash(node scripts/db/dedupe-duplicate-admissions.mjs)",
+      "Bash(node scripts/db/dedupe-duplicate-admissions.mjs --apply)",
+      "Bash(node scripts/log-change.mjs --title \"Cleaned up duplicate admission records\" --category Fix --description \"Traced the legacy system's 'Total Student' count \\(17,649\\) to its exact source query and found 19 genuine duplicate/orphan admission_master rows inflating our count to 17,842. Re-pointed 16 linked fee/attendance rows onto the correct admission, then soft-deleted the 19 duplicates — count is now 17,823 \\(legacy total + 174 legitimate new admissions\\), no data lost.\")"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

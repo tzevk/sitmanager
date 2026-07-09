@@ -24,10 +24,13 @@ const SEARCH_FIELDS: Record<string, string> = {
   mobile:    'sm.Present_Mobile',
 };
 
-// Granted admissions only: active, admitted (Status_id=8). Cancelled admissions are
-// included (tagged via the Cancelled column) rather than hidden, so cancelled students
-// still show in Student Master with their status visible.
-const BASE_WHERE = `am.IsDelete = 0 AND am.IsActive = 1 AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL) AND sm.Status_id = 8`;
+// Granted admissions only: any student with an active, non-deleted admission_master
+// row. Not filtered on Status_id=8 — that column has a known drift bug (see
+// project_admission_status_columns memory) where a genuinely admitted student's
+// Status_id can lag behind their real admission, hiding them here otherwise.
+// Cancelled admissions are included too (tagged via the Cancelled column) rather
+// than hidden, so cancelled students still show with their status visible.
+const BASE_WHERE = `am.IsDelete = 0 AND am.IsActive = 1 AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)`;
 
 // One row per student: keep only the latest active admission.
 // A student can accumulate more than one active admission_master row (e.g. a batch
