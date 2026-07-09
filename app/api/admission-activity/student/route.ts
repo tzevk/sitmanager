@@ -135,20 +135,25 @@ export async function GET(req: NextRequest) {
       ),
     ]);
 
-    const total = (countRows as any[])[0]?.total || 0;
+    const searchedTotal = (countRows as any[])[0]?.total || 0;
 
-    // "Total Student" header figure: reproduces the legacy app's own count exactly
-    // (appp.js /nodeapp/getAllStudent countQuery — COUNT(*) of admission_master rows
-    // with IsDelete=0 AND IsActive=1, no Status_id filter, no per-student dedup).
-    // Deliberately a separate, unfiltered, global count from `total` above: `total`
-    // drives real pagination against the deduped (one row per student) list, so it
-    // can't be swapped for this raw admission-row count without breaking paging.
+    // "Total Student" figure: reproduces the legacy app's own count exactly (appp.js
+    // /nodeapp/getAllStudent countQuery — COUNT(*) of admission_master rows with
+    // IsDelete=0 AND IsActive=1, no Status_id filter, no per-student dedup). Always a
+    // global, unfiltered count regardless of search.
     const [[{ legacyTotal }]] = await pool.query<any[]>(
       `SELECT COUNT(*) AS legacyTotal
        FROM admission_master am
        LEFT JOIN student_master sm ON sm.Student_Id = am.Student_Id
        WHERE am.IsDelete = 0 AND am.IsActive = 1`
     );
+
+    // With no active search, show the same legacy-matching figure everywhere on the
+    // page (header + pagination) rather than the smaller deduped-list count. Once a
+    // search narrows the list, pagination must track the actual matching rows instead
+    // — the legacy total wouldn't make sense next to a handful of search results.
+    const isFiltered = Boolean(clause);
+    const total = isFiltered ? searchedTotal : (legacyTotal || 0);
 
     return NextResponse.json({
       rows,
