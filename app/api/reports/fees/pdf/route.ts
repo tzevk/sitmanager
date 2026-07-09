@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
          MAX(bm.SDate) AS SDate, MAX(bm.EDate) AS EDate,
          COALESCE(MAX(cm.Course_Name),'') AS Course_Name,
          COALESCE(MAX(sm.Moved_To_Batch_Code), '') AS Moved_To_Batch_Code,
+         COALESCE(MAX(sm.Moved_From_Batch_Code), '') AS Moved_From_Batch_Code,
          COALESCE(NULLIF(TRIM(MAX(sm.Transfered)), ''), '') AS Transfered,
          CASE WHEN LOWER(TRIM(CAST(MAX(COALESCE(am.Cancel,'')) AS CHAR))) IN ('yes','1','true') THEN 1 ELSE 0 END AS Cancelled
        FROM student_master sm
@@ -217,7 +218,12 @@ export async function GET(req: NextRequest) {
 
       let nameLabel = stu.Student_Name || '—';
       if (status === 'Cancelled')   nameLabel += '  [Cancelled]';
-      if (status === 'Transferred') nameLabel += `  [Transferred${stu.Moved_To_Batch_Code ? ` → ${stu.Moved_To_Batch_Code}` : ''}]`;
+      if (status === 'Transferred') {
+        const route = stu.Moved_From_Batch_Code && stu.Moved_To_Batch_Code
+          ? ` ${stu.Moved_From_Batch_Code} → ${stu.Moved_To_Batch_Code}`
+          : stu.Moved_To_Batch_Code ? ` → ${stu.Moved_To_Batch_Code}` : '';
+        nameLabel += `  [Transferred${route}]`;
+      }
 
       drawCell(colX[0], y, colWidths[0], rowH, String(idx + 1), { align: 'center', fill: rowFill, textColor });
       drawCell(colX[1], y, colWidths[1], rowH, nameLabel, { bold: true, fill: rowFill, textColor });

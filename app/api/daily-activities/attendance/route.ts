@@ -249,6 +249,7 @@ export async function GET(req: NextRequest) {
            a.Cancel,
            s.Transfered,
            s.Moved_To_Batch_Code,
+           s.Moved_From_Batch_Code,
            mtc.Course_Name AS movedToCourseName
          FROM (
            SELECT

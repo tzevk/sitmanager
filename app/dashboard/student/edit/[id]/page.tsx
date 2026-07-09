@@ -187,7 +187,7 @@ export default function EditStudentPage() {
     /* Status */
     Status_id: '', Status_date: '', Cancel: '',
     /* Transfer / move-to */
-    Transfered: '', Moved_To_Course_Id: '', Moved_To_Batch_Code: '',
+    Transfered: '', Moved_To_Course_Id: '', Moved_To_Batch_Code: '', Moved_From_Batch_Code: '',
     /* Admission */
     Admission_Dt: '',
     /* Student portal / referral */
@@ -283,6 +283,7 @@ export default function EditStudentPage() {
           Transfered:       s.Transfered || '',
           Moved_To_Course_Id: s.Moved_To_Course_Id != null ? String(s.Moved_To_Course_Id) : '',
           Moved_To_Batch_Code: s.Moved_To_Batch_Code || '',
+          Moved_From_Batch_Code: s.Moved_From_Batch_Code || '',
           Admission_Dt:     s.Admission_Dt ? String(s.Admission_Dt).slice(0, 10) : '',
           Login_Password:   s.Login_Password   || '',
           Refered_By:       s.Refered_By       || '',
@@ -903,6 +904,7 @@ export default function EditStudentPage() {
                         </div>
                         <StudentTransferBadge
                           transferred={form.Transfered}
+                          movedFromBatchCode={form.Moved_From_Batch_Code}
                           movedToCourseName={courses.find((c) => String(c.Course_Id) === form.Moved_To_Course_Id)?.Course_Name}
                           movedToBatchCode={form.Moved_To_Batch_Code}
                           className="mt-1"
@@ -1400,6 +1402,7 @@ export default function EditStudentPage() {
                   <div className="flex items-end">
                     <StudentTransferBadge
                       transferred={form.Transfered}
+                      movedFromBatchCode={form.Moved_From_Batch_Code}
                       movedToCourseName={courses.find((c) => String(c.Course_Id) === form.Moved_To_Course_Id)?.Course_Name}
                       movedToBatchCode={form.Moved_To_Batch_Code}
                     />

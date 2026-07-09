@@ -7,17 +7,22 @@ function isYes(value: unknown): boolean {
 
 export function StudentTransferBadge({
   transferred,
+  movedFromBatchCode,
   movedToCourseName,
   movedToBatchCode,
   className = '',
 }: {
   transferred?: string | null;
+  movedFromBatchCode?: string | null;
   movedToCourseName?: string | null;
   movedToBatchCode?: string | null;
   className?: string;
 }) {
   const isTransferred = isYes(transferred);
-  const destination = [movedToCourseName, movedToBatchCode].filter(Boolean).join(' · ');
+  const route = movedFromBatchCode && movedToBatchCode
+    ? `${movedFromBatchCode} → ${movedToBatchCode}`
+    : movedToBatchCode || null;
+  const destination = [route, movedToCourseName].filter(Boolean).join(' · ');
 
   if (!isTransferred && !destination) return null;
 

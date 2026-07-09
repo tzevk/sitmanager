@@ -37,6 +37,7 @@ interface FeesRow {
   Batch_Code: string;
   Transfered?: string | null;
   Moved_To_Batch_Code?: string | null;
+  Moved_From_Batch_Code?: string | null;
   Moved_To_Course_Name?: string | null;
 }
 
@@ -51,6 +52,7 @@ interface BatchWiseFeesRow {
   Cancel?: string | null;
   Transfered?: string | null;
   Moved_To_Batch_Code?: string | null;
+  Moved_From_Batch_Code?: string | null;
   Moved_To_Course_Name?: string | null;
   Student_Name: string;
   Present_Mobile: string;
@@ -436,8 +438,10 @@ function FeesReportContent() {
           if (status === 'Cancelled') {
             cell.value = `${r.Student_Name || '—'}  [Cancelled]`;
           } else if (status === 'Transferred') {
-            const dest = r.Moved_To_Batch_Code ? ` → ${r.Moved_To_Batch_Code}` : '';
-            cell.value = `${r.Student_Name || '—'}  [Transferred${dest}]`;
+            const route = r.Moved_From_Batch_Code && r.Moved_To_Batch_Code
+              ? ` ${r.Moved_From_Batch_Code} → ${r.Moved_To_Batch_Code}`
+              : r.Moved_To_Batch_Code ? ` → ${r.Moved_To_Batch_Code}` : '';
+            cell.value = `${r.Student_Name || '—'}  [Transferred${route}]`;
           }
         } else if (ci === 4 || ci === 5) {
           cell.numFmt = '₹#,##0';
@@ -763,6 +767,7 @@ function ChequePdcTable({ rows, totalAmt, totalTax, totalNet }: {
                   <span className="truncate block">{r.Student_Name || '—'}</span>
                   <StudentTransferBadge
                     transferred={r.Transfered}
+                    movedFromBatchCode={r.Moved_From_Batch_Code}
                     movedToCourseName={r.Moved_To_Course_Name}
                     movedToBatchCode={r.Moved_To_Batch_Code}
                   />
@@ -857,6 +862,7 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
                           <span className="truncate block">{r.Student_Name || '—'}</span>
                           <StudentTransferBadge
                             transferred={r.Transfered}
+                            movedFromBatchCode={r.Moved_From_Batch_Code}
                             movedToCourseName={r.Moved_To_Course_Name}
                             movedToBatchCode={r.Moved_To_Batch_Code}
                           />

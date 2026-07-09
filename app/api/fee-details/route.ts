@@ -97,7 +97,8 @@ export async function GET(req: NextRequest) {
             // deleted/transferred, but the name must still render on the receipt.
             `SELECT sm.Student_Id, sm.Student_Name, cm.Course_Name, sm.Batch_Code AS Batch_code,
                     COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
-                    COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code
+                    COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
+                    COALESCE(sm.Moved_From_Batch_Code, '') AS Moved_From_Batch_Code
              FROM student_master sm
              LEFT JOIN course_mst cm ON cm.Course_Id = sm.Course_Id
              WHERE sm.Student_Id IN (?)`,
@@ -122,6 +123,7 @@ export async function GET(req: NextRequest) {
           Amount: row.Amount,
           Transfered: student?.Transfered ?? '',
           Moved_To_Batch_Code: student?.Moved_To_Batch_Code ?? '',
+          Moved_From_Batch_Code: student?.Moved_From_Batch_Code ?? '',
           Cancelled: 0,
         };
       });
@@ -132,21 +134,27 @@ export async function GET(req: NextRequest) {
     if (mode === 'students') {
       const studentParams: any[] = [];
       const studentConditions = [
-        '(IsDelete = 0 OR IsDelete IS NULL)',
-        '(IsActive = 1 OR IsActive IS NULL)',
-        "COALESCE(NULLIF(TRIM(Student_Name), ''), '') <> ''",
+        '(sm.IsDelete = 0 OR sm.IsDelete IS NULL)',
+        '(sm.IsActive = 1 OR sm.IsActive IS NULL)',
+        "COALESCE(NULLIF(TRIM(sm.Student_Name), ''), '') <> ''",
       ];
       if (q) {
-        studentConditions.push('(Student_Name LIKE ? OR Student_Id = ? OR Batch_Code LIKE ?)');
+        studentConditions.push('(sm.Student_Name LIKE ? OR sm.Student_Id = ? OR sm.Batch_Code LIKE ?)');
         studentParams.push(`%${q}%`, Number(q) || 0, `%${q}%`);
       }
       const requestedLimit = Number(searchParams.get('limit')) || 0;
       const limit = q ? Math.max(1, Math.min(requestedLimit || 50, 100)) : 0;
       const studentRows = await runGuardedQuery(getPool(),
-        `SELECT Student_Id, Student_Name, Present_Mobile, Email, Batch_Code AS Batch_code
-         FROM student_master
+        `SELECT sm.Student_Id, sm.Student_Name, sm.Present_Mobile, sm.Email, sm.Batch_Code AS Batch_code,
+                COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
+                COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
+                COALESCE(sm.Moved_From_Batch_Code, '') AS Moved_From_Batch_Code,
+                (SELECT MAX(CASE WHEN LOWER(TRIM(CAST(COALESCE(am.Cancel,'') AS CHAR))) IN ('yes','1','true') THEN 1 ELSE 0 END)
+                 FROM admission_master am
+                 WHERE am.Student_Id = sm.Student_Id AND (am.IsDelete = 0 OR am.IsDelete IS NULL)) AS Cancelled
+         FROM student_master sm
          WHERE ${studentConditions.join(' AND ')}
-         ORDER BY ${q ? 'Student_Id DESC' : 'Student_Name ASC'}
+         ORDER BY ${q ? 'sm.Student_Id DESC' : 'sm.Student_Name ASC'}
          ${limit ? `LIMIT ${limit}` : ''}`,
         studentParams,
         10
@@ -189,7 +197,7 @@ export async function GET(req: NextRequest) {
       `WITH matched_students AS (
         SELECT
           sm.Student_Id, sm.Student_Name, sm.Present_Mobile, sm.Email,
-          sm.Course_Id, sm.Batch_Code, sm.Transfered, sm.Moved_To_Batch_Code
+          sm.Course_Id, sm.Batch_Code, sm.Transfered, sm.Moved_To_Batch_Code, sm.Moved_From_Batch_Code
         FROM student_master sm
         WHERE ${conditions.join(' AND ')}
         ORDER BY sm.Student_Id DESC
@@ -209,6 +217,7 @@ export async function GET(req: NextRequest) {
          0 AS Total_Paid,
          COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
          COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
+         COALESCE(sm.Moved_From_Batch_Code, '') AS Moved_From_Batch_Code,
          0 AS Cancelled
        FROM matched_students sm
        LEFT JOIN course_mst cm ON cm.Course_Id = sm.Course_Id

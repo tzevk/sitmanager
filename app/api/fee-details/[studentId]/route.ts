@@ -40,6 +40,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
               DATE_FORMAT(bm.SDate, '%Y-%m-%d') AS Batch_SDate,
               COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
               COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
+              COALESCE(sm.Moved_From_Batch_Code, '') AS Moved_From_Batch_Code,
               COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name
        FROM student_master sm
        LEFT JOIN course_mst cm ON cm.Course_Id = sm.Course_Id
@@ -223,6 +224,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
         Admission_Id: admission?.Admission_Id ?? null,
         Transfered: student.Transfered || '',
         Moved_To_Batch_Code: student.Moved_To_Batch_Code || '',
+        Moved_From_Batch_Code: student.Moved_From_Batch_Code || '',
         Moved_To_Course_Name: student.Moved_To_Course_Name || '',
         Cancel: Number(admission?.Cancel ?? 0) === 1,
       },

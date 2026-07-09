@@ -14,10 +14,11 @@ interface StudentRow {
   Email: string | null;
   Transfered: string;
   Moved_To_Batch_Code: string;
+  Moved_From_Batch_Code: string;
   Cancelled: number;
 }
 
-const StatusTag = ({ row }: { row: Pick<StudentRow, 'Transfered' | 'Moved_To_Batch_Code' | 'Cancelled'> }) => {
+const StatusTag = ({ row }: { row: Pick<StudentRow, 'Transfered' | 'Moved_To_Batch_Code' | 'Moved_From_Batch_Code' | 'Cancelled'> }) => {
   if (Number(row.Cancelled) === 1)
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-red-100 border border-red-200 px-1.5 py-0.5 text-[10px] font-bold text-red-700 whitespace-nowrap shrink-0">
@@ -28,7 +29,12 @@ const StatusTag = ({ row }: { row: Pick<StudentRow, 'Transfered' | 'Moved_To_Bat
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 whitespace-nowrap shrink-0">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-        Transferred{row.Moved_To_Batch_Code ? <span className="font-mono">→ {row.Moved_To_Batch_Code}</span> : null}
+        Transferred{row.Moved_To_Batch_Code ? (
+          <span className="font-mono">
+            {row.Moved_From_Batch_Code ? `${row.Moved_From_Batch_Code} → ` : '→ '}
+            {row.Moved_To_Batch_Code}
+          </span>
+        ) : null}
       </span>
     );
   return null;
@@ -354,7 +360,7 @@ export default function AddFeeDetailsPage() {
         ${selectedStudent && (Number(selectedStudent.Cancelled) === 1 || selectedStudent.Transfered?.toLowerCase() === 'yes') ? `
         <div class="status-line">
           ${Number(selectedStudent.Cancelled) === 1 ? '<span class="status-tag status-cancelled">CANCELLED</span>' : ''}
-          ${selectedStudent.Transfered?.toLowerCase() === 'yes' ? `<span class="status-tag status-transferred">TRANSFERRED${selectedStudent.Moved_To_Batch_Code ? ` &rarr; ${selectedStudent.Moved_To_Batch_Code}` : ''}</span>` : ''}
+          ${selectedStudent.Transfered?.toLowerCase() === 'yes' ? `<span class="status-tag status-transferred">TRANSFERRED${selectedStudent.Moved_From_Batch_Code && selectedStudent.Moved_To_Batch_Code ? ` ${selectedStudent.Moved_From_Batch_Code} &rarr; ${selectedStudent.Moved_To_Batch_Code}` : selectedStudent.Moved_To_Batch_Code ? ` &rarr; ${selectedStudent.Moved_To_Batch_Code}` : ''}</span>` : ''}
         </div>` : ''}
         <div class="body">
           <div class="line-row">Received with thanks from <span class="fill name">${data.student.Student_Name}</span></div>

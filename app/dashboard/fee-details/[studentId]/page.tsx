@@ -17,6 +17,7 @@ interface Student {
   Admission_Id: number | null;
   Transfered: string;
   Moved_To_Batch_Code: string;
+  Moved_From_Batch_Code: string;
   Moved_To_Course_Name: string;
   Cancel: boolean;
 }
@@ -382,7 +383,7 @@ export default function FeeDetailsEditPage() {
         ${data.student.Cancel || data.student.Transfered.toLowerCase() === 'yes' ? `
         <div class="status-line">
           ${data.student.Cancel ? '<span class="status-tag status-cancelled">CANCELLED</span>' : ''}
-          ${data.student.Transfered.toLowerCase() === 'yes' ? `<span class="status-tag status-transferred">TRANSFERRED${data.student.Moved_To_Batch_Code ? ` &rarr; ${data.student.Moved_To_Batch_Code}` : ''}</span>` : ''}
+          ${data.student.Transfered.toLowerCase() === 'yes' ? `<span class="status-tag status-transferred">TRANSFERRED${data.student.Moved_From_Batch_Code && data.student.Moved_To_Batch_Code ? ` ${data.student.Moved_From_Batch_Code} &rarr; ${data.student.Moved_To_Batch_Code}` : data.student.Moved_To_Batch_Code ? ` &rarr; ${data.student.Moved_To_Batch_Code}` : ''}</span>` : ''}
         </div>` : ''}
         <div class="body">
           <div class="line-row">Received with thanks from <span class="fill name">${data.student.Student_Name}</span></div>
@@ -541,7 +542,10 @@ ${copy('Student Copy')}
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-300 shrink-0" />
                   Transferred
                   {data.student.Moved_To_Batch_Code && (
-                    <span className="font-mono normal-case font-semibold">→ {data.student.Moved_To_Batch_Code}</span>
+                    <span className="font-mono normal-case font-semibold">
+                      {data.student.Moved_From_Batch_Code ? `${data.student.Moved_From_Batch_Code} → ` : '→ '}
+                      {data.student.Moved_To_Batch_Code}
+                    </span>
                   )}
                 </span>
               )}

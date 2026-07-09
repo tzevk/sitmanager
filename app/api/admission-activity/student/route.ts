@@ -24,10 +24,12 @@ const SEARCH_FIELDS: Record<string, string> = {
   mobile:    'sm.Present_Mobile',
 };
 
-// Granted admissions only: active, admitted (Status_id=8) and NOT cancelled.
-const BASE_WHERE = `am.IsDelete = 0 AND am.IsActive = 1 AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL) AND sm.Status_id = 8 AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))`;
+// Granted admissions only: active, admitted (Status_id=8). Cancelled admissions are
+// included (tagged via the Cancelled column) rather than hidden, so cancelled students
+// still show in Student Master with their status visible.
+const BASE_WHERE = `am.IsDelete = 0 AND am.IsActive = 1 AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL) AND sm.Status_id = 8`;
 
-// One row per student: keep only the latest active, non-cancelled admission.
+// One row per student: keep only the latest active admission.
 // A student can accumulate more than one active admission_master row (e.g. a batch
 // transfer leaves the old admission active while roll-number allotment inserts a new
 // one for the new batch). Without this, the student appears once per admission and the
@@ -36,7 +38,7 @@ const BASE_WHERE = `am.IsDelete = 0 AND am.IsActive = 1 AND (sm.IsDelete = 0 OR 
 const LATEST_ADMISSION_JOIN = `JOIN (
   SELECT Student_Id, MAX(Admission_Id) AS Admission_Id
   FROM admission_master
-  WHERE IsDelete = 0 AND IsActive = 1 AND (Cancel IS NULL OR LOWER(TRIM(Cancel)) NOT IN ('yes'))
+  WHERE IsDelete = 0 AND IsActive = 1
   GROUP BY Student_Id
 ) la ON la.Admission_Id = am.Admission_Id`;
 
@@ -99,7 +101,9 @@ export async function GET(req: NextRequest) {
            sm.Present_Mobile,
            sm.Transfered,
            sm.Moved_To_Batch_Code,
+           sm.Moved_From_Batch_Code,
            COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name,
+           CASE WHEN LOWER(TRIM(COALESCE(am.Cancel, ''))) IN ('yes','1','true') THEN 1 ELSE 0 END AS Cancelled,
            sm.IsActive,
            am.Payment_Type,
            COALESCE(bm.Fees_Full_Payment, bm2.Fees_Full_Payment) AS Total_Fees,

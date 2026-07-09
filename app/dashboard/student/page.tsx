@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
+import { StudentTransferBadge } from '@/components/ui/StudentTransferBadge';
 
 interface StudentRow {
   Admission_Id?: number;
@@ -18,6 +19,11 @@ interface StudentRow {
   Total_Fees: number | null;
   Paid_Fees: number | null;
   Balance_Fees: number | null;
+  Transfered?: string | null;
+  Moved_To_Batch_Code?: string | null;
+  Moved_From_Batch_Code?: string | null;
+  Moved_To_Course_Name?: string | null;
+  Cancelled?: number | null;
 }
 
 interface Pagination { page: number; limit: number; total: number; totalPages: number }
@@ -245,7 +251,21 @@ export default function StudentPage() {
                   <td className="py-1.5 px-3 text-xs text-slate-700 font-mono whitespace-nowrap">{r.Student_Id}</td>
                   <td className="py-1.5 px-3 text-slate-500 font-mono text-xs whitespace-nowrap">{r.Batch_Code || '—'}</td>
                   <td className="py-1.5 px-3 font-semibold text-slate-900 text-xs max-w-[180px]">
-                    <span className="truncate block">{r.Student_Name || '—'}</span>
+                    <div className="flex flex-col gap-1">
+                      <span className="truncate block">{r.Student_Name || '—'}</span>
+                      {Number(r.Cancelled) === 1 ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700 w-fit">
+                          Cancelled
+                        </span>
+                      ) : (
+                        <StudentTransferBadge
+                          transferred={r.Transfered}
+                          movedFromBatchCode={r.Moved_From_Batch_Code}
+                          movedToCourseName={r.Moved_To_Course_Name}
+                          movedToBatchCode={r.Moved_To_Batch_Code}
+                        />
+                      )}
+                    </div>
                   </td>
                   <td className="py-1.5 px-3 text-slate-600 text-xs max-w-[220px]">
                     <span className="truncate block">{r.Present_Address || '—'}</span>

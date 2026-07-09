@@ -16,6 +16,7 @@ export async function ensureStudentTransferColumns(pool: Pool): Promise<void> {
     ['Transfered', 'VARCHAR(20) NULL'],
     ['Moved_To_Course_Id', 'INT NULL'],
     ['Moved_To_Batch_Code', 'VARCHAR(100) NULL'],
+    ['Moved_From_Batch_Code', 'VARCHAR(100) NULL'],
   ];
 
   const missing = required.filter(([column]) => !existing.has(column));

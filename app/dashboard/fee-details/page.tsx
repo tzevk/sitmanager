@@ -18,6 +18,7 @@ interface RecentReceiptRow {
   Amount: number | null;
   Transfered: string;
   Moved_To_Batch_Code: string;
+  Moved_From_Batch_Code: string;
   Cancelled: number;
 }
 
@@ -32,12 +33,13 @@ interface StudentSearchRow {
   Total_Paid: number | null;
   Transfered: string;
   Moved_To_Batch_Code: string;
+  Moved_From_Batch_Code: string;
   Cancelled: number;
   Latest_Fees_Id: number | null;
   Latest_Fees_Code: string | null;
 }
 
-const StatusTag = ({ row }: { row: Pick<RecentReceiptRow, 'Transfered' | 'Moved_To_Batch_Code' | 'Cancelled'> }) => {
+const StatusTag = ({ row }: { row: Pick<RecentReceiptRow, 'Transfered' | 'Moved_To_Batch_Code' | 'Moved_From_Batch_Code' | 'Cancelled'> }) => {
   if (Number(row.Cancelled) === 1)
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-red-100 border border-red-200 px-1.5 py-0.5 text-[10px] font-bold text-red-700 whitespace-nowrap">
@@ -48,7 +50,12 @@ const StatusTag = ({ row }: { row: Pick<RecentReceiptRow, 'Transfered' | 'Moved_
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 whitespace-nowrap">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
-        Transferred{row.Moved_To_Batch_Code ? <span className="font-mono font-semibold">→ {row.Moved_To_Batch_Code}</span> : null}
+        Transferred{row.Moved_To_Batch_Code ? (
+          <span className="font-mono font-semibold">
+            {row.Moved_From_Batch_Code ? `${row.Moved_From_Batch_Code} → ` : '→ '}
+            {row.Moved_To_Batch_Code}
+          </span>
+        ) : null}
       </span>
     );
   return null;

@@ -20,6 +20,7 @@ interface Student {
   Cancel?: number | null;
   Transfered?: string | null;
   Moved_To_Batch_Code?: string | null;
+  Moved_From_Batch_Code?: string | null;
   movedToCourseName?: string | null;
 }
 
@@ -34,6 +35,7 @@ interface AttendanceStudentRow {
   Cancel?: number | null;
   Transfered?: string | null;
   Moved_To_Batch_Code?: string | null;
+  Moved_From_Batch_Code?: string | null;
   movedToCourseName?: string | null;
 }
 
@@ -323,6 +325,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
         Cancel:       st.Cancel,
         Transfered:   st.Transfered,
         Moved_To_Batch_Code: st.Moved_To_Batch_Code,
+        Moved_From_Batch_Code: st.Moved_From_Batch_Code,
         movedToCourseName:   st.movedToCourseName,
       }));
       setStudents(s);
@@ -1009,7 +1012,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                           {Number(student.Cancel) === 1 && (
                             <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">Cancelled</span>
                           )}
-                          <StudentTransferBadge transferred={student.Transfered} movedToCourseName={student.movedToCourseName} movedToBatchCode={student.Moved_To_Batch_Code} />
+                          <StudentTransferBadge transferred={student.Transfered} movedFromBatchCode={student.Moved_From_Batch_Code} movedToCourseName={student.movedToCourseName} movedToBatchCode={student.Moved_To_Batch_Code} />
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">Roll: {student.rollNo || '—'}</p>
                         <p className="text-xs text-gray-400 mt-0.5">Mobile: {student.mobile || '—'}</p>
@@ -1126,7 +1129,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                           {Number(student.Cancel) === 1 && (
                             <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">Cancelled</span>
                           )}
-                          <StudentTransferBadge transferred={student.Transfered} movedToCourseName={student.movedToCourseName} movedToBatchCode={student.Moved_To_Batch_Code} />
+                          <StudentTransferBadge transferred={student.Transfered} movedFromBatchCode={student.Moved_From_Batch_Code} movedToCourseName={student.movedToCourseName} movedToBatchCode={student.Moved_To_Batch_Code} />
                         </div>
                       </td>
                       <td className="py-2.5 px-4 text-xs text-gray-500 tabular-nums">{student.mobile || <span className="text-gray-300">—</span>}</td>

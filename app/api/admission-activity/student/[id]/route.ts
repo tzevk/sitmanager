@@ -205,7 +205,7 @@ export async function GET(
          s.Permanent_Address, s.Permanent_City, s.Permanent_State, s.Permanent_Pin, s.Permanent_Country,
          s.Qualification, s.Discipline, s.Percentage,
          s.Course_Id, s.Batch_Code, s.Batch_Category_id,
-         s.Transfered, s.Moved_To_Course_Id, s.Moved_To_Batch_Code,
+         s.Transfered, s.Moved_To_Course_Id, s.Moved_To_Batch_Code, s.Moved_From_Batch_Code,
          s.Company          AS Organisation,
          s.Designation,
          s.Occupation       AS OccupationalStatus,
@@ -472,6 +472,28 @@ export async function PUT(
       : (Course_Id ? parseInt(Course_Id) : null);
     const resolvedBatchCategoryId = await resolveBatchCategoryId(pool, resolvedBatchCode, Batch_Category_id || null);
 
+    // Capture which batch the student is being transferred FROM, once, at the
+    // moment the transfer is recorded — so the badge everywhere can show
+    // "From X → To Y" instead of just the destination. Read fresh from the DB
+    // (not the submitted form) since student_master.Batch_Code gets overwritten
+    // to the destination batch below. Once captured it's preserved on later
+    // saves rather than re-derived (by then Batch_Code already IS the
+    // destination, which would silently corrupt it into "from = to").
+    let resolvedMovedFromBatchCode: string | null = null;
+    if (resolvedTransfered && resolvedMovedToBatchCode) {
+      const [priorRows] = await pool.query(
+        `SELECT Batch_Code, Moved_From_Batch_Code FROM student_master WHERE Student_Id = ? LIMIT 1`,
+        [id]
+      ) as [any[], any];
+      const existingMovedFrom = String(priorRows[0]?.Moved_From_Batch_Code ?? '').trim();
+      if (existingMovedFrom) {
+        resolvedMovedFromBatchCode = existingMovedFrom;
+      } else {
+        const priorBatchCode = String(priorRows[0]?.Batch_Code ?? '').trim();
+        resolvedMovedFromBatchCode = (priorBatchCode && priorBatchCode !== resolvedMovedToBatchCode) ? priorBatchCode : null;
+      }
+    }
+
     // ── 1. Core UPDATE — columns guaranteed to exist in all deployments ───
     await pool.query(
       `UPDATE student_master SET
@@ -497,6 +519,7 @@ export async function PUT(
          Transfered       = ?,
          Moved_To_Course_Id = ?,
          Moved_To_Batch_Code = ?,
+         Moved_From_Batch_Code = ?,
          Qualification    = ?,
          Percentage       = ?,
          Company          = ?,
@@ -531,6 +554,7 @@ export async function PUT(
         resolvedTransfered,
         resolvedMovedToCourseId,
         resolvedTransfered ? resolvedMovedToBatchCode : null,
+        resolvedTransfered ? resolvedMovedFromBatchCode : null,
         Qualification || null,
         Percentage ? parseFloat(Percentage) : null,
         Organisation || null,

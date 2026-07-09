@@ -66,6 +66,7 @@ export async function GET(req: NextRequest) {
            COALESCE(bm.Batch_code,'') AS Batch_Code,
            COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
            COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
+           COALESCE(sm.Moved_From_Batch_Code, '') AS Moved_From_Batch_Code,
            COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name
          FROM s_fees_mst sfm
          LEFT JOIN student_master sm ON sm.Student_Id = sfm.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
@@ -108,6 +109,7 @@ export async function GET(req: NextRequest) {
              am.Cancel AS Cancel,
              COALESCE(NULLIF(TRIM(sm.Transfered), ''), am.Transfered) AS Transfered,
              COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
+             COALESCE(sm.Moved_From_Batch_Code, '') AS Moved_From_Batch_Code,
              COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name,
              COALESCE(sm.Student_Name, CONCAT_WS(' ', sm.FName, sm.MName, sm.LName), '') AS Student_Name,
              COALESCE(sm.Present_Mobile,'') AS Present_Mobile,
@@ -177,6 +179,7 @@ export async function GET(req: NextRequest) {
              COALESCE(bm.Batch_code,'') AS Batch_Code,
              COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
              COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
+             COALESCE(sm.Moved_From_Batch_Code, '') AS Moved_From_Batch_Code,
              COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name
            FROM s_fees_mst sfm
            LEFT JOIN student_master sm ON sm.Student_Id = sfm.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
