@@ -67,9 +67,16 @@ export default function StudentReportPage() {
   return <StudentReportContent />;
 }
 
+const REPORT_TYPE_IDS: readonly string[] = TABS.map((t) => t.id);
+
 function StudentReportContent() {
   const router = useRouter();
-  const [tab, setTab] = useState<ReportType>('student-list');
+  const initialTab = (() => {
+    if (typeof window === 'undefined') return 'student-list';
+    const t = new URLSearchParams(window.location.search).get('type');
+    return t && REPORT_TYPE_IDS.includes(t) ? (t as ReportType) : 'student-list';
+  })();
+  const [tab, setTab] = useState<ReportType>(initialTab);
   const [courseId, setCourseId] = useState('');
   const [batchCode, setBatchCode] = useState('');
   const [courses, setCourses] = useState<CourseOption[]>([]);
