@@ -340,38 +340,40 @@ function BatchTransferReportContent() {
         ) : rows.length === 0 ? (
           <div className="py-16 text-center text-xs text-slate-400">No records found.</div>
         ) : (
-          <div className="overflow-x-auto">
+          <div>
             <div className="px-5 py-2 text-[11px] text-slate-500 border-b border-slate-100">
               <span className="font-semibold text-slate-700">{rows.length}</span> record(s) · {activeLabel}
             </div>
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-200">
-                  <th className={TH}>Sr</th>
-                  <th className={TH}>Roll No</th>
-                  <th className={TH}>Student Name</th>
-                  <th className={TH}>Course</th>
-                  <th className={TH}>Batch</th>
-                  <th className={TH}>Mobile</th>
-                  <th className={TH}>Admission Date</th>
-                  <th className={TH}>{extraHeader}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => (
-                  <tr key={`${r.Student_Id}-${i}`} className="hover:bg-slate-50/60 transition-colors">
-                    <td className={`${TD} text-slate-400`}>{i + 1}</td>
-                    <td className={`${TD} font-mono text-[11px]`}>{r.Roll_No || '—'}</td>
-                    <td className={`${TD} font-medium`}>{r.Student_Name || '—'}</td>
-                    <td className={TD}>{r.Course_Name || '—'}</td>
-                    <td className={`${TD} font-mono text-[11px]`}>{r.Batch_Code || '—'}</td>
-                    <td className={TD}>{r.Present_Mobile || '—'}</td>
-                    <td className={TD}>{fmtDate(r.Admission_Date)}</td>
-                    <td className={TD}>{extraValue(r)}</td>
+            <div className="max-h-[60vh] overflow-y-auto overflow-x-auto">
+              <table className="w-full">
+                <thead className="sticky top-0 z-10 bg-slate-50">
+                  <tr className="border-b border-slate-200">
+                    <th className={TH}>Sr</th>
+                    <th className={TH}>Roll No</th>
+                    <th className={TH}>Student Name</th>
+                    <th className={TH}>Course</th>
+                    <th className={TH}>Batch</th>
+                    <th className={TH}>Mobile</th>
+                    <th className={TH}>Admission Date</th>
+                    <th className={TH}>{extraHeader}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={`${r.Student_Id}-${i}`} className="hover:bg-slate-50/60 transition-colors">
+                      <td className={`${TD} text-slate-400`}>{i + 1}</td>
+                      <td className={`${TD} font-mono text-[11px]`}>{r.Roll_No || '—'}</td>
+                      <td className={`${TD} font-medium`}>{r.Student_Name || '—'}</td>
+                      <td className={TD}>{r.Course_Name || '—'}</td>
+                      <td className={`${TD} font-mono text-[11px]`}>{r.Batch_Code || '—'}</td>
+                      <td className={TD}>{r.Present_Mobile || '—'}</td>
+                      <td className={TD}>{fmtDate(r.Admission_Date)}</td>
+                      <td className={TD}>{extraValue(r)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
