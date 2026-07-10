@@ -128,7 +128,8 @@ export async function GET(req: NextRequest) {
 
     const orderBy =
       type === 'batch-wise' ? 'b.Batch_code ASC, sm.Student_Name ASC'
-      : type === 'yearly' || type === 'month-wise' ? 'Admission_Date DESC, sm.Student_Name ASC'
+      : type === 'yearly' || type === 'month-wise' || type === 'transferred' || type === 'cancelled' || type === 'left'
+        ? 'Admission_Date DESC, sm.Student_Name ASC'
       : 'sm.Student_Name ASC';
 
     const [rows] = await pool.query<any[]>(
