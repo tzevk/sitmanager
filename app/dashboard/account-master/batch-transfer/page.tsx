@@ -14,37 +14,20 @@ interface ReportRow {
   Student_Name: string;
   Present_Mobile?: string;
   Email?: string;
-  Photo?: string;
   Course_Name?: string;
   Batch_Code?: string;
   Admission_Date?: string | null;
   Status_Name?: string;
-  DocCount?: number;
-  CompanyName?: string;
-  Result?: string;
   Moved_From_Batch_Code?: string;
   Moved_To_Batch_Code?: string;
-  Moved_To_Course_Name?: string;
 }
 
-type ReportType =
-  | 'student-list' | 'batch-wise' | 'yearly' | 'card-list' | 'month-wise'
-  | 'documents' | 'left' | 'cancelled' | 'transferred' | 'placed';
+type ReportType = 'transferred' | 'cancelled';
 
 const TABS: { id: ReportType; label: string }[] = [
-  { id: 'student-list', label: 'Student List' },
-  { id: 'batch-wise',   label: 'Batch Wise' },
-  { id: 'yearly',       label: 'Yearly' },
-  { id: 'card-list',    label: 'For Card List' },
-  { id: 'month-wise',   label: 'Month Wise' },
-  { id: 'documents',    label: 'Documents' },
-  { id: 'left',         label: 'Left' },
-  { id: 'cancelled',    label: 'Cancelled Students' },
-  { id: 'transferred',  label: 'Batch Transfer' },
-  { id: 'placed',       label: 'Placed Students' },
+  { id: 'transferred', label: 'Batch Transfer' },
+  { id: 'cancelled',   label: 'Cancelled Students' },
 ];
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const fmtDate = (d: string | null | undefined) => {
   if (!d) return '—';
@@ -53,23 +36,23 @@ const fmtDate = (d: string | null | undefined) => {
   const [y, m, day] = s.split('-');
   return `${day}/${m}/${y}`;
 };
-const yearOf = (d?: string | null) => (d && /^\d{4}/.test(d) ? d.slice(0, 4) : '');
-const monthOf = (d?: string | null) => {
-  if (!d || !/^\d{4}-\d{2}/.test(d)) return '';
-  return `${MONTHS[Number(d.slice(5, 7)) - 1]} ${d.slice(0, 4)}`;
-};
 
 /* ── Page ──────────────────────────────────────────────────────────── */
-export default function StudentReportPage() {
+export default function BatchTransferReportPage() {
   const { canView, loading: permLoading } = useResourcePermissions('student');
   if (permLoading) return <PermissionLoading />;
-  if (!canView) return <AccessDenied message="You do not have permission to view student reports." />;
-  return <StudentReportContent />;
+  if (!canView) return <AccessDenied message="You do not have permission to view this report." />;
+  return <BatchTransferReportContent />;
 }
 
-function StudentReportContent() {
+function BatchTransferReportContent() {
   const router = useRouter();
-  const [tab, setTab] = useState<ReportType>('student-list');
+  const initialTab: ReportType = (() => {
+    if (typeof window === 'undefined') return 'transferred';
+    const t = new URLSearchParams(window.location.search).get('type');
+    return t === 'cancelled' ? 'cancelled' : 'transferred';
+  })();
+  const [tab, setTab] = useState<ReportType>(initialTab);
   const [courseId, setCourseId] = useState('');
   const [batchCode, setBatchCode] = useState('');
   const [courses, setCourses] = useState<CourseOption[]>([]);
@@ -83,13 +66,11 @@ function StudentReportContent() {
 
   const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] transition-colors';
 
-  // Load courses once
   useEffect(() => {
     fetch('/api/reports/student?action=courses')
       .then(r => r.json()).then(d => setCourses(d.courses ?? [])).catch(() => {});
   }, []);
 
-  // Reload batches when course changes
   useEffect(() => {
     setBatchCode('');
     const url = courseId
@@ -125,58 +106,30 @@ function StudentReportContent() {
     setTab(t); setRows([]); setSearched(false); setError('');
   };
 
-  /* Columns shown per report type */
-  const showExtra: 'year' | 'month' | 'docs' | 'status' | 'company' | 'transfer' | null =
-    tab === 'yearly' ? 'year'
-    : tab === 'month-wise' ? 'month'
-    : tab === 'documents' ? 'docs'
-    : tab === 'cancelled' || tab === 'left' ? 'status'
-    : tab === 'placed' ? 'company'
-    : tab === 'transferred' ? 'transfer'
-    : null;
-
-  const extraHeader =
-    showExtra === 'year' ? 'Year'
-    : showExtra === 'month' ? 'Month'
-    : showExtra === 'docs' ? 'Documents'
-    : showExtra === 'status' ? 'Status'
-    : showExtra === 'company' ? 'Company'
-    : showExtra === 'transfer' ? 'Moved From → To'
-    : '';
-
+  const extraHeader = tab === 'transferred' ? 'Moved From → To' : 'Status';
   const extraValue = (r: ReportRow): string => {
-    switch (showExtra) {
-      case 'year':   return yearOf(r.Admission_Date) || '—';
-      case 'month':  return monthOf(r.Admission_Date) || '—';
-      case 'docs':   return String(r.DocCount ?? 0);
-      case 'status': return r.Status_Name || '—';
-      case 'company':return r.CompanyName || r.Result || '—';
-      case 'transfer': {
-        const from = r.Moved_From_Batch_Code || '';
-        const to = r.Moved_To_Batch_Code || '';
-        if (!from && !to) return '—';
-        return `${from || '?'} → ${to || '?'}`;
-      }
-      default:       return '';
+    if (tab === 'transferred') {
+      const from = r.Moved_From_Batch_Code || '';
+      const to = r.Moved_To_Batch_Code || '';
+      if (!from && !to) return '—';
+      return `${from || '?'} → ${to || '?'}`;
     }
+    return r.Status_Name || '—';
   };
 
-  const activeLabel = TABS.find(t => t.id === tab)?.label ?? 'Student Report';
+  const activeLabel = TABS.find(t => t.id === tab)?.label ?? 'Batch Transfer';
   const courseLabel = courses.find(c => String(c.Course_Id) === courseId)?.Course_Name ?? 'All Courses';
 
-  /* Print — open a clean printable window with the current rows */
   const handlePrint = () => {
     if (!rows.length) return;
     const w = window.open('', '_blank', 'width=1000,height=800');
     if (!w) return;
-    const head = ['Sr', 'Roll No', 'Student Name', 'Course', 'Batch', 'Mobile'];
-    if (extraHeader) head.push(extraHeader);
+    const head = ['Sr', 'Roll No', 'Student Name', 'Course', 'Batch', 'Mobile', 'Admission Date', extraHeader];
     const bodyRows = rows.map((r, i) => {
       const cells = [
         String(i + 1), r.Roll_No || '—', r.Student_Name || '—', r.Course_Name || '—',
-        r.Batch_Code || '—', r.Present_Mobile || '—',
+        r.Batch_Code || '—', r.Present_Mobile || '—', fmtDate(r.Admission_Date), extraValue(r),
       ];
-      if (extraHeader) cells.push(extraValue(r));
       return `<tr>${cells.map(c => `<td>${String(c).replace(/</g, '&lt;')}</td>`).join('')}</tr>`;
     }).join('');
     w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${activeLabel}</title><style>
@@ -207,8 +160,8 @@ function StudentReportContent() {
       <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-5 py-3 shadow-[0_4px_14px_rgba(46,48,147,0.18)] relative overflow-hidden">
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
         <div className="relative z-10">
-          <h2 className="text-sm font-black text-white tracking-tight leading-none">Student Report</h2>
-          <p className="text-[11px] text-white/60 mt-0.5">Student list, batch / year / month wise, documents, left, cancelled, batch transfer and placed students</p>
+          <h2 className="text-sm font-black text-white tracking-tight leading-none">Batch Transfer / Cancelled Students</h2>
+          <p className="text-[11px] text-white/60 mt-0.5">Pick a category to view transferred or cancelled students with full details</p>
         </div>
       </div>
 
@@ -274,7 +227,7 @@ function StudentReportContent() {
         {!searched && !loading ? (
           <div className="py-16 text-center">
             <svg className="w-10 h-10 text-slate-200 mx-auto mb-3" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-            <p className="text-xs text-slate-400">Choose a report type and click <span className="font-semibold">Show</span> to load results</p>
+            <p className="text-xs text-slate-400">Choose a category and click <span className="font-semibold">Show</span> to load results</p>
           </div>
         ) : loading ? (
           <div className="py-16 flex flex-col items-center gap-2">
@@ -297,8 +250,8 @@ function StudentReportContent() {
                   <th className={TH}>Course</th>
                   <th className={TH}>Batch</th>
                   <th className={TH}>Mobile</th>
-                  {tab !== 'card-list' && <th className={TH}>Admission Date</th>}
-                  {extraHeader && <th className={TH}>{extraHeader}</th>}
+                  <th className={TH}>Admission Date</th>
+                  <th className={TH}>{extraHeader}</th>
                 </tr>
               </thead>
               <tbody>
@@ -310,8 +263,8 @@ function StudentReportContent() {
                     <td className={TD}>{r.Course_Name || '—'}</td>
                     <td className={`${TD} font-mono text-[11px]`}>{r.Batch_Code || '—'}</td>
                     <td className={TD}>{r.Present_Mobile || '—'}</td>
-                    {tab !== 'card-list' && <td className={TD}>{fmtDate(r.Admission_Date)}</td>}
-                    {extraHeader && <td className={TD}>{extraValue(r)}</td>}
+                    <td className={TD}>{fmtDate(r.Admission_Date)}</td>
+                    <td className={TD}>{extraValue(r)}</td>
                   </tr>
                 ))}
               </tbody>
