@@ -22,11 +22,14 @@ interface ReportRow {
   DocCount?: number;
   CompanyName?: string;
   Result?: string;
+  Moved_From_Batch_Code?: string;
+  Moved_To_Batch_Code?: string;
+  Moved_To_Course_Name?: string;
 }
 
 type ReportType =
   | 'student-list' | 'batch-wise' | 'yearly' | 'card-list' | 'month-wise'
-  | 'documents' | 'left' | 'cancelled' | 'placed';
+  | 'documents' | 'left' | 'cancelled' | 'transferred' | 'placed';
 
 const TABS: { id: ReportType; label: string }[] = [
   { id: 'student-list', label: 'Student List' },
@@ -37,6 +40,7 @@ const TABS: { id: ReportType; label: string }[] = [
   { id: 'documents',    label: 'Documents' },
   { id: 'left',         label: 'Left' },
   { id: 'cancelled',    label: 'Cancelled Students' },
+  { id: 'transferred',  label: 'Batch Transfer' },
   { id: 'placed',       label: 'Placed Students' },
 ];
 
@@ -122,12 +126,13 @@ function StudentReportContent() {
   };
 
   /* Columns shown per report type */
-  const showExtra: 'year' | 'month' | 'docs' | 'status' | 'company' | null =
+  const showExtra: 'year' | 'month' | 'docs' | 'status' | 'company' | 'transfer' | null =
     tab === 'yearly' ? 'year'
     : tab === 'month-wise' ? 'month'
     : tab === 'documents' ? 'docs'
     : tab === 'cancelled' || tab === 'left' ? 'status'
     : tab === 'placed' ? 'company'
+    : tab === 'transferred' ? 'transfer'
     : null;
 
   const extraHeader =
@@ -136,6 +141,7 @@ function StudentReportContent() {
     : showExtra === 'docs' ? 'Documents'
     : showExtra === 'status' ? 'Status'
     : showExtra === 'company' ? 'Company'
+    : showExtra === 'transfer' ? 'Moved From → To'
     : '';
 
   const extraValue = (r: ReportRow): string => {
@@ -145,6 +151,12 @@ function StudentReportContent() {
       case 'docs':   return String(r.DocCount ?? 0);
       case 'status': return r.Status_Name || '—';
       case 'company':return r.CompanyName || r.Result || '—';
+      case 'transfer': {
+        const from = r.Moved_From_Batch_Code || '';
+        const to = r.Moved_To_Batch_Code || '';
+        if (!from && !to) return '—';
+        return `${from || '?'} → ${to || '?'}`;
+      }
       default:       return '';
     }
   };
@@ -196,7 +208,7 @@ function StudentReportContent() {
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-[#FAE452]" />
         <div className="relative z-10">
           <h2 className="text-sm font-black text-white tracking-tight leading-none">Student Report</h2>
-          <p className="text-[11px] text-white/60 mt-0.5">Student list, batch / year / month wise, documents, left, cancelled and placed students</p>
+          <p className="text-[11px] text-white/60 mt-0.5">Student list, batch / year / month wise, documents, left, cancelled, batch transfer and placed students</p>
         </div>
       </div>
 

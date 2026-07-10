@@ -1,4 +1,5 @@
 import { getPool } from '@/lib/db';
+import { sendAdmissionFormEmail } from '@/lib/mailer';
 
 /**
  * Support Ticketing System
@@ -179,6 +180,62 @@ export async function createTicket(input: CreateTicketInput): Promise<number> {
     ]
   );
   return (result as { insertId: number }).insertId;
+}
+
+// "Admin" category tickets always go to the Accounts Department role — looked up by
+// title rather than a hardcoded role id, since role ids aren't stable across
+// deployments (confirmed role id 24 = "Accounts Department" in this DB, but that's
+// incidental). Never throws: a notification failure should never block ticket
+// creation, so callers can fire this without awaiting error handling.
+export async function notifyAccountsDepartmentIfAdminCategory(ticket: {
+  id: number;
+  subject: string;
+  message: string;
+  category: string | null;
+  userName: string | null;
+  userEmail: string | null;
+}): Promise<void> {
+  if (String(ticket.category ?? '').trim().toLowerCase() !== 'admin') return;
+
+  try {
+    const pool = getPool();
+    const [roleRows] = await pool.query(
+      `SELECT id FROM role WHERE title = 'Accounts Department' AND (\`delete\` = 0 OR \`delete\` IS NULL) LIMIT 1`
+    ) as [Array<{ id: number }>, unknown];
+    const roleId = roleRows[0]?.id;
+    if (!roleId) return;
+
+    const [userRows] = await pool.query(
+      `SELECT email, firstname FROM awt_adminuser
+       WHERE role = ? AND (deleted = 0 OR deleted IS NULL) AND email IS NOT NULL AND email <> ''`,
+      [roleId]
+    ) as [Array<{ email: string; firstname: string | null }>, unknown];
+    if (!userRows.length) return;
+
+    const raisedBy = ticket.userName || 'A staff member';
+    const subject = `[Admin] New Support Ticket: ${ticket.subject}`;
+    const text = [
+      `A new Admin-category support ticket has been raised.`,
+      '',
+      `Ticket #${ticket.id}: ${ticket.subject}`,
+      `Raised by: ${raisedBy}${ticket.userEmail ? ` (${ticket.userEmail})` : ''}`,
+      '',
+      ticket.message,
+    ].join('\n');
+
+    await Promise.all(userRows.map((u) =>
+      sendAdmissionFormEmail({
+        toEmail: u.email,
+        admissionFormUrl: '#',
+        subject,
+        text,
+      }).catch((err) => {
+        console.error('[support-tickets] Failed to notify Accounts Department:', u.email, err);
+      })
+    ));
+  } catch (err) {
+    console.error('[support-tickets] notifyAccountsDepartmentIfAdminCategory failed:', err);
+  }
 }
 
 interface AddReplyInput {

@@ -6,6 +6,7 @@ import {
   listTickets,
   createTicket,
   getTicketStats,
+  notifyAccountsDepartmentIfAdminCategory,
   TICKET_STATUSES,
   type TicketStatus,
 } from '@/lib/support-tickets';
@@ -74,10 +75,11 @@ export async function POST(request: NextRequest) {
     }
 
     const userName = [session.firstName, session.lastName].filter(Boolean).join(' ').trim() || null;
+    const category = body.category ? String(body.category).slice(0, 80) : null;
     const id = await createTicket({
       subject: subject.slice(0, 255),
       message,
-      category: body.category ? String(body.category).slice(0, 80) : null,
+      category,
       priority: body.priority,
       userId: session.userId,
       userName,
@@ -91,6 +93,12 @@ export async function POST(request: NextRequest) {
       action: 'CREATE',
       recordId: id,
       details: { subject, priority: body.priority ?? 'normal' },
+    });
+
+    // Admin-category tickets always get routed to the Accounts Department role.
+    // Never blocks/fails the ticket creation itself — the function swallows its own errors.
+    await notifyAccountsDepartmentIfAdminCategory({
+      id, subject, message, category, userName, userEmail: session.email ?? null,
     });
 
     return NextResponse.json({ success: true, id, message: 'Ticket submitted' });

@@ -2,13 +2,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { ensureStudentTransferColumns } from '@/lib/student-transfer';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 const REPORT_TYPES = [
   'student-list', 'batch-wise', 'yearly', 'card-list', 'month-wise',
-  'documents', 'left', 'cancelled', 'placed',
+  'documents', 'left', 'cancelled', 'transferred', 'placed',
 ] as const;
 type ReportType = (typeof REPORT_TYPES)[number];
 
@@ -36,6 +37,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const pool = getPool();
+    await ensureStudentTransferColumns(pool);
     const { searchParams } = new URL(req.url);
     const action = searchParams.get('action') || '';
 
@@ -113,6 +115,8 @@ export async function GET(req: NextRequest) {
       conds.push(`LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) ${TRUTHY}`);
     } else if (type === 'left') {
       conds.push(`LOWER(TRIM(CAST(COALESCE(am.Lefted, '') AS CHAR))) ${TRUTHY}`);
+    } else if (type === 'transferred') {
+      conds.push(`LOWER(TRIM(CAST(COALESCE(sm.Transfered, '') AS CHAR))) ${TRUTHY}`);
     } else {
       conds.push(`LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT ${TRUTHY}`);
       conds.push(`LOWER(TRIM(CAST(COALESCE(am.Lefted, '') AS CHAR))) NOT ${TRUTHY}`);
@@ -140,6 +144,9 @@ export async function GET(req: NextRequest) {
           COALESCE(b.Batch_code, NULLIF(TRIM(sm.Batch_Code), ''), '') AS Batch_Code,
           ${docCountSelect}
           COALESCE(stt.Status, '') AS Status_Name,
+          COALESCE(sm.Moved_From_Batch_Code, '') AS Moved_From_Batch_Code,
+          COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
+          COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name,
           DATE_FORMAT(
             COALESCE(
               am.Admission_Date,
@@ -151,6 +158,7 @@ export async function GET(req: NextRequest) {
         LEFT JOIN course_mst c ON c.Course_Id = sm.Course_Id
         LEFT JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
         LEFT JOIN status_master stt ON stt.Id = sm.Status_id
+        LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
         WHERE ${conds.join(' AND ')}
         ORDER BY ${orderBy}
         LIMIT 5000`),
