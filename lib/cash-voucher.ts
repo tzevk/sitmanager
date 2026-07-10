@@ -5,21 +5,8 @@ export const CASH_VOUCHER_COMPANIES = ['SUVIDYA', 'ACCENT'] as const;
 
 let columnsReady = false;
 
-// awt_cashvoucher already exists (6,000+ real historical rows) but has no column
-// for the opening cash balance the voucher was drawn against — add it lazily,
-// same pattern used elsewhere in this codebase for evolving an existing table.
 export async function ensureCashVoucherColumns(pool: Pool): Promise<void> {
   if (columnsReady) return;
-
-  const [existingCols] = await pool.query(
-    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'awt_cashvoucher'`
-  ) as [Array<{ COLUMN_NAME: string }>, unknown];
-
-  const existing = new Set(existingCols.map((row) => row.COLUMN_NAME));
-  if (!existing.has('opening_balance')) {
-    await pool.query(`ALTER TABLE awt_cashvoucher ADD COLUMN opening_balance DECIMAL(12,2) NULL`);
-  }
 
   // awt_cashvoucherchild (21,000+ rows) has no index on voucherid — every list-page
   // load was doing an unindexed join/lookup against the whole child table to total
@@ -35,21 +22,17 @@ export async function ensureCashVoucherColumns(pool: Pool): Promise<void> {
   columnsReady = true;
 }
 
-// Reproduces the real, live numbering scheme found in the existing 6,450 rows of
-// awt_cashvoucher: "C-{MM}/{seq}" where seq is a 3-digit, 1-based counter that
-// resets every calendar month (scoped to year+month of the voucher's own date,
-// not the whole table) — e.g. the 11th voucher dated in July 2025 is C-07/011,
-// and the 11th one dated in July 2026 is also C-07/011 (a different, later row).
-export async function generateVoucherNo(pool: Pool, dateStr: string): Promise<string> {
-  const d = new Date(dateStr);
-  const year = d.getFullYear();
-  const month = d.getMonth() + 1;
-  const mm = String(month).padStart(2, '0');
+// Reproduces the real legacy numbering scheme exactly (Routes/account/GenerateVoucherNo.js:
+// "C-{MM}/{seq}", a 3-digit 1-based counter scoped by YEAR/MONTH(created_date) — i.e. the
+// row's insert timestamp, not the voucher's own displayed date field.
+export async function generateVoucherNo(pool: Pool): Promise<string> {
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
 
   const [rows] = await pool.query(
     `SELECT COUNT(*) AS c FROM awt_cashvoucher
-     WHERE deleted = 0 AND YEAR(STR_TO_DATE(date, '%Y-%m-%d')) = ? AND MONTH(STR_TO_DATE(date, '%Y-%m-%d')) = ?`,
-    [year, month]
+     WHERE deleted = 0 AND MONTH(created_date) = ? AND YEAR(created_date) = ?`,
+    [now.getMonth() + 1, now.getFullYear()]
   ) as [Array<{ c: number }>, unknown];
 
   const seq = (rows[0]?.c ?? 0) + 1;

@@ -44,7 +44,6 @@ export default function EditCashVoucherPage() {
   const [company, setCompany] = useState<string>(CASH_VOUCHER_COMPANIES[0]);
   const [date, setDate] = useState('');
   const [paidTo, setPaidTo] = useState('');
-  const [openingBalance, setOpeningBalance] = useState('');
   const [paidBy, setPaidBy] = useState('');
   const [preparedBy, setPreparedBy] = useState('');
   const [items, setItems] = useState<LineItem[]>([emptyItem()]);
@@ -67,7 +66,6 @@ export default function EditCashVoucherPage() {
       setCompany(v.company || CASH_VOUCHER_COMPANIES[0]);
       setDate(v.date ? String(v.date).slice(0, 10) : '');
       setPaidTo(v.paidto || '');
-      setOpeningBalance(v.opening_balance != null ? String(v.opening_balance) : '');
       setPaidBy(v.paidby || '');
       setPreparedBy(v.prepaired_by || '');
 
@@ -96,7 +94,6 @@ export default function EditCashVoucherPage() {
   const removeItemRow = (index: number) => setItems((prev) => prev.filter((_, i) => i !== index));
 
   const totalAmount = items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
-  const closingBalance = (Number(openingBalance) || 0) - totalAmount;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,7 +110,6 @@ export default function EditCashVoucherPage() {
           company,
           date,
           paidTo,
-          openingBalance: openingBalance === '' ? null : Number(openingBalance),
           paidBy,
           preparedBy,
           items: items
@@ -193,10 +189,6 @@ export default function EditCashVoucherPage() {
                 <input type="text" value={paidTo} onChange={(e) => setPaidTo(e.target.value)} className={ctrl} placeholder="Paid to" required />
               </div>
               <div className="flex flex-col gap-1">
-                <label className={lbl}>Opening Balance</label>
-                <input type="number" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} className={ctrl} placeholder="0.00" />
-              </div>
-              <div className="flex flex-col gap-1">
                 <label className={lbl}>Paid By</label>
                 <input type="text" value={paidBy} onChange={(e) => setPaidBy(e.target.value)} className={ctrl} placeholder="e.g. Cash" />
               </div>
@@ -271,9 +263,8 @@ export default function EditCashVoucherPage() {
                 </tbody>
               </table>
 
-              <div className="mt-3 flex justify-end gap-6 text-xs font-semibold">
-                <span className="text-slate-500">Total Expenses: <span className="text-slate-900">{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
-                <span className="text-slate-500">Closing Balance: <span className="text-slate-900">{closingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+              <div className="mt-3 flex justify-end text-xs font-semibold">
+                <span className="text-slate-500">Total: <span className="text-slate-900">{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
               </div>
             </div>
           </div>

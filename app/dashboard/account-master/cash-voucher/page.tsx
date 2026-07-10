@@ -14,7 +14,6 @@ interface VoucherRow {
   paidto: string | null;
   paidby: string | null;
   prepaired_by: string | null;
-  opening_balance: number | null;
   total_amount: number;
 }
 
@@ -157,42 +156,46 @@ export default function CashVoucherPage() {
 
       w.document.write(`<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Cash Voucher ${row.voucherno}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; color: #000; background: #fff; font-size: 12px; }
-  .sheet { width: 860px; margin: 0 auto; padding: 28px; }
-  .logo-row { display: flex; align-items: center; gap: 10px; margin-bottom: -1px; }
-  .logo-row img { width: 70px; height: auto; }
-  .frame { border: 2px solid #000; border-radius: 10px; overflow: hidden; }
+  body { font-family: 'Poppins', Arial, sans-serif; color: #000; background: #fff; font-size: 12px; }
+  .sheet { width: 900px; margin: 0 auto; padding: 30px; position: relative; }
+  .logo { display: block; width: 160px; height: auto; margin-bottom: 6px; margin-left: 4px; }
+  .box { border: 2.5px solid #000; border-radius: 22px; overflow: hidden; }
+  .gap { height: 14px; }
+  .tear-line { border-top: 2px dashed #000; margin: 26px -10px 0; }
   .top { display: flex; }
-  .top .company { flex: 1.6; padding: 8px 10px; border-right: 1px solid #000; }
-  .top .company .name { font-weight: 700; font-size: 12.5px; }
-  .top .company .addr { font-size: 11px; margin-top: 2px; }
-  .top .title { flex: 0.8; padding: 8px 10px; border-right: 1px solid #000; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 700; font-size: 14px; }
-  .top .meta { flex: 1.6; display: flex; flex-direction: column; }
-  .top .meta .row { display: flex; border-bottom: 1px solid #000; }
+  .top .company { flex: 1.9; padding: 10px 14px; border-right: 2px solid #000; }
+  .top .company .name { font-weight: 700; font-size: 13px; }
+  .top .company .addr { font-size: 11px; margin-top: 3px; line-height: 1.4; }
+  .top .title { flex: 0.85; padding: 10px 12px; border-right: 2px solid #000; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 700; font-size: 15px; }
+  .top .meta { flex: 1.9; display: flex; flex-direction: column; }
+  .top .meta .row { display: flex; border-bottom: 2px solid #000; }
   .top .meta .row:last-child { border-bottom: none; }
-  .top .meta .row > div { padding: 6px 10px; }
-  .top .meta .row > div:first-child { border-right: 1px solid #000; }
-  table.items { width: 100%; border-collapse: collapse; border-top: 1px solid #000; }
-  table.items th, table.items td { border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 5px 8px; text-align: left; vertical-align: top; }
+  .top .meta .row > div { padding: 8px 12px; }
+  .top .meta .row > div:first-child { border-right: 2px solid #000; }
+  table.items { width: 100%; border-collapse: collapse; border-top: 2px solid #000; }
+  table.items th, table.items td { border-right: 2px solid #000; padding: 6px 10px; text-align: left; vertical-align: top; }
   table.items th:last-child, table.items td:last-child { border-right: none; }
-  table.items th { background: #f2f2f2; font-size: 11px; }
-  .num { text-align: center; width: 30px; }
+  table.items th { font-size: 11.5px; font-weight: 600; background: #fff; border-bottom: 2px solid #000; }
+  .num { text-align: center; width: 32px; }
   .amt { text-align: right; white-space: nowrap; }
-  .footer-row { display: flex; border-bottom: 1px solid #000; }
-  .footer-row > div { padding: 6px 10px; border-right: 1px solid #000; }
+  .footer-row { display: flex; border-top: 2px solid #000; }
+  .footer-row > div { padding: 8px 12px; border-right: 2px solid #000; }
   .footer-row > div:last-child { border-right: none; flex: 1; }
   .sign-row { display: flex; }
-  .sign-row > div { flex: 1; padding: 18px 10px 6px; border-right: 1px solid #000; text-align: center; font-weight: 700; font-size: 11px; }
+  .sign-row > div { flex: 1; padding: 20px 12px 8px; border-right: 2px solid #000; text-align: center; font-weight: 700; font-size: 11px; }
   .sign-row > div:last-child { border-right: none; }
-  .sign-row .name { font-weight: 400; display: block; margin-bottom: 2px; }
+  .sign-row .name { font-weight: 400; display: block; margin-bottom: 3px; }
   @media print { body { -webkit-print-color-adjust: exact; } }
 </style></head>
 <body>
   <div class="sheet">
-    <div class="logo-row"><img src="${logo}" alt="SIT" /></div>
-    <div class="frame">
+    <img class="logo" src="${logo}" alt="SIT" />
+
+    <div class="box">
       <div class="top">
         <div class="company">
           <div class="name">SUVIDYA INSTITUTE OF TECHNOLOGY PVT. LTD.</div>
@@ -227,6 +230,11 @@ export default function CashVoucherPage() {
         <div>Total : ${fmtMoney(total)}</div>
         <div>${amountToWords(total)}</div>
       </div>
+    </div>
+
+    <div class="gap"></div>
+
+    <div class="box">
       <div class="sign-row">
         <div><span class="name">${row.prepaired_by || ''}</span>PREPARED BY</div>
         <div>CHECKED BY</div>
@@ -234,6 +242,7 @@ export default function CashVoucherPage() {
         <div>RECEIVERS SIGNATURE</div>
       </div>
     </div>
+    <div class="tear-line"></div>
   </div>
   <script>window.onload = () => window.print();</script>
 </body></html>`);
@@ -301,16 +310,15 @@ export default function CashVoucherPage() {
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 border-r border-slate-200">Company</th>
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 border-r border-slate-200">Paid To</th>
                 <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 border-r border-slate-200">Prepared By</th>
-                <th className="text-right py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 border-r border-slate-200">Opening Balance</th>
                 <th className="text-right py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 border-r border-slate-200">Total Amount</th>
                 <th className="text-center py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">Action</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={9} className="py-6 text-center text-xs text-slate-400">Loading…</td></tr>
+                <tr><td colSpan={8} className="py-6 text-center text-xs text-slate-400">Loading…</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={9} className="py-6 text-center text-xs text-slate-400">No cash vouchers found</td></tr>
+                <tr><td colSpan={8} className="py-6 text-center text-xs text-slate-400">No cash vouchers found</td></tr>
               ) : (
                 rows.map((row, i) => (
                   <tr key={row.id} className="hover:bg-slate-50/60 transition-colors">
@@ -320,7 +328,6 @@ export default function CashVoucherPage() {
                     <td className="py-2 px-3 text-xs border-b border-r border-slate-100">{row.company || '—'}</td>
                     <td className="py-2 px-3 text-xs border-b border-r border-slate-100 font-medium truncate max-w-[180px]" title={row.paidto || ''}>{row.paidto || '—'}</td>
                     <td className="py-2 px-3 text-xs border-b border-r border-slate-100">{row.prepaired_by || '—'}</td>
-                    <td className="py-2 px-3 text-xs border-b border-r border-slate-100 text-right font-mono">{row.opening_balance != null ? fmtMoney(row.opening_balance) : '—'}</td>
                     <td className="py-2 px-3 text-xs border-b border-r border-slate-100 text-right font-mono font-semibold">{fmtMoney(row.total_amount)}</td>
                     <td className="py-2 px-3 text-xs border-b border-slate-100 text-center">
                       <div className="inline-flex items-center justify-center gap-1.5">

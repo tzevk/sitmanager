@@ -33,8 +33,8 @@ export async function GET(req: NextRequest) {
     // across the entire (21,000+ row) child table on every request.
     const [rows, [countRows]] = await Promise.all([
       pool.query(
-        `SELECT v.id, v.company, v.voucherno, v.date, v.paidto, v.paidby,
-                v.prepaired_by, v.approved_by, v.checked_by, v.opening_balance,
+        `SELECT v.id, COALESCE(NULLIF(v.company, ''), 'SUVIDYA') AS company, v.voucherno, v.date, v.paidto, v.paidby,
+                v.prepaired_by, v.approved_by, v.checked_by,
                 (SELECT COALESCE(SUM(c.amount), 0) FROM awt_cashvoucherchild c
                  WHERE c.voucherid = v.id AND c.deleted = 0) AS total_amount
          FROM awt_cashvoucher v
@@ -76,9 +76,6 @@ export async function POST(req: NextRequest) {
     const company = String(body?.company ?? '').trim();
     const date = String(body?.date ?? '').trim();
     const paidTo = String(body?.paidTo ?? '').trim();
-    const openingBalance = body?.openingBalance !== '' && body?.openingBalance != null
-      ? Number(body.openingBalance)
-      : null;
     const paidBy = String(body?.paidBy ?? '').trim() || null;
     const preparedBy = String(body?.preparedBy ?? '').trim() || null;
 
@@ -88,13 +85,13 @@ export async function POST(req: NextRequest) {
     const items = Array.isArray(body?.items) ? body.items : [];
     const validItems = items.filter((it: any) => Number(it?.amount) > 0);
 
-    const voucherno = await generateVoucherNo(pool, date);
+    const voucherno = await generateVoucherNo(pool);
 
     const [insertResult] = await pool.query(
       `INSERT INTO awt_cashvoucher
-         (company, voucherno, date, paidto, paidby, prepaired_by, opening_balance, created_date, updated_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-      [company, voucherno, date, paidTo, paidBy, preparedBy, openingBalance]
+         (company, voucherno, date, paidto, paidby, prepaired_by, created_date, updated_date)
+       VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [company, voucherno, date, paidTo, paidBy, preparedBy]
     ) as [any, any];
     const voucherId = insertResult.insertId;
 

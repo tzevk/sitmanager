@@ -33,7 +33,6 @@ export default function AddCashVoucherPage() {
   const [company, setCompany] = useState<string>(CASH_VOUCHER_COMPANIES[0]);
   const [date, setDate] = useState(todayISO());
   const [paidTo, setPaidTo] = useState('');
-  const [openingBalance, setOpeningBalance] = useState('');
   const [paidBy, setPaidBy] = useState('');
   const [preparedBy, setPreparedBy] = useState('');
   const [items, setItems] = useState<LineItem[]>([emptyItem()]);
@@ -49,20 +48,18 @@ export default function AddCashVoucherPage() {
     })();
   }, []);
 
-  // Preview only — the real Sr. No. is (re)computed fresh at save time, so this can
-  // shift if another voucher is saved for the same month in the meantime.
+  // Preview only — the real Sr. No. is (re)computed fresh at save time (scoped by
+  // the current month/year, matching the legacy scheme exactly), so this can shift
+  // if another voucher is saved in the meantime.
   useEffect(() => {
-    if (!date) { setNextVoucherno(''); return; }
-    const ctrl = new AbortController();
     (async () => {
       try {
-        const res = await fetch(`/api/account-master/cash-voucher/next-voucherno?date=${date}`, { signal: ctrl.signal });
+        const res = await fetch('/api/account-master/cash-voucher/next-voucherno');
         const data = await res.json();
         setNextVoucherno(data.voucherno || '');
       } catch { /* ignore */ }
     })();
-    return () => ctrl.abort();
-  }, [date]);
+  }, []);
 
   const updateItem = (index: number, patch: Partial<LineItem>) => {
     setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
@@ -72,7 +69,6 @@ export default function AddCashVoucherPage() {
   const removeItemRow = (index: number) => setItems((prev) => prev.filter((_, i) => i !== index));
 
   const totalAmount = items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
-  const closingBalance = (Number(openingBalance) || 0) - totalAmount;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,7 +85,6 @@ export default function AddCashVoucherPage() {
           company,
           date,
           paidTo,
-          openingBalance: openingBalance === '' ? null : Number(openingBalance),
           paidBy,
           preparedBy,
           items: items
@@ -124,7 +119,7 @@ export default function AddCashVoucherPage() {
         <div className="relative z-10 flex items-center justify-between">
           <div>
             <h2 className="text-sm font-black text-white tracking-tight leading-none">Add Cash Voucher Details</h2>
-            <p className="text-[11px] text-white/60 mt-0.5">Company, date, paid to and opening balance, then itemize the expenses below.</p>
+            <p className="text-[11px] text-white/60 mt-0.5">Company, date and paid to, then itemize the expenses below.</p>
           </div>
           <button
             type="button"
@@ -162,10 +157,6 @@ export default function AddCashVoucherPage() {
             <div className="flex flex-col gap-1">
               <label className={lbl}>Paid To *</label>
               <input type="text" value={paidTo} onChange={(e) => setPaidTo(e.target.value)} className={ctrl} placeholder="Paid to" required />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className={lbl}>Opening Balance</label>
-              <input type="number" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} className={ctrl} placeholder="0.00" />
             </div>
             <div className="flex flex-col gap-1">
               <label className={lbl}>Paid By</label>
@@ -243,9 +234,8 @@ export default function AddCashVoucherPage() {
               </tbody>
             </table>
 
-            <div className="mt-3 flex justify-end gap-6 text-xs font-semibold">
-              <span className="text-slate-500">Total Expenses: <span className="text-slate-900">{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
-              <span className="text-slate-500">Closing Balance: <span className="text-slate-900">{closingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+            <div className="mt-3 flex justify-end text-xs font-semibold">
+              <span className="text-slate-500">Total: <span className="text-slate-900">{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
             </div>
           </div>
         </div>

@@ -18,7 +18,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     await ensureCashVoucherColumns(pool);
 
     const [voucherRows] = await pool.query(
-      `SELECT id, company, voucherno, date, paidto, paidby, prepaired_by, approved_by, checked_by, opening_balance
+      `SELECT id, COALESCE(NULLIF(company, ''), 'SUVIDYA') AS company, voucherno, date, paidto, paidby, prepaired_by, approved_by, checked_by
        FROM awt_cashvoucher WHERE id = ? AND deleted = 0 LIMIT 1`,
       [voucherId]
     ) as [any[], any];
@@ -55,9 +55,6 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const company = String(body?.company ?? '').trim();
     const date = String(body?.date ?? '').trim();
     const paidTo = String(body?.paidTo ?? '').trim();
-    const openingBalance = body?.openingBalance !== '' && body?.openingBalance != null
-      ? Number(body.openingBalance)
-      : null;
     const paidBy = String(body?.paidBy ?? '').trim() || null;
     const preparedBy = String(body?.preparedBy ?? '').trim() || null;
 
@@ -66,9 +63,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
     await pool.query(
       `UPDATE awt_cashvoucher SET
-         company = ?, date = ?, paidto = ?, paidby = ?, prepaired_by = ?, opening_balance = ?, updated_date = NOW()
+         company = ?, date = ?, paidto = ?, paidby = ?, prepaired_by = ?, updated_date = NOW()
        WHERE id = ? AND deleted = 0`,
-      [company, date, paidTo, paidBy, preparedBy, openingBalance, voucherId]
+      [company, date, paidTo, paidBy, preparedBy, voucherId]
     );
 
     const items = Array.isArray(body?.items) ? body.items : [];
