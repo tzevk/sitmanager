@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { useResourcePermissions } from '@/lib/permissions-context';
@@ -48,7 +47,6 @@ export default function BatchTransferReportPage() {
 }
 
 function BatchTransferReportContent() {
-  const router = useRouter();
   const initialTab: ReportType = (() => {
     if (typeof window === 'undefined') return 'transferred';
     const t = new URLSearchParams(window.location.search).get('type');
@@ -312,12 +310,6 @@ function BatchTransferReportContent() {
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" /></svg>
             Export to Excel
-          </button>
-          <button onClick={() => router.back()}
-            className="flex items-center gap-1.5 border border-slate-300 text-slate-700 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-50 transition-colors self-end"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-            Back
           </button>
         </div>
 
