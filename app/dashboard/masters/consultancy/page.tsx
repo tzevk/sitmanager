@@ -360,14 +360,14 @@ export default function ConsultancyPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-200">
-                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap">Consultancy Name</th>
-                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap">Company Type</th>
-                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap">CName</th>
-                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap">Designation</th>
-                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap">Address</th>
-                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap">City</th>
-                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap">Telephone</th>
-                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap">Email</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap border-r border-slate-200">Consultancy Name</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap border-r border-slate-200">Company Type</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap border-r border-slate-200">CName</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap border-r border-slate-200">Designation</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap border-r border-slate-200">Address</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap border-r border-slate-200">City</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap border-r border-slate-200">Telephone</th>
+                <th className="text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap border-r border-slate-200">Email</th>
                 <th className="text-center py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap">Action</th>
               </tr>
             </thead>
@@ -380,14 +380,14 @@ export default function ConsultancyPage() {
                 <tr><td colSpan={9} className="py-8 text-center text-xs text-slate-400">No records found</td></tr>
               ) : rows.map(row => (
                 <tr key={row.Const_Id} className="hover:bg-slate-50/60 transition-colors">
-                  <td className="py-2 px-3 text-xs border-b border-slate-100 font-medium text-slate-900 truncate max-w-[180px]" title={row.Comp_Name || ''}>{row.Comp_Name || '-'}</td>
-                  <td className="py-2 px-3 text-xs border-b border-slate-100">{row.Company_Type || '-'}</td>
-                  <td className="py-2 px-3 text-xs border-b border-slate-100 truncate max-w-[130px]">{row.Contact_Person || '-'}</td>
-                  <td className="py-2 px-3 text-xs border-b border-slate-100 truncate max-w-[100px]">{row.Designation || '-'}</td>
-                  <td className="py-2 px-3 text-xs border-b border-slate-100 truncate max-w-[160px]" title={row.Address || ''}>{row.Address || '-'}</td>
-                  <td className="py-2 px-3 text-xs border-b border-slate-100">{row.City || '-'}</td>
-                  <td className="py-2 px-3 text-xs border-b border-slate-100 font-mono">{row.Tel || '-'}</td>
-                  <td className="py-2 px-3 text-xs border-b border-slate-100 truncate max-w-[150px]" title={row.EMail || ''}>{row.EMail || '-'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-r border-slate-100 font-medium text-slate-900 truncate max-w-[180px]" title={row.Comp_Name || ''}>{row.Comp_Name || '-'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-r border-slate-100">{row.Company_Type || '-'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-r border-slate-100 truncate max-w-[130px]">{row.Contact_Person || '-'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-r border-slate-100 truncate max-w-[100px]">{row.Designation || '-'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-r border-slate-100 truncate max-w-[160px]" title={row.Address || ''}>{row.Address || '-'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-r border-slate-100">{row.City || '-'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-r border-slate-100 font-mono">{row.Tel || '-'}</td>
+                  <td className="py-2 px-3 text-xs border-b border-r border-slate-100 truncate max-w-[150px]" title={row.EMail || ''}>{row.EMail || '-'}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100 text-center">
                     <div className="inline-flex items-center justify-center gap-1.5">
                       <button onClick={() => handleView(row)}
