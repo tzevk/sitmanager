@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -103,11 +105,18 @@ function BatchTransferReportContent() {
 
   const handleShow = () => fetchReport(tab);
   const handleTabChange = (t: ReportType) => {
-    setTab(t); setRows([]); setSearched(false); setError('');
+    setTab(t); setSearched(false); setError('');
+    fetchReport(t);
   };
 
+  // Load the active tab's data as soon as the page opens.
+  useEffect(() => {
+    fetchReport(tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const extraHeader = tab === 'transferred' ? 'Moved From → To' : 'Status';
-  const extraValue = (r: ReportRow): string => {
+  const extraValue = useCallback((r: ReportRow): string => {
     if (tab === 'transferred') {
       const from = r.Moved_From_Batch_Code || '';
       const to = r.Moved_To_Batch_Code || '';
@@ -115,7 +124,7 @@ function BatchTransferReportContent() {
       return `${from || '?'} → ${to || '?'}`;
     }
     return r.Status_Name || '—';
-  };
+  }, [tab]);
 
   const activeLabel = TABS.find(t => t.id === tab)?.label ?? 'Batch Transfer';
   const courseLabel = courses.find(c => String(c.Course_Id) === courseId)?.Course_Name ?? 'All Courses';
@@ -150,6 +159,94 @@ function BatchTransferReportContent() {
     </body></html>`);
     w.document.close();
   };
+
+  /* ---- Export to Excel (.xlsx via ExcelJS — styled, one file per tab) ---- */
+  const exportExcel = useCallback(async () => {
+    if (!rows.length) return;
+
+    const border = (color: string): ExcelJS.Border => ({ style: 'thin', color: { argb: color } });
+    const borders = (c: string) => ({ top: border(c), bottom: border(c), left: border(c), right: border(c) });
+    const fill = (argb: string): ExcelJS.Fill => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'SIT Manager';
+    wb.created = new Date();
+    const ws = wb.addWorksheet(activeLabel, {
+      views: [{ state: 'frozen', ySplit: 4 }],
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+    });
+
+    const colCount = 8;
+
+    ws.mergeCells(1, 1, 1, colCount);
+    const r1 = ws.getRow(1);
+    r1.height = 28;
+    const c1 = ws.getCell('A1');
+    c1.value = 'SUVIDYA INSTITUTE OF TECHNOLOGY';
+    c1.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+    c1.fill = fill('FF2E3093');
+    c1.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    ws.mergeCells(2, 1, 2, colCount);
+    const r2 = ws.getRow(2);
+    r2.height = 18;
+    const c2 = ws.getCell('A2');
+    const filterParts = [
+      courseId ? `Course: ${courseLabel}` : 'All Courses',
+      batchCode ? `Batch: ${batchCode}` : 'All Batches',
+      `Total: ${rows.length}`,
+    ];
+    c2.value = `${activeLabel}   ·   ${filterParts.join('   ·   ')}   ·   ${new Date().toLocaleString('en-IN')}`;
+    c2.font = { name: 'Calibri', size: 10, italic: true, color: { argb: 'FFFFFFFF' } };
+    c2.fill = fill('FF3D4DB5');
+    c2.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    ws.getRow(3).height = 4;
+
+    const headers = ['Sr', 'Roll No', 'Student Name', 'Course', 'Batch', 'Mobile', 'Admission Date', extraHeader];
+    const headerRow = ws.getRow(4);
+    headerRow.height = 22;
+    headers.forEach((h, ci) => {
+      const cell = headerRow.getCell(ci + 1);
+      cell.value = h;
+      cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = fill('FF2A6BB5');
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = borders('FF1A5A9E');
+    });
+
+    rows.forEach((r, i) => {
+      const rowIdx = 5 + i;
+      const exRow = ws.getRow(rowIdx);
+      exRow.height = 18;
+      const stripeBg = i % 2 === 0 ? 'FFFFFFFF' : 'FFF7F8FD';
+      const vals: (string | number)[] = [
+        i + 1, r.Roll_No || '—', r.Student_Name || '—', r.Course_Name || '—',
+        r.Batch_Code || '—', r.Present_Mobile || '—', fmtDate(r.Admission_Date), extraValue(r),
+      ];
+      vals.forEach((v, ci) => {
+        const cell = exRow.getCell(ci + 1);
+        cell.value = v;
+        cell.border = borders('FFE5E7EB');
+        cell.font = { name: 'Calibri', size: 9, color: { argb: 'FF374151' } };
+        cell.fill = fill(stripeBg);
+        cell.alignment = { vertical: 'middle', horizontal: ci === 0 ? 'center' : 'left' };
+        if (ci === 2) cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: 'FF111827' } };
+      });
+    });
+
+    ws.columns = [
+      { width: 6 }, { width: 14 }, { width: 26 }, { width: 24 },
+      { width: 14 }, { width: 15 }, { width: 15 }, { width: 26 },
+    ];
+
+    ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + rows.length, column: colCount } };
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const fileTag = tab === 'transferred' ? 'Batch_Transfer' : 'Cancelled_Students';
+    saveAs(blob, `${fileTag}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }, [rows, tab, activeLabel, extraHeader, extraValue, courseId, courseLabel, batchCode]);
 
   const TH = 'text-left py-2 px-3 font-bold text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 whitespace-nowrap';
   const TD = 'py-2 px-3 text-xs text-slate-700 border-b border-slate-100';
@@ -209,6 +306,12 @@ function BatchTransferReportContent() {
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a1 1 0 001-1v-4a1 1 0 00-1-1H9a1 1 0 00-1 1v4a1 1 0 001 1zm8-12V5a2 2 0 00-2-2H7a2 2 0 00-2 2v4h14z" /></svg>
             Print
+          </button>
+          <button onClick={exportExcel} disabled={!rows.length}
+            className="flex items-center gap-1.5 bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 disabled:opacity-40 transition-colors self-end"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" /></svg>
+            Export to Excel
           </button>
           <button onClick={() => router.back()}
             className="flex items-center gap-1.5 border border-slate-300 text-slate-700 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-50 transition-colors self-end"
