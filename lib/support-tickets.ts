@@ -210,6 +210,17 @@ export async function notifyAccountsDepartmentIfAdminCategory(ticket: {
        WHERE role = ? AND (deleted = 0 OR deleted IS NULL) AND email IS NOT NULL AND email <> ''`,
       [roleId]
     ) as [Array<{ email: string; firstname: string | null }>, unknown];
+
+    // Admin-category tickets are always copied to these two fixed recipients
+    // in addition to whoever holds the Accounts Department role.
+    const fixedRecipients = ['harshadavajantri@suvidya.ac.in', 'manasipanchal@suvidya.ac.in'];
+    const seen = new Set(userRows.map((u) => u.email.toLowerCase()));
+    for (const email of fixedRecipients) {
+      if (!seen.has(email.toLowerCase())) {
+        userRows.push({ email, firstname: null });
+        seen.add(email.toLowerCase());
+      }
+    }
     if (!userRows.length) return;
 
     const raisedBy = ticket.userName || 'A staff member';

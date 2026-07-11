@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import { useFinanceResource } from '../shared/useFinanceResource';
 import { Modal, TableHeader, TableSkeleton, EmptyRow, TotalRow, inpCls, lblCls, trCls, downloadCsv } from '../shared/primitives';
 import { fmt, todayISO, fmtDate } from '../shared/format';
@@ -29,6 +31,21 @@ const RECEIPT_CATS = [
 ];
 const PAYMENT_CATS = Array.from(new Set([...SIT_CATS, ...ACCENT_CATS]));
 const ALL_CATS = Array.from(new Set([...PAYMENT_CATS, ...RECEIPT_CATS]));
+
+// Stable fill color per category (cycled from a fixed palette by declaration
+// order) so the same category always gets the same color across exports,
+// rather than a color that shifts depending on which rows happen to be
+// present in a given filtered export.
+const CATEGORY_COLOR_PALETTE = [
+  'FFDDEBF7', 'FFFCE4D6', 'FFE2EFDA', 'FFFFF2CC', 'FFEAE1F5',
+  'FFD9E8F5', 'FFFDE9D9', 'FFDDF0E8', 'FFFBE5D6', 'FFE0E0F0',
+  'FFF7DADA', 'FFDCEEF0', 'FFF0E6D2', 'FFE8DFF0', 'FFD6EAF8',
+  'FFFAE0E4', 'FFE3F2E1', 'FFF5E6CC',
+];
+const CATEGORY_COLOR_MAP = new Map<string, string>(
+  ALL_CATS.map((cat, i) => [cat, CATEGORY_COLOR_PALETTE[i % CATEGORY_COLOR_PALETTE.length]])
+);
+const colorForCategory = (cat: string) => CATEGORY_COLOR_MAP.get(cat) ?? 'FFF3F4F6';
 
 function catsFor(type?: string): string[] {
   if (type === 'Receipt') return RECEIPT_CATS;
@@ -251,6 +268,118 @@ export default function CashflowTab() {
     })));
   }, [filteredRows]);
 
+  /* Excel export — one workbook, "Payments" + "Receipts" sheets, rows
+     color-coded by category. Exports payRows/receiptRows (every row matching
+     the current filters, not just what's scrolled into view — the tables
+     above only virtualize the DOM, not the underlying data). */
+  const handleExportExcel = useCallback(async () => {
+    if (payRows.length === 0 && receiptRows.length === 0) return;
+
+    const border = (color: string): ExcelJS.Border => ({ style: 'thin', color: { argb: color } });
+    const borders = (c: string) => ({ top: border(c), bottom: border(c), left: border(c), right: border(c) });
+    const fill = (argb: string): ExcelJS.Fill => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'SIT Manager';
+    wb.created = new Date();
+
+    const buildSheet = (
+      name: string,
+      rows: CashflowTxn[],
+      amountLabel: 'Payment (₹)' | 'Receipt (₹)',
+      amountField: 'payment' | 'receipt',
+      headerColor: string,
+    ) => {
+      const ws = wb.addWorksheet(name, {
+        views: [{ state: 'frozen', ySplit: 5 }],
+        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+      });
+      const colCount = 7;
+
+      ws.mergeCells(1, 1, 1, colCount);
+      const r1 = ws.getRow(1);
+      r1.height = 28;
+      const c1 = ws.getCell('A1');
+      c1.value = 'SUVIDYA INSTITUTE OF TECHNOLOGY';
+      c1.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+      c1.fill = fill('FF2E3093');
+      c1.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      ws.mergeCells(2, 1, 2, colCount);
+      const r2 = ws.getRow(2);
+      r2.height = 20;
+      const c2 = ws.getCell('A2');
+      const total = rows.reduce((s, r) => s + Number(r[amountField] || 0), 0);
+      c2.value = `${name}  ·  ${rows.length} record(s)  ·  Total ${fmt(total)}  ·  ${new Date().toLocaleString('en-IN')}`;
+      c2.font = { name: 'Calibri', size: 10, italic: true, color: { argb: 'FFFFFFFF' } };
+      c2.fill = fill('FF3D4DB5');
+      c2.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      ws.getRow(3).height = 4;
+
+      const headers = ['Date', 'Description', 'Category', 'Department', 'Company', amountLabel, 'Ref No'];
+      const headerRow = ws.getRow(4);
+      headerRow.height = 22;
+      headers.forEach((h, ci) => {
+        const cell = headerRow.getCell(ci + 1);
+        cell.value = h;
+        cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = fill(headerColor);
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.border = borders('FF1A5A9E');
+      });
+
+      rows.forEach((r, i) => {
+        const rowIdx = 5 + i;
+        const exRow = ws.getRow(rowIdx);
+        exRow.height = 18;
+        const catColor = colorForCategory(r.category);
+        const vals: (string | number)[] = [
+          fmtDate(r.date) || '', r.description || '', r.category || '—',
+          r.department || '—', r.company || '—', Number(r[amountField] || 0), r.ref_no || '',
+        ];
+        vals.forEach((v, ci) => {
+          const cell = exRow.getCell(ci + 1);
+          cell.value = v;
+          cell.border = borders('FFE5E7EB');
+          cell.font = { name: 'Calibri', size: 9, color: { argb: 'FF374151' } };
+          cell.fill = fill(catColor);
+          cell.alignment = { vertical: 'middle', horizontal: ci === 5 ? 'right' : 'left' };
+          if (ci === 5) cell.numFmt = '₹#,##0.00';
+        });
+      });
+
+      const totalRowIdx = 5 + rows.length;
+      ws.mergeCells(totalRowIdx, 1, totalRowIdx, 5);
+      const totalLabelCell = ws.getCell(totalRowIdx, 1);
+      totalLabelCell.value = `TOTAL (${rows.length})`;
+      totalLabelCell.alignment = { horizontal: 'right', vertical: 'middle' };
+      const totalValueCell = ws.getCell(totalRowIdx, 6);
+      totalValueCell.value = total;
+      totalValueCell.numFmt = '₹#,##0.00';
+      for (let ci = 1; ci <= colCount; ci++) {
+        const cell = ws.getCell(totalRowIdx, ci);
+        cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = fill('FF1E3A5F');
+        cell.border = borders('FF1E3A5F');
+        cell.alignment = cell.alignment || { vertical: 'middle' };
+      }
+      ws.getRow(totalRowIdx).height = 22;
+
+      ws.columns = [
+        { width: 12 }, { width: 34 }, { width: 26 }, { width: 20 }, { width: 16 }, { width: 16 }, { width: 20 },
+      ];
+      ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + rows.length, column: colCount } };
+    };
+
+    buildSheet('Payments', [...payRows], 'Payment (₹)', 'payment', 'FFB91C1C');
+    buildSheet('Receipts', [...receiptRows], 'Receipt (₹)', 'receipt', 'FF15803D');
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, `Payments_and_Receipts_${todayISO()}.xlsx`);
+  }, [payRows, receiptRows]);
+
   const handleClear = useCallback(() => {
     setSearch(''); setType(''); setCat(''); setDepartment(''); setCompany(''); setYear(''); setMonth(''); setFrom(''); setTo('');
   }, []);
@@ -285,7 +414,9 @@ export default function CashflowTab() {
             <div className="flex gap-2">
               <button onClick={handleClear} className="px-3 py-1.5 text-[11px] font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">Clear</button>
               <button onClick={handleExport} disabled={filteredRows.length === 0}
-                className="px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-[#2E3093] text-white hover:bg-[#252880] disabled:opacity-50 transition-colors">Export CSV</button>
+                className="px-3 py-1.5 text-[11px] font-semibold rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors">Export CSV</button>
+              <button onClick={handleExportExcel} disabled={payRows.length === 0 && receiptRows.length === 0}
+                className="px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">Export Excel</button>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 items-end">
