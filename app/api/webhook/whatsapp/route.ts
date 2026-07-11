@@ -1,4 +1,3 @@
-
 // /api/webhook/whatsapp/route.ts
 // SIT WhatsApp Automation — Simplified Flow
 // Qualification → Course → Brochure → Note interest → Done
@@ -26,6 +25,7 @@ const ADMIN_NUMBER = "919167219404";
 interface QualificationEntry {
   label: string;
   courses: string[];
+  other?: boolean;
 }
 
 interface WaData {
@@ -98,6 +98,11 @@ const QUALIFICATION_MAP: Record<number, QualificationEntry> = {
   7: {
     label: "HSC Student (Arts / Commerce / Science)",
     courses: ["Engineering Design and Drafting"],
+  },
+  8: {
+    label: "Other",
+    courses: [],
+    other: true,
   },
 };
 
@@ -353,8 +358,22 @@ async function handleFlow(
       qualification_label: qualification.label,
     };
 
+    // ── Option 8 — Other ──
+    if (qualification.other) {
+      await db.execute(
+        `UPDATE meta_ads_lead_sync SET wa_stage = 'completed', wa_callback_requested = 1, wa_data = ? WHERE id = ?`,
+        [JSON.stringify(updatedData), lead.id]
+      );
+      await notifyAdmin(waData.name || "Unknown", from, "Other (Qualification not listed)");
+      await sendMessage(from,
+        `Thank you, ${waData.name || "there"}! 😊\n\nWe have noted your interest and our team will be contacting you shortly.\n\nThank you for choosing SIT — Suvidya Institute of Technology!`
+      );
+      return;
+    }
+
     await updateStage("chat_awaiting_course", updatedData);
 
+    // Single course — skip list, just confirm
     if (qualification.courses.length === 1) {
       const course = qualification.courses[0];
       await sendMessage(from,
