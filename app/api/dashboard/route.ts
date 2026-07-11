@@ -901,10 +901,16 @@ async function fetchDashboardData(dept?: string) {
           AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
         GROUP BY am.Student_Id
       ),
-      student_paid AS (
+      -- Same ledger aggregation as lib/fee-balance.ts (Fee Details' exact Total
+      -- Fees / Total Paid formula), so this dashboard's pending-fees figures
+      -- match the per-student Fee Details page instead of only counting the
+      -- tuition fee and ignoring posted debits / the one-time membership fee.
+      student_ledger AS (
         SELECT
           f.Student_Id AS Student_Id,
-          SUM(CASE WHEN f.TypeR = 'C' THEN COALESCE(f.Total_Amt, f.Amount, 0) ELSE 0 END) AS paid_amount
+          SUM(CASE WHEN f.TypeR = 'C' THEN COALESCE(f.Total_Amt, f.Amount, 0) ELSE 0 END) AS paid_amount,
+          SUM(CASE WHEN f.TypeR = 'D' THEN COALESCE(f.Total_Amt, f.Amount, 0) ELSE 0 END) AS posted_debit,
+          MAX(CASE WHEN f.TypeR = 'D' AND LOWER(IFNULL(f.Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END) AS has_membership_debit
         FROM s_fees_mst f FORCE INDEX (idx_sfees_student)
         JOIN latest_admission la ON la.Student_Id = f.Student_Id
         WHERE (f.IsDelete = 0 OR f.IsDelete IS NULL)
@@ -925,13 +931,19 @@ async function fetchDashboardData(dept?: string) {
           ob.Batch_Id,
           ob.Batch_code,
           ob.Course_Id,
-          COALESCE(NULLIF(CAST(REPLACE(IFNULL(am.Fees, ''), ',', '') AS DECIMAL(15,2)), 0), NULLIF(ob.batch_fee, 0), 0) AS due_amount,
-          COALESCE(sp.paid_amount, 0) AS paid_amount
+          COALESCE(NULLIF(CAST(REPLACE(IFNULL(am.Fees, ''), ',', '') AS DECIMAL(15,2)), 0), NULLIF(ob.batch_fee, 0), 0)
+            + COALESCE(sl.posted_debit, 0)
+            + CASE
+                WHEN COALESCE(NULLIF(CAST(REPLACE(IFNULL(am.Fees, ''), ',', '') AS DECIMAL(15,2)), 0), NULLIF(ob.batch_fee, 0), 0) > 0
+                     AND NOT COALESCE(sl.has_membership_debit, 0)
+                THEN 899 ELSE 0
+              END AS due_amount,
+          COALESCE(sl.paid_amount, 0) AS paid_amount
         FROM latest_admission la
         JOIN admission_master am ON am.Admission_Id = la.Admission_Id
         JOIN ongoing_batches ob ON ob.Batch_Id = am.Batch_Id
         JOIN student_master sm ON sm.Student_Id = la.Student_Id
-        LEFT JOIN student_paid sp ON sp.Student_Id = sm.Student_Id
+        LEFT JOIN student_ledger sl ON sl.Student_Id = sm.Student_Id
         WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
           AND (sm.IsActive = 1 OR sm.IsActive IS NULL)
           AND COALESCE(NULLIF(TRIM(sm.Student_Name), ''), '') <> ''
