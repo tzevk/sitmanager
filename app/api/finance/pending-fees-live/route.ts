@@ -21,6 +21,12 @@ export async function GET(req: NextRequest) {
     // wildly overstating "pending"), didn't filter by TypeR (so Debit charges
     // were counted as if paid), never fell back to the batch fee when
     // am.Fees was empty, and ignored the one-time membership fee entirely.
+    // `ledger` is an INNER JOIN — only students with at least one real row in
+    // s_fees_mst count as "pending" here, per Fee Details. A student with zero
+    // fee-ledger activity has nothing Fee Details would show as owed; without
+    // this, every such student's tuition-fallback-only guess (batch fee, no
+    // actual billing/payment ever recorded) inflated the total by thousands
+    // of historical students who were never really "pending" in Fee Details.
     const CTE = `WITH latest_admission AS (
         SELECT Student_Id, MAX(Admission_Id) AS Admission_Id
         FROM admission_master
@@ -64,7 +70,7 @@ export async function GET(req: NextRequest) {
           WHERE deleted = 0 OR deleted IS NULL GROUP BY batch_id
         ) latest_fs ON latest_fs.batch_id = bm.Batch_Id
         LEFT JOIN fees_structure fs ON fs.id = latest_fs.id
-        LEFT JOIN ledger l ON l.Student_Id = sm.Student_Id
+        JOIN ledger l ON l.Student_Id = sm.Student_Id
         WHERE (am.Cancel IS NULL OR LOWER(TRIM(CAST(am.Cancel AS CHAR))) NOT IN ('yes', '1', 'true'))
           ${search ? `AND (sm.Student_Name LIKE ? OR sm.Batch_Code LIKE ? OR c.Course_Name LIKE ?)` : ''}
       ),
