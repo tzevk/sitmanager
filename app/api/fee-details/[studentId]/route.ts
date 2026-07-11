@@ -318,14 +318,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
     if (!studentRows.length) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     const student = studentRows[0];
 
-    // A discount reduces what the student owes, so it's always stored as a
-    // negative debit — that way it flows through the existing
-    // tuition + SUM(debit) Total Fees formula (report/Excel/PDF/ledger) as a
-    // reduction without any of them needing special-case handling.
+    // A discount is always a Credit (reduces balance the same way a payment
+    // does) and never generates a receipt number — it's a fee waiver, not a
+    // cash transaction.
     const isDiscount = String(Particular ?? '').trim().toLowerCase() === DISCOUNT_LABEL.toLowerCase();
-    const typeR = isDiscount ? 'D' : (Type === 'Debit' ? 'D' : 'C');
+    const typeR = isDiscount ? 'C' : (Type === 'Debit' ? 'D' : 'C');
     const now = new Date();
-    const amount = isDiscount ? -Math.abs(Number(Amount)) : Number(Amount);
+    const amount = Number(Amount);
     const transactionNo = String(Transaction_No ?? PaymentId ?? Cheque_No ?? '').trim() || null;
 
     const mkNotes = (particular: string, txTaxType?: string | null) =>
@@ -362,8 +361,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
       // real cash receipt — no receipt number, and (since /api/fee-details'
       // "recent receipts" list requires Fees_Code IS NOT NULL) it also stays
       // out of the Fee Details list.
-      const isMembershipFee = rowParticular.trim().toLowerCase() === MEMBERSHIP_FEE_LABEL.toLowerCase();
-      if (isMembershipFee) {
+      const isReceiptless = rowParticular.trim().toLowerCase() === MEMBERSHIP_FEE_LABEL.toLowerCase()
+        || rowParticular.trim().toLowerCase() === DISCOUNT_LABEL.toLowerCase();
+      if (isReceiptless) {
         return { Fees_Id: insertedId, Fees_Code: null };
       }
       const feesCode = (typeof forcedFeesCode === 'string' && isReceiptNoFormat(forcedFeesCode))
