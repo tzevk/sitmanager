@@ -52,14 +52,31 @@ export default function CbdTab() {
   const [feeRows, setFeeRows]       = useState<PendingFee[]>([]);
   const [feesLoading, setFeesLoading] = useState(true);
   const [feeSearch, setFeeSearch]   = useState('');
+  // Grand totals across every matching student — the API computes these
+  // separately from the (capped at 300) `rows` list, since summing only the
+  // fetched page silently understated "Total" whenever more than 300 students
+  // had a pending balance.
+  const [feeApiTotals, setFeeApiTotals] = useState({ totalCount: 0, totalFees: 0, totalPaid: 0, totalPending: 0, truncated: false });
 
   const loadFees = useCallback(async (q: string) => {
     setFeesLoading(true);
     try {
       const params = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : '';
       const res = await fetch(`/api/finance/pending-fees-live${params}`, { cache: 'no-store' });
-      if (res.ok) setFeeRows((await res.json()).rows ?? []);
-      else setFeeRows([]);
+      if (res.ok) {
+        const data = await res.json();
+        setFeeRows(data.rows ?? []);
+        setFeeApiTotals({
+          totalCount: Number(data.totalCount ?? 0),
+          totalFees: Number(data.totalFees ?? 0),
+          totalPaid: Number(data.totalPaid ?? 0),
+          totalPending: Number(data.totalPending ?? 0),
+          truncated: Boolean(data.truncated),
+        });
+      } else {
+        setFeeRows([]);
+        setFeeApiTotals({ totalCount: 0, totalFees: 0, totalPaid: 0, totalPending: 0, truncated: false });
+      }
     } finally {
       setFeesLoading(false);
     }
@@ -132,11 +149,11 @@ export default function CbdTab() {
     return new Map(items.map(item => [(item.row as PendingFee).id, item]));
   }, [feeRows, today]);
 
-  const feeTotals = useMemo(() => ({
-    total:   feeRows.reduce((s, r) => s + Number(r.total_fees), 0),
-    paid:    feeRows.reduce((s, r) => s + Number(r.paid), 0),
-    pending: feeRows.reduce((s, r) => s + Math.max(0, Number(r.total_fees) - Number(r.paid)), 0),
-  }), [feeRows]);
+  const feeTotals = {
+    total:   feeApiTotals.totalFees,
+    paid:    feeApiTotals.totalPaid,
+    pending: feeApiTotals.totalPending,
+  };
 
   return (
     <div className="space-y-6">
@@ -349,7 +366,14 @@ export default function CbdTab() {
                })}
               {feeRows.length > 0 && (
                 <TotalRow>
-                  <td colSpan={2} className="px-3 py-2 text-xs text-[#2E3093]">Total ({feeRows.length})</td>
+                  <td colSpan={2} className="px-3 py-2 text-xs text-[#2E3093]">
+                    Total ({feeApiTotals.totalCount})
+                    {feeApiTotals.truncated && (
+                      <span className="ml-1 text-[10px] font-normal text-gray-400">
+                        — showing top {feeRows.length} by amount
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{fmt(feeTotals.total)}</td>
                   <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{fmt(feeTotals.paid)}</td>
                   <td className="px-3 py-2 text-xs text-center text-red-600">{fmt(feeTotals.pending)}</td>
