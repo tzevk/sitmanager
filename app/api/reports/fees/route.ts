@@ -93,7 +93,12 @@ export async function GET(req: NextRequest) {
         const smConditions: string[] = [
           '(sm.IsDelete = 0 OR sm.IsDelete IS NULL)',
           '(sm.IsActive = 1 OR sm.IsActive IS NULL)', // exclude hidden (deactivated) students
-          `NULLIF(TRIM(am.Roll_No), '') IS NOT NULL`, // no roll number allotted yet — don't show them
+          // No roll number allotted yet — don't show them. Falls back to any
+          // admission record (am_any) when this specific bm.Batch_Id has none —
+          // a transferred student's admission_master row still sits under their
+          // OLD Batch_Id, so requiring an exact-batch match here would otherwise
+          // hide them entirely from their new (Moved_To) batch's report.
+          `NULLIF(TRIM(COALESCE(am.Roll_No, am_any.Roll_No)), '') IS NOT NULL`,
         ];
         const smParams: any[] = [];
         if (courseId) { smConditions.push('bm.Course_Id = ?');  smParams.push(Number(courseId)); }
@@ -105,10 +110,10 @@ export async function GET(req: NextRequest) {
              COALESCE(cm.Course_Name,'') AS Course_Name,
              bm.SDate AS Batch_Start, bm.EDate AS Batch_End, bm.Fees_Full_Payment,
              sm.Student_Id AS Student_Id,
-             am.Roll_No AS Roll_No,
-             am.Cancel AS Cancel,
-             am.Fees AS Admission_Fees,
-             COALESCE(NULLIF(TRIM(sm.Transfered), ''), am.Transfered) AS Transfered,
+             COALESCE(am.Roll_No, am_any.Roll_No) AS Roll_No,
+             COALESCE(am.Cancel, am_any.Cancel) AS Cancel,
+             COALESCE(am.Fees, am_any.Fees) AS Admission_Fees,
+             COALESCE(NULLIF(TRIM(sm.Transfered), ''), am.Transfered, am_any.Transfered) AS Transfered,
              COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
              COALESCE(sm.Moved_From_Batch_Code, '') AS Moved_From_Batch_Code,
              COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name,
@@ -138,6 +143,12 @@ export async function GET(req: NextRequest) {
              ON (
                bm.Batch_code = sm.Batch_Code
                OR (NULLIF(TRIM(sm.Moved_From_Batch_Code), '') IS NOT NULL AND bm.Batch_code = sm.Moved_From_Batch_Code)
+               -- Some transfers never synced sm.Batch_Code to the new batch (a known
+               -- data gap), which would otherwise make the student invisible in their
+               -- own current batch's report. Moved_To_Batch_Code is the authoritative
+               -- "current batch" for a transferred student — same fallback the student
+               -- list (EFFECTIVE_BATCH_CODE) already uses.
+               OR (LOWER(TRIM(COALESCE(sm.Transfered, ''))) = 'yes' AND NULLIF(TRIM(sm.Moved_To_Batch_Code), '') IS NOT NULL AND bm.Batch_code = sm.Moved_To_Batch_Code)
              )
              AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
            LEFT JOIN course_mst cm ON cm.Course_Id = bm.Course_Id
@@ -149,6 +160,13 @@ export async function GET(req: NextRequest) {
              GROUP BY Student_Id, Batch_Id
            ) am_pick ON am_pick.Student_Id = sm.Student_Id AND am_pick.Batch_Id = bm.Batch_Id
            LEFT JOIN admission_master am ON am.Admission_Id = am_pick.Admission_Id
+           LEFT JOIN (
+             SELECT Student_Id, MAX(Admission_Id) AS Admission_Id
+             FROM admission_master
+             WHERE (IsDelete = 0 OR IsDelete IS NULL)
+             GROUP BY Student_Id
+           ) am_pick_any ON am_pick_any.Student_Id = sm.Student_Id
+           LEFT JOIN admission_master am_any ON am_any.Admission_Id = am_pick_any.Admission_Id
            LEFT JOIN (
              SELECT batch_id, MAX(id) AS id FROM fees_structure
              WHERE deleted = 0 OR deleted IS NULL GROUP BY batch_id

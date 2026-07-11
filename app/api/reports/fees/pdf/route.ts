@@ -82,6 +82,10 @@ export async function GET(req: NextRequest) {
          ON (
            bm.Batch_code = sm.Batch_Code
            OR (NULLIF(TRIM(sm.Moved_From_Batch_Code), '') IS NOT NULL AND bm.Batch_code = sm.Moved_From_Batch_Code)
+           -- Some transfers never synced sm.Batch_Code to the new batch (a known
+           -- data gap) — fall back to Moved_To_Batch_Code, the authoritative
+           -- "current batch" for a transferred student, same as the report/Excel query.
+           OR (LOWER(TRIM(COALESCE(sm.Transfered, ''))) = 'yes' AND NULLIF(TRIM(sm.Moved_To_Batch_Code), '') IS NOT NULL AND bm.Batch_code = sm.Moved_To_Batch_Code)
          )
          AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
        LEFT JOIN course_mst cm ON cm.Course_Id = bm.Course_Id
