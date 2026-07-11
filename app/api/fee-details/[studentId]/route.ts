@@ -9,6 +9,7 @@ export const maxDuration = 60;
 
 const MEMBERSHIP_FEE_AMOUNT = 899;
 const MEMBERSHIP_FEE_LABEL = 'One Time Membership Fees - Sitians Alumni Association';
+const DISCOUNT_LABEL = 'Discount';
 
 function parseNotes(notes: string | null): { particular: string; taxType: string } {
   if (!notes) return { particular: '', taxType: '' };
@@ -228,6 +229,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
         fixed: false,
       },
       { label: MEMBERSHIP_FEE_LABEL, amount: MEMBERSHIP_FEE_AMOUNT, fixed: true },
+      { label: DISCOUNT_LABEL, amount: null, fixed: false },
     ];
 
     let record: any = null;
@@ -316,9 +318,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
     if (!studentRows.length) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     const student = studentRows[0];
 
-    const typeR = Type === 'Debit' ? 'D' : 'C';
+    // A discount reduces what the student owes, so it's always stored as a
+    // negative debit — that way it flows through the existing
+    // tuition + SUM(debit) Total Fees formula (report/Excel/PDF/ledger) as a
+    // reduction without any of them needing special-case handling.
+    const isDiscount = String(Particular ?? '').trim().toLowerCase() === DISCOUNT_LABEL.toLowerCase();
+    const typeR = isDiscount ? 'D' : (Type === 'Debit' ? 'D' : 'C');
     const now = new Date();
-    const amount = Number(Amount);
+    const amount = isDiscount ? -Math.abs(Number(Amount)) : Number(Amount);
     const transactionNo = String(Transaction_No ?? PaymentId ?? Cheque_No ?? '').trim() || null;
 
     const mkNotes = (particular: string, txTaxType?: string | null) =>
