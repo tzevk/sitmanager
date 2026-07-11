@@ -56,7 +56,7 @@ const AWS_SES_SECRET_KEY = process.env.ADMISSION_AWS_SES_SECRET_KEY;
 const AWS_SES_FROM_EMAIL = process.env.ADMISSION_AWS_SES_FROM_EMAIL;
 const AWS_SES_REPLY_TO = process.env.ADMISSION_AWS_SES_REPLY_TO;
 
-interface MailAttachment {
+export interface MailAttachment {
   filename: string;
   content: Buffer;
   cid?: string;
@@ -634,16 +634,18 @@ export function buildFeeReceiptMailContent(params: {
   paymentType: string;
   amount: number;
   taxType?: string | null;
+  customMessage?: string | null;
 }) {
   const safeName = (params.studentName || '').trim() || 'Student';
   const subject = `Fee Receipt ${params.receiptNo} - Suvidya Institute of Technology`;
   const fmtAmount = (n: number) =>
     `₹ ${(Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const customMessage = (params.customMessage || '').trim();
 
   const text = [
     `Dear ${safeName},`,
     '',
-    'Thank you for your payment. Please find your fee receipt details below:',
+    customMessage || 'Thank you for your payment. Please find your fee receipt details below:',
     '',
     `Receipt No   : ${params.receiptNo}`,
     `Receipt Date : ${params.receiptDate}`,
@@ -663,7 +665,7 @@ export function buildFeeReceiptMailContent(params: {
   const safeNameHtml = escapeHtml(safeName);
   const html = withEmailSignature(`
     <p>Dear <strong>${safeNameHtml}</strong>,</p>
-    <p>Thank you for your payment. Please find your fee receipt details below:</p>
+    <p>${customMessage ? escapeHtml(customMessage).replace(/\n/g, '<br/>') : 'Thank you for your payment. Please find your fee receipt details below:'}</p>
     <table style="width:100%;border-collapse:collapse;margin:16px 0;">
       <tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;width:160px;">Receipt No</td><td style="padding:6px 10px;border:1px solid #e5e7eb;font-weight:bold;font-family:monospace;">${escapeHtml(params.receiptNo)}</td></tr>
       <tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Receipt Date</td><td style="padding:6px 10px;border:1px solid #e5e7eb;">${escapeHtml(params.receiptDate)}</td></tr>
@@ -693,6 +695,8 @@ export async function sendFeeReceiptEmail(params: {
   paymentType: string;
   amount: number;
   taxType?: string | null;
+  customMessage?: string | null;
+  attachments?: MailAttachment[];
 }) {
   const built = buildFeeReceiptMailContent(params);
   await sendAdmissionFormEmail({
@@ -702,6 +706,7 @@ export async function sendFeeReceiptEmail(params: {
     subject: built.subject,
     text: built.text,
     html: built.html,
+    attachments: params.attachments,
   });
 }
 

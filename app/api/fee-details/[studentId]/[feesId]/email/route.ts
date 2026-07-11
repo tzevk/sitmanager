@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { sendFeeReceiptEmail } from '@/lib/mailer';
+import { buildFeeReceiptPdf } from '@/lib/fee-receipt-pdf';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -16,6 +17,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
     const sid = Number(studentId);
     const fid = Number(feesId);
     if (!sid || !fid) return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
+
+    const body = await req.json().catch(() => ({}));
+    const customMessage = typeof body?.message === 'string' ? body.message.trim() : '';
+    const attachReceipt = body?.attachReceipt !== false; // default true
 
     const pool = getPool();
 
@@ -54,8 +59,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
       return `${day}/${m}/${y}`;
     };
 
-    await sendFeeReceiptEmail({
-      toEmail: student.Email,
+    const receiptFields = {
       studentName: student.Student_Name,
       studentId: sid,
       courseName: student.Course_Name,
@@ -66,6 +70,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
       paymentType: fee.Payment_Type ?? '—',
       amount: Number(fee.Amount) || 0,
       taxType,
+    };
+
+    const attachments = attachReceipt
+      ? [{
+          filename: `Fee_Receipt_${fee.Fees_Code || fid}.pdf`,
+          content: await buildFeeReceiptPdf(receiptFields),
+          contentType: 'application/pdf',
+        }]
+      : undefined;
+
+    await sendFeeReceiptEmail({
+      toEmail: student.Email,
+      ...receiptFields,
+      customMessage,
+      attachments,
     });
 
     return NextResponse.json({ success: true, email: student.Email });
