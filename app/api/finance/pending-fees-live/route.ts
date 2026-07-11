@@ -21,8 +21,7 @@ export async function GET(req: NextRequest) {
     // wildly overstating "pending"), didn't filter by TypeR (so Debit charges
     // were counted as if paid), never fell back to the batch fee when
     // am.Fees was empty, and ignored the one-time membership fee entirely.
-    const [rows] = await getPool().query<any[]>(
-      `WITH latest_admission AS (
+    const CTE = `WITH latest_admission AS (
         SELECT Student_Id, MAX(Admission_Id) AS Admission_Id
         FROM admission_master
         WHERE (IsDelete = 0 OR IsDelete IS NULL)
@@ -68,26 +67,57 @@ export async function GET(req: NextRequest) {
         LEFT JOIN ledger l ON l.Student_Id = sm.Student_Id
         WHERE (am.Cancel IS NULL OR LOWER(TRIM(CAST(am.Cancel AS CHAR))) NOT IN ('yes', '1', 'true'))
           ${search ? `AND (sm.Student_Name LIKE ? OR sm.Batch_Code LIKE ? OR c.Course_Name LIKE ?)` : ''}
-      )
-      SELECT
-        id,
-        IFNULL(Student_Name, 'Unknown') AS student_name,
-        TRIM(CONCAT_WS(' — ',
-          NULLIF(TRIM(IFNULL(Batch_Code, '')), ''),
-          NULLIF(TRIM(IFNULL(Course_Name,  '')), '')
-        )) AS batch,
-        (tuition + posted_debit + CASE WHEN tuition > 0 AND NOT has_membership_debit THEN 899 ELSE 0 END) AS total_fees,
-        paid,
-        GREATEST(tuition + posted_debit + CASE WHEN tuition > 0 AND NOT has_membership_debit THEN 899 ELSE 0 END - paid, 0) AS pending,
-        NULL AS due_date
-      FROM resolved
-      HAVING pending > 0
-      ORDER BY pending DESC
-      LIMIT 300`,
-      search ? [`%${search}%`, `%${search}%`, `%${search}%`] : []
-    );
+      ),
+      pending_calc AS (
+        SELECT
+          id, Student_Name, Batch_Code, Course_Name,
+          (tuition + posted_debit + CASE WHEN tuition > 0 AND NOT has_membership_debit THEN 899 ELSE 0 END) AS total_fees,
+          paid,
+          GREATEST(tuition + posted_debit + CASE WHEN tuition > 0 AND NOT has_membership_debit THEN 899 ELSE 0 END - paid, 0) AS pending
+        FROM resolved
+        HAVING pending > 0
+      )`;
+    const params = search ? [`%${search}%`, `%${search}%`, `%${search}%`] : [];
 
-    return NextResponse.json({ rows });
+    const [[rows], [totalsRows]] = await Promise.all([
+      getPool().query<any[]>(
+        `${CTE}
+        SELECT
+          id,
+          IFNULL(Student_Name, 'Unknown') AS student_name,
+          TRIM(CONCAT_WS(' — ',
+            NULLIF(TRIM(IFNULL(Batch_Code, '')), ''),
+            NULLIF(TRIM(IFNULL(Course_Name,  '')), '')
+          )) AS batch,
+          total_fees,
+          paid,
+          pending,
+          NULL AS due_date
+        FROM pending_calc
+        ORDER BY pending DESC
+        LIMIT 300`,
+        params
+      ),
+      // Grand total across every matching student, not just the top-300 shown —
+      // the "Total" row in the UI must reflect this, not a sum of the capped page.
+      getPool().query<any[]>(
+        `${CTE}
+        SELECT COUNT(*) AS total_count, SUM(total_fees) AS total_fees, SUM(paid) AS total_paid, SUM(pending) AS total_pending
+        FROM pending_calc`,
+        params
+      ),
+    ]);
+
+    const totals = totalsRows[0] ?? { total_count: 0, total_fees: 0, total_paid: 0, total_pending: 0 };
+
+    return NextResponse.json({
+      rows,
+      totalCount: Number(totals.total_count ?? 0),
+      totalFees: Number(totals.total_fees ?? 0),
+      totalPaid: Number(totals.total_paid ?? 0),
+      totalPending: Number(totals.total_pending ?? 0),
+      truncated: Number(totals.total_count ?? 0) > rows.length,
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Server error' }, { status: 500 });
   }
