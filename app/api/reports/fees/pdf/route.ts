@@ -65,7 +65,18 @@ export async function GET(req: NextRequest) {
          COALESCE(MAX(sm.Moved_To_Batch_Code), '') AS Moved_To_Batch_Code,
          COALESCE(MAX(sm.Moved_From_Batch_Code), '') AS Moved_From_Batch_Code,
          COALESCE(NULLIF(TRIM(MAX(sm.Transfered)), ''), '') AS Transfered,
-         CASE WHEN LOWER(TRIM(CAST(MAX(COALESCE(am.Cancel,'')) AS CHAR))) IN ('yes','1','true') THEN 1 ELSE 0 END AS Cancelled
+         CASE WHEN LOWER(TRIM(CAST(MAX(COALESCE(am.Cancel,'')) AS CHAR))) IN ('yes','1','true') THEN 1 ELSE 0 END AS Cancelled,
+         -- Same resolution chain as /api/fee-details / the on-screen report,
+         -- so the PDF's "Amount" matches the Fee Details page exactly instead
+         -- of only ever reading the batch's flat Fees_Full_Payment.
+         MAX(COALESCE(
+           NULLIF(CAST(REPLACE(IFNULL(fs.actualfees, ''), ',', '') AS DECIMAL(15,2)), 0),
+           NULLIF(CAST(REPLACE(IFNULL(fs.fullfees, ''), ',', '') AS DECIMAL(15,2)), 0),
+           NULLIF(CAST(REPLACE(IFNULL(fs.total_inr, ''), ',', '') AS DECIMAL(15,2)), 0),
+           NULLIF(CAST(REPLACE(IFNULL(bm.Actual_Fees_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
+           NULLIF(CAST(REPLACE(IFNULL(bm.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
+           0
+         )) AS Resolved_Batch_Fee
        FROM student_master sm
        LEFT JOIN batch_mst bm
          ON (
@@ -81,6 +92,11 @@ export async function GET(req: NextRequest) {
          GROUP BY Student_Id, Batch_Id
        ) am_pick ON am_pick.Student_Id = sm.Student_Id AND am_pick.Batch_Id = bm.Batch_Id
        LEFT JOIN admission_master am ON am.Admission_Id = am_pick.Admission_Id
+       LEFT JOIN (
+         SELECT batch_id, MAX(id) AS id FROM fees_structure
+         WHERE deleted = 0 OR deleted IS NULL GROUP BY batch_id
+       ) latest_fs ON latest_fs.batch_id = bm.Batch_Id
+       LEFT JOIN fees_structure fs ON fs.id = latest_fs.id
        WHERE ${conditions.join(' AND ')}
        GROUP BY sm.Student_Id
        ORDER BY Student_Name ASC`,
@@ -92,17 +108,35 @@ export async function GET(req: NextRequest) {
     }
 
     const studentIds = students.map(s => s.Student_Id);
-    const [payments] = await pool.query<any[]>(
-      `SELECT Student_Id, SUM(Total_Amt) AS Paid
+    // Same per-student ledger aggregation as /api/fee-details and the
+    // on-screen report's Total_Fees_Exact / Total_Paid_Exact.
+    const [ledgerRows] = await pool.query<any[]>(
+      `SELECT Student_Id,
+         SUM(CASE WHEN TypeR = 'C' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS paid,
+         SUM(CASE WHEN TypeR = 'D' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS posted_debit,
+         MAX(CASE WHEN TypeR = 'D' AND LOWER(IFNULL(Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END) AS has_membership_debit
        FROM s_fees_mst
-       WHERE Student_Id IN (?) AND TypeR = 'C' AND (IsDelete = 0 OR IsDelete IS NULL)
+       WHERE Student_Id IN (?) AND (IsDelete = 0 OR IsDelete IS NULL)
        GROUP BY Student_Id`,
       [studentIds]
     );
 
+    const parseFee = (v: any) => Number(String(v ?? '').replace(/,/g, '')) || 0;
+    const MEMBERSHIP_FEE = 899;
+    const ledgerByStudent = new Map<number, any>();
+    for (const l of ledgerRows) {
+      ledgerByStudent.set(Number(l.Student_Id), l);
+    }
+    const amountByStudent = new Map<number, number>();
     const paidByStudent = new Map<number, number>();
-    for (const p of payments) {
-      paidByStudent.set(Number(p.Student_Id), Number(p.Paid) || 0);
+    for (const stu of students) {
+      const id = Number(stu.Student_Id);
+      const ledger = ledgerByStudent.get(id);
+      const tuition = parseFee(stu.Fees) || Number(stu.Resolved_Batch_Fee) || 0;
+      const postedDebit = Number(ledger?.posted_debit ?? 0);
+      const membership = tuition > 0 && !Number(ledger?.has_membership_debit ?? 0) ? MEMBERSHIP_FEE : 0;
+      amountByStudent.set(id, tuition + postedDebit + membership);
+      paidByStudent.set(id, Number(ledger?.paid ?? 0));
     }
 
     // ── Build PDF ─────────────────────────────────────────────────
@@ -213,7 +247,7 @@ export async function GET(req: NextRequest) {
       const rowFill = idx % 2 === 0 ? statusRowFill[status] : statusAltFill[status];
       const textColor = statusTextColor[status];
 
-      const amount = Number(stu.Fees ?? stu.Fees_Full_Payment ?? 0);
+      const amount = amountByStudent.get(Number(stu.Student_Id)) ?? 0;
       const paid = paidByStudent.get(Number(stu.Student_Id)) ?? 0;
       const rem = amount - paid;
 
