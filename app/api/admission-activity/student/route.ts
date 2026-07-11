@@ -58,20 +58,21 @@ function buildSearch(field: string, value: string) {
   const like = `%${value}%`;
   const col = SEARCH_FIELDS[field];
   if (col) {
-    // Numeric exact-ish for id, LIKE for the rest
-    if (field === 'studentId') return { clause: `AND CAST(sm.Student_Id AS CHAR) LIKE ?`, params: [like] };
+    // Exact match for id — a LIKE '%6%' substring match would also return
+    // students 176, 1176, 176776, etc. (any id merely containing "6").
+    if (field === 'studentId') return { clause: `AND sm.Student_Id = ?`, params: [Number(value) || 0] };
     return { clause: `AND ${col} LIKE ?`, params: [like] };
   }
   // No field selected → search across all of them
   return {
     clause: `AND (
-      CAST(sm.Student_Id AS CHAR) LIKE ?
+      sm.Student_Id = ?
       OR ${EFFECTIVE_BATCH_CODE} LIKE ?
       OR sm.Student_Name LIKE ?
       OR sm.Email LIKE ?
       OR sm.Present_Mobile LIKE ?
     )`,
-    params: [like, like, like, like, like],
+    params: [Number(value) || 0, like, like, like, like],
   };
 }
 
