@@ -685,10 +685,20 @@ export async function PUT(
       await savePayload(pool, inquiryId, safePayload);
       savedPayload = safePayload;
     }
-    try { await saveStructuredAdmissionData(inquiryId, savedPayload); } catch (e) {
-      console.warn('[OnlineAdmission] saveStructuredAdmissionData failed on PUT:', e);
+    // These two write to disjoint tables (payload/KT vs. student_master/admission_master)
+    // and both work off the in-memory savedPayload/cleanBody rather than re-reading each
+    // other's writes, so running them concurrently instead of sequentially roughly halves
+    // this portion of the Update button's latency.
+    const [structuredResult, syncResult] = await Promise.allSettled([
+      saveStructuredAdmissionData(inquiryId, savedPayload),
+      syncOnlineAdmissionIntoCurrentDb(inquiryId, cleanBody, { statusAction: body.statusAction || 'update' }),
+    ]);
+    if (structuredResult.status === 'rejected') {
+      console.warn('[OnlineAdmission] saveStructuredAdmissionData failed on PUT:', structuredResult.reason);
     }
-    await syncOnlineAdmissionIntoCurrentDb(inquiryId, cleanBody, { statusAction: body.statusAction || 'update' });
+    if (syncResult.status === 'rejected') {
+      throw syncResult.reason;
+    }
 
     return NextResponse.json({ success: true, message: 'Admission updated successfully' });
   } catch (err: unknown) {

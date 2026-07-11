@@ -351,6 +351,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
       );
 
       const insertedId = Number(result.insertId);
+      // The one-time alumni/membership fee is an internal ledger charge, not a
+      // real cash receipt — no receipt number, and (since /api/fee-details'
+      // "recent receipts" list requires Fees_Code IS NOT NULL) it also stays
+      // out of the Fee Details list.
+      const isMembershipFee = rowParticular.trim().toLowerCase() === MEMBERSHIP_FEE_LABEL.toLowerCase();
+      if (isMembershipFee) {
+        return { Fees_Id: insertedId, Fees_Code: null };
+      }
       const feesCode = (typeof forcedFeesCode === 'string' && isReceiptNoFormat(forcedFeesCode))
         ? forcedFeesCode.trim()
         : await generateReceiptNo();
