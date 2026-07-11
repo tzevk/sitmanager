@@ -173,15 +173,20 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
       };
     });
 
-    const totalDebit = Number(
-      admission?.Fees ??
-      feeRow?.actualfees ??
-      feeRow?.fullfees ??
-      feeRow?.total_inr ??
-      feeRow?.Actual_Fees_Payment ??
-      feeRow?.Fees_Full_Payment ??
-      0
-    );
+    // parseFee (not Number()) deliberately — admission.Fees is free-text legacy
+    // data and sometimes holds non-numeric garbage (e.g. "No"); Number("No") is
+    // NaN, which would silently poison every downstream total (ledgerTotalDebit,
+    // balance) into null instead of falling back to the batch fee like
+    // lib/fee-balance.ts (Report/Excel/PDF/CBD dashboard) already does.
+    const parseFee = (v: unknown) => Number(String(v ?? '').replace(/,/g, '')) || 0;
+    const totalDebit =
+      parseFee(admission?.Fees) ||
+      parseFee(feeRow?.actualfees) ||
+      parseFee(feeRow?.fullfees) ||
+      parseFee(feeRow?.total_inr) ||
+      parseFee(feeRow?.Actual_Fees_Payment) ||
+      parseFee(feeRow?.Fees_Full_Payment) ||
+      0;
     const postedDebit = ledger.reduce((s, r) => s + r.Debit, 0);
     const totalCredit = ledger.reduce((s, r) => s + r.Credit, 0);
     const hasAlumniDebit = ledger.some((r) => /one\s*time\s+membership\s+fees/i.test(r.Particular) && r.Debit > 0);
