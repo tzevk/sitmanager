@@ -264,12 +264,22 @@ export default function FeeDetailsEditPage() {
     }
   };
 
-  const handleEmailReceipt = async (feesId?: number) => {
+  const openEmailModal = (feesId?: number) => {
     const targetFeesId = feesId ?? data?.record?.Fees_Id;
+    if (!targetFeesId) return;
+    setEmailMessage('');
+    setEmailAttachReceipt(true);
+    setEmailModalFeesId(targetFeesId);
+  };
+
+  const handleEmailReceipt = async () => {
+    const targetFeesId = emailModalFeesId;
     if (!targetFeesId) return;
     setError('');
     setMessage('');
-    if (feesId) {
+    setEmailSending(true);
+    const isRowAction = targetFeesId !== data?.record?.Fees_Id;
+    if (isRowAction) {
       setRowActionFeeId(targetFeesId);
       setRowActionType('email');
     } else {
@@ -278,12 +288,16 @@ export default function FeeDetailsEditPage() {
     try {
       const res = await fetch(`/api/fee-details/${params.studentId}/${targetFeesId}/email`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: emailMessage.trim() || undefined, attachReceipt: emailAttachReceipt }),
       });
       const d = await res.json();
       if (!res.ok) { setError(d.error ?? 'Failed to send email'); return; }
       setMessage(`Receipt emailed to ${d.email}`);
+      setEmailModalFeesId(null);
     } finally {
-      if (feesId) {
+      setEmailSending(false);
+      if (isRowAction) {
         setRowActionFeeId(null);
         setRowActionType(null);
       } else {
@@ -749,7 +763,7 @@ ${copy('Student Copy')}
           </button>
           {data.record && (
             <button
-              onClick={() => handleEmailReceipt()}
+              onClick={() => openEmailModal()}
               disabled={emailing || !data.student.Email}
               title={!data.student.Email ? 'Student does not have an email address on file' : undefined}
               className="h-9 px-4 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
@@ -834,7 +848,7 @@ ${copy('Student Copy')}
                                     {rowActionFeeId === r.Fees_Id && rowActionType === 'download' ? 'Saving' : 'Save'}
                                   </button>
                                   <button
-                                    onClick={() => handleEmailReceipt(r.Fees_Id)}
+                                    onClick={() => openEmailModal(r.Fees_Id)}
                                     disabled={!data.student.Email || (rowActionFeeId === r.Fees_Id && rowActionType === 'email')}
                                     className="h-6 px-2 rounded-md border border-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
                                   >
@@ -882,6 +896,63 @@ ${copy('Student Copy')}
           </div>
         </div>
       </div>
+
+      {/* Email Receipt Modal */}
+      {emailModalFeesId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5]">
+              <div>
+                <h3 className="text-sm font-bold text-white">Email Fee Receipt</h3>
+                <p className="text-[11px] text-white/80">To {data.student.Email}</p>
+              </div>
+              <button
+                onClick={() => setEmailModalFeesId(null)}
+                className="text-white/80 hover:text-white"
+                aria-label="Close"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="flex flex-col gap-1">
+                <label className={label}>Message (optional)</label>
+                <textarea
+                  className={`${ctrl} min-h-[100px]`}
+                  value={emailMessage}
+                  onChange={(e) => setEmailMessage(e.target.value)}
+                  placeholder="Add a personal note to include in the email — leave blank to use the default message."
+                />
+              </div>
+              <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={emailAttachReceipt}
+                  onChange={(e) => setEmailAttachReceipt(e.target.checked)}
+                  className="accent-[#2E3093]"
+                />
+                Attach fee receipt (PDF)
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50">
+              <button
+                onClick={() => setEmailModalFeesId(null)}
+                disabled={emailSending}
+                className="h-9 px-4 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEmailReceipt}
+                disabled={emailSending}
+                className="h-9 px-4 rounded-lg bg-[#2E3093] text-white text-xs font-bold hover:bg-[#252880] disabled:opacity-60"
+              >
+                {emailSending ? 'Sending…' : 'Send Email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
