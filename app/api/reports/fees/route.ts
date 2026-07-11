@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
         if (courseId) { smConditions.push('bm.Course_Id = ?');  smParams.push(Number(courseId)); }
         if (batchId)  { smConditions.push('bm.Batch_Id = ?');   smParams.push(Number(batchId)); }
 
-        const [rows] = await pool.query(
+        const [rows] = await pool.query<any[]>(
           `SELECT
              COALESCE(bm.Batch_code,'') AS Batch_Code,
              COALESCE(cm.Course_Name,'') AS Course_Name,
@@ -107,6 +107,7 @@ export async function GET(req: NextRequest) {
              sm.Student_Id AS Student_Id,
              am.Roll_No AS Roll_No,
              am.Cancel AS Cancel,
+             am.Fees AS Admission_Fees,
              COALESCE(NULLIF(TRIM(sm.Transfered), ''), am.Transfered) AS Transfered,
              COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
              COALESCE(sm.Moved_From_Batch_Code, '') AS Moved_From_Batch_Code,
@@ -117,10 +118,27 @@ export async function GET(req: NextRequest) {
              sfm.Payment_Type, sfm.Cheque_No, sfm.Cheque_Bank, sfm.Cheque_Branch,
              sfm.Cheque_Date, sfm.Amount, sfm.Service_Tax, sfm.Total_Amt,
              sfm.UnPaid_Amt, sfm.Amt_Word, sfm.Notes,
-             sfm.FeesMonth, sfm.FeesYear, sfm.Print
+             sfm.FeesMonth, sfm.FeesYear, sfm.Print,
+             -- Same resolution chain as /api/fee-details, so "Total Fees" here
+             -- matches the per-student Fee Details page exactly instead of
+             -- only ever reading the batch's flat Fees_Full_Payment.
+             COALESCE(
+               NULLIF(CAST(REPLACE(IFNULL(fs.actualfees, ''), ',', '') AS DECIMAL(15,2)), 0),
+               NULLIF(CAST(REPLACE(IFNULL(fs.fullfees, ''), ',', '') AS DECIMAL(15,2)), 0),
+               NULLIF(CAST(REPLACE(IFNULL(fs.total_inr, ''), ',', '') AS DECIMAL(15,2)), 0),
+               NULLIF(CAST(REPLACE(IFNULL(bm.Actual_Fees_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
+               NULLIF(CAST(REPLACE(IFNULL(bm.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
+               0
+             ) AS Resolved_Batch_Fee,
+             ledger.paid AS Ledger_Paid,
+             ledger.posted_debit AS Ledger_Posted_Debit,
+             ledger.has_membership_debit AS Ledger_Has_Membership_Debit
            FROM student_master sm
            LEFT JOIN batch_mst bm
-             ON bm.Batch_code = sm.Batch_Code
+             ON (
+               bm.Batch_code = sm.Batch_Code
+               OR (NULLIF(TRIM(sm.Moved_From_Batch_Code), '') IS NOT NULL AND bm.Batch_code = sm.Moved_From_Batch_Code)
+             )
              AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
            LEFT JOIN course_mst cm ON cm.Course_Id = bm.Course_Id
            LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
@@ -131,6 +149,20 @@ export async function GET(req: NextRequest) {
              GROUP BY Student_Id, Batch_Id
            ) am_pick ON am_pick.Student_Id = sm.Student_Id AND am_pick.Batch_Id = bm.Batch_Id
            LEFT JOIN admission_master am ON am.Admission_Id = am_pick.Admission_Id
+           LEFT JOIN (
+             SELECT batch_id, MAX(id) AS id FROM fees_structure
+             WHERE deleted = 0 OR deleted IS NULL GROUP BY batch_id
+           ) latest_fs ON latest_fs.batch_id = bm.Batch_Id
+           LEFT JOIN fees_structure fs ON fs.id = latest_fs.id
+           LEFT JOIN (
+             SELECT Student_Id,
+               SUM(CASE WHEN TypeR = 'C' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS paid,
+               SUM(CASE WHEN TypeR = 'D' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS posted_debit,
+               MAX(CASE WHEN TypeR = 'D' AND LOWER(IFNULL(Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END) AS has_membership_debit
+             FROM s_fees_mst
+             WHERE (IsDelete = 0 OR IsDelete IS NULL)
+             GROUP BY Student_Id
+           ) ledger ON ledger.Student_Id = sm.Student_Id
            LEFT JOIN s_fees_mst sfm
              ON sfm.Student_Id = sm.Student_Id
              AND sfm.Batch_Id  = bm.Batch_Id
@@ -150,7 +182,23 @@ export async function GET(req: NextRequest) {
             ...(toDate     ? [toDate]     : []),
           ]
         );
-        return NextResponse.json({ rows });
+
+        // Mirror /api/fee-details' exact Total Fees / Total Paid formula so this
+        // report's numbers match the per-student Fee Details page precisely.
+        const parseFee = (v: any) => Number(String(v ?? '').replace(/,/g, '')) || 0;
+        const MEMBERSHIP_FEE = 899;
+        const rowsWithExact = rows.map((r) => {
+          const tuition = parseFee(r.Admission_Fees) || Number(r.Resolved_Batch_Fee) || 0;
+          const postedDebit = Number(r.Ledger_Posted_Debit ?? 0);
+          const paid = Number(r.Ledger_Paid ?? 0);
+          const membership = tuition > 0 && !Number(r.Ledger_Has_Membership_Debit ?? 0) ? MEMBERSHIP_FEE : 0;
+          return {
+            ...r,
+            Total_Fees_Exact: tuition + postedDebit + membership,
+            Total_Paid_Exact: paid,
+          };
+        });
+        return NextResponse.json({ rows: rowsWithExact });
       }
 
       // ── Fees Record (individual) ─────────────────────────────────

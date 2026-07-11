@@ -74,6 +74,8 @@ interface BatchWiseFeesRow {
   FeesMonth: number | null;
   FeesYear: number | null;
   Print: number | null;
+  Total_Fees_Exact?: number | null;
+  Total_Paid_Exact?: number | null;
 }
 
 interface FacultyRow {
@@ -277,12 +279,6 @@ function FeesReportContent() {
     if (subTab !== 'batch-wise-fees') return;
     if (!batchWiseFeesRows.length) return;
 
-    const paidByStudent = new Map<number, number>();
-    for (const r of batchWiseFeesRows) {
-      if (!r.Fees_Id || r.Student_Id == null) continue;
-      paidByStudent.set(r.Student_Id, (paidByStudent.get(r.Student_Id) ?? 0) + (r.Amount ?? 0));
-    }
-
     const statusBg: Record<string, string> = {
       Active: 'FFFFFFFF', Cancelled: 'FFFEE2E2', Transferred: 'FFFEF3C7',
     };
@@ -350,17 +346,23 @@ function FeesReportContent() {
       cell.border = borders('FF1A5A9E');
     });
 
-    /* ── Group rows by batch + student (one row per student, payments summed) ── */
+    /* ── Group rows by batch + student (one row per student) ──────── */
+    // Total Fees / Total Paid come straight from the server's Total_Fees_Exact /
+    // Total_Paid_Exact — the same tuition+debit+membership formula the Fee
+    // Details page uses — instead of the batch's flat Fees_Full_Payment and a
+    // client-side sum of same-batch payments, so the numbers match exactly.
     type StudentGroup = {
       batchCode: string; courseName: string; batchStart: string | null; batchEnd: string | null;
-      first: BatchWiseFeesRow; totalPaid: number; paymentTypes: Set<string>;
+      first: BatchWiseFeesRow; paymentTypes: Set<string>;
     };
-    const filteredRows = batchWiseFeesRows.filter(r => r.Fees_Id);
+    // Include every enrolled student, even those with no fee payment recorded
+    // yet under this batch (e.g. a transferred student shown against the batch
+    // they transferred FROM) — matches the on-screen table, which never
+    // required a Fees_Id to display a student row.
     const groups: StudentGroup[] = [];
-    for (const r of filteredRows) {
+    for (const r of batchWiseFeesRows) {
       const last = groups[groups.length - 1];
       if (last && last.batchCode === (r.Batch_Code || '') && last.first.Student_Id === r.Student_Id) {
-        last.totalPaid += r.Amount ?? 0;
         if (r.Payment_Type) last.paymentTypes.add(r.Payment_Type);
       } else {
         groups.push({
@@ -369,7 +371,6 @@ function FeesReportContent() {
           batchStart: r.Batch_Start,
           batchEnd: r.Batch_End,
           first: r,
-          totalPaid: r.Amount ?? 0,
           paymentTypes: new Set(r.Payment_Type ? [r.Payment_Type] : []),
         });
       }
@@ -397,10 +398,11 @@ function FeesReportContent() {
       }
 
       const r = g.first;
-      const totalFees = r.Fees_Full_Payment ?? 0;
-      const remaining = totalFees - g.totalPaid;
+      const totalFees = r.Total_Fees_Exact ?? r.Fees_Full_Payment ?? 0;
+      const totalPaid = r.Total_Paid_Exact ?? 0;
+      const remaining = totalFees - totalPaid;
       sumTotal += totalFees;
-      sumPaid += g.totalPaid;
+      sumPaid += totalPaid;
       sumRemaining += remaining;
 
       const status = studentStatus(r);
@@ -414,7 +416,7 @@ function FeesReportContent() {
 
       const vals: (string | number)[] = [
         srNo++, r.Student_Id ?? '', r.Roll_No || '', r.Student_Name || '—',
-        totalFees, g.totalPaid, remaining, paymentTypeLabel,
+        totalFees, totalPaid, remaining, paymentTypeLabel,
       ];
 
       const dataRow = ws.getRow(rowIdx);

@@ -67,7 +67,12 @@ export async function GET(req: NextRequest) {
          COALESCE(NULLIF(TRIM(MAX(sm.Transfered)), ''), '') AS Transfered,
          CASE WHEN LOWER(TRIM(CAST(MAX(COALESCE(am.Cancel,'')) AS CHAR))) IN ('yes','1','true') THEN 1 ELSE 0 END AS Cancelled
        FROM student_master sm
-       LEFT JOIN batch_mst bm ON bm.Batch_code = sm.Batch_Code AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
+       LEFT JOIN batch_mst bm
+         ON (
+           bm.Batch_code = sm.Batch_Code
+           OR (NULLIF(TRIM(sm.Moved_From_Batch_Code), '') IS NOT NULL AND bm.Batch_code = sm.Moved_From_Batch_Code)
+         )
+         AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
        LEFT JOIN course_mst cm ON cm.Course_Id = bm.Course_Id
        LEFT JOIN (
          SELECT Student_Id, Batch_Id, MAX(Admission_Id) AS Admission_Id
