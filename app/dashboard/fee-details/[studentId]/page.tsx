@@ -94,6 +94,10 @@ export default function FeeDetailsEditPage() {
   const [emailing, setEmailing] = useState(false);
   const [rowActionFeeId, setRowActionFeeId] = useState<number | null>(null);
   const [rowActionType, setRowActionType] = useState<'email' | 'download' | 'delete' | null>(null);
+  const [emailModalFeesId, setEmailModalFeesId] = useState<number | null>(null);
+  const [emailMessage, setEmailMessage] = useState('');
+  const [emailAttachReceipt, setEmailAttachReceipt] = useState(true);
+  const [emailSending, setEmailSending] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [students, setStudents] = useState<StudentOption[]>([]);
