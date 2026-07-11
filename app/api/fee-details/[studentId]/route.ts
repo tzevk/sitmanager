@@ -157,22 +157,20 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
       }
     }
 
-    const ledger = ledgerRows
-      .map((r) => {
-        const { particular } = parseNotes(r.Notes);
-        const amt = Number(r.Total_Amt ?? r.Amount ?? 0);
-        return {
-          Fees_Id: r.Fees_Id,
-          Date: r.RDate || r.Date_Added,
-          Particular: particular,
-          Payment_Type: r.Payment_Type,
-          Transaction_No: r.PaymentId || r.Cheque_No || '',
-          Fees_Code: r.Fees_Code,
-          Debit: r.TypeR === 'D' ? amt : 0,
-          Credit: r.TypeR === 'C' ? amt : 0,
-        };
-      })
-      .filter((r) => r.Debit > 0 || r.Credit > 0);
+    const ledger = ledgerRows.map((r) => {
+      const { particular } = parseNotes(r.Notes);
+      const amt = Number(r.Total_Amt ?? r.Amount ?? 0);
+      return {
+        Fees_Id: r.Fees_Id,
+        Date: r.RDate || r.Date_Added,
+        Particular: particular,
+        Payment_Type: r.Payment_Type,
+        Transaction_No: r.PaymentId || r.Cheque_No || '',
+        Fees_Code: r.Fees_Code,
+        Debit: r.TypeR === 'D' ? amt : 0,
+        Credit: r.TypeR === 'C' ? amt : 0,
+      };
+    });
 
     const totalDebit = Number(
       admission?.Fees ??
