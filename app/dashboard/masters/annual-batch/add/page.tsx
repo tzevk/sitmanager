@@ -164,6 +164,8 @@ export default function AddAnnualBatchPage() {
   const labelCls = 'block text-[11px] font-semibold text-gray-600 mb-0.5';
   const inputCls =
     'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
+  const dateCls =
+    'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[16px] text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors';
   const selectCls =
     'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors';
   const hintCls = 'mt-1 text-[10px] font-medium text-slate-400';
@@ -260,15 +262,15 @@ export default function AddAnnualBatchPage() {
                 </div>
 
                 {/* Description */}
-                <div className="lg:col-span-1">
+                <div className="col-span-full">
                   <label className={labelCls}>Description</label>
-                  <input
-                    type="text"
+                  <textarea
+                    rows={2}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Description"
                     maxLength={TEXT_LIMITS.description}
-                    className={inputCls}
+                    className={`${inputCls} resize-none`}
                   />
                   <div className={hintCls}>{description.length}/{TEXT_LIMITS.description}</div>
                 </div>
@@ -303,7 +305,7 @@ export default function AddAnnualBatchPage() {
                     type="date"
                     value={plannedStartDate}
                     onChange={(e) => setPlannedStartDate(e.target.value)}
-                    className={inputCls}
+                    className={dateCls}
                   />
                 </div>
 
@@ -314,7 +316,7 @@ export default function AddAnnualBatchPage() {
                     type="date"
                     value={actualDate}
                     onChange={(e) => setActualDate(e.target.value)}
-                    className={inputCls}
+                    className={dateCls}
                   />
                 </div>
 
@@ -343,7 +345,7 @@ export default function AddAnnualBatchPage() {
                     type="date"
                     value={trainingCompletionDate}
                     onChange={(e) => setTrainingCompletionDate(e.target.value)}
-                    className={inputCls}
+                    className={dateCls}
                   />
                 </div>
 
@@ -354,7 +356,7 @@ export default function AddAnnualBatchPage() {
                     type="date"
                     value={lastAdmissionDate}
                     onChange={(e) => setLastAdmissionDate(e.target.value)}
-                    className={inputCls}
+                    className={dateCls}
                   />
                 </div>
 

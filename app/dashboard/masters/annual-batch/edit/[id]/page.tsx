@@ -244,6 +244,8 @@ export default function EditAnnualBatchPage() {
   const labelCls = 'block text-[11px] font-semibold text-gray-600 mb-0.5';
   const inputCls =
     'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
+  const dateCls =
+    'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[16px] text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors';
   const selectCls =
     'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors';
   const textareaCls =
@@ -487,26 +489,26 @@ export default function EditAnnualBatchPage() {
                   <label className={labelCls}>
                     Planned Start Date <span className="text-red-400">*</span>
                   </label>
-                  <input type="date" value={plannedStartDate} onChange={(e) => setPlannedStartDate(e.target.value)} className={inputCls} />
+                  <input type="date" value={plannedStartDate} onChange={(e) => setPlannedStartDate(e.target.value)} className={dateCls} />
                 </div>
 
                 <div>
                   <label className={labelCls}>
                     Training completion Date <span className="text-red-400">*</span>
                   </label>
-                  <input type="date" value={trainingCompletionDate} onChange={(e) => setTrainingCompletionDate(e.target.value)} className={inputCls} />
+                  <input type="date" value={trainingCompletionDate} onChange={(e) => setTrainingCompletionDate(e.target.value)} className={dateCls} />
                 </div>
 
                 <div>
                   <label className={labelCls}>
                     Last Date of Admission <span className="text-red-400">*</span>
                   </label>
-                  <input type="date" value={lastAdmissionDate} onChange={(e) => setLastAdmissionDate(e.target.value)} className={inputCls} />
+                  <input type="date" value={lastAdmissionDate} onChange={(e) => setLastAdmissionDate(e.target.value)} className={dateCls} />
                 </div>
 
                 <div>
                   <label className={labelCls}>Actual Date</label>
-                  <input type="date" value={actualDate} onChange={(e) => setActualDate(e.target.value)} className={inputCls} />
+                  <input type="date" value={actualDate} onChange={(e) => setActualDate(e.target.value)} className={dateCls} />
                 </div>
 
                 <div>

@@ -7,6 +7,10 @@ Format: `[Date] Module — Description`
 
 ## 2026-07-13
 
+### Annual Batch — Description & Date Fixes
+- **Description field** changed from a single-line text input to a multi-line textarea spanning the full row width, so longer descriptions can be entered without overflow.
+- **Date inputs** on both the Add and Edit pages updated to use `font-size: 16px` to prevent iOS Safari from auto-zooming the viewport on focus (sub-16px inputs triggered a zoom that disrupted the native date picker, making it appear unresponsive).
+
 ### Online Admission — Discussion Column
 - Added a **Discussion** column to the Online Admissions list page.
 - Each row shows the total number of discussion notes logged against that inquiry (purple badge when notes exist, dash when none).
