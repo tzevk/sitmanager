@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { type ReactNode, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -26,6 +26,31 @@ const TEXT_LIMITS = {
   trainingName: 255,
   description: 500,
 };
+
+const labelCls = 'block text-[11px] font-semibold text-gray-600 mb-0.5';
+const inputCls =
+  'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[16px] text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
+const dateCls =
+  'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[16px] text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors';
+const selectCls =
+  'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[16px] text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors';
+const hintCls = 'mt-1 text-[10px] font-medium text-slate-400';
+
+function SectionCard({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm">
+      <div className="bg-gradient-to-r from-[#2E3093]/7 to-[#2A6BB5]/7 px-4 py-2 border-b border-slate-200">
+        <h3 className="text-[13px] font-bold text-[#2E3093] flex items-center gap-2">
+          <span className="w-7 h-7 rounded-lg bg-[#2E3093]/10 flex items-center justify-center">
+            {icon}
+          </span>
+          {title}
+        </h3>
+      </div>
+      <div className="px-4 py-3">{children}</div>
+    </div>
+  );
+}
 
 export default function AddAnnualBatchPage() {
   const router = useRouter();
@@ -160,28 +185,6 @@ export default function AddAnnualBatchPage() {
     router.push('/dashboard/masters/annual-batch');
   };
 
-  /* --- shared classes --- */
-  const labelCls = 'block text-[11px] font-semibold text-gray-600 mb-0.5';
-  const inputCls =
-    'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
-  const selectCls =
-    'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors';
-  const hintCls = 'mt-1 text-[10px] font-medium text-slate-400';
-
-  const SectionCard = ({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) => (
-    <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm">
-      <div className="bg-gradient-to-r from-[#2E3093]/7 to-[#2A6BB5]/7 px-4 py-2 border-b border-slate-200">
-        <h3 className="text-[13px] font-bold text-[#2E3093] flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg bg-[#2E3093]/10 flex items-center justify-center">
-            {icon}
-          </span>
-          {title}
-        </h3>
-      </div>
-      <div className="px-4 py-3">{children}</div>
-    </div>
-  );
-
   if (permLoading) return <PermissionLoading />;
   if (!canCreate) return <AccessDenied message="You do not have permission to create annual batches." />;
 
@@ -260,15 +263,15 @@ export default function AddAnnualBatchPage() {
                 </div>
 
                 {/* Description */}
-                <div className="lg:col-span-1">
+                <div className="col-span-full">
                   <label className={labelCls}>Description</label>
-                  <input
-                    type="text"
+                  <textarea
+                    rows={2}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Description"
                     maxLength={TEXT_LIMITS.description}
-                    className={inputCls}
+                    className={`${inputCls} resize-none`}
                   />
                   <div className={hintCls}>{description.length}/{TEXT_LIMITS.description}</div>
                 </div>
@@ -303,7 +306,7 @@ export default function AddAnnualBatchPage() {
                     type="date"
                     value={plannedStartDate}
                     onChange={(e) => setPlannedStartDate(e.target.value)}
-                    className={inputCls}
+                    className={dateCls}
                   />
                 </div>
 
@@ -314,7 +317,7 @@ export default function AddAnnualBatchPage() {
                     type="date"
                     value={actualDate}
                     onChange={(e) => setActualDate(e.target.value)}
-                    className={inputCls}
+                    className={dateCls}
                   />
                 </div>
 
@@ -343,7 +346,7 @@ export default function AddAnnualBatchPage() {
                     type="date"
                     value={trainingCompletionDate}
                     onChange={(e) => setTrainingCompletionDate(e.target.value)}
-                    className={inputCls}
+                    className={dateCls}
                   />
                 </div>
 
@@ -354,7 +357,7 @@ export default function AddAnnualBatchPage() {
                     type="date"
                     value={lastAdmissionDate}
                     onChange={(e) => setLastAdmissionDate(e.target.value)}
-                    className={inputCls}
+                    className={dateCls}
                   />
                 </div>
 

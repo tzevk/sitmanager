@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -72,6 +72,28 @@ function toNumberOrNull(value: string): number | null {
 
 function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+const labelCls = 'block text-[11px] font-semibold text-gray-600 mb-0.5';
+const inputCls =
+  'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[16px] text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
+const dateCls =
+  'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[16px] text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors';
+const selectCls =
+  'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[16px] text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors';
+const textareaCls =
+  'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[16px] text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors resize-none';
+const hintCls = 'mt-1 text-[10px] font-medium text-slate-400';
+
+function SectionCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm">
+      <div className="bg-gradient-to-r from-[#2E3093]/7 to-[#2A6BB5]/7 px-4 py-2 border-b border-slate-200">
+        <h3 className="text-[13px] font-bold text-[#2E3093]">{title}</h3>
+      </div>
+      <div className="px-4 py-3">{children}</div>
+    </div>
+  );
 }
 
 export default function EditAnnualBatchPage() {
@@ -241,23 +263,6 @@ export default function EditAnnualBatchPage() {
     setDollarTotal(String(usdTot));
   }, [inrBasic, dollarBasic, taxRate]);
 
-  const labelCls = 'block text-[11px] font-semibold text-gray-600 mb-0.5';
-  const inputCls =
-    'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
-  const selectCls =
-    'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors';
-  const textareaCls =
-    'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors resize-none';
-  const hintCls = 'mt-1 text-[10px] font-medium text-slate-400';
-
-  const SectionCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
-    <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm">
-      <div className="bg-gradient-to-r from-[#2E3093]/7 to-[#2A6BB5]/7 px-4 py-2 border-b border-slate-200">
-        <h3 className="text-[13px] font-bold text-[#2E3093]">{title}</h3>
-      </div>
-      <div className="px-4 py-3">{children}</div>
-    </div>
-  );
 
   const handleSave = async () => {
     if (!courseId) {
@@ -487,26 +492,26 @@ export default function EditAnnualBatchPage() {
                   <label className={labelCls}>
                     Planned Start Date <span className="text-red-400">*</span>
                   </label>
-                  <input type="date" value={plannedStartDate} onChange={(e) => setPlannedStartDate(e.target.value)} className={inputCls} />
+                  <input type="date" value={plannedStartDate} onChange={(e) => setPlannedStartDate(e.target.value)} className={dateCls} />
                 </div>
 
                 <div>
                   <label className={labelCls}>
                     Training completion Date <span className="text-red-400">*</span>
                   </label>
-                  <input type="date" value={trainingCompletionDate} onChange={(e) => setTrainingCompletionDate(e.target.value)} className={inputCls} />
+                  <input type="date" value={trainingCompletionDate} onChange={(e) => setTrainingCompletionDate(e.target.value)} className={dateCls} />
                 </div>
 
                 <div>
                   <label className={labelCls}>
                     Last Date of Admission <span className="text-red-400">*</span>
                   </label>
-                  <input type="date" value={lastAdmissionDate} onChange={(e) => setLastAdmissionDate(e.target.value)} className={inputCls} />
+                  <input type="date" value={lastAdmissionDate} onChange={(e) => setLastAdmissionDate(e.target.value)} className={dateCls} />
                 </div>
 
                 <div>
                   <label className={labelCls}>Actual Date</label>
-                  <input type="date" value={actualDate} onChange={(e) => setActualDate(e.target.value)} className={inputCls} />
+                  <input type="date" value={actualDate} onChange={(e) => setActualDate(e.target.value)} className={dateCls} />
                 </div>
 
                 <div>
