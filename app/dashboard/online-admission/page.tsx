@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -32,6 +32,16 @@ interface AdmissionRow {
   NeftAmount: number | null;
   IsDraft: 0 | 1;
   DraftStep: number;
+  DiscussionCount: number;
+}
+
+interface DiscussionEntry {
+  id: number;
+  date: string | null;
+  nextdate: string | null;
+  discussion: string;
+  created_by: number | null;
+  created_date: string | null;
 }
 
 interface Pagination { page: number; limit: number; total: number; totalPages: number }
@@ -92,6 +102,14 @@ export default function OnlineAdmissionPage() {
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Discussion modal
+  const [discModal, setDiscModal]     = useState<{ inquiryId: number; studentName: string } | null>(null);
+  const [discussions, setDiscussions] = useState<DiscussionEntry[]>([]);
+  const [discLoading, setDiscLoading] = useState(false);
+  const [discText, setDiscText]       = useState('');
+  const [discPosting, setDiscPosting] = useState(false);
+  const [, startDiscTransition]       = useTransition();
+
   const fetchData = useCallback(async () => {
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -120,6 +138,45 @@ export default function OnlineAdmissionPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const refresh = () => { setPage(1); setFetchTrigger(t => t + 1); };
+
+  const openDiscModal = useCallback(async (row: AdmissionRow) => {
+    setDiscModal({ inquiryId: row.Inquiry_Id, studentName: row.Student_Name || `#${row.Inquiry_Id}` });
+    setDiscussions([]);
+    setDiscText('');
+    setDiscLoading(true);
+    try {
+      const res  = await fetch(`/api/inquiry/discussions?inquiryId=${row.Inquiry_Id}`);
+      const data = await res.json();
+      setDiscussions(data.discussions ?? []);
+    } catch { /* ignore */ } finally {
+      setDiscLoading(false);
+    }
+  }, []);
+
+  const postDiscussion = async () => {
+    if (!discModal || !discText.trim()) return;
+    setDiscPosting(true);
+    try {
+      await fetch('/api/inquiry/discussions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquiryId: discModal.inquiryId, discussion: discText.trim() }),
+      });
+      setDiscText('');
+      const res  = await fetch(`/api/inquiry/discussions?inquiryId=${discModal.inquiryId}`);
+      const data = await res.json();
+      setDiscussions(data.discussions ?? []);
+      startDiscTransition(() => {
+        setRows(prev => prev.map(r =>
+          r.Inquiry_Id === discModal.inquiryId
+            ? { ...r, DiscussionCount: r.DiscussionCount + 1 }
+            : r
+        ));
+      });
+    } catch { /* ignore */ } finally {
+      setDiscPosting(false);
+    }
+  };
 
   const handleTabChange = (t: AdmissionTab) => {
     setTab(t);
@@ -272,13 +329,14 @@ export default function OnlineAdmissionPage() {
                     <th className="text-left py-2 px-3 font-bold">Payment</th>
                     <th className="text-left py-2 px-3 font-bold">Form</th>
                     <th className="text-left py-2 px-3 font-bold whitespace-nowrap">Last Updated</th>
+                    <th className="text-left py-2 px-3 font-bold">Discussion</th>
                     <th className="text-center py-2 px-3 font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={9} className="py-10 text-center">
+                      <td colSpan={10} className="py-10 text-center">
                         <div className="inline-flex flex-col items-center gap-1.5">
                           <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                           <span className="text-xs text-slate-400">Loading…</span>
@@ -287,7 +345,7 @@ export default function OnlineAdmissionPage() {
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center">
+                      <td colSpan={10} className="py-12 text-center">
                         <div className="inline-flex flex-col items-center gap-2 text-slate-400">
                           <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -362,6 +420,22 @@ export default function OnlineAdmissionPage() {
                           </td>
                           <td className="py-1.5 px-3 text-slate-500 whitespace-nowrap text-[11px]">
                             {fmtDateTime(r.LastActivityAt)}
+                          </td>
+                          <td className="py-1.5 px-3">
+                            <button
+                              title="View / add discussions"
+                              onClick={() => openDiscModal(r)}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
+                                (r.DiscussionCount ?? 0) > 0
+                                  ? 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'
+                                  : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                              </svg>
+                              {(r.DiscussionCount ?? 0) > 0 ? r.DiscussionCount : '—'}
+                            </button>
                           </td>
                           <td className="py-1.5 px-3">
                             <div className="flex items-center justify-center gap-0.5">
@@ -478,6 +552,79 @@ export default function OnlineAdmissionPage() {
               </div>
             )}
           </div>
+
+          {/* ── Discussion Modal ── */}
+          {discModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/40" onClick={() => setDiscModal(null)} />
+              <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh]">
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">{discModal.studentName}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Inquiry #{discModal.inquiryId} · Discussions</p>
+                  </div>
+                  <button onClick={() => setDiscModal(null)} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                {/* Thread */}
+                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-0">
+                  {discLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  ) : discussions.length === 0 ? (
+                    <p className="text-center text-xs text-slate-400 py-6">No discussions yet. Add the first note below.</p>
+                  ) : (
+                    discussions.map(d => (
+                      <div key={d.id} className="bg-slate-50 rounded-xl px-4 py-3">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-[10px] font-semibold text-slate-500">
+                            {d.date ? new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                          </span>
+                          {d.created_date && (
+                            <span className="text-[10px] text-slate-400">
+                              {new Date(d.created_date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[12.5px] text-slate-700 whitespace-pre-wrap leading-relaxed">{d.discussion}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {/* Add note */}
+                <div className="border-t border-slate-100 px-5 py-3.5 flex flex-col gap-2">
+                  <textarea
+                    rows={3}
+                    value={discText}
+                    onChange={e => setDiscText(e.target.value)}
+                    placeholder="Add a note or follow-up…"
+                    className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      disabled={discPosting || !discText.trim()}
+                      onClick={postDiscussion}
+                      className="flex items-center gap-1.5 bg-[#2E3093] text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-[#252880] transition-colors disabled:opacity-40"
+                    >
+                      {discPosting ? (
+                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        </svg>
+                      )}
+                      Post
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

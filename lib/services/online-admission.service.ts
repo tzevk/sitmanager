@@ -53,6 +53,7 @@ export interface AdmissionRow {
   /** Last step reached while filling a draft (0 when unknown / already submitted). */
   DraftStep: number;
   IsLegacy: 0 | 1;
+  DiscussionCount: number;
 }
 
 export interface StatusOption { id: number; label: string }
@@ -1355,7 +1356,9 @@ export async function listOnlineAdmissions(
       CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.razorpayAmount')), '') AS DECIMAL(12,2)) AS RazorpayAmount,
       COALESCE(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.paymentSubMethod')), '') AS PaymentSubMethod,
       COALESCE(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.neftTransactionNumber')), '') AS NeftTransactionNumber,
-      CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.neftAmount')), '') AS DECIMAL(12,2)) AS NeftAmount
+      CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(oap.Payload, '$.neftAmount')), '') AS DECIMAL(12,2)) AS NeftAmount,
+      (SELECT COUNT(*) FROM awt_inquirydiscussion d
+         WHERE d.Inquiry_id = si.Inquiry_Id AND (d.deleted = 0 OR d.deleted IS NULL)) AS DiscussionCount
      FROM ${PAYLOAD_TABLE} oap
        JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = oap.Inquiry_Id
      ${smJoin}
@@ -1534,6 +1537,7 @@ export async function listOnlineAdmissions(
       NeftAmount: r.NeftAmount != null ? Number(r.NeftAmount) : null,
       IsDraft: r.IsDraft ? 1 : 0,
       DraftStep: r.DraftStep != null ? Number(r.DraftStep) : 0,
+      DiscussionCount: Number(r.DiscussionCount || 0),
       StatusLabel: label,
       StatusCategory: resolveCategory(Number(r.Status_id), label),
     };
