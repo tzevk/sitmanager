@@ -325,6 +325,16 @@ export default function AddFeeDetailsPage() {
       return `${numToWords(rs)} RUPEES${ps > 0 ? ` AND ${numToWords(ps)} PAISE` : ''} ONLY`;
     };
 
+    // Consistent "Sentence case" (first letter capitalized, rest lowercase) across
+    // every free-text field on the receipt — source data is inconsistently cased
+    // (e.g. "KIRAN KRISHNA NAYAK", "suraj Vasant sable") and printed side-by-side
+    // it looked visually inconsistent.
+    const toSentenceCase = (s: string | null | undefined): string => {
+      const v = (s ?? '').trim();
+      if (!v) return '';
+      return v.charAt(0).toUpperCase() + v.slice(1).toLowerCase();
+    };
+
     const fmtDate2 = (d: string | null | undefined) => {
       if (!d) return '';
       const s = String(d).slice(0, 10);
@@ -363,20 +373,20 @@ export default function AddFeeDetailsPage() {
           ${selectedStudent.Transfered?.toLowerCase() === 'yes' ? `<span class="status-tag status-transferred">TRANSFERRED${selectedStudent.Moved_From_Batch_Code && selectedStudent.Moved_To_Batch_Code ? ` ${selectedStudent.Moved_From_Batch_Code} &rarr; ${selectedStudent.Moved_To_Batch_Code}` : selectedStudent.Moved_To_Batch_Code ? ` &rarr; ${selectedStudent.Moved_To_Batch_Code}` : ''}</span>` : ''}
         </div>` : ''}
         <div class="body">
-          <div class="line-row">Received with thanks from <span class="fill name">${data.student.Student_Name}</span></div>
+          <div class="line-row">Received with thanks from <span class="fill name">${toSentenceCase(data.student.Student_Name)}</span></div>
           <div class="line-row">the sum of rupees <span class="fill words">${amtWords}</span> as</div>
           <div class="course-row">
-            <span>Course fees for</span><span class="fill course">${data.student.Course_Name || particular || ''}</span>
-            <span>by</span><span class="fill mode">${paymentType}</span>
+            <span>Course fees for</span><span class="fill course">${toSentenceCase(data.student.Course_Name || particular)}</span>
+            <span>by</span><span class="fill mode">${toSentenceCase(paymentType)}</span>
             <span>No.</span><span class="fill ref">${refNo}</span>
           </div>
           <div class="course-row second">
             <span>Dated</span><span class="fill dated">${showCheque ? chequeDateFmt : receiptDateFmt}</span>
-            <span>drawn on</span><span class="fill drawn">${showCheque ? bank : ''}</span>
+            <span>drawn on</span><span class="fill drawn">${toSentenceCase(showCheque ? bank : '')}</span>
           </div>
           <div class="note-row">
-            <span>Note :</span><span class="fill note">${particular || ''}</span>
-            <span>Branch</span><span class="fill branch">${showCheque ? branch : ''}</span>
+            <span>Note :</span><span class="fill note">${toSentenceCase(particular)}</span>
+            <span>Branch</span><span class="fill branch">${toSentenceCase(showCheque ? branch : '')}</span>
             <span class="amount-box">RS. ${fmt(amtNum)}</span>
           </div>
           <div class="notes-title">Notes:</div>
@@ -405,15 +415,16 @@ export default function AddFeeDetailsPage() {
       .strong { font-size: 16px; font-weight: 400; margin-left: 24px; }
       .body { margin-top: 24px; }
       .line-row, .course-row, .note-row { display: flex; align-items: baseline; gap: 8px; margin-top: 24px; white-space: nowrap; }
+      .course-row, .note-row { flex-wrap: wrap; }
       .fill { display: inline-block; border-bottom: 2px dotted #222; text-align: center; min-height: 20px; font-size: 16px; }
       .name { width: 650px; }
       .words { width: 630px; }
-      .course { width: 340px; }
-      .mode { width: 120px; }
-      .ref { width: 170px; }
+      .course { width: 460px; white-space: normal; word-break: break-word; line-height: 1.3; }
+      .mode { width: 100px; }
+      .ref { width: 140px; }
       .dated { width: 145px; }
       .drawn { width: 455px; }
-      .note { width: 380px; }
+      .note { width: 300px; white-space: normal; word-break: break-word; line-height: 1.3; }
       .branch { width: 160px; }
       .amount-box { margin-left: auto; border: 3px solid #111; padding: 10px 46px; font-size: 18px; font-weight: 700; }
       .notes-title { margin-top: 22px; font-size: 16px; }
