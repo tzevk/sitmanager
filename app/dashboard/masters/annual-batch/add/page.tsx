@@ -163,11 +163,11 @@ export default function AddAnnualBatchPage() {
   /* --- shared classes --- */
   const labelCls = 'block text-[11px] font-semibold text-gray-600 mb-0.5';
   const inputCls =
-    'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
+    'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[16px] text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
   const dateCls =
     'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[16px] text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors';
   const selectCls =
-    'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors';
+    'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[16px] text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors';
   const hintCls = 'mt-1 text-[10px] font-medium text-slate-400';
 
   const SectionCard = ({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) => (
