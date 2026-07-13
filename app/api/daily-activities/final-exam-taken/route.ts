@@ -75,6 +75,56 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ exams });
     }
 
+    /* --- Students for a batch with their marks for a given final exam --- */
+    if (fetchOptions === 'students') {
+      const batchId = searchParams.get('batchId');
+      const takeId = searchParams.get('takeId');
+      if (!batchId) return NextResponse.json({ students: [] });
+
+      const [students] = await pool.query(
+        `SELECT a.Admission_Id, a.Student_Id, a.Student_Code, s.Student_Name, a.Roll_No
+         FROM admission_master a
+         JOIN student_master s ON a.Student_Id = s.Student_Id
+         WHERE a.Batch_Id = ?
+           AND (a.IsDelete = 0 OR a.IsDelete IS NULL)
+           AND (a.Cancel = 0 OR a.Cancel IS NULL)
+         ORDER BY CAST(COALESCE(a.Roll_No, '0') AS UNSIGNED), s.Student_Name`,
+        [parseInt(batchId)]
+      );
+
+      // Existing marks for this exam sitting, keyed by student.
+      const marksMap: Record<string, number | null> = {};
+      const statusMap: Record<string, string | null> = {};
+      const childIdMap: Record<string, number | null> = {};
+      if (takeId && parseInt(takeId) > 0) {
+        const [childRows] = await pool.query(
+          `SELECT Student_Id AS raw_sid, Marks_Given AS marks_obtained, Status AS status, ID AS child_id
+           FROM exam_taken_child
+           WHERE Take_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+          [parseInt(takeId)]
+        );
+        for (const row of childRows as any[]) {
+          marksMap[String(row.raw_sid)] = row.marks_obtained != null ? Number(row.marks_obtained) : null;
+          statusMap[String(row.raw_sid)] = row.status ?? null;
+          childIdMap[String(row.raw_sid)] = row.child_id ?? null;
+        }
+      }
+
+      const result = (students as any[]).map((s: any, idx: number) => ({
+        row_num: idx + 1,
+        Admission_Id: s.Admission_Id,
+        Student_Id: s.Student_Id,
+        Student_Code: s.Student_Code,
+        Student_Name: s.Student_Name,
+        Roll_No: s.Roll_No,
+        marks_obtained: marksMap[String(s.Student_Id)] ?? marksMap[String(s.Admission_Id)] ?? null,
+        status: statusMap[String(s.Student_Id)] ?? statusMap[String(s.Admission_Id)] ?? null,
+        child_id: childIdMap[String(s.Student_Id)] ?? childIdMap[String(s.Admission_Id)] ?? null,
+      }));
+
+      return NextResponse.json({ students: result });
+    }
+
     /* --- List with pagination --- */
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
     const limit = Math.min(100, Math.max(10, parseInt(searchParams.get('limit') || '25')));
@@ -226,6 +276,29 @@ export async function PUT(req: NextRequest) {
         Take_Id,
       ]
     );
+
+    /* ── Save per-student marks into exam_taken_child ── */
+    if (body.studentMarks && Array.isArray(body.studentMarks) && body.studentMarks.length > 0) {
+      for (const sm of body.studentMarks) {
+        const marks = sm.marks_obtained != null && sm.marks_obtained !== '' ? String(sm.marks_obtained) : null;
+        if (sm.child_id) {
+          await pool.query(
+            `UPDATE exam_taken_child SET Marks_Given = ?, Status = ?, Marks_from = ?, Student_Name = ?
+             WHERE ID = ? AND Take_Id = ?`,
+            [marks, sm.status ?? null, body.Max_Marks != null ? String(body.Max_Marks) : null,
+             sm.Student_Name || '', sm.child_id, Take_Id]
+          );
+        } else {
+          await pool.query(
+            `INSERT INTO exam_taken_child
+               (Take_Id, Student_Id, Student_Name, Marks_Given, Marks_from, Status, IsActive, IsDelete)
+             VALUES (?, ?, ?, ?, ?, ?, 1, 0)`,
+            [Take_Id, sm.Student_Id, sm.Student_Name || '', marks,
+             body.Max_Marks != null ? String(body.Max_Marks) : null, sm.status ?? null]
+          );
+        }
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

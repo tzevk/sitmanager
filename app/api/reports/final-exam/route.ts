@@ -145,12 +145,18 @@ export async function GET(req: NextRequest) {
     if (options === 'batches') {
       const courseId = url.searchParams.get('courseId');
       if (!courseId) return NextResponse.json({ batches: [] });
+      // This is a read-only historical report, so list every non-deleted batch
+      // for the course — including completed/older ones. We deliberately do NOT
+      // filter on IsActive (older batches are commonly marked inactive) or on
+      // batch_mst.Cancel: that column is a small-integer status code (values
+      // 0-14), NOT a boolean "cancelled" flag — real cancellations live in
+      // awt_batchcancellation — so treating Cancel<>0 as cancelled wrongly hid
+      // ~150 batches that had already completed their final exams.
       const [batches] = await pool.query(
         `SELECT Batch_Id AS id, Batch_code AS name, Category AS category
          FROM batch_mst
-         WHERE Course_Id = ? AND IsActive = 1
+         WHERE Course_Id = ?
            AND (IsDelete = 0 OR IsDelete IS NULL)
-           AND (Cancel = 0 OR Cancel IS NULL)
          ORDER BY Batch_Id DESC`,
         [parseInt(courseId)]
       );
