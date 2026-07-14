@@ -371,7 +371,6 @@ export default function AddFinalExamTakenPage() {
                         <th className="py-2 px-3 text-left">Student Name</th>
                         <th className="py-2 px-3 text-center w-28">Marks Obtained</th>
                         <th className="py-2 px-3 text-center w-24">Max Marks</th>
-                        <th className="py-2 px-3 text-center w-20">%</th>
                         <th className="py-2 px-3 text-center w-28">Status</th>
                       </tr>
                     </thead>
@@ -380,9 +379,6 @@ export default function AddFinalExamTakenPage() {
                         const edit = markEdits[s.Student_Id];
                         const maxMarks = form.Max_Marks ? parseInt(form.Max_Marks) : null;
                         const marksVal = edit?.marks ?? '';
-                        const pct = marksVal !== '' && maxMarks
-                          ? Math.round((parseFloat(marksVal) / maxMarks) * 100)
-                          : null;
                         return (
                           <tr key={s.Student_Id} className="hover:bg-blue-50/20 transition-colors">
                             <td className="py-1.5 px-3 text-gray-400 font-mono">{s.row_num}</td>
@@ -400,17 +396,6 @@ export default function AddFinalExamTakenPage() {
                               />
                             </td>
                             <td className="py-1.5 px-3 text-center text-gray-500">{maxMarks ?? '—'}</td>
-                            <td className="py-1.5 px-3 text-center">
-                              {pct != null ? (
-                                <span className={`text-xs font-semibold ${
-                                  pct >= 75 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'
-                                }`}>
-                                  {pct}%
-                                </span>
-                              ) : (
-                                <span className="text-gray-300">—</span>
-                              )}
-                            </td>
                             <td className="py-1.5 px-3 text-center">
                               <select
                                 value={edit?.status ?? 'Present'}

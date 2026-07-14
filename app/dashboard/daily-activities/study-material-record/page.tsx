@@ -143,7 +143,7 @@ export default function StudyMaterialRecordPage() {
       <td>${i + 1}</td>
       <td class="left">${escape(r.studentName)}</td>
       <td>${escape(formatDate(r.admissionDate))}</td>
-      <td>${r.feesCompleted ? 'Yes' : 'No'}</td>
+      <td></td>
       <td></td><td></td><td></td><td></td><td></td>
     </tr>`).join('');
 
@@ -292,11 +292,7 @@ export default function StudyMaterialRecordPage() {
                   <td className="py-2 px-3 text-xs text-slate-400 border-b border-slate-100 font-mono">{index + 1}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100 font-semibold text-slate-700">{row.studentName || '-'}</td>
                   <td className="py-2 px-3 text-xs border-b border-slate-100 text-slate-600">{formatDate(row.admissionDate)}</td>
-                  <td className="py-2 px-3 text-xs border-b border-slate-100">
-                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${row.feesCompleted ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-100 text-amber-800'}`}>
-                      {row.feesCompleted ? 'Yes' : 'No'}
-                    </span>
-                  </td>
+                  <td className="py-2 px-3 text-xs border-b border-slate-100"></td>
                 </tr>
               ))}
             </tbody>
