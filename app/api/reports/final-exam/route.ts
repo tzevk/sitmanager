@@ -583,5 +583,7 @@ export async function GET(req: NextRequest) {
 }
 
 function roundH(n: number): number {
-  return Math.round(n * 100) / 100;
+  // Number.EPSILON nudge avoids binary floating-point edge cases where a value
+  // like 1.005 is actually stored as 1.00499999999999989 and rounds down.
+  return Math.round((n + Number.EPSILON) * 100) / 100;
 }

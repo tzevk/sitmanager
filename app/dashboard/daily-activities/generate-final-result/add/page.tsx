@@ -12,6 +12,10 @@ interface Course { Course_Id: number; Course_Name: string; }
 interface Batch { Batch_Id: number; Batch_code: string; Category: string | null; Timings: string | null; }
 interface Employee { Emp_Id: number; Employee_Name: string; }
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type ReportCardRow = Record<string, any>;
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 interface FormData {
   Course_Id: string;
   Batch_Id: string;
@@ -53,6 +57,9 @@ export default function AddGenerateFinalResultPage() {
   const [success, setSuccess] = useState('');
   const [resultId, setResultId] = useState<string>(editId || '');
   const [printing, setPrinting] = useState(false);
+  const [reportCardRows, setReportCardRows] = useState<ReportCardRow[]>([]);
+  const [reportCardLoading, setReportCardLoading] = useState(false);
+  const [reportCardError, setReportCardError] = useState('');
 
   /* ── Load courses & employees on mount ── */
   useEffect(() => {
@@ -106,6 +113,25 @@ export default function AddGenerateFinalResultPage() {
       } catch { /* ignore */ }
     })();
   }, [form.Course_Id]);
+
+  /* ── Load report card preview whenever a result exists ── */
+  useEffect(() => {
+    if (!resultId) { setReportCardRows([]); setReportCardError(''); return; }
+    setReportCardLoading(true);
+    setReportCardError('');
+    (async () => {
+      try {
+        const res = await fetch(`/api/daily-activities/generate-final-result/report-card?genId=${resultId}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load report card data');
+        setReportCardRows(data.students || []);
+      } catch (err: unknown) {
+        setReportCardRows([]);
+        setReportCardError(err instanceof Error ? err.message : 'Failed to load report card data');
+      }
+      setReportCardLoading(false);
+    })();
+  }, [resultId]);
 
   const set = (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [field]: e.target.value }));
@@ -431,24 +457,6 @@ export default function AddGenerateFinalResultPage() {
                 Generate
               </button>
 
-              {/* Without Absent Rule */}
-              <button type="button" onClick={() => handleAction('Without Absent Rule')}
-                className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                </svg>
-                Without Absent Rule
-              </button>
-
-              {/* Without Absent Rule with Full Attendance */}
-              <button type="button" onClick={() => handleAction('Without Absent Rule with Full Attendance')}
-                className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Without Absent Rule with Full Attendance
-              </button>
-
               {/* Print Report Card */}
               <button type="button" onClick={handlePrintReportCard} disabled={printing || !resultId}
                 title={!resultId ? 'Generate the final result first' : undefined}
@@ -494,6 +502,71 @@ export default function AddGenerateFinalResultPage() {
               </button>
             </div>
           </div>
+
+          {/* ── Report Card Preview ── */}
+          {resultId && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+              <h3 className="text-sm font-bold text-[#2E3093] uppercase tracking-wider mb-4">Report Card Preview</h3>
+              {reportCardLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-5 h-5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                  <span className="ml-3 text-sm text-gray-500">Loading report card data...</span>
+                </div>
+              ) : reportCardError ? (
+                <div className="text-sm text-gray-500 py-4">{reportCardError}</div>
+              ) : reportCardRows.length === 0 ? (
+                <div className="text-sm text-gray-500 py-4">No report card data has been generated for this result yet.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-600">
+                        {[
+                          'Student Code', 'Student Name',
+                          'Ass1 Given', 'Ass1 Max', 'Ass1 Status', 'Ass %',
+                          'Test1 Given', 'Test1 Max', 'Test1 Status', 'Test %',
+                          'Final %', 'Full Attend', 'Total Lectures', 'Atten. Lectures', 'Absents',
+                          'Full Attendance', 'Total Assignments', 'Given Assignments',
+                          'Total Tests', 'Given Tests', 'Discipline', 'Final Result %', 'Grade',
+                        ].map(h => (
+                          <th key={h} className="border border-gray-200 px-2.5 py-2 text-left font-semibold whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportCardRows.map((s, i) => (
+                        <tr key={s.id ?? i} className="hover:bg-gray-50">
+                          <td className="border border-gray-200 px-2.5 py-1.5 whitespace-nowrap">{s.Student_Code || ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 whitespace-nowrap">{s.Student_Name || ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Ass1_Given ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Ass1_Max ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Ass1_Status ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Ass_Percent ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Test1_Given ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Test1_Max ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Test1_Status ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Test_Percent ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Final_Percent ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Full_Attend ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Total_Lectures ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.AttenLectures ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Absents ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Full_Attendance ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Total_Assignments ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Given_Assignments ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Total_Tests ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Given_Tests ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Discipline ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center font-semibold">{s.Final_Result_Percent ?? ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 text-center font-semibold">{s.Grade ?? ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </form>
       )}
     </div>
