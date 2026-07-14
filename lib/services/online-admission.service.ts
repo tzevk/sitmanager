@@ -1559,6 +1559,12 @@ export async function submitOnlineAdmission(
   if (String(input.paymentSubMethod || '').toLowerCase() === 'neft' && !normalizeText(input.neftTransactionNumber)) {
     throw Object.assign(new Error('NEFT transaction number is required'), { status: 400 });
   }
+  if (!normalizeText(input.familyContact)) {
+    throw Object.assign(new Error('Family contact number is required'), { status: 400 });
+  }
+  if (normalizeText(input.familyContact) === normalizeText(mobile)) {
+    throw Object.assign(new Error('Family contact number cannot be the same as the mobile number'), { status: 400 });
+  }
 
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);

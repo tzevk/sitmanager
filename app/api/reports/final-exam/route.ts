@@ -331,16 +331,25 @@ export async function GET(req: NextRequest) {
     }
 
     /* ── 8. Final exams for this batch ── */
+    // batch_final_exam has known data-quality duplicates: the same Exam_Id can
+    // appear multiple times with byte-identical Subject/Max_Marks (verified:
+    // 681 Exam_Ids affected, 0 with conflicting values). Left-joining without
+    // collapsing those multiplies every final-exam row, inflating both the
+    // marks-obtained sum and the max-marks denominator (e.g. one real 100-mark
+    // paper was being counted as 400). GROUP BY fem.Take_Id collapses the
+    // duplicates back to one row per exam sitting; MAX() is safe here since
+    // the duplicate rows always agree.
     const [feRows] = await pool.query(
       `SELECT fem.Take_Id,
               IFNULL(fem.Test_No, 0)                    AS Test_No,
-              COALESCE(bfe.max_marks, fem.Marks, 0)     AS Max_Marks,
+              MAX(COALESCE(bfe.max_marks, fem.Marks, 0)) AS Max_Marks,
               fem.Test_Dt,
-              bfe.Subject                               AS Exam_Subject
+              MAX(bfe.Subject)                          AS Exam_Subject
        FROM final_exam_master fem
        LEFT JOIN batch_final_exam bfe ON fem.Test_Id = bfe.Exam_Id
        WHERE fem.Batch_Id = ?
          AND (fem.IsDelete = 0 OR fem.IsDelete IS NULL)
+       GROUP BY fem.Take_Id, fem.Test_No, fem.Test_Dt
        ORDER BY fem.Test_No, fem.Take_Id`,
       [batchId]
     );
@@ -431,8 +440,30 @@ export async function GET(req: NextRequest) {
     /* ── 12. Build per-student result rows ── */
     const utTotalMax = unitTests.reduce((s: number, u: any) => s + Number(u.Max_Marks), 0);
     const asTotalMax = assignments.reduce((s: number, a: any) => s + Number(a.Max_Marks), 0);
-    const feTotalMax = finalExams.reduce((s: number, f: any) => s + Number(f.Max_Marks), 0);
     // vivaTotalMax already computed above
+
+    /* Re-exam handling: a re-exam is stored in final_exam_master as its OWN
+     * Take_Id/Max_Marks row (batch_final_exam.Subject like "Re-Exam" /
+     * "Re-Final Exam" / "Repeat - Final Exam"), not linked to which paper it
+     * replaces. Most students in a batch never sit the re-exam (their marks
+     * default to 0), so summing every row's Max_Marks into one denominator
+     * wrongly dilutes everyone's percentage — e.g. a batch with 1 regular
+     * paper + 2 re-exam rows (all 100 marks) turned a 63/100 score into
+     * 63/300 for students who never needed the re-exam.
+     * Fix: re-exam rows don't add to the denominator. Per student, a
+     * re-exam mark REPLACES their weakest regular paper's mark (scaled to
+     * that paper's max marks) only if it's a better percentage — it can
+     * only help, never hurt, and never inflates the total.
+     */
+    const RE_EXAM_PATTERN = /re[\s-]*exam|re[\s-]*final|repeat|rexam/i;
+    const regularExams = finalExams.filter((f: any) => !RE_EXAM_PATTERN.test(String(f.Exam_Subject || '')));
+    const reExamRows    = finalExams.filter((f: any) =>  RE_EXAM_PATTERN.test(String(f.Exam_Subject || '')));
+    // If every row is tagged "re-exam" (no regular paper on record), there's
+    // nothing to replace — treat them all as regular so the total isn't zero.
+    const effectiveRegularExams = regularExams.length > 0 ? regularExams : finalExams;
+    const effectiveReExamRows   = regularExams.length > 0 ? reExamRows : [];
+
+    const feTotalMax = effectiveRegularExams.reduce((s: number, f: any) => s + Number(f.Max_Marks), 0);
 
     const utWtg = Number(batch.UnitTestWtg) || 35;
     const asWtg = Number(batch.AssignWtg)   || 15;
@@ -459,9 +490,34 @@ export async function GET(req: NextRequest) {
       const asObtained = assignments.reduce((sum: number, a: any) => sum + (asMarks[a.Given_Id] || 0), 0);
       const asAvg = asTotalMax > 0 ? roundH((asObtained / asTotalMax) * asWtg) : 0;
 
-      /* final exam — denominator is the actual sum of final exam max marks */
+      /* final exam — denominator is the sum of REGULAR paper max marks only;
+       * a re-exam mark replaces the weakest regular paper's mark (scaled to
+       * that paper's max) when its percentage is better, instead of being
+       * summed in as an extra paper (see the comment above feTotalMax). */
       const feMarks: Record<number, number> = feMarksMap[sid] || {};
-      const feObtained = finalExams.reduce((sum: number, f: any) => sum + (feMarks[f.Take_Id] || 0), 0);
+      const regularVals = effectiveRegularExams.map((f: any) => ({
+        mark: feMarks[f.Take_Id] || 0,
+        max: Number(f.Max_Marks) || 0,
+      }));
+      let bestReExamPct = -1;
+      for (const f of effectiveReExamRows) {
+        const maxM = Number(f.Max_Marks) || 0;
+        if (maxM <= 0) continue;
+        const pct = (feMarks[f.Take_Id] || 0) / maxM;
+        if (pct > bestReExamPct) bestReExamPct = pct;
+      }
+      if (bestReExamPct >= 0 && regularVals.length > 0) {
+        let weakestIdx = 0;
+        let weakestPct = regularVals[0].max > 0 ? regularVals[0].mark / regularVals[0].max : 0;
+        for (let i = 1; i < regularVals.length; i++) {
+          const pct = regularVals[i].max > 0 ? regularVals[i].mark / regularVals[i].max : 0;
+          if (pct < weakestPct) { weakestPct = pct; weakestIdx = i; }
+        }
+        if (bestReExamPct > weakestPct) {
+          regularVals[weakestIdx].mark = roundH(bestReExamPct * regularVals[weakestIdx].max);
+        }
+      }
+      const feObtained = regularVals.reduce((sum: number, v) => sum + v.mark, 0);
       const feAvg = feTotalMax > 0 ? roundH((feObtained / feTotalMax) * feWtg) : 0;
 
       /* attendance — from shared helper (dedup + 3-late = 1-absent rule) */

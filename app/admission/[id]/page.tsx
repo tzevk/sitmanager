@@ -1122,8 +1122,12 @@ export default function PublicAdmissionFormPage() {
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
-        if (!formData.firstName || !formData.lastName || !formData.dob || !formData.gender || !formData.email || !formData.mobile) {
+        if (!formData.firstName || !formData.lastName || !formData.dob || !formData.gender || !formData.email || !formData.mobile || !formData.familyContact) {
           alert('Please fill all required fields in Personal Info');
+          return false;
+        }
+        if (formData.familyContact === formData.mobile) {
+          alert('Family Contact Number cannot be the same as Mobile Number');
           return false;
         }
         if (!hasRequiredPhoto()) {
@@ -1232,8 +1236,13 @@ export default function PublicAdmissionFormPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.firstName || !formData.lastName || !formData.dob || !formData.gender || !formData.email || !formData.mobile) {
+    if (!formData.firstName || !formData.lastName || !formData.dob || !formData.gender || !formData.email || !formData.mobile || !formData.familyContact) {
       alert('Please complete Step 1: Fill all required fields in Personal Info');
+      setCurrentStep(1);
+      return;
+    }
+    if (formData.familyContact === formData.mobile) {
+      alert('Family Contact Number cannot be the same as Mobile Number');
       setCurrentStep(1);
       return;
     }
@@ -1916,8 +1925,8 @@ export default function PublicAdmissionFormPage() {
                             <input type="tel" value={formData.telephone} onChange={(e) => handleChange('telephone', e.target.value)} placeholder="Telephone number" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
                           </div>
                           <div>
-                            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Family Contact Number</label>
-                            <input type="tel" value={formData.familyContact} onChange={(e) => handleChange('familyContact', e.target.value)} placeholder="Emergency contact" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Family Contact Number <span className="text-red-500">*</span></label>
+                            <input type="tel" value={formData.familyContact} onChange={(e) => handleChange('familyContact', e.target.value)} placeholder="Emergency contact" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" required />
                           </div>
                         </div>
                       </div>
