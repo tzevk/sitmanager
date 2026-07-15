@@ -40,6 +40,7 @@ type BatchDetails = {
   CourseName: string | null;
   Course_description: string | null;
   Location: string | null;
+  WhatsApp_Group_Link: string | null;
   Batch_Category_id: number | null;
   IsActive: number;
 };
@@ -118,6 +119,7 @@ export default function EditAnnualBatchPage() {
   const [timings, setTimings] = useState('');
   const [trainingCoordinator, setTrainingCoordinator] = useState('');
   const [location, setLocation] = useState('');
+  const [whatsappGroupLink, setWhatsappGroupLink] = useState('');
 
   const [publish, setPublish] = useState<'0' | '1'>('1');
 
@@ -206,6 +208,7 @@ export default function EditAnnualBatchPage() {
         setTimings(data.Timings || '');
         setTrainingCoordinator(data.Training_Coordinator || '');
         setLocation(data.Location || '');
+        setWhatsappGroupLink(data.WhatsApp_Group_Link || '');
 
         setPublish(String(data.IsActive ?? 1) === '0' ? '0' : '1');
 
@@ -329,6 +332,7 @@ export default function EditAnnualBatchPage() {
           CourseName: courseName || null,
           Course_description: description || null,
           Location: location || null,
+          WhatsApp_Group_Link: whatsappGroupLink || null,
           IsActive: Number(publish),
         }),
       });
@@ -540,6 +544,17 @@ export default function EditAnnualBatchPage() {
                     className={inputCls}
                   />
                   <div className={hintCls}>{trainingCoordinator.length}/{TEXT_LIMITS.trainingCoordinator}</div>
+                </div>
+
+                <div className="lg:col-span-2">
+                  <label className={labelCls}>WhatsApp Group Link</label>
+                  <input
+                    type="url"
+                    value={whatsappGroupLink}
+                    onChange={(e) => setWhatsappGroupLink(e.target.value)}
+                    placeholder="https://chat.whatsapp.com/..."
+                    className={inputCls}
+                  />
                 </div>
 
                 <div>

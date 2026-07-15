@@ -5,6 +5,30 @@ Format: `[Date] Module — Description`
 
 ---
 
+## 2026-07-15
+
+### Annual Batch — WhatsApp Group Link
+- Added a **WhatsApp Group Link** field to the Annual Batch Add and Edit forms so each batch can store its invite link.
+- The field is saved to the `batch_mst` table (`WhatsApp_Group_Link` column, added automatically on first use).
+- Displayed and editable on both the Add and Edit pages under the Batch Details section.
+
+### Batch Communication — New Daily Activity
+- Added a **Batch Communication** page under Daily Activities (`/dashboard/daily-activities/batch-communication`).
+- Follows the same Course → Batch → student list pattern as Allot Roll Number.
+- Displays the batch's WhatsApp group link (clickable) at the top of the student list.
+- Includes a **Send Email to All** utility: compose a subject and message body, preview the recipient count, and send email to every student in the batch who has an email address on record.
+- Per-student send results (sent/failed) are shown after dispatch.
+
+### Annual Batch — All Inputs 16 px Font Fix
+- Extended the `font-size: 16px` fix from date inputs to **all** form inputs, selects, and textareas on the Add and Edit pages, preventing iOS Safari from auto-zooming on any field focus.
+
+### Annual Batch — SectionCard Remount Fix
+- `SectionCard` was previously defined as a `const` arrow function **inside** the page component, causing React to see a new component type on every render.
+- This unmounted and remounted the entire card subtree on each state change, which closed the native date picker mid-selection on mobile.
+- Fix: moved `SectionCard` and all CSS class constants to **module level** (outside the component function) so their identities are stable across renders.
+
+---
+
 ## 2026-07-13
 
 ### Annual Batch — Description & Date Fixes

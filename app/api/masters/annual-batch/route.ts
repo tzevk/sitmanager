@@ -3,6 +3,21 @@ import { getPool } from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { requirePermission } from '@/lib/api-auth';
 
+// Ensure optional columns exist — added lazily to avoid ALTER TABLE on every request
+let columnsChecked = false;
+async function ensureOptionalColumns(pool: ReturnType<typeof getPool>) {
+  if (columnsChecked) return;
+  columnsChecked = true;
+  try {
+    const [cols] = await pool.query<RowDataPacket[]>(
+      "SHOW COLUMNS FROM batch_mst LIKE 'WhatsApp_Group_Link'"
+    );
+    if (!(cols as RowDataPacket[]).length) {
+      await pool.query('ALTER TABLE batch_mst ADD COLUMN WhatsApp_Group_Link VARCHAR(500) NULL');
+    }
+  } catch { /* ignore if no ALTER privilege */ }
+}
+
 type BatchTextField = {
   column: string;
   label: string;
@@ -175,6 +190,7 @@ export async function POST(req: NextRequest) {
       CourseName,
       Course_description,
       Location,
+      WhatsApp_Group_Link,
       IsActive,
     } = body;
 
@@ -183,13 +199,14 @@ export async function POST(req: NextRequest) {
     }
 
     await ensureBatchTextColumns(pool);
+    await ensureOptionalColumns(pool);
     const text = textByColumn({ Batch_code, Category, Timings, Duration, Training_Coordinator, CourseName });
     const location = locationValue(Location);
 
     const [result] = await pool.query<ResultSetHeader>(
-      `INSERT INTO batch_mst 
-        (Course_Id, Batch_code, Category, Batch_Category_id, Timings, SDate, ActualDate, Admission_Date, EDate, Duration, Training_Coordinator, Location, INR_Basic, INR_ServiceTax, INR_Total, Dollar_Basic, Dollar_ServiceTax, Dollar_Total, CourseName, Course_description, IsActive, IsDelete, Date_Added)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
+      `INSERT INTO batch_mst
+        (Course_Id, Batch_code, Category, Batch_Category_id, Timings, SDate, ActualDate, Admission_Date, EDate, Duration, Training_Coordinator, Location, WhatsApp_Group_Link, INR_Basic, INR_ServiceTax, INR_Total, Dollar_Basic, Dollar_ServiceTax, Dollar_Total, CourseName, Course_description, IsActive, IsDelete, Date_Added)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
       [
         Course_Id,
         text.Batch_code,
@@ -203,6 +220,7 @@ export async function POST(req: NextRequest) {
         text.Duration,
         text.Training_Coordinator,
         location,
+        String(WhatsApp_Group_Link || '').trim() || null,
         INR_Basic || null,
         INR_ServiceTax || null,
         INR_Total || null,
@@ -251,6 +269,7 @@ export async function PUT(req: NextRequest) {
       CourseName,
       Course_description,
       Location,
+      WhatsApp_Group_Link,
       IsActive,
     } = body;
 
@@ -262,6 +281,7 @@ export async function PUT(req: NextRequest) {
     }
 
     await ensureBatchTextColumns(pool);
+    await ensureOptionalColumns(pool);
     const text = textByColumn({ Batch_code, Category, Timings, Duration, Training_Coordinator, CourseName });
     const location = locationValue(Location);
 
@@ -279,6 +299,7 @@ export async function PUT(req: NextRequest) {
         Duration = ?,
         Training_Coordinator = ?,
         Location = ?,
+        WhatsApp_Group_Link = ?,
         INR_Basic = ?,
         INR_ServiceTax = ?,
         INR_Total = ?,
@@ -302,6 +323,7 @@ export async function PUT(req: NextRequest) {
         text.Duration,
         text.Training_Coordinator,
         location,
+        String(WhatsApp_Group_Link || '').trim() || null,
         INR_Basic || null,
         INR_ServiceTax || null,
         INR_Total || null,

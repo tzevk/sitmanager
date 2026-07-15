@@ -51,7 +51,8 @@ export async function GET(
         b.CourseName,
         b.Course_description,
         b.Batch_Category_id,
-        b.IsActive
+        b.IsActive,
+        b.WhatsApp_Group_Link
        FROM batch_mst b
        LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
        WHERE b.Batch_Id = ?`,
