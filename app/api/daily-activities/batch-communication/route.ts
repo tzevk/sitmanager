@@ -21,6 +21,27 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+// Ensure WhatsApp_Group_Link column exists — created lazily on first request
+let waColReady = false;
+let waColExists = false;
+async function ensureWaColumn(pool: ReturnType<typeof getPool>) {
+  if (waColReady) return;
+  waColReady = true;
+  try {
+    const [cols] = await pool.query<any[]>(
+      "SHOW COLUMNS FROM batch_mst LIKE 'WhatsApp_Group_Link'"
+    );
+    if (cols.length > 0) {
+      waColExists = true;
+    } else {
+      await pool.query('ALTER TABLE batch_mst ADD COLUMN WhatsApp_Group_Link VARCHAR(500) NULL');
+      waColExists = true;
+    }
+  } catch {
+    waColExists = false;
+  }
+}
+
 /*
  * GET /api/daily-activities/batch-communication
  * Returns courses list, batches for a course, and students + batch metadata
@@ -32,6 +53,9 @@ export async function GET(req: NextRequest) {
     if (auth instanceof NextResponse) return auth;
 
     const pool = getPool();
+    await ensureWaColumn(pool);
+    const waCol = waColExists ? 'b.WhatsApp_Group_Link' : 'NULL';
+
     const { searchParams } = new URL(req.url);
     const courseId = searchParams.get('courseId')?.trim() || '';
     const batchId  = searchParams.get('batchId')?.trim()  || '';
@@ -56,7 +80,7 @@ export async function GET(req: NextRequest) {
            b.Batch_code,
            b.Category,
            b.Timings,
-           b.WhatsApp_Group_Link,
+           ${waCol} AS WhatsApp_Group_Link,
            COUNT(DISTINCT a.Student_Id) AS StudentCount
          FROM batch_mst b
          LEFT JOIN admission_master a
@@ -65,7 +89,7 @@ export async function GET(req: NextRequest) {
            AND (a.Cancel   = 0 OR a.Cancel   IS NULL)
          WHERE b.Course_Id = ?
            AND (b.IsDelete = 0 OR b.IsDelete IS NULL)
-         GROUP BY b.Batch_Id, b.Batch_code, b.Category, b.Timings, b.WhatsApp_Group_Link
+         GROUP BY b.Batch_Id, b.Batch_code, b.Category, b.Timings
          ORDER BY b.Batch_Id DESC`,
         [Number(courseId)]
       );
@@ -83,7 +107,7 @@ export async function GET(req: NextRequest) {
       // Batch metadata (including WhatsApp link)
       const [batchRows] = await pool.query<any[]>(
         `SELECT b.Batch_Id, b.Batch_code, b.Category, b.Timings,
-                b.WhatsApp_Group_Link, c.Course_Name
+                ${waCol} AS WhatsApp_Group_Link, c.Course_Name
          FROM batch_mst b
          LEFT JOIN course_mst c ON c.Course_Id = b.Course_Id
          WHERE b.Batch_Id = ? LIMIT 1`,

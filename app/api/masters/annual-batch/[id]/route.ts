@@ -2,17 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
-async function ensureBatchLocationColumn(pool: ReturnType<typeof getPool>) {
+async function ensureBatchColumns(pool: ReturnType<typeof getPool>) {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT COLUMN_NAME
      FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
        AND TABLE_NAME = 'batch_mst'
-       AND COLUMN_NAME = 'Location'`
+       AND COLUMN_NAME IN ('Location', 'WhatsApp_Group_Link')`
   );
-  if (!rows.length) {
-    await pool.query(`ALTER TABLE batch_mst ADD COLUMN Location VARCHAR(20) NULL`);
-  }
+  const existing = new Set((rows as RowDataPacket[]).map(r => String(r.COLUMN_NAME)));
+  try {
+    if (!existing.has('Location')) {
+      await pool.query(`ALTER TABLE batch_mst ADD COLUMN Location VARCHAR(20) NULL`);
+    }
+    if (!existing.has('WhatsApp_Group_Link')) {
+      await pool.query(`ALTER TABLE batch_mst ADD COLUMN WhatsApp_Group_Link VARCHAR(500) NULL`);
+    }
+  } catch { /* ignore if no ALTER privilege */ }
 }
 
 export async function GET(
@@ -21,7 +27,7 @@ export async function GET(
 ) {
   try {
     const pool = getPool();
-    await ensureBatchLocationColumn(pool);
+    await ensureBatchColumns(pool);
     const { id } = await params;
 
     const [rows] = await pool.query<RowDataPacket[]>(
