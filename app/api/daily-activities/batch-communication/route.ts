@@ -2,15 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
-import { withEmailSignature } from '@/lib/mailer';
-import nodemailer from 'nodemailer';
-
-const SMTP_HOST     = process.env.ADMISSION_SMTP_HOST || 'smtp.gmail.com';
-const SMTP_PORT     = parseInt(process.env.ADMISSION_SMTP_PORT || '587', 10);
-const SMTP_SECURE   = process.env.ADMISSION_SMTP_SECURE === '1';
-const SMTP_USER     = process.env.ADMISSION_SMTP_USER;
-const SMTP_PASS     = process.env.ADMISSION_SMTP_PASS;
-const SMTP_FROM     = process.env.ADMISSION_SMTP_FROM;
+import { withEmailSignature, sendAdmissionFormEmail } from '@/lib/mailer';
 
 function escapeHtml(value: string): string {
   return value
@@ -202,7 +194,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch students with email addresses
-    let conditions = [
+    const conditions = [
       'a.Batch_Id = ?',
       '(a.IsDelete = 0 OR a.IsDelete IS NULL)',
       '(a.Cancel   = 0 OR a.Cancel   IS NULL)',
@@ -244,18 +236,6 @@ export async function POST(req: NextRequest) {
       <p style="white-space:pre-line;">${bodyHtml}</p>
     `);
 
-    // Create transporter
-    if (!SMTP_USER || !SMTP_PASS || !SMTP_FROM) {
-      return NextResponse.json({ success: false, message: 'Email is not configured on this server' }, { status: 503 });
-    }
-
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-    });
-
     type Result = { email: string; studentName: string; success: boolean; error?: string };
     const results: Result[] = [];
 
@@ -269,9 +249,10 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        await transporter.sendMail({
-          from: SMTP_FROM,
-          to: email,
+        await sendAdmissionFormEmail({
+          toEmail: email,
+          studentName,
+          admissionFormUrl: '#',
           subject: subject.trim(),
           html: htmlContent,
           text: messageBody.trim(),
