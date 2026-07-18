@@ -172,7 +172,6 @@ const TABS = [
   { id: 'unit-test-details',     label: 'Unit Test Details' },
   { id: 'discipline-moc',        label: 'DISCIPLINE / MOC Details' },
   { id: 'feedback-details',      label: 'FeedBack Details' },
-  { id: 'standard-lecture-plan', label: 'Standard Lecture Plan' },
   { id: 'lecture-plan',          label: 'Lecture Plan' },
   { id: 'convocation-details',   label: 'Convocation Details' },
   { id: 'result-structure',      label: 'Result Structure' },
@@ -355,6 +354,11 @@ export default function EditBatchPage() {
   const [loadingLectures, setLoadingLectures] = useState(false);
   const [showAddLectureModal, setShowAddLectureModal] = useState(false);
   const [savingLecture, setSavingLecture] = useState(false);
+  const [showImportPanel, setShowImportPanel] = useState(false);
+  const [importCourses, setImportCourses] = useState<{ courseName: string; courseCode: string | null; courseId: number | null; assignmentCount: number }[]>([]);
+  const [importCourseName, setImportCourseName] = useState('');
+  const [loadingImportCourses, setLoadingImportCourses] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [newLecture, setNewLecture] = useState({
     lecture_no: '',
     subject: '',
@@ -2901,6 +2905,50 @@ export default function EditBatchPage() {
     setSavingLecture(false);
   };
 
+  const handleOpenImportPanel = async () => {
+    setShowImportPanel(true);
+    setLoadingImportCourses(true);
+    try {
+      const res = await fetch('/api/masters/standard-lecture-plan/assignments/courses');
+      const data = await res.json();
+      setImportCourses(data.rows || []);
+    } catch {
+      /* ignore */
+    }
+    setLoadingImportCourses(false);
+  };
+
+  const handleImportFromCourse = async () => {
+    if (!importCourseName || importing) return;
+    setImporting(true);
+    try {
+      const res = await fetch(`/api/masters/standard-lecture-plan/assignments?course=${encodeURIComponent(importCourseName)}`);
+      const data = await res.json();
+      const rows: Array<{ assignment_name: string | null; description: string | null; input_documents: string | null }> = data.rows || [];
+
+      for (const a of rows) {
+        await fetch(`/api/masters/batch/${batchId}/lectures`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subject: a.assignment_name,
+            subject_topic: a.description,
+            assignment: a.assignment_name,
+            documents: a.input_documents,
+            publish: 'No',
+          }),
+        });
+      }
+
+      setShowImportPanel(false);
+      setImportCourseName('');
+      fetchLectures();
+    } catch {
+      /* ignore */
+    }
+    setImporting(false);
+  };
+
   const LecturePlanTab = () => (
     <div className="space-y-2">
       {/* Add Lecture Modal */}
@@ -3091,6 +3139,53 @@ export default function EditBatchPage() {
           </svg>
           Export
         </button>
+        <div className="relative">
+          <button
+            onClick={() => (showImportPanel ? setShowImportPanel(false) : handleOpenImportPanel())}
+            className="flex items-center gap-1 px-2 py-1 border border-[#2E3093]/30 text-[#2E3093] text-xs font-medium rounded h-7 hover:bg-[#2E3093]/5"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-4.5L12 17.25m0 0l4.5-4.5M12 17.25V3" />
+            </svg>
+            Import
+          </button>
+          {showImportPanel && (
+            <div className="absolute left-0 top-full mt-1 z-20 w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-3">
+              <label className={labelCls}>Course Number &amp; Training Name</label>
+              {loadingImportCourses ? (
+                <div className="text-xs text-gray-400 py-2">Loading courses...</div>
+              ) : (
+                <select
+                  value={importCourseName}
+                  onChange={(e) => setImportCourseName(e.target.value)}
+                  className={`${inputCls} mb-2`}
+                >
+                  <option value="">Select course...</option>
+                  {importCourses.map((c) => (
+                    <option key={c.courseName} value={c.courseName}>
+                      {c.courseCode ? `${c.courseCode} - ` : ''}{c.courseName} ({c.assignmentCount})
+                    </option>
+                  ))}
+                </select>
+              )}
+              <div className="flex justify-end gap-2 mt-2">
+                <button
+                  onClick={() => setShowImportPanel(false)}
+                  className="px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleImportFromCourse}
+                  disabled={!importCourseName || importing}
+                  className="px-2.5 py-1 bg-[#2E3093] text-white text-xs font-bold rounded disabled:opacity-50"
+                >
+                  {importing ? 'Importing...' : 'Import'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
         <div className="flex-1" />
         <div className="relative">
           <input
@@ -3969,8 +4064,6 @@ export default function EditBatchPage() {
         return DisciplineMocTab();
       case 'feedback-details':
         return FeedbackDetailsTab();
-      case 'standard-lecture-plan':
-        return StandardLecturePlanTab();
       case 'lecture-plan':
         return LecturePlanTab();
       case 'convocation-details':

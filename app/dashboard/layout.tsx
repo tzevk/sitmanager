@@ -32,6 +32,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Masters > Employee': '/dashboard/masters/employee',
   'Masters > Library Book': '/dashboard/masters/library-book',
   'Masters > Trainer': '/dashboard/masters/faculty',
+  'Masters > Standard Lecture Plan': '/dashboard/masters/standard-lecture-plan',
   'Masters > Interview Master': '/dashboard/masters/interview-master',
   'Masters > Closed Batches': '/dashboard/masters/closed-batches',
   'Admin/Accounts > Employee Profession Tax': '/dashboard/account-master/employee-profession-tax',
@@ -123,6 +124,7 @@ const SUB_MENUS: Record<string, string[]> = {
     'Employee',
     'Library Book',
     'Trainer',
+    'Standard Lecture Plan',
     'Interview Master',
   ],
   'Admission Activity': [

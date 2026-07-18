@@ -109,6 +109,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       ...createPermissions('employee', 'Employee'),
       ...createPermissions('library_book', 'Library Book'),
       ...createPermissions('faculty', 'Faculty'),
+      ...createPermissions('standard_lecture_plan', 'Standard Lecture Plan'),
     ],
   },
 
@@ -554,6 +555,8 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/dashboard/masters/faculty': ['faculty.view'],
   '/dashboard/masters/faculty/add': ['faculty.create'],
   '/dashboard/masters/faculty/edit': ['faculty.update'],
+  '/dashboard/masters/standard-lecture-plan': ['standard_lecture_plan.view'],
+  '/dashboard/masters/standard-lecture-plan/edit': ['standard_lecture_plan.view'],
   '/dashboard/masters/interview-master': ['interview_master.view'],
 
   // Consultancy
@@ -604,6 +607,9 @@ export const API_PERMISSIONS: Record<string, Record<string, string[]>> = {
     GET: ['batch.view'],
     PUT: ['batch.update'],
     DELETE: ['batch.delete'],
+  },
+  '/api/masters/standard-lecture-plan': {
+    GET: ['standard_lecture_plan.view'],
   },
   '/api/admission-activity/corporate-inquiry': {
     GET: ['corporate_inquiry.view'],
