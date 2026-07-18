@@ -22,6 +22,7 @@
   "dependencies": {
     "@aws-sdk/client-ses": "^3.1025.0",
     "@react-pdf/renderer": "^4.5.1",
+    "@sparticuz/chromium": "^147.0.0",
     "@tiptap/extension-color": "^3.19.0",
     "@tiptap/extension-text-style": "^3.19.0",
     "@tiptap/react": "^3.19.0",
@@ -41,6 +42,7 @@
     "next": "^16.2.1",
     "nodemailer": "^8.0.4",
     "pdfkit": "^0.18.0",
+    "puppeteer-core": "^25.3.0",
     "razorpay": "^2.9.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",

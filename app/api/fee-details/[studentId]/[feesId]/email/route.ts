@@ -3,10 +3,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { sendFeeReceiptEmail } from '@/lib/mailer';
-import { buildFeeReceiptPdf } from '@/lib/fee-receipt-pdf';
+import { buildReceiptHtml } from '@/lib/receipt-html';
+import { renderHtmlToPdf } from '@/lib/receipt-pdf-render';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+// Headless-Chrome PDF rendering (see lib/receipt-pdf-render.ts) is slower
+// than the previous PDFKit approach, especially on a cold start.
+export const maxDuration = 120;
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId: string; feesId: string }> }) {
   const auth = await requirePermission(req, ['report_fees.update', 'finance.update']);
@@ -61,13 +64,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
       taxType = t.trim();
     }
 
-    const fmtDate = (d: any) => {
-      if (!d) return '—';
-      const s = String(d).slice(0, 10);
-      const [y, m, day] = s.split('-');
-      return `${day}/${m}/${y}`;
-    };
-
     const receiptFields = {
       studentName: student.Student_Name,
       studentId: sid,
@@ -91,10 +87,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
       movedToBatchCode: student.Moved_To_Batch_Code || null,
     };
 
+    // Render the exact same markup Print Receipt uses (lib/receipt-html.ts)
+    // through headless Chrome, so the attached PDF is pixel-identical to
+    // what comes out of the browser's Print Receipt button.
     const attachments = attachReceipt
       ? [{
           filename: `Fee_Receipt_${fee.Fees_Code || fid}.pdf`,
-          content: await buildFeeReceiptPdf({ ...receiptFields, receiptDate: fmtDate(fee.RDate) }),
+          content: await renderHtmlToPdf(await buildReceiptHtml(receiptFields)),
           contentType: 'application/pdf',
         }]
       : undefined;
