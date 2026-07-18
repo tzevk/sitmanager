@@ -142,7 +142,14 @@ export async function GET(req: NextRequest) {
          ${LATEST_ADMISSION_JOIN}
          JOIN student_master sm ON sm.Student_Id = am.Student_Id
          LEFT JOIN batch_mst bm ON bm.Batch_Id = am.Batch_Id
-         LEFT JOIN batch_mst bm2 ON bm2.Batch_code = sm.Batch_Code AND (bm2.IsDelete = 0 OR bm2.IsDelete IS NULL)
+         -- Deterministic single row (not a plain Batch_code equality join): batch_mst
+         -- has at least one duplicated Batch_code (two active rows for '12038'), which
+         -- was fanning this join into two result rows per student in that batch.
+         LEFT JOIN batch_mst bm2 ON bm2.Batch_Id = (
+           SELECT b2.Batch_Id FROM batch_mst b2
+           WHERE b2.Batch_code = sm.Batch_Code AND (b2.IsDelete = 0 OR b2.IsDelete IS NULL)
+           ORDER BY b2.Batch_Id DESC LIMIT 1
+         )
          LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
          ${FEES_STRUCTURE_JOIN}
          ${FEES_JOIN}
