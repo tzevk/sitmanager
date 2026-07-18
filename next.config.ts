@@ -26,11 +26,12 @@ const nextConfig: NextConfig = {
   // Turbopack config (required for Next.js 16+)
   turbopack: {},
 
-  // Keep mysql2 and pdfkit external — don't bundle native Node modules.
+  // Keep native/binary-dependent Node modules external — don't bundle them.
   // pdfkit resolves its AFM font data files relative to __dirname at runtime;
   // bundling it (Turbopack/webpack) rewrites __dirname and breaks that lookup,
-  // causing ENOENT on Helvetica.afm.
-  serverExternalPackages: ['mysql2', 'pdfkit'],
+  // causing ENOENT on Helvetica.afm. puppeteer-core/@sparticuz/chromium ship
+  // a Chromium binary that must be required from disk at runtime, not bundled.
+  serverExternalPackages: ['mysql2', 'pdfkit', 'puppeteer-core', '@sparticuz/chromium'],
 
   // pdfkit loads its standard-font .afm files from disk at runtime —
   // make sure they're included in the serverless function bundle.
