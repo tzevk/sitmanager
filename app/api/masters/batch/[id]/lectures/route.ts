@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
+/** documents/assignment/etc. are varchar(50) columns; truncate instead of erroring on longer input. */
+const truncate = (value: unknown, maxLength = 50): string | null => {
+  if (value === null || value === undefined || value === '') return null;
+  return String(value).slice(0, maxLength);
+};
+
 // GET - fetch all lecture plans for a batch
 export async function GET(
   request: NextRequest,
@@ -70,28 +76,29 @@ export async function POST(
     const pool = getPool();
 
     const [result] = await pool.query(`
-      INSERT INTO batch_lecture_master 
-      (batch_id, lecture_no, subject, subject_topic, date, lectureday, starttime, endtime, 
+      INSERT INTO batch_lecture_master
+      (batch_id, lecture_no, subject, subject_topic, date, lectureday, starttime, endtime,
        assignment, assignment_date, faculty_name, class_room, documents, unit_test, publish,
-       lecturecontent, deleted, created_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
+       lecturecontent, department, deleted, created_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
     `, [
       batchId,
       body.lecture_no || null,
       body.subject || null,
       body.subject_topic || null,
-      body.date || null,
-      body.lectureday || null,
-      body.starttime || null,
-      body.endtime || null,
-      body.assignment || null,
-      body.assignment_date || null,
-      body.faculty_id || null,  // stored in faculty_name column (which holds faculty ID)
-      body.class_room || null,
-      body.documents || null,
-      body.unit_test || null,
+      truncate(body.date, 150),
+      truncate(body.lectureday),
+      truncate(body.starttime),
+      truncate(body.endtime),
+      truncate(body.assignment),
+      truncate(body.assignment_date),
+      truncate(body.faculty_id),  // stored in faculty_name column (holds either a Faculty_Id or a raw trainer name)
+      truncate(body.class_room),
+      truncate(body.documents),
+      truncate(body.unit_test),
       body.publish || 'No',
       body.lecturecontent || body.subject || null,
+      body.department || null,
     ]);
 
     return NextResponse.json({ success: true, insertId: (result as { insertId: number }).insertId });
@@ -134,16 +141,16 @@ export async function PUT(request: NextRequest) {
       data.lecture_no || null,
       data.subject || null,
       data.subject_topic || null,
-      data.date || null,
-      data.lectureday || null,
-      data.starttime || null,
-      data.endtime || null,
-      data.assignment || null,
-      data.assignment_date || null,
-      data.faculty_id || null,  // stored in faculty_name column (which holds faculty ID)
-      data.class_room || null,
-      data.documents || null,
-      data.unit_test || null,
+      truncate(data.date, 150),
+      truncate(data.lectureday),
+      truncate(data.starttime),
+      truncate(data.endtime),
+      truncate(data.assignment),
+      truncate(data.assignment_date),
+      truncate(data.faculty_id),  // stored in faculty_name column (holds either a Faculty_Id or a raw trainer name)
+      truncate(data.class_room),
+      truncate(data.documents),
+      truncate(data.unit_test),
       data.publish || 'No',
       data.lecturecontent || data.subject || null,
       id,

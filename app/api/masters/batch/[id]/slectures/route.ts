@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
+/** documents/assignment/etc. are varchar(50) columns; truncate instead of erroring on longer input. */
+const truncate = (value: unknown, maxLength = 50): string | null => {
+  if (value === null || value === undefined || value === '') return null;
+  return String(value).slice(0, maxLength);
+};
+
 async function ensureFacultyIdColumn(pool: ReturnType<typeof getPool>) {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT COUNT(*) AS cnt
@@ -255,17 +261,17 @@ export async function POST(
       body.lecture_no || null,
       body.subject || null,
       body.subject_topic || null,
-      body.date || null,
-      body.lectureday || null,
-      body.starttime || null,
-      body.endtime || null,
-      body.assignment || null,
-      body.assignment_date || null,
+      truncate(body.date),
+      truncate(body.lectureday),
+      truncate(body.starttime),
+      truncate(body.endtime),
+      truncate(body.assignment),
+      truncate(body.assignment_date),
       facultyId,
-      facultyName,
-      body.class_room || null,
-      body.documents || null,
-      body.unit_test || null,
+      truncate(facultyName),
+      truncate(body.class_room),
+      truncate(body.documents),
+      truncate(body.unit_test),
       body.publish || 'No',
       body.lecturecontent || null,
     ]);
@@ -323,17 +329,17 @@ export async function PUT(request: NextRequest) {
       data.lecture_no || null,
       data.subject || null,
       data.subject_topic || null,
-      data.date || null,
-      data.lectureday || null,
-      data.starttime || null,
-      data.endtime || null,
-      data.assignment || null,
-      data.assignment_date || null,
+      truncate(data.date),
+      truncate(data.lectureday),
+      truncate(data.starttime),
+      truncate(data.endtime),
+      truncate(data.assignment),
+      truncate(data.assignment_date),
       facultyId,
-      facultyName,
-      data.class_room || null,
-      data.documents || null,
-      data.unit_test || null,
+      truncate(facultyName),
+      truncate(data.class_room),
+      truncate(data.documents),
+      truncate(data.unit_test),
       data.publish || 'No',
       data.lecturecontent || null,
       id,

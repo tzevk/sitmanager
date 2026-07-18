@@ -2909,7 +2909,7 @@ export default function EditBatchPage() {
     setShowImportPanel(true);
     setLoadingImportCourses(true);
     try {
-      const res = await fetch('/api/masters/standard-lecture-plan/assignments/courses');
+      const res = await fetch('/api/masters/standard-lecture-plan/lectures/courses');
       const data = await res.json();
       setImportCourses(data.rows || []);
     } catch {
@@ -2922,19 +2922,28 @@ export default function EditBatchPage() {
     if (!importCourseName || importing) return;
     setImporting(true);
     try {
-      const res = await fetch(`/api/masters/standard-lecture-plan/assignments?course=${encodeURIComponent(importCourseName)}`);
+      const res = await fetch(`/api/masters/standard-lecture-plan/lectures?course=${encodeURIComponent(importCourseName)}`);
       const data = await res.json();
-      const rows: Array<{ assignment_name: string | null; description: string | null; input_documents: string | null }> = data.rows || [];
+      const rows: Array<{
+        lecture_no: number | null;
+        module: string | null;
+        sub_topics: string | null;
+        faculty: string | null;
+        project_assignment: string | null;
+        department: string | null;
+      }> = data.rows || [];
 
-      for (const a of rows) {
+      for (const l of rows) {
         await fetch(`/api/masters/batch/${batchId}/lectures`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            subject: a.assignment_name,
-            subject_topic: a.description,
-            assignment: a.assignment_name,
-            documents: a.input_documents,
+            lecture_no: l.lecture_no,
+            subject: l.module,
+            subject_topic: l.sub_topics,
+            assignment: l.project_assignment,
+            faculty_id: l.faculty,
+            department: l.department,
             publish: 'No',
           }),
         });
