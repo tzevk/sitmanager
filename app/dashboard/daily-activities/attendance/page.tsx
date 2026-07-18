@@ -9,7 +9,6 @@ import { saveAs } from 'file-saver';
 /* ─── Types ───────────────────────────────────────────────────────── */
 interface Course  { Course_Id: number; Course_Name: string }
 interface Batch   { Batch_Id: number; Batch_code: string; Category: string; Timings: string }
-interface Faculty { Faculty_Id: number; Faculty_Name: string }
 interface Student {
   Admission_Id: number;
   Student_Id: number;
@@ -53,9 +52,6 @@ type FeedbackLink = {
   expiresAt?: string;
 };
 
-const HOUR_OPTIONS = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0'));
-const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0'));
-
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -96,13 +92,6 @@ function parseTimeParts(value: string) {
   };
 }
 
-function buildTimeValue(hour: string, minute: string, period: 'AM' | 'PM') {
-  if (!hour || !minute) return '';
-  let hourNumber = Number(hour) % 12;
-  if (period === 'PM') hourNumber += 12;
-  return `${String(hourNumber).padStart(2, '0')}:${minute}`;
-}
-
 function formatTime12Hour(value: string) {
   const parts = parseTimeParts(value);
   if (!parts.hour || !parts.minute) return value || '—';
@@ -129,56 +118,6 @@ async function loadImageAsDataUrl(url: string): Promise<string | null> {
   }
 }
 
-function TimePicker({
-  label,
-  value,
-  onChange,
-  className,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  className: string;
-}) {
-  const parts = parseTimeParts(value);
-
-  return (
-    <div className="flex flex-col gap-1 w-full sm:w-auto">
-      <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{label}</label>
-      <div className="grid grid-cols-3 gap-2 min-w-[230px]">
-        <select
-          value={parts.hour}
-          onChange={(e) => onChange(e.target.value ? buildTimeValue(e.target.value, parts.minute || '00', parts.period) : '')}
-          className={className}
-        >
-          <option value="">Hour</option>
-          {HOUR_OPTIONS.map((hour) => (
-            <option key={hour} value={hour}>{hour}</option>
-          ))}
-        </select>
-        <select
-          value={parts.minute}
-          onChange={(e) => onChange(parts.hour ? buildTimeValue(parts.hour, e.target.value, parts.period) : '')}
-          className={className}
-        >
-          <option value="">Min</option>
-          {MINUTE_OPTIONS.map((minute) => (
-            <option key={minute} value={minute}>{minute}</option>
-          ))}
-        </select>
-        <select
-          value={parts.period}
-          onChange={(e) => onChange(parts.hour ? buildTimeValue(parts.hour, parts.minute || '00', e.target.value as 'AM' | 'PM') : '')}
-          className={className}
-        >
-          <option value="AM">AM</option>
-          <option value="PM">PM</option>
-        </select>
-      </div>
-    </div>
-  );
-}
-
 /* ─── Main page ───────────────────────────────────────────────────── */
 export default function AttendancePage() {
   return (
@@ -192,14 +131,13 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   /* selectors */
   const [courses, setCourses]   = useState<Course[]>([]);
   const [batches, setBatches]   = useState<Batch[]>([]);
-  const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [courseId, setCourseId] = useState('');
   const [batchId, setBatchId]   = useState('');
   const [date, setDate]         = useState(todayStr());
-  const [trainerId, setTrainerId] = useState('');
-  const [trainerSearch, setTrainerSearch] = useState('');
-  const [trainerTimeFrom, setTrainerTimeFrom] = useState('');
-  const [trainerTimeTo, setTrainerTimeTo] = useState('');
+
+  /* Trainer + time are read-only here — sourced from Lecture Taken, per half */
+  const [lectureFH, setLectureFH] = useState<{ trainerName: string | null; timeFrom: string | null; timeTo: string | null }>({ trainerName: null, timeFrom: null, timeTo: null });
+  const [lectureSH, setLectureSH] = useState<{ trainerName: string | null; timeFrom: string | null; timeTo: string | null }>({ trainerName: null, timeFrom: null, timeTo: null });
 
   /* data */
   const [students, setStudents]     = useState<Student[]>([]);
@@ -224,10 +162,6 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     fetch('/api/daily-activities/attendance?options=courses')
       .then(r => r.json())
       .then(d => setCourses(d.courses ?? []));
-
-    fetch('/api/daily-activities/attendance?options=faculties')
-      .then(r => r.json())
-      .then(d => setFaculties(d.faculties ?? []));
   }, []);
 
   /* load batches when course changes */
@@ -253,10 +187,8 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     setError('');
     setFeedbackLinks([]);
     setCopiedFeedbackUrl('');
-    setTrainerId('');
-    setTrainerSearch('');
-    setTrainerTimeFrom('');
-    setTrainerTimeTo('');
+    setLectureFH({ trainerName: null, timeFrom: null, timeTo: null });
+    setLectureSH({ trainerName: null, timeFrom: null, timeTo: null });
   }, [batchId, date]);
 
   useEffect(() => {
@@ -273,18 +205,6 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
             url: String(link.url),
             expiresAt: link.expiresAt ? String(link.expiresAt) : (data.expiresAt ? String(data.expiresAt) : ''),
           })));
-          if (data.trainerId != null) {
-            const nextTrainerId = String(data.trainerId);
-            setTrainerId((prev) => prev || nextTrainerId);
-          }
-          if (data.trainerTimeFrom) {
-            const nextTimeFrom = String(data.trainerTimeFrom).slice(0, 5);
-            setTrainerTimeFrom((prev) => prev || nextTimeFrom);
-          }
-          if (data.trainerTimeTo) {
-            const nextTimeTo = String(data.trainerTimeTo).slice(0, 5);
-            setTrainerTimeTo((prev) => prev || nextTimeTo);
-          }
         } else {
           setFeedbackLinks([]);
         }
@@ -336,6 +256,16 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
       for (const st of d2.students ?? []) sh[st.Student_Id] = st.attendanceStatus ?? '';
       setStatusMapFH(fh);
       setStatusMapSH(sh);
+      setLectureFH({
+        trainerName: d1.trainerName ?? null,
+        timeFrom: d1.trainerTimeFrom ? String(d1.trainerTimeFrom).slice(0, 5) : null,
+        timeTo: d1.trainerTimeTo ? String(d1.trainerTimeTo).slice(0, 5) : null,
+      });
+      setLectureSH({
+        trainerName: d2.trainerName ?? null,
+        timeFrom: d2.trainerTimeFrom ? String(d2.trainerTimeFrom).slice(0, 5) : null,
+        timeTo: d2.trainerTimeTo ? String(d2.trainerTimeTo).slice(0, 5) : null,
+      });
       setLoaded(true);
 
       /* Load feedback for this batch+date (non-critical) */
@@ -403,9 +333,6 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
             date,
             session: 'first_half',
             records: fhRecords,
-            trainerId: trainerId || null,
-            trainerTimeFrom: trainerTimeFrom || null,
-            trainerTimeTo: trainerTimeTo || null,
           }),
         })
       );
@@ -418,9 +345,6 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
             date,
             session: 'second_half',
             records: shRecords,
-            trainerId: trainerId || null,
-            trainerTimeFrom: trainerTimeFrom || null,
-            trainerTimeTo: trainerTimeTo || null,
           }),
         })
       );
@@ -432,10 +356,11 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
         }
       }
       setSaved(true);
-      // Generate a geo-locked feedback link for this batch+date
+      // Generate a geo-locked feedback link for this batch+date — trainer info
+      // (if any) comes from whichever half Lecture Taken has recorded.
       try {
         const selectedBatchObj = batches.find(b => String(b.Batch_Id) === batchId);
-        const selectedTrainer = faculties.find((f) => String(f.Faculty_Id) === trainerId);
+        const lectureForFeedback = lectureFH.trainerName ? lectureFH : lectureSH;
         const fbRes = await fetch('/api/daily-activities/attendance/feedback-token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -443,10 +368,9 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
             batchId: Number(batchId),
             date,
             batchName: selectedBatchObj?.Batch_code,
-            trainerId: trainerId || null,
-            trainerName: selectedTrainer?.Faculty_Name || null,
-            trainerTimeFrom: trainerTimeFrom || null,
-            trainerTimeTo: trainerTimeTo || null,
+            trainerName: lectureForFeedback.trainerName || null,
+            trainerTimeFrom: lectureForFeedback.timeFrom || null,
+            trainerTimeTo: lectureForFeedback.timeTo || null,
           }),
         });
         if (fbRes.ok) {
@@ -512,13 +436,14 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
 
     const selectedCourse = courses.find((c) => String(c.Course_Id) === courseId)?.Course_Name || '—';
     const selectedBatchObj = batches.find((b) => String(b.Batch_Id) === batchId);
-    const selectedTrainer = faculties.find((f) => String(f.Faculty_Id) === trainerId)?.Faculty_Name || '—';
 
     sheet.getCell('B4').value = `Course: ${selectedCourse}`;
     sheet.getCell('D4').value = `Batch: ${selectedBatchObj?.Batch_code || '—'}`;
     sheet.getCell('F4').value = `Date: ${new Date(`${date}T00:00:00`).toLocaleDateString('en-IN')}`;
-    sheet.getCell('B5').value = `Trainer: ${selectedTrainer}`;
-    sheet.getCell('D5').value = `Time: ${formatTime12Hour(trainerTimeFrom)} - ${formatTime12Hour(trainerTimeTo)}`;
+    sheet.getCell('B5').value = `Trainer (FH): ${lectureFH.trainerName || '—'}`;
+    sheet.getCell('D5').value = `Time (FH): ${formatTime12Hour(lectureFH.timeFrom || '') || '—'} - ${formatTime12Hour(lectureFH.timeTo || '') || '—'}`;
+    sheet.getCell('B6').value = `Trainer (SH): ${lectureSH.trainerName || '—'}`;
+    sheet.getCell('D6').value = `Time (SH): ${formatTime12Hour(lectureSH.timeFrom || '') || '—'} - ${formatTime12Hour(lectureSH.timeTo || '') || '—'}`;
 
     const logoData = await loadImageAsDataUrl('/sit.png');
     if (logoData) {
@@ -626,7 +551,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
       new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
       `Attendance_${selectedBatchObj?.Batch_code || 'batch'}_${filenameDate}.xlsx`
     );
-  }, [students, statusMapFH, statusMapSH, feedbackMap, courses, courseId, batches, batchId, faculties, trainerId, date, trainerTimeFrom, trainerTimeTo]);
+  }, [students, statusMapFH, statusMapSH, feedbackMap, courses, courseId, batches, batchId, date, lectureFH, lectureSH]);
 
   /* derived */
   const filtered = students.filter(s =>
@@ -646,9 +571,6 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   const fhPct      = pct(fhPresent, students.length);
   const shPct      = pct(shPresent, students.length);
   const selectedBatch = batches.find(b => String(b.Batch_Id) === batchId);
-  const filteredFaculties = faculties.filter((faculty) =>
-    !trainerSearch || faculty.Faculty_Name.toLowerCase().includes(trainerSearch.toLowerCase())
-  );
 
   const ctrlCls = 'border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-800 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]';
 
@@ -736,27 +658,6 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
             />
           </div>
 
-          <div className="flex flex-col gap-1 w-full sm:w-auto sm:min-w-[220px]">
-            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Trainer</label>
-            <input
-              type="text"
-              value={trainerSearch}
-              onChange={(e) => setTrainerSearch(e.target.value)}
-              placeholder="Search trainer..."
-              className={`${ctrlCls} sm:hidden`}
-            />
-            <select value={trainerId} onChange={e => setTrainerId(e.target.value)} className={ctrlCls}>
-              <option value="">— Select Trainer —</option>
-              {filteredFaculties.map((faculty) => (
-                <option key={faculty.Faculty_Id} value={faculty.Faculty_Id}>{faculty.Faculty_Name}</option>
-              ))}
-            </select>
-          </div>
-
-          <TimePicker label="Trainer From" value={trainerTimeFrom} onChange={setTrainerTimeFrom} className={ctrlCls} />
-
-          <TimePicker label="Trainer To" value={trainerTimeTo} onChange={setTrainerTimeTo} className={ctrlCls} />
-
           {/* Load button */}
           <button
             onClick={loadAttendance}
@@ -782,6 +683,12 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
               {/* First Half */}
               <div className="bg-blue-50/60 rounded-lg px-3 py-2 border border-blue-100">
                 <p className="text-[10px] font-bold text-[#2E3093] uppercase tracking-wide mb-1.5">First Half</p>
+                <p className="text-[11px] text-gray-500 mb-1.5">
+                  Trainer: <span className="font-semibold text-gray-700">{lectureFH.trainerName || 'Not recorded in Lecture Taken'}</span>
+                  {(lectureFH.timeFrom || lectureFH.timeTo) && (
+                    <> · {formatTime12Hour(lectureFH.timeFrom || '')} - {formatTime12Hour(lectureFH.timeTo || '')}</>
+                  )}
+                </p>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-50 text-green-700 border border-green-100">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />P: {fhPresent}
@@ -807,6 +714,12 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
               {/* Second Half */}
               <div className="bg-purple-50/60 rounded-lg px-3 py-2 border border-purple-100">
                 <p className="text-[10px] font-bold text-purple-700 uppercase tracking-wide mb-1.5">Second Half</p>
+                <p className="text-[11px] text-gray-500 mb-1.5">
+                  Trainer: <span className="font-semibold text-gray-700">{lectureSH.trainerName || 'Not recorded in Lecture Taken'}</span>
+                  {(lectureSH.timeFrom || lectureSH.timeTo) && (
+                    <> · {formatTime12Hour(lectureSH.timeFrom || '')} - {formatTime12Hour(lectureSH.timeTo || '')}</>
+                  )}
+                </p>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-50 text-green-700 border border-green-100">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />P: {shPresent}
@@ -895,12 +808,6 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                   </svg>
                     Student Feedback Links <span className="font-normal normal-case text-blue-500">(valid 24h · present/late students only)</span>
                 </p>
-                  {(trainerId || trainerTimeFrom || trainerTimeTo) && (
-                    <div className="mb-2 rounded-md border border-blue-200 bg-white px-2.5 py-2 text-[11px] text-blue-800">
-                      {trainerId && <p>Trainer: <span className="font-semibold">{faculties.find((f) => String(f.Faculty_Id) === trainerId)?.Faculty_Name || '—'}</span></p>}
-                      {(trainerTimeFrom || trainerTimeTo) && <p>Time Allotted: <span className="font-semibold">{formatTime12Hour(trainerTimeFrom)} - {formatTime12Hour(trainerTimeTo)}</span></p>}
-                    </div>
-                  )}
                 <div className="space-y-3">
                   {feedbackLinks.map((link) => (
                     <div key={link.session} className="rounded-md border border-blue-200 bg-white p-3">

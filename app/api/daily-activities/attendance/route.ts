@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { ensureAttendanceTable } from '@/lib/student-attendance';
 
 type DisciplineGroup = { name: string; subtopics: string[] };
 
@@ -32,87 +33,6 @@ function buildTopicSummary(topics: string[], subtopics: string[]) {
     topicText ? `Topic: ${topicText}` : '',
     subtopicText ? `Subtopic: ${subtopicText}` : '',
   ].filter(Boolean).join(' | ') || null;
-}
-
-// Auto-create attendance table on first use
-let tableReady = false;
-async function ensureAttendanceTable(pool: any) {
-  if (tableReady) return;
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS student_attendance (
-        Attendance_Id INT AUTO_INCREMENT PRIMARY KEY,
-        Batch_Id      INT      NOT NULL,
-        Student_Id    INT      NOT NULL,
-        Admission_Id  INT      NOT NULL,
-        Attendance_Date DATE   NOT NULL,
-        Session       ENUM('first_half','second_half') NOT NULL DEFAULT 'first_half',
-        In_Time       TIME     NULL,
-        Out_Time      TIME     NULL,
-        Status        CHAR(1)  NOT NULL DEFAULT 'P' COMMENT 'P=Present, A=Absent, L=Late',
-        Remarks       VARCHAR(255) NULL,
-        Created_At    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        Updated_At    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        IsDelete      TINYINT(1) DEFAULT 0,
-        UNIQUE KEY uq_attendance (Batch_Id, Student_Id, Attendance_Date, Session)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    `);
-
-    const [sessionCol] = await pool.query(
-      `SELECT COUNT(*) AS cnt
-       FROM information_schema.COLUMNS
-       WHERE TABLE_SCHEMA = DATABASE()
-         AND TABLE_NAME = 'student_attendance'
-         AND COLUMN_NAME = 'Session'`
-    );
-    if (!sessionCol?.[0]?.cnt) {
-      await pool.query(
-        `ALTER TABLE student_attendance
-         ADD COLUMN Session ENUM('first_half','second_half') NOT NULL DEFAULT 'first_half' AFTER Attendance_Date`
-      );
-    }
-
-    // ensure In_Time and Out_Time columns exist
-    const [inTimeCol] = await pool.query(
-      `SELECT COUNT(*) AS cnt
-       FROM information_schema.COLUMNS
-       WHERE TABLE_SCHEMA = DATABASE()
-         AND TABLE_NAME = 'student_attendance'
-         AND COLUMN_NAME = 'In_Time'`
-    );
-    if (!inTimeCol?.[0]?.cnt) {
-      await pool.query(`ALTER TABLE student_attendance ADD COLUMN In_Time TIME NULL AFTER Session`);
-    }
-    const [outTimeCol] = await pool.query(
-      `SELECT COUNT(*) AS cnt
-       FROM information_schema.COLUMNS
-       WHERE TABLE_SCHEMA = DATABASE()
-         AND TABLE_NAME = 'student_attendance'
-         AND COLUMN_NAME = 'Out_Time'`
-    );
-    if (!outTimeCol?.[0]?.cnt) {
-      await pool.query(`ALTER TABLE student_attendance ADD COLUMN Out_Time TIME NULL AFTER In_Time`);
-    }
-
-    const [uniqIdx] = await pool.query(
-      `SELECT COUNT(*) AS cnt
-       FROM information_schema.STATISTICS
-       WHERE TABLE_SCHEMA = DATABASE()
-         AND TABLE_NAME = 'student_attendance'
-         AND INDEX_NAME = 'uq_attendance'`
-    );
-    if (uniqIdx?.[0]?.cnt) {
-      await pool.query(`ALTER TABLE student_attendance DROP INDEX uq_attendance`);
-    }
-    await pool.query(
-      `ALTER TABLE student_attendance
-       ADD UNIQUE KEY uq_attendance (Batch_Id, Student_Id, Attendance_Date, Session)`
-    );
-
-    tableReady = true;
-  } catch {
-    tableReady = true;
-  }
 }
 
 /* ─── GET ─────────────────────────────────────────────────────────── */
@@ -288,7 +208,30 @@ export async function GET(req: NextRequest) {
       const present = students.filter((s) => s.attendanceStatus === 'P').length;
       const absent  = students.filter((s) => s.attendanceStatus === 'A').length;
 
-      return NextResponse.json({ students, summary: { present, absent, total: students.length }, session });
+      // Trainer + time are no longer entered on this page — read-only, sourced
+      // from whatever the Lecture Taken module recorded for this batch/date/session.
+      const lectureStart = session === 'second_half' ? '02:00PM' : '09:00AM';
+      const [lectureRows] = await pool.query<any[]>(
+        `SELECT f.Faculty_Id, f.Faculty_Name, lt.Faculty_Start, lt.Faculty_End
+         FROM lecture_taken_master lt
+         LEFT JOIN faculty_master f ON f.Faculty_Id = lt.Faculty_Id
+         WHERE lt.Batch_Id = ? AND lt.Take_Dt = ? AND lt.Lecture_Start = ?
+           AND (lt.IsDelete = 0 OR lt.IsDelete IS NULL)
+         ORDER BY lt.Take_Id DESC
+         LIMIT 1`,
+        [Number(batchId), date, lectureStart]
+      );
+      const lectureInfo = lectureRows[0] || null;
+
+      return NextResponse.json({
+        students,
+        summary: { present, absent, total: students.length },
+        session,
+        trainerId: lectureInfo?.Faculty_Id ?? null,
+        trainerName: lectureInfo?.Faculty_Name ?? null,
+        trainerTimeFrom: lectureInfo?.Faculty_Start ?? null,
+        trainerTimeTo: lectureInfo?.Faculty_End ?? null,
+      });
     }
 
     return NextResponse.json({ error: 'Missing required params' }, { status: 400 });
@@ -308,22 +251,16 @@ export async function POST(req: NextRequest) {
     await ensureAttendanceTable(pool);
 
     const body = await req.json();
-    const { batchId, date, session: sessionRaw, records, trainerId, trainerTimeFrom, trainerTimeTo, topics, subtopics, activityType } = body as {
+    const { batchId, date, session: sessionRaw, records, topics, subtopics, activityType } = body as {
       batchId: number;
       date: string;
       session?: 'first_half' | 'second_half';
       records: { studentId: number; admissionId: number; status: 'P' | 'A' | 'L'; In_Time?: string; Out_Time?: string }[];
-      trainerId?: number | string | null;
-      trainerTimeFrom?: string | null;
-      trainerTimeTo?: string | null;
       topics?: string[];
       subtopics?: string[];
       activityType?: 'lecture' | 'assignment' | 'test';
     };
     const session = sessionRaw === 'second_half' ? 'second_half' : 'first_half';
-    const normalizedTrainerId = Number.isFinite(Number(trainerId)) && Number(trainerId) > 0 ? Number(trainerId) : null;
-    const normalizedTrainerTimeFrom = trainerTimeFrom || null;
-    const normalizedTrainerTimeTo = trainerTimeTo || null;
     const normalizedTopics = uniqNonEmpty(Array.isArray(topics) ? topics : []);
     const normalizedSubtopics = uniqNonEmpty(Array.isArray(subtopics) ? subtopics : []);
     const normalizedActivityType = activityType === 'assignment' || activityType === 'test' || activityType === 'lecture'
@@ -379,26 +316,26 @@ export async function POST(req: NextRequest) {
       );
       let takeId: number = existingLecture[0]?.Take_Id ?? null;
 
+      // Trainer/Faculty_Id and Faculty_Start/End are no longer set from here —
+      // Lecture Taken is now the sole owner of who took the lecture and when;
+      // attendance only records Lecture_Name/Topic/Assign_Given/Test_Given.
       if (!takeId) {
         const [ins] = await conn.query<any>(
           `INSERT INTO lecture_taken_master
-             (Course_Id, Batch_Id, Faculty_Id, Take_Dt, Lecture_Start, Faculty_Start, Faculty_End, Lecture_Name, Topic, Assign_Given, Test_Given, IsActive, IsDelete)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
-          [courseId, batchId, normalizedTrainerId, date, lectureStart, normalizedTrainerTimeFrom, normalizedTrainerTimeTo, lectureName, topicSummary, assignGiven, testGiven]
+             (Course_Id, Batch_Id, Take_Dt, Lecture_Start, Lecture_Name, Topic, Assign_Given, Test_Given, IsActive, IsDelete)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+          [courseId, batchId, date, lectureStart, lectureName, topicSummary, assignGiven, testGiven]
         );
         takeId = ins.insertId;
       } else {
         await conn.query(
           `UPDATE lecture_taken_master
-           SET Faculty_Id = ?,
-               Faculty_Start = ?,
-               Faculty_End = ?,
-               Lecture_Name = COALESCE(?, Lecture_Name),
+           SET Lecture_Name = COALESCE(?, Lecture_Name),
                Topic = COALESCE(?, Topic),
                Assign_Given = COALESCE(?, Assign_Given),
                Test_Given = COALESCE(?, Test_Given)
            WHERE Take_Id = ?`,
-          [normalizedTrainerId, normalizedTrainerTimeFrom, normalizedTrainerTimeTo, lectureName, topicSummary, assignGiven, testGiven, takeId]
+          [lectureName, topicSummary, assignGiven, testGiven, takeId]
         );
       }
 

@@ -17,6 +17,10 @@
     {
       "path": "/api/cron/suvidya-inquiry-sync",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/sync-biometric-attendance",
+      "schedule": "*/15 * * * *"
     }
   ],
   "functions": {

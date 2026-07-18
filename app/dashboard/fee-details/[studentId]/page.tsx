@@ -850,22 +850,13 @@ ${copy('Student Copy')}
                                 {rowActionFeeId === r.Fees_Id && rowActionType === 'delete' ? 'Deleting' : 'Delete'}
                               </button>
                               {r.Credit > 0 && (
-                                <>
-                                  <button
-                                    onClick={() => handleDownloadReceiptForFee(r.Fees_Id)}
-                                    disabled={rowActionFeeId === r.Fees_Id && rowActionType === 'download'}
-                                    className="h-6 px-2 rounded-md border border-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-                                  >
-                                    {rowActionFeeId === r.Fees_Id && rowActionType === 'download' ? 'Saving' : 'Save'}
-                                  </button>
-                                  <button
-                                    onClick={() => openEmailModal(r.Fees_Id)}
-                                    disabled={!data.student.Email || (rowActionFeeId === r.Fees_Id && rowActionType === 'email')}
-                                    className="h-6 px-2 rounded-md border border-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-                                  >
-                                    {rowActionFeeId === r.Fees_Id && rowActionType === 'email' ? 'Sending' : 'Email'}
-                                  </button>
-                                </>
+                                <button
+                                  onClick={() => handleDownloadReceiptForFee(r.Fees_Id)}
+                                  disabled={rowActionFeeId === r.Fees_Id && rowActionType === 'download'}
+                                  className="h-6 px-2 rounded-md border border-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                                >
+                                  {rowActionFeeId === r.Fees_Id && rowActionType === 'download' ? 'Saving' : 'Save'}
+                                </button>
                               )}
                           </div>
                         ) : (

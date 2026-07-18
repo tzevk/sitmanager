@@ -3,6 +3,7 @@ import path from 'path';
 import nodemailer from 'nodemailer';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import { SESClient, SendEmailCommand, SendRawEmailCommand } from '@aws-sdk/client-ses';
+import { amountToWords, formatReceiptDate, toSentenceCase } from '@/lib/amount-to-words';
 
 const MAIL_PROVIDER = (process.env.ADMISSION_MAIL_PROVIDER || 'smtp').trim().toLowerCase();
 
@@ -635,49 +636,102 @@ export function buildFeeReceiptMailContent(params: {
   amount: number;
   taxType?: string | null;
   customMessage?: string | null;
+  chequeNo?: string | null;
+  bank?: string | null;
+  branch?: string | null;
+  chequeDate?: string | null;
+  cancelled?: boolean;
+  transferred?: boolean;
+  movedFromBatchCode?: string | null;
+  movedToBatchCode?: string | null;
+  logoCid?: string;
 }) {
   const safeName = (params.studentName || '').trim() || 'Student';
   const subject = `Fee Receipt ${params.receiptNo} - Suvidya Institute of Technology`;
   const fmtAmount = (n: number) =>
     `₹ ${(Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const customMessage = (params.customMessage || '').trim();
+  const showCheque = ['Cheque', 'DD', 'PDC'].includes(params.paymentType || '');
+  const amtWords = amountToWords(params.amount);
 
   const text = [
     `Dear ${safeName},`,
     '',
-    customMessage || 'Thank you for your payment. Please find your fee receipt details below:',
+    customMessage || 'Thank you for your payment. Please find your fee receipt below:',
     '',
     `Receipt No   : ${params.receiptNo}`,
     `Receipt Date : ${params.receiptDate}`,
     `Student ID   : ${params.studentId}`,
     params.courseName ? `Course       : ${params.courseName}` : '',
     params.batchCode ? `Batch Code   : ${params.batchCode}` : '',
-    `Particular   : ${params.particular}`,
-    `Payment Type : ${params.paymentType}`,
+    `Received with thanks from ${toSentenceCase(safeName)} the sum of rupees ${amtWords} as`,
+    `Course fees for ${toSentenceCase(params.courseName || params.particular)} by ${toSentenceCase(params.paymentType)}${params.chequeNo ? ` No. ${params.chequeNo}` : ''}`,
+    showCheque ? `Dated ${params.chequeDate ? formatReceiptDate(params.chequeDate) : params.receiptDate} drawn on ${toSentenceCase(params.bank || '')}` : '',
+    `Note: ${toSentenceCase(params.particular)}${showCheque && params.branch ? ` | Branch: ${toSentenceCase(params.branch)}` : ''}`,
     params.taxType ? `Tax Type     : ${params.taxType}` : '',
     `Amount       : ${fmtAmount(params.amount)}`,
     '',
-    'This is a system-generated receipt for your records.',
+    'Notes: Payment by cheque shall be subject to realization of cheque. In case cheque bounces, receipt will be automatically cancelled. Payment strictly not refundable or transferable.',
+    '',
+    'This is a computer generated receipt, signature does not required.',
   ]
     .filter(Boolean)
     .join('\n');
 
-  const safeNameHtml = escapeHtml(safeName);
+  const statusTags = [
+    params.cancelled ? '<span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;color:#B91C1C;border:1.5px solid #B91C1C;background:#FEE2E2;margin-right:6px;">CANCELLED</span>' : '',
+    params.transferred ? `<span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;color:#A16207;border:1.5px solid #A16207;background:#FEF3C7;">TRANSFERRED${params.movedFromBatchCode && params.movedToBatchCode ? ` ${escapeHtml(params.movedFromBatchCode)} &rarr; ${escapeHtml(params.movedToBatchCode)}` : params.movedToBatchCode ? ` &rarr; ${escapeHtml(params.movedToBatchCode)}` : ''}</span>` : '',
+  ].filter(Boolean).join('');
+
   const html = withEmailSignature(`
-    <p>Dear <strong>${safeNameHtml}</strong>,</p>
-    <p>${customMessage ? escapeHtml(customMessage).replace(/\n/g, '<br/>') : 'Thank you for your payment. Please find your fee receipt details below:'}</p>
-    <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-      <tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;width:160px;">Receipt No</td><td style="padding:6px 10px;border:1px solid #e5e7eb;font-weight:bold;font-family:monospace;">${escapeHtml(params.receiptNo)}</td></tr>
-      <tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Receipt Date</td><td style="padding:6px 10px;border:1px solid #e5e7eb;">${escapeHtml(params.receiptDate)}</td></tr>
-      <tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Student ID</td><td style="padding:6px 10px;border:1px solid #e5e7eb;">${escapeHtml(String(params.studentId))}</td></tr>
-      ${params.courseName ? `<tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Course</td><td style="padding:6px 10px;border:1px solid #e5e7eb;">${escapeHtml(params.courseName)}</td></tr>` : ''}
-      ${params.batchCode ? `<tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Batch Code</td><td style="padding:6px 10px;border:1px solid #e5e7eb;">${escapeHtml(params.batchCode)}</td></tr>` : ''}
-      <tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Particular</td><td style="padding:6px 10px;border:1px solid #e5e7eb;">${escapeHtml(params.particular)}</td></tr>
-      <tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Payment Type</td><td style="padding:6px 10px;border:1px solid #e5e7eb;">${escapeHtml(params.paymentType)}</td></tr>
-      ${params.taxType ? `<tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Tax Type</td><td style="padding:6px 10px;border:1px solid #e5e7eb;">${escapeHtml(params.taxType)}</td></tr>` : ''}
-      <tr><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#6b7280;">Amount</td><td style="padding:6px 10px;border:1px solid #e5e7eb;font-weight:bold;">${fmtAmount(params.amount)}</td></tr>
-    </table>
-    <p>This is a system-generated receipt for your records.</p>
+    ${customMessage ? `<p>${escapeHtml(customMessage).replace(/\n/g, '<br/>')}</p>` : ''}
+    <div style="max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:10px;padding:24px;font-family:Arial,sans-serif;">
+      <table role="presentation" style="width:100%;border-collapse:collapse;margin-bottom:14px;">
+        <tr>
+          <td style="vertical-align:middle;">
+            ${params.logoCid ? `<img src="cid:${params.logoCid}" alt="SIT" style="height:44px;" />` : ''}
+          </td>
+          <td style="text-align:center;vertical-align:middle;">
+            <div style="font-size:16px;font-weight:700;margin-bottom:4px;">PAYMENT RECEIPT</div>
+            <div style="font-size:18px;font-weight:700;">Suvidya Institute of Technology Private Limited</div>
+            <div style="font-size:11px;color:#4b5563;line-height:1.4;">Regd. Office : 18/140 Anand Nagar, Nehru Road, Vakola, Santacruz (E),<br />Mumbai - 400 055. Tel.: 022 26682290, 9821569885</div>
+          </td>
+          <td style="width:44px;"></td>
+        </tr>
+      </table>
+      <table role="presentation" style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+        <tr>
+          <td style="font-size:13px;">Receipt No.: <strong>${escapeHtml(params.receiptNo)}</strong></td>
+          <td style="font-size:13px;text-align:right;">Date : <strong>${escapeHtml(formatReceiptDate(params.receiptDate) || params.receiptDate)}</strong></td>
+        </tr>
+      </table>
+      ${statusTags ? `<div style="margin-bottom:10px;">${statusTags}</div>` : ''}
+      <p style="font-size:14px;line-height:1.8;margin:14px 0 4px;">Received with thanks from <strong>${escapeHtml(toSentenceCase(safeName))}</strong></p>
+      <p style="font-size:14px;line-height:1.8;margin:0 0 4px;">the sum of rupees <strong>${escapeHtml(amtWords)}</strong> as</p>
+      <p style="font-size:14px;line-height:1.8;margin:0 0 4px;">Course fees for <strong>${escapeHtml(toSentenceCase(params.courseName || params.particular))}</strong> by <strong>${escapeHtml(toSentenceCase(params.paymentType))}</strong>${params.chequeNo ? ` No. <strong>${escapeHtml(params.chequeNo)}</strong>` : ''}</p>
+      ${showCheque ? `<p style="font-size:14px;line-height:1.8;margin:0 0 4px;">Dated <strong>${escapeHtml(params.chequeDate ? formatReceiptDate(params.chequeDate) : (formatReceiptDate(params.receiptDate) || params.receiptDate))}</strong> drawn on <strong>${escapeHtml(toSentenceCase(params.bank || ''))}</strong></p>` : ''}
+      <table role="presentation" style="width:100%;border-collapse:collapse;margin:14px 0;">
+        <tr>
+          <td style="font-size:13px;vertical-align:middle;">
+            Note : ${escapeHtml(toSentenceCase(params.particular))}
+            ${showCheque && params.branch ? `&nbsp;&nbsp;Branch: ${escapeHtml(toSentenceCase(params.branch))}` : ''}
+          </td>
+          <td style="width:180px;text-align:right;">
+            <span style="display:inline-block;border:3px solid #111;padding:8px 18px;font-size:15px;font-weight:700;">RS. ${fmtAmount(params.amount).replace('₹ ', '')}</span>
+          </td>
+        </tr>
+      </table>
+      ${params.taxType ? `<p style="font-size:12px;color:#6b7280;margin:0 0 8px;">Tax Type: ${escapeHtml(params.taxType)}</p>` : ''}
+      <div style="font-size:12px;color:#6b7280;margin-top:16px;">
+        <strong>Notes:</strong>
+        <ul style="margin:6px 0 0;padding-left:18px;line-height:1.5;">
+          <li>Payment by cheque shall be subject to realization of cheque.</li>
+          <li>In case cheque bounces, receipt will be automatically cancelled.</li>
+          <li>Payment strictly not refundable or transferable.</li>
+        </ul>
+      </div>
+      <p style="text-align:center;font-weight:700;font-size:13px;margin-top:20px;">This is a computer generated receipt, signature does not required.</p>
+    </div>
   `);
 
   return { safeName, subject, text, html };
@@ -696,9 +750,24 @@ export async function sendFeeReceiptEmail(params: {
   amount: number;
   taxType?: string | null;
   customMessage?: string | null;
+  chequeNo?: string | null;
+  bank?: string | null;
+  branch?: string | null;
+  chequeDate?: string | null;
+  cancelled?: boolean;
+  transferred?: boolean;
+  movedFromBatchCode?: string | null;
+  movedToBatchCode?: string | null;
   attachments?: MailAttachment[];
 }) {
-  const built = buildFeeReceiptMailContent(params);
+  // Same institute logo used by the printed receipt, inlined via CID so it
+  // renders identically across email clients (no external image request).
+  const logoAttachment = await buildInlineSitLogoAttachment();
+  const built = buildFeeReceiptMailContent({ ...params, logoCid: logoAttachment?.cid });
+  const attachments = [
+    ...(logoAttachment ? [logoAttachment] : []),
+    ...(params.attachments || []),
+  ];
   await sendAdmissionFormEmail({
     toEmail: params.toEmail,
     studentName: params.studentName,
@@ -706,7 +775,7 @@ export async function sendFeeReceiptEmail(params: {
     subject: built.subject,
     text: built.text,
     html: built.html,
-    attachments: params.attachments,
+    attachments: attachments.length ? attachments : undefined,
   });
 }
 
