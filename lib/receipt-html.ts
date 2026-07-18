@@ -99,22 +99,22 @@ export async function buildReceiptHtml(params: {
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; color: #000; background: #fff; font-size: 14px; }
-  .receipt { width: 100%; padding: 28px 28px 12px; background: #fff; }
+  .receipt { width: 100%; padding: 16px 28px 8px; background: #fff; }
   .top-row { display: flex; align-items: flex-start; justify-content: space-between; }
-  .logo { width: 235px; height: auto; object-fit: contain; }
-  .copy-tag { margin-top: 58px; margin-right: 55px; font-size: 14px; }
+  .logo { width: 200px; height: auto; object-fit: contain; }
+  .copy-tag { margin-top: 40px; margin-right: 55px; font-size: 14px; }
   .header { text-align: center; margin-top: 0; }
-  .receipt-label { font-size: 18px; font-weight: 700; margin-bottom: 18px; }
-  .org-name { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
-  .org-addr { font-size: 12px; line-height: 1.4; }
-  .meta-line { display: flex; justify-content: space-between; margin-top: 44px; font-size: 14px; }
-  .status-line { display: flex; gap: 10px; margin-top: 10px; }
+  .receipt-label { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+  .org-name { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+  .org-addr { font-size: 12px; line-height: 1.3; }
+  .meta-line { display: flex; justify-content: space-between; margin-top: 22px; font-size: 14px; }
+  .status-line { display: flex; gap: 10px; margin-top: 8px; }
   .status-tag { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; border: 1.5px solid; }
   .status-cancelled { color: #B91C1C; border-color: #B91C1C; background: #FEE2E2; }
   .status-transferred { color: #A16207; border-color: #A16207; background: #FEF3C7; }
   .strong { font-size: 16px; font-weight: 400; margin-left: 24px; }
-  .body { margin-top: 24px; }
-  .line-row, .course-row, .note-row { display: flex; align-items: baseline; gap: 8px; margin-top: 24px; white-space: nowrap; }
+  .body { margin-top: 12px; }
+  .line-row, .course-row, .note-row { display: flex; align-items: baseline; gap: 8px; margin-top: 14px; white-space: nowrap; }
   .course-row, .note-row { flex-wrap: wrap; }
   .fill { display: inline-block; border-bottom: 2px dotted #222; text-align: center; min-height: 20px; font-size: 16px; }
   .name { width: 650px; }
@@ -126,11 +126,11 @@ export async function buildReceiptHtml(params: {
   .drawn { width: 455px; }
   .note { width: 300px; white-space: normal; word-break: break-word; line-height: 1.3; }
   .branch { width: 160px; }
-  .amount-box { margin-left: auto; border: 3px solid #111; padding: 10px 46px; font-size: 18px; font-weight: 700; }
-  .notes-title { margin-top: 22px; font-size: 16px; }
+  .amount-box { margin-left: auto; border: 3px solid #111; padding: 8px 40px; font-size: 18px; font-weight: 700; }
+  .notes-title { margin-top: 12px; font-size: 15px; }
   .notes-list { margin-top: 0; padding-left: 18px; font-size: 12px; line-height: 1.15; }
-  .footer-text { margin-top: 28px; text-align: center; font-size: 18px; font-weight: 700; }
-  .cut-line { margin-top: 22px; border-top: 4px dashed #111; }
+  .footer-text { margin-top: 14px; text-align: center; font-size: 16px; font-weight: 700; }
+  .cut-line { margin-top: 12px; border-top: 4px dashed #111; }
 </style></head><body>
 ${receipt}
 </body></html>`;
