@@ -5,7 +5,6 @@ import { requirePermission } from '@/lib/api-auth';
 import { ensureStudentTransferColumns } from '@/lib/student-transfer';
 import { ensureAlumniColumn } from '@/lib/student-alumni';
 import { saveStructuredAdmissionData } from '@/lib/services/online-admission.service';
-import { computeStudentFeeBalance, FEE_WAIVER_LABEL } from '@/lib/fee-balance';
 
 const ONLINE_ADMISSION_PAYLOAD_TABLE = 'online_admission_payload';
 
@@ -601,7 +600,6 @@ export async function PUT(
     }
 
     // ── 3. Sync admission_master — keeps the student list in sync ────────
-    let justCancelled = false;
     try {
       // Look up Batch_Id from batch code
       let batchId: number | null = null;
@@ -623,7 +621,7 @@ export async function PUT(
       // un-cancel it, or edit an unrelated field), and would instead fall into
       // the "no active admission" branch and create a stray duplicate row.
       const [admRows] = await pool.query(
-        `SELECT Admission_Id, Cancel FROM admission_master
+        `SELECT Admission_Id FROM admission_master
          WHERE Student_Id = ?
            AND (IsDelete = 0 OR IsDelete IS NULL)
          ORDER BY Admission_Id DESC
@@ -633,8 +631,6 @@ export async function PUT(
 
       if (admRows.length) {
         const admissionId = admRows[0].Admission_Id;
-        const priorCancel = Number(admRows[0].Cancel ?? 0) === 1;
-        justCancelled = resolvedCancel === 1 && !priorCancel;
         const setClauses: string[] = [];
         const setVals: (string | number | null)[] = [];
 
@@ -664,28 +660,6 @@ export async function PUT(
       }
     } catch (admErr) {
       console.warn('Student PUT: admission_master sync skipped:', (admErr as Error)?.message);
-    }
-
-    // ── 3b. Cancellation → auto-waive any remaining fee balance ───────────
-    // The moment an admission is newly marked Cancelled (not on every re-save
-    // while it's already cancelled), write off whatever's still outstanding so
-    // Fee Details / the Fee Report stop showing a balance owed by a student
-    // who's no longer enrolled. Recorded as a Credit (same as Discount) with
-    // no receipt number — it's a waiver, not a cash transaction.
-    if (justCancelled) {
-      try {
-        const { balance } = await computeStudentFeeBalance(pool, Number(id));
-        if (balance > 0) {
-          await pool.query(
-            `INSERT INTO s_fees_mst
-              (Student_Id, Amount, Total_Amt, TypeR, Notes, RDate, Date_Added, FeesMonth, FeesYear, IsDelete)
-             VALUES (?, ?, ?, 'C', ?, CURDATE(), NOW(), MONTH(CURDATE()), YEAR(CURDATE()), 0)`,
-            [id, balance, balance, FEE_WAIVER_LABEL]
-          );
-        }
-      } catch (waiverErr) {
-        console.warn('Student PUT: fee waiver on cancellation skipped:', (waiverErr as Error)?.message);
-      }
     }
 
     // ── 4. Persist structured academic data back to the admission payload ──

@@ -181,9 +181,16 @@ export async function GET(req: NextRequest) {
              WHERE (IsDelete = 0 OR IsDelete IS NULL)
              GROUP BY Student_Id
            ) ledger ON ledger.Student_Id = sm.Student_Id
+           -- Match on Student_Id alone (not + sfm.Batch_Id = bm.Batch_Id): many real
+           -- fee-ledger rows carry a NULL or stale Batch_Id (e.g. cancellation
+           -- waivers, legacy course-fee rows recorded under a different batch_mst
+           -- row than the student's currently-resolved one), so requiring an exact
+           -- Batch_Id match silently dropped transactions that DO show on the
+           -- student's own Fee Details page. Fee activity belongs to the student,
+           -- not to a specific batch_mst row — same principle already used by the
+           -- ledger aggregation below and by /api/fee-details.
            LEFT JOIN s_fees_mst sfm
              ON sfm.Student_Id = sm.Student_Id
-             AND sfm.Batch_Id  = bm.Batch_Id
              AND sfm.IsDelete  = 0
              AND sfm.TypeR     = 'C'
              ${amountType ? 'AND sfm.Payment_Type = ?' : ''}

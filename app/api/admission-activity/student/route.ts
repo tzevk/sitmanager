@@ -45,13 +45,28 @@ const LATEST_ADMISSION_JOIN = `JOIN (
   GROUP BY Student_Id
 ) la ON la.Admission_Id = am.Admission_Id`;
 
-// Paid fees per student = sum of credit (TypeR='C') entries in the fees ledger.
+// Same Total Fees / Paid formula as /api/fee-details, the Fee Report, and
+// lib/fee-balance.ts's computeStudentFeeBalance: admission fee (or
+// fees_structure/batch fallback) + posted debits + the one-time membership
+// fee, minus the paid ledger. This list previously only used the batch's flat
+// Fees_Full_Payment (no membership fee, no posted debits), which made its
+// Total Fees / Balance figures disagree with the student's own Fee Details
+// page by exactly the ₹899 membership fee whenever that had been billed.
 const FEES_JOIN = `LEFT JOIN (
-  SELECT Student_Id, SUM(Amount) AS Paid
+  SELECT Student_Id,
+    SUM(CASE WHEN TypeR = 'C' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS Paid,
+    SUM(CASE WHEN TypeR = 'D' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS PostedDebit,
+    MAX(CASE WHEN TypeR = 'D' AND LOWER(IFNULL(Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END) AS HasMembershipDebit
   FROM s_fees_mst
-  WHERE TypeR = 'C' AND IsDelete = 0
+  WHERE IsDelete = 0
   GROUP BY Student_Id
 ) fp ON fp.Student_Id = sm.Student_Id`;
+
+const FEES_STRUCTURE_JOIN = `LEFT JOIN (
+  SELECT batch_id, MAX(id) AS id FROM fees_structure
+  WHERE deleted = 0 OR deleted IS NULL GROUP BY batch_id
+) latest_fs ON latest_fs.batch_id = COALESCE(bm.Batch_Id, bm2.Batch_Id)
+LEFT JOIN fees_structure fs ON fs.id = latest_fs.id`;
 
 function buildSearch(field: string, value: string) {
   if (!value) return { clause: '', params: [] as (string | number)[] };
@@ -110,15 +125,26 @@ export async function GET(req: NextRequest) {
            CASE WHEN LOWER(TRIM(COALESCE(am.Cancel, ''))) IN ('yes','1','true') THEN 1 ELSE 0 END AS Cancelled,
            sm.IsActive,
            am.Payment_Type,
-           COALESCE(bm.Fees_Full_Payment, bm2.Fees_Full_Payment) AS Total_Fees,
+           am.Fees AS Admission_Fees,
+           COALESCE(
+             NULLIF(CAST(REPLACE(IFNULL(fs.actualfees, ''), ',', '') AS DECIMAL(15,2)), 0),
+             NULLIF(CAST(REPLACE(IFNULL(fs.fullfees, ''), ',', '') AS DECIMAL(15,2)), 0),
+             NULLIF(CAST(REPLACE(IFNULL(fs.total_inr, ''), ',', '') AS DECIMAL(15,2)), 0),
+             NULLIF(CAST(REPLACE(IFNULL(bm.Actual_Fees_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
+             NULLIF(CAST(REPLACE(IFNULL(bm.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
+             NULLIF(CAST(REPLACE(IFNULL(bm2.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
+             0
+           ) AS Resolved_Batch_Fee,
            COALESCE(fp.Paid, 0) AS Paid_Fees,
-           (COALESCE(bm.Fees_Full_Payment, bm2.Fees_Full_Payment, 0) - COALESCE(fp.Paid, 0)) AS Balance_Fees
+           COALESCE(fp.PostedDebit, 0) AS Posted_Debit,
+           COALESCE(fp.HasMembershipDebit, 0) AS Has_Membership_Debit
          FROM admission_master am
          ${LATEST_ADMISSION_JOIN}
          JOIN student_master sm ON sm.Student_Id = am.Student_Id
          LEFT JOIN batch_mst bm ON bm.Batch_Id = am.Batch_Id
          LEFT JOIN batch_mst bm2 ON bm2.Batch_code = sm.Batch_Code AND (bm2.IsDelete = 0 OR bm2.IsDelete IS NULL)
          LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
+         ${FEES_STRUCTURE_JOIN}
          ${FEES_JOIN}
          WHERE ${BASE_WHERE} ${clause}
          ORDER BY sm.Student_Id DESC, am.Admission_Id DESC
@@ -137,6 +163,24 @@ export async function GET(req: NextRequest) {
     ]);
 
     const searchedTotal = (countRows as any[])[0]?.total || 0;
+
+    // Same Total Fees / Balance formula as /api/fee-details and the Fee Report
+    // (see lib/fee-balance.ts): admission fee (or fees_structure/batch
+    // fallback) + posted debits + the one-time ₹899 membership fee, minus paid.
+    const parseFee = (v: unknown) => Number(String(v ?? '').replace(/,/g, '')) || 0;
+    const MEMBERSHIP_FEE = 899;
+    const rowsWithExactFees = (rows as any[]).map((row) => {
+      const tuition = parseFee(row.Admission_Fees) || Number(row.Resolved_Batch_Fee) || 0;
+      const postedDebit = Number(row.Posted_Debit ?? 0);
+      const paid = Number(row.Paid_Fees ?? 0);
+      const membership = tuition > 0 && !Number(row.Has_Membership_Debit ?? 0) ? MEMBERSHIP_FEE : 0;
+      const totalFees = tuition + postedDebit + membership;
+      return {
+        ...row,
+        Total_Fees: totalFees,
+        Balance_Fees: totalFees - paid,
+      };
+    });
 
     // "Total Student" figure: reproduces the legacy app's own count exactly (appp.js
     // /nodeapp/getAllStudent countQuery — COUNT(*) of admission_master rows with
@@ -157,7 +201,7 @@ export async function GET(req: NextRequest) {
     const total = isFiltered ? searchedTotal : (legacyTotal || 0);
 
     return NextResponse.json({
-      rows,
+      rows: rowsWithExactFees,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
       legacyTotalStudentCount: legacyTotal || 0,
     });

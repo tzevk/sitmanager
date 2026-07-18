@@ -235,6 +235,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
       },
       { label: MEMBERSHIP_FEE_LABEL, amount: MEMBERSHIP_FEE_AMOUNT, fixed: true },
       { label: DISCOUNT_LABEL, amount: null, fixed: false },
+      { label: 'Excess Fee Refund', amount: null as number | null, fixed: false },
+      { label: 'Admission Cancellation Charges', amount: null as number | null, fixed: false },
+      { label: 'Duplicate Certificate Fees', amount: null as number | null, fixed: false },
     ];
 
     let record: any = null;
