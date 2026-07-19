@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toBatchNumber } from '@/lib/batch-display';
 
 interface DashboardData {
@@ -46,6 +46,18 @@ interface PlannedLecture {
   starttime?: string;
   assignment?: number;
   unit_test?: number;
+}
+
+interface BatchDetails {
+  batch: {
+    batch_id: number;
+    batch_code: string;
+    course_name: string | null;
+    duration: string | null;
+    timings: string | null;
+  };
+  students: { student_id: number; student_name: string }[];
+  assignments: { lecture_no: number | null; assignment: string; date: string | null }[];
 }
 
 type ActivityType = 'lecture' | 'assignment' | 'test';
@@ -121,6 +133,15 @@ function monthKey(d: Date) {
   return `${yyyy}-${mm}`;
 }
 
+/** subject_topic is stored as a newline-separated list of individual sub-topic lines. */
+function subtopicOptions(l: PlannedLecture | null): string[] {
+  if (!l?.subject_topic) return [];
+  return l.subject_topic
+    .split('\n')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
 export default function TrainerDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -134,6 +155,17 @@ export default function TrainerDashboardPage() {
   const [secondHalfTopic, setSecondHalfTopic] = useState('');
   const [secondHalfActivity, setSecondHalfActivity] = useState<ActivityType>('lecture');
 
+  const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
+
+  const [startModalOpen, setStartModalOpen] = useState(false);
+  const [firstHalfSubtopics, setFirstHalfSubtopics] = useState<string[]>([]);
+  const [secondHalfSubtopics, setSecondHalfSubtopics] = useState<string[]>([]);
+
+  const [batchDetailsOpen, setBatchDetailsOpen] = useState(false);
+  const [batchDetailsLoading, setBatchDetailsLoading] = useState(false);
+  const [batchDetails, setBatchDetails] = useState<BatchDetails | null>(null);
+  const [batchDetailsError, setBatchDetailsError] = useState('');
+
   useEffect(() => {
     fetch('/api/trainer-portal/dashboard')
       .then(r => r.json())
@@ -142,9 +174,17 @@ export default function TrainerDashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Always the trainer's (first) ongoing batch — no manual picker, it's fetched automatically.
-  const batches = data?.batches ?? [];
-  const currentBatch = batches[0] ?? null;
+  const batches = useMemo(() => data?.batches ?? [], [data]);
+
+  // Default to the trainer's first ongoing batch once loaded; the Start My Day
+  // modal lets them pick a different one if they teach more than one.
+  useEffect(() => {
+    if (selectedBatchId == null && batches.length > 0) {
+      setSelectedBatchId(batches[0].Batch_Id);
+    }
+  }, [batches, selectedBatchId]);
+
+  const currentBatch = batches.find(b => b.Batch_Id === selectedBatchId) ?? batches[0] ?? null;
 
   // Pull the standard lecture plan so we can default each half's topic to what's scheduled for today.
   useEffect(() => {
@@ -196,22 +236,62 @@ export default function TrainerDashboardPage() {
     setData(nd);
   }
 
-  async function startDay() {
+  function openStartDayModal() {
+    setSaveMsg('');
+    setFirstHalfSubtopics(subtopicOptions(firstHalfPlan));
+    setSecondHalfSubtopics(subtopicOptions(secondHalfPlan));
+    setStartModalOpen(true);
+  }
+
+  async function confirmStartDay() {
     setSaving(true);
     setSaveMsg('');
     try {
       const res = await fetch('/api/trainer-portal/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'check_in' }),
+        body: JSON.stringify({
+          action: 'check_in',
+          batchId: currentBatch?.Batch_Id ?? null,
+          sessions: {
+            first_half: {
+              subject: String(firstHalfPlan?.lecturecontent || firstHalfPlan?.subject || '').trim() || null,
+              subtopics: firstHalfSubtopics.join('\n') || null,
+              activityType: defaultActivityFor(firstHalfPlan),
+            },
+            second_half: {
+              subject: String(secondHalfPlan?.lecturecontent || secondHalfPlan?.subject || '').trim() || null,
+              subtopics: secondHalfSubtopics.join('\n') || null,
+              activityType: defaultActivityFor(secondHalfPlan),
+            },
+          },
+        }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { setSaveMsg(d?.error || 'Something went wrong. Please try again.'); return; }
       await refreshData();
+      setStartModalOpen(false);
     } catch {
       setSaveMsg('Network error. Please try again.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function openBatchDetails(batchId: number) {
+    setBatchDetailsOpen(true);
+    setBatchDetailsLoading(true);
+    setBatchDetailsError('');
+    setBatchDetails(null);
+    try {
+      const res = await fetch(`/api/trainer-portal/batch-details?batchId=${batchId}`);
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setBatchDetailsError(d?.error || 'Could not load batch details.'); return; }
+      setBatchDetails(d);
+    } catch {
+      setBatchDetailsError('Network error. Please try again.');
+    } finally {
+      setBatchDetailsLoading(false);
     }
   }
 
@@ -277,16 +357,16 @@ export default function TrainerDashboardPage() {
 
         {!dayComplete && (
           <button
-            onClick={canSignIn ? startDay : openEndDayModal}
+            onClick={canSignIn ? openStartDayModal : openEndDayModal}
             disabled={saving}
             className="mt-4 w-full py-4 rounded-lg font-bold text-lg disabled:opacity-60"
             style={{ background: canSignIn ? '#16a34a' : '#b45309', color: 'white' }}
           >
-            {saving && canSignIn ? 'Starting…' : canSignIn ? 'Start Day' : 'End Day'}
+            {canSignIn ? 'Start My Day' : 'End My Day'}
           </button>
         )}
 
-        {saveMsg && !modalOpen && (
+        {saveMsg && !modalOpen && !startModalOpen && (
           <p className="mt-3 text-sm font-medium text-yellow-100">{saveMsg}</p>
         )}
       </div>
@@ -344,13 +424,23 @@ export default function TrainerDashboardPage() {
         ) : (
           <div className="space-y-2">
             {batches.map(b => (
-              <div key={b.Batch_Id} className="rounded-lg border border-gray-200 px-4 py-3 flex items-center justify-between gap-3">
+              <button
+                key={b.Batch_Id}
+                type="button"
+                onClick={() => openBatchDetails(b.Batch_Id)}
+                className="w-full text-left rounded-lg border border-gray-200 px-4 py-3 flex items-center justify-between gap-3 hover:border-[#2E3093]/40 hover:bg-[#2E3093]/5 transition-colors"
+              >
                 <div className="min-w-0">
                   <p className="text-base font-semibold text-gray-800 truncate">{toBatchNumber(b.Batch_code)}</p>
                   <p className="text-sm text-gray-500 truncate">{b.Course_Name || '—'}</p>
                 </div>
-                <p className="text-sm font-medium text-gray-600 shrink-0">{b.Timings?.trim() || 'Timing not set'}</p>
-              </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <p className="text-sm font-medium text-gray-600">{b.Timings?.trim() || 'Timing not set'}</p>
+                  <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </button>
             ))}
           </div>
         )}
@@ -380,6 +470,207 @@ export default function TrainerDashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Start-my-day modal: pick the batch, subject is auto-filled from the Standard Lecture Plan,
+          sub-topics are a checklist for each half. */}
+      {startModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={() => !saving && setStartModalOpen(false)}>
+          <div className="bg-white w-full sm:max-w-md rounded-t-xl sm:rounded-xl shadow-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-6 pt-6 pb-2 shrink-0">
+              <h3 className="text-xl font-bold text-gray-800">Start My Day</h3>
+              <p className="text-sm text-gray-500 mt-1">{todayLabel}</p>
+            </div>
+
+            <div className="px-6 py-4 space-y-5 overflow-y-auto">
+              {batches.length > 1 && (
+                <div>
+                  <label className="block text-base font-semibold text-gray-700 mb-2">Batch</label>
+                  <select
+                    value={selectedBatchId ?? ''}
+                    onChange={e => setSelectedBatchId(Number(e.target.value))}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-base bg-white"
+                  >
+                    {batches.map(b => (
+                      <option key={b.Batch_Id} value={b.Batch_Id}>
+                        {toBatchNumber(b.Batch_code)} — {b.Course_Name || 'Untitled'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {batches.length === 1 && currentBatch && (
+                <div>
+                  <p className="text-base font-semibold text-gray-700">{toBatchNumber(currentBatch.Batch_code)}</p>
+                  <p className="text-sm text-gray-500">{currentBatch.Course_Name || '—'}</p>
+                </div>
+              )}
+
+              {/* First Half */}
+              <div className="border-t border-gray-100 pt-4">
+                <label className="block text-base font-semibold text-gray-700 mb-2">First Half</label>
+                <p className="text-sm text-gray-400 mb-1">Subject</p>
+                <p className="px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-base text-gray-800 font-medium">
+                  {String(firstHalfPlan?.lecturecontent || firstHalfPlan?.subject || 'Not scheduled')}
+                </p>
+                {subtopicOptions(firstHalfPlan).length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-sm text-gray-400 mb-1.5">Sub-Topics</p>
+                    <div className="space-y-2">
+                      {subtopicOptions(firstHalfPlan).map((topic, idx) => (
+                        <label key={idx} className="flex items-start gap-2.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={firstHalfSubtopics.includes(topic)}
+                            onChange={e => setFirstHalfSubtopics(prev =>
+                              e.target.checked ? [...prev, topic] : prev.filter(t => t !== topic)
+                            )}
+                            className="mt-1 w-4 h-4 accent-[#2E3093]"
+                          />
+                          <span className="text-sm text-gray-700">{topic}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Second Half */}
+              <div className="border-t border-gray-100 pt-4">
+                <label className="block text-base font-semibold text-gray-700 mb-2">Second Half</label>
+                <p className="text-sm text-gray-400 mb-1">Subject</p>
+                <p className="px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-base text-gray-800 font-medium">
+                  {String(secondHalfPlan?.lecturecontent || secondHalfPlan?.subject || 'Not scheduled')}
+                </p>
+                {subtopicOptions(secondHalfPlan).length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-sm text-gray-400 mb-1.5">Sub-Topics</p>
+                    <div className="space-y-2">
+                      {subtopicOptions(secondHalfPlan).map((topic, idx) => (
+                        <label key={idx} className="flex items-start gap-2.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={secondHalfSubtopics.includes(topic)}
+                            onChange={e => setSecondHalfSubtopics(prev =>
+                              e.target.checked ? [...prev, topic] : prev.filter(t => t !== topic)
+                            )}
+                            className="mt-1 w-4 h-4 accent-[#2E3093]"
+                          />
+                          <span className="text-sm text-gray-700">{topic}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {saveMsg && (
+                <p className="text-sm font-medium px-4 py-3 rounded-lg bg-red-50 text-red-600">{saveMsg}</p>
+              )}
+            </div>
+
+            <div className="px-6 pb-6 pt-2 flex gap-3 shrink-0">
+              <button
+                onClick={() => setStartModalOpen(false)}
+                disabled={saving}
+                className="flex-1 py-3 rounded-lg font-semibold text-base border-2 border-gray-200 text-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmStartDay}
+                disabled={saving}
+                className="flex-1 py-3 rounded-lg font-bold text-base text-white disabled:opacity-60"
+                style={{ background: '#16a34a' }}
+              >
+                {saving ? 'Starting…' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch details modal: opened by clicking a batch in "Ongoing Batches" */}
+      {batchDetailsOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={() => setBatchDetailsOpen(false)}>
+          <div className="bg-white w-full sm:max-w-md rounded-t-xl sm:rounded-xl shadow-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-6 pt-6 pb-3 shrink-0 border-b border-gray-100">
+              <h3 className="text-xl font-bold text-gray-800">Batch Details</h3>
+            </div>
+            <div className="px-6 py-4 overflow-y-auto space-y-5">
+              {batchDetailsLoading ? (
+                <p className="text-base text-gray-400">Loading…</p>
+              ) : batchDetailsError ? (
+                <p className="text-sm font-medium px-4 py-3 rounded-lg bg-red-50 text-red-600">{batchDetailsError}</p>
+              ) : batchDetails ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-sm text-gray-400">Training Programme</p>
+                      <p className="text-base font-semibold text-gray-800">{batchDetails.batch.course_name || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Batch</p>
+                      <p className="text-base font-semibold text-gray-800">{toBatchNumber(batchDetails.batch.batch_code)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Duration</p>
+                      <p className="text-base font-semibold text-gray-800">{batchDetails.batch.duration || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Timings</p>
+                      <p className="text-base font-semibold text-gray-800">{batchDetails.batch.timings || '—'}</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-semibold text-gray-500 mb-2">
+                      Students ({batchDetails.students.length})
+                    </p>
+                    {batchDetails.students.length === 0 ? (
+                      <p className="text-sm text-gray-400">No students on record for this batch.</p>
+                    ) : (
+                      <div className="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                        {batchDetails.students.map(s => (
+                          <p key={s.student_id} className="px-4 py-2.5 text-sm text-gray-700">{s.student_name}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-semibold text-gray-500 mb-2">
+                      Assignments (Standard Lecture Plan)
+                    </p>
+                    {batchDetails.assignments.length === 0 ? (
+                      <p className="text-sm text-gray-400">No assignments planned for this batch.</p>
+                    ) : (
+                      <div className="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                        {batchDetails.assignments.map((a, idx) => (
+                          <div key={idx} className="px-4 py-2.5">
+                            <p className="text-sm font-medium text-gray-700">{a.assignment}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {a.lecture_no ? `Lecture ${a.lecture_no}` : ''}
+                              {a.date ? ` · ${formatDate(a.date)}` : ''}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : null}
+            </div>
+            <div className="px-6 py-4 shrink-0 border-t border-gray-100">
+              <button
+                onClick={() => setBatchDetailsOpen(false)}
+                className="w-full py-3 rounded-lg font-semibold text-base border-2 border-gray-200 text-gray-600"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* End-day modal: first half + second half, each with a typable lecture name and an activity type */}
       {modalOpen && (

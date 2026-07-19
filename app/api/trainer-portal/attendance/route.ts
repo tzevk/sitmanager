@@ -156,11 +156,45 @@ export async function POST(req: NextRequest) {
       if (existing.length) {
         return NextResponse.json({ error: 'Already checked in today' }, { status: 400 });
       }
+
+      const normalizedBatchId = Number(batchId);
+      const hasBatch = Number.isFinite(normalizedBatchId) && normalizedBatchId > 0;
+
       await pool.query(
-        `INSERT INTO trainer_attendance (Faculty_Id, Attend_Date, Check_In, Status)
-         VALUES (?, CURDATE(), CURTIME(), 'Present')`,
-        [facultyId]
+        `INSERT INTO trainer_attendance (Faculty_Id, Attend_Date, Check_In, Status, Batch_Id)
+         VALUES (?, CURDATE(), CURTIME(), 'Present', ?)`,
+        [facultyId, hasBatch ? normalizedBatchId : null]
       );
+
+      // Pre-seed today's lecture plan (subject + chosen sub-topics) as the day starts,
+      // so it's already on record even before the trainer ends their day.
+      if (hasBatch && sessions && typeof sessions === 'object') {
+        const todayIso = new Date().toISOString().slice(0, 10);
+        const fh = sessions.first_half || {};
+        const sh = sessions.second_half || {};
+
+        if (normalizeText(fh.subject) || normalizeText(fh.subtopics)) {
+          await syncLectureForSession(pool, {
+            facultyId,
+            batchId: normalizedBatchId,
+            dateIso: todayIso,
+            session: 'first_half',
+            topic: normalizeText(fh.subtopics) || normalizeText(fh.subject),
+            activityType: normalizeText(fh.activityType),
+          });
+        }
+        if (normalizeText(sh.subject) || normalizeText(sh.subtopics)) {
+          await syncLectureForSession(pool, {
+            facultyId,
+            batchId: normalizedBatchId,
+            dateIso: todayIso,
+            session: 'second_half',
+            topic: normalizeText(sh.subtopics) || normalizeText(sh.subject),
+            activityType: normalizeText(sh.activityType),
+          });
+        }
+      }
+
       return NextResponse.json({ success: true, action: 'check_in' });
     }
 

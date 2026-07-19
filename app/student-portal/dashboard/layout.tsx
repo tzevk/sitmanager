@@ -68,11 +68,11 @@ export default function StudentDashboardLayout({ children }: { children: React.R
 
   return (
     <div className="min-h-screen bg-slate-200 flex justify-center">
-     <div className="relative w-full max-w-[480px] min-h-screen bg-[#f0f2f8] flex flex-col shadow-2xl">
+     <div className="relative w-full max-w-[480px] lg:max-w-3xl xl:max-w-5xl min-h-screen bg-[#f0f2f8] flex flex-col shadow-2xl transition-[max-width] duration-200">
 
       {/* App bar */}
       <header className="sticky top-0 z-20 bg-white border-b border-gray-100">
-        <div className="flex items-center gap-3 px-4 h-14">
+        <div className="flex items-center gap-3 px-4 lg:px-8 h-14">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/sit.png" alt="SIT" className="h-7 w-auto object-contain" />
           <div className="w-px h-4 bg-gray-200" />
@@ -100,8 +100,8 @@ export default function StudentDashboardLayout({ children }: { children: React.R
       </main>
 
       {/* Bottom nav */}
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-30 bg-white border-t border-gray-100 shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
-        <div className="flex" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] lg:max-w-3xl xl:max-w-5xl z-30 bg-white border-t border-gray-100 shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
+        <div className="flex max-w-md lg:max-w-lg mx-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           {navItems.map(item => {
             const active = isActive(item.href);
             return (

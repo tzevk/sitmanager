@@ -120,15 +120,6 @@ export default function PortalAccountsPage() {
     []
   );
 
-  function generatePassword(length = 10): string {
-    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-    const bytes = new Uint8Array(Math.max(1, length));
-    crypto.getRandomValues(bytes);
-    let out = '';
-    for (let i = 0; i < bytes.length; i++) out += alphabet[bytes[i] % alphabet.length];
-    return out;
-  }
-
   function csvEscape(value: unknown): string {
     const s = value === null || value === undefined ? '' : String(value);
     if (/[\n\r",]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
@@ -154,11 +145,18 @@ export default function PortalAccountsPage() {
     return `student.${studentId}`;
   }
 
+  /** Standard student portal password: their first name + "@123" (e.g. "Rahul@123"). */
+  function generateStudentPassword(studentName: string | null | undefined): string {
+    const firstName = String(studentName || '').trim().split(/\s+/)[0] || 'Student';
+    const capitalized = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+    return `${capitalized}@123`;
+  }
+
   function exportStudentCsv(filteredRows: StudentRow[]) {
     if (!filteredRows.length) return;
     const pwMap: Record<number, string> = { ...studentPasswords };
     for (const r of filteredRows) {
-      if (!r.auth_id && !pwMap[r.Student_Id]) pwMap[r.Student_Id] = generatePassword(10);
+      if (!r.auth_id && !pwMap[r.Student_Id]) pwMap[r.Student_Id] = generateStudentPassword(r.Student_Name);
     }
     setStudentPasswords(pwMap);
     const headers = ['Student ID', 'Roll No', 'Student Name', 'Email', 'Mobile', 'Username', 'Password', 'Has Account'];
@@ -170,9 +168,9 @@ export default function PortalAccountsPage() {
     downloadCsv(`portal-accounts-students-batch${studentBatchId}.csv`, headers, rows);
   }
 
-  async function createStudentAccount(studentId: number, rollNo: string | null) {
+  async function createStudentAccount(studentId: number, rollNo: string | null, studentName?: string | null) {
     const username = suggestStudentUsername(rollNo, studentId);
-    const password = studentPasswords[studentId] || generatePassword(10);
+    const password = studentPasswords[studentId] || generateStudentPassword(studentName);
     if (!studentPasswords[studentId]) setStudentPasswords(prev => ({ ...prev, [studentId]: password }));
     setStudentSavingId(studentId);
     setError(''); setSuccess('');
@@ -201,7 +199,7 @@ export default function PortalAccountsPage() {
     let created = 0; let failed = 0;
     for (const r of toCreate) {
       const username = suggestStudentUsername(r.Roll_No, r.Student_Id);
-      const password = studentPasswords[r.Student_Id] || generatePassword(10);
+      const password = studentPasswords[r.Student_Id] || generateStudentPassword(r.Student_Name);
       if (!studentPasswords[r.Student_Id]) setStudentPasswords(prev => ({ ...prev, [r.Student_Id]: password }));
       try {
         const res = await fetch('/api/admin/portal-accounts/student', {
@@ -689,7 +687,7 @@ export default function PortalAccountsPage() {
         });
         setStudentPasswords(prev => {
           const next = { ...prev };
-          rows.forEach(r => { if (!r.auth_id && !next[r.Student_Id]) next[r.Student_Id] = generatePassword(10); });
+          rows.forEach(r => { if (!r.auth_id && !next[r.Student_Id]) next[r.Student_Id] = generateStudentPassword(r.Student_Name); });
           return next;
         });
       })
@@ -1055,7 +1053,7 @@ export default function PortalAccountsPage() {
                                       <button
                                         type="button"
                                         className={btnPrimarySm}
-                                        onClick={() => createStudentAccount(r.Student_Id, r.Roll_No)}
+                                        onClick={() => createStudentAccount(r.Student_Id, r.Roll_No, r.Student_Name)}
                                         disabled={isSaving || bulkCreating}
                                       >
                                         {isSaving ? 'Saving…' : hasAccount ? 'Update' : 'Create'}

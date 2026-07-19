@@ -35,8 +35,14 @@ const nextConfig: NextConfig = {
 
   // pdfkit loads its standard-font .afm files from disk at runtime —
   // make sure they're included in the serverless function bundle.
+  // @sparticuz/chromium ships its Chromium binary (~65MB across bin/*.br) the
+  // same way — required from disk via executablePath(), not bundled — so the
+  // fee-receipt-email route (the only one that renders HTML to PDF via
+  // headless Chrome) needs the same explicit include or the binary is missing
+  // at runtime on Vercel even though the build succeeds locally.
   outputFileTracingIncludes: {
     '/api/reports/fees/pdf/route': ['./node_modules/pdfkit/js/data/**/*'],
+    '/api/fee-details/[studentId]/[feesId]/email/route': ['./node_modules/@sparticuz/chromium/bin/**/*'],
   },
 
   experimental: {

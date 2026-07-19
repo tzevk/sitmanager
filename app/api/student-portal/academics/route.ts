@@ -101,6 +101,33 @@ export async function GET(req: NextRequest) {
     let attendanceSummary = { total_lectures: 0, attended: 0, absent: 0, percentage: 0 };
     let recentLectures: any[] = [];
 
+    // Standard Lecture Plan lookup: student_attendance has no lecture_no/id column,
+    // only (Batch_Id, Attendance_Date, Session) — so we match by date, taking the
+    // Nth lecture on that date (1st = first_half, 2nd = second_half) as a best-effort join.
+    const lecturesByDate = new Map<string, Array<{ subject: string | null; faculty_name: string | null }>>();
+    if (batchId) {
+      const [slectureRows] = await pool.query<any[]>(
+        `SELECT date, subject, subject_topic, faculty_name, lecture_no
+         FROM batch_slecture_master
+         WHERE batch_id = ? AND date IS NOT NULL
+           AND (deleted = '0' OR deleted IS NULL)
+         ORDER BY date ASC, lecture_no ASC`,
+        [batchId]
+      );
+      for (const row of slectureRows as any[]) {
+        const key = String(row.date);
+        const list = lecturesByDate.get(key) ?? [];
+        list.push({ subject: row.subject || row.subject_topic || null, faculty_name: row.faculty_name || null });
+        lecturesByDate.set(key, list);
+      }
+    }
+    const lookupLecture = (date: unknown, session: string) => {
+      const list = lecturesByDate.get(String(date));
+      if (!list || !list.length) return null;
+      const idx = session === 'second_half' ? 1 : 0;
+      return list[idx] ?? list[0];
+    };
+
     if (batchId) {
       const [attendanceRows] = await pool.query<any[]>(
         `SELECT Attendance_Id, Attendance_Date, Session, Status
@@ -119,15 +146,19 @@ export async function GET(req: NextRequest) {
       const percentage = totalSessions > 0 ? Math.round((attended / totalSessions) * 100) : 0;
       attendanceSummary = { total_lectures: totalSessions, attended, absent, percentage };
 
-      recentLectures = attendanceRows.slice(0, 10).map((r: any) => ({
-        Take_Id: r.Attendance_Id,
-        Take_Dt: r.Attendance_Date,
-        Topic: r.Session === 'second_half' ? 'Second Half' : 'First Half',
-        Faculty_Name: '',
-        present: r.Status === 'P' ? 1 : 0,
-        Late: 0,
-        session: r.Session,
-      }));
+      recentLectures = attendanceRows.slice(0, 10).map((r: any) => {
+        const lecture = lookupLecture(r.Attendance_Date, r.Session);
+        const fallbackTopic = r.Session === 'second_half' ? 'Second Half' : 'First Half';
+        return {
+          Take_Id: r.Attendance_Id,
+          Take_Dt: r.Attendance_Date,
+          Topic: lecture?.subject || fallbackTopic,
+          Faculty_Name: lecture?.faculty_name || '',
+          present: r.Status === 'P' ? 1 : 0,
+          Late: 0,
+          session: r.Session,
+        };
+      });
     }
 
     // 3. Upcoming lectures from batch_lecture_master
@@ -218,20 +249,25 @@ export async function GET(req: NextRequest) {
          LIMIT 100`,
         [batchId, studentId]
       );
-      allLectures = (allRows as any[]).map((r: any) => ({
-        Take_Id: r.Attendance_Id,
-        Take_Dt: r.Attendance_Date,
-        Topic: r.Session === 'second_half' ? 'Second Half' : 'First Half',
-        Faculty_Name: '',
-        present: r.Status === 'P' ? 1 : 0,
-        Late: 0,
-        session: r.Session,
-      }));
+      allLectures = (allRows as any[]).map((r: any) => {
+        const lecture = lookupLecture(r.Attendance_Date, r.Session);
+        const fallbackTopic = r.Session === 'second_half' ? 'Second Half' : 'First Half';
+        return {
+          Take_Id: r.Attendance_Id,
+          Take_Dt: r.Attendance_Date,
+          Topic: lecture?.subject || fallbackTopic,
+          Faculty_Name: lecture?.faculty_name || '',
+          present: r.Status === 'P' ? 1 : 0,
+          Late: 0,
+          session: r.Session,
+        };
+      });
     }
 
     // 7. Fees summary — ledger based: debit = charged, credit = paid, pending = balance.
     //    Mirrors the admin per-student fee page (debit - credit). Student_Id is indexed.
     let feesSummary = { total: 0, paid: 0, pending: 0 };
+    let feeLedger: any[] = [];
     try {
       const [feeRows] = await pool.query<any[]>(
         `SELECT
@@ -244,10 +280,30 @@ export async function GET(req: NextRequest) {
       const debit = Number(feeRows[0]?.debit || 0);
       const credit = Number(feeRows[0]?.credit || 0);
       feesSummary = { total: Math.round(debit), paid: Math.round(credit), pending: Math.round(debit - credit) };
+
+      const [ledgerRows] = await pool.query<any[]>(
+        `SELECT Fees_Id, Fees_Code, RDate, Date_Added, Payment_Type, TypeR,
+                COALESCE(Total_Amt, Amount, 0) AS Amount, Notes
+         FROM s_fees_mst
+         WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+         ORDER BY COALESCE(RDate, Date_Added) DESC, Fees_Id DESC
+         LIMIT 10`,
+        [studentId]
+      );
+      feeLedger = ledgerRows.map((r: any) => ({
+        fees_id: r.Fees_Id,
+        receipt_code: r.Fees_Code,
+        date: r.RDate ?? r.Date_Added,
+        payment_type: r.Payment_Type,
+        type: r.TypeR === 'C' ? 'paid' : 'charged',
+        amount: Math.round(Number(r.Amount || 0)),
+        notes: r.Notes,
+      }));
     } catch { /* fees optional — never block the dashboard */ }
 
     return NextResponse.json({
       fees: feesSummary,
+      fee_ledger: feeLedger,
       student: {
         student_id: student?.Student_Id,
         student_name: student?.Student_Name,
