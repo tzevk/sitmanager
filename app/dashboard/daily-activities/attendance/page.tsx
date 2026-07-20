@@ -315,15 +315,15 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     setSaved(false);
   };
 
-  /* save both halves */
-  const save = async () => {
+  /* save both halves — accepts optional pre-computed maps (used by facescan apply-and-save) */
+  const save = async (fhOverride?: StatusMap, shOverride?: StatusMap) => {
     const toRecords = (map: StatusMap) =>
       students
         .filter(s => map[s.Student_Id])
         .map(s => ({ studentId: s.Student_Id, admissionId: s.Admission_Id, status: map[s.Student_Id] as 'P' | 'A' | 'L' }));
 
-    const fhRecords = toRecords(statusMapFH);
-    const shRecords = toRecords(statusMapSH);
+    const fhRecords = toRecords(fhOverride ?? statusMapFH);
+    const shRecords = toRecords(shOverride ?? statusMapSH);
 
     if (!fhRecords.length && !shRecords.length) {
       setError('Please mark attendance for at least one student.');
@@ -465,6 +465,37 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     setSaved(false);
     setFacescanOpen(false);
     setFacescanManual('');
+  };
+
+  const applyAndSave = async () => {
+    // Build merged maps locally — can't wait for async React state update
+    const mergedFH = { ...statusMapFH };
+    const mergedSH = { ...statusMapSH };
+
+    const applyFH = facescanApplyTo !== 'second_half';
+    const applySH = facescanApplyTo !== 'first_half';
+
+    if (applyFH) for (const id of facescanFhIds) mergedFH[id] = 'P';
+    if (applySH) for (const id of facescanShIds) mergedSH[id] = 'P';
+
+    const lines = facescanManual.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+    for (const line of lines) {
+      const student =
+        students.find(s => String(s.Student_Id) === line) ??
+        students.find(s => s.rollNo && s.rollNo.toLowerCase() === line.toLowerCase());
+      if (!student) continue;
+      if (applyFH) mergedFH[student.Student_Id] = 'P';
+      if (applySH) mergedSH[student.Student_Id] = 'P';
+    }
+
+    setStatusMapFH(mergedFH);
+    setStatusMapSH(mergedSH);
+    setFacescanOpen(false);
+    setFacescanManual('');
+    setFacescanFhIds(new Set());
+    setFacescanShIds(new Set());
+
+    await save(mergedFH, mergedSH);
   };
 
   const exportExcel = useCallback(async () => {
@@ -1410,25 +1441,47 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
             </div>
 
             {/* Footer */}
-            <div className="shrink-0 px-5 py-4 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50/60">
-              <button
-                type="button"
-                onClick={() => setFacescanOpen(false)}
-                className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={applyFacescan}
-                disabled={facescanLoading || (facescanFhIds.size === 0 && facescanShIds.size === 0 && !facescanManual.trim())}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold text-white bg-[#2E3093] hover:bg-[#252780] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                Apply as Present
-              </button>
+            <div className="shrink-0 px-5 py-4 border-t border-slate-100 bg-slate-50/60">
+              {saving && (
+                <div className="flex items-center gap-2 mb-3 text-xs text-slate-500">
+                  <div className="w-3.5 h-3.5 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                  Saving attendance…
+                </div>
+              )}
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFacescanOpen(false)}
+                  disabled={saving}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={applyFacescan}
+                  disabled={facescanLoading || saving || (facescanFhIds.size === 0 && facescanShIds.size === 0 && !facescanManual.trim())}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  Apply Only
+                </button>
+                {canCreate && (
+                  <button
+                    type="button"
+                    onClick={applyAndSave}
+                    disabled={facescanLoading || saving || (facescanFhIds.size === 0 && facescanShIds.size === 0 && !facescanManual.trim())}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold text-white bg-[#2E3093] hover:bg-[#252780] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                    {saving ? 'Saving…' : 'Apply & Save'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
