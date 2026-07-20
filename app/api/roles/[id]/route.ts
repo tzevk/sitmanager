@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { apiRateLimiter } from '@/lib/rate-limit';
 import { logTableActivity } from '@/lib/activity-log';
+import { invalidatePermissionCache } from '@/lib/api-auth';
 import {
   getRoleById,
   updateRolePartial,
@@ -68,6 +69,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       dashboard_department: body.dashboard_department,
       updatedBy: session.userId,
     });
+
+    // Clear the permission cache so every user with this role picks up the
+    // new permission set on their very next request — not after the 5-min TTL.
+    await invalidatePermissionCache(roleId);
 
     await Promise.all([
       logTableActivity(request, {
