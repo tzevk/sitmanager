@@ -5,6 +5,15 @@ Format: `[Date] Module — Description`
 
 ---
 
+## 2026-07-20
+
+### Allot Roll Number — Excel Export
+- Added an **Export Excel** button next to the existing Export Facescan button on the Allot Roll Number page.
+- Downloads an `.xlsx` file containing Sr No, Student Name, and Roll Number for all students in the selected batch.
+- File is named `{CourseName}_{BatchCode}_RollNumbers.xlsx` for easy identification.
+
+---
+
 ## 2026-07-15
 
 ### Annual Batch — WhatsApp Group Link
