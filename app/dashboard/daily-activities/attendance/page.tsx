@@ -157,6 +157,10 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   const [feedbackLinks, setFeedbackLinks]     = useState<FeedbackLink[]>([]);
   const [copiedFeedbackUrl, setCopiedFeedbackUrl] = useState('');
 
+  /* per-row auto-save */
+  const [savingSet, setSavingSet]   = useState<Set<string>>(new Set());
+  const [rowErrors, setRowErrors]   = useState<Record<string, string>>({});
+
   /* facescan panel */
   const [facescanOpen, setFacescanOpen]           = useState(false);
   const [facescanLoading, setFacescanLoading]     = useState(false);
@@ -313,6 +317,45 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     setStatusMapFH(prev => ({ ...prev, ...fh }));
     setStatusMapSH(prev => ({ ...prev, ...sh }));
     setSaved(false);
+  };
+
+  /* per-row click → immediate save */
+  const handleStatusClick = async (student: Student, status: AttStatus, half: 'FH' | 'SH') => {
+    const currentMap = half === 'FH' ? statusMapFH : statusMapSH;
+    const current    = currentMap[student.Student_Id] ?? '';
+    if (current === status) return; // clicking same status is a no-op
+
+    const key     = `${student.Student_Id}-${half}`;
+    const session = half === 'FH' ? 'first_half' : 'second_half';
+
+    // Optimistic update
+    const setter = half === 'FH' ? setStatusMapFH : setStatusMapSH;
+    setter(prev => ({ ...prev, [student.Student_Id]: status }));
+    setSavingSet(prev => new Set([...prev, key]));
+    setRowErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
+
+    try {
+      const res = await fetch('/api/daily-activities/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          batchId: Number(batchId),
+          date,
+          session,
+          records: [{ studentId: student.Student_Id, admissionId: student.Admission_Id, status }],
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'Save failed');
+      }
+    } catch (e: unknown) {
+      // Revert
+      setter(prev => ({ ...prev, [student.Student_Id]: current }));
+      setRowErrors(prev => ({ ...prev, [key]: e instanceof Error ? e.message : 'Save failed' }));
+    } finally {
+      setSavingSet(prev => { const n = new Set(prev); n.delete(key); return n; });
+    }
   };
 
   /* save both halves — accepts optional pre-computed maps (used by facescan apply-and-save) */
@@ -702,17 +745,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
           </div>
 
           <div className="flex items-center gap-2">
-            {loaded && students.length > 0 && (
-              <button
-                onClick={openFacescan}
-                className="inline-flex w-full sm:w-auto justify-center items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg border border-emerald-300/60 bg-emerald-500/20 text-white hover:bg-emerald-500/30 transition-colors"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                </svg>
-                Facescan
-              </button>
-            )}
+            {/* Facescan paused */}
             {loaded && students.length > 0 && (
               <button
                 onClick={exportExcel}
@@ -1048,29 +1081,47 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                     {canCreate ? (
                       <div className="space-y-1.5">
                         <p className="text-[10px] font-bold text-[#2E3093] uppercase">First Half</p>
-                        <div className="flex items-center gap-1.5">
-                          <button onClick={() => toggle(student.Student_Id, 'P', 'FH')} className={btnBase(fh==='P','bg-green-500 text-white shadow-sm shadow-green-200','bg-gray-100 text-gray-500 hover:bg-green-100 hover:text-green-700')}>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>P
-                          </button>
-                          <button onClick={() => toggle(student.Student_Id, 'L', 'FH')} className={btnBase(fh==='L','bg-amber-500 text-white shadow-sm shadow-amber-200','bg-gray-100 text-gray-500 hover:bg-amber-100 hover:text-amber-700')}>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3" /></svg>L
-                          </button>
-                          <button onClick={() => toggle(student.Student_Id, 'A', 'FH')} className={btnBase(fh==='A','bg-red-500 text-white shadow-sm shadow-red-200','bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600')}>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>A
-                          </button>
-                        </div>
+                        {savingSet.has(`${student.Student_Id}-FH`) ? (
+                          <div className="flex items-center gap-1.5 py-1 text-[11px] text-blue-500">
+                            <div className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />Saving…
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <button onClick={() => handleStatusClick(student, 'P', 'FH')} className={btnBase(fh==='P','bg-green-500 text-white shadow-sm shadow-green-200','bg-gray-100 text-gray-500 hover:bg-green-100 hover:text-green-700')}>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>P
+                            </button>
+                            <button onClick={() => handleStatusClick(student, 'L', 'FH')} className={btnBase(fh==='L','bg-amber-500 text-white shadow-sm shadow-amber-200','bg-gray-100 text-gray-500 hover:bg-amber-100 hover:text-amber-700')}>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3" /></svg>L
+                            </button>
+                            <button onClick={() => handleStatusClick(student, 'A', 'FH')} className={btnBase(fh==='A','bg-red-500 text-white shadow-sm shadow-red-200','bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600')}>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>A
+                            </button>
+                          </div>
+                        )}
+                        {rowErrors[`${student.Student_Id}-FH`] && (
+                          <p className="text-[10px] text-red-500">{rowErrors[`${student.Student_Id}-FH`]}</p>
+                        )}
                         <p className="text-[10px] font-bold text-purple-600 uppercase">Second Half</p>
-                        <div className="flex items-center gap-1.5">
-                          <button onClick={() => toggle(student.Student_Id, 'P', 'SH')} className={btnBase(sh==='P','bg-green-500 text-white shadow-sm shadow-green-200','bg-gray-100 text-gray-500 hover:bg-green-100 hover:text-green-700')}>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>P
-                          </button>
-                          <button onClick={() => toggle(student.Student_Id, 'L', 'SH')} className={btnBase(sh==='L','bg-amber-500 text-white shadow-sm shadow-amber-200','bg-gray-100 text-gray-500 hover:bg-amber-100 hover:text-amber-700')}>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3" /></svg>L
-                          </button>
-                          <button onClick={() => toggle(student.Student_Id, 'A', 'SH')} className={btnBase(sh==='A','bg-red-500 text-white shadow-sm shadow-red-200','bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600')}>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>A
-                          </button>
-                        </div>
+                        {savingSet.has(`${student.Student_Id}-SH`) ? (
+                          <div className="flex items-center gap-1.5 py-1 text-[11px] text-purple-500">
+                            <div className="w-3.5 h-3.5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />Saving…
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <button onClick={() => handleStatusClick(student, 'P', 'SH')} className={btnBase(sh==='P','bg-green-500 text-white shadow-sm shadow-green-200','bg-gray-100 text-gray-500 hover:bg-green-100 hover:text-green-700')}>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>P
+                            </button>
+                            <button onClick={() => handleStatusClick(student, 'L', 'SH')} className={btnBase(sh==='L','bg-amber-500 text-white shadow-sm shadow-amber-200','bg-gray-100 text-gray-500 hover:bg-amber-100 hover:text-amber-700')}>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3" /></svg>L
+                            </button>
+                            <button onClick={() => handleStatusClick(student, 'A', 'SH')} className={btnBase(sh==='A','bg-red-500 text-white shadow-sm shadow-red-200','bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600')}>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>A
+                            </button>
+                          </div>
+                        )}
+                        {rowErrors[`${student.Student_Id}-SH`] && (
+                          <p className="text-[10px] text-red-500">{rowErrors[`${student.Student_Id}-SH`]}</p>
+                        )}
                       </div>
                     ) : (
                       <div className="flex gap-4 text-xs">
@@ -1163,20 +1214,32 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                       {/* First Half */}
                       <td className="py-2.5 px-3 bg-blue-50/30 border-l border-blue-100/60">
                         {canCreate ? (
-                          <div className="flex items-center justify-center gap-1">
-                            {(['P','L','A'] as const).map(s => (
-                              <button
-                                key={s}
-                                onClick={() => toggle(student.Student_Id, s, 'FH')}
-                                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ${
-                                  fh === s
-                                    ? s === 'P' ? 'bg-green-500 text-white shadow-sm scale-105'
-                                    : s === 'L' ? 'bg-amber-500 text-white shadow-sm scale-105'
-                                    : 'bg-red-500 text-white shadow-sm scale-105'
-                                    : 'bg-white text-gray-400 border border-gray-200 hover:border-gray-300 hover:text-gray-600'
-                                }`}
-                              >{s}</button>
-                            ))}
+                          <div className="flex flex-col items-center gap-1">
+                            {savingSet.has(`${student.Student_Id}-FH`) ? (
+                              <div className="flex items-center gap-1.5 py-1.5 text-[11px] text-blue-500">
+                                <div className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                                Saving…
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center gap-1">
+                                {(['P','L','A'] as const).map(s => (
+                                  <button
+                                    key={s}
+                                    onClick={() => handleStatusClick(student, s, 'FH')}
+                                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ${
+                                      fh === s
+                                        ? s === 'P' ? 'bg-green-500 text-white shadow-sm scale-105'
+                                        : s === 'L' ? 'bg-amber-500 text-white shadow-sm scale-105'
+                                        : 'bg-red-500 text-white shadow-sm scale-105'
+                                        : 'bg-white text-gray-400 border border-gray-200 hover:border-gray-300 hover:text-gray-600'
+                                    }`}
+                                  >{s}</button>
+                                ))}
+                              </div>
+                            )}
+                            {rowErrors[`${student.Student_Id}-FH`] && (
+                              <p className="text-[10px] text-red-500 text-center">{rowErrors[`${student.Student_Id}-FH`]}</p>
+                            )}
                           </div>
                         ) : (
                           <div className="flex justify-center">
@@ -1190,20 +1253,32 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                       {/* Second Half */}
                       <td className="py-2.5 px-3 bg-purple-50/30 border-l border-purple-100/60">
                         {canCreate ? (
-                          <div className="flex items-center justify-center gap-1">
-                            {(['P','L','A'] as const).map(s => (
-                              <button
-                                key={s}
-                                onClick={() => toggle(student.Student_Id, s, 'SH')}
-                                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ${
-                                  sh === s
-                                    ? s === 'P' ? 'bg-green-500 text-white shadow-sm scale-105'
-                                    : s === 'L' ? 'bg-amber-500 text-white shadow-sm scale-105'
-                                    : 'bg-red-500 text-white shadow-sm scale-105'
-                                    : 'bg-white text-gray-400 border border-gray-200 hover:border-gray-300 hover:text-gray-600'
-                                }`}
-                              >{s}</button>
-                            ))}
+                          <div className="flex flex-col items-center gap-1">
+                            {savingSet.has(`${student.Student_Id}-SH`) ? (
+                              <div className="flex items-center gap-1.5 py-1.5 text-[11px] text-purple-500">
+                                <div className="w-3.5 h-3.5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                                Saving…
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center gap-1">
+                                {(['P','L','A'] as const).map(s => (
+                                  <button
+                                    key={s}
+                                    onClick={() => handleStatusClick(student, s, 'SH')}
+                                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ${
+                                      sh === s
+                                        ? s === 'P' ? 'bg-green-500 text-white shadow-sm scale-105'
+                                        : s === 'L' ? 'bg-amber-500 text-white shadow-sm scale-105'
+                                        : 'bg-red-500 text-white shadow-sm scale-105'
+                                        : 'bg-white text-gray-400 border border-gray-200 hover:border-gray-300 hover:text-gray-600'
+                                    }`}
+                                  >{s}</button>
+                                ))}
+                              </div>
+                            )}
+                            {rowErrors[`${student.Student_Id}-SH`] && (
+                              <p className="text-[10px] text-red-500 text-center">{rowErrors[`${student.Student_Id}-SH`]}</p>
+                            )}
                           </div>
                         ) : (
                           <div className="flex justify-center">
