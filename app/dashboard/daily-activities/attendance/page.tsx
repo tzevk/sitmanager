@@ -757,7 +757,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
             )}
             {canCreate && loaded && students.length > 0 && (
               <button
-                onClick={save}
+                onClick={() => save()}
                 disabled={saving || (!students.some(s => statusMapFH[s.Student_Id]) && !students.some(s => statusMapSH[s.Student_Id]))}
                 className="hidden sm:inline-flex w-full sm:w-auto justify-center items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg bg-white text-[#2E3093] hover:bg-white/90 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -1352,7 +1352,7 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
 
             {canCreate && (
               <button
-                onClick={save}
+                onClick={() => save()}
                 disabled={saving || (!students.some(s => statusMapFH[s.Student_Id]) && !students.some(s => statusMapSH[s.Student_Id]))}
                 className="inline-flex w-full sm:w-auto justify-center items-center gap-1.5 px-4 py-2 text-sm font-bold rounded-lg bg-[#2E3093] text-white hover:bg-[#252780] transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
