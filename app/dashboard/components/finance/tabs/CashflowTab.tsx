@@ -5,7 +5,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { useFinanceResource } from '../shared/useFinanceResource';
 import { Modal, TableHeader, TableSkeleton, EmptyRow, TotalRow, inpCls, lblCls, trCls, downloadCsv } from '../shared/primitives';
-import { fmt, todayISO, fmtDate, isCountableCashflow, MONTHS_FULL } from '../shared/format';
+import { fmt, todayISO, fmtDate, isCountableCashflow, buildYearOptions, yearValueToRange, monthOptionsForYear } from '../shared/format';
 import type { CashflowTxn, CashflowType } from '../shared/types';
 import CashflowCategoryBars from '../charts/CashflowCategoryBars';
 import { detectCashflowAnomalies, categoryMoMGrowth } from '../shared/predictions';
@@ -143,10 +143,43 @@ function HeaderSort({
   );
 }
 
+function YearMonthFilter({
+  year, month, setYear, setMonth, currentYear, calendarYearOptions, financialYearOptions,
+}: {
+  year: string; month: string;
+  setYear: (v: string) => void; setMonth: (v: string) => void;
+  currentYear: number;
+  calendarYearOptions: { value: string; label: string }[];
+  financialYearOptions: { value: string; label: string }[];
+}) {
+  const monthOptions = monthOptionsForYear(year, currentYear);
+  return (
+    <div className="flex items-center justify-end gap-2 mb-2">
+      <select value={year} onChange={e => { setYear(e.target.value); setMonth(''); }}
+        className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
+        <option value="">All years</option>
+        <optgroup label="Calendar Year">
+          {calendarYearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </optgroup>
+        <optgroup label="Financial Year">
+          {financialYearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </optgroup>
+      </select>
+      <select value={month} onChange={e => setMonth(e.target.value)}
+        className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
+        <option value="">All months</option>
+        {monthOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
 export default function CashflowTab() {
   const now = new Date();
   const currentYear = now.getFullYear();
-  const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+  const { calendar: calendarYearOptions, financial: financialYearOptions } = useMemo(
+    () => buildYearOptions(currentYear), [currentYear]
+  );
 
   const [search, setSearch] = useState('');
   const [type, setType]     = useState<'' | CashflowType>('');
@@ -167,9 +200,10 @@ export default function CashflowTab() {
     if (category)   p.set('category', category);
     if (department) p.set('department', department);
     if (company)    p.set('company', company);
-    // year expands into a date range so the server can apply it
-    const effectiveDateFrom = year && !dateFrom ? `${year}-01-01` : dateFrom;
-    const effectiveDateTo   = year && !dateTo   ? `${year}-12-31` : dateTo;
+    // year expands into a date range so the server can apply it (calendar or financial year)
+    const yearRange = yearValueToRange(year);
+    const effectiveDateFrom = yearRange && !dateFrom ? yearRange.from : dateFrom;
+    const effectiveDateTo   = yearRange && !dateTo   ? yearRange.to   : dateTo;
     if (effectiveDateFrom) p.set('dateFrom', effectiveDateFrom);
     if (effectiveDateTo)   p.set('dateTo',   effectiveDateTo);
     return p.toString();
@@ -232,13 +266,14 @@ export default function CashflowTab() {
   /* ── client-side filtering ──────────────────────── */
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const yearRange = yearValueToRange(year);
     return cash.rows.filter(r => {
       if (q && !`${r.description ?? ''} ${r.company ?? ''} ${r.department ?? ''} ${r.category}`.toLowerCase().includes(q)) return false;
       if (type       && r.type     !== type)             return false;
       if (category   && r.category !== category)         return false;
       if (department && (r.department ?? '') !== department) return false;
       if (company    && (r.company ?? '')    !== company)    return false;
-      if (year       && !(r.date ?? '').startsWith(year))   return false;
+      if (yearRange  && ((r.date ?? '') < yearRange.from || (r.date ?? '') > yearRange.to)) return false;
       if (month      && !(r.date ?? '').startsWith(month)) return false;
       if (dateFrom   && (r.date ?? '') < dateFrom)       return false;
       if (dateTo     && (r.date ?? '') > dateTo)         return false;
@@ -405,21 +440,8 @@ export default function CashflowTab() {
     <div className="space-y-6">
       {/* Payment vs Receipt by Department */}
       <div>
-        <div className="flex items-center justify-end gap-2 mb-2">
-          <select value={year} onChange={e => { setYear(e.target.value); setMonth(''); }}
-            className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
-            <option value="">All years</option>
-            {yearOptions.map(y => <option key={y} value={String(y)}>{y}</option>)}
-          </select>
-          <select value={month} onChange={e => setMonth(e.target.value)}
-            className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
-            <option value="">All months</option>
-            {MONTHS_FULL.map((m, i) => {
-              const val = `${year || currentYear}-${String(i + 1).padStart(2, '0')}`;
-              return <option key={i} value={val}>{m}</option>;
-            })}
-          </select>
-        </div>
+        <YearMonthFilter year={year} month={month} setYear={setYear} setMonth={setMonth}
+          currentYear={currentYear} calendarYearOptions={calendarYearOptions} financialYearOptions={financialYearOptions} />
         <CashflowCategoryBars rows={countableFilteredRows} view="dept" />
       </div>
 
@@ -479,9 +501,14 @@ export default function CashflowTab() {
             <div>
               <label className="block text-[10px] text-gray-400 mb-0.5">Year</label>
               <select value={year} onChange={e => { setYear(e.target.value); setMonth(''); }}
-                className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-24 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
+                className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-28 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
                 <option value="">All years</option>
-                {yearOptions.map(y => <option key={y} value={String(y)}>{y}</option>)}
+                <optgroup label="Calendar Year">
+                  {calendarYearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </optgroup>
+                <optgroup label="Financial Year">
+                  {financialYearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </optgroup>
               </select>
             </div>
             <div>
@@ -489,10 +516,7 @@ export default function CashflowTab() {
               <select value={month} onChange={e => setMonth(e.target.value)}
                 className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-32 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
                 <option value="">All months</option>
-                {MONTHS_FULL.map((m, i) => {
-                  const val = `${year || currentYear}-${String(i + 1).padStart(2, '0')}`;
-                  return <option key={i} value={val}>{m}</option>;
-                })}
+                {monthOptionsForYear(year, currentYear).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
             <div>
@@ -692,6 +716,8 @@ export default function CashflowTab() {
 
       {/* Charts: Profit summary + Payment vs Receipt by Category */}
       <div>
+        <YearMonthFilter year={year} month={month} setYear={setYear} setMonth={setMonth}
+          currentYear={currentYear} calendarYearOptions={calendarYearOptions} financialYearOptions={financialYearOptions} />
         <CashflowCategoryBars rows={countableFilteredRows} view="summary-and-category" />
       </div>
 

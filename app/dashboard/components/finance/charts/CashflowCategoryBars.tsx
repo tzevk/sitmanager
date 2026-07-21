@@ -66,6 +66,8 @@ export default function CashflowCategoryBars({ rows, view = 'all' }: { rows: Cas
     ];
   }, [rows]);
 
+  const profitTotal = summaryData.find(d => d.name === 'Profit')?.value ?? 0;
+
   if (view !== 'dept' && catData.length === 0) {
     return (
       <div className="rounded-xl border border-gray-200 bg-white p-6 text-center text-xs text-gray-400">
@@ -109,8 +111,11 @@ export default function CashflowCategoryBars({ rows, view = 'all' }: { rows: Cas
       {/* Summary bar chart: Profit = Income - (Expense + Loan Repayment) — half width */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <p className="text-[11px] font-semibold text-[#2E3093] uppercase tracking-wider mb-3">
+          <p className="text-[11px] font-semibold text-[#2E3093] uppercase tracking-wider mb-3 flex items-center gap-2">
             Profit = Income − (Expense + Loan Repayment)
+            <span className={`text-sm font-bold normal-case tracking-normal ${profitTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              {fmt(profitTotal)}
+            </span>
           </p>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={summaryData} barSize={56}>
