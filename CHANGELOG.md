@@ -5,6 +5,22 @@ Format: `[Date] Module — Description`
 
 ---
 
+## 2026-07-20
+
+### Attendance — Facescan Sync
+- Added a **Facescan** button to the Attendance page header (visible once students are loaded).
+- When clicked, automatically fetches today's biometric punch logs from the SmartOffice device and pre-marks matched students as Present (First Half = punches before 1 PM, Second Half = punches after 1 PM).
+- If SmartOffice is not configured or unreachable, a **Manual Entry** fallback is shown: type or scan Student IDs / Roll Numbers (one per line, barcode-scanner friendly). The textarea matches entries against the loaded student list and reports how many were found.
+- An **Apply To** selector lets you direct the import to First Half, Second Half, or Both.
+- Nothing is saved to the database until you click the regular **Save Attendance** button.
+
+### Allot Roll Number — Excel Export
+- Added an **Export Excel** button next to the existing Export Facescan button on the Allot Roll Number page.
+- Downloads an `.xlsx` file containing Sr No, Student Name, and Roll Number for all students in the selected batch.
+- File is named `{CourseName}_{BatchCode}_RollNumbers.xlsx` for easy identification.
+
+---
+
 ## 2026-07-15
 
 ### Annual Batch — WhatsApp Group Link

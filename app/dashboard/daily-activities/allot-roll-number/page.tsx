@@ -305,6 +305,23 @@ export default function AllotRollNumberPage() {
     }
   };
 
+  const handleExportExcel = () => {
+    if (!rows.length) return;
+    const courseName = selectedCourse?.Course_Name || 'Course';
+    const batchCode = selectedBatch?.Batch_code || 'Batch';
+    import('xlsx').then((XLSX) => {
+      const data = rows.map((r, i) => ({
+        'Sr No': i + 1,
+        'Student Name': r.Student_Name || '',
+        'Roll Number': r.Roll_No || '',
+      }));
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Roll Numbers');
+      XLSX.writeFile(wb, `${courseName}_${batchCode}_RollNumbers.xlsx`);
+    });
+  };
+
   const handleExportFacescan = () => {
     if (!rows.length) return;
     const w = window.open('', '_blank', 'width=900,height=1000');
@@ -449,6 +466,17 @@ export default function AllotRollNumberPage() {
               className="inline-flex items-center px-3 py-1.5 rounded-md border border-slate-200 bg-white text-slate-700 text-[11px] font-bold hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Export Facescan
+            </button>
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              disabled={!rows.length}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px] font-bold hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+              </svg>
+              Export Excel
             </button>
             {canUpdate ? (
               <button

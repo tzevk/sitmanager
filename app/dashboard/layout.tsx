@@ -64,9 +64,10 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Role Right > Add Employee': '/dashboard/masters/employee/add',
   'Role Right > Portal Accounts': '/dashboard/portal-accounts',
   'Daily Activities > Attendance': '/dashboard/daily-activities/attendance',
+  'Daily Activities > Standard Lecture Plan': '/dashboard/masters/batch',
+  'Daily Activities > Study Material Record': '/dashboard/daily-activities/study-material-record',
   'Daily Activities > Allot Roll Number': '/dashboard/daily-activities/allot-roll-number',
   'Daily Activities > Batch Communication': '/dashboard/daily-activities/batch-communication',
-  'Daily Activities > Study Material Record': '/dashboard/daily-activities/study-material-record',
   'Daily Activities > Lecture Taken': '/dashboard/daily-activities/lecture-taken',
   'Daily Activities > Assignments Taken': '/dashboard/daily-activities/assignments-taken',
   'Daily Activities > Unit Test Taken': '/dashboard/daily-activities/unit-test-taken',
@@ -135,9 +136,10 @@ const SUB_MENUS: Record<string, string[]> = {
   ],
   'Daily Activities': [
     'Attendance',
+    'Standard Lecture Plan',
+    'Study Material Record',
     'Allot Roll Number',
     'Batch Communication',
-    'Study Material Record',
     'Lecture Taken',
     'Assignments Taken',
     'Unit Test Taken',
@@ -284,9 +286,10 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Role Right > Add Employee': ['employee.create'],
   'Role Right > Portal Accounts': ['user.create'],
   'Daily Activities > Attendance': ['attendance.view'],
+  'Daily Activities > Standard Lecture Plan': ['standard_lecture_plan.view', 'batch.view', 'batch.update'],
+  'Daily Activities > Study Material Record': ['study_material_record.view'],
   'Daily Activities > Allot Roll Number': ['roll_number.view'],
   'Daily Activities > Batch Communication': ['annual_batch.view'],
-  'Daily Activities > Study Material Record': ['study_material.view'],
   'Daily Activities > Lecture Taken': ['lecture.view'],
   'Daily Activities > Assignments Taken': ['assignment.view'],
   'Daily Activities > Unit Test Taken': ['unit_test.view'],
@@ -1006,7 +1009,10 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
       </nav>
 
       {/* Page content */}
-      <main className="flex-1 overflow-y-auto p-6">
+      {/* min-h-0 overrides the flex item's content-based auto min-height —
+          without it, Safari/WebKit can let main grow past the available
+          space instead of scrolling within it. */}
+      <main className="flex-1 min-h-0 overflow-y-auto p-6">
         {children}
       </main>
 
