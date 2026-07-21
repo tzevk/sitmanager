@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFinanceResource } from '../shared/useFinanceResource';
 import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, TotalRow, SectionTitle, StatCard, thCls, tdCls, tdNum, inpCls, lblCls, trCls, PctBar } from '../shared/primitives';
-import { fmt, pct, MONTHS_FULL, parseMonth, fmtDate, todayISO, isCountableCashflow } from '../shared/format';
+import {
+  fmt, pct, MONTHS_FULL, parseMonth, fmtDate, todayISO, isCountableCashflow,
+  buildYearOptions, isFinancialYearValue, monthsInFinancialYear, financialYearLabel,
+} from '../shared/format';
 import type { Loan, DeptPerf, DebtPlan, CtRow, MonthlyRow, CashflowTxn, PendingInvoice, SalaryCashflow } from '../shared/types';
 
 const TARGET_EXPENSE_PCT: Record<string, number> = {
@@ -20,9 +23,19 @@ const CBD_YEARLY_INCOME  = 67_460_000;  // ₹6,74,60,000
 export default function OverviewTab() {
   const now = new Date();
   const [monthIdx, setMonthIdx] = useState(now.getMonth());
-  const [year, setYear] = useState(now.getFullYear());
-  const yearOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
-  const monthYear = `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
+  const [yearValue, setYearValue] = useState(String(now.getFullYear()));
+  const currentYear = now.getFullYear();
+  const { calendar: calendarYearOptions, financial: financialYearOptions } = useMemo(
+    () => buildYearOptions(currentYear), [currentYear]
+  );
+  const isFY = isFinancialYearValue(yearValue);
+  // Single month ("2026-04") when a calendar year is picked, or every month
+  // in the financial year (1 Apr – 31 Mar) when an FY is picked.
+  const activeMonths = useMemo(() => (
+    isFY ? monthsInFinancialYear(Number(yearValue.slice(2))) : [`${yearValue}-${String(monthIdx + 1).padStart(2, '0')}`]
+  ), [isFY, yearValue, monthIdx]);
+  const monthYear = activeMonths[0];
+  const periodLabel = isFY ? financialYearLabel(Number(yearValue.slice(2))) : `${MONTHS_FULL[monthIdx]} ${yearValue}`;
 
   // Separate filter for Department Performance table
   const [deptPerfMonthIdx, setDeptPerfMonthIdx] = useState(now.getMonth());
@@ -31,7 +44,9 @@ export default function OverviewTab() {
   const deptPerfLabel = `${MONTHS_FULL[deptPerfMonthIdx]} ${deptPerfYear}`;
   const deptPerfYearOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
 
-  const depts  = useFinanceResource<DeptPerf>('/api/finance/dept-performance', { query: `month_year=${monthYear}` });
+  // In FY mode the server can only filter on one exact month, so fetch everything
+  // and narrow to activeMonths client-side instead.
+  const depts  = useFinanceResource<DeptPerf>('/api/finance/dept-performance', isFY ? {} : { query: `month_year=${monthYear}` });
   const deptsPerf = useFinanceResource<DeptPerf>('/api/finance/dept-performance', { query: `month_year=${deptPerfMonthYear}` });
   const loans  = useFinanceResource<Loan>('/api/finance/loans');
   const debtPlans = useFinanceResource<DebtPlan>('/api/finance/debt-plan');
@@ -173,6 +188,7 @@ export default function OverviewTab() {
     };
 
     for (const r of depts.rows) {
+      if (!activeMonths.includes(parseMonth(r.month_year))) continue;
       const dept = (r.department || '').toLowerCase();
       const amountActual = Number(r.amount_achieved || 0);
       const amountTarget = Number(r.target_amount || 0);
@@ -205,7 +221,7 @@ export default function OverviewTab() {
       }
     }
 
-    const ctMonthRows = ctPerf.rows.filter(r => parseMonth(r.month_year) === monthYear);
+    const ctMonthRows = ctPerf.rows.filter(r => activeMonths.includes(parseMonth(r.month_year)));
     const ctTurnover = ctMonthRows.reduce((s, r) => s + Number(r.cost_from_company || 0), 0);
     const ctExpense = ctMonthRows.reduce((s, r) => s + Number(r.trainer_cost || 0) + Number(r.travelling_expenses || 0), 0);
     if (ctTurnover > 0 || ctExpense > 0) {
@@ -213,27 +229,30 @@ export default function OverviewTab() {
       base.corporate.expenseActual += ctExpense;
     }
 
-    const depMonthRows = deputation.rows.filter(r => parseMonth(r.month) === monthYear);
-    const depActual = cashflowActualByDeptMonth.get(`DEPUTATION ACCENT::${monthYear}`) || depMonthRows.reduce((s, r) => s + Number(r.actual_cost || 0), 0);
+    const sumOverMonths = (map: Map<string, number>, dept: string) =>
+      activeMonths.reduce((s, my) => s + (map.get(`${dept}::${my}`) || 0), 0);
+
+    const depMonthRows = deputation.rows.filter(r => activeMonths.includes(parseMonth(r.month)));
+    const depActual = sumOverMonths(cashflowActualByDeptMonth, 'DEPUTATION ACCENT') || depMonthRows.reduce((s, r) => s + Number(r.actual_cost || 0), 0);
     const depTarget = depMonthRows.reduce((s, r) => s + Number(r.target_cost || 0), 0);
     if (base.deputation.turnoverActual === 0 && depActual > 0) base.deputation.turnoverActual = depActual;
     if (base.deputation.turnoverTarget === 0 && depTarget > 0) base.deputation.turnoverTarget = depTarget;
 
-    const projMonthRows = projects.rows.filter(r => parseMonth(r.month) === monthYear);
-    const projActual = cashflowActualByDeptMonth.get(`PROJECT ACCENT::${monthYear}`) || projMonthRows.reduce((s, r) => s + Number(r.actual_cost || 0), 0);
+    const projMonthRows = projects.rows.filter(r => activeMonths.includes(parseMonth(r.month)));
+    const projActual = sumOverMonths(cashflowActualByDeptMonth, 'PROJECT ACCENT') || projMonthRows.reduce((s, r) => s + Number(r.actual_cost || 0), 0);
     const projTarget = projMonthRows.reduce((s, r) => s + Number(r.target_cost || 0), 0);
     if (base.accentProjects.turnoverActual === 0 && projActual > 0) base.accentProjects.turnoverActual = projActual;
     if (base.accentProjects.turnoverTarget === 0 && projTarget > 0) base.accentProjects.turnoverTarget = projTarget;
 
     // Fill any actuals still at zero directly from real cashflow transactions
-    // for the selected month, keyed by department. This is what actually
+    // for the selected period, keyed by department. This is what actually
     // updates every month as new payments/receipts are entered — the
     // dept-performance / CT / deputation / projects tables above are manually
     // maintained and often lag behind, which is why totals can look stale.
     const cfTurnover = (depts_: string[]) =>
-      depts_.reduce((s, d) => s + (cashflowByDeptMonth.turnover.get(`${d}::${monthYear}`) || 0), 0);
+      depts_.reduce((s, d) => s + sumOverMonths(cashflowByDeptMonth.turnover, d), 0);
     const cfExpense = (depts_: string[]) =>
-      depts_.reduce((s, d) => s + (cashflowByDeptMonth.expense.get(`${d}::${monthYear}`) || 0), 0);
+      depts_.reduce((s, d) => s + sumOverMonths(cashflowByDeptMonth.expense, d), 0);
 
     if (base.cbd.turnoverActual === 0) base.cbd.turnoverActual = cfTurnover(['CBD']);
     if (base.cbd.expenseActual === 0) base.cbd.expenseActual = cfExpense(['CBD']);
@@ -248,8 +267,8 @@ export default function OverviewTab() {
     if (base.other.turnoverActual === 0) base.other.turnoverActual = cfTurnover(otherDepts);
     if (base.other.expenseActual === 0) base.other.expenseActual = cfExpense(otherDepts);
 
-    // Hardcode CBD monthly income target
-    base.cbd.turnoverTarget = CBD_MONTHLY_INCOME;
+    // CBD income target: monthly target as-is, or × 12 across the whole financial year
+    base.cbd.turnoverTarget = isFY ? CBD_YEARLY_INCOME : CBD_MONTHLY_INCOME;
 
     return [base.cbd, base.deputation, base.corporate, base.accentProjects, base.other].map(item => {
       const targetPct = TARGET_EXPENSE_PCT[item.key];
@@ -267,7 +286,7 @@ export default function OverviewTab() {
         profitPctTarget,
       };
     });
-  }, [ctPerf.rows, depts.rows, deputation.rows, projects.rows, monthYear, cashflowActualByDeptMonth, cashflowByDeptMonth]);
+  }, [ctPerf.rows, depts.rows, deputation.rows, projects.rows, activeMonths, isFY, cashflowActualByDeptMonth, cashflowByDeptMonth]);
 
   const summaryTotals = useMemo(() => {
     return deptBreakdown.reduce(
@@ -334,27 +353,35 @@ export default function OverviewTab() {
         <div className="flex items-center justify-between">
           <SectionTitle>Cashflow Summary - Department-wise Breakdown</SectionTitle>
             <span className="text-[11px] font-medium text-gray-500">
-              CBD Annual Income Target:&nbsp;
-              <span className="font-bold text-[#2E3093]">₹{CBD_YEARLY_INCOME.toLocaleString('en-IN')}</span>
-              &nbsp;·&nbsp;Monthly Target:&nbsp;
-              <span className="font-bold text-[#2E3093]">₹{CBD_MONTHLY_INCOME.toLocaleString('en-IN')}</span>
+              Showing:&nbsp;<span className="font-bold text-[#2E3093]">{periodLabel}</span>
+              &nbsp;·&nbsp;CBD {isFY ? 'Annual' : 'Monthly'} Income Target:&nbsp;
+              <span className="font-bold text-[#2E3093]">₹{(isFY ? CBD_YEARLY_INCOME : CBD_MONTHLY_INCOME).toLocaleString('en-IN')}</span>
             </span>
           <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-gray-500">Month:</label>
-            <select
-              value={monthIdx}
-              onChange={e => setMonthIdx(Number(e.target.value))}
-              className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
-            >
-              {MONTHS_FULL.map((m, i) => <option key={i} value={i}>{m}</option>)}
-            </select>
+            {!isFY && (
+              <>
+                <label className="text-xs font-medium text-gray-500">Month:</label>
+                <select
+                  value={monthIdx}
+                  onChange={e => setMonthIdx(Number(e.target.value))}
+                  className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+                >
+                  {MONTHS_FULL.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                </select>
+              </>
+            )}
             <label className="text-xs font-medium text-gray-500">Year:</label>
             <select
-              value={year}
-              onChange={e => setYear(Number(e.target.value))}
+              value={yearValue}
+              onChange={e => setYearValue(e.target.value)}
               className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
             >
-              {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+              <optgroup label="Calendar Year">
+                {calendarYearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </optgroup>
+              <optgroup label="Financial Year">
+                {financialYearOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </optgroup>
             </select>
           </div>
         </div>

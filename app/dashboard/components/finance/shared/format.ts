@@ -87,10 +87,15 @@ export function isCountableCashflow(r: { type: string; category: string }): bool
 
 export interface YearSelectOption { value: string; label: string }
 
+/** "FY2026" → "FY 26-27". Indian financial year: always 1 April – 31 March. */
+export function financialYearLabel(startYear: number): string {
+  return `FY ${String(startYear % 100).padStart(2, '0')}-${String((startYear + 1) % 100).padStart(2, '0')}`;
+}
+
 /**
  * Builds Year <select> options spanning `span` years on either side of
  * `centerYear` — both calendar years ("2026") and Indian financial years
- * ("FY2026" = Apr 2026 – Mar 2027, labelled "FY 2026-27").
+ * ("FY2026" = 1 Apr 2026 – 31 Mar 2027, labelled "FY 26-27").
  */
 export function buildYearOptions(centerYear: number, span = 2): { calendar: YearSelectOption[]; financial: YearSelectOption[] } {
   const calendar: YearSelectOption[] = [];
@@ -98,9 +103,20 @@ export function buildYearOptions(centerYear: number, span = 2): { calendar: Year
   for (let i = -span; i <= span; i++) {
     const y = centerYear + i;
     calendar.push({ value: String(y), label: String(y) });
-    financial.push({ value: `FY${y}`, label: `FY ${y}-${String((y + 1) % 100).padStart(2, '0')}` });
+    financial.push({ value: `FY${y}`, label: financialYearLabel(y) });
   }
   return { calendar, financial };
+}
+
+/** All 12 "YYYY-MM" months in Indian financial year `startYear` (1 Apr startYear – 31 Mar startYear+1). */
+export function monthsInFinancialYear(startYear: number): string[] {
+  const months: string[] = [];
+  for (let i = 0; i < 12; i++) {
+    const calMonth = ((i + 3) % 12) + 1; // index 0 → April(4) ... index 11 → March(3)
+    const calYear = i <= 8 ? startYear : startYear + 1;
+    months.push(`${calYear}-${String(calMonth).padStart(2, '0')}`);
+  }
+  return months;
 }
 
 /** Whether a Year-select value represents a financial year ("FY2026"). */
