@@ -12,22 +12,24 @@ import { detectCashflowAnomalies, categoryMoMGrowth } from '../shared/prediction
 
 const CF_TYPES: CashflowType[] = ['Payment', 'Receipt'];
 const CF_DEPARTMENTS = ['CBD','CORPORATE TRAINING','DEPUTATION ACCENT','PROJECT ACCENT','T&D','ADMIN ACCOUNTS','HELPING STAFF','GENERAL','MANAGEMENT','TRAINERS','LOAN REPAYMENT','MARKETING - ACCENT','PUNE BRANCH'] as const;
-const CF_COMPANIES   = ['Suvidya','SIT Alumni','ATS','Accent','SIT Mumbai','SIT Pune'] as const;
+const CF_COMPANIES   = ['Suvidya','SIT Alumni','ATS','Accent','SIT Mumbai','SIT Pune','Suvidya - Mumbai','Suvidya - Pune','Accent - Mumbai','Accent - Malvan'] as const;
 
 const SIT_CATS = [
   'OD Interest / Loan EMI','Management Car Expenses','Management Salary','Employee Salary',
   'Trainers Payment','Food','Utility','Marketing - SIT',
   'Travelling Expense - Staff (Marketing)','Travelling Expense - Operations','Software','Stationary','Infrastructure','Taxes',
   'Mock Interview Charges','Mock Interview','Refund','Internal Transfer',
+  'Miscellaneous','Cash Withdrawal','Convocation','Associate','Operations','Office Expenses',
 ];
 const ACCENT_CATS = [
   'OD Interest / Loan EMI','Management Car Expenses','Management Salary','Employee Salary',
   'Trainers Payment','Food','Utility','Marketing - Accent',
   'Travelling Expense - Staff (Marketing)','Software','Stationary','Infrastructure','Taxes',
   'Mock Interview Charges','Mock Interview','Refund','Internal Transfer',
+  'Miscellaneous','Cash Withdrawal','Convocation','Associate','Operations','Office Expenses',
 ];
 const RECEIPT_CATS = [
-  'Tution Fees','Corporate Training','Deputation','Projects','Internal Transfer',
+  'Tuition Fees','Tution Fees','Corporate Training','Deputation','Projects','Internal Transfer','Loan','Miscellaneous',
 ];
 const PAYMENT_CATS = Array.from(new Set([...SIT_CATS, ...ACCENT_CATS]));
 const ALL_CATS = Array.from(new Set([...PAYMENT_CATS, ...RECEIPT_CATS]));
