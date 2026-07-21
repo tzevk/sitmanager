@@ -72,3 +72,15 @@ export function isoOffsetDays(n: number): string {
   d.setDate(d.getDate() + n);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
+
+/**
+ * Whether a cashflow row should count toward totals/aggregates.
+ * Internal Transfer moves cash between the org's own accounts (not real
+ * income/expense), and a "Loan" receipt is borrowed money, not revenue —
+ * both would otherwise inflate reported totals.
+ */
+export function isCountableCashflow(r: { type: string; category: string }): boolean {
+  if (r.category === 'Internal Transfer') return false;
+  if (r.type === 'Receipt' && r.category === 'Loan') return false;
+  return true;
+}

@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const [rows] = await getPool().query<any[]>(
-      `SELECT * FROM ${FINANCE_CASHFLOW.table} ${whereSql} ORDER BY ${FINANCE_CASHFLOW.defaultOrder} LIMIT 1000`,
+      `SELECT * FROM ${FINANCE_CASHFLOW.table} ${whereSql} ORDER BY ${FINANCE_CASHFLOW.defaultOrder} LIMIT 20000`,
       params,
     );
     return jsonOk({ rows });

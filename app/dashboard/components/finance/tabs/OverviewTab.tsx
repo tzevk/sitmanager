@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFinanceResource } from '../shared/useFinanceResource';
 import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, TotalRow, SectionTitle, StatCard, thCls, tdCls, tdNum, inpCls, lblCls, trCls, PctBar } from '../shared/primitives';
-import { fmt, pct, MONTHS_FULL, parseMonth, fmtDate, todayISO } from '../shared/format';
+import { fmt, pct, MONTHS_FULL, parseMonth, fmtDate, todayISO, isCountableCashflow } from '../shared/format';
 import type { Loan, DeptPerf, DebtPlan, CtRow, MonthlyRow, CashflowTxn, PendingInvoice, SalaryCashflow } from '../shared/types';
 
 const TARGET_EXPENSE_PCT: Record<string, number> = {
@@ -52,8 +52,9 @@ export default function OverviewTab() {
   }, []);
 
   const kpis = useMemo(() => {
-    const totalReceipts = cashflow.rows.reduce((s, r) => s + Number(r.receipt || 0), 0);
-    const totalPayments = cashflow.rows.reduce((s, r) => s + Number(r.payment || 0), 0);
+    const countableRows = cashflow.rows.filter(isCountableCashflow);
+    const totalReceipts = countableRows.reduce((s, r) => s + Number(r.receipt || 0), 0);
+    const totalPayments = countableRows.reduce((s, r) => s + Number(r.payment || 0), 0);
     const totalCash = totalReceipts - totalPayments;
 
     const today = todayISO();
@@ -74,10 +75,25 @@ export default function OverviewTab() {
     for (const txn of cashflow.rows) {
       if (txn.type !== 'Payment') continue;
       if (!txn.date || !txn.department) continue;
+      if (!isCountableCashflow(txn)) continue;
       const key = `${(txn.department).toUpperCase()}::${txn.date.substring(0, 7)}`;
       map.set(key, (map.get(key) || 0) + Number(txn.payment || 0));
     }
     return map;
+  }, [cashflow.rows]);
+
+  /** Cashflow receipts (turnover) and payments (expense) per department per month (YYYY-MM). */
+  const cashflowByDeptMonth = useMemo(() => {
+    const turnover = new Map<string, number>();
+    const expense = new Map<string, number>();
+    for (const txn of cashflow.rows) {
+      if (!txn.date || !txn.department) continue;
+      if (!isCountableCashflow(txn)) continue;
+      const key = `${(txn.department).toUpperCase()}::${txn.date.substring(0, 7)}`;
+      if (txn.type === 'Receipt') turnover.set(key, (turnover.get(key) || 0) + Number(txn.receipt || 0));
+      if (txn.type === 'Payment') expense.set(key, (expense.get(key) || 0) + Number(txn.payment || 0));
+    }
+    return { turnover, expense };
   }, [cashflow.rows]);
   const [deptModal, setDeptModal] = useState<{ open: boolean; editing: DeptPerf | null }>({ open: false, editing: null });
   const [deptForm, setDeptForm]   = useState({ department: '', amount_achieved: '', target_amount: '' });
@@ -209,6 +225,29 @@ export default function OverviewTab() {
     if (base.accentProjects.turnoverActual === 0 && projActual > 0) base.accentProjects.turnoverActual = projActual;
     if (base.accentProjects.turnoverTarget === 0 && projTarget > 0) base.accentProjects.turnoverTarget = projTarget;
 
+    // Fill any actuals still at zero directly from real cashflow transactions
+    // for the selected month, keyed by department. This is what actually
+    // updates every month as new payments/receipts are entered — the
+    // dept-performance / CT / deputation / projects tables above are manually
+    // maintained and often lag behind, which is why totals can look stale.
+    const cfTurnover = (depts_: string[]) =>
+      depts_.reduce((s, d) => s + (cashflowByDeptMonth.turnover.get(`${d}::${monthYear}`) || 0), 0);
+    const cfExpense = (depts_: string[]) =>
+      depts_.reduce((s, d) => s + (cashflowByDeptMonth.expense.get(`${d}::${monthYear}`) || 0), 0);
+
+    if (base.cbd.turnoverActual === 0) base.cbd.turnoverActual = cfTurnover(['CBD']);
+    if (base.cbd.expenseActual === 0) base.cbd.expenseActual = cfExpense(['CBD']);
+
+    if (base.corporate.turnoverActual === 0) base.corporate.turnoverActual = cfTurnover(['CORPORATE TRAINING']);
+    if (base.corporate.expenseActual === 0) base.corporate.expenseActual = cfExpense(['CORPORATE TRAINING']);
+
+    if (base.deputation.expenseActual === 0) base.deputation.expenseActual = cfExpense(['DEPUTATION ACCENT']);
+    if (base.accentProjects.expenseActual === 0) base.accentProjects.expenseActual = cfExpense(['PROJECT ACCENT']);
+
+    const otherDepts = ['T&D', 'ADMIN ACCOUNTS', 'HELPING STAFF', 'GENERAL', 'MANAGEMENT', 'TRAINERS', 'LOAN REPAYMENT'];
+    if (base.other.turnoverActual === 0) base.other.turnoverActual = cfTurnover(otherDepts);
+    if (base.other.expenseActual === 0) base.other.expenseActual = cfExpense(otherDepts);
+
     // Hardcode CBD monthly income target
     base.cbd.turnoverTarget = CBD_MONTHLY_INCOME;
 
@@ -228,7 +267,7 @@ export default function OverviewTab() {
         profitPctTarget,
       };
     });
-  }, [ctPerf.rows, depts.rows, deputation.rows, projects.rows, monthYear, cashflowActualByDeptMonth]);
+  }, [ctPerf.rows, depts.rows, deputation.rows, projects.rows, monthYear, cashflowActualByDeptMonth, cashflowByDeptMonth]);
 
   const summaryTotals = useMemo(() => {
     return deptBreakdown.reduce(

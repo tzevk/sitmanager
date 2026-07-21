@@ -5,7 +5,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { useFinanceResource } from '../shared/useFinanceResource';
 import { Modal, TableHeader, TableSkeleton, EmptyRow, TotalRow, inpCls, lblCls, trCls, downloadCsv } from '../shared/primitives';
-import { fmt, todayISO, fmtDate } from '../shared/format';
+import { fmt, todayISO, fmtDate, isCountableCashflow } from '../shared/format';
 import type { CashflowTxn, CashflowType } from '../shared/types';
 import CashflowCategoryBars from '../charts/CashflowCategoryBars';
 import { detectCashflowAnomalies, categoryMoMGrowth } from '../shared/predictions';
@@ -257,8 +257,8 @@ export default function CashflowTab() {
   }, [filteredRows, receiptSort]);
 
   const totals = useMemo(() => ({
-    payment: payRows.reduce((s, r) => s + Number(r.payment || 0), 0),
-    receipt: receiptRows.reduce((s, r) => s + Number(r.receipt || 0), 0),
+    payment: payRows.filter(isCountableCashflow).reduce((s, r) => s + Number(r.payment || 0), 0),
+    receipt: receiptRows.filter(isCountableCashflow).reduce((s, r) => s + Number(r.receipt || 0), 0),
   }), [payRows, receiptRows]);
 
   // CF_DEPARTMENTS provides static options for the department filter
@@ -386,8 +386,10 @@ export default function CashflowTab() {
     setSearch(''); setType(''); setCat(''); setDepartment(''); setCompany(''); setYear(''); setMonth(''); setFrom(''); setTo('');
   }, []);
 
-  const anomalies = useMemo(() => detectCashflowAnomalies(cash.rows), [cash.rows]);
-  const momGrowth = useMemo(() => categoryMoMGrowth(cash.rows), [cash.rows]);
+  const countableCashRows = useMemo(() => cash.rows.filter(isCountableCashflow), [cash.rows]);
+  const countableFilteredRows = useMemo(() => filteredRows.filter(isCountableCashflow), [filteredRows]);
+  const anomalies = useMemo(() => detectCashflowAnomalies(countableCashRows), [countableCashRows]);
+  const momGrowth = useMemo(() => categoryMoMGrowth(countableCashRows), [countableCashRows]);
 
   const anomalySet = useMemo(() => {
     const s = new Set<number>();
@@ -403,7 +405,7 @@ export default function CashflowTab() {
     <div className="space-y-6">
       {/* Payment vs Receipt by Department */}
       <div>
-        <CashflowCategoryBars rows={filteredRows} view="dept" />
+        <CashflowCategoryBars rows={countableFilteredRows} view="dept" />
       </div>
 
       <div>
@@ -664,7 +666,7 @@ export default function CashflowTab() {
 
       {/* Charts: Profit summary + Payment vs Receipt by Category */}
       <div>
-        <CashflowCategoryBars rows={filteredRows} view="summary-and-category" />
+        <CashflowCategoryBars rows={countableFilteredRows} view="summary-and-category" />
       </div>
 
       {/* ── AI Insights: Anomaly Spikes ─────────────── */}
