@@ -7,7 +7,7 @@ export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requirePermission(req, 'study_material.view');
+    const auth = await requirePermission(req, 'study_material_record.view');
     if (auth instanceof NextResponse) return auth;
 
     const pool = getPool();

@@ -26,6 +26,7 @@ interface Pagination {
 export default function BatchPage() {
   const router = useRouter();
   const { canView, canCreate, canUpdate, loading: permLoading } = useResourcePermissions('batch');
+  const { canView: canViewSLP, canUpdate: canUpdateSLP, loading: slpPermLoading } = useResourcePermissions('standard_lecture_plan');
 
   /* ---- List state ---- */
   const [rows, setRows] = useState<Batch[]>([]);
@@ -126,8 +127,8 @@ export default function BatchPage() {
 
   const totalPages = pagination.totalPages;
 
-  if (permLoading) return <PermissionLoading />;
-  if (!canView) return <AccessDenied message="You do not have permission to view batches." />;
+  if (permLoading || slpPermLoading) return <PermissionLoading />;
+  if (!canView && !canViewSLP && !canUpdateSLP) return <AccessDenied message="You do not have permission to view batches." />;
 
   return (
     <div className="h-full overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-sm p-3 space-y-6">

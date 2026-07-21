@@ -40,7 +40,7 @@ function formatDate(raw: string | null) {
 }
 
 export default function StudyMaterialRecordPage() {
-  const { canView, loading: permLoading } = useResourcePermissions('study_material');
+  const { canView, loading: permLoading } = useResourcePermissions('study_material_record');
   const [courses, setCourses] = useState<Course[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [rows, setRows] = useState<StudentRow[]>([]);

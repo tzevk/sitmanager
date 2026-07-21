@@ -166,8 +166,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     icon: 'calendar',
     permissions: [
       ...createPermissions('attendance', 'Attendance'),
+      ...createPermissions('study_material_record', 'Study Material Record'),
       ...createPermissions('roll_number', 'Roll Number Allotment'),
-      ...createPermissions('study_material', 'Study Material Record', ['view']),
       ...createPermissions('lecture', 'Lecture'),
       ...createPermissions('assignment', 'Assignment'),
       ...createPermissions('unit_test', 'Unit Test'),
