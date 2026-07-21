@@ -382,7 +382,7 @@ export default function CashflowTab() {
           cell.font = { name: 'Calibri', size: 9, color: { argb: 'FF374151' } };
           cell.fill = fill(catColor);
           cell.alignment = { vertical: 'middle', horizontal: ci === 5 ? 'right' : 'left' };
-          if (ci === 5) cell.numFmt = '₹#,##0.00';
+          if (ci === 5) cell.numFmt = '₹#,##0';
         });
       });
 
@@ -393,7 +393,7 @@ export default function CashflowTab() {
       totalLabelCell.alignment = { horizontal: 'right', vertical: 'middle' };
       const totalValueCell = ws.getCell(totalRowIdx, 6);
       totalValueCell.value = total;
-      totalValueCell.numFmt = '₹#,##0.00';
+      totalValueCell.numFmt = '₹#,##0';
       for (let ci = 1; ci <= colCount; ci++) {
         const cell = ws.getCell(totalRowIdx, ci);
         cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };

@@ -12,7 +12,7 @@ import { fmt, monthLabel, parseMonth } from '../shared/format';
 const fmtLakh = (v: number) =>
   v >= 1_00_00_000 ? `₹${(v / 1_00_00_000).toFixed(1)}Cr`
   : v >= 1_00_000   ? `₹${(v / 1_00_000).toFixed(1)}L`
-  : `₹${v.toLocaleString('en-IN')}`;
+  : `₹${Math.round(v).toLocaleString('en-IN')}`;
 
 interface DataPoint {
   month: string;

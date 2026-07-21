@@ -1,9 +1,9 @@
-/** Indian-format rupee, treating null/undefined/NaN as em-dash. ₹0 is a real value. */
+/** Indian-format rupee, treating null/undefined/NaN as em-dash. ₹0 is a real value. Always rounds to a whole number. */
 export function fmt(n: number | string | null | undefined): string {
   if (n === null || n === undefined || n === '') return '—';
   const v = typeof n === 'number' ? n : Number(n);
   if (!Number.isFinite(v)) return '—';
-  return `₹${v.toLocaleString('en-IN')}`;
+  return `₹${Math.round(v).toLocaleString('en-IN')}`;
 }
 
 export function pct(numerator: number | string, denominator: number | string): string {
