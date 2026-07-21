@@ -5,7 +5,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { useFinanceResource } from '../shared/useFinanceResource';
 import { Modal, TableHeader, TableSkeleton, EmptyRow, TotalRow, inpCls, lblCls, trCls, downloadCsv } from '../shared/primitives';
-import { fmt, todayISO, fmtDate, isCountableCashflow } from '../shared/format';
+import { fmt, todayISO, fmtDate, isCountableCashflow, MONTHS_FULL } from '../shared/format';
 import type { CashflowTxn, CashflowType } from '../shared/types';
 import CashflowCategoryBars from '../charts/CashflowCategoryBars';
 import { detectCashflowAnomalies, categoryMoMGrowth } from '../shared/predictions';
@@ -405,6 +405,21 @@ export default function CashflowTab() {
     <div className="space-y-6">
       {/* Payment vs Receipt by Department */}
       <div>
+        <div className="flex items-center justify-end gap-2 mb-2">
+          <select value={year} onChange={e => { setYear(e.target.value); setMonth(''); }}
+            className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
+            <option value="">All years</option>
+            {yearOptions.map(y => <option key={y} value={String(y)}>{y}</option>)}
+          </select>
+          <select value={month} onChange={e => setMonth(e.target.value)}
+            className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
+            <option value="">All months</option>
+            {MONTHS_FULL.map((m, i) => {
+              const val = `${year || currentYear}-${String(i + 1).padStart(2, '0')}`;
+              return <option key={i} value={val}>{m}</option>;
+            })}
+          </select>
+        </div>
         <CashflowCategoryBars rows={countableFilteredRows} view="dept" />
       </div>
 
@@ -463,10 +478,21 @@ export default function CashflowTab() {
             </div>
             <div>
               <label className="block text-[10px] text-gray-400 mb-0.5">Year</label>
-              <select value={year} onChange={e => setYear(e.target.value)}
+              <select value={year} onChange={e => { setYear(e.target.value); setMonth(''); }}
                 className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-24 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
                 <option value="">All years</option>
                 {yearOptions.map(y => <option key={y} value={String(y)}>{y}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] text-gray-400 mb-0.5">Month</label>
+              <select value={month} onChange={e => setMonth(e.target.value)}
+                className="text-xs rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 w-32 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]">
+                <option value="">All months</option>
+                {MONTHS_FULL.map((m, i) => {
+                  const val = `${year || currentYear}-${String(i + 1).padStart(2, '0')}`;
+                  return <option key={i} value={val}>{m}</option>;
+                })}
               </select>
             </div>
             <div>
