@@ -312,26 +312,41 @@ export default function AllotRollNumberPage() {
 
     const courseName = selectedCourse?.Course_Name || '';
     const batchCode = selectedBatch?.Batch_code || '';
+    const logoUrl = `${window.location.origin}/sit.png`;
     const escape = (v: unknown) => String(v ?? '').replace(/</g, '&lt;');
 
-    const bodyRows = rows.map((r) => `<tr><td>${escape(r.Student_Id)}</td><td>${escape(r.Student_Name)}</td></tr>`).join('');
+    const bodyRows = rows.map((r, i) => `<tr>
+      <td class="num">${i + 1}</td>
+      <td class="num">${escape(r.Student_Id)}</td>
+      <td class="left">${escape(r.Student_Name)}</td>
+    </tr>`).join('');
 
     w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Student Facescan</title><style>
       *{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif}
-      body{padding:24px;color:#111}
-      h1{font-size:16px;margin-bottom:14px}
-      .header{display:flex;justify-content:space-between;font-size:13px;margin-bottom:16px}
+      body{padding:20px;color:#111}
+      .logo{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+      .logo img{height:44px}
+      .title-box{border:2px solid #2E3093;background:#2E3093;color:#fff;padding:8px;text-align:center;font-size:15px;font-weight:bold;letter-spacing:0.5px;margin-bottom:10px}
+      .meta{display:flex;justify-content:space-between;font-size:13px;margin-bottom:10px;font-weight:600}
       table{width:100%;border-collapse:collapse;font-size:12px}
-      th,td{border:1px solid #333;padding:6px 10px;text-align:left}
-      th{background:#f1f1f1}
+      th,td{border:1px solid #333;padding:7px 10px}
+      th{background:#eef0fa;color:#2E3093;font-weight:bold;text-align:left}
+      .num{text-align:center;font-variant-numeric:tabular-nums}
+      td.left{text-align:left}
+      tbody tr:nth-child(even){background:#f9fafc}
       @media print{@page{size:A4;margin:12mm}}
     </style></head><body>
-      <h1>Student Facescan</h1>
-      <div class="header">
-        <span>Training Programme : ${escape(courseName)}</span>
-        <span>Batch No. : ${escape(batchCode)}</span>
+      <div class="logo"><img src="${logoUrl}" alt="SIT" /></div>
+      <div class="title-box">STUDENT FACESCAN</div>
+      <div class="meta">
+        <span>Training Programme : &nbsp;&nbsp;${escape(courseName)}</span>
+        <span>Batch No. : &nbsp;&nbsp;${escape(batchCode)}</span>
       </div>
-      <table><thead><tr><th>Student ID No.</th><th>Student Name</th></tr></thead><tbody>${bodyRows}</tbody></table>
+      <table>
+        <colgroup><col style="width:8%"/><col style="width:22%"/><col style="width:70%"/></colgroup>
+        <thead><tr><th class="num">Sr No</th><th class="num">Student ID No.</th><th>Student Name</th></tr></thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
       <script>window.onload=()=>{setTimeout(()=>window.print(),400)}<\/script>
     </body></html>`);
     w.document.close();

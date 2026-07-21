@@ -44,13 +44,12 @@ export async function GET(req: NextRequest) {
     // student_master so every enrolled student appears, and pick exactly one
     // admission_master row per (Student_Id, Batch_Id) — the old admission_master-
     // anchored query here could double-count a student who has more than one
-    // active admission row (e.g. a historically transferred student), and never
-    // filtered out students with no roll number allotted.
+    // active admission row (e.g. a historically transferred student). Roll
+    // number allotment is unrelated to fee reporting and is never filtered on here.
     const conditions: string[] = [
       '(sm.IsDelete = 0 OR sm.IsDelete IS NULL)',
       '(sm.IsActive = 1 OR sm.IsActive IS NULL)',
       'bm.Batch_Id = ?',
-      `NULLIF(TRIM(am.Roll_No), '') IS NOT NULL`,
     ];
     const params: any[] = [Number(batchId)];
     if (courseId) { conditions.push('bm.Course_Id = ?'); params.push(Number(courseId)); }

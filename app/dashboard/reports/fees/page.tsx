@@ -48,7 +48,6 @@ interface BatchWiseFeesRow {
   Batch_End: string | null;
   Fees_Full_Payment?: number | null;
   Student_Id?: number | null;
-  Roll_No?: string | null;
   Cancel?: string | null;
   Transfered?: string | null;
   Moved_To_Batch_Code?: string | null;
@@ -290,7 +289,7 @@ function FeesReportContent() {
     const borders = (c: string) => ({ top: border(c), bottom: border(c), left: border(c), right: border(c) });
     const fill = (argb: string): ExcelJS.Fill => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
 
-    const colCount = 8; // Sr, Student ID, Student Code, Name, Total, Paid, Remaining, Payment Type
+    const colCount = 7; // Sr, Student ID, Name, Total, Paid, Remaining, Payment Type
 
     const wb = new ExcelJS.Workbook();
     wb.creator = 'SIT Manager';
@@ -334,7 +333,7 @@ function FeesReportContent() {
     ws.getRow(4).height = 4;
 
     /* ── Row 5: Column headers ── */
-    const headers = ['Sr No', 'Student ID', 'Student Code', 'Name of Student', 'Total Amount', 'Amount Paid', 'Remaining Amount', 'Payment Type'];
+    const headers = ['Sr No', 'Student ID', 'Name of Student', 'Total Amount', 'Amount Paid', 'Remaining Amount', 'Payment Type'];
     const headerRow = ws.getRow(5);
     headerRow.height = 26;
     headers.forEach((h, ci) => {
@@ -415,7 +414,7 @@ function FeesReportContent() {
         : (Array.from(g.paymentTypes)[0] || '—');
 
       const vals: (string | number)[] = [
-        srNo++, r.Student_Id ?? '', r.Roll_No || '', r.Student_Name || '—',
+        srNo++, r.Student_Id ?? '', r.Student_Name || '—',
         totalFees, totalPaid, remaining, paymentTypeLabel,
       ];
 
@@ -505,7 +504,6 @@ function FeesReportContent() {
     ws.columns = [
       { width: 6 },   // Sr No
       { width: 12 },  // Student ID
-      { width: 16 },  // Student Code
       { width: 32 },  // Name of Student
       { width: 16 },  // Total Amount
       { width: 16 },  // Amount Paid

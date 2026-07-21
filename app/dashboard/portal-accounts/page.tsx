@@ -1016,11 +1016,16 @@ export default function PortalAccountsPage() {
                                   </td>
                                   <td className="px-3 py-2 font-mono text-gray-700">{username}</td>
                                   <td className="px-3 py-2">
-                                    {hasAccount ? (
+                                    {!password && hasAccount ? (
+                                      // Account existed before this page load — we never generated/know its password.
                                       <span className="text-[10px] text-gray-400 italic">••••••••</span>
                                     ) : (
                                       <input
-                                        className="w-full bg-white border border-gray-200 rounded px-2 py-1 text-xs font-mono text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093]"
+                                        className={`w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] ${
+                                          hasAccount
+                                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-bold'
+                                            : 'bg-white border-gray-200 text-gray-900'
+                                        }`}
                                         value={password}
                                         onChange={e => setStudentPasswords(prev => ({ ...prev, [r.Student_Id]: e.target.value }))}
                                         placeholder="password"

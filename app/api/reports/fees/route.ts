@@ -93,12 +93,6 @@ export async function GET(req: NextRequest) {
         const smConditions: string[] = [
           '(sm.IsDelete = 0 OR sm.IsDelete IS NULL)',
           '(sm.IsActive = 1 OR sm.IsActive IS NULL)', // exclude hidden (deactivated) students
-          // No roll number allotted yet — don't show them. Falls back to any
-          // admission record (am_any) when this specific bm.Batch_Id has none —
-          // a transferred student's admission_master row still sits under their
-          // OLD Batch_Id, so requiring an exact-batch match here would otherwise
-          // hide them entirely from their new (Moved_To) batch's report.
-          `NULLIF(TRIM(COALESCE(am.Roll_No, am_any.Roll_No)), '') IS NOT NULL`,
         ];
         const smParams: any[] = [];
         if (courseId) { smConditions.push('bm.Course_Id = ?');  smParams.push(Number(courseId)); }
@@ -110,7 +104,6 @@ export async function GET(req: NextRequest) {
              COALESCE(cm.Course_Name,'') AS Course_Name,
              bm.SDate AS Batch_Start, bm.EDate AS Batch_End, bm.Fees_Full_Payment,
              sm.Student_Id AS Student_Id,
-             COALESCE(am.Roll_No, am_any.Roll_No) AS Roll_No,
              COALESCE(am.Cancel, am_any.Cancel) AS Cancel,
              COALESCE(am.Fees, am_any.Fees) AS Admission_Fees,
              COALESCE(NULLIF(TRIM(sm.Transfered), ''), am.Transfered, am_any.Transfered) AS Transfered,

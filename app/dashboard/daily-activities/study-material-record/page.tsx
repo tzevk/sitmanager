@@ -152,12 +152,14 @@ export default function StudyMaterialRecordPage() {
       body{padding:16px;color:#111}
       .logo{display:flex;align-items:center;gap:8px;margin-bottom:8px}
       .logo img{height:50px}
-      .title-box{border:2px solid #111;padding:6px;text-align:center;font-size:16px;font-weight:bold;margin-bottom:10px}
-      .meta{display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px}
+      .title-box{border:2px solid #2E3093;background:#2E3093;color:#fff;padding:8px;text-align:center;font-size:16px;font-weight:bold;letter-spacing:0.5px;margin-bottom:10px}
+      .meta{display:flex;justify-content:space-between;font-size:13px;margin-bottom:10px;font-weight:600}
       table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
-      th,td{border:1px solid #333;padding:6px 6px;text-align:center;overflow:hidden}
-      td.left{text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      th{background:#fff;font-weight:normal}
+      th,td{border:1px solid #333;padding:7px 8px;text-align:center;overflow:hidden}
+      td.left{text-align:left;white-space:normal;word-break:break-word}
+      th{background:#eef0fa;font-weight:bold;color:#2E3093}
+      tbody tr:nth-child(even){background:#f9fafc}
+      tbody td{height:26px}
       @media print{@page{size:A4 landscape;margin:8mm}}
     </style></head><body>
       <div class="logo"><img src="${logoUrl}" alt="SIT" /></div>
@@ -169,21 +171,19 @@ export default function StudyMaterialRecordPage() {
       <table>
         <colgroup>
           <col style="width:4%"/>
-          <col style="width:14%"/>
+          <col style="width:16%"/>
           <col style="width:8%"/>
           <col style="width:8%"/>
-          <col style="width:13.2%"/><col style="width:13.2%"/><col style="width:13.2%"/><col style="width:13.2%"/><col style="width:13.2%"/>
+          <col style="width:12.8%"/><col style="width:12.8%"/><col style="width:12.8%"/><col style="width:12.8%"/><col style="width:12.8%"/>
         </colgroup>
         <thead>
           <tr>
-            <th rowspan="4">Sr.<br/>No.</th>
-            <th rowspan="4">Name</th>
-            <th rowspan="4">Date of<br/>Admission</th>
-            <th rowspan="4">Fees<br/>Completed</th>
-            <th colspan="5">Study Material</th>
+            <th rowspan="2">Sr.<br/>No.</th>
+            <th rowspan="2">Name</th>
+            <th rowspan="2">Date of<br/>Admission</th>
+            <th rowspan="2">Fees<br/>Completed</th>
+            <th colspan="5">Study Material — Date of Issue</th>
           </tr>
-          <tr><th></th><th></th><th></th><th></th><th></th></tr>
-          <tr><th colspan="5">Date of Issue</th></tr>
           <tr><th></th><th></th><th></th><th></th><th></th></tr>
         </thead>
         <tbody>${bodyRows}</tbody>
