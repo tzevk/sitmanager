@@ -234,9 +234,20 @@ export default function EditBatchPage() {
   const router = useRouter();
   const params = useParams();
   const batchId = params.id as string;
-  const { canUpdate, loading: permLoading } = useResourcePermissions('batch');
+  const { canView: canViewBatch, canUpdate, loading: permLoading } = useResourcePermissions('batch');
+  const { canView: canViewSLP, canUpdate: canUpdateSLP, loading: slpPermLoading } = useResourcePermissions('standard_lecture_plan');
+
+  // SLP-only mode: user has SLP permissions but not full batch access
+  const slpOnlyMode = (canViewSLP || canUpdateSLP) && !canViewBatch && !canUpdate;
 
   const [activeTab, setActiveTab] = useState('batch-details');
+
+  // Once permissions resolve, redirect SLP-only users to the SLP tab
+  useEffect(() => {
+    if (!permLoading && !slpPermLoading && slpOnlyMode) {
+      setActiveTab('standard-lecture-plan');
+    }
+  }, [permLoading, slpPermLoading, slpOnlyMode]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -3985,8 +3996,10 @@ export default function EditBatchPage() {
     );
   }
 
-  if (permLoading) return <PermissionLoading />;
-  if (!canUpdate) return <AccessDenied message="You do not have permission to edit batches." />;
+  if (permLoading || slpPermLoading) return <PermissionLoading />;
+  if (!canViewBatch && !canUpdate && !canViewSLP && !canUpdateSLP) {
+    return <AccessDenied message="You do not have permission to access this page." />;
+  }
 
   return (
     <div className="space-y-2">
@@ -4031,7 +4044,11 @@ export default function EditBatchPage() {
         {/* Tab Navigation */}
         <div className="border-b border-gray-200 bg-gray-50/50">
           <div className="flex overflow-x-auto scrollbar-hide">
-            {TABS.map((tab) => (
+            {TABS.filter(tab =>
+              slpOnlyMode
+                ? tab.id === 'standard-lecture-plan' || tab.id === 'lecture-plan'
+                : true
+            ).map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
