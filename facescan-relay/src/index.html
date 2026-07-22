@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>SIT Facescan Relay</title>
+  <style>
+    body {
+      font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #f4f5f7;
+      margin: 0;
+      padding: 20px;
+      color: #1f2937;
+    }
+    h1 { font-size: 15px; margin: 0 0 4px; color: #2E3093; }
+    p.sub { font-size: 11px; color: #6b7280; margin: 0 0 16px; }
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 14px;
+    }
+    .status { font-size: 12px; margin-bottom: 8px; }
+    .status.ok { color: #15803d; }
+    .status.err { color: #b91c1c; }
+    .meta { font-size: 11px; color: #9ca3af; }
+    button {
+      margin-top: 12px;
+      width: 100%;
+      padding: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+      background: #2E3093;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover { background: #23257A; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <h1>SIT Facescan Relay</h1>
+  <p class="sub">Polls the biometric device on this network and syncs punches to SIT Manager.</p>
+  <div class="card">
+    <div id="status" class="status">Starting…</div>
+    <div id="meta" class="meta"></div>
+    <button id="sync-btn">Sync Now</button>
+  </div>
+  <script src="renderer.js"></script>
+</body>
+</html>

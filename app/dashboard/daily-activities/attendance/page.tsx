@@ -31,6 +31,9 @@ interface AttendanceStudentRow {
   rollNo: string;
   mobile: string;
   attendanceStatus?: AttStatus;
+  In_Time?: string | null;
+  Out_Time?: string | null;
+  Remarks?: string | null;
   Cancel?: number | null;
   Transfered?: string | null;
   Moved_To_Batch_Code?: string | null;
@@ -40,6 +43,9 @@ interface AttendanceStudentRow {
 
 type AttStatus = 'P' | 'A' | 'L' | '';
 type StatusMap  = Record<number, AttStatus>;
+type AttMeta    = { inTime?: string; outTime?: string; remarks?: string };
+type MetaMap    = Record<number, AttMeta>;
+type FacescanPunch = { studentId: number; inTime: string; outTime: string };
 type FeedbackEntry = { rating: number; comments: string | null };
 type StudentFeedback = {
   firstHalf: FeedbackEntry | null;
@@ -98,6 +104,31 @@ function formatTime12Hour(value: string) {
   return `${parts.hour}:${parts.minute} ${parts.period}`;
 }
 
+/**
+ * Decides Present vs Late from a facescan punch time, against the lecture's
+ * scheduled start (from Lecture Taken) when known, else a fixed fallback
+ * hour (9 for first half, 14 for second half) — with a 10-minute grace
+ * period before something counts as late.
+ */
+function computeLateFromPunch(inTime: string, scheduledStart: string | null, fallbackHour: number, graceMinutes = 10): { status: 'P' | 'L'; remarks?: string } {
+  const [ih, im] = inTime.split(':').map(Number);
+  if (!Number.isFinite(ih) || !Number.isFinite(im)) return { status: 'P' };
+  const inMinutes = ih * 60 + im;
+
+  let startMinutes: number;
+  if (scheduledStart && /^\d{2}:\d{2}/.test(scheduledStart)) {
+    const [sh, sm] = scheduledStart.split(':').map(Number);
+    startMinutes = sh * 60 + sm;
+  } else {
+    startMinutes = fallbackHour * 60;
+  }
+
+  const lateBy = inMinutes - startMinutes - graceMinutes;
+  return lateBy > 0
+    ? { status: 'L', remarks: `Late by ${lateBy} min (facescan)` }
+    : { status: 'P' };
+}
+
 async function loadImageAsDataUrl(url: string): Promise<string | null> {
   try {
     const response = await fetch(url);
@@ -143,6 +174,8 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   const [students, setStudents]     = useState<Student[]>([]);
   const [statusMapFH, setStatusMapFH] = useState<StatusMap>({});
   const [statusMapSH, setStatusMapSH] = useState<StatusMap>({});
+  const [metaMapFH, setMetaMapFH]   = useState<MetaMap>({});
+  const [metaMapSH, setMetaMapSH]   = useState<MetaMap>({});
   const [search, setSearch]         = useState('');
 
   /* feedback column */
@@ -166,8 +199,10 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   const [facescanLoading, setFacescanLoading]     = useState(false);
   const [facescanConfigured, setFacescanConfigured] = useState<boolean | null>(null);
   const [facescanError, setFacescanError]         = useState('');
-  const [facescanFhIds, setFacescanFhIds]         = useState<Set<number>>(new Set());
-  const [facescanShIds, setFacescanShIds]         = useState<Set<number>>(new Set());
+  const [facescanFhPunches, setFacescanFhPunches] = useState<FacescanPunch[]>([]);
+  const [facescanShPunches, setFacescanShPunches] = useState<FacescanPunch[]>([]);
+  const facescanFhIds = new Set(facescanFhPunches.map(p => p.studentId));
+  const facescanShIds = new Set(facescanShPunches.map(p => p.studentId));
   const [facescanManual, setFacescanManual]       = useState('');
   const [facescanApplyTo, setFacescanApplyTo]     = useState<'both' | 'first_half' | 'second_half'>('both');
 
@@ -195,6 +230,8 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     setStudents([]);
     setStatusMapFH({});
     setStatusMapSH({});
+    setMetaMapFH({});
+    setMetaMapSH({});
     setFeedbackMap({});
     setLoaded(false);
     setSaved(false);
@@ -270,6 +307,17 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
       for (const st of d2.students ?? []) sh[st.Student_Id] = st.attendanceStatus ?? '';
       setStatusMapFH(fh);
       setStatusMapSH(sh);
+
+      const fhMeta: MetaMap = {};
+      const shMeta: MetaMap = {};
+      for (const st of (d1.students ?? []) as AttendanceStudentRow[]) {
+        fhMeta[st.Student_Id] = { inTime: st.In_Time ?? undefined, outTime: st.Out_Time ?? undefined, remarks: st.Remarks ?? undefined };
+      }
+      for (const st of (d2.students ?? []) as AttendanceStudentRow[]) {
+        shMeta[st.Student_Id] = { inTime: st.In_Time ?? undefined, outTime: st.Out_Time ?? undefined, remarks: st.Remarks ?? undefined };
+      }
+      setMetaMapFH(fhMeta);
+      setMetaMapSH(shMeta);
       setLectureFH({
         trainerName: d1.trainerName ?? null,
         timeFrom: d1.trainerTimeFrom ? String(d1.trainerTimeFrom).slice(0, 5) : null,
@@ -359,14 +407,17 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   };
 
   /* save both halves — accepts optional pre-computed maps (used by facescan apply-and-save) */
-  const save = async (fhOverride?: StatusMap, shOverride?: StatusMap) => {
-    const toRecords = (map: StatusMap) =>
+  const save = async (fhOverride?: StatusMap, shOverride?: StatusMap, fhMetaOverride?: MetaMap, shMetaOverride?: MetaMap) => {
+    const toRecords = (map: StatusMap, meta: MetaMap) =>
       students
         .filter(s => map[s.Student_Id])
-        .map(s => ({ studentId: s.Student_Id, admissionId: s.Admission_Id, status: map[s.Student_Id] as 'P' | 'A' | 'L' }));
+        .map(s => ({
+          studentId: s.Student_Id, admissionId: s.Admission_Id, status: map[s.Student_Id] as 'P' | 'A' | 'L',
+          In_Time: meta[s.Student_Id]?.inTime, Out_Time: meta[s.Student_Id]?.outTime, Remarks: meta[s.Student_Id]?.remarks,
+        }));
 
-    const fhRecords = toRecords(fhOverride ?? statusMapFH);
-    const shRecords = toRecords(shOverride ?? statusMapSH);
+    const fhRecords = toRecords(fhOverride ?? statusMapFH, fhMetaOverride ?? metaMapFH);
+    const shRecords = toRecords(shOverride ?? statusMapSH, shMetaOverride ?? metaMapSH);
 
     if (!fhRecords.length && !shRecords.length) {
       setError('Please mark attendance for at least one student.');
@@ -447,8 +498,8 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
   const openFacescan = async () => {
     setFacescanOpen(true);
     setFacescanError('');
-    setFacescanFhIds(new Set());
-    setFacescanShIds(new Set());
+    setFacescanFhPunches([]);
+    setFacescanShPunches([]);
     if (!batchId || !date) return;
     setFacescanLoading(true);
     try {
@@ -463,8 +514,8 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
         setFacescanError(data.error);
       } else {
         setFacescanConfigured(true);
-        setFacescanFhIds(new Set(data.firstHalfIds as number[]));
-        setFacescanShIds(new Set(data.secondHalfIds as number[]));
+        setFacescanFhPunches((data.firstHalf ?? []) as FacescanPunch[]);
+        setFacescanShPunches((data.secondHalf ?? []) as FacescanPunch[]);
       }
     } catch {
       setFacescanConfigured(null);
@@ -472,6 +523,22 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     } finally {
       setFacescanLoading(false);
     }
+  };
+
+  /**
+   * Builds status + meta updates from facescan punches for one half: Present
+   * or Late (vs the lecture's scheduled start, or a 9am/2pm fallback) with an
+   * auto remark, plus the in/out time from the device.
+   */
+  const buildFacescanUpdates = (punches: FacescanPunch[], scheduledStart: string | null, fallbackHour: number) => {
+    const statusUpdates: StatusMap = {};
+    const metaUpdates: MetaMap = {};
+    for (const p of punches) {
+      const { status, remarks } = computeLateFromPunch(p.inTime, scheduledStart, fallbackHour);
+      statusUpdates[p.studentId] = status;
+      metaUpdates[p.studentId] = { inTime: p.inTime, outTime: p.outTime, remarks };
+    }
+    return { statusUpdates, metaUpdates };
   };
 
   const applyFacescan = () => {
@@ -489,20 +556,16 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     const applySH = facescanApplyTo === 'both' || facescanApplyTo === 'second_half';
 
     if (applyFH) {
-      const idsToMark = new Set([...facescanFhIds, ...manualIds]);
-      setStatusMapFH(prev => {
-        const next = { ...prev };
-        for (const id of idsToMark) next[id] = 'P';
-        return next;
-      });
+      const { statusUpdates, metaUpdates } = buildFacescanUpdates(facescanFhPunches, lectureFH.timeFrom, 9);
+      for (const id of manualIds) if (!(id in statusUpdates)) statusUpdates[id] = 'P';
+      setStatusMapFH(prev => ({ ...prev, ...statusUpdates }));
+      setMetaMapFH(prev => ({ ...prev, ...metaUpdates }));
     }
     if (applySH) {
-      const idsToMark = new Set([...facescanShIds, ...manualIds]);
-      setStatusMapSH(prev => {
-        const next = { ...prev };
-        for (const id of idsToMark) next[id] = 'P';
-        return next;
-      });
+      const { statusUpdates, metaUpdates } = buildFacescanUpdates(facescanShPunches, lectureSH.timeFrom, 14);
+      for (const id of manualIds) if (!(id in statusUpdates)) statusUpdates[id] = 'P';
+      setStatusMapSH(prev => ({ ...prev, ...statusUpdates }));
+      setMetaMapSH(prev => ({ ...prev, ...metaUpdates }));
     }
 
     setSaved(false);
@@ -514,12 +577,22 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     // Build merged maps locally — can't wait for async React state update
     const mergedFH = { ...statusMapFH };
     const mergedSH = { ...statusMapSH };
+    const mergedMetaFH = { ...metaMapFH };
+    const mergedMetaSH = { ...metaMapSH };
 
     const applyFH = facescanApplyTo !== 'second_half';
     const applySH = facescanApplyTo !== 'first_half';
 
-    if (applyFH) for (const id of facescanFhIds) mergedFH[id] = 'P';
-    if (applySH) for (const id of facescanShIds) mergedSH[id] = 'P';
+    if (applyFH) {
+      const { statusUpdates, metaUpdates } = buildFacescanUpdates(facescanFhPunches, lectureFH.timeFrom, 9);
+      Object.assign(mergedFH, statusUpdates);
+      Object.assign(mergedMetaFH, metaUpdates);
+    }
+    if (applySH) {
+      const { statusUpdates, metaUpdates } = buildFacescanUpdates(facescanShPunches, lectureSH.timeFrom, 14);
+      Object.assign(mergedSH, statusUpdates);
+      Object.assign(mergedMetaSH, metaUpdates);
+    }
 
     const lines = facescanManual.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
     for (const line of lines) {
@@ -527,18 +600,20 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
         students.find(s => String(s.Student_Id) === line) ??
         students.find(s => s.rollNo && s.rollNo.toLowerCase() === line.toLowerCase());
       if (!student) continue;
-      if (applyFH) mergedFH[student.Student_Id] = 'P';
-      if (applySH) mergedSH[student.Student_Id] = 'P';
+      if (applyFH && !mergedFH[student.Student_Id]) mergedFH[student.Student_Id] = 'P';
+      if (applySH && !mergedSH[student.Student_Id]) mergedSH[student.Student_Id] = 'P';
     }
 
     setStatusMapFH(mergedFH);
     setStatusMapSH(mergedSH);
+    setMetaMapFH(mergedMetaFH);
+    setMetaMapSH(mergedMetaSH);
     setFacescanOpen(false);
     setFacescanManual('');
-    setFacescanFhIds(new Set());
-    setFacescanShIds(new Set());
+    setFacescanFhPunches([]);
+    setFacescanShPunches([]);
 
-    await save(mergedFH, mergedSH);
+    await save(mergedFH, mergedSH, mergedMetaFH, mergedMetaSH);
   };
 
   const exportExcel = useCallback(async () => {
@@ -745,7 +820,17 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Facescan paused */}
+            {canCreate && batchId && date && (
+              <button
+                onClick={openFacescan}
+                className="inline-flex w-full sm:w-auto justify-center items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg border border-white/50 text-white hover:bg-white/10 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                </svg>
+                Facescan Sync
+              </button>
+            )}
             {loaded && students.length > 0 && (
               <button
                 onClick={exportExcel}
@@ -1183,6 +1268,8 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                 {filtered.map((student, idx) => {
                   const fh = statusMapFH[student.Student_Id] ?? '';
                   const sh = statusMapSH[student.Student_Id] ?? '';
+                  const fhMeta = metaMapFH[student.Student_Id];
+                  const shMeta = metaMapSH[student.Student_Id];
                   return (
                     <tr
                       key={student.Student_Id}
@@ -1248,6 +1335,15 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                             </span>
                           </div>
                         )}
+                        {(fhMeta?.inTime || fhMeta?.outTime) && (
+                          <p className="mt-1 text-center text-[10px] text-gray-400 tabular-nums">
+                            {fhMeta.inTime ? `In: ${formatTime12Hour(fhMeta.inTime.slice(0, 5))}` : ''}
+                            {fhMeta.outTime ? ` · Out: ${formatTime12Hour(fhMeta.outTime.slice(0, 5))}` : ''}
+                          </p>
+                        )}
+                        {fhMeta?.remarks && (
+                          <p className="mt-0.5 text-center text-[10px] text-amber-600 font-medium">{fhMeta.remarks}</p>
+                        )}
                       </td>
 
                       {/* Second Half */}
@@ -1286,6 +1382,15 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                               {sh||'—'}
                             </span>
                           </div>
+                        )}
+                        {(shMeta?.inTime || shMeta?.outTime) && (
+                          <p className="mt-1 text-center text-[10px] text-gray-400 tabular-nums">
+                            {shMeta.inTime ? `In: ${formatTime12Hour(shMeta.inTime.slice(0, 5))}` : ''}
+                            {shMeta.outTime ? ` · Out: ${formatTime12Hour(shMeta.outTime.slice(0, 5))}` : ''}
+                          </p>
+                        )}
+                        {shMeta?.remarks && (
+                          <p className="mt-0.5 text-center text-[10px] text-amber-600 font-medium">{shMeta.remarks}</p>
                         )}
                       </td>
 
@@ -1458,10 +1563,10 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                   </svg>
                   <div>
                     <p className="text-xs font-bold text-amber-700">
-                      {facescanConfigured === false ? 'SmartOffice Not Configured' : 'Device Unreachable'}
+                      {facescanConfigured === false ? 'No Facescan Data Yet' : 'Device Unreachable'}
                     </p>
                     <p className="text-[11px] text-amber-600 mt-0.5">
-                      {facescanError || 'Set SMARTOFFICE_BASE_URL and SMARTOFFICE_API_KEY to enable auto sync.'}
+                      {facescanError || 'No punches synced for this date yet, and SmartOffice isn’t configured. If the device is on the institute LAN, the facescan-relay app needs to push logs first — you can still mark attendance manually below.'}
                     </p>
                   </div>
                 </div>

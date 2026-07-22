@@ -1,0 +1,18 @@
+{
+  "name": "facescan-relay",
+  "version": "1.0.0",
+  "description": "Local relay app: polls the SIT facescan biometric device on the institute LAN and pushes punch logs to SIT Manager.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "SIT",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "electron": "^33.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "electron-squirrel-startup": "^1.0.1"
+  }
+}

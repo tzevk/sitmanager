@@ -166,6 +166,7 @@ export async function GET(req: NextRequest) {
            att.Attendance_Id,
            att.In_Time,
            att.Out_Time,
+           att.Remarks,
            a.Cancel,
            s.Transfered,
            s.Moved_To_Batch_Code,
@@ -191,7 +192,8 @@ export async function GET(req: NextRequest) {
              MAX(Attendance_Id) AS Attendance_Id,
              MAX(Status)        AS Status,
              MAX(In_Time)       AS In_Time,
-             MAX(Out_Time)      AS Out_Time
+             MAX(Out_Time)      AS Out_Time,
+             MAX(Remarks)       AS Remarks
            FROM student_attendance
            WHERE Batch_Id = ?
              AND Attendance_Date = ?
@@ -255,7 +257,7 @@ export async function POST(req: NextRequest) {
       batchId: number;
       date: string;
       session?: 'first_half' | 'second_half';
-      records: { studentId: number; admissionId: number; status: 'P' | 'A' | 'L'; In_Time?: string; Out_Time?: string }[];
+      records: { studentId: number; admissionId: number; status: 'P' | 'A' | 'L'; In_Time?: string; Out_Time?: string; Remarks?: string }[];
       topics?: string[];
       subtopics?: string[];
       activityType?: 'lecture' | 'assignment' | 'test';
@@ -282,17 +284,18 @@ export async function POST(req: NextRequest) {
       for (const rec of records) {
         await conn.query(
           `INSERT INTO student_attendance
-             (Batch_Id, Student_Id, Admission_Id, Attendance_Date, Session, Status, In_Time, Out_Time, IsDelete)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+             (Batch_Id, Student_Id, Admission_Id, Attendance_Date, Session, Status, In_Time, Out_Time, Remarks, IsDelete)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
            ON DUPLICATE KEY UPDATE
              Status     = VALUES(Status),
              Admission_Id = VALUES(Admission_Id),
              Session    = VALUES(Session),
              In_Time    = VALUES(In_Time),
              Out_Time   = VALUES(Out_Time),
+             Remarks    = VALUES(Remarks),
              IsDelete   = 0,
              Updated_At = CURRENT_TIMESTAMP`,
-          [batchId, rec.studentId, rec.admissionId, date, session, rec.status, rec.In_Time || null, rec.Out_Time || null]
+          [batchId, rec.studentId, rec.admissionId, date, session, rec.status, rec.In_Time || null, rec.Out_Time || null, rec.Remarks || null]
         );
       }
 
