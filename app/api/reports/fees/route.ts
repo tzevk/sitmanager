@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
         // (same pattern used by fee-details/route.ts).
         const smConditions: string[] = [
           '(sm.IsDelete = 0 OR sm.IsDelete IS NULL)',
-          '(sm.IsActive = 1 OR sm.IsActive IS NULL)', // exclude hidden (deactivated) students
+          '(sm.IsActive = 1 OR sm.IsActive IS NULL)',
         ];
         const smParams: any[] = [];
         if (courseId) { smConditions.push('bm.Course_Id = ?');  smParams.push(Number(courseId)); }
@@ -133,16 +133,14 @@ export async function GET(req: NextRequest) {
              ledger.has_membership_debit AS Ledger_Has_Membership_Debit
            FROM student_master sm
            LEFT JOIN batch_mst bm
-             ON (
-               bm.Batch_code = sm.Batch_Code
-               OR (NULLIF(TRIM(sm.Moved_From_Batch_Code), '') IS NOT NULL AND bm.Batch_code = sm.Moved_From_Batch_Code)
-               -- Some transfers never synced sm.Batch_Code to the new batch (a known
-               -- data gap), which would otherwise make the student invisible in their
-               -- own current batch's report. Moved_To_Batch_Code is the authoritative
-               -- "current batch" for a transferred student — same fallback the student
-               -- list (EFFECTIVE_BATCH_CODE) already uses.
-               OR (LOWER(TRIM(COALESCE(sm.Transfered, ''))) = 'yes' AND NULLIF(TRIM(sm.Moved_To_Batch_Code), '') IS NOT NULL AND bm.Batch_code = sm.Moved_To_Batch_Code)
-             )
+             ON bm.Batch_code = CASE
+               -- Transferred students whose Batch_Code wasn't synced: use Moved_To
+               WHEN LOWER(TRIM(COALESCE(sm.Transfered, ''))) = 'yes'
+                    AND NULLIF(TRIM(sm.Moved_To_Batch_Code), '') IS NOT NULL
+                    AND NULLIF(TRIM(sm.Batch_Code), '') IS NULL
+               THEN sm.Moved_To_Batch_Code
+               ELSE sm.Batch_Code
+             END
              AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
            LEFT JOIN course_mst cm ON cm.Course_Id = bm.Course_Id
            LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
