@@ -103,7 +103,9 @@ export async function GET(req: NextRequest) {
 
     const studentIds = students.map(s => s.Student_Id);
     // Same per-student ledger aggregation as /api/fee-details and the
-    // on-screen report's Total_Fees_Exact / Total_Paid_Exact.
+    // on-screen report's Total_Fees_Exact / Total_Paid_Exact — scoped to this
+    // batch (or legacy rows with no Batch_Id at all) so a student admitted to
+    // more than one batch doesn't have another batch's payments counted here.
     const [ledgerRows] = await pool.query<any[]>(
       `SELECT Student_Id,
          SUM(CASE WHEN TypeR = 'C' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS paid,
@@ -111,8 +113,9 @@ export async function GET(req: NextRequest) {
          MAX(CASE WHEN TypeR = 'D' AND LOWER(IFNULL(Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END) AS has_membership_debit
        FROM s_fees_mst
        WHERE Student_Id IN (?) AND (IsDelete = 0 OR IsDelete IS NULL)
+         AND (Batch_Id = ? OR Batch_Id IS NULL OR Batch_Id = 0)
        GROUP BY Student_Id`,
-      [studentIds]
+      [studentIds, Number(batchId)]
     );
 
     const parseFee = (v: any) => Number(String(v ?? '').replace(/,/g, '')) || 0;

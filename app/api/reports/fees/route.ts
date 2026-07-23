@@ -132,9 +132,25 @@ export async function GET(req: NextRequest) {
                NULLIF(CAST(REPLACE(IFNULL(bm.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
                0
              ) AS Resolved_Batch_Fee,
-             ledger.paid AS Ledger_Paid,
-             ledger.posted_debit AS Ledger_Posted_Debit,
-             ledger.has_membership_debit AS Ledger_Has_Membership_Debit
+             -- Scalar subqueries (not a joined aggregate) so a student who has
+             -- BOTH real-Batch_Id fee rows and legacy NULL-Batch_Id fee rows
+             -- (430+ students) can't produce two matching ledger rows and
+             -- silently double every payment row in the result set.
+             (SELECT SUM(CASE WHEN TypeR = 'C' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END)
+              FROM s_fees_mst
+              WHERE Student_Id = sm.Student_Id AND (IsDelete = 0 OR IsDelete IS NULL)
+                AND (Batch_Id = bm.Batch_Id OR Batch_Id IS NULL OR Batch_Id = 0)
+             ) AS Ledger_Paid,
+             (SELECT SUM(CASE WHEN TypeR = 'D' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END)
+              FROM s_fees_mst
+              WHERE Student_Id = sm.Student_Id AND (IsDelete = 0 OR IsDelete IS NULL)
+                AND (Batch_Id = bm.Batch_Id OR Batch_Id IS NULL OR Batch_Id = 0)
+             ) AS Ledger_Posted_Debit,
+             (SELECT MAX(CASE WHEN TypeR = 'D' AND LOWER(IFNULL(Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END)
+              FROM s_fees_mst
+              WHERE Student_Id = sm.Student_Id AND (IsDelete = 0 OR IsDelete IS NULL)
+                AND (Batch_Id = bm.Batch_Id OR Batch_Id IS NULL OR Batch_Id = 0)
+             ) AS Ledger_Has_Membership_Debit
            FROM (
              SELECT Student_Id, Batch_Id, MAX(Admission_Id) AS Admission_Id
              FROM admission_master
@@ -151,27 +167,20 @@ export async function GET(req: NextRequest) {
              WHERE deleted = 0 OR deleted IS NULL GROUP BY batch_id
            ) latest_fs ON latest_fs.batch_id = bm.Batch_Id
            LEFT JOIN fees_structure fs ON fs.id = latest_fs.id
-           LEFT JOIN (
-             SELECT Student_Id,
-               SUM(CASE WHEN TypeR = 'C' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS paid,
-               SUM(CASE WHEN TypeR = 'D' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS posted_debit,
-               MAX(CASE WHEN TypeR = 'D' AND LOWER(IFNULL(Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END) AS has_membership_debit
-             FROM s_fees_mst
-             WHERE (IsDelete = 0 OR IsDelete IS NULL)
-             GROUP BY Student_Id
-           ) ledger ON ledger.Student_Id = sm.Student_Id
-           -- Match on Student_Id alone (not + sfm.Batch_Id = bm.Batch_Id): many real
-           -- fee-ledger rows carry a NULL or stale Batch_Id (e.g. cancellation
-           -- waivers, legacy course-fee rows recorded under a different batch_mst
-           -- row than the student's currently-resolved one), so requiring an exact
-           -- Batch_Id match silently dropped transactions that DO show on the
-           -- student's own Fee Details page. Fee activity belongs to the student,
-           -- not to a specific batch_mst row — same principle already used by the
-           -- ledger aggregation below and by /api/fee-details.
+           -- Scoped to (Student_Id, Batch_Id): 1,214+ students hold a genuine
+           -- admission to more than one batch (re-admissions, course changes),
+           -- each with their own separate fee payments. Matching by Student_Id
+           -- alone pulled EVERY batch's payments into each batch's report —
+           -- e.g. a student who paid ₹85k under batch A and ₹15k under batch B
+           -- would show both totals under both batches. A small share (~3%) of
+           -- legacy fee rows carry no Batch_Id at all (cancellation waivers,
+           -- pre-migration records) — those still match on Student_Id alone
+           -- as a fallback so they aren't silently dropped.
            LEFT JOIN s_fees_mst sfm
              ON sfm.Student_Id = sm.Student_Id
              AND sfm.IsDelete  = 0
              AND sfm.TypeR     = 'C'
+             AND (sfm.Batch_Id = bm.Batch_Id OR sfm.Batch_Id IS NULL OR sfm.Batch_Id = 0)
              ${amountType ? 'AND sfm.Payment_Type = ?' : ''}
              ${fromDate   ? 'AND sfm.Date_Added >= ?' : ''}
              ${toDate     ? 'AND sfm.Date_Added <= ?' : ''}
