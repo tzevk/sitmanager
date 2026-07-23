@@ -5,6 +5,33 @@ import { requirePermission } from '@/lib/api-auth';
 
 export const runtime = 'nodejs';
 
+// Canonical roll number format used across this institute:
+// {2-digit batch start year}{5-digit batch code}{4-digit sequential serial}
+// e.g. batch "09071" starting in 2026, student #3 → "26090710003".
+// Derived from the batch's own start year (not "today"), so the prefix a
+// batch gets doesn't shift depending on when within its life a roll number
+// happens to be allotted.
+function rollNumberPrefix(batchCode: string, sdate: unknown): string {
+  const code = String(batchCode || '').trim();
+  const date = sdate ? new Date(String(sdate)) : null;
+  const yy = date && !Number.isNaN(date.getTime())
+    ? String(date.getFullYear()).slice(-2)
+    : String(new Date().getFullYear()).slice(-2);
+  return `${yy}${code}`;
+}
+
+function buildRollNumber(prefix: string, serial: number): string {
+  return `${prefix}${String(serial).padStart(4, '0')}`;
+}
+
+async function getBatchInfo(pool: any, batchId: number) {
+  const [rows] = await pool.query(
+    `SELECT Batch_code, SDate FROM batch_mst WHERE Batch_Id = ? LIMIT 1`,
+    [batchId]
+  );
+  return (rows as any[])[0] || null;
+}
+
 async function getBatchStudents(pool: ReturnType<typeof getPool>, batchId: number, includeHidden = false) {
   const admissionDeleteCondition = includeHidden ? '(am.IsDelete = 0 OR am.IsDelete IS NULL OR am.IsDelete = 1)' : '(am.IsDelete = 0 OR am.IsDelete IS NULL)';
   const [rows] = await pool.query<any[]>(
@@ -211,15 +238,15 @@ export async function PATCH(req: NextRequest) {
           return NextResponse.json({ success: false, error: 'No students found in this batch.' }, { status: 400 });
         }
 
-        // Determine roll width from existing roll numbers (min 5)
-        let rollWidth = 5;
-        for (const a of admissions) {
-          const roll = String(a.Roll_No || '').trim();
-          if (/^\d+$/.test(roll) && roll.length > rollWidth) rollWidth = roll.length;
+        const batch = await getBatchInfo(conn, bid);
+        if (!batch) {
+          await conn.rollback();
+          return NextResponse.json({ success: false, error: 'Batch not found.' }, { status: 400 });
         }
+        const prefix = rollNumberPrefix(batch.Batch_code, batch.SDate);
 
         for (let i = 0; i < admissions.length; i++) {
-          const newRollNo = String(i + 1).padStart(rollWidth, '0');
+          const newRollNo = buildRollNumber(prefix, i + 1);
           await conn.query(
             `UPDATE admission_master SET Roll_No = ? WHERE Admission_Id = ? AND Batch_Id = ?`,
             [newRollNo, admissions[i].Admission_Id, bid]
@@ -258,38 +285,36 @@ export async function PATCH(req: NextRequest) {
           [bid]
         );
 
-        const usedRolls = new Set<string>();
-        let maxRoll = 0;
-        let rollWidth = 5;
+        const batch = await getBatchInfo(conn, bid);
+        if (!batch) {
+          await conn.rollback();
+          return NextResponse.json({ success: false, error: 'Batch not found.' }, { status: 400 });
+        }
+        const prefix = rollNumberPrefix(batch.Batch_code, batch.SDate);
+
+        // Derive the next serial from existing roll numbers under this
+        // batch's own prefix, rather than requiring a manually-allotted seed
+        // — any correctly-formatted roll number already present anchors it.
+        const usedSerials = new Set<number>();
+        let maxSerial = 0;
 
         for (const admission of admissions) {
           const currentRoll = String(admission.Roll_No || '').trim();
           if (!currentRoll) continue;
-          usedRolls.add(currentRoll);
-          if (/^\d+$/.test(currentRoll)) {
-            const numericRoll = Number(currentRoll);
-            if (numericRoll > maxRoll) {
-              maxRoll = numericRoll;
-              rollWidth = Math.max(5, currentRoll.length);
-            }
+          if (currentRoll.startsWith(prefix) && /^\d{4}$/.test(currentRoll.slice(prefix.length))) {
+            const serial = Number(currentRoll.slice(prefix.length));
+            usedSerials.add(serial);
+            if (serial > maxSerial) maxSerial = serial;
           }
         }
 
-        if (!maxRoll) {
-          await conn.rollback();
-          return NextResponse.json({ success: false, error: 'Allocate the first roll number manually, then auto-generate the remaining roll numbers.' }, { status: 400 });
-        }
-
-        let nextRoll = maxRoll + 1;
+        let nextSerial = maxSerial + 1;
         let updated = 0;
         for (const admission of admissions) {
           if (String(admission.Roll_No || '').trim()) continue;
 
-          let nextRollNo = String(nextRoll).padStart(rollWidth, '0');
-          while (usedRolls.has(nextRollNo)) {
-            nextRoll += 1;
-            nextRollNo = String(nextRoll).padStart(rollWidth, '0');
-          }
+          while (usedSerials.has(nextSerial)) nextSerial += 1;
+          const nextRollNo = buildRollNumber(prefix, nextSerial);
 
           await conn.query(
             `UPDATE admission_master
@@ -299,8 +324,8 @@ export async function PATCH(req: NextRequest) {
                AND (Roll_No IS NULL OR TRIM(CAST(Roll_No AS CHAR)) = '')`,
             [nextRollNo, admission.Admission_Id, bid]
           );
-          usedRolls.add(nextRollNo);
-          nextRoll += 1;
+          usedSerials.add(nextSerial);
+          nextSerial += 1;
           updated += 1;
         }
 
@@ -321,8 +346,18 @@ export async function PATCH(req: NextRequest) {
 
     if (action === 'save-roll-number') {
       const nextRollNo = String(rollNo ?? '').trim();
-      if (nextRollNo && !/^\d{5,}$/.test(nextRollNo)) {
-        return NextResponse.json({ success: false, error: 'Roll number must be numeric and at least 5 digits.' }, { status: 400 });
+      if (nextRollNo) {
+        const batch = await getBatchInfo(pool, bid);
+        if (!batch) {
+          return NextResponse.json({ success: false, error: 'Batch not found.' }, { status: 400 });
+        }
+        const prefix = rollNumberPrefix(batch.Batch_code, batch.SDate);
+        if (!new RegExp(`^${prefix}\\d{4}$`).test(nextRollNo)) {
+          return NextResponse.json({
+            success: false,
+            error: `Roll number must be in the format ${prefix}#### (e.g. ${buildRollNumber(prefix, 1)}).`,
+          }, { status: 400 });
+        }
       }
 
       if (nextRollNo) {
