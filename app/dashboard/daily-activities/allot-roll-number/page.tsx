@@ -1,8 +1,29 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
+
+async function loadImageAsDataUrl(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') resolve(reader.result);
+        else reject(new Error('Failed to load image'));
+      };
+      reader.onerror = () => reject(new Error('Failed to read image blob'));
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
 
 type Course = {
   Course_Id: number;
@@ -334,21 +355,93 @@ export default function AllotRollNumberPage() {
     }
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!rows.length) return;
     const courseName = selectedCourse?.Course_Name || 'Course';
     const batchCode = selectedBatch?.Batch_code || 'Batch';
-    import('xlsx').then((XLSX) => {
-      const data = rows.map((r, i) => ({
-        'Sr No': i + 1,
-        'Student Name': r.Student_Name || '',
-        'Roll Number': r.Roll_No || '',
-      }));
-      const ws = XLSX.utils.json_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Roll Numbers');
-      XLSX.writeFile(wb, `${courseName}_${batchCode}_RollNumbers.xlsx`);
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'SIT Manager';
+    wb.created = new Date();
+
+    const ws = wb.addWorksheet('Roll Numbers', {
+      views: [{ state: 'frozen', ySplit: 4 }],
+      pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1 },
     });
+    ws.columns = [
+      { width: 8 },
+      { width: 40 },
+      { width: 18 },
+    ];
+
+    const border = (color: string): ExcelJS.Border => ({ style: 'thin', color: { argb: color } });
+    const borders = (c: string) => ({ top: border(c), bottom: border(c), left: border(c), right: border(c) });
+    const fill = (argb: string): ExcelJS.Fill => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+
+    ws.mergeCells(1, 1, 1, 3);
+    const titleCell = ws.getCell('A1');
+    titleCell.value = 'Suvidya Institute of Technology';
+    titleCell.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+    titleCell.fill = fill('FF2E3093');
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getRow(1).height = 26;
+
+    ws.mergeCells(2, 1, 2, 3);
+    const subtitleCell = ws.getCell('A2');
+    subtitleCell.value = 'Roll Number Allotment';
+    subtitleCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF2E3093' } };
+    subtitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getRow(2).height = 18;
+
+    ws.mergeCells(3, 1, 3, 3);
+    const metaCell = ws.getCell('A3');
+    metaCell.value = `${courseName}  ·  Batch ${batchCode}  ·  ${rows.length} student(s)  ·  ${new Date().toLocaleString('en-IN')}`;
+    metaCell.font = { name: 'Calibri', size: 9, italic: true, color: { argb: 'FF6B7280' } };
+    metaCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getRow(3).height = 16;
+
+    const logoData = await loadImageAsDataUrl('/sit.png');
+    if (logoData) {
+      const imageId = wb.addImage({ base64: logoData, extension: 'png' });
+      ws.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 90, height: 22 } });
+    }
+
+    const headers = ['Sr No', 'Student Name', 'Roll Number'];
+    const headerRow = ws.getRow(4);
+    headers.forEach((h, i) => {
+      const cell = headerRow.getCell(i + 1);
+      cell.value = h;
+      cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = fill('FF2A6BB5');
+      cell.alignment = { horizontal: i === 1 ? 'left' : 'center', vertical: 'middle' };
+      cell.border = borders('FF1F2A78');
+    });
+    headerRow.height = 20;
+
+    rows.forEach((r, i) => {
+      const row = ws.getRow(5 + i);
+      const stripe = i % 2 === 0 ? 'FFFFFFFF' : 'FFF3F5FB';
+      const vals = [i + 1, r.Student_Name || '—', r.Roll_No || '—'];
+      vals.forEach((v, ci) => {
+        const cell = row.getCell(ci + 1);
+        cell.value = v;
+        cell.font = { name: 'Calibri', size: 9, color: { argb: 'FF374151' } };
+        cell.fill = fill(stripe);
+        cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+        cell.border = borders('FFE5E7EB');
+      });
+      if (!r.Roll_No) {
+        row.getCell(3).font = { name: 'Calibri', size: 9, italic: true, color: { argb: 'FFB91C1C' } };
+      } else {
+        row.getCell(3).font = { name: 'Calibri', size: 9, bold: true, color: { argb: 'FF2E3093' } };
+      }
+    });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    saveAs(
+      new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+      `${courseName}_${batchCode}_RollNumbers.xlsx`
+    );
   };
 
   const handleExportFacescan = () => {
