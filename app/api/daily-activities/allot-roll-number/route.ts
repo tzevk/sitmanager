@@ -185,6 +185,58 @@ export async function PATCH(req: NextRequest) {
 
     const pool = getPool();
 
+    if (action === 'reorder-roll-numbers') {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+
+        const [admissions] = await conn.query<any[]>(
+          `SELECT
+             am.Admission_Id,
+             COALESCE(TRIM(CAST(am.Roll_No AS CHAR)), '') AS Roll_No,
+             COALESCE(NULLIF(TRIM(s.Student_Name), ''), TRIM(CONCAT_WS(' ', s.FName, s.LName)), CONCAT('Student #', s.Student_Id)) AS Student_Name
+           FROM admission_master am
+           JOIN student_master s ON s.Student_Id = am.Student_Id
+           WHERE am.Batch_Id = ?
+             AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+             AND (am.Cancel = 0 OR am.Cancel IS NULL)
+             AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
+           ORDER BY Student_Name ASC, am.Admission_Id ASC
+           FOR UPDATE`,
+          [bid]
+        );
+
+        if (admissions.length === 0) {
+          await conn.rollback();
+          return NextResponse.json({ success: false, error: 'No students found in this batch.' }, { status: 400 });
+        }
+
+        // Determine roll width from existing roll numbers (min 5)
+        let rollWidth = 5;
+        for (const a of admissions) {
+          const roll = String(a.Roll_No || '').trim();
+          if (/^\d+$/.test(roll) && roll.length > rollWidth) rollWidth = roll.length;
+        }
+
+        for (let i = 0; i < admissions.length; i++) {
+          const newRollNo = String(i + 1).padStart(rollWidth, '0');
+          await conn.query(
+            `UPDATE admission_master SET Roll_No = ? WHERE Admission_Id = ? AND Batch_Id = ?`,
+            [newRollNo, admissions[i].Admission_Id, bid]
+          );
+        }
+
+        await conn.commit();
+        const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
+        return NextResponse.json({ success: true, rows, updated: admissions.length });
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      } finally {
+        conn.release();
+      }
+    }
+
     if (action === 'auto-generate-roll-numbers') {
       const conn = await pool.getConnection();
       try {

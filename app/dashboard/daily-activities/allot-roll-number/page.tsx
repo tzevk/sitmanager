@@ -81,6 +81,7 @@ export default function AllotRollNumberPage() {
   const [loadingRows, setLoadingRows] = useState(false);
   const [savingRollAdmissionId, setSavingRollAdmissionId] = useState<number | null>(null);
   const [autoGeneratingRolls, setAutoGeneratingRolls] = useState(false);
+  const [reorderingRolls, setReorderingRolls] = useState(false);
   const [rollInputs, setRollInputs] = useState<Record<number, string>>({});
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -305,6 +306,34 @@ export default function AllotRollNumberPage() {
     }
   };
 
+  const handleReorderRollNumbers = async () => {
+    if (!canUpdate || !batchId || reorderingRolls) return;
+    const batchCode = selectedBatch?.Batch_code || batchId;
+    const ok = window.confirm(`Re-allocate all roll numbers for batch ${batchCode} in alphabetical order? This will overwrite all existing roll numbers.`);
+    if (!ok) return;
+
+    setError('');
+    setMessage('');
+    setReorderingRolls(true);
+    try {
+      const res = await fetch('/api/daily-activities/allot-roll-number', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reorder-roll-numbers', batchId: Number(batchId) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) throw new Error(data?.error || 'Failed to reorder roll numbers');
+      const nextRows = Array.isArray(data.rows) ? data.rows : [];
+      setRows(nextRows);
+      setRollInputs(Object.fromEntries(nextRows.map((student: StudentRow) => [student.Admission_Id, student.Roll_No || ''])));
+      setMessage(`Re-allocated ${Number(data.updated || 0)} roll numbers in alphabetical order.`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to reorder roll numbers');
+    } finally {
+      setReorderingRolls(false);
+    }
+  };
+
   const handleExportExcel = () => {
     if (!rows.length) return;
     const courseName = selectedCourse?.Course_Name || 'Course';
@@ -478,6 +507,17 @@ export default function AllotRollNumberPage() {
               </svg>
               Export Excel
             </button>
+            {canUpdate && (
+              <button
+                type="button"
+                onClick={handleReorderRollNumbers}
+                disabled={!batchId || !rows.length || reorderingRolls}
+                title="Sort all students A–Z and re-allocate roll numbers sequentially"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-violet-200 bg-violet-50 text-violet-700 text-[11px] font-bold hover:bg-violet-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {reorderingRolls ? 'Reordering...' : 'Reorder A–Z'}
+              </button>
+            )}
             {canUpdate ? (
               <button
                 type="button"
