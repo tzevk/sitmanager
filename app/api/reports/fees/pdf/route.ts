@@ -39,17 +39,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'batchId is required' }, { status: 400 });
     }
 
-    // Same base data source and de-dup as the Excel export / on-screen table
-    // (app/api/reports/fees/route.ts, batch-wise-fees subtab): anchor on
-    // student_master so every enrolled student appears, and pick exactly one
-    // admission_master row per (Student_Id, Batch_Id) — the old admission_master-
-    // anchored query here could double-count a student who has more than one
-    // active admission row (e.g. a historically transferred student). Roll
-    // number allotment is unrelated to fee reporting and is never filtered on here.
+    // Driven by admission_master, not student_master.Batch_Code — that column
+    // drifts out of sync with reality (verified: 40%+ of Batch_Code-matched
+    // students in some batches had zero genuine admission to that batch, while
+    // students actually admitted there were missing because their Batch_Code
+    // pointed elsewhere). admission_master is the real enrollment record —
+    // including one row per batch for transferred students — so it's the
+    // correct source for "who genuinely belongs to this batch". Same fix as
+    // app/api/reports/fees/route.ts, batch-wise-fees subtab.
     const conditions: string[] = [
       '(sm.IsDelete = 0 OR sm.IsDelete IS NULL)',
       '(sm.IsActive = 1 OR sm.IsActive IS NULL)',
-      'bm.Batch_Id = ?',
     ];
     const params: any[] = [Number(batchId)];
     if (courseId) { conditions.push('bm.Course_Id = ?'); params.push(Number(courseId)); }
@@ -76,25 +76,16 @@ export async function GET(req: NextRequest) {
            NULLIF(CAST(REPLACE(IFNULL(bm.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
            0
          )) AS Resolved_Batch_Fee
-       FROM student_master sm
-       LEFT JOIN batch_mst bm
-         ON (
-           bm.Batch_code = sm.Batch_Code
-           OR (NULLIF(TRIM(sm.Moved_From_Batch_Code), '') IS NOT NULL AND bm.Batch_code = sm.Moved_From_Batch_Code)
-           -- Some transfers never synced sm.Batch_Code to the new batch (a known
-           -- data gap) — fall back to Moved_To_Batch_Code, the authoritative
-           -- "current batch" for a transferred student, same as the report/Excel query.
-           OR (LOWER(TRIM(COALESCE(sm.Transfered, ''))) = 'yes' AND NULLIF(TRIM(sm.Moved_To_Batch_Code), '') IS NOT NULL AND bm.Batch_code = sm.Moved_To_Batch_Code)
-         )
-         AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
-       LEFT JOIN course_mst cm ON cm.Course_Id = bm.Course_Id
-       LEFT JOIN (
+       FROM (
          SELECT Student_Id, Batch_Id, MAX(Admission_Id) AS Admission_Id
          FROM admission_master
-         WHERE (IsDelete = 0 OR IsDelete IS NULL)
+         WHERE (IsDelete = 0 OR IsDelete IS NULL) AND Batch_Id = ?
          GROUP BY Student_Id, Batch_Id
-       ) am_pick ON am_pick.Student_Id = sm.Student_Id AND am_pick.Batch_Id = bm.Batch_Id
-       LEFT JOIN admission_master am ON am.Admission_Id = am_pick.Admission_Id
+       ) am_pick
+       JOIN admission_master am ON am.Admission_Id = am_pick.Admission_Id
+       JOIN batch_mst bm ON bm.Batch_Id = am_pick.Batch_Id AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
+       JOIN student_master sm ON sm.Student_Id = am_pick.Student_Id
+       LEFT JOIN course_mst cm ON cm.Course_Id = bm.Course_Id
        LEFT JOIN (
          SELECT batch_id, MAX(id) AS id FROM fees_structure
          WHERE deleted = 0 OR deleted IS NULL GROUP BY batch_id

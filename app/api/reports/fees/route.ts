@@ -86,10 +86,14 @@ export async function GET(req: NextRequest) {
 
       // ── Batch Wise Fees Details ──────────────────────────────────
       if (subTab === 'batch-wise-fees') {
-        // Use student_master as the base table so ALL enrolled students appear,
-        // even those whose admission_master.Batch_Id wasn't synced.
-        // The student's batch is the authoritative sm.Batch_Code column
-        // (same pattern used by fee-details/route.ts).
+        // Driven by admission_master, not student_master.Batch_Code — that
+        // column drifts out of sync with reality (stale/wrong for a large
+        // share of records; verified batches where 40%+ of Batch_Code-matched
+        // students had zero genuine admission to that batch, while their real
+        // admission history pointed elsewhere entirely). admission_master is
+        // the actual enrollment record, including one row per batch for
+        // transferred students (both the batch moved FROM and moved TO), so
+        // it's the correct source for "who genuinely belongs to this batch".
         const smConditions: string[] = [
           '(sm.IsDelete = 0 OR sm.IsDelete IS NULL)',
           '(sm.IsActive = 1 OR sm.IsActive IS NULL)',
@@ -104,9 +108,9 @@ export async function GET(req: NextRequest) {
              COALESCE(cm.Course_Name,'') AS Course_Name,
              bm.SDate AS Batch_Start, bm.EDate AS Batch_End, bm.Fees_Full_Payment,
              sm.Student_Id AS Student_Id,
-             COALESCE(am.Cancel, am_any.Cancel) AS Cancel,
-             COALESCE(am.Fees, am_any.Fees) AS Admission_Fees,
-             COALESCE(NULLIF(TRIM(sm.Transfered), ''), am.Transfered, am_any.Transfered) AS Transfered,
+             am.Cancel AS Cancel,
+             am.Fees AS Admission_Fees,
+             COALESCE(NULLIF(TRIM(sm.Transfered), ''), am.Transfered) AS Transfered,
              COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
              COALESCE(sm.Moved_From_Batch_Code, '') AS Moved_From_Batch_Code,
              COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name,
@@ -131,33 +135,17 @@ export async function GET(req: NextRequest) {
              ledger.paid AS Ledger_Paid,
              ledger.posted_debit AS Ledger_Posted_Debit,
              ledger.has_membership_debit AS Ledger_Has_Membership_Debit
-           FROM student_master sm
-           LEFT JOIN batch_mst bm
-             ON bm.Batch_code = CASE
-               -- Transferred students whose Batch_Code wasn't synced: use Moved_To
-               WHEN LOWER(TRIM(COALESCE(sm.Transfered, ''))) = 'yes'
-                    AND NULLIF(TRIM(sm.Moved_To_Batch_Code), '') IS NOT NULL
-                    AND NULLIF(TRIM(sm.Batch_Code), '') IS NULL
-               THEN sm.Moved_To_Batch_Code
-               ELSE sm.Batch_Code
-             END
-             AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
-           LEFT JOIN course_mst cm ON cm.Course_Id = bm.Course_Id
-           LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
-           LEFT JOIN (
+           FROM (
              SELECT Student_Id, Batch_Id, MAX(Admission_Id) AS Admission_Id
              FROM admission_master
              WHERE (IsDelete = 0 OR IsDelete IS NULL)
              GROUP BY Student_Id, Batch_Id
-           ) am_pick ON am_pick.Student_Id = sm.Student_Id AND am_pick.Batch_Id = bm.Batch_Id
-           LEFT JOIN admission_master am ON am.Admission_Id = am_pick.Admission_Id
-           LEFT JOIN (
-             SELECT Student_Id, MAX(Admission_Id) AS Admission_Id
-             FROM admission_master
-             WHERE (IsDelete = 0 OR IsDelete IS NULL)
-             GROUP BY Student_Id
-           ) am_pick_any ON am_pick_any.Student_Id = sm.Student_Id
-           LEFT JOIN admission_master am_any ON am_any.Admission_Id = am_pick_any.Admission_Id
+           ) am_pick
+           JOIN admission_master am ON am.Admission_Id = am_pick.Admission_Id
+           JOIN batch_mst bm ON bm.Batch_Id = am_pick.Batch_Id AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
+           JOIN student_master sm ON sm.Student_Id = am_pick.Student_Id
+           LEFT JOIN course_mst cm ON cm.Course_Id = bm.Course_Id
+           LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
            LEFT JOIN (
              SELECT batch_id, MAX(id) AS id FROM fees_structure
              WHERE deleted = 0 OR deleted IS NULL GROUP BY batch_id
