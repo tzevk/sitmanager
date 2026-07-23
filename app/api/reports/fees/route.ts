@@ -159,20 +159,77 @@ export async function GET(req: NextRequest) {
              (SELECT SUM(CASE WHEN TypeR = 'C' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END)
               FROM s_fees_mst
               WHERE Student_Id = sm.Student_Id AND (IsDelete = 0 OR IsDelete IS NULL)
-                AND (Batch_Id IN (SELECT Batch_Id FROM batch_mst WHERE Course_Id = bm.Course_Id)
-                     OR Batch_Id IS NULL OR Batch_Id = 0)
+                AND (
+                  Batch_Id IN (SELECT Batch_Id FROM batch_mst WHERE Course_Id = bm.Course_Id)
+                  OR (
+                    (Batch_Id IS NULL OR Batch_Id = 0)
+                    -- Only fall back to the student's other courses when there
+                    -- AREN'T any — a handful of legacy waiver rows (bulk
+                    -- "Fee Waived - Admission Cancelled" entries, ~₹17.8L
+                    -- total) carry no Batch_Id and can't be attributed to a
+                    -- specific course when the student is genuinely enrolled
+                    -- in more than one; counting them toward every course
+                    -- they're in would double them up rather than just once.
+                    AND NOT EXISTS (
+                      SELECT 1 FROM admission_master am_other
+                      JOIN batch_mst bm_other ON bm_other.Batch_Id = am_other.Batch_Id
+                      WHERE am_other.Student_Id = sm.Student_Id
+                        AND bm_other.Course_Id <> bm.Course_Id
+                        AND (am_other.IsDelete = 0 OR am_other.IsDelete IS NULL)
+                        AND am_other.Roll_No IS NOT NULL AND am_other.Roll_No <> ''
+                    )
+                  )
+                )
              ) AS Ledger_Paid,
              (SELECT SUM(CASE WHEN TypeR = 'D' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END)
               FROM s_fees_mst
               WHERE Student_Id = sm.Student_Id AND (IsDelete = 0 OR IsDelete IS NULL)
-                AND (Batch_Id IN (SELECT Batch_Id FROM batch_mst WHERE Course_Id = bm.Course_Id)
-                     OR Batch_Id IS NULL OR Batch_Id = 0)
+                AND (
+                  Batch_Id IN (SELECT Batch_Id FROM batch_mst WHERE Course_Id = bm.Course_Id)
+                  OR (
+                    (Batch_Id IS NULL OR Batch_Id = 0)
+                    -- Only fall back to the student's other courses when there
+                    -- AREN'T any — a handful of legacy waiver rows (bulk
+                    -- "Fee Waived - Admission Cancelled" entries, ~₹17.8L
+                    -- total) carry no Batch_Id and can't be attributed to a
+                    -- specific course when the student is genuinely enrolled
+                    -- in more than one; counting them toward every course
+                    -- they're in would double them up rather than just once.
+                    AND NOT EXISTS (
+                      SELECT 1 FROM admission_master am_other
+                      JOIN batch_mst bm_other ON bm_other.Batch_Id = am_other.Batch_Id
+                      WHERE am_other.Student_Id = sm.Student_Id
+                        AND bm_other.Course_Id <> bm.Course_Id
+                        AND (am_other.IsDelete = 0 OR am_other.IsDelete IS NULL)
+                        AND am_other.Roll_No IS NOT NULL AND am_other.Roll_No <> ''
+                    )
+                  )
+                )
              ) AS Ledger_Posted_Debit,
              (SELECT MAX(CASE WHEN TypeR = 'D' AND LOWER(IFNULL(Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END)
               FROM s_fees_mst
               WHERE Student_Id = sm.Student_Id AND (IsDelete = 0 OR IsDelete IS NULL)
-                AND (Batch_Id IN (SELECT Batch_Id FROM batch_mst WHERE Course_Id = bm.Course_Id)
-                     OR Batch_Id IS NULL OR Batch_Id = 0)
+                AND (
+                  Batch_Id IN (SELECT Batch_Id FROM batch_mst WHERE Course_Id = bm.Course_Id)
+                  OR (
+                    (Batch_Id IS NULL OR Batch_Id = 0)
+                    -- Only fall back to the student's other courses when there
+                    -- AREN'T any — a handful of legacy waiver rows (bulk
+                    -- "Fee Waived - Admission Cancelled" entries, ~₹17.8L
+                    -- total) carry no Batch_Id and can't be attributed to a
+                    -- specific course when the student is genuinely enrolled
+                    -- in more than one; counting them toward every course
+                    -- they're in would double them up rather than just once.
+                    AND NOT EXISTS (
+                      SELECT 1 FROM admission_master am_other
+                      JOIN batch_mst bm_other ON bm_other.Batch_Id = am_other.Batch_Id
+                      WHERE am_other.Student_Id = sm.Student_Id
+                        AND bm_other.Course_Id <> bm.Course_Id
+                        AND (am_other.IsDelete = 0 OR am_other.IsDelete IS NULL)
+                        AND am_other.Roll_No IS NOT NULL AND am_other.Roll_No <> ''
+                    )
+                  )
+                )
              ) AS Ledger_Has_Membership_Debit
            FROM (
              SELECT Student_Id, Batch_Id, MAX(Admission_Id) AS Admission_Id

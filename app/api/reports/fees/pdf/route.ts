@@ -119,16 +119,34 @@ export async function GET(req: NextRequest) {
     // to. A genuinely different course still keeps its own separate total,
     // since Course_Id differs.
     const [ledgerRows] = await pool.query<any[]>(
-      `SELECT Student_Id,
-         SUM(CASE WHEN TypeR = 'C' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS paid,
-         SUM(CASE WHEN TypeR = 'D' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS posted_debit,
-         MAX(CASE WHEN TypeR = 'D' AND LOWER(IFNULL(Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END) AS has_membership_debit
-       FROM s_fees_mst
-       WHERE Student_Id IN (?) AND (IsDelete = 0 OR IsDelete IS NULL)
-         AND (Batch_Id IN (SELECT Batch_Id FROM batch_mst WHERE Course_Id = ?)
-              OR Batch_Id IS NULL OR Batch_Id = 0)
-       GROUP BY Student_Id`,
-      [studentIds, students[0].Course_Id]
+      `SELECT sfm.Student_Id,
+         SUM(CASE WHEN sfm.TypeR = 'C' THEN COALESCE(sfm.Total_Amt, sfm.Amount, 0) ELSE 0 END) AS paid,
+         SUM(CASE WHEN sfm.TypeR = 'D' THEN COALESCE(sfm.Total_Amt, sfm.Amount, 0) ELSE 0 END) AS posted_debit,
+         MAX(CASE WHEN sfm.TypeR = 'D' AND LOWER(IFNULL(sfm.Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END) AS has_membership_debit
+       FROM s_fees_mst sfm
+       WHERE sfm.Student_Id IN (?) AND (sfm.IsDelete = 0 OR sfm.IsDelete IS NULL)
+         AND (
+           sfm.Batch_Id IN (SELECT Batch_Id FROM batch_mst WHERE Course_Id = ?)
+           OR (
+             (sfm.Batch_Id IS NULL OR sfm.Batch_Id = 0)
+             -- Only fall back when the student ISN'T also genuinely enrolled
+             -- in another course — a handful of legacy waiver rows (bulk
+             -- "Fee Waived - Admission Cancelled" entries, ~₹17.8L total)
+             -- carry no Batch_Id and can't be attributed to a specific course
+             -- when the student has more than one; counting them toward every
+             -- course they're in would double them up rather than just once.
+             AND NOT EXISTS (
+               SELECT 1 FROM admission_master am_other
+               JOIN batch_mst bm_other ON bm_other.Batch_Id = am_other.Batch_Id
+               WHERE am_other.Student_Id = sfm.Student_Id
+                 AND bm_other.Course_Id <> ?
+                 AND (am_other.IsDelete = 0 OR am_other.IsDelete IS NULL)
+                 AND am_other.Roll_No IS NOT NULL AND am_other.Roll_No <> ''
+             )
+           )
+         )
+       GROUP BY sfm.Student_Id`,
+      [studentIds, students[0].Course_Id, students[0].Course_Id]
     );
 
     const parseFee = (v: any) => Number(String(v ?? '').replace(/,/g, '')) || 0;
