@@ -149,18 +149,24 @@ export default function StudyMaterialRecordPage() {
 
     w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Study Material Issue Record</title><style>
       *{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif}
-      body{padding:16px;color:#111}
+      html,body{width:100%;color:#111}
+      body{padding:12px}
       .logo{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-      .logo img{height:50px}
-      .title-box{border:2px solid #2E3093;background:#2E3093;color:#fff;padding:8px;text-align:center;font-size:16px;font-weight:bold;letter-spacing:0.5px;margin-bottom:10px}
-      .meta{display:flex;justify-content:space-between;font-size:13px;margin-bottom:10px;font-weight:600}
-      table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
-      th,td{border:1px solid #333;padding:7px 8px;text-align:center;overflow:hidden}
+      .logo img{height:46px}
+      .title-box{border:2px solid #2E3093;background:#2E3093;color:#fff;padding:7px;text-align:center;font-size:15px;font-weight:bold;letter-spacing:0.5px;margin-bottom:8px}
+      .meta{display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px;font-weight:600}
+      table{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
+      th,td{border:1px solid #555;padding:6px 5px;text-align:center;overflow:hidden}
       td.left{text-align:left;white-space:normal;word-break:break-word}
       th{background:#eef0fa;font-weight:bold;color:#2E3093}
       tbody tr:nth-child(even){background:#f9fafc}
-      tbody td{height:26px}
-      @media print{@page{size:A4 landscape;margin:8mm}}
+      tbody td{height:24px}
+      @media print{
+        @page{size:A4 landscape;margin:10mm 12mm}
+        body{padding:0;margin:0}
+        th{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#eef0fa !important;color:#2E3093 !important}
+        tbody tr:nth-child(even) td{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#f9fafc !important}
+      }
     </style></head><body>
       <div class="logo"><img src="${logoUrl}" alt="SIT" /></div>
       <div class="title-box">STUDY MATERIAL ISSUE RECORD</div>
