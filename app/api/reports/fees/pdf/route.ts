@@ -50,13 +50,17 @@ export async function GET(req: NextRequest) {
     const conditions: string[] = [
       '(sm.IsDelete = 0 OR sm.IsDelete IS NULL)',
       '(sm.IsActive = 1 OR sm.IsActive IS NULL)',
+      // A roll number is allotted (Allot Roll Number) only once a batch
+      // admission is actually confirmed/settled, so it's a strong extra
+      // signal of genuine batch membership on top of admission_master.
+      "am.Roll_No IS NOT NULL AND am.Roll_No <> ''",
     ];
     const params: any[] = [Number(batchId)];
     if (courseId) { conditions.push('bm.Course_Id = ?'); params.push(Number(courseId)); }
 
     const [students] = await pool.query<any[]>(
       `SELECT
-         sm.Student_Id, MAX(am.Admission_Date) AS Admission_Date, MAX(am.Fees) AS Fees,
+         sm.Student_Id, MAX(bm.Course_Id) AS Course_Id, MAX(am.Admission_Date) AS Admission_Date, MAX(am.Fees) AS Fees,
          COALESCE(MAX(sm.Student_Name), MAX(CONCAT_WS(' ', sm.FName, sm.MName, sm.LName)), '') AS Student_Name,
          COALESCE(MAX(bm.Batch_code),'') AS Batch_Code, MAX(bm.Fees_Full_Payment) AS Fees_Full_Payment,
          MAX(bm.SDate) AS SDate, MAX(bm.EDate) AS EDate,
@@ -103,9 +107,17 @@ export async function GET(req: NextRequest) {
 
     const studentIds = students.map(s => s.Student_Id);
     // Same per-student ledger aggregation as /api/fee-details and the
-    // on-screen report's Total_Fees_Exact / Total_Paid_Exact — scoped to this
-    // batch (or legacy rows with no Batch_Id at all) so a student admitted to
-    // more than one batch doesn't have another batch's payments counted here.
+    // on-screen report's Total_Fees_Exact / Total_Paid_Exact — scoped to
+    // (Student_Id, Course_Id), not just this batch. Confirmed the course fee
+    // is a single obligation covering a student's whole run in a course, not
+    // a fresh charge per yearly batch (e.g. E.D.D. rolls a continuing student
+    // into a new batch_mst row each year — 10024→10025→10026 — while their
+    // payment stays recorded under whichever batch was current when they
+    // paid). Matches on any batch under the same course, not only batches
+    // this student has a formal admission_master row for, since some legacy
+    // fee rows carry a Batch_Id the student was never formally re-admitted
+    // to. A genuinely different course still keeps its own separate total,
+    // since Course_Id differs.
     const [ledgerRows] = await pool.query<any[]>(
       `SELECT Student_Id,
          SUM(CASE WHEN TypeR = 'C' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END) AS paid,
@@ -113,9 +125,10 @@ export async function GET(req: NextRequest) {
          MAX(CASE WHEN TypeR = 'D' AND LOWER(IFNULL(Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END) AS has_membership_debit
        FROM s_fees_mst
        WHERE Student_Id IN (?) AND (IsDelete = 0 OR IsDelete IS NULL)
-         AND (Batch_Id = ? OR Batch_Id IS NULL OR Batch_Id = 0)
+         AND (Batch_Id IN (SELECT Batch_Id FROM batch_mst WHERE Course_Id = ?)
+              OR Batch_Id IS NULL OR Batch_Id = 0)
        GROUP BY Student_Id`,
-      [studentIds, Number(batchId)]
+      [studentIds, students[0].Course_Id]
     );
 
     const parseFee = (v: any) => Number(String(v ?? '').replace(/,/g, '')) || 0;

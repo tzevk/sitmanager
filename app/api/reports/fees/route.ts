@@ -97,6 +97,10 @@ export async function GET(req: NextRequest) {
         const smConditions: string[] = [
           '(sm.IsDelete = 0 OR sm.IsDelete IS NULL)',
           '(sm.IsActive = 1 OR sm.IsActive IS NULL)',
+          // A roll number is allotted (Allot Roll Number) only once a batch
+          // admission is actually confirmed/settled, so it's a strong extra
+          // signal of genuine batch membership on top of admission_master.
+          "am.Roll_No IS NOT NULL AND am.Roll_No <> ''",
         ];
         const smParams: any[] = [];
         if (courseId) { smConditions.push('bm.Course_Id = ?');  smParams.push(Number(courseId)); }
@@ -136,20 +140,39 @@ export async function GET(req: NextRequest) {
              -- BOTH real-Batch_Id fee rows and legacy NULL-Batch_Id fee rows
              -- (430+ students) can't produce two matching ledger rows and
              -- silently double every payment row in the result set.
+             --
+             -- Scoped to (Student_Id, Course_Id) rather than (Student_Id,
+             -- Batch_Id): confirmed the course fee is a single obligation
+             -- covering a student's whole run in a course, not a fresh charge
+             -- per yearly batch. Many courses roll a continuing student into
+             -- a new batch_mst row each year (e.g. E.D.D. 10024→10025→10026)
+             -- while their payment stays recorded under whichever batch was
+             -- current when they paid — batch-only scoping made year-one
+             -- payments invisible to the year-two batch's report, showing a
+             -- fully-paid student as having paid nothing. Matches on any
+             -- batch under the same course (not just batches this student has
+             -- a formal admission_master row for) since some legacy fee rows
+             -- carry a Batch_Id the student was never formally re-admitted
+             -- to, even though it's clearly the same course's payment.
+             -- Genuinely different courses still get separate totals, since
+             -- Course_Id differs between them.
              (SELECT SUM(CASE WHEN TypeR = 'C' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END)
               FROM s_fees_mst
               WHERE Student_Id = sm.Student_Id AND (IsDelete = 0 OR IsDelete IS NULL)
-                AND (Batch_Id = bm.Batch_Id OR Batch_Id IS NULL OR Batch_Id = 0)
+                AND (Batch_Id IN (SELECT Batch_Id FROM batch_mst WHERE Course_Id = bm.Course_Id)
+                     OR Batch_Id IS NULL OR Batch_Id = 0)
              ) AS Ledger_Paid,
              (SELECT SUM(CASE WHEN TypeR = 'D' THEN COALESCE(Total_Amt, Amount, 0) ELSE 0 END)
               FROM s_fees_mst
               WHERE Student_Id = sm.Student_Id AND (IsDelete = 0 OR IsDelete IS NULL)
-                AND (Batch_Id = bm.Batch_Id OR Batch_Id IS NULL OR Batch_Id = 0)
+                AND (Batch_Id IN (SELECT Batch_Id FROM batch_mst WHERE Course_Id = bm.Course_Id)
+                     OR Batch_Id IS NULL OR Batch_Id = 0)
              ) AS Ledger_Posted_Debit,
              (SELECT MAX(CASE WHEN TypeR = 'D' AND LOWER(IFNULL(Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END)
               FROM s_fees_mst
               WHERE Student_Id = sm.Student_Id AND (IsDelete = 0 OR IsDelete IS NULL)
-                AND (Batch_Id = bm.Batch_Id OR Batch_Id IS NULL OR Batch_Id = 0)
+                AND (Batch_Id IN (SELECT Batch_Id FROM batch_mst WHERE Course_Id = bm.Course_Id)
+                     OR Batch_Id IS NULL OR Batch_Id = 0)
              ) AS Ledger_Has_Membership_Debit
            FROM (
              SELECT Student_Id, Batch_Id, MAX(Admission_Id) AS Admission_Id
@@ -167,15 +190,12 @@ export async function GET(req: NextRequest) {
              WHERE deleted = 0 OR deleted IS NULL GROUP BY batch_id
            ) latest_fs ON latest_fs.batch_id = bm.Batch_Id
            LEFT JOIN fees_structure fs ON fs.id = latest_fs.id
-           -- Scoped to (Student_Id, Batch_Id): 1,214+ students hold a genuine
-           -- admission to more than one batch (re-admissions, course changes),
-           -- each with their own separate fee payments. Matching by Student_Id
-           -- alone pulled EVERY batch's payments into each batch's report —
-           -- e.g. a student who paid ₹85k under batch A and ₹15k under batch B
-           -- would show both totals under both batches. A small share (~3%) of
-           -- legacy fee rows carry no Batch_Id at all (cancellation waivers,
-           -- pre-migration records) — those still match on Student_Id alone
-           -- as a fallback so they aren't silently dropped.
+           -- Individual payment rows stay scoped to THIS batch specifically
+           -- (unlike the course-wide Ledger_* totals above) — this lists the
+           -- actual transactions recorded against this batch, so a payment
+           -- made during an earlier year's batch shows up there, not here.
+           -- A genuinely different course a student is admitted to keeps its
+           -- own separate rows and totals, since Course_Id differs.
            LEFT JOIN s_fees_mst sfm
              ON sfm.Student_Id = sm.Student_Id
              AND sfm.IsDelete  = 0
