@@ -22,36 +22,38 @@ export async function GET(req: NextRequest) {
     const courseId = toInt(searchParams.get('courseId'));
 
     if (batchId) {
+      // Use EXISTS so each student_master row appears at most once.
+      // The old UNION caused duplicates when a student was linked via both
+      // admission_master AND student_master.Batch_Code simultaneously.
       const [rows] = await pool.query(
-        `SELECT DISTINCT Student_Id, Student_Name, Present_Mobile, Email
-         FROM (
-           SELECT
-             sm.Student_Id,
-             sm.Student_Name,
-             COALESCE(sm.Present_Mobile, '') AS Present_Mobile,
-             COALESCE(sm.Email, '') AS Email
-           FROM admission_master am
-           JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
-           JOIN student_master sm ON sm.Student_Id = am.Student_Id
-           WHERE am.Batch_Id = ?
-             AND am.IsActive = 1
-             AND am.IsDelete = 0
-             AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
-             AND ${VISIBLE_BATCH_SQL}
-             AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-           UNION
-           SELECT
-             sm.Student_Id,
-             sm.Student_Name,
-             COALESCE(sm.Present_Mobile, '') AS Present_Mobile,
-             COALESCE(sm.Email, '') AS Email
-           FROM batch_mst b
-           JOIN student_master sm ON sm.Batch_Code = b.Batch_code
-           WHERE b.Batch_Id = ?
-             AND ${VISIBLE_BATCH_SQL}
-             AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-         ) linked_students
-         ORDER BY Student_Name ASC`,
+        `SELECT
+           sm.Student_Id,
+           sm.Student_Name,
+           COALESCE(sm.Present_Mobile, '') AS Present_Mobile,
+           COALESCE(sm.Email, '') AS Email
+         FROM student_master sm
+         WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+           AND (
+             EXISTS (
+               SELECT 1
+               FROM admission_master am
+               JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
+               WHERE am.Student_Id = sm.Student_Id
+                 AND am.Batch_Id = ?
+                 AND am.IsActive = 1
+                 AND am.IsDelete = 0
+                 AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
+                 AND ${VISIBLE_BATCH_SQL}
+             )
+             OR sm.Batch_Code = (
+               SELECT b2.Batch_code
+               FROM batch_mst b2
+               WHERE b2.Batch_Id = ?
+                 AND ${VISIBLE_BATCH_SQL.replace(/\bb\b/g, 'b2')}
+               LIMIT 1
+             )
+           )
+         ORDER BY sm.Student_Name ASC`,
         [batchId, batchId]
       );
 
