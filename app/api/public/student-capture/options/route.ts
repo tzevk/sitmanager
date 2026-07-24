@@ -22,9 +22,9 @@ export async function GET(req: NextRequest) {
     const courseId = toInt(searchParams.get('courseId'));
 
     if (batchId) {
-      // Use EXISTS so each student_master row appears at most once.
-      // The old UNION caused duplicates when a student was linked via both
-      // admission_master AND student_master.Batch_Code simultaneously.
+      // Collect unique Student_Ids from both sources via UNION (deduplicates by ID),
+      // then join to student_master once. This avoids both the duplicate rows the
+      // old UNION-of-full-rows caused and the per-row correlated scan EXISTS needs.
       const [rows] = await pool.query(
         `SELECT
            sm.Student_Id,
@@ -32,27 +32,24 @@ export async function GET(req: NextRequest) {
            COALESCE(sm.Present_Mobile, '') AS Present_Mobile,
            COALESCE(sm.Email, '') AS Email
          FROM student_master sm
+         JOIN (
+           SELECT am.Student_Id
+           FROM admission_master am
+           JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
+           WHERE am.Batch_Id = ?
+             AND am.IsActive = 1
+             AND am.IsDelete = 0
+             AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
+             AND ${VISIBLE_BATCH_SQL}
+           UNION
+           SELECT sm2.Student_Id
+           FROM student_master sm2
+           JOIN batch_mst b ON b.Batch_code = sm2.Batch_Code
+           WHERE b.Batch_Id = ?
+             AND ${VISIBLE_BATCH_SQL}
+             AND (sm2.IsDelete = 0 OR sm2.IsDelete IS NULL)
+         ) ids ON ids.Student_Id = sm.Student_Id
          WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-           AND (
-             EXISTS (
-               SELECT 1
-               FROM admission_master am
-               JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
-               WHERE am.Student_Id = sm.Student_Id
-                 AND am.Batch_Id = ?
-                 AND am.IsActive = 1
-                 AND am.IsDelete = 0
-                 AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
-                 AND ${VISIBLE_BATCH_SQL}
-             )
-             OR sm.Batch_Code = (
-               SELECT b2.Batch_code
-               FROM batch_mst b2
-               WHERE b2.Batch_Id = ?
-                 AND ${VISIBLE_BATCH_SQL.replace(/\bb\b/g, 'b2')}
-               LIMIT 1
-             )
-           )
          ORDER BY sm.Student_Name ASC`,
         [batchId, batchId]
       );
