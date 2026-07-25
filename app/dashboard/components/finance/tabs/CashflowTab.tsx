@@ -442,11 +442,18 @@ export default function CashflowTab() {
     <div className="space-y-6">
       {/* Payment vs Receipt by Department */}
       <div>
-        <YearMonthFilter year={year} month={month} setYear={setYear} setMonth={setMonth}
-          currentYear={currentYear} calendarYearOptions={calendarYearOptions} financialYearOptions={financialYearOptions} />
-        <p className="text-[10px] text-gray-400 mb-2 text-right">
-          CBD&apos;s profit % combines Trainers&apos; and T&amp;D&apos;s expenses (bifurcation shown under the label) — see raw figures below.
-        </p>
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+          <div className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5">
+            <svg className="w-3.5 h-3.5 text-amber-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-[11px] font-medium text-amber-800">
+              CBD&apos;s profit % below combines Trainers&apos; and T&amp;D&apos;s expenses (bifurcation shown under the CBD label) — see raw figures in the table below.
+            </p>
+          </div>
+          <YearMonthFilter year={year} month={month} setYear={setYear} setMonth={setMonth}
+            currentYear={currentYear} calendarYearOptions={calendarYearOptions} financialYearOptions={financialYearOptions} />
+        </div>
         <CashflowCategoryBars rows={countableFilteredRows} view="dept" />
       </div>
 
