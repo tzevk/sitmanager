@@ -8,7 +8,7 @@ import { Modal, TableHeader, TableSkeleton, EmptyRow, TotalRow, inpCls, lblCls, 
 import { fmt, todayISO, fmtDate, isCountableCashflow, buildYearOptions, yearValueToRange, monthOptionsForYear } from '../shared/format';
 import type { CashflowTxn, CashflowType } from '../shared/types';
 import CashflowCategoryBars from '../charts/CashflowCategoryBars';
-import { detectCashflowAnomalies, categoryMoMGrowth } from '../shared/predictions';
+import { detectCashflowAnomalies, categoryMoMGrowth, buildMoMInsights, buildMoMRecommendations } from '../shared/predictions';
 
 const CF_TYPES: CashflowType[] = ['Payment', 'Receipt'];
 const CF_DEPARTMENTS = ['CBD','CORPORATE TRAINING','DEPUTATION ACCENT','PROJECT ACCENT','T&D','ADMIN ACCOUNTS','HELPING STAFF','GENERAL','MANAGEMENT','TRAINERS','LOAN REPAYMENT','MARKETING - ACCENT','PUNE BRANCH'] as const;
@@ -425,6 +425,8 @@ export default function CashflowTab() {
   const countableFilteredRows = useMemo(() => filteredRows.filter(isCountableCashflow), [filteredRows]);
   const anomalies = useMemo(() => detectCashflowAnomalies(countableCashRows), [countableCashRows]);
   const momGrowth = useMemo(() => categoryMoMGrowth(countableCashRows), [countableCashRows]);
+  const momInsights = useMemo(() => buildMoMInsights(momGrowth, 5), [momGrowth]);
+  const momRecommendations = useMemo(() => buildMoMRecommendations(momGrowth, 5), [momGrowth]);
 
   const anomalySet = useMemo(() => {
     const s = new Set<number>();
@@ -758,22 +760,36 @@ export default function CashflowTab() {
             </svg>
             Month-on-Month Spending Growth (vs previous month)
           </p>
-          <div className="flex flex-wrap gap-2">
-            {momGrowth.map(g => (
-              <div key={g.category} className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
-                g.direction === 'up'   ? 'bg-red-50 border-red-200' :
-                g.direction === 'down' ? 'bg-emerald-50 border-emerald-200' :
-                                         'bg-gray-50 border-gray-200'
-              }`}>
-                <span className="text-[10px] font-semibold text-gray-700">{g.category}</span>
-                <span className={`text-[11px] font-bold ${
-                  g.direction === 'up' ? 'text-red-600' : g.direction === 'down' ? 'text-emerald-700' : 'text-gray-500'
-                }`}>
-                  {g.growthPct > 0 ? '+' : ''}{g.growthPct.toFixed(1)}%
-                  {g.direction === 'up' ? ' ↑' : g.direction === 'down' ? ' ↓' : ' →'}
-                </span>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">Top 5 Insights</p>
+              <ul className="space-y-1.5">
+                {momInsights.map(ins => (
+                  <li key={ins.category} className="flex items-start gap-1.5 text-xs text-gray-700">
+                    <span className={`mt-0.5 shrink-0 ${
+                      ins.direction === 'up' ? 'text-red-500' : ins.direction === 'down' ? 'text-emerald-600' : 'text-gray-400'
+                    }`}>
+                      {ins.direction === 'up' ? '▲' : ins.direction === 'down' ? '▼' : '●'}
+                    </span>
+                    <span>{ins.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">Top 5 Recommendations</p>
+              <ul className="space-y-1.5">
+                {momRecommendations.map((rec, i) => (
+                  <li key={i} className="flex items-start gap-1.5 text-xs text-gray-700">
+                    <span className="mt-0.5 shrink-0 text-[#2E3093] font-bold">{i + 1}.</span>
+                    <span>{rec}</span>
+                  </li>
+                ))}
+                {momRecommendations.length === 0 && (
+                  <li className="text-xs text-gray-400">No categories rose enough to flag this month.</li>
+                )}
+              </ul>
+            </div>
           </div>
         </div>
       )}

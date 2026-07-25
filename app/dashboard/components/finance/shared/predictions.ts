@@ -488,6 +488,70 @@ export function categoryMoMGrowth(
   return result.sort((a, b) => b.growthPct - a.growthPct);
 }
 
+// ─── MoM Insights & Recommendations ─────────────────────────────────────────
+
+export interface MoMInsight {
+  category:  string;
+  direction: 'up' | 'down' | 'flat';
+  text:      string;
+}
+
+const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
+
+/**
+ * Top N categories by magnitude of month-on-month change (up or down),
+ * phrased as plain-language observations. A category with no spend last
+ * month is called out as new rather than reported as flat/0% growth.
+ */
+export function buildMoMInsights(growth: CategoryGrowth[], limit = 5): MoMInsight[] {
+  return [...growth]
+    .sort((a, b) => Math.abs(b.growthPct) - Math.abs(a.growthPct) || (b.currentAmt - b.prevAmt) - (a.currentAmt - a.prevAmt))
+    .slice(0, limit)
+    .map(g => {
+      if (g.prevAmt === 0 && g.currentAmt > 0) {
+        return { category: g.category, direction: 'up' as const, text: `${g.category} is new this month — ${inr(g.currentAmt)} with no spend last month.` };
+      }
+      if (g.direction === 'flat') {
+        return { category: g.category, direction: 'flat' as const, text: `${g.category} held steady at ${inr(g.currentAmt)} (${g.growthPct >= 0 ? '+' : ''}${g.growthPct.toFixed(1)}%).` };
+      }
+      const verb = g.direction === 'up' ? 'rose' : 'fell';
+      return {
+        category: g.category,
+        direction: g.direction,
+        text: `${g.category} ${verb} ${Math.abs(g.growthPct).toFixed(1)}% — ${inr(g.prevAmt)} → ${inr(g.currentAmt)}.`,
+      };
+    });
+}
+
+/**
+ * Actionable follow-ups for the categories with the sharpest spending
+ * increases. Backfills with the sharpest decreases (as "confirm this is
+ * real, not a missed payment") only if fewer than `limit` categories rose.
+ */
+export function buildMoMRecommendations(growth: CategoryGrowth[], limit = 5): string[] {
+  const rising = growth.filter(g => g.direction === 'up' || (g.prevAmt === 0 && g.currentAmt > 0));
+  const risingSorted = [...rising].sort((a, b) => (b.currentAmt - b.prevAmt) - (a.currentAmt - a.prevAmt));
+
+  const recs = risingSorted.slice(0, limit).map(g => {
+    if (g.prevAmt === 0) {
+      return `"${g.category}" is a new expense this month (${inr(g.currentAmt)}) — confirm it's expected and budget for it going forward.`;
+    }
+    return `Review "${g.category}" — up ${g.growthPct.toFixed(1)}% (+${inr(g.currentAmt - g.prevAmt)}) month-over-month; confirm the increase before it repeats next cycle.`;
+  });
+
+  if (recs.length < limit) {
+    const falling = growth
+      .filter(g => g.direction === 'down')
+      .sort((a, b) => (a.currentAmt - a.prevAmt) - (b.currentAmt - b.prevAmt));
+    for (const g of falling) {
+      if (recs.length >= limit) break;
+      recs.push(`"${g.category}" dropped ${Math.abs(g.growthPct).toFixed(1)}% (${inr(g.prevAmt - g.currentAmt)} less) — worth confirming this is a real saving and not a delayed/missed payment.`);
+    }
+  }
+
+  return recs.slice(0, limit);
+}
+
 // ─── Department Risk Flags ───────────────────────────────────────────────────
 
 export type DeptRisk = 'at-risk' | 'watch' | 'on-track';
