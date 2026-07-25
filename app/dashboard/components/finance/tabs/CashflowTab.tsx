@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import { useFinanceResource } from '../shared/useFinanceResource';
+import { useFinanceResource, useFinanceSingleton } from '../shared/useFinanceResource';
 import { Modal, TableHeader, TableSkeleton, EmptyRow, TotalRow, inpCls, lblCls, trCls, downloadCsv } from '../shared/primitives';
 import { fmt, todayISO, fmtDate, isCountableCashflow, buildYearOptions, yearValueToRange, monthOptionsForYear } from '../shared/format';
 import type { CashflowTxn, CashflowType } from '../shared/types';
@@ -210,6 +210,32 @@ export default function CashflowTab() {
   }, [search, type, category, department, company, year, dateFrom, dateTo]);
 
   const cash = useFinanceResource<CashflowTxn>('/api/finance/cashflow', { query: query || undefined });
+
+  /* ── Bank balance (manually maintained; no live bank feed) ── */
+  const bankBalance = useFinanceSingleton<{ sit_balance: number; atspl_balance: number }>('/api/finance/bank-balance', '');
+  const [bankBalanceModal, setBankBalanceModal] = useState(false);
+  const [bankBalanceForm, setBankBalanceForm] = useState({ sit_balance: '', atspl_balance: '' });
+  const [bankBalanceSaving, setBankBalanceSaving] = useState(false);
+
+  const openBankBalance = useCallback(() => {
+    setBankBalanceForm({
+      sit_balance: String(bankBalance.row?.sit_balance ?? 0),
+      atspl_balance: String(bankBalance.row?.atspl_balance ?? 0),
+    });
+    setBankBalanceModal(true);
+  }, [bankBalance.row]);
+
+  const saveBankBalance = useCallback(async () => {
+    setBankBalanceSaving(true);
+    try {
+      await bankBalance.save({
+        sit_balance: Number(bankBalanceForm.sit_balance) || 0,
+        atspl_balance: Number(bankBalanceForm.atspl_balance) || 0,
+      });
+      setBankBalanceModal(false);
+    } catch { /* toast already shown */ }
+    setBankBalanceSaving(false);
+  }, [bankBalance, bankBalanceForm]);
 
   /* ── inline edit ────────────────────────────────── */
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -443,14 +469,20 @@ export default function CashflowTab() {
       {/* Payment vs Receipt by Department */}
       <div>
         <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
-          <div className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5">
-            <svg className="w-3.5 h-3.5 text-amber-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <button
+            type="button"
+            onClick={openBankBalance}
+            title="Click to update"
+            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 hover:bg-gray-50 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5 text-[#2E3093] shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M5 6l7-3 7 3M4 10v9m4-9v9m4-9v9m4-9v9m4-9v9M3 21h18" />
             </svg>
-            <p className="text-[11px] font-medium text-amber-800">
-              CBD&apos;s profit % below combines Trainers&apos; and T&amp;D&apos;s expenses (bifurcation shown under the CBD label) — see raw figures in the table below.
-            </p>
-          </div>
+            <span className="text-[11px] font-semibold text-gray-700">Bank Balance:</span>
+            <span className="text-[11px] font-bold text-[#2E3093]">SIT: {fmt(bankBalance.row?.sit_balance ?? 0)}</span>
+            <span className="text-gray-300">·</span>
+            <span className="text-[11px] font-bold text-[#2E3093]">ATSPL: {fmt(bankBalance.row?.atspl_balance ?? 0)}</span>
+          </button>
           <YearMonthFilter year={year} month={month} setYear={setYear} setMonth={setMonth}
             currentYear={currentYear} calendarYearOptions={calendarYearOptions} financialYearOptions={financialYearOptions} />
         </div>
@@ -803,6 +835,20 @@ export default function CashflowTab() {
           </div>
         </div>
       )}
+
+      {/* ── Bank balance modal ──────────────────────── */}
+      <Modal
+        open={bankBalanceModal}
+        title="Update Bank Balance"
+        saving={bankBalanceSaving}
+        onClose={() => setBankBalanceModal(false)}
+        onSave={saveBankBalance}
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className={lblCls}>SIT Balance (₹)</label><input type="number" className={inpCls} value={bankBalanceForm.sit_balance} onChange={e => setBankBalanceForm(f => ({ ...f, sit_balance: e.target.value }))} /></div>
+          <div><label className={lblCls}>ATSPL Balance (₹)</label><input type="number" className={inpCls} value={bankBalanceForm.atspl_balance} onChange={e => setBankBalanceForm(f => ({ ...f, atspl_balance: e.target.value }))} /></div>
+        </div>
+      </Modal>
 
       {/* ── Add modal ────────────────────────────────── */}
       <Modal open={addModal} title="Add Transaction" saving={addSaving} onClose={() => setAddModal(false)} onSave={saveAdd}>
