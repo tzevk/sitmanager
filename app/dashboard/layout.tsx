@@ -258,6 +258,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Masters > Trainer': ['faculty.view'],
   'Masters > Interview Master': ['interview_master.view'],
   'Masters > Closed Batches': ['batch.view'],
+  'Masters > Standard Lecture Plan': ['standard_lecture_plan.view'],
   'Admin/Accounts > Employee Profession Tax': ['profession_tax.view'],
   'Admin/Accounts > Account Head': ['account_head.view'],
   'Admin/Accounts > Assets': ['assets.view'],
