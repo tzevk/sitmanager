@@ -22,36 +22,35 @@ export async function GET(req: NextRequest) {
     const courseId = toInt(searchParams.get('courseId'));
 
     if (batchId) {
+      // Collect unique Student_Ids from both sources via UNION (deduplicates by ID),
+      // then join to student_master once. This avoids both the duplicate rows the
+      // old UNION-of-full-rows caused and the per-row correlated scan EXISTS needs.
       const [rows] = await pool.query(
-        `SELECT DISTINCT Student_Id, Student_Name, Present_Mobile, Email
-         FROM (
-           SELECT
-             sm.Student_Id,
-             sm.Student_Name,
-             COALESCE(sm.Present_Mobile, '') AS Present_Mobile,
-             COALESCE(sm.Email, '') AS Email
+        `SELECT
+           sm.Student_Id,
+           sm.Student_Name,
+           COALESCE(sm.Present_Mobile, '') AS Present_Mobile,
+           COALESCE(sm.Email, '') AS Email
+         FROM student_master sm
+         JOIN (
+           SELECT am.Student_Id
            FROM admission_master am
            JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
-           JOIN student_master sm ON sm.Student_Id = am.Student_Id
            WHERE am.Batch_Id = ?
              AND am.IsActive = 1
              AND am.IsDelete = 0
              AND (am.Cancel IS NULL OR LOWER(TRIM(am.Cancel)) NOT IN ('yes'))
              AND ${VISIBLE_BATCH_SQL}
-             AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
            UNION
-           SELECT
-             sm.Student_Id,
-             sm.Student_Name,
-             COALESCE(sm.Present_Mobile, '') AS Present_Mobile,
-             COALESCE(sm.Email, '') AS Email
-           FROM batch_mst b
-           JOIN student_master sm ON sm.Batch_Code = b.Batch_code
+           SELECT sm2.Student_Id
+           FROM student_master sm2
+           JOIN batch_mst b ON b.Batch_code = sm2.Batch_Code
            WHERE b.Batch_Id = ?
              AND ${VISIBLE_BATCH_SQL}
-             AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-         ) linked_students
-         ORDER BY Student_Name ASC`,
+             AND (sm2.IsDelete = 0 OR sm2.IsDelete IS NULL)
+         ) ids ON ids.Student_Id = sm.Student_Id
+         WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+         ORDER BY sm.Student_Name ASC`,
         [batchId, batchId]
       );
 
