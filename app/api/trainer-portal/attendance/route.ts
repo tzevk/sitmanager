@@ -2,71 +2,136 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { getTrainerSession } from '@/app/api/trainer-portal/auth/session/route';
+import { splitFirstSecondHalf } from '@/lib/time-format';
 
 function normalizeText(v: unknown) {
   const s = String(v ?? '').trim();
   return s || null;
 }
 
-function activityFlags(activityType: unknown) {
-  const value = String(activityType ?? '').toLowerCase();
-  if (value === 'assignment') return { assignGiven: 1, testGiven: 0 };
-  if (value === 'test') return { assignGiven: 0, testGiven: 1 };
-  return { assignGiven: 0, testGiven: 0 };
+async function ensureAttendanceColumns(pool: any) {
+  const [cRows] = await pool.query(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'batch_slecture_master'
+       AND COLUMN_NAME IN ('trainer_in_time', 'trainer_out_time', 'first_half_status', 'break_minutes', 'second_half_status')`
+  );
+  const existingCols = new Set((cRows as any[]).map((r) => r.COLUMN_NAME));
+
+  if (!existingCols.has('trainer_in_time')) {
+    await pool.query(
+      `ALTER TABLE batch_slecture_master ADD COLUMN trainer_in_time VARCHAR(20) NULL AFTER lecture_status`
+    );
+  }
+  if (!existingCols.has('trainer_out_time')) {
+    await pool.query(
+      `ALTER TABLE batch_slecture_master ADD COLUMN trainer_out_time VARCHAR(20) NULL AFTER trainer_in_time`
+    );
+  }
+  if (!existingCols.has('first_half_status')) {
+    await pool.query(
+      `ALTER TABLE batch_slecture_master ADD COLUMN first_half_status VARCHAR(30) NULL AFTER trainer_out_time`
+    );
+  }
+  if (!existingCols.has('break_minutes')) {
+    await pool.query(
+      `ALTER TABLE batch_slecture_master ADD COLUMN break_minutes INT NULL AFTER first_half_status`
+    );
+  }
+  if (!existingCols.has('second_half_status')) {
+    await pool.query(
+      `ALTER TABLE batch_slecture_master ADD COLUMN second_half_status VARCHAR(30) NULL AFTER break_minutes`
+    );
+  }
 }
 
-async function syncLectureForSession(
+/**
+ * Writes trainer in/out + half-status onto the matching batch_slecture_master
+ * row(s) for today, per the Lecture Plan matching rule:
+ *  - 0 rows match -> no-op (trainer_attendance is still written as normal).
+ *  - 1 row matches -> everything relevant lands on that single row.
+ *  - 2+ rows match -> split by starttime into first-half/second-half rows,
+ *    same logic the client uses to compute firstHalfPlan/secondHalfPlan.
+ */
+async function writeToLecturePlan(
   pool: any,
-  input: {
+  params: {
     facultyId: number;
     batchId: number;
     dateIso: string;
-    session: 'first_half' | 'second_half';
-    topic: string | null;
-    activityType: string | null;
+    phase: 'check_in' | 'check_out';
+    firstHalfStatus: string | null;
+    secondHalfStatus: string | null;
+    breakMinutes: number | null;
   }
 ) {
-  const lectureStart = input.session === 'second_half' ? '02:00PM' : '09:00AM';
-  const displayTopic = input.topic;
-  const { assignGiven, testGiven } = activityFlags(input.activityType);
-
-  const [batchRowsRaw] = await pool.query(
-    `SELECT Course_Id FROM batch_mst WHERE Batch_Id = ? LIMIT 1`,
-    [input.batchId]
+  const [rowsRaw] = await pool.query(
+    `SELECT id, starttime
+     FROM batch_slecture_master
+     WHERE batch_id = ? AND faculty_id = ? AND date = ?
+       AND (deleted IS NULL OR deleted = '0' OR deleted = 0)`,
+    [String(params.batchId), params.facultyId, params.dateIso]
   );
-  const batchRows = batchRowsRaw as any[];
-  const courseId = batchRows?.[0]?.Course_Id ?? null;
+  const rows = rowsRaw as any[];
 
-  const [existingRaw] = await pool.query(
-    `SELECT MAX(Take_Id) AS Take_Id
-     FROM lecture_taken_master
-     WHERE Batch_Id = ? AND Take_Dt = ? AND Lecture_Start = ?
-       AND (IsDelete = 0 OR IsDelete IS NULL)`,
-    [input.batchId, input.dateIso, lectureStart]
-  );
-  const existing = existingRaw as any[];
-
-  const takeId = Number(existing?.[0]?.Take_Id || 0);
-  if (takeId > 0) {
-    await pool.query(
-      `UPDATE lecture_taken_master
-       SET Faculty_Id = ?,
-           Lecture_Name = COALESCE(?, Lecture_Name),
-           Topic = COALESCE(?, Topic),
-           Assign_Given = ?,
-           Test_Given = ?
-       WHERE Take_Id = ?`,
-      [input.facultyId, input.topic, displayTopic, assignGiven, testGiven, takeId]
-    );
+  if (!rows.length) {
+    // No plan row for this batch/trainer/date — skip the plan-table write.
     return;
   }
 
-  await pool.query(
-    `INSERT INTO lecture_taken_master
-      (Course_Id, Batch_Id, Faculty_Id, Take_Dt, Lecture_Start, Lecture_Name, Topic, Assign_Given, Test_Given, IsActive, IsDelete)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
-    [courseId, input.batchId, input.facultyId, input.dateIso, lectureStart, input.topic, displayTopic, assignGiven, testGiven]
-  );
+  if (rows.length === 1) {
+    const id = rows[0].id;
+    if (params.phase === 'check_in') {
+      await pool.query(
+        `UPDATE batch_slecture_master
+         SET trainer_in_time = CURTIME(), first_half_status = COALESCE(?, first_half_status)
+         WHERE id = ?`,
+        [params.firstHalfStatus, id]
+      );
+    } else {
+      await pool.query(
+        `UPDATE batch_slecture_master
+         SET trainer_out_time = CURTIME(),
+             second_half_status = COALESCE(?, second_half_status),
+             break_minutes = COALESCE(?, break_minutes),
+             first_half_status = COALESCE(first_half_status, ?)
+         WHERE id = ?`,
+        [params.secondHalfStatus, params.breakMinutes, params.firstHalfStatus, id]
+      );
+    }
+    return;
+  }
+
+  // 2+ rows for the day — split first-half vs second-half using the same
+  // logic the client uses to compute firstHalfPlan/secondHalfPlan.
+  const { firstHalf, secondHalf } = splitFirstSecondHalf(rows);
+
+  if (params.phase === 'check_in') {
+    if (firstHalf) {
+      await pool.query(
+        `UPDATE batch_slecture_master
+         SET trainer_in_time = CURTIME(), first_half_status = COALESCE(?, first_half_status)
+         WHERE id = ?`,
+        [params.firstHalfStatus, firstHalf.id]
+      );
+    }
+  } else {
+    if (secondHalf) {
+      const isSameRowAsFirst = !firstHalf || firstHalf.id === secondHalf.id;
+      await pool.query(
+        `UPDATE batch_slecture_master
+         SET trainer_out_time = CURTIME(),
+             second_half_status = COALESCE(?, second_half_status),
+             break_minutes = COALESCE(?, break_minutes)
+             ${isSameRowAsFirst ? ', first_half_status = COALESCE(first_half_status, ?)' : ''}
+         WHERE id = ?`,
+        isSameRowAsFirst
+          ? [params.secondHalfStatus, params.breakMinutes, params.firstHalfStatus, secondHalf.id]
+          : [params.secondHalfStatus, params.breakMinutes, secondHalf.id]
+      );
+    }
+  }
 }
 
 /* GET — Trainer's own attendance history */
@@ -137,9 +202,13 @@ export async function POST(req: NextRequest) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const pool = getPool();
+    await ensureAttendanceColumns(pool);
     const body = await req.json();
-    const { action, batchId, sessions } = body; // action: 'check_in' | 'check_out'
+    const { action, batchId, sessions, breakMinutes } = body; // action: 'check_in' | 'check_out'
     const facultyId = session.facultyId;
+    const normalizedBreakMinutes = Number.isFinite(Number(breakMinutes)) && breakMinutes !== null && breakMinutes !== undefined
+      ? Number(breakMinutes)
+      : null;
 
     if (!action || !['check_in', 'check_out'].includes(action)) {
       return NextResponse.json({ error: 'action must be check_in or check_out' }, { status: 400 });
@@ -166,33 +235,20 @@ export async function POST(req: NextRequest) {
         [facultyId, hasBatch ? normalizedBatchId : null]
       );
 
-      // Pre-seed today's lecture plan (subject + chosen sub-topics) as the day starts,
-      // so it's already on record even before the trainer ends their day.
-      if (hasBatch && sessions && typeof sessions === 'object') {
+      // Record the check-in on today's matching Lecture Plan row(s).
+      if (hasBatch) {
         const todayIso = new Date().toISOString().slice(0, 10);
-        const fh = sessions.first_half || {};
-        const sh = sessions.second_half || {};
+        const fh = (sessions && typeof sessions === 'object' && sessions.first_half) || {};
 
-        if (normalizeText(fh.subject) || normalizeText(fh.subtopics)) {
-          await syncLectureForSession(pool, {
-            facultyId,
-            batchId: normalizedBatchId,
-            dateIso: todayIso,
-            session: 'first_half',
-            topic: normalizeText(fh.subtopics) || normalizeText(fh.subject),
-            activityType: normalizeText(fh.activityType),
-          });
-        }
-        if (normalizeText(sh.subject) || normalizeText(sh.subtopics)) {
-          await syncLectureForSession(pool, {
-            facultyId,
-            batchId: normalizedBatchId,
-            dateIso: todayIso,
-            session: 'second_half',
-            topic: normalizeText(sh.subtopics) || normalizeText(sh.subject),
-            activityType: normalizeText(sh.activityType),
-          });
-        }
+        await writeToLecturePlan(pool, {
+          facultyId,
+          batchId: normalizedBatchId,
+          dateIso: todayIso,
+          phase: 'check_in',
+          firstHalfStatus: normalizeText(fh.activityType),
+          secondHalfStatus: null,
+          breakMinutes: null,
+        });
       }
 
       return NextResponse.json({ success: true, action: 'check_in' });
@@ -219,22 +275,14 @@ export async function POST(req: NextRequest) {
       if (Number.isFinite(normalizedBatchId) && normalizedBatchId > 0) {
         const todayIso = new Date().toISOString().slice(0, 10);
 
-        await syncLectureForSession(pool, {
+        await writeToLecturePlan(pool, {
           facultyId,
           batchId: normalizedBatchId,
           dateIso: todayIso,
-          session: 'first_half',
-          topic: normalizeText(fh.topic),
-          activityType: normalizeText(fh.activityType),
-        });
-
-        await syncLectureForSession(pool, {
-          facultyId,
-          batchId: normalizedBatchId,
-          dateIso: todayIso,
-          session: 'second_half',
-          topic: normalizeText(sh.topic),
-          activityType: normalizeText(sh.activityType),
+          phase: 'check_out',
+          firstHalfStatus: normalizeText(fh.activityType),
+          secondHalfStatus: normalizeText(sh.activityType),
+          breakMinutes: normalizedBreakMinutes,
         });
       }
 

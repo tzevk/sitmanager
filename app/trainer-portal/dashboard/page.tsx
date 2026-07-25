@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { toBatchNumber } from '@/lib/batch-display';
+import { parseTimeToMinutes, formatTimeAmPm } from '@/lib/time-format';
 
 interface DashboardData {
   faculty: {
@@ -44,6 +45,7 @@ interface PlannedLecture {
   lecturecontent?: string | null;
   date: string;
   starttime?: string;
+  endtime?: string;
   assignment?: number;
   unit_test?: number;
 }
@@ -67,41 +69,6 @@ function defaultActivityFor(l: PlannedLecture | null): ActivityType {
   if (Number(l.unit_test || 0) > 0) return 'test';
   if (Number(l.assignment || 0) > 0) return 'assignment';
   return 'lecture';
-}
-
-function parseTimeToMinutes(t?: string | null): number | null {
-  if (!t) return null;
-  const raw = t.trim();
-  if (!raw) return null;
-  const m = raw
-    .replace(/\./g, '')
-    .trim()
-    .match(/^\s*(\d{1,2})\s*:\s*(\d{2})(?:\s*:\s*(\d{2}))?\s*([aApP])?\s*([mM])?\s*$/);
-  if (!m) return null;
-  let hh = Number(m[1]);
-  const mm2 = Number(m[2]);
-  if (!Number.isFinite(hh) || !Number.isFinite(mm2)) return null;
-  if (mm2 < 0 || mm2 > 59) return null;
-  const hasMeridiem = Boolean(m[4]);
-  if (hasMeridiem) {
-    const ap = String(m[4]).toLowerCase();
-    if (hh < 1 || hh > 12) return null;
-    if (ap === 'a') { if (hh === 12) hh = 0; }
-    else if (ap === 'p') { if (hh !== 12) hh += 12; }
-  }
-  if (hh < 0 || hh > 23) return null;
-  return hh * 60 + mm2;
-}
-
-function formatTimeAmPm(t?: string | null): string {
-  if (!t) return '—';
-  const minutes = parseTimeToMinutes(t);
-  if (minutes == null) return String(t).trim() || '—';
-  const hh24 = Math.floor(minutes / 60);
-  const mm2 = minutes % 60;
-  const suffix = hh24 >= 12 ? 'pm' : 'am';
-  const hh12 = (hh24 % 12) || 12;
-  return `${hh12}:${String(mm2).padStart(2, '0')} ${suffix}`;
 }
 
 function formatHmFromMinutes(totalMinutes: number) {
@@ -154,6 +121,7 @@ export default function TrainerDashboardPage() {
   const [firstHalfActivity, setFirstHalfActivity] = useState<ActivityType>('lecture');
   const [secondHalfTopic, setSecondHalfTopic] = useState('');
   const [secondHalfActivity, setSecondHalfActivity] = useState<ActivityType>('lecture');
+  const [breakMinutes, setBreakMinutes] = useState<number | ''>('');
 
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
 
@@ -301,6 +269,8 @@ export default function TrainerDashboardPage() {
     setFirstHalfActivity(defaultActivityFor(firstHalfPlan));
     setSecondHalfTopic(String(secondHalfPlan?.lecturecontent || secondHalfPlan?.subject || '').trim());
     setSecondHalfActivity(defaultActivityFor(secondHalfPlan));
+    const defaultBreak = data?.faculty?.breakTimeMinutes;
+    setBreakMinutes(Number.isFinite(Number(defaultBreak)) && defaultBreak != null ? Number(defaultBreak) : '');
     setModalOpen(true);
   }
 
@@ -314,6 +284,7 @@ export default function TrainerDashboardPage() {
         body: JSON.stringify({
           action: 'check_out',
           batchId: currentBatch?.Batch_Id ?? null,
+          breakMinutes: breakMinutes === '' ? null : Number(breakMinutes),
           sessions: {
             first_half: { topic: firstHalfTopic.trim() || null, activityType: firstHalfActivity },
             second_half: { topic: secondHalfTopic.trim() || null, activityType: secondHalfActivity },
@@ -503,6 +474,12 @@ export default function TrainerDashboardPage() {
                   <p className="text-base font-semibold text-gray-700">{toBatchNumber(currentBatch.Batch_code)}</p>
                   <p className="text-sm text-gray-500">{currentBatch.Course_Name || '—'}</p>
                 </div>
+              )}
+
+              {(firstHalfPlan || secondHalfPlan) && (
+                <p className="text-sm text-gray-500">
+                  Scheduled: {formatTimeAmPm(firstHalfPlan?.starttime)} – {formatTimeAmPm(secondHalfPlan?.endtime ?? secondHalfPlan?.starttime)}
+                </p>
               )}
 
               {/* First Half */}
@@ -703,6 +680,18 @@ export default function TrainerDashboardPage() {
                   <option value="assignment">Assignment</option>
                   <option value="test">Test</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-base font-semibold text-gray-700 mb-2">Break (minutes)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={breakMinutes}
+                  onChange={e => setBreakMinutes(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="Break minutes"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-base focus:outline-none focus:border-[#2E3093]"
+                />
               </div>
 
               <div>

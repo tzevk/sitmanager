@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { SignJWT } from 'jose';
 import crypto from 'crypto';
+import { decryptPassword } from '@/lib/student-password-crypto';
 
 const STUDENT_COOKIE = 'sit_student_session';
 const SESSION_DURATION = 60 * 60 * 12; // 12 hours
@@ -23,15 +24,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Username and password are required' }, { status: 400 });
     }
 
-    const hashedPassword = crypto.createHash('md5').update(password).digest('hex');
-
     const [rows] = await pool.query<any[]>(
       `SELECT spa.*, s.Student_Name, s.Email, s.Present_Mobile, s.Course_Id
        FROM student_portal_auth spa
        JOIN student_master s ON spa.Student_Id = s.Student_Id
-       WHERE spa.Username = ? AND spa.Password_Hash = ? AND spa.IsActive = 1
+       WHERE spa.Username = ? AND spa.IsActive = 1
          AND (s.IsDelete = 0 OR s.IsDelete IS NULL)`,
-      [username, hashedPassword]
+      [username]
     );
 
     if (!rows.length) {
@@ -40,8 +39,33 @@ export async function POST(req: NextRequest) {
 
     const user = rows[0];
 
+    let passwordMatches = false;
+    if (user.Password_Enc) {
+      try {
+        const decrypted = decryptPassword(Buffer.from(user.Password_Enc));
+        const decryptedBuf = Buffer.from(decrypted, 'utf8');
+        const submittedBuf = Buffer.from(password, 'utf8');
+        passwordMatches =
+          decryptedBuf.length === submittedBuf.length &&
+          crypto.timingSafeEqual(decryptedBuf, submittedBuf);
+      } catch (err) {
+        console.error('Student password decrypt error:', err);
+        passwordMatches = false;
+      }
+    } else {
+      // Row not yet migrated to encrypted passwords — fall back to legacy MD5 check.
+      const hashedPassword = crypto.createHash('md5').update(password).digest('hex');
+      passwordMatches = user.Password_Hash === hashedPassword;
+    }
+
+    if (!passwordMatches) {
+      return NextResponse.json({ success: false, message: 'Invalid username or password' }, { status: 401 });
+    }
+
     // Update last login
     await pool.query(`UPDATE student_portal_auth SET Last_Login = NOW() WHERE Id = ?`, [user.Id]);
+
+    const mustChangePassword = Boolean(user.Must_Change_Password);
 
     // Create JWT
     const token = await new SignJWT({
@@ -49,6 +73,7 @@ export async function POST(req: NextRequest) {
       name: user.Student_Name,
       email: user.Email,
       type: 'student',
+      mustChangePassword,
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
@@ -62,6 +87,7 @@ export async function POST(req: NextRequest) {
         name: user.Student_Name,
         email: user.Email,
       },
+      mustChangePassword,
     });
 
     response.cookies.set(STUDENT_COOKIE, token, {

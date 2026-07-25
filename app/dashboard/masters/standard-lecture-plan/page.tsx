@@ -5,16 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 
 interface StandardLecturePlanRow {
-  batchId: string;
-  batchCode: string | null;
-  courseName: string | null;
-}
-
-interface Pagination {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
+  courseName: string;
+  courseCode: string | null;
+  courseId: number | null;
+  lectureCount: number;
 }
 
 export default function StandardLecturePlanPage() {
@@ -22,11 +16,12 @@ export default function StandardLecturePlanPage() {
   const { canView, loading: permLoading } = useResourcePermissions('standard_lecture_plan');
 
   const [rows, setRows] = useState<StandardLecturePlanRow[]>([]);
-  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string>('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const limit = 25;
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -34,21 +29,21 @@ export default function StandardLecturePlanPage() {
     try {
       const params = new URLSearchParams();
       params.set('page', String(page));
-      params.set('limit', '25');
+      params.set('limit', String(limit));
       if (search) params.set('search', search);
 
-      const res = await fetch(`/api/masters/standard-lecture-plan?${params.toString()}`);
+      const res = await fetch(`/api/masters/standard-lecture-plan/lectures/courses?${params.toString()}`);
       const text = await res.text();
       const data = text ? JSON.parse(text) : {};
       if (!res.ok) {
         throw new Error(data?.error || `Failed to fetch (${res.status})`);
       }
       setRows(data.rows ?? []);
-      setPagination(data.pagination ?? { page: 1, limit: 25, total: 0, totalPages: 0 });
+      setTotal(data.total ?? 0);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to fetch';
       setRows([]);
-      setPagination({ page: 1, limit: 25, total: 0, totalPages: 0 });
+      setTotal(0);
       setListError(message);
     } finally {
       setLoading(false);
@@ -57,7 +52,7 @@ export default function StandardLecturePlanPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const totalPages = pagination.totalPages;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
 
   if (permLoading) {
     return (
@@ -100,7 +95,7 @@ export default function StandardLecturePlanPage() {
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-xs font-bold text-[#2E3093] bg-[#FAE452]/60 border border-[#FAE452] rounded-full px-3 py-1">
-                {pagination.total.toLocaleString()}
+                {total.toLocaleString()}
               </span>
             </div>
             <div className="relative">
@@ -111,7 +106,7 @@ export default function StandardLecturePlanPage() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="Search by batch code or course…"
+                placeholder="Search by training programme…"
                 className="w-64 pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-4 focus:ring-[#2E3093]/10 focus:border-[#2E3093] placeholder:text-slate-400 transition-all"
               />
               <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -131,15 +126,16 @@ export default function StandardLecturePlanPage() {
             <table className="dashboard-table w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="text-left px-4 py-3 font-bold text-slate-600">Batch Code</th>
-                  <th className="text-left px-4 py-3 font-bold text-slate-600">Course Name</th>
+                  <th className="text-left px-4 py-3 font-bold text-slate-600">Training Programme</th>
+                  <th className="text-left px-4 py-3 font-bold text-slate-600">Course Code</th>
+                  <th className="text-center px-4 py-3 font-bold text-slate-600">Lecture Count</th>
                   <th className="text-center px-4 py-3 font-bold text-slate-600">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={3} className="py-16 text-center">
+                    <td colSpan={4} className="py-16 text-center">
                       <div className="flex flex-col items-center gap-2">
                         <div className="w-8 h-8 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                         <span className="text-sm text-slate-500">Loading...</span>
@@ -148,24 +144,25 @@ export default function StandardLecturePlanPage() {
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="py-16 text-center">
+                    <td colSpan={4} className="py-16 text-center">
                       <div className="flex flex-col items-center gap-2 text-slate-300">
                         <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                         </svg>
-                        <p className="text-sm">No batches found</p>
+                        <p className="text-sm">No training programmes found</p>
                       </div>
                     </td>
                   </tr>
                 ) : (
                   rows.map(r => (
-                    <tr key={r.batchId} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
-                      <td className="px-4 py-3 text-slate-900 font-semibold">{r.batchCode || '—'}</td>
-                      <td className="px-4 py-3 text-slate-700">{r.courseName || '—'}</td>
+                    <tr key={r.courseName} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
+                      <td className="px-4 py-3 text-slate-900 font-semibold">{r.courseName || '—'}</td>
+                      <td className="px-4 py-3 text-slate-700">{r.courseCode || '—'}</td>
+                      <td className="px-4 py-3 text-slate-700 text-center">{r.lectureCount}</td>
                       <td className="py-2.5 px-4 text-center">
                         <button
                           title="Edit"
-                          onClick={() => router.push(`/dashboard/masters/standard-lecture-plan/edit/${r.batchId}`)}
+                          onClick={() => router.push(`/dashboard/masters/standard-lecture-plan/edit/${encodeURIComponent(r.courseName)}`)}
                           className="p-2 rounded-lg hover:bg-[#FAE452]/70 text-[#2E3093] transition-colors"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

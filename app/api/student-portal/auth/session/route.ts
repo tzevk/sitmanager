@@ -15,6 +15,7 @@ export interface StudentSession {
   name: string;
   email: string;
   type: 'student';
+  mustChangePassword?: boolean;
 }
 
 export async function getStudentSession(req: NextRequest): Promise<StudentSession | null> {

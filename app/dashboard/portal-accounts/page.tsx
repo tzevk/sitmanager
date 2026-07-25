@@ -47,6 +47,7 @@ export default function PortalAccountsPage() {
     Student_Id: number; Roll_No: string | null; Student_Name: string;
     Email: string | null; Present_Mobile: string | null;
     auth_id: number | null; existing_username: string | null; account_active: number | null;
+    current_password: string | null; must_change_password: boolean;
   };
   const [studentCourseId, setStudentCourseId] = useState('');
   const [studentBatchId, setStudentBatchId]   = useState('');
@@ -687,7 +688,15 @@ export default function PortalAccountsPage() {
         });
         setStudentPasswords(prev => {
           const next = { ...prev };
-          rows.forEach(r => { if (!r.auth_id && !next[r.Student_Id]) next[r.Student_Id] = generateStudentPassword(r.Student_Name); });
+          rows.forEach(r => {
+            if (next[r.Student_Id]) return;
+            if (r.current_password) {
+              // Server can now decrypt and return the real current password (AES-256-GCM).
+              next[r.Student_Id] = r.current_password;
+            } else if (!r.auth_id) {
+              next[r.Student_Id] = generateStudentPassword(r.Student_Name);
+            }
+          });
           return next;
         });
       })
@@ -794,7 +803,9 @@ export default function PortalAccountsPage() {
                   <p className="text-[11px] text-gray-600">{subtitle}</p>
                 </div>
                 <div className="text-[11px] text-gray-500">
-                  Password is stored as MD5 (legacy compatibility)
+                  {tab === 'student'
+                    ? 'Passwords are stored encrypted (AES-256-GCM) — recoverable for display here'
+                    : 'Password is stored as MD5 (legacy compatibility)'}
                 </div>
               </div>
             </div>
@@ -1016,21 +1027,16 @@ export default function PortalAccountsPage() {
                                   </td>
                                   <td className="px-3 py-2 font-mono text-gray-700">{username}</td>
                                   <td className="px-3 py-2">
-                                    {!password && hasAccount ? (
-                                      // Account existed before this page load — we never generated/know its password.
-                                      <span className="text-[10px] text-gray-400 italic">••••••••</span>
-                                    ) : (
-                                      <input
-                                        className={`w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] ${
-                                          hasAccount
-                                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-bold'
-                                            : 'bg-white border-gray-200 text-gray-900'
-                                        }`}
-                                        value={password}
-                                        onChange={e => setStudentPasswords(prev => ({ ...prev, [r.Student_Id]: e.target.value }))}
-                                        placeholder="password"
-                                      />
-                                    )}
+                                    <input
+                                      className={`w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] ${
+                                        hasAccount
+                                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-bold'
+                                          : 'bg-white border-gray-200 text-gray-900'
+                                      }`}
+                                      value={password}
+                                      onChange={e => setStudentPasswords(prev => ({ ...prev, [r.Student_Id]: e.target.value }))}
+                                      placeholder="password"
+                                    />
                                   </td>
                                   <td className="px-3 py-2">
                                     <span className={`px-2 py-0.5 rounded-full border text-[10px] font-semibold ${

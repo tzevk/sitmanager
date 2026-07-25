@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
+import { computeLectureStatuses } from '@/lib/lecturePlanStatus';
 
 /** documents/assignment/etc. are varchar(50) columns; truncate instead of erroring on longer input. */
 const truncate = (value: unknown, maxLength = 50): string | null => {
@@ -25,29 +26,6 @@ async function ensureFacultyIdColumn(pool: ReturnType<typeof getPool>) {
   );
 }
 
-// Helper to adjust dates from previous batch to current batch
-function adjustDate(
-  originalDate: string | null, 
-  prevStartDate: Date, 
-  currentStartDate: Date,
-  prevEndDate: Date,
-  currentEndDate: Date
-): string | null {
-  if (!originalDate) return null;
-  
-  const origDate = new Date(originalDate);
-  const prevDuration = prevEndDate.getTime() - prevStartDate.getTime();
-  const currentDuration = currentEndDate.getTime() - currentStartDate.getTime();
-  
-  // Calculate the relative position within the previous batch duration
-  const relativePosition = (origDate.getTime() - prevStartDate.getTime()) / prevDuration;
-  
-  // Apply that relative position to the current batch duration
-  const newDate = new Date(currentStartDate.getTime() + (relativePosition * currentDuration));
-  
-  return newDate.toISOString().split('T')[0];
-}
-
 // GET - fetch all standard lecture plans for a batch
 export async function GET(
   request: NextRequest,
@@ -57,172 +35,141 @@ export async function GET(
     const { id: batchId } = await params;
     const pool = getPool();
     await ensureFacultyIdColumn(pool);
-    
-    // First, get the current batch info (Course_Id, SDate, EDate)
+
+    // First, get the current batch info (Course_Id -> Course_Name)
     const [batchRows] = await pool.query<RowDataPacket[]>(`
-      SELECT Course_Id, SDate, EDate FROM batch_mst WHERE Batch_Id = ?
+      SELECT b.Course_Id, c.Course_Name
+      FROM batch_mst b
+      LEFT JOIN course_mst c ON c.Course_Id = b.Course_Id
+      WHERE b.Batch_Id = ?
     `, [batchId]);
-    
+
     const currentBatch = batchRows[0];
     if (!currentBatch) {
       return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
     }
-    
+
+    const courseName: string | null = currentBatch.Course_Name || null;
+
+    // Does the Training Programme have a Standard Lecture Plan at all?
+    let hasStandardPlan = false;
+    if (courseName) {
+      const [templateCountRows] = await pool.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS cnt FROM standard_lecture_plan_template WHERE course_name = ?`,
+        [courseName]
+      );
+      hasStandardPlan = Number(templateCountRows[0]?.cnt ?? 0) > 0;
+    }
+
     // Check if current batch already has lectures
     const [existingRows] = await pool.query<RowDataPacket[]>(`
-      SELECT id FROM batch_slecture_master 
+      SELECT id FROM batch_slecture_master
       WHERE batch_id = ? AND (deleted IS NULL OR deleted = '0')
       LIMIT 1
     `, [batchId]);
-    
-    let lectures: RowDataPacket[] = [];
-    
-    if (existingRows.length > 0) {
-      // Current batch has lectures, fetch them
-      const [rows] = await pool.query<RowDataPacket[]>(`
-        SELECT 
-          s.id,
-          s.lecture_no,
-          s.subject,
-          s.subject_topic,
-          s.date,
-          s.lectureday,
-          s.starttime,
-          s.endtime,
-          s.assignment,
-          s.assignment_date,
-          s.faculty_id,
-          COALESCE(f.Faculty_Name, s.faculty_name) AS faculty_name,
-          s.class_room,
-          s.documents,
-          s.unit_test,
-          u.utdate AS unit_test_date,
-          s.publish,
-          s.lecturecontent
-        FROM batch_slecture_master s
-        LEFT JOIN faculty_master f ON f.Faculty_Id = s.faculty_id
-        LEFT JOIN awt_unittesttaken u ON u.id = CAST(s.unit_test AS UNSIGNED)
-        WHERE s.batch_id = ? AND (s.deleted IS NULL OR s.deleted = '0')
-        ORDER BY s.lecture_no ASC, s.date ASC
-      `, [batchId]);
-      lectures = rows;
-    } else if (currentBatch.Course_Id && currentBatch.SDate && currentBatch.EDate) {
-      // No lectures for current batch - find previous batch of same course with lectures
-      const [prevBatchRows] = await pool.query<RowDataPacket[]>(`
-        SELECT b.Batch_Id, b.SDate, b.EDate
-        FROM batch_mst b
-        WHERE b.Course_Id = ? 
-          AND b.Batch_Id != ?
-          AND b.SDate IS NOT NULL 
-          AND b.EDate IS NOT NULL
-          AND EXISTS (
-            SELECT 1 FROM batch_slecture_master s 
-            WHERE s.batch_id = b.Batch_Id AND (s.deleted IS NULL OR s.deleted = '0')
-          )
-        ORDER BY b.SDate DESC
-        LIMIT 1
-      `, [currentBatch.Course_Id, batchId]);
-      
-      if (prevBatchRows.length > 0) {
-        const prevBatch = prevBatchRows[0];
-        
-        // Fetch lectures from previous batch
-        const [prevLectures] = await pool.query<RowDataPacket[]>(`
-          SELECT 
-            s.lecture_no,
-            s.subject,
-            s.subject_topic,
-            s.date,
-            s.lectureday,
-            s.starttime,
-            s.endtime,
-            s.assignment,
-            s.assignment_date,
-            s.faculty_id,
-            COALESCE(f.Faculty_Name, s.faculty_name) AS faculty_name,
-            s.class_room,
-            s.documents,
-            s.unit_test,
-            u.utdate AS unit_test_date,
-            s.publish,
-            s.lecturecontent
-          FROM batch_slecture_master s
-          LEFT JOIN faculty_master f ON f.Faculty_Id = s.faculty_id
-          LEFT JOIN awt_unittesttaken u ON u.id = CAST(s.unit_test AS UNSIGNED)
-          WHERE s.batch_id = ? AND (s.deleted IS NULL OR s.deleted = '0')
-          ORDER BY s.lecture_no ASC, s.date ASC
-        `, [prevBatch.Batch_Id]);
-        
-        // Adjust dates for current batch
-        const prevStartDate = new Date(prevBatch.SDate);
-        const prevEndDate = new Date(prevBatch.EDate);
-        const currentStartDate = new Date(currentBatch.SDate);
-        const currentEndDate = new Date(currentBatch.EDate);
-        
-        // Insert adjusted lectures into current batch and return them
-        for (const lec of prevLectures) {
-          const adjustedDate = adjustDate(lec.date, prevStartDate, currentStartDate, prevEndDate, currentEndDate);
-          const adjustedAssignmentDate = adjustDate(lec.assignment_date, prevStartDate, currentStartDate, prevEndDate, currentEndDate);
-          
-          const [insertResult] = await pool.query(`
-            INSERT INTO batch_slecture_master 
-            (batch_id, lecture_no, subject, subject_topic, date, lectureday, starttime, endtime, 
-             assignment, assignment_date, faculty_id, faculty_name, class_room, documents, unit_test, publish,
-             lecturecontent, deleted, created_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
-          `, [
-            batchId,
-            lec.lecture_no,
-            lec.subject,
-            lec.subject_topic,
-            adjustedDate,
-            lec.lectureday,
-            lec.starttime,
-            lec.endtime,
-            lec.assignment,
-            adjustedAssignmentDate,
-            lec.faculty_id || null,
-            lec.faculty_name,
-            lec.class_room,
-            lec.documents,
-            lec.unit_test,
-            lec.publish || 'No',
-            lec.lecturecontent,
-          ]);
-          
-          lectures.push({
-            id: (insertResult as { insertId: number }).insertId,
-            lecture_no: lec.lecture_no,
-            subject: lec.subject,
-            subject_topic: lec.subject_topic,
-            date: adjustedDate,
-            lectureday: lec.lectureday,
-            starttime: lec.starttime,
-            endtime: lec.endtime,
-            assignment: lec.assignment,
-            assignment_date: adjustedAssignmentDate,
-            faculty_id: lec.faculty_id,
-            faculty_name: lec.faculty_name,
-            class_room: lec.class_room,
-            documents: lec.documents,
-            unit_test: lec.unit_test,
-            unit_test_date: lec.unit_test_date,
-            publish: lec.publish,
-            lecturecontent: lec.lecturecontent,
-          } as RowDataPacket);
-        }
+
+    if (existingRows.length === 0 && hasStandardPlan && courseName) {
+      // Seed this batch's plan from the Standard Lecture Plan template for its Training Programme.
+      const [templateRows] = await pool.query<RowDataPacket[]>(`
+        SELECT lecture_no, department, module, sub_topics, faculty, project_assignment
+        FROM standard_lecture_plan_template
+        WHERE course_name = ?
+        ORDER BY lecture_no ASC
+      `, [courseName]);
+
+      for (const t of templateRows) {
+        await pool.query(`
+          INSERT INTO batch_slecture_master
+          (batch_id, lecture_no, standard_seq, subject, subject_topic, department, faculty_name, publish,
+           lecture_status, deleted, created_date)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'No', 'pending', '0', NOW())
+        `, [
+          batchId,
+          t.lecture_no,
+          t.lecture_no,
+          t.module,
+          t.sub_topics,
+          t.department,
+          t.faculty,
+        ]);
       }
+    }
+
+    // Fetch this batch's lectures
+    const [rows] = await pool.query<RowDataPacket[]>(`
+      SELECT
+        s.id,
+        s.lecture_no,
+        s.standard_seq,
+        s.actual_seq,
+        s.lecture_status,
+        s.subject,
+        s.subject_topic,
+        s.date,
+        s.lectureday,
+        s.starttime,
+        s.endtime,
+        s.assignment,
+        s.assignment_date,
+        s.faculty_id,
+        COALESCE(f.Faculty_Name, s.faculty_name) AS faculty_name,
+        s.class_room,
+        s.documents,
+        s.unit_test,
+        u.utdate AS unit_test_date,
+        s.publish,
+        s.lecturecontent
+      FROM batch_slecture_master s
+      LEFT JOIN faculty_master f ON f.Faculty_Id = s.faculty_id
+      LEFT JOIN awt_unittesttaken u ON u.id = CAST(s.unit_test AS UNSIGNED)
+      WHERE s.batch_id = ? AND (s.deleted IS NULL OR s.deleted = '0')
+    `, [batchId]);
+
+    // Recompute Actual Sequence + status on every read (idempotent, self-healing).
+    const computed = computeLectureStatuses(
+      rows.map((r) => ({ id: r.id, standard_seq: r.standard_seq, date: r.date, starttime: r.starttime }))
+    );
+    const computedById = new Map(computed.map((c) => [c.id, c]));
+    const lectures: Array<RowDataPacket & { actual_seq: number | null; lecture_status: string }> = rows
+      .map((r) => {
+        const c = computedById.get(r.id);
+        return { ...r, actual_seq: c?.actual_seq ?? null, lecture_status: c?.lecture_status ?? 'pending' };
+      });
+    lectures.sort((a, b) => {
+        // Conducted rows first, ordered by date ascending; then not-yet-conducted by standard_seq ascending.
+        const aConducted = Boolean(a.date);
+        const bConducted = Boolean(b.date);
+        if (aConducted !== bConducted) return aConducted ? -1 : 1;
+        if (aConducted && bConducted) {
+          if (a.date !== b.date) return String(a.date) < String(b.date) ? -1 : 1;
+          return (a.actual_seq ?? 0) - (b.actual_seq ?? 0);
+        }
+        const aSeq = a.standard_seq ?? Number.MAX_SAFE_INTEGER;
+        const bSeq = b.standard_seq ?? Number.MAX_SAFE_INTEGER;
+        return aSeq - bSeq;
+      });
+
+    if (computed.length) {
+      await Promise.all(
+        computed.map((c) =>
+          pool.query(`UPDATE batch_slecture_master SET actual_seq = ?, lecture_status = ? WHERE id = ?`, [
+            c.actual_seq,
+            c.lecture_status,
+            c.id,
+          ])
+        )
+      ).catch((err) => console.error('Failed to persist lecture status recompute:', err));
     }
 
     // Also fetch faculty list for the dropdown
     const [facultyRows] = await pool.query(`
-      SELECT Faculty_Id, Faculty_Name 
-      FROM faculty_master 
-      WHERE IsActive = 1 AND IsDelete = 0 
+      SELECT Faculty_Id, Faculty_Name
+      FROM faculty_master
+      WHERE IsActive = 1 AND IsDelete = 0
       ORDER BY Faculty_Name ASC
     `);
 
-    return NextResponse.json({ lectures, facultyList: facultyRows });
+    return NextResponse.json({ lectures, facultyList: facultyRows, hasStandardPlan, courseName });
   } catch (error) {
     console.error('Error fetching standard lectures:', error);
     return NextResponse.json({ error: 'Failed to fetch lectures' }, { status: 500 });
@@ -251,14 +198,15 @@ export async function POST(
     }
 
     const [result] = await pool.query(`
-      INSERT INTO batch_slecture_master 
-      (batch_id, lecture_no, subject, subject_topic, date, lectureday, starttime, endtime, 
+      INSERT INTO batch_slecture_master
+      (batch_id, lecture_no, standard_seq, subject, subject_topic, date, lectureday, starttime, endtime,
        assignment, assignment_date, faculty_id, faculty_name, class_room, documents, unit_test, publish, lecturecontent,
-       deleted, created_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
+       lecture_status, deleted, created_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '0', NOW())
     `, [
       batchId,
       body.lecture_no || null,
+      body.standard_seq ? Number(body.standard_seq) : null,
       body.subject || null,
       body.subject_topic || null,
       truncate(body.date),

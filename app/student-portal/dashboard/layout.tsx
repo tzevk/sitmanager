@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import ForceChangePasswordModal from './_components/ForceChangePasswordModal';
 
 const navItems = [
   {
@@ -38,6 +39,8 @@ export default function StudentDashboardLayout({ children }: { children: React.R
   const router = useRouter();
   const pathname = usePathname();
   const [studentName, setStudentName] = useState('');
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -50,6 +53,8 @@ export default function StudentDashboardLayout({ children }: { children: React.R
           const name = data.user?.name ?? '';
           sessionStorage.setItem('sit_student_name', name);
           setStudentName(name);
+          setMustChangePassword(Boolean(data.user?.mustChangePassword));
+          setSessionChecked(true);
         }
       } catch { /* silent */ }
     })();
@@ -65,6 +70,10 @@ export default function StudentDashboardLayout({ children }: { children: React.R
     href === '/student-portal/dashboard' ? pathname === href : pathname.startsWith(href);
 
   const initials = (studentName || 'S').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+  if (sessionChecked && mustChangePassword) {
+    return <ForceChangePasswordModal onDone={() => setMustChangePassword(false)} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-200 flex justify-center">

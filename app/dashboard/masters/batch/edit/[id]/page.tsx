@@ -77,33 +77,9 @@ interface StandardLecture {
   unit_test: string | null;
   unit_test_date?: string | null;
   publish: string | null;
-}
-
-interface Lecture {
-  id: number;
-  lecture_no: number | null;
-  subject: string | null;
-  subject_topic: string | null;
-  date: string | null;
-  starttime: string | null;
-  endtime: string | null;
-  assignment: string | null;
-  assignment_date: string | null;
-  faculty_id: string | null;
-  faculty_name_display: string | null;
-  class_room: string | null;
-  documents: string | null;
-  unit_test: string | null;
-  publish: string | null;
-  duration: string | null;
-  marks: string | null;
-  lectureday: string | null;
-  module: string | null;
-  planned: string | null;
-  department: string | null;
-  practicetest: string | null;
-  lecturecontent: string | null;
-  status: string | null;
+  standard_seq?: number | null;
+  actual_seq?: number | null;
+  lecture_status?: string | null;
 }
 
 interface FinalExam {
@@ -245,7 +221,7 @@ export default function EditBatchPage() {
   // Once permissions resolve, redirect SLP-only users to the SLP tab
   useEffect(() => {
     if (!permLoading && !slpPermLoading && slpOnlyMode) {
-      setActiveTab('standard-lecture-plan');
+      setActiveTab('lecture-plan');
     }
   }, [permLoading, slpPermLoading, slpOnlyMode]);
   const [loading, setLoading] = useState(true);
@@ -336,13 +312,16 @@ export default function EditBatchPage() {
     Tel: string | null;
   }[]>([]);
 
-  /* Standard Lecture Plan state */
+  /* Standard Lecture Plan state (now the single Lecture Plan tab) */
   const [standardLectures, setStandardLectures] = useState<StandardLecture[]>([]);
   const [stdPlanLocked, setStdPlanLocked] = useState(false);
   const [savingSLectureRowId, setSavingSLectureRowId] = useState<number | null>(null);
   const [autoLinkingLegacyTrainers, setAutoLinkingLegacyTrainers] = useState(false);
   const [sLectureSearch, setSLectureSearch] = useState('');
   const [loadingSLectures, setLoadingSLectures] = useState(false);
+  const [hasStandardPlan, setHasStandardPlan] = useState(true);
+  const [slpCourseName, setSlpCourseName] = useState<string | null>(null);
+  const [resyncing, setResyncing] = useState(false);
   // Standard Lecture Plan is edited inline (no modal)
 
   /* Final Exam Details state */
@@ -358,36 +337,6 @@ export default function EditBatchPage() {
     duration: '',
   });
 
-  /* Lecture Plan state */
-  const [lectures, setLectures] = useState<Lecture[]>([]);
-  const [savingLectureRowId, setSavingLectureRowId] = useState<number | null>(null);
-  const [lectureSearch, setLectureSearch] = useState('');
-  const [loadingLectures, setLoadingLectures] = useState(false);
-  const [showAddLectureModal, setShowAddLectureModal] = useState(false);
-  const [savingLecture, setSavingLecture] = useState(false);
-  const [showImportPanel, setShowImportPanel] = useState(false);
-  const [importCourses, setImportCourses] = useState<{ courseName: string; courseCode: string | null; courseId: number | null; assignmentCount: number }[]>([]);
-  const [importCourseName, setImportCourseName] = useState('');
-  const [loadingImportCourses, setLoadingImportCourses] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [newLecture, setNewLecture] = useState({
-    lecture_no: '',
-    subject: '',
-    subject_topic: '',
-    date: '',
-    lectureday: '',
-    starttime: '',
-    endtime: '',
-    assignment: '',
-    assignment_date: '',
-    faculty_id: '',
-    class_room: '',
-    documents: '',
-    unit_test: '',
-    publish: 'No',
-  });
-  // Lecture Plan is edited inline (no modal)
-
   /* Grade Boundaries state */
   const [gradeBoundaries, setGradeBoundaries] = useState<Array<{ id: number; startFrom: number; endTo: number; grade: string }>>([]);
   const [newGradeBoundary, setNewGradeBoundary] = useState({ startFrom: '', endTo: '', grade: '' });
@@ -395,10 +344,6 @@ export default function EditBatchPage() {
 
   const updateStandardLectureInline = (id: number, patch: Partial<StandardLecture>) => {
     setStandardLectures(prev => prev.map(l => (l.id === id ? { ...l, ...patch } : l)));
-  };
-
-  const updateLectureInline = (id: number, patch: Partial<Lecture>) => {
-    setLectures(prev => prev.map(l => (l.id === id ? { ...l, ...patch } : l)));
   };
 
   const handleSaveSLectureInline = async (row: StandardLecture) => {
@@ -546,36 +491,6 @@ export default function EditBatchPage() {
       alert('Auto-link failed. Please try again.');
     }
     setAutoLinkingLegacyTrainers(false);
-  };
-
-  const handleSaveLectureInline = async (row: Lecture) => {
-    setSavingLectureRowId(row.id);
-    try {
-      await fetch(`/api/masters/batch/${batchId}/lectures`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: row.id,
-          lecture_no: row.lecture_no,
-          subject: row.subject,
-          lecturecontent: row.lecturecontent ?? row.subject,
-          subject_topic: row.subject_topic,
-          date: formatDateForInput(row.date) || null,
-          lectureday: row.lectureday,
-          starttime: row.starttime,
-          endtime: row.endtime,
-          assignment: row.assignment,
-          assignment_date: formatDateForInput(row.assignment_date) || null,
-          faculty_id: row.faculty_id,
-          class_room: row.class_room,
-          documents: row.documents,
-          unit_test: row.unit_test,
-          publish: row.publish,
-        }),
-      });
-      fetchLectures();
-    } catch { /* ignore */ }
-    setSavingLectureRowId(null);
   };
 
   /* Batch Details form state */
@@ -764,8 +679,9 @@ export default function EditBatchPage() {
     }
   }, [activeTab, batchId]);
 
-  /* Fetch standard lectures for this batch */
-  const fetchStandardLectures = async () => {
+  /* Fetch (batch-level) lecture plan for this batch, sourced from batch_slecture_master
+     and seeded/re-synced from standard_lecture_plan_template */
+  const fetchStandardLectures = useCallback(async () => {
     setLoadingSLectures(true);
     try {
       const res = await fetch(`/api/masters/batch/${batchId}/slectures`);
@@ -805,110 +721,18 @@ export default function EditBatchPage() {
         };
       });
       setStandardLectures(normalizedLectures);
+      setFacultyList(json.facultyList || []);
+      setHasStandardPlan(json.hasStandardPlan !== false);
+      setSlpCourseName(json.courseName ?? null);
     } catch { /* ignore */ }
     setLoadingSLectures(false);
-  };
-
-  useEffect(() => {
-    if (activeTab === 'standard-lecture-plan' && batchId) {
-      const doFetch = async () => {
-        setLoadingSLectures(true);
-        try {
-          const res = await fetch(`/api/masters/batch/${batchId}/slectures`);
-          const json = await res.json();
-          const normalizedLectures: StandardLecture[] = (json.lectures || []).map((row: unknown) => {
-            const l = (row ?? {}) as UnknownRecord;
-
-            const lecturecontent = toStringOrNull(
-              pickFirstNonNull(l, ['lecturecontent', 'lecture_content'])
-            );
-            const assignmentRaw = toStringOrNull(
-              pickFirstNonNull(l, ['assignment', 'Assign', 'assign', 'Assignment'])
-            );
-            const assignmentDateRaw = toStringOrNull(
-              pickFirstNonNull(l, [
-                'assignment_date',
-                'assignmentDate',
-                'assignmentdate',
-                'AssignDt',
-                'AssignDT',
-                'Assign_Dt',
-                'Assign_Date',
-                'assignDt',
-                'AssignmentDate',
-              ])
-            );
-
-            const assignment = (assignmentRaw ?? '').trim() || null;
-            const assignment_date = (assignmentDateRaw ?? '').trim() || null;
-
-            return {
-              ...(l as unknown as StandardLecture),
-              lecturecontent,
-              assignment,
-              assignment_date,
-            };
-          });
-          setStandardLectures(normalizedLectures);
-          setFacultyList(json.facultyList || []);
-        } catch { /* ignore */ }
-        setLoadingSLectures(false);
-      };
-      doFetch();
-    }
-  }, [activeTab, batchId]);
-
-  /* Fetch lectures for this batch */
-  const fetchLectures = useCallback(async () => {
-    setLoadingLectures(true);
-    try {
-      const res = await fetch(`/api/masters/batch/${batchId}/lectures`);
-      const json = await res.json();
-      // Normalize fields that may come back with different key names across environments
-      const normalizedLectures: Lecture[] = (json.lectures || []).map((row: unknown) => {
-        const l = (row ?? {}) as UnknownRecord;
-
-        const lecturecontent = toStringOrNull(
-          pickFirstNonNull(l, ['lecturecontent', 'lecture_content', 'subject'])
-        );
-        const assignmentRaw = toStringOrNull(
-          pickFirstNonNull(l, ['assignment', 'Assign', 'assign', 'Assignment'])
-        );
-        const assignmentDateRaw = toStringOrNull(
-          pickFirstNonNull(l, [
-            'assignment_date',
-            'assignmentDate',
-            'assignmentdate',
-            'AssignDt',
-            'AssignDT',
-            'Assign_Dt',
-            'Assign_Date',
-            'assignDt',
-            'AssignmentDate',
-          ])
-        );
-
-        const assignment = (assignmentRaw ?? '').trim() || null;
-        const assignment_date = (assignmentDateRaw ?? '').trim() || null;
-
-        return {
-          ...(l as unknown as Lecture),
-          lecturecontent,
-          assignment,
-          assignment_date,
-        };
-      });
-      setLectures(normalizedLectures);
-      setFacultyList(json.facultyList || []);
-    } catch { /* ignore */ }
-    setLoadingLectures(false);
   }, [batchId]);
 
   useEffect(() => {
     if (activeTab === 'lecture-plan' && batchId) {
-      fetchLectures();
+      fetchStandardLectures();
     }
-  }, [activeTab, batchId, fetchLectures]);
+  }, [activeTab, batchId, fetchStandardLectures]);
 
   /* Fetch final exams for this batch */
   const fetchFinalExams = useCallback(async () => {
@@ -2322,10 +2146,71 @@ export default function EditBatchPage() {
     link.click();
   };
 
-  const StandardLecturePlanTab = () => (
+  /* Re-sync from Standard Plan: insert any template lecture_no not already present
+     in this batch's own plan. Source is always the batch's own Training Programme. */
+  const handleResyncFromStandardPlan = async () => {
+    if (stdPlanLocked || !hasStandardPlan || !slpCourseName || resyncing) return;
+    setResyncing(true);
+    try {
+      const res = await fetch(`/api/masters/standard-lecture-plan/lectures?course=${encodeURIComponent(slpCourseName)}`);
+      const data = await res.json();
+      const templateRows: Array<{
+        lecture_no: number | null;
+        module: string | null;
+        sub_topics: string | null;
+        faculty: string | null;
+        project_assignment: string | null;
+        department: string | null;
+      }> = data.rows || [];
+
+      const existingLectureNos = new Set(
+        standardLectures
+          .map((l) => l.lecture_no)
+          .filter((n): n is number => n != null)
+      );
+
+      const missingRows = templateRows.filter(
+        (r) => r.lecture_no != null && !existingLectureNos.has(r.lecture_no)
+      );
+
+      for (const r of missingRows) {
+        await fetch(`/api/masters/batch/${batchId}/slectures`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lecture_no: r.lecture_no,
+            standard_seq: r.lecture_no,
+            subject: r.module,
+            subject_topic: r.sub_topics,
+            department: r.department,
+            faculty_name: r.faculty,
+            publish: 'No',
+          }),
+        });
+      }
+
+      await fetchStandardLectures();
+      if (missingRows.length > 0) {
+        alert(`Re-sync complete: ${missingRows.length} lecture(s) added from the Standard Lecture Plan.`);
+      } else {
+        alert('Already up to date with the Standard Lecture Plan.');
+      }
+    } catch {
+      alert('Re-sync failed. Please try again.');
+    }
+    setResyncing(false);
+  };
+
+  const BatchLecturePlanTab = () => (
     <div className="space-y-2">
-      {/* Toolbar: Export, Search */}
+      {/* Toolbar: Training Programme, Lock, Auto Link, Re-sync, Export, Search */}
       <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 px-2 py-1 border border-slate-200 bg-slate-50 rounded h-7">
+          <span className="text-[10px] font-semibold text-slate-500 uppercase">Training Programme</span>
+          <span className="text-xs font-semibold text-slate-800">
+            {slpCourseName || batchData?.Course_Name || '-'}
+          </span>
+        </div>
         <button
           onClick={() => setStdPlanLocked(v => !v)}
           className={`flex items-center gap-1 px-2 py-1 border text-xs font-medium rounded h-7 hover:bg-gray-50 ${
@@ -2342,6 +2227,17 @@ export default function EditBatchPage() {
           title="Map legacy trainer names to linked trainer records"
         >
           {autoLinkingLegacyTrainers ? 'Auto Linking...' : 'Auto Link Legacy Trainers'}
+        </button>
+        <button
+          onClick={handleResyncFromStandardPlan}
+          disabled={stdPlanLocked || !hasStandardPlan || resyncing}
+          className="flex items-center gap-1 px-2 py-1 border border-[#2E3093]/30 text-[#2E3093] text-xs font-medium rounded h-7 hover:bg-[#2E3093]/5 disabled:opacity-50"
+          title="Insert any Standard Lecture Plan lectures missing from this batch"
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+          </svg>
+          {resyncing ? 'Re-syncing...' : 'Re-sync from Standard Plan'}
         </button>
         <button
           onClick={handleExportSLectures}
@@ -2367,12 +2263,24 @@ export default function EditBatchPage() {
         </div>
       </div>
 
+      {/* Warning banner when the Training Programme has no Standard Lecture Plan */}
+      {!hasStandardPlan && (
+        <div className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 font-medium flex items-center gap-2">
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          No Standard Lecture Plan exists for this Training Programme &mdash; create one in Masters &gt; Standard Lecture Plan before this batch&apos;s lecture plan can be seeded.
+        </div>
+      )}
+
       {/* Table */}
       <div className="border border-gray-200 rounded overflow-hidden overflow-x-auto">
         <table className="dashboard-table w-full text-xs">
           <thead>
             <tr className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5">
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Lec#</th>
+              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Std Seq</th>
+              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Actual Seq</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Subject</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Subject Topic</th>
               <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Date</th>
@@ -2393,7 +2301,7 @@ export default function EditBatchPage() {
           <tbody>
             {loadingSLectures ? (
               <tr>
-                <td colSpan={16} className="px-2 py-4 text-center text-gray-400">
+                <td colSpan={18} className="px-2 py-4 text-center text-gray-400">
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-3 h-3 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                     Loading...
@@ -2402,13 +2310,22 @@ export default function EditBatchPage() {
               </tr>
             ) : filteredSLectures.length === 0 ? (
               <tr>
-                <td colSpan={16} className="px-2 py-4 text-center text-gray-400">
-                  No lecture plan found. Lectures are auto-loaded from previous batch of same course.
+                <td colSpan={18} className="px-2 py-4 text-center text-gray-400">
+                  No lecture plan found. Lectures are auto-loaded from the Standard Lecture Plan.
                 </td>
               </tr>
             ) : (
-              filteredSLectures.map((l) => (
-                <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50">
+              filteredSLectures.map((l) => {
+                const statusRowCls =
+                  l.lecture_status === 'cancelled'
+                    ? 'bg-red-50 border-l-4 border-l-red-400'
+                    : l.lecture_status === 'replacement'
+                    ? 'bg-emerald-50 border-l-4 border-l-emerald-400'
+                    : l.lecture_status === 'pending'
+                    ? 'bg-amber-50 border-l-4 border-l-amber-400'
+                    : '';
+                return (
+                <tr key={l.id} className={`border-b border-gray-100 hover:bg-gray-50 ${statusRowCls}`}>
                   <td className="px-2 py-1.5 text-gray-700">
                     <input
                       type="number"
@@ -2417,6 +2334,12 @@ export default function EditBatchPage() {
                       onChange={(e) => updateStandardLectureInline(l.id, { lecture_no: e.target.value ? Number(e.target.value) : null })}
                       className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
                     />
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">
+                    {l.standard_seq ?? '—'}
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">
+                    {l.actual_seq ?? '—'}
                   </td>
                   <td className="px-2 py-1.5 text-gray-900 font-medium">
                     <input
@@ -2599,7 +2522,8 @@ export default function EditBatchPage() {
                     </div>
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
@@ -2817,606 +2741,6 @@ export default function EditBatchPage() {
                       </button>
                       <button
                         onClick={() => handleDeleteFinalExam(e.id)}
-                        className="p-1 text-red-600 hover:bg-red-50 rounded"
-                        title="Delete"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-
-  /* Lecture Plan handlers */
-  const filteredLectures = lectures.filter((l) => {
-    const q = lectureSearch.toLowerCase();
-    const subject = (l.subject || l.lecturecontent || '').toLowerCase();
-    const topics = (l.subject_topic || '').toLowerCase();
-    const lectureday = (l.lectureday || '').toLowerCase();
-    return subject.includes(q) || topics.includes(q) || lectureday.includes(q);
-  });
-
-  const handleDeleteLecture = async (lectureId: number) => {
-    if (!confirm('Are you sure you want to delete this lecture?')) return;
-    try {
-      const res = await fetch(`/api/masters/batch/${batchId}/lectures?lectureId=${lectureId}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        fetchLectures();
-      }
-    } catch { /* ignore */ }
-  };
-
-  const handleExportLectures = () => {
-    const headers = ['LectureNo', 'Subject', 'SubjectTopics', 'Date', 'LectureDay', 'StartTime', 'EndTime', 'Assignment', 'AssignmentDate', 'TrainerName', 'ClassRoom', 'Documents', 'UnitTest', 'Publish'];
-    const rows = filteredLectures.map(l => [
-      l.lecture_no || '',
-      l.subject || l.lecturecontent || '',
-      l.subject_topic || '',
-      l.date || '',
-      l.lectureday || '',
-      l.starttime || '',
-      l.endtime || '',
-      l.assignment || '',
-      l.assignment_date || '',
-      l.faculty_name_display || '',
-      l.class_room || '',
-      l.documents || '',
-      l.unit_test || '',
-      l.publish || '',
-    ]);
-    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `lectures-batch-${batchId}.csv`;
-    link.click();
-  };
-
-  const handleSaveLecture = async () => {
-    if (!newLecture.subject.trim()) return;
-    setSavingLecture(true);
-    try {
-      const res = await fetch(`/api/masters/batch/${batchId}/lectures`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newLecture),
-      });
-      if (res.ok) {
-        setShowAddLectureModal(false);
-        setNewLecture({
-          lecture_no: '',
-          subject: '',
-          subject_topic: '',
-          date: '',
-          lectureday: '',
-          starttime: '',
-          endtime: '',
-          assignment: '',
-          assignment_date: '',
-          faculty_id: '',
-          class_room: '',
-          documents: '',
-          unit_test: '',
-          publish: 'No',
-        });
-        fetchLectures();
-      }
-    } catch { /* ignore */ }
-    setSavingLecture(false);
-  };
-
-  const handleOpenImportPanel = async () => {
-    setShowImportPanel(true);
-    setLoadingImportCourses(true);
-    try {
-      const res = await fetch('/api/masters/standard-lecture-plan/lectures/courses');
-      const data = await res.json();
-      setImportCourses(data.rows || []);
-    } catch {
-      /* ignore */
-    }
-    setLoadingImportCourses(false);
-  };
-
-  const handleImportFromCourse = async () => {
-    if (!importCourseName || importing) return;
-    setImporting(true);
-    try {
-      const res = await fetch(`/api/masters/standard-lecture-plan/lectures?course=${encodeURIComponent(importCourseName)}`);
-      const data = await res.json();
-      const rows: Array<{
-        lecture_no: number | null;
-        module: string | null;
-        sub_topics: string | null;
-        faculty: string | null;
-        project_assignment: string | null;
-        department: string | null;
-      }> = data.rows || [];
-
-      for (const l of rows) {
-        await fetch(`/api/masters/batch/${batchId}/lectures`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            lecture_no: l.lecture_no,
-            subject: l.module,
-            subject_topic: l.sub_topics,
-            assignment: l.project_assignment,
-            faculty_id: l.faculty,
-            department: l.department,
-            publish: 'No',
-          }),
-        });
-      }
-
-      setShowImportPanel(false);
-      setImportCourseName('');
-      fetchLectures();
-    } catch {
-      /* ignore */
-    }
-    setImporting(false);
-  };
-
-  const LecturePlanTab = () => (
-    <div className="space-y-2">
-      {/* Add Lecture Modal */}
-      {showAddLectureModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4">
-            <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] px-3 py-2">
-              <h3 className="text-xs font-bold text-white">Add Lecture</h3>
-            </div>
-            <div className="p-3 grid grid-cols-4 gap-2">
-              <div>
-                <label className={labelCls}>Lecture No</label>
-                <input
-                  type="number"
-                  value={newLecture.lecture_no}
-                  onChange={(e) => setNewLecture({ ...newLecture, lecture_no: e.target.value })}
-                  className={inputCls}
-                  placeholder="No"
-                />
-              </div>
-              <div className="col-span-2">
-                <label className={labelCls}>Subject</label>
-                <input
-                  type="text"
-                  value={newLecture.subject}
-                  onChange={(e) => setNewLecture({ ...newLecture, subject: e.target.value })}
-                  className={inputCls}
-                  placeholder="Subject"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Date</label>
-                <input
-                  type="date"
-                  value={newLecture.date}
-                  onChange={(e) => setNewLecture({ ...newLecture, date: e.target.value })}
-                  className={inputCls}
-                />
-              </div>
-              <div className="col-span-2">
-                <label className={labelCls}>Subject Topics</label>
-                <input
-                  type="text"
-                  value={newLecture.subject_topic}
-                  onChange={(e) => setNewLecture({ ...newLecture, subject_topic: e.target.value })}
-                  className={inputCls}
-                  placeholder="Topics"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Start Time</label>
-                <input
-                  type="time"
-                  value={newLecture.starttime}
-                  onChange={(e) => setNewLecture({ ...newLecture, starttime: e.target.value })}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Lecture Day</label>
-                <input
-                  type="text"
-                  value={newLecture.lectureday}
-                  onChange={(e) => setNewLecture({ ...newLecture, lectureday: e.target.value })}
-                  className={inputCls}
-                  placeholder="Lecture Day"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>End Time</label>
-                <input
-                  type="time"
-                  value={newLecture.endtime}
-                  onChange={(e) => setNewLecture({ ...newLecture, endtime: e.target.value })}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Assignment</label>
-                <input
-                  type="text"
-                  value={newLecture.assignment}
-                  onChange={(e) => setNewLecture({ ...newLecture, assignment: e.target.value })}
-                  className={inputCls}
-                  placeholder="Assignment"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Assignment Date</label>
-                <input
-                  type="date"
-                  value={newLecture.assignment_date}
-                  onChange={(e) => setNewLecture({ ...newLecture, assignment_date: e.target.value })}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Trainer Name</label>
-                <select
-                  value={newLecture.faculty_id}
-                  onChange={(e) => setNewLecture({ ...newLecture, faculty_id: e.target.value })}
-                  className={selectCls}
-                >
-                  <option value="">Select Trainer</option>
-                  {facultyList.map(f => (
-                    <option key={f.Faculty_Id} value={f.Faculty_Id.toString()}>{f.Faculty_Name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Class Room</label>
-                <input
-                  type="text"
-                  value={newLecture.class_room}
-                  onChange={(e) => setNewLecture({ ...newLecture, class_room: e.target.value })}
-                  className={inputCls}
-                  placeholder="Room"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Documents</label>
-                <input
-                  type="text"
-                  value={newLecture.documents}
-                  onChange={(e) => setNewLecture({ ...newLecture, documents: e.target.value })}
-                  className={inputCls}
-                  placeholder="Documents"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Unit Test</label>
-                <input
-                  type="text"
-                  value={newLecture.unit_test}
-                  onChange={(e) => setNewLecture({ ...newLecture, unit_test: e.target.value })}
-                  className={inputCls}
-                  placeholder="Unit Test"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Publish</label>
-                <select
-                  value={newLecture.publish}
-                  onChange={(e) => setNewLecture({ ...newLecture, publish: e.target.value })}
-                  className={selectCls}
-                >
-                  <option value="No">No</option>
-                  <option value="Yes">Yes</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 px-3 py-2 bg-gray-50 border-t">
-              <button
-                onClick={() => setShowAddLectureModal(false)}
-                className="px-3 py-1 text-xs font-medium text-gray-600 hover:text-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveLecture}
-                disabled={!newLecture.subject.trim() || savingLecture}
-                className="px-3 py-1 bg-[#2E3093] text-white text-xs font-medium rounded disabled:opacity-50"
-              >
-                {savingLecture ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Toolbar: Add, Export, Search */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => setShowAddLectureModal(true)}
-          className="flex items-center gap-1 px-2 py-1 bg-[#2E3093] text-white text-xs font-medium rounded h-7"
-        >
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Add
-        </button>
-        <button
-          onClick={handleExportLectures}
-          className="flex items-center gap-1 px-2 py-1 border border-gray-300 text-gray-600 text-xs font-medium rounded h-7 hover:bg-gray-50"
-        >
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-          </svg>
-          Export
-        </button>
-        <div className="relative">
-          <button
-            onClick={() => (showImportPanel ? setShowImportPanel(false) : handleOpenImportPanel())}
-            className="flex items-center gap-1 px-2 py-1 border border-[#2E3093]/30 text-[#2E3093] text-xs font-medium rounded h-7 hover:bg-[#2E3093]/5"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-4.5L12 17.25m0 0l4.5-4.5M12 17.25V3" />
-            </svg>
-            Import
-          </button>
-          {showImportPanel && (
-            <div className="absolute left-0 top-full mt-1 z-20 w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-3">
-              <label className={labelCls}>Course Number &amp; Training Name</label>
-              {loadingImportCourses ? (
-                <div className="text-xs text-gray-400 py-2">Loading courses...</div>
-              ) : (
-                <select
-                  value={importCourseName}
-                  onChange={(e) => setImportCourseName(e.target.value)}
-                  className={`${inputCls} mb-2`}
-                >
-                  <option value="">Select course...</option>
-                  {importCourses.map((c) => (
-                    <option key={c.courseName} value={c.courseName}>
-                      {c.courseCode ? `${c.courseCode} - ` : ''}{c.courseName} ({c.assignmentCount})
-                    </option>
-                  ))}
-                </select>
-              )}
-              <div className="flex justify-end gap-2 mt-2">
-                <button
-                  onClick={() => setShowImportPanel(false)}
-                  className="px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-gray-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleImportFromCourse}
-                  disabled={!importCourseName || importing}
-                  className="px-2.5 py-1 bg-[#2E3093] text-white text-xs font-bold rounded disabled:opacity-50"
-                >
-                  {importing ? 'Importing...' : 'Import'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="flex-1" />
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search..."
-            value={lectureSearch}
-            onChange={(e) => setLectureSearch(e.target.value)}
-            className="w-32 pl-6 pr-2 py-1 border border-gray-300 rounded text-xs h-7"
-          />
-          <svg className="absolute left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-          </svg>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="border border-gray-200 rounded overflow-hidden overflow-x-auto">
-        <table className="dashboard-table w-full text-xs">
-          <thead>
-            <tr className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5">
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Lec#</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Subject</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Topics</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Date</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Lecture Day</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Start</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">End</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Assign</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">AssignDt</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Trainer</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Room</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Docs</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">UT</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Pub</th>
-              <th className="text-center px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Act</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loadingLectures ? (
-              <tr>
-                <td colSpan={15} className="px-2 py-4 text-center text-gray-400">
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="w-3 h-3 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
-                    Loading...
-                  </div>
-                </td>
-              </tr>
-            ) : filteredLectures.length === 0 ? (
-              <tr>
-                <td colSpan={15} className="px-2 py-4 text-center text-gray-400">
-                  No records found. Click &quot;Add&quot; to create.
-                </td>
-              </tr>
-            ) : (
-              filteredLectures.map((l) => (
-                <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <input
-                      type="number"
-                      value={l.lecture_no ?? ''}
-                      onChange={(e) => updateLectureInline(l.id, { lecture_no: e.target.value ? Number(e.target.value) : null })}
-                      className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-900 font-medium">
-                    <input
-                      type="text"
-                      value={(l.subject ?? l.lecturecontent ?? '').toString()}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        updateLectureInline(l.id, { subject: v, lecturecontent: v });
-                      }}
-                      className="w-full min-w-[140px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
-                      placeholder="Subject"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <input
-                      type="text"
-                      value={(l.subject_topic ?? '').toString()}
-                      onChange={(e) => updateLectureInline(l.id, { subject_topic: e.target.value })}
-                      className="w-full min-w-[120px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
-                      placeholder="Topics"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
-                    <input
-                      type="date"
-                      value={formatDateForInput(l.date)}
-                      onChange={(e) => updateLectureInline(l.id, { date: e.target.value })}
-                      className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <input
-                      type="text"
-                      value={(l.lectureday ?? '').toString()}
-                      onChange={(e) => updateLectureInline(l.id, { lectureday: e.target.value })}
-                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
-                      placeholder="Lecture Day"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
-                    <input
-                      type="time"
-                      value={(l.starttime ?? '').toString()}
-                      onChange={(e) => updateLectureInline(l.id, { starttime: e.target.value })}
-                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
-                    <input
-                      type="time"
-                      value={(l.endtime ?? '').toString()}
-                      onChange={(e) => updateLectureInline(l.id, { endtime: e.target.value })}
-                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <input
-                      type="text"
-                      value={(l.assignment ?? '').toString()}
-                      onChange={(e) => updateLectureInline(l.id, { assignment: e.target.value })}
-                      className="w-full min-w-[110px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
-                      placeholder="Assignment"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
-                    <input
-                      type="date"
-                      value={formatDateForInput(l.assignment_date)}
-                      onChange={(e) => updateLectureInline(l.id, { assignment_date: e.target.value })}
-                      className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    {(() => {
-                      const currentVal = (l.faculty_id ?? '').toString();
-                      const hasMatch = currentVal
-                        ? facultyList.some(f => String(f.Faculty_Id) === currentVal)
-                        : true;
-                      return (
-                        <select
-                          value={currentVal}
-                          onChange={(e) => updateLectureInline(l.id, { faculty_id: e.target.value })}
-                          className="w-full min-w-[140px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
-                        >
-                          <option value="">Select Trainer</option>
-                          {currentVal && !hasMatch && (
-                            <option value={currentVal}>{l.faculty_name_display || currentVal}</option>
-                          )}
-                          {facultyList.map(f => (
-                            <option key={f.Faculty_Id} value={String(f.Faculty_Id)}>{f.Faculty_Name}</option>
-                          ))}
-                        </select>
-                      );
-                    })()}
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <input
-                      type="text"
-                      value={(l.class_room ?? '').toString()}
-                      onChange={(e) => updateLectureInline(l.id, { class_room: e.target.value })}
-                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
-                      placeholder="Room"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <input
-                      type="text"
-                      value={(l.documents ?? '').toString()}
-                      onChange={(e) => updateLectureInline(l.id, { documents: e.target.value })}
-                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
-                      placeholder="Docs"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <input
-                      type="text"
-                      value={(l.unit_test ?? '').toString()}
-                      onChange={(e) => updateLectureInline(l.id, { unit_test: e.target.value })}
-                      className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
-                      placeholder="UT"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <select
-                      value={(l.publish ?? 'No').toString()}
-                      onChange={(e) => updateLectureInline(l.id, { publish: e.target.value })}
-                      className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
-                    >
-                      <option value="No">No</option>
-                      <option value="Yes">Yes</option>
-                    </select>
-                  </td>
-                  <td className="px-2 py-1.5 text-center">
-                    <div className="flex items-center justify-center gap-0.5">
-                      <button
-                        onClick={() => handleSaveLectureInline(l)}
-                        disabled={savingLectureRowId === l.id}
-                        className="p-1 text-green-700 hover:bg-green-50 rounded disabled:opacity-50"
-                        title="Save"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 21V13H7v8" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v4h8" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handleDeleteLecture(l.id)}
                         className="p-1 text-red-600 hover:bg-red-50 rounded"
                         title="Delete"
                       >
@@ -4085,7 +3409,7 @@ export default function EditBatchPage() {
       case 'feedback-details':
         return FeedbackDetailsTab();
       case 'lecture-plan':
-        return LecturePlanTab();
+        return BatchLecturePlanTab();
       case 'convocation-details':
         return ConvocationDetailsTab();
       case 'result-structure':
@@ -4159,7 +3483,7 @@ export default function EditBatchPage() {
           <div className="flex overflow-x-auto scrollbar-hide gap-1">
             {TABS.filter(tab =>
               slpOnlyMode
-                ? tab.id === 'standard-lecture-plan' || tab.id === 'lecture-plan'
+                ? tab.id === 'lecture-plan'
                 : true
             ).map((tab) => (
               <button
