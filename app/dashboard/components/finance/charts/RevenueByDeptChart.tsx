@@ -3,55 +3,96 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { apiFetch } from '../shared/api';
-import { fmt, monthLabel } from '../shared/format';
-import type { DeptPerf } from '../shared/types';
+import { fmt, monthLabel, isCountableCashflow, monthsInFinancialYear } from '../shared/format';
+import type { DeptPerf, CashflowTxn } from '../shared/types';
 
 interface MonthlyRow { month_year: string; achieved: number; target: number }
+
+// Hardcoded income targets — same figures used by the Overview tab's
+// Department-wise Breakdown, kept in sync so both views agree.
+const HARDCODED_MONTHLY_TARGET: Record<string, number> = {
+  'CBD / Inhouse': 5_600_000,       // ₹56,00,000
+  'Corporate Training': 2_000_000,  // ₹20,00,000
+};
+
+// Maps a real finance_cashflow.department value to this chart's display label.
+function mapCashflowDept(dept: string | null): string | null {
+  const d = (dept || '').toUpperCase();
+  if (d === 'CBD') return 'CBD / Inhouse';
+  if (d === 'CORPORATE TRAINING') return 'Corporate Training';
+  if (d === 'DEPUTATION ACCENT') return 'Accent Deputation';
+  if (d === 'PROJECT ACCENT') return 'Accent Projects';
+  return null;
+}
 
 const DEFAULT_DEPTS = ['CBD / Inhouse', 'Corporate Training', 'Accent Deputation', 'Accent Projects'];
 
 export default function RevenueByDeptChart({ year }: { year: number }) {
   const [dept, setDept] = useState<string>('All');
   const [mode, setMode] = useState<'bar' | 'line'>('bar');
-  const [rows, setRows] = useState<DeptPerf[]>([]);
+  const [deptPerfRows, setDeptPerfRows] = useState<DeptPerf[]>([]);
+  const [cashflowRows, setCashflowRows] = useState<CashflowTxn[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Financial year: April `year` – March `year + 1`.
+  const fyMonths = useMemo(() => monthsInFinancialYear(year), [year]);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    // Fetch all year's dept-performance entries; backend ignores unknown query keys gracefully.
-    apiFetch<{ rows: DeptPerf[] }>(`/api/finance/dept-performance?year=${year}`)
-      .then(d => { if (alive) { setRows(d.rows ?? []); setLoading(false); } })
-      .catch(() => { if (alive) { setRows([]); setLoading(false); } });
+    Promise.all([
+      apiFetch<{ rows: DeptPerf[] }>(`/api/finance/dept-performance`).catch(() => ({ rows: [] })),
+      apiFetch<{ rows: CashflowTxn[] }>(`/api/finance/cashflow`).catch(() => ({ rows: [] })),
+    ]).then(([deptPerf, cashflow]) => {
+      if (!alive) return;
+      setDeptPerfRows(deptPerf.rows ?? []);
+      setCashflowRows(cashflow.rows ?? []);
+      setLoading(false);
+    });
     return () => { alive = false; };
   }, [year]);
 
   const departments = useMemo(() => {
     const seen = new Set<string>(DEFAULT_DEPTS);
-    rows.forEach(r => seen.add(r.department));
+    deptPerfRows.forEach(r => seen.add(r.department));
     return ['All', ...Array.from(seen)];
-  }, [rows]);
+  }, [deptPerfRows]);
+
+  /** Real cashflow receipts, mapped to display department + month (YYYY-MM). */
+  const cashflowAchievedByDeptMonth = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const txn of cashflowRows) {
+      if (txn.type !== 'Receipt' || !txn.date) continue;
+      if (!isCountableCashflow(txn)) continue;
+      const label = mapCashflowDept(txn.department);
+      if (!label) continue;
+      const key = `${label}::${txn.date.slice(0, 7)}`;
+      map.set(key, (map.get(key) || 0) + Number(txn.receipt || 0));
+    }
+    return map;
+  }, [cashflowRows]);
 
   const chartData: MonthlyRow[] = useMemo(() => {
-    const filtered = dept === 'All' ? rows : rows.filter(r => r.department === dept);
-    const byMonth = new Map<string, MonthlyRow>();
-    for (const r of filtered) {
-      // accept either month_year (ISO YYYY-MM) or already-truncated string
+    const deptFilter = dept === 'All' ? null : dept;
+    const targetByMonth = new Map<string, number>();
+    for (const r of deptPerfRows) {
+      if (deptFilter && r.department !== deptFilter) continue;
       const key = String(r.month_year ?? '').slice(0, 7);
-      if (!key.startsWith(`${year}-`)) continue;
-      const cur = byMonth.get(key) ?? { month_year: key, achieved: 0, target: 0 };
-      cur.achieved += Number(r.amount_achieved || 0);
-      cur.target   += Number(r.target_amount   || 0);
-      byMonth.set(key, cur);
+      if (!fyMonths.includes(key)) continue;
+      targetByMonth.set(key, (targetByMonth.get(key) || 0) + Number(r.target_amount || 0));
     }
-    // Always emit 12 months for visual consistency
-    const out: MonthlyRow[] = [];
-    for (let m = 1; m <= 12; m++) {
-      const key = `${year}-${String(m).padStart(2, '0')}`;
-      out.push(byMonth.get(key) ?? { month_year: key, achieved: 0, target: 0 });
-    }
-    return out;
-  }, [rows, dept, year]);
+
+    const activeDepts = deptFilter ? [deptFilter] : DEFAULT_DEPTS;
+
+    return fyMonths.map(key => {
+      const achieved = activeDepts.reduce((s, d) => s + (cashflowAchievedByDeptMonth.get(`${d}::${key}`) || 0), 0);
+      const manualTarget = targetByMonth.get(key) || 0;
+      const hardcodedTarget = deptFilter
+        ? (HARDCODED_MONTHLY_TARGET[deptFilter] || 0)
+        : activeDepts.reduce((s, d) => s + (HARDCODED_MONTHLY_TARGET[d] || 0), 0);
+      return { month_year: key, achieved, target: manualTarget || hardcodedTarget };
+    });
+  }, [deptPerfRows, cashflowAchievedByDeptMonth, dept, fyMonths]);
 
   const total = useMemo(() => chartData.reduce((s, r) => s + r.achieved, 0), [chartData]);
 
@@ -60,7 +101,7 @@ export default function RevenueByDeptChart({ year }: { year: number }) {
       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
         <div>
           <p className="text-[11px] font-semibold text-[#2E3093] uppercase tracking-wider">
-            Revenue by Department — {year}
+            Revenue by Department — FY {year}-{String(year + 1).slice(-2)}
           </p>
           <p className="text-[10px] text-gray-500">Total achieved: {fmt(total)}</p>
         </div>

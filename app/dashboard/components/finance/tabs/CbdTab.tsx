@@ -2,10 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { TableHeader, TableSkeleton, EmptyRow, TotalRow, SectionTitle, thCls, tdCls, tdNum, trCls, PctBar, downloadCsv, Modal, RowActions, inpCls, lblCls } from '../shared/primitives';
-import { fmt, todayISO, monthLabel, parseMonth } from '../shared/format';
+import { fmt, todayISO, monthLabel, parseMonth, isCountableCashflow, monthsInFinancialYear, financialYearLabel } from '../shared/format';
 import type { PendingFee, MonthlyRow, CashflowTxn } from '../shared/types';
 import { useFinanceResource } from '../shared/useFinanceResource';
 import { feeRecoveryPriority } from '../shared/predictions';
+
+// Same figures as the Overview tab's Department-wise Breakdown, kept in sync
+// so both views agree on what CBD is being measured against.
+const CBD_MONTHLY_INCOME = 5_600_000; // ₹56,00,000
+const CBD_EXPENSE_TARGET_PCT = 0.20;  // target expense = 20% of actual turnover
 
 interface PlanRow {
   Plan_Id: number;
@@ -21,7 +26,11 @@ interface PlanRow {
 
 export default function CbdTab() {
   /* ── Annual targets (read-only from CBD dashboard masters) ── */
-  const currentYear = new Date().getFullYear();
+  // /api/masters/annual-batch/plan's `year` param is already a financial-year
+  // start year (Apr–Mar) under the hood, so Jan–Mar belongs to the FY that
+  // started the previous calendar year.
+  const now = new Date();
+  const currentYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
   const [year, setYear] = useState(currentYear);
   const [annualTargets, setAnnualTargets] = useState<PlanRow[]>([]);
   const [targetsLoading, setTargetsLoading] = useState(true);
@@ -96,39 +105,74 @@ export default function CbdTab() {
   const monthly  = useFinanceResource<MonthlyRow>('/api/finance/cbd-monthly');
   const cashflow = useFinanceResource<CashflowTxn>('/api/finance/cashflow');
 
-  const cfActualByMonth = useMemo(() => {
-    const map = new Map<string, number>();
+  /** CBD's real turnover (receipts) and expense (payments) per month, from cashflow. */
+  const cfByMonth = useMemo(() => {
+    const turnover = new Map<string, number>();
+    const expense = new Map<string, number>();
     for (const txn of cashflow.rows) {
       if ((txn.department ?? '').toUpperCase() !== 'CBD') continue;
-      if (txn.type !== 'Payment') continue;
-      if (!txn.date) continue;
+      if (!txn.date || !isCountableCashflow(txn)) continue;
       const m = txn.date.substring(0, 7);
-      map.set(m, (map.get(m) || 0) + Number(txn.payment || 0));
+      if (txn.type === 'Receipt') turnover.set(m, (turnover.get(m) || 0) + Number(txn.receipt || 0));
+      if (txn.type === 'Payment') expense.set(m, (expense.get(m) || 0) + Number(txn.payment || 0));
     }
-    return map;
+    return { turnover, expense };
   }, [cashflow.rows]);
+
+  const monthlyTargetOverrides = useMemo(() => {
+    const map = new Map<string, MonthlyRow>();
+    for (const r of monthly.rows) map.set((r.month ?? '').slice(0, 7), r);
+    return map;
+  }, [monthly.rows]);
+
+  // Every month of the financial year, shown at once — not one row per
+  // manual entry, so a month with no manual override still shows real
+  // cashflow-derived actuals instead of disappearing.
+  const monthlyBreakdown = useMemo(() => {
+    return monthsInFinancialYear(year).map(m => {
+      const turnoverActual = cfByMonth.turnover.get(m) || 0;
+      const expenseActual  = cfByMonth.expense.get(m) || 0;
+      const override = monthlyTargetOverrides.get(m);
+      const expenseTarget = override ? Number(override.target_cost || 0) : turnoverActual * CBD_EXPENSE_TARGET_PCT;
+      const turnoverTarget = CBD_MONTHLY_INCOME;
+      const profitActual = turnoverActual - expenseActual;
+      const profitTarget = turnoverTarget - expenseTarget;
+      return {
+        month: m,
+        turnoverActual, turnoverTarget,
+        expenseActual, expenseTarget,
+        profitActual, profitTarget,
+        profitPctActual: turnoverActual > 0 ? (profitActual / turnoverActual) * 100 : null,
+        profitPctTarget: turnoverTarget > 0 ? (profitTarget / turnoverTarget) * 100 : null,
+        override,
+      };
+    });
+  }, [year, cfByMonth, monthlyTargetOverrides]);
 
   const [monthlyModal, setMonthlyModal] = useState<{ open: boolean; editing: MonthlyRow | null }>({ open: false, editing: null });
   const [monthlyForm, setMonthlyForm]   = useState({ month: '', target_cost: '' });
   const [monthlySaving, setMonthlySaving] = useState(false);
 
-  const openAddMonthly = useCallback(() => {
-    setMonthlyForm({ month: '', target_cost: '' });
-    setMonthlyModal({ open: true, editing: null });
-  }, []);
-
-  const openEditMonthly = useCallback((r: MonthlyRow) => {
-    setMonthlyForm({ month: r.month ?? '', target_cost: String(r.target_cost ?? 0) });
-    setMonthlyModal({ open: true, editing: r });
+  // Every month already has a row (see monthlyBreakdown) — "editing" a month
+  // just means setting/clearing its manual Expense Target override.
+  const openSetExpenseTarget = useCallback((month: string, override?: MonthlyRow) => {
+    setMonthlyForm({ month, target_cost: override ? String(override.target_cost ?? 0) : '' });
+    setMonthlyModal({ open: true, editing: override ?? null });
   }, []);
 
   const saveMonthly = useCallback(async () => {
     setMonthlySaving(true);
     try {
-      await monthly.save(
-        { month: monthlyForm.month.trim(), target_cost: Number(monthlyForm.target_cost) } as Partial<MonthlyRow>,
-        monthlyModal.editing,
-      );
+      // Blank input means "use the default" — clear any existing override
+      // instead of saving a literal ₹0 target.
+      if (!monthlyForm.target_cost.trim()) {
+        if (monthlyModal.editing) await monthly.remove(monthlyModal.editing.id);
+      } else {
+        await monthly.save(
+          { month: monthlyForm.month.trim(), target_cost: Number(monthlyForm.target_cost) } as Partial<MonthlyRow>,
+          monthlyModal.editing,
+        );
+      }
       setMonthlyModal({ open: false, editing: null });
     } catch { /* swallow */ }
     setMonthlySaving(false);
@@ -166,7 +210,7 @@ export default function CbdTab() {
             onChange={e => setYear(Number(e.target.value))}
             className="text-xs font-semibold rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
           >
-            {years.map(y => <option key={y} value={y}>{y}</option>)}
+            {years.map(y => <option key={y} value={y}>{financialYearLabel(y)}</option>)}
           </select>
         </div>
         <div className="overflow-x-auto rounded-xl border border-gray-200">
@@ -184,7 +228,7 @@ export default function CbdTab() {
             </tr></thead>
             <tbody>
               {targetsLoading ? <TableSkeleton cols={9} /> :
-               annualTargets.length === 0 ? <EmptyRow cols={9} message={`No annual targets found for ${year}.`} /> :
+               annualTargets.length === 0 ? <EmptyRow cols={9} message={`No annual targets found for ${financialYearLabel(year)}.`} /> :
                <>
                  <TotalRow>
                    <td className="px-3 py-2 text-xs text-[#2E3093]">Total ({annualTargets.length})</td>
@@ -242,35 +286,48 @@ export default function CbdTab() {
 
       {/* ── Monthly Performance ──────────────────────── */}
       <div>
-        <TableHeader title="CBD / Inhouse — Monthly Performance" onAdd={openAddMonthly} />
+        <TableHeader title={`CBD / Inhouse — Monthly Performance (${financialYearLabel(year)})`} />
         <div className="overflow-x-auto rounded-xl border border-gray-200">
           <table className="w-full border-separate border-spacing-0">
-            <thead><tr className="bg-[#2E3093]">
-              <th className={thCls}>Month</th>
-              <th className={`${thCls} text-right`}>Actual Cost (₹)</th>
-              <th className={`${thCls} text-right`}>Targeted Cost (₹)</th>
-              <th className={`${thCls} text-center`}>%age</th>
-              <th className={`${thCls} text-center`}>Actions</th>
-            </tr></thead>
+            <thead>
+              <tr className="bg-[#2E3093]">
+                <th rowSpan={2} className={`${thCls} !text-center`}>Month</th>
+                <th colSpan={2} className={`${thCls} !text-center`}>Turnover (₹)</th>
+                <th colSpan={2} className={`${thCls} !text-center`}>Expense (₹)</th>
+                <th colSpan={2} className={`${thCls} !text-center`}>Profit (₹)</th>
+                <th colSpan={2} className={`${thCls} !text-center`}>Profit %</th>
+                <th rowSpan={2} className={`${thCls} !text-center`}>Actions</th>
+              </tr>
+              <tr className="bg-[#2E3093]">
+                <th className={`${thCls} !text-center`}>Actual</th>
+                <th className={`${thCls} !text-center`}>Target</th>
+                <th className={`${thCls} !text-center`}>Actual</th>
+                <th className={`${thCls} !text-center`}>Target</th>
+                <th className={`${thCls} !text-center`}>Actual</th>
+                <th className={`${thCls} !text-center`}>Target</th>
+                <th className={`${thCls} !text-center`}>Actual</th>
+                <th className={`${thCls} !text-center`}>Target</th>
+              </tr>
+            </thead>
             <tbody>
-              {monthly.loading ? <TableSkeleton cols={5} /> :
-               monthly.rows.length === 0 ? <EmptyRow cols={5} /> :
-               monthly.rows.map((r, i) => {
-                 const actualCost = cfActualByMonth.get((r.month ?? '').substring(0, 7)) || 0;
-                 const pct = Number(r.target_cost || 0) > 0 ? (actualCost / Number(r.target_cost)) * 100 : 0;
-                 const over = pct > 100;
-                 return (
-                   <tr key={r.id} className={trCls(i)}>
-                     <td className={tdCls}>{monthLabel(parseMonth(r.month ?? ''))}</td>
-                     <td className={tdNum}>{fmt(actualCost)}</td>
-                     <td className={tdNum}>{fmt(r.target_cost)}</td>
-                     <td className={`${tdNum} ${over ? 'text-red-600 font-semibold' : 'text-emerald-700'}`}>
-                       {Number(r.target_cost || 0) > 0 ? `${pct.toFixed(1)}%` : '—'}
-                     </td>
-                     <RowActions onEdit={() => openEditMonthly(r)} onDelete={() => monthly.remove(r.id)} />
-                   </tr>
-                 );
-               })}
+              {monthly.loading || cashflow.loading ? <TableSkeleton cols={10} /> :
+               monthlyBreakdown.map((r, i) => (
+                 <tr key={r.month} className={trCls(i)}>
+                   <td className={tdCls}>{monthLabel(parseMonth(r.month))}</td>
+                   <td className={`${tdNum} text-[#2E3093]`}>{fmt(r.turnoverActual)}</td>
+                   <td className={tdNum}>{fmt(r.turnoverTarget)}</td>
+                   <td className={`${tdNum} text-red-600`}>{fmt(r.expenseActual)}</td>
+                   <td className={tdNum}>{fmt(r.expenseTarget)}{r.override ? <span className="ml-1 text-[9px] text-amber-600 font-semibold" title="Manually overridden">•</span> : null}</td>
+                   <td className={`${tdNum} font-semibold ${r.profitActual < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(r.profitActual)}</td>
+                   <td className={`${tdNum} font-semibold ${r.profitTarget < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(r.profitTarget)}</td>
+                   <td className={`${tdNum} font-semibold ${(r.profitPctActual ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{r.profitPctActual != null ? `${r.profitPctActual.toFixed(1)}%` : '—'}</td>
+                   <td className={`${tdNum} font-semibold ${(r.profitPctTarget ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{r.profitPctTarget != null ? `${r.profitPctTarget.toFixed(1)}%` : '—'}</td>
+                   <RowActions
+                     onEdit={() => openSetExpenseTarget(r.month, r.override)}
+                     onDelete={r.override ? () => monthly.remove(r.override!.id) : undefined}
+                   />
+                 </tr>
+               ))}
             </tbody>
           </table>
         </div>
@@ -278,22 +335,16 @@ export default function CbdTab() {
 
       <Modal
         open={monthlyModal.open}
-        title={monthlyModal.editing ? 'Edit Monthly Performance' : 'Add Monthly Performance'}
+        title={`Set Expense Target — ${monthlyForm.month ? monthLabel(monthlyForm.month) : ''}`}
         saving={monthlySaving}
         onClose={() => setMonthlyModal({ open: false, editing: null })}
         onSave={saveMonthly}
       >
         <div>
-          <label className={lblCls}>Month (YYYY-MM)</label>
-          <input
-            type="month"
-            className={inpCls}
-            value={monthlyForm.month}
-            onChange={e => setMonthlyForm(f => ({ ...f, month: e.target.value }))}
-          />
-        </div>
-        <div>
-          <label className={lblCls}>Targeted Cost (₹)</label>
+          <label className={lblCls}>Expense Target (₹)</label>
+          <p className="text-[11px] text-gray-400 mb-1">
+            Leave blank to use the default (20% of that month&apos;s actual turnover).
+          </p>
           <input
             type="number"
             min="0"

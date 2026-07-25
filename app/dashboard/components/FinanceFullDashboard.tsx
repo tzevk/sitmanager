@@ -110,7 +110,9 @@ function TabPanel({ id }: { id: TabId }) {
 
 export default function FinanceFullDashboard() {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
-  const year = new Date().getFullYear();
+  // Financial year start year: Apr–Mar, so Jan–Mar belongs to the FY that started the previous calendar year.
+  const now = new Date();
+  const year = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
 
   return (
     <ToastProvider>

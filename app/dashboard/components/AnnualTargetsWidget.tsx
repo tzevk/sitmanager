@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useState, useEffect } from 'react';
+import { financialYearLabel } from './finance/shared/format';
 
 interface PlanRow {
   Plan_Id: number;
@@ -35,7 +36,10 @@ function targetForRow(row: PlanRow): number {
 }
 
 export default function AnnualTargetsWidget() {
-  const currentYear = new Date().getFullYear();
+  const now = new Date();
+  // Plan_Year is a financial-year start year (Apr–Mar — see /api/masters/annual-batch/plan),
+  // so Jan–Mar belongs to the FY that started the previous calendar year.
+  const currentYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
   const [year, setYear]     = useState(currentYear);
   const [rows, setRows]     = useState<PlanRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,7 +96,7 @@ export default function AnnualTargetsWidget() {
           onChange={e => setYear(Number(e.target.value))}
           className="text-xs font-semibold rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
         >
-          {years.map(y => <option key={y} value={y}>{y}</option>)}
+          {years.map(y => <option key={y} value={y}>{financialYearLabel(y)}</option>)}
         </select>
       </div>
 
@@ -157,7 +161,7 @@ export default function AnnualTargetsWidget() {
             ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-5 py-10 text-center text-sm text-gray-400">
-                  No annual batch plan found for {year}
+                  No annual batch plan found for {financialYearLabel(year)}
                 </td>
               </tr>
             ) : (
