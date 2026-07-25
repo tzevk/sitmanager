@@ -15,6 +15,16 @@ const LOAN_CATS = ['OD Interest / Loan EMI'];
 // Cashflow tab / transaction table keeps each department separate.
 const CBD_COMBINED_DEPTS = ['CBD', 'TRAINERS', 'T&D'];
 
+// Same 5-bucket grouping as the Overview tab's Department-wise Breakdown
+// (CBD / Deputation / Corporate Training / Accent Projects / Other) — with
+// 9+ real departments in the raw data, showing every one individually left
+// no room for readable bold labels at half chart width.
+const NAMED_DEPTS: Record<string, string> = {
+  'DEPUTATION ACCENT': 'Deputation Accent',
+  'CORPORATE TRAINING': 'Corporate Training',
+  'PROJECT ACCENT': 'Project Accent',
+};
+
 /** "45 L" / "1.2 Cr" — Indian-unit compact format for bar value labels. Empty for zero/negative. */
 function fmtCompact(v: number): string {
   if (!v || v <= 0) return '';
@@ -97,7 +107,7 @@ export default function CashflowCategoryBars({ rows, view = 'all' }: { rows: Cas
     const map = new Map<string, Row>();
     for (const r of rows) {
       const rawDept = (r.department || 'Unassigned').toUpperCase();
-      const key = CBD_COMBINED_DEPTS.includes(rawDept) ? 'CBD' : (r.department || 'Unassigned');
+      const key = CBD_COMBINED_DEPTS.includes(rawDept) ? 'CBD' : (NAMED_DEPTS[rawDept] ?? 'Other Departments');
       const cur = map.get(key) ?? { category: key, payment: 0, receipt: 0 };
       cur.payment += Number(r.payment || 0);
       cur.receipt += Number(r.receipt || 0);
@@ -136,9 +146,6 @@ export default function CashflowCategoryBars({ rows, view = 'all' }: { rows: Cas
       <div className="w-full lg:w-1/2 rounded-xl border border-gray-200 bg-white p-4">
         <p className="text-[11px] font-semibold text-[#2E3093] uppercase tracking-wider mb-3">
           Payment vs Receipt by Department
-        </p>
-        <p className="text-[10px] text-gray-400 -mt-2 mb-3">
-          CBD&apos;s profit % combines Trainers&apos; and T&amp;D&apos;s expenses (bifurcation shown under the label) — see raw figures in the Cashflow tab.
         </p>
         <div className="flex gap-3 mb-3">
           <span className="inline-flex flex-col items-center rounded-md border border-gray-200 bg-[#fef2f2] px-3 py-1 text-[11px] font-semibold text-gray-700">

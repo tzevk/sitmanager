@@ -444,6 +444,9 @@ export default function CashflowTab() {
       <div>
         <YearMonthFilter year={year} month={month} setYear={setYear} setMonth={setMonth}
           currentYear={currentYear} calendarYearOptions={calendarYearOptions} financialYearOptions={financialYearOptions} />
+        <p className="text-[10px] text-gray-400 mb-2 text-right">
+          CBD&apos;s profit % combines Trainers&apos; and T&amp;D&apos;s expenses (bifurcation shown under the label) — see raw figures below.
+        </p>
         <CashflowCategoryBars rows={countableFilteredRows} view="dept" />
       </div>
 
