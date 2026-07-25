@@ -143,7 +143,7 @@ export default function CashflowCategoryBars({ rows, view = 'all' }: { rows: Cas
 
   if (view === 'dept') {
     return (
-      <div className="w-full lg:w-1/2 rounded-xl border border-gray-200 bg-white p-4">
+      <div className="w-full rounded-xl border border-gray-200 bg-white p-4">
         <p className="text-[11px] font-semibold text-[#2E3093] uppercase tracking-wider mb-3">
           Payment vs Receipt by Department
         </p>
