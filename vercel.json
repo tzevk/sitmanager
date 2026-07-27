@@ -7,10 +7,6 @@
   "regions": ["bom1"],
   "crons": [
     {
-      "path": "/api/cron/legacy-inquiry-sync",
-      "schedule": "3-59/10 * * * *"
-    },
-    {
       "path": "/api/cron/meta-leads-refresh",
       "schedule": "*/2 * * * *"
     },
