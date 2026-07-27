@@ -289,6 +289,63 @@ export async function getAdmissionInquiryAssetSummary(inquiryId: number): Promis
   };
 }
 
+export interface AdmissionAssetDetail {
+  key: string;
+  isPhoto: boolean;
+  filename: string;
+  contentType: string | null;
+}
+
+/** List saved inquiry-scoped assets (photo + documents) with enough info to build view links. */
+export async function getAdmissionInquiryAssetDetails(inquiryId: number): Promise<AdmissionAssetDetail[]> {
+  if (!inquiryId) return [];
+  const pool = getPool();
+  await ensureInquiryDocManifestTable(pool);
+  const [rows] = await pool.query(
+    `SELECT Doc_Key, Filename, Content_Type, Is_Photo
+     FROM ${INQUIRY_DOC_MANIFEST_TABLE}
+     WHERE Inquiry_Id = ? AND File_Data IS NOT NULL
+     ORDER BY Is_Photo DESC, Doc_Key ASC`,
+    [inquiryId]
+  ) as [any[], any];
+  return (rows as any[]).map((row) => ({
+    key: String(row.Doc_Key),
+    isPhoto: Number(row.Is_Photo) === 1,
+    filename: String(row.Filename || ''),
+    contentType: row.Content_Type ? String(row.Content_Type) : null,
+  }));
+}
+
+export interface AdmissionInquiryDocumentBlob {
+  data: Buffer;
+  contentType: string;
+  filename: string;
+}
+
+/** Fetch a single saved inquiry-scoped asset's bytes, scoped strictly to that inquiry. */
+export async function getAdmissionInquiryDocumentBlob(
+  inquiryId: number,
+  docKey: string,
+): Promise<AdmissionInquiryDocumentBlob | null> {
+  if (!inquiryId || !docKey) return null;
+  const pool = getPool();
+  await ensureInquiryDocManifestTable(pool);
+  const [rows] = await pool.query(
+    `SELECT Filename, Content_Type, File_Data
+     FROM ${INQUIRY_DOC_MANIFEST_TABLE}
+     WHERE Inquiry_Id = ? AND Doc_Key = ? AND File_Data IS NOT NULL
+     LIMIT 1`,
+    [inquiryId, docKey]
+  ) as [any[], any];
+  const row = (rows as any[])[0];
+  if (!row?.File_Data) return null;
+  return {
+    data: Buffer.from(row.File_Data),
+    contentType: String(row.Content_Type || 'application/octet-stream'),
+    filename: String(row.Filename || 'file'),
+  };
+}
+
 /** Move inquiry-scoped uploads onto the real student once it exists (on grant). */
 export async function attachInquiryAssetsToStudent(inquiryId: number, studentId: number): Promise<void> {
   if (!inquiryId || !studentId) return;

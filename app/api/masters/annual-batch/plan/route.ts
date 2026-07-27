@@ -48,6 +48,19 @@ export async function GET(req: NextRequest) {
       params.push(`%${search}%`);
     }
 
+    // A course can have several plan rows (e.g. "<Course> - Fulltime" / "- Weekend" /
+    // "- Online") sharing one Course_Id. This condition scopes each row's live figures
+    // to the matching batch Category when the row's name encodes one — otherwise a
+    // Course_Id-only match makes every variant of the same course report the exact
+    // same (summed multiple times by the frontend's total) admitted/frequency count.
+    const CATEGORY_MATCH = (batchAlias: string) => `(
+      (LOWER(p.Training_Program_Name) NOT LIKE '%fulltime%' AND LOWER(p.Training_Program_Name) NOT LIKE '%full time%'
+       AND LOWER(p.Training_Program_Name) NOT LIKE '%weekend%' AND LOWER(p.Training_Program_Name) NOT LIKE '%online%')
+      OR ((LOWER(p.Training_Program_Name) LIKE '%fulltime%' OR LOWER(p.Training_Program_Name) LIKE '%full time%') AND LOWER(COALESCE(${batchAlias}.Category, '')) LIKE '%full%time%')
+      OR (LOWER(p.Training_Program_Name) LIKE '%weekend%' AND LOWER(COALESCE(${batchAlias}.Category, '')) LIKE '%weekend%')
+      OR (LOWER(p.Training_Program_Name) LIKE '%online%' AND LOWER(COALESCE(${batchAlias}.Category, '')) LIKE '%online%')
+    )`;
+
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT p.*,
         COALESCE(
@@ -55,23 +68,35 @@ export async function GET(req: NextRequest) {
            WHERE b.Course_Id = p.Course_Id AND b.INR_Basic > 0
            ORDER BY b.Batch_Id DESC LIMIT 1),
         0) AS Fees,
-        (SELECT COUNT(*)
-         FROM student_master sm
-         WHERE sm.Course_Id = p.Course_Id
-           AND sm.Admission_Dt IS NOT NULL
-           AND sm.Admission_Dt >= CONCAT(p.Plan_Year, '-04-01')
-           AND sm.Admission_Dt <  CONCAT(p.Plan_Year + 1, '-04-01')
-           AND (sm.IsDelete IS NULL OR sm.IsDelete = 0)
-        ) AS Students_Admitted_Live,
-        (SELECT COUNT(DISTINCT b2.Batch_Id)
-         FROM batch_mst b2
-         WHERE b2.Course_Id = p.Course_Id
-           AND b2.SDate IS NOT NULL
-           AND b2.SDate >= CONCAT(p.Plan_Year, '-04-01')
-           AND b2.SDate <  CONCAT(p.Plan_Year + 1, '-04-01')
-           AND (b2.IsDelete IS NULL OR b2.IsDelete = 0)
-           AND (b2.Cancel IS NULL OR b2.Cancel = 0)
-        ) AS Frequency_Conducted_Live
+        -- Real, category-scoped admitted-student count for completed/ongoing batches
+        -- this FY, via admission_master — NOT a raw student_master.Admission_Dt count
+        -- (which double/triple-counted the same admissions across every Fulltime/
+        -- Weekend/Online variant row of a course, and included future-dated batches).
+        COALESCE((
+          SELECT COUNT(DISTINCT am.Student_Id)
+          FROM admission_master am
+          JOIN batch_mst ab ON ab.Batch_Id = am.Batch_Id
+          WHERE ab.Course_Id = p.Course_Id
+            AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+            AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+            AND (ab.IsDelete IS NULL OR ab.IsDelete = 0)
+            AND (ab.Cancel IS NULL OR ab.Cancel = 0)
+            AND ab.SDate >= CONCAT(p.Plan_Year, '-04-01')
+            AND ab.SDate <  CONCAT(p.Plan_Year + 1, '-04-01')
+            AND ab.SDate <= CURDATE()
+            AND ${CATEGORY_MATCH('ab')}
+        ), 0) AS Students_Admitted_Live,
+        COALESCE((
+          SELECT COUNT(DISTINCT ab2.Batch_Id)
+          FROM batch_mst ab2
+          WHERE ab2.Course_Id = p.Course_Id
+            AND ab2.SDate IS NOT NULL
+            AND ab2.SDate >= CONCAT(p.Plan_Year, '-04-01')
+            AND ab2.SDate <  CONCAT(p.Plan_Year + 1, '-04-01')
+            AND (ab2.IsDelete IS NULL OR ab2.IsDelete = 0)
+            AND (ab2.Cancel IS NULL OR ab2.Cancel = 0)
+            AND ${CATEGORY_MATCH('ab2')}
+        ), 0) AS Frequency_Conducted_Live
        FROM annual_batch_plan p ${where} ORDER BY Training_Program_Name ASC`,
       params
     );

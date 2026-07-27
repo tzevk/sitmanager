@@ -52,6 +52,15 @@ const groupedSlots = documentSlots.reduce<Record<string, DocumentSlot[]>>((acc, 
   return acc;
 }, {});
 
+// Vercel serverless functions hard-cap the request body around 4.5 MB regardless of
+// route/runtime config — a multipart body over that limit never reaches the API route
+// at all and surfaces to the browser as a raw "Failed to fetch" network error, not a
+// handled JSON response. Keep individual files small and cap the combined total with
+// margin below that ceiling so submissions fail with a clear on-page message instead.
+const PHOTO_MAX_BYTES = 2 * 1024 * 1024;
+const DOCUMENT_MAX_BYTES = 2 * 1024 * 1024;
+const TOTAL_MAX_BYTES = 4 * 1024 * 1024;
+
 function fileSizeLabel(size: number): string {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
@@ -163,6 +172,10 @@ export default function StudentCapturePage() {
 
   const updateDocumentFile = (key: string, file: File | null) => {
     setError('');
+    if (file && file.size > DOCUMENT_MAX_BYTES) {
+      setError(`${file.name} is too large (${fileSizeLabel(file.size)}). Maximum ${fileSizeLabel(DOCUMENT_MAX_BYTES)} per document.`);
+      return;
+    }
     setDocuments((prev) => prev.map((doc) => (doc.key === key ? { ...doc, file } : doc)));
   };
 
@@ -189,6 +202,14 @@ export default function StudentCapturePage() {
       return;
     }
 
+    const totalBytes = photoFile.size + selectedDocs.reduce((sum, doc) => sum + (doc.file?.size || 0), 0);
+    if (totalBytes > TOTAL_MAX_BYTES) {
+      setError(
+        `Total upload size (${fileSizeLabel(totalBytes)}) exceeds the ${fileSizeLabel(TOTAL_MAX_BYTES)} limit. Remove a document or use smaller files, then try again.`
+      );
+      return;
+    }
+
     const body = new FormData();
     body.append('batchId', batchId);
     body.append('studentId', studentId);
@@ -210,7 +231,12 @@ export default function StudentCapturePage() {
       setSuccess(data?.message || 'Uploaded successfully.');
       resetUploads();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+      const isNetworkFailure = err instanceof TypeError;
+      setError(
+        isNetworkFailure
+          ? 'Upload failed to reach the server — this usually means the combined file size is too large. Reduce file sizes and try again.'
+          : err instanceof Error ? err.message : 'Upload failed'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -335,11 +361,20 @@ export default function StudentCapturePage() {
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
-                  onChange={(event) => setPhotoFile(event.target.files?.[0] || null)}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] || null;
+                    setError('');
+                    if (file && file.size > PHOTO_MAX_BYTES) {
+                      setError(`Photo is too large (${fileSizeLabel(file.size)}). Maximum ${fileSizeLabel(PHOTO_MAX_BYTES)}.`);
+                      event.target.value = '';
+                      return;
+                    }
+                    setPhotoFile(file);
+                  }}
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-[#2E3093]/10 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-[#2E3093]"
                   required
                 />
-                <p className="text-xs text-slate-500">Accepted formats: JPG, PNG, WebP. Maximum 5 MB.</p>
+                <p className="text-xs text-slate-500">Accepted formats: JPG, PNG, WebP. Maximum {fileSizeLabel(PHOTO_MAX_BYTES)}.</p>
                 {photoFile && (
                   <div className="flex items-center justify-between rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">
                     <span className="truncate">{photoFile.name} - {fileSizeLabel(photoFile.size)}</span>

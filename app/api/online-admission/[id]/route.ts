@@ -5,7 +5,7 @@ import { requirePermission } from '@/lib/api-auth';
 import { apiRateLimiter } from '@/lib/rate-limit';
 import { resolveInquiryTableName } from '@/lib/services/inquiry.service';
 import { syncOnlineAdmissionIntoCurrentDb, saveStructuredAdmissionData } from '@/lib/services/online-admission.service';
-import { getAdmissionInquiryAssetSummary, hasAdmissionUploads, saveAdmissionAssetsForInquiry, type AdmissionUploadBundle } from '@/lib/student-documents.server';
+import { getAdmissionInquiryAssetSummary, getAdmissionInquiryAssetDetails, hasAdmissionUploads, saveAdmissionAssetsForInquiry, type AdmissionUploadBundle } from '@/lib/student-documents.server';
 
 const ONLINE_ADMISSION_PAYLOAD_TABLE = 'online_admission_payload';
 
@@ -190,12 +190,28 @@ export async function GET(
       const payload = await getPayload(pool, inquiryId);
       const draftMeta = payload?.__draftProgress ?? null;
       const savedAssets = await getAdmissionInquiryAssetSummary(inquiryId);
+      // Additive: detailed list of saved assets so the client can render "View" links.
+      // Does not replace/alter `savedAssets` above, which the wizard already relies on
+      // for validation gating.
+      let savedAdmissionAssetsDetail: Array<{ key: string; isPhoto: boolean; filename: string; url: string }> = [];
+      try {
+        const details = await getAdmissionInquiryAssetDetails(inquiryId);
+        savedAdmissionAssetsDetail = details.map((d) => ({
+          key: d.key,
+          isPhoto: d.isPhoto,
+          filename: d.filename,
+          url: `/api/public/online-admission/${inquiryId}/document/${encodeURIComponent(d.key)}`,
+        }));
+      } catch (e) {
+        console.warn('[OnlineAdmission] getAdmissionInquiryAssetDetails failed:', e);
+      }
       return NextResponse.json({
         success: true,
         inquiryId,
         draft: payload,
         draftMeta,
         savedAssets,
+        savedAdmissionAssetsDetail,
       });
     }
 

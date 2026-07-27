@@ -162,6 +162,12 @@ async function fetchDashboardData(dept?: string) {
     CASE WHEN DATE(${BATCH_ACTUALDATE_EXPR}) >= '1901-01-01' THEN ${BATCH_ACTUALDATE_EXPR} END,
     ${BATCH_SDATE_EXPR}
   )`;
+  // Financial year runs Apr–Mar (matches the CBD Lead Funnel widget's FY convention);
+  // "this year" widgets must not use calendar-year Jan 1 as the boundary.
+  const FY_START_EXPR = `CASE WHEN MONTH(CURDATE()) >= 4
+    THEN DATE_FORMAT(CURDATE(), '%Y-04-01')
+    ELSE DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 YEAR), '%Y-04-01')
+  END`;
   const BATCH_DURATION_VALUE_EXPR = `CAST(COALESCE(NULLIF(REGEXP_SUBSTR(CAST(b.Duration AS CHAR), '[0-9]+'), ''), '1') AS UNSIGNED)`;
   const BATCH_DURATION_END_EXPR = `CASE
     WHEN ${BATCH_PENDING_START_EXPR} IS NULL THEN NULL
@@ -297,15 +303,29 @@ async function fetchDashboardData(dept?: string) {
             CURDATE()))
         ) AS target_frequency,
         (SELECT b2.Max_Students FROM batch_mst b2 WHERE b2.Course_Id = c.Course_Id AND b2.Max_Students IS NOT NULL AND b2.Max_Students != '' AND b2.Max_Students != '0' ORDER BY b2.Batch_Id DESC LIMIT 1) AS min_students_batch,
-        COALESCE(SUM(b.NoStudent), 0) AS students_admitted,
+        -- Real admitted-student count for this FY's completed/ongoing batches (batches
+        -- that have actually started), via admission_master — NOT batch_mst.NoStudent,
+        -- which is a manually-maintained column that's unpopulated for current batches.
+        COALESCE((
+          SELECT COUNT(DISTINCT am.Student_Id)
+          FROM admission_master am
+          JOIN batch_mst ab ON ab.Batch_Id = am.Batch_Id
+          WHERE ab.Course_Id = c.Course_Id
+            AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+            AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+            AND (ab.IsDelete IS NULL OR ab.IsDelete = 0)
+            AND (ab.Cancel IS NULL OR ab.Cancel = 0)
+            AND ${BATCH_SDATE_EXPR.replace(/\bb\./g, 'ab.')} >= ${FY_START_EXPR}
+            AND ${BATCH_SDATE_EXPR.replace(/\bb\./g, 'ab.')} <= CURDATE()
+        ), 0) AS students_admitted,
         COALESCE(
-          (SELECT SUM(sf.Total_Amt) FROM s_fees_mst sf WHERE sf.Course_Id = c.Course_Id AND (sf.IsDelete IS NULL OR sf.IsDelete = 0) AND sf.Date_Added >= DATE_FORMAT(CURDATE(), '%Y-01-01')),
+          (SELECT SUM(sf.Total_Amt) FROM s_fees_mst sf WHERE sf.Course_Id = c.Course_Id AND (sf.IsDelete IS NULL OR sf.IsDelete = 0) AND sf.Date_Added >= ${FY_START_EXPR}),
         0) AS fees_collected
       FROM course_mst c
       LEFT JOIN batch_mst b ON b.Course_Id = c.Course_Id
         AND (b.IsDelete IS NULL OR b.IsDelete = 0)
         AND (b.Cancel IS NULL OR b.Cancel = 0)
-        AND b.SDate >= DATE_FORMAT(CURDATE(), '%Y-01-01')
+        AND ${BATCH_SDATE_EXPR} >= ${FY_START_EXPR}
       WHERE (c.IsDelete IS NULL OR c.IsDelete = 0)
         AND COALESCE(NULLIF(TRIM(c.Course_Name), ''), '') <> ''
       GROUP BY c.Course_Id, c.Course_Name
@@ -356,9 +376,40 @@ async function fetchDashboardData(dept?: string) {
         ) THEN si.Inquiry_Id END) AS Confirmed_Admissions
       FROM batch_mst b
       LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
+      -- Inquiry↔batch matching, widened beyond a plain Batch_Code text match: an
+      -- inquiry whose linked student was actually admitted into this batch still
+      -- counts even if the inquiry's own Batch_Code drifted blank/stale after
+      -- conversion (a real, observed data pattern — e.g. a manually-recorded fee
+      -- payment/admission that never synced Batch_Code back onto the inquiry row).
+      -- Built as a UNION'd derived table (rather than an OR inside the JOIN's ON
+      -- clause) because MySQL cannot use indexes for an OR spanning two different
+      -- join strategies here — the naive correlated version took 100+ seconds.
+      -- Both branches are pre-filtered to just the next-3-months batches so this
+      -- derived table stays cheap regardless of total inquiry/admission volume.
+      LEFT JOIN (
+        SELECT si1.Inquiry_Id, b1.Batch_Id
+        FROM student_inquiry si1
+        JOIN batch_mst b1
+          ON LOWER(TRIM(si1.Batch_Code)) = LOWER(TRIM(b1.Batch_code))
+         AND ${BATCH_SDATE_EXPR.replace(/\bb\./g, 'b1.')} >= CURDATE()
+         AND ${BATCH_SDATE_EXPR.replace(/\bb\./g, 'b1.')} <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
+         AND (b1.IsDelete IS NULL OR b1.IsDelete = 0)
+        WHERE (si1.IsDelete = 0 OR si1.IsDelete IS NULL)
+        UNION
+        SELECT si2.Inquiry_Id, am2.Batch_Id
+        FROM admission_master am2
+        JOIN batch_mst b2
+          ON b2.Batch_Id = am2.Batch_Id
+         AND ${BATCH_SDATE_EXPR.replace(/\bb\./g, 'b2.')} >= CURDATE()
+         AND ${BATCH_SDATE_EXPR.replace(/\bb\./g, 'b2.')} <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
+         AND (b2.IsDelete IS NULL OR b2.IsDelete = 0)
+        JOIN student_inquiry si2 ON si2.Student_Id = am2.Student_Id
+        WHERE (si2.IsDelete = 0 OR si2.IsDelete IS NULL)
+          AND (am2.IsDelete = 0 OR am2.IsDelete IS NULL)
+          AND LOWER(TRIM(CAST(COALESCE(am2.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+      ) im ON im.Batch_Id = b.Batch_Id
       LEFT JOIN student_inquiry si
-        ON LOWER(TRIM(si.Batch_Code)) = LOWER(TRIM(b.Batch_code))
-       AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
+        ON si.Inquiry_Id = im.Inquiry_Id AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
       LEFT JOIN awt_inquirydiscussion d_inq
         ON d_inq.deleted = 0 AND d_inq.Inquiry_id = si.Inquiry_Id
       LEFT JOIN awt_inquirydiscussion d_stu

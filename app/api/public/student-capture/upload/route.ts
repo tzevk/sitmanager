@@ -6,7 +6,12 @@ import { ensureDocumentBlobColumns, saveStudentPhotoBlob } from '@/lib/student-d
 
 export const runtime = 'nodejs';
 
-const MAX_BYTES = 5 * 1024 * 1024;
+// Vercel serverless functions hard-cap the request body around 4.5 MB regardless of
+// runtime config — anything over that never reaches this handler at all (the browser
+// sees a raw network failure, not a JSON response). Keep these limits in sync with the
+// client-side ones in app/student-capture/page.tsx.
+const MAX_BYTES = 2 * 1024 * 1024;
+const TOTAL_MAX_BYTES = 4 * 1024 * 1024;
 const PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const DOCUMENT_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 const VISIBLE_BATCH_SQL = `
@@ -90,7 +95,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unsupported photo format. Use JPG, PNG, or WebP.' }, { status: 400 });
     }
     if (photo.size > MAX_BYTES) {
-      return NextResponse.json({ success: false, error: 'Photo is too large. Maximum size is 5 MB.' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Photo is too large. Maximum size is 2 MB.' }, { status: 400 });
     }
     if (documents.length === 0) {
       return NextResponse.json({ success: false, error: 'Upload at least one document.' }, { status: 400 });
@@ -101,8 +106,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: 'Unsupported document format. Use PDF, JPG, PNG, or WebP.' }, { status: 400 });
       }
       if (document.size > MAX_BYTES) {
-        return NextResponse.json({ success: false, error: 'Each document must be 5 MB or smaller.' }, { status: 400 });
+        return NextResponse.json({ success: false, error: 'Each document must be 2 MB or smaller.' }, { status: 400 });
       }
+    }
+
+    const totalBytes = photo.size + documents.reduce((sum, doc) => sum + doc.size, 0);
+    if (totalBytes > TOTAL_MAX_BYTES) {
+      return NextResponse.json(
+        { success: false, error: 'Combined upload size is too large. Remove a document or use smaller files.' },
+        { status: 400 }
+      );
     }
 
     const photoFilename = `student_${studentId}_${Date.now()}${extensionFor(photo, '.jpg')}`;

@@ -59,6 +59,15 @@ type SavedAdmissionAssets = {
   count?: number;
 };
 
+// Additive: detail entries for already-uploaded assets, used only to render
+// "View" links next to already-uploaded items. Does not affect validation.
+type SavedAdmissionAssetDetail = {
+  key: string;
+  isPhoto: boolean;
+  filename?: string;
+  url: string;
+};
+
 const NEFT_BANK_DETAILS = {
   bank: 'Axis Bank Ltd.',
   address: 'City Survey No. 841 to 846, "Florence" Florence CHS. LTD. Vakola, Mumbai - 400 055',
@@ -132,11 +141,38 @@ export default function PublicAdmissionFormPage() {
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [manualSaving, setManualSaving] = useState(false);
   const [savedAdmissionAssets, setSavedAdmissionAssets] = useState<SavedAdmissionAssets>({ photo: false, documents: false });
+  // Additive, isolated from the above — only used to render "View" links for
+  // already-uploaded files. Fetched independently so existing draft-restore /
+  // autosave logic is left untouched.
+  const [savedAdmissionAssetsDetail, setSavedAdmissionAssetsDetail] = useState<SavedAdmissionAssetDetail[]>([]);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Set once we load an already-submitted payload — viewing it must not autosave
   // (which would strip submittedAt and revert the application to a draft).
   const submittedLockRef = useRef(false);
   const draftKey = `sit_admission_draft_${studentId}`;
+
+  // Additive & isolated: fetches the detailed list of already-uploaded assets
+  // (for rendering "View" links only) whenever the saved-asset counts change.
+  // Deliberately kept separate from restoreDraft/persistDraftNow so their
+  // existing logic is not touched.
+  useEffect(() => {
+    if (!studentId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/online-admission/${encodeURIComponent(studentId)}?draft=1`);
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (cancelled || !data) return;
+        if (Array.isArray(data.savedAdmissionAssetsDetail)) {
+          setSavedAdmissionAssetsDetail(data.savedAdmissionAssetsDetail);
+        }
+      } catch {
+        // Non-critical — the "View" links simply won't appear.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [studentId, savedAdmissionAssets.count]);
 
   useEffect(() => {
     if (!isPreviewTermsMode) return;
@@ -1104,6 +1140,15 @@ export default function PublicAdmissionFormPage() {
 
   const hasRequiredPhoto = () => Boolean(formData.photoFile) || savedAdmissionAssets.photo;
   const hasRequiredAcademicDocument = () => hasSelectedAcademicDocument() || savedAdmissionAssets.documents;
+
+  // Additive helper: look up a previously-saved asset's "View" URL by its
+  // Doc_Key (see buildUploads() in app/api/online-admission/route.ts for the
+  // key naming). Returns undefined if nothing was saved yet — callers should
+  // simply skip rendering the View link in that case.
+  const savedAssetUrl = (key: string): string | undefined =>
+    savedAdmissionAssetsDetail.find((d) => d.key === key)?.url;
+  const savedPhotoUrl = (): string | undefined =>
+    savedAdmissionAssetsDetail.find((d) => d.isPhoto)?.url;
 
   const handleSameAddress = (checked: boolean) => {
     handleChange('sameAsPresent', checked);
@@ -2084,6 +2129,18 @@ export default function PublicAdmissionFormPage() {
                                     <i className="fas fa-times text-xs"></i>
                                   </button>
                                 </div>
+                              ) : savedAdmissionAssets.photo && savedPhotoUrl() ? (
+                                <a
+                                  href={savedPhotoUrl()}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="relative w-32 h-40 border-2 border-green-400 rounded-lg overflow-hidden shadow-md flex flex-col items-center justify-center bg-white hover:border-green-500 transition-all"
+                                  title="View previously uploaded photo"
+                                >
+                                  <i className="fas fa-check-circle text-3xl text-green-500 mb-2"></i>
+                                  <span className="text-xs text-green-600 font-semibold">Uploaded</span>
+                                  <span className="text-[11px] text-[#2A6BB5] underline mt-1">View</span>
+                                </a>
                               ) : (
                                 <div className="w-32 h-40 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center bg-white">
                                   <i className="fas fa-user text-4xl text-gray-300 mb-2"></i>
@@ -2104,6 +2161,13 @@ export default function PublicAdmissionFormPage() {
                                 <span className="text-xs text-green-600 flex items-center gap-1 mt-2">
                                   <i className="fas fa-check-circle"></i>
                                   {formData.photoFile.name}
+                                </span>
+                              )}
+                              {!formData.photoFile && savedAdmissionAssets.photo && savedPhotoUrl() && (
+                                <span className="text-xs text-green-600 flex items-center gap-1 mt-2">
+                                  <i className="fas fa-check-circle"></i>
+                                  A photo is already on file.
+                                  <a href={savedPhotoUrl()} target="_blank" rel="noopener noreferrer" className="text-[#2A6BB5] underline font-semibold">View</a>
                                 </span>
                               )}
                               <div className="mt-3 bg-white border border-blue-200 rounded-lg p-3">
@@ -2250,6 +2314,13 @@ export default function PublicAdmissionFormPage() {
                                     {formData.ssc_marksheetFile.name}
                                   </span>
                                 )}
+                                {!formData.ssc_marksheetFile && savedAssetUrl('ssc_marksheet') && (
+                                  <span className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                                    <i className="fas fa-check-circle"></i>
+                                    A marksheet is already on file.
+                                    <a href={savedAssetUrl('ssc_marksheet')} target="_blank" rel="noopener noreferrer" className="text-[#2A6BB5] underline font-semibold">View</a>
+                                  </span>
+                                )}
                                 <p className="text-xs text-gray-500 mt-1">PDF, JPG, or PNG (max 5MB)</p>
                               </div>
                             </div>
@@ -2374,6 +2445,13 @@ export default function PublicAdmissionFormPage() {
                                     {formData.hsc_marksheetFile.name}
                                   </span>
                                 )}
+                                {!formData.hsc_marksheetFile && savedAssetUrl('hsc_marksheet') && (
+                                  <span className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                                    <i className="fas fa-check-circle"></i>
+                                    A marksheet is already on file.
+                                    <a href={savedAssetUrl('hsc_marksheet')} target="_blank" rel="noopener noreferrer" className="text-[#2A6BB5] underline font-semibold">View</a>
+                                  </span>
+                                )}
                                 <p className="text-xs text-gray-500 mt-1">PDF, JPG, or PNG (max 5MB)</p>
                               </div>
                             </div>
@@ -2494,6 +2572,13 @@ export default function PublicAdmissionFormPage() {
                                   <span className="text-xs text-green-600 flex items-center gap-1 mt-1">
                                     <i className="fas fa-check-circle"></i>
                                     {formData.diploma_marksheetFile.name}
+                                  </span>
+                                )}
+                                {!formData.diploma_marksheetFile && savedAssetUrl('diploma_marksheet') && (
+                                  <span className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                                    <i className="fas fa-check-circle"></i>
+                                    A marksheet is already on file.
+                                    <a href={savedAssetUrl('diploma_marksheet')} target="_blank" rel="noopener noreferrer" className="text-[#2A6BB5] underline font-semibold">View</a>
                                   </span>
                                 )}
                                 <p className="text-xs text-gray-500 mt-1">PDF, JPG, or PNG (max 5MB)</p>
@@ -2618,6 +2703,13 @@ export default function PublicAdmissionFormPage() {
                                     {formData.grad_marksheetFile.name}
                                   </span>
                                 )}
+                                {!formData.grad_marksheetFile && savedAssetUrl('graduation_marksheet') && (
+                                  <span className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                                    <i className="fas fa-check-circle"></i>
+                                    A marksheet is already on file.
+                                    <a href={savedAssetUrl('graduation_marksheet')} target="_blank" rel="noopener noreferrer" className="text-[#2A6BB5] underline font-semibold">View</a>
+                                  </span>
+                                )}
                                 <p className="text-xs text-gray-500 mt-1">PDF, JPG, or PNG (max 5MB)</p>
                               </div>
                             </div>
@@ -2738,6 +2830,13 @@ export default function PublicAdmissionFormPage() {
                                   <span className="text-xs text-green-600 flex items-center gap-1 mt-1">
                                     <i className="fas fa-check-circle"></i>
                                     {formData.postgrad_marksheetFile.name}
+                                  </span>
+                                )}
+                                {!formData.postgrad_marksheetFile && savedAssetUrl('postgraduation_marksheet') && (
+                                  <span className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                                    <i className="fas fa-check-circle"></i>
+                                    A marksheet is already on file.
+                                    <a href={savedAssetUrl('postgraduation_marksheet')} target="_blank" rel="noopener noreferrer" className="text-[#2A6BB5] underline font-semibold">View</a>
                                   </span>
                                 )}
                                 <p className="text-xs text-gray-500 mt-1">PDF, JPG, or PNG (max 5MB)</p>
