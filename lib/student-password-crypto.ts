@@ -14,15 +14,8 @@ function getKey(): Buffer {
   return key;
 }
 
-// Validate the key at module load time so misconfiguration fails fast on startup
-// (same defensive pattern used for JWT_SECRET elsewhere in this codebase).
-const KEY = getKey();
-
-/**
- * Encrypts a plaintext password with AES-256-GCM.
- * Returns iv(12) || authTag(16) || ciphertext, all concatenated into a single Buffer.
- */
 export function encryptPassword(plain: string): Buffer {
+  const KEY = getKey();
   const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv(ALGO, KEY, iv);
   const ciphertext = Buffer.concat([cipher.update(String(plain), 'utf8'), cipher.final()]);
@@ -35,6 +28,7 @@ export function encryptPassword(plain: string): Buffer {
  * Throws a clear error on failure (bad key, corrupt/truncated data, tampered ciphertext).
  */
 export function decryptPassword(buf: Buffer): string {
+  const KEY = getKey();
   if (!Buffer.isBuffer(buf) || buf.length < IV_LENGTH + AUTH_TAG_LENGTH) {
     throw new Error('Invalid encrypted password data: too short');
   }
