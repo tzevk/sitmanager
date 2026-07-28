@@ -6,6 +6,8 @@ import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 import { toBatchNumber } from '@/lib/batch-display';
 
+const STATUS_ONLY_SAVE_LABELS = ['new', 'irrelevant', 'contacted (not interested)'];
+
 interface FormOptions {
   courses: { id: number; name: string }[];
   categories: string[];
@@ -246,14 +248,20 @@ export default function AddInquiryPage() {
 
   const firstDiscussionTime = discussions.length > 0 ? discussions[0]?.created_date : null;
 
+  // For these statuses the inquiry is effectively closed out — only the status itself
+  // needs to be saved, so Name/Mode/How They Know/Batch are not required.
+  const isStatusOnlySave = STATUS_ONLY_SAVE_LABELS.includes(
+    opts?.statuses.find(s => s.id === statusId)?.label?.toLowerCase() ?? ''
+  );
+
   const handleSave = async () => {
-    if (!name.trim()) { setError('Name is required'); return; }
     if (!Number.isInteger(statusId) || statusId <= 0) { setError('Status is required'); return; }
-    if (!inquiryMode.trim()) { setError('Mode is required'); return; }
-    if (!inquiryType.trim()) { setError('How They Know About SIT is required'); return; }
-    const statusLabel = opts?.statuses.find(s => s.id === statusId)?.label?.toLowerCase() ?? '';
-    const batchOptionalForStatus = statusLabel === 'new' || statusLabel === 'irrelevant';
-    if (!batchOptionalForStatus && !batchCode.trim()) { setError('Batch Code is required'); return; }
+    if (!isStatusOnlySave) {
+      if (!name.trim()) { setError('Name is required'); return; }
+      if (!inquiryMode.trim()) { setError('Mode is required'); return; }
+      if (!inquiryType.trim()) { setError('How They Know About SIT is required'); return; }
+      if (!batchCode.trim()) { setError('Batch Code is required'); return; }
+    }
     setError(''); setSaving(true);
     try {
       const res = await fetch('/api/inquiry', {
@@ -548,8 +556,11 @@ export default function AddInquiryPage() {
               </div>
             )}
             <div>
-              <label className={lbl}>Mode <span className="text-red-400 normal-case">*</span></label>
-              <select value={inquiryMode} onChange={e => { setInquiryMode(e.target.value); setContactLogged(false); }} className={ctrl} required>
+              <label className={lbl}>
+                Mode
+                {!isStatusOnlySave && <span className="text-red-400 normal-case"> *</span>}
+              </label>
+              <select value={inquiryMode} onChange={e => { setInquiryMode(e.target.value); setContactLogged(false); }} className={ctrl}>
                 <option value="">— Select —</option>
                 {opts?.inquiryModes?.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
@@ -564,8 +575,11 @@ export default function AddInquiryPage() {
               </select>
             </div>
             <div className={editId ? 'col-span-1' : 'col-span-3'}>
-              <label className={lbl}>How They Know About SIT <span className="text-red-400 normal-case">*</span></label>
-              <select value={inquiryType} onChange={e => setInquiryType(e.target.value)} className={ctrl} required>
+              <label className={lbl}>
+                How They Know About SIT
+                {!isStatusOnlySave && <span className="text-red-400 normal-case"> *</span>}
+              </label>
+              <select value={inquiryType} onChange={e => setInquiryType(e.target.value)} className={ctrl}>
                 <option value="">— Select —</option>
                 {opts?.inquiryTypes?.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
@@ -594,9 +608,7 @@ export default function AddInquiryPage() {
             <div className="col-span-2">
               <label className={lbl}>
                 Batch
-                {!['new', 'irrelevant'].includes(opts?.statuses.find(s => s.id === statusId)?.label?.toLowerCase() ?? '') && (
-                  <span className="text-red-400 normal-case"> *</span>
-                )}
+                {!isStatusOnlySave && <span className="text-red-400 normal-case"> *</span>}
               </label>
               <select value={batchCode} onChange={e => setBatchCode(e.target.value)} className={ctrl}>
                 <option value="">— Select Batch —</option>
