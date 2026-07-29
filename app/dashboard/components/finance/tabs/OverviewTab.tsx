@@ -435,7 +435,7 @@ export default function OverviewTab() {
             <li>Profit Actual = Turnover Actual − Expense Actual</li>
             <li>Profit Target = Turnover Target × profit% (CBD 30%, Deputation 15%, Corporate Training 40%, Accent Projects 20%)</li>
             <li>Profit % Actual = Profit Actual ÷ Turnover Actual</li>
-            <li>Profit % Target = Profit Target ÷ Turnover Target</li>
+            <li>Profit % Target = Hardcoded Profit Percentage (CBD 30%, Deputation 15%, Corporate Training 40%, Accent Projects 20%)</li>
           </ul>
         </div>
       </div>
