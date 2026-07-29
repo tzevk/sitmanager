@@ -425,6 +425,19 @@ export default function OverviewTab() {
             </tbody>
           </table>
         </div>
+        <div className="w-full lg:w-1/2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] leading-relaxed text-gray-500">
+          <span className="font-semibold text-gray-600">How these numbers are calculated:</span>
+          <ul className="mt-1 list-disc pl-4 space-y-0.5">
+            <li>Turnover Actual = sum of receipts posted for the department in the selected period</li>
+            <li>Turnover Target = hardcoded income target (CBD ₹6,74,60,000/yr, Corporate Training ₹3,00,00,000/yr, Deputation ₹2,50,00,000/yr, Accent Projects ₹10,00,00,000/yr; ÷12 for monthly view)</li>
+            <li>Expense Actual = sum of payments posted for the department in the selected period</li>
+            <li>Expense Target = Turnover Actual × expense% (CBD 70%, Deputation 80%, Corporate Training 50%, Accent Projects 80%)</li>
+            <li>Profit Actual = Turnover Actual − Expense Actual</li>
+            <li>Profit Target = Turnover Target × profit% (CBD 30%, Deputation 15%, Corporate Training 40%, Accent Projects 20%)</li>
+            <li>Profit % Actual = Profit Actual ÷ Turnover Actual</li>
+            <li>Profit % Target = Profit Target ÷ Turnover Target</li>
+          </ul>
+        </div>
       </div>
 
       {/* Loans */}
