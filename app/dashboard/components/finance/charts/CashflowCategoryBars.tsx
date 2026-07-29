@@ -33,6 +33,13 @@ function fmtCompact(v: number): string {
   return v.toLocaleString('en-IN');
 }
 
+/** Same compact formatting as fmtCompact, but signed — for labels (e.g. Profit) that can be negative. */
+function fmtCompactSigned(v: number): string {
+  if (!v) return '';
+  const sign = v < 0 ? '-' : '';
+  return sign + fmtCompact(Math.abs(v));
+}
+
 interface DeptRow extends Row { profitPct: number | null }
 
 function DeptTick(props: {
@@ -195,7 +202,7 @@ export default function CashflowCategoryBars({ rows, view = 'all' }: { rows: Cas
             </span>
           </p>
           <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={summaryData} barSize={56}>
+            <BarChart data={summaryData} barSize={56} barCategoryGap="10%">
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
               <XAxis dataKey="name" tick={<CustomTick />} height={42} />
               <YAxis fontSize={10} tickFormatter={(v: number) => v >= 100000 ? `${(v / 100000).toFixed(1)}L` : String(v)} />
@@ -204,6 +211,7 @@ export default function CashflowCategoryBars({ rows, view = 'all' }: { rows: Cas
                 {summaryData.map((entry) => (
                   <Cell key={entry.name} fill={SUMMARY_COLORS[entry.name] ?? '#6b7280'} />
                 ))}
+                <LabelList dataKey="value" position="top" formatter={(v: unknown) => fmtCompactSigned(Number(v) || 0)} fontSize={10} fontWeight={700} fill="#374151" />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
