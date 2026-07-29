@@ -16,6 +16,13 @@ const TARGET_EXPENSE_PCT: Record<string, number> = {
   accentProjects: 0.80,
 };
 
+const TARGET_PROFIT_PCT: Record<string, number> = {
+  cbd: 0.30,
+  deputation: 0.15,
+  corporate: 0.40,
+  accentProjects: 0.20,
+};
+
 // Hardcoded CBD income targets
 const CBD_MONTHLY_INCOME = 5_621_667;   // ₹56,21,667
 const CBD_YEARLY_INCOME  = 67_460_000;  // ₹6,74,60,000
@@ -238,7 +245,8 @@ export default function OverviewTab() {
       const targetPct = TARGET_EXPENSE_PCT[item.key];
       const expenseTarget = targetPct != null ? item.turnoverActual * targetPct : item.expenseTarget;
       const profitActual = item.turnoverActual - item.expenseActual;
-      const profitTarget = item.turnoverTarget - expenseTarget;
+      const profitTargetPct = TARGET_PROFIT_PCT[item.key];
+      const profitTarget = profitTargetPct != null ? item.turnoverTarget * profitTargetPct : item.turnoverTarget - expenseTarget;
       const profitPctActual = item.turnoverActual > 0 ? (profitActual / item.turnoverActual) * 100 : null;
       const profitPctTarget = item.turnoverTarget > 0 ? (profitTarget / item.turnoverTarget) * 100 : null;
       return {
