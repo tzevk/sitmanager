@@ -2,10 +2,10 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useFinanceResource } from '../shared/useFinanceResource';
-import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, TotalRow, thCls, tdCls, tdNum, inpCls, lblCls, trCls, PctBar } from '../shared/primitives';
-import { fmt, pct, monthLabel, parseMonth, fmtDate } from '../shared/format';
+import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, SectionTitle, thCls, tdCls, tdNum, inpCls, lblCls, trCls } from '../shared/primitives';
+import { fmt, monthLabel, parseMonth, fmtDate, isCountableCashflow, monthsInFinancialYear, financialYearLabel } from '../shared/format';
 import type { MonthlyRow, CashflowTxn, PendingInvoice, InvoiceStatus } from '../shared/types';
-import { targetAttainmentTrend } from '../shared/predictions';
+import { DEPT_TURNOVER_TARGETS, TARGET_EXPENSE_PCT, TARGET_PROFIT_PCT } from '../shared/targets';
 
 const INVOICE_STATUSES: InvoiceStatus[] = ['Pending', 'Paid', 'Overdue'];
 
@@ -125,142 +125,163 @@ export function PendingInvoicesSection({ department = 'Projects' }: { department
   );
 }
 
-interface Props { apiPath: string; title: string; cashflowDepartment: string }
+interface Props { apiPath: string; title: string; cashflowDepartment: string; deptKey: 'deputation' | 'accentProjects' }
 
 /** Shared base for Accent Deputation + Accent Projects (same shape, different endpoint). */
-export default function MonthlyTab({ apiPath, title, cashflowDepartment }: Props) {
+export default function MonthlyTab({ apiPath, title, cashflowDepartment, deptKey }: Props) {
+  const now = new Date();
+  const currentYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  const [year, setYear] = useState(currentYear);
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+
   const data = useFinanceResource<MonthlyRow>(apiPath);
   const cashflow = useFinanceResource<CashflowTxn>('/api/finance/cashflow');
+
+  /** This department's real turnover (receipts) and expense (payments) per month, from cashflow. */
+  const cfByMonth = useMemo(() => {
+    const turnover = new Map<string, number>();
+    const expense = new Map<string, number>();
+    for (const txn of cashflow.rows) {
+      if ((txn.department ?? '').toUpperCase() !== cashflowDepartment.toUpperCase()) continue;
+      if (!txn.date || !isCountableCashflow(txn)) continue;
+      const m = txn.date.substring(0, 7);
+      if (txn.type === 'Receipt') turnover.set(m, (turnover.get(m) || 0) + Number(txn.receipt || 0));
+      if (txn.type === 'Payment') expense.set(m, (expense.get(m) || 0) + Number(txn.payment || 0));
+    }
+    return { turnover, expense };
+  }, [cashflow.rows, cashflowDepartment]);
+
+  const monthlyTargetOverrides = useMemo(() => {
+    const map = new Map<string, MonthlyRow>();
+    for (const r of data.rows) map.set(parseMonth(r.month), r);
+    return map;
+  }, [data.rows]);
+
+  // Every month of the financial year, shown at once — not one row per
+  // manual entry, so a month with no manual override still shows real
+  // cashflow-derived actuals instead of disappearing.
+  const monthlyBreakdown = useMemo(() => {
+    return monthsInFinancialYear(year).map(m => {
+      const turnoverActual = cfByMonth.turnover.get(m) || 0;
+      const expenseActual  = cfByMonth.expense.get(m) || 0;
+      const override = monthlyTargetOverrides.get(m);
+      const turnoverTarget = DEPT_TURNOVER_TARGETS[deptKey].monthly;
+      const expenseTarget = override ? Number(override.target_cost || 0) : turnoverActual * TARGET_EXPENSE_PCT[deptKey];
+      const profitActual = turnoverActual - expenseActual;
+      const profitTarget = turnoverTarget * TARGET_PROFIT_PCT[deptKey];
+      return {
+        month: m,
+        turnoverActual, turnoverTarget,
+        expenseActual, expenseTarget,
+        profitActual, profitTarget,
+        profitPctActual: turnoverActual > 0 ? (profitActual / turnoverActual) * 100 : null,
+        profitPctTarget: turnoverTarget > 0 ? (profitTarget / turnoverTarget) * 100 : null,
+        override,
+      };
+    });
+  }, [year, cfByMonth, monthlyTargetOverrides, deptKey]);
 
   const [modal, setModal] = useState<{ open: boolean; editing: MonthlyRow | null }>({ open: false, editing: null });
   const [form, setForm]   = useState({ month: '', target_cost: '' });
   const [saving, setSaving] = useState(false);
 
-  /** Sum of cashflow payments for this department per month (YYYY-MM). */
-  const cashflowActualByMonth = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const txn of cashflow.rows) {
-      if ((txn.department ?? '').toUpperCase() !== cashflowDepartment.toUpperCase()) continue;
-      if (txn.type !== 'Payment') continue;
-      if (!txn.date) continue;
-      const m = txn.date.substring(0, 7);
-      map.set(m, (map.get(m) || 0) + Number(txn.payment || 0));
-    }
-    return map;
-  }, [cashflow.rows, cashflowDepartment]);
+  const openSetExpenseTarget = (month: string, override?: MonthlyRow) => {
+    setForm({ month, target_cost: override ? String(override.target_cost ?? 0) : '' });
+    setModal({ open: true, editing: override ?? null });
+  };
 
-  const openAdd = useCallback(() => {
-    setForm({ month: '', target_cost: '' });
-    setModal({ open: true, editing: null });
-  }, []);
-  const openEdit = useCallback((r: MonthlyRow) => {
-    setForm({
-      month: parseMonth(r.month),
-      target_cost: String(r.target_cost),
-    });
-    setModal({ open: true, editing: r });
-  }, []);
-  const save = useCallback(async () => {
+  const save = async () => {
     setSaving(true);
     try {
-      await data.save({
-        month: form.month,
-        target_cost: Number(form.target_cost),
-      } as Partial<MonthlyRow>, modal.editing);
+      if (!form.target_cost.trim()) {
+        if (modal.editing) await data.remove(modal.editing.id);
+      } else {
+        await data.save(
+          { month: form.month.trim(), target_cost: Number(form.target_cost) } as Partial<MonthlyRow>,
+          modal.editing,
+        );
+      }
       setModal({ open: false, editing: null });
     } catch { /* toast */ }
     setSaving(false);
-  }, [data, form, modal.editing]);
-
-  const sortedRows = useMemo(() => {
-    return [...data.rows].sort((a, b) => parseMonth(b.month).localeCompare(parseMonth(a.month)));
-  }, [data.rows]);
-
-  const totals = useMemo(() => ({
-    actual: sortedRows.reduce((s, r) => s + (cashflowActualByMonth.get(parseMonth(r.month)) || 0), 0),
-    target: sortedRows.reduce((s, r) => s + Number(r.target_cost || 0), 0),
-  }), [sortedRows, cashflowActualByMonth]);
-
-  const attainmentTrend = useMemo(() =>
-    targetAttainmentTrend(
-      [...sortedRows]
-        .sort((a, b) => parseMonth(a.month).localeCompare(parseMonth(b.month)))
-        .map(r => ({ actual: cashflowActualByMonth.get(parseMonth(r.month)) || 0, target: Number(r.target_cost) }))
-    ),
-    [sortedRows, cashflowActualByMonth]
-  );
-
-  const trendColor = attainmentTrend?.direction === 'improving' ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                   : attainmentTrend?.direction === 'declining'  ? 'text-red-600 bg-red-50 border-red-200'
-                   : 'text-amber-700 bg-amber-50 border-amber-200';
-  const trendIcon  = attainmentTrend?.direction === 'improving' ? '↑' : attainmentTrend?.direction === 'declining' ? '↓' : '→';
+  };
 
   return (
     <div className="space-y-4">
-      <TableHeader title={title} onAdd={openAdd} />
-
-      {attainmentTrend && (
-        <div className={`flex flex-wrap items-center gap-4 rounded-xl border px-4 py-3 text-xs ${trendColor}`}>
-          <span className="flex items-center gap-1.5 font-semibold">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            AI Trend Insight
-          </span>
-          <span>Latest: <strong>{attainmentTrend.latestPct.toFixed(1)}%</strong></span>
-          <span>Avg: <strong>{attainmentTrend.avgPct.toFixed(1)}%</strong></span>
-          <span>Trend: <strong>{trendIcon} {attainmentTrend.direction}</strong> ({attainmentTrend.slopePerPeriod > 0 ? '+' : ''}{attainmentTrend.slopePerPeriod.toFixed(1)}pp/mo)</span>
-          <span>Next month forecast: <strong>{attainmentTrend.nextPeriodForecast.toFixed(1)}%</strong></span>
-        </div>
-      )}
+      <div className="flex items-center justify-between mb-2">
+        <SectionTitle>{`${title} (${financialYearLabel(year)})`}</SectionTitle>
+        <select
+          value={year}
+          onChange={e => setYear(Number(e.target.value))}
+          className="text-xs font-semibold rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093]"
+        >
+          {years.map(y => <option key={y} value={y}>{financialYearLabel(y)}</option>)}
+        </select>
+      </div>
       <div className="overflow-x-auto rounded-xl border border-gray-200">
         <table className="w-full border-separate border-spacing-0">
-          <thead><tr className="bg-[#2E3093]">
-            <th className={thCls}>Month</th>
-            <th className={`${thCls} text-center`}>Actual Cost (₹)</th>
-            <th className={`${thCls} text-center`}>Targeted Cost (₹)</th>
-            <th className={`${thCls} text-center`}>%age</th>
-            <th className={`${thCls} text-center`}>Actions</th>
-          </tr></thead>
+          <thead>
+            <tr className="bg-[#2E3093]">
+              <th rowSpan={2} className={`${thCls} !text-center`}>Month</th>
+              <th colSpan={2} className={`${thCls} !text-center`}>Turnover (₹)</th>
+              <th colSpan={2} className={`${thCls} !text-center`}>Expense (₹)</th>
+              <th colSpan={2} className={`${thCls} !text-center`}>Profit (₹)</th>
+              <th colSpan={2} className={`${thCls} !text-center`}>Profit %</th>
+              <th rowSpan={2} className={`${thCls} !text-center`}>Actions</th>
+            </tr>
+            <tr className="bg-[#2E3093]">
+              <th className={`${thCls} !text-center`}>Actual</th>
+              <th className={`${thCls} !text-center`}>Target</th>
+              <th className={`${thCls} !text-center`}>Actual</th>
+              <th className={`${thCls} !text-center`}>Target</th>
+              <th className={`${thCls} !text-center`}>Actual</th>
+              <th className={`${thCls} !text-center`}>Target</th>
+              <th className={`${thCls} !text-center`}>Actual</th>
+              <th className={`${thCls} !text-center`}>Target</th>
+            </tr>
+          </thead>
           <tbody>
-            {data.loading ? <TableSkeleton cols={5} /> :
-             sortedRows.length === 0 ? <EmptyRow cols={5} /> :
-             sortedRows.map((r, i) => {
-              const actualCost = cashflowActualByMonth.get(parseMonth(r.month)) || 0;
-              return (
-                <tr key={r.id} className={trCls(i)}>
-                  <td className={tdCls}>{monthLabel(parseMonth(r.month))}</td>
-                  <td className={tdNum}>{fmt(actualCost)}</td>
-                  <td className={tdNum}>{fmt(r.target_cost)}</td>
-                  <td className={tdNum}><PctBar value={actualCost} denominator={r.target_cost} /></td>
-                  <RowActions onEdit={() => openEdit(r)} onDelete={() => data.remove(r.id)} />
-                </tr>
-              );
-            })}
-            {sortedRows.length > 0 && (
-              <TotalRow>
-                <td className="px-3 py-2 text-xs text-[#2E3093]">Total</td>
-                <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{fmt(totals.actual)}</td>
-                <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{fmt(totals.target)}</td>
-                <td className="px-3 py-2 text-xs text-center text-[#2E3093]">{pct(totals.actual, totals.target)}</td>
-                <td />
-              </TotalRow>
-            )}
+            {data.loading || cashflow.loading ? <TableSkeleton cols={10} /> :
+             monthlyBreakdown.map((r, i) => (
+               <tr key={r.month} className={trCls(i)}>
+                 <td className={tdCls}>{monthLabel(parseMonth(r.month))}</td>
+                 <td className={`${tdNum} text-[#2E3093]`}>{fmt(r.turnoverActual)}</td>
+                 <td className={tdNum}>{fmt(r.turnoverTarget)}</td>
+                 <td className={`${tdNum} text-red-600`}>{fmt(r.expenseActual)}</td>
+                 <td className={tdNum}>{fmt(r.expenseTarget)}{r.override ? <span className="ml-1 text-[9px] text-amber-600 font-semibold" title="Manually overridden">•</span> : null}</td>
+                 <td className={`${tdNum} font-semibold ${r.profitActual < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(r.profitActual)}</td>
+                 <td className={`${tdNum} font-semibold ${r.profitTarget < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(r.profitTarget)}</td>
+                 <td className={`${tdNum} font-semibold ${(r.profitPctActual ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{r.profitPctActual != null ? `${r.profitPctActual.toFixed(1)}%` : '—'}</td>
+                 <td className={`${tdNum} font-semibold ${(r.profitPctTarget ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{r.profitPctTarget != null ? `${r.profitPctTarget.toFixed(1)}%` : '—'}</td>
+                 <RowActions
+                   onEdit={() => openSetExpenseTarget(r.month, r.override)}
+                   onDelete={r.override ? () => data.remove(r.override!.id) : undefined}
+                 />
+               </tr>
+             ))}
           </tbody>
         </table>
       </div>
 
       <Modal
         open={modal.open}
-        title={modal.editing ? 'Edit Record' : 'Add Record'}
+        title={`Set Expense Target — ${form.month ? monthLabel(form.month) : ''}`}
         saving={saving}
         onClose={() => setModal({ open: false, editing: null })}
         onSave={save}
       >
-        <div><label className={lblCls}>Month</label><input type="month" className={inpCls} value={form.month} onChange={e => setForm(f => ({ ...f, month: e.target.value }))} /></div>
         <div>
-          <label className={lblCls}>Targeted Cost (₹)</label>
-          <input type="number" min="0" className={inpCls} value={form.target_cost} onChange={e => setForm(f => ({ ...f, target_cost: e.target.value }))} />
+          <label className={lblCls}>Expense Target (₹)</label>
+          <p className="text-[11px] text-gray-400 mb-1">
+            Leave blank to use the default ({(TARGET_EXPENSE_PCT[deptKey] * 100).toFixed(0)}% of that month&apos;s actual turnover).
+          </p>
+          <input
+            type="number"
+            min="0"
+            className={inpCls}
+            value={form.target_cost}
+            onChange={e => setForm(f => ({ ...f, target_cost: e.target.value }))}
+          />
         </div>
       </Modal>
     </div>
@@ -270,7 +291,7 @@ export default function MonthlyTab({ apiPath, title, cashflowDepartment }: Props
 export function DeputationTab() {
   return (
     <div className="space-y-6">
-      <MonthlyTab apiPath="/api/finance/deputation" title="Accent Deputation — Monthly Performance" cashflowDepartment="DEPUTATION ACCENT" />
+      <MonthlyTab apiPath="/api/finance/deputation" title="Accent Deputation — Monthly Performance" cashflowDepartment="DEPUTATION ACCENT" deptKey="deputation" />
       <PendingInvoicesSection department="Deputation" />
     </div>
   );
@@ -279,7 +300,7 @@ export function DeputationTab() {
 export function ProjectsTab() {
   return (
     <div className="space-y-6">
-      <MonthlyTab apiPath="/api/finance/projects" title="Accent Projects — Monthly Performance" cashflowDepartment="PROJECT ACCENT" />
+      <MonthlyTab apiPath="/api/finance/projects" title="Accent Projects — Monthly Performance" cashflowDepartment="PROJECT ACCENT" deptKey="accentProjects" />
       <PendingInvoicesSection department="Projects" />
     </div>
   );
