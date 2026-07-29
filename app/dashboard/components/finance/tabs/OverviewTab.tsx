@@ -10,7 +10,7 @@ import {
 import type { Loan, DeptPerf, DebtPlan, CtRow, MonthlyRow, CashflowTxn, PendingInvoice, SalaryCashflow } from '../shared/types';
 
 const TARGET_EXPENSE_PCT: Record<string, number> = {
-  cbd: 0.20,
+  cbd: 0.70,
   deputation: 0.80,
   corporate: 0.50,
   accentProjects: 0.80,
