@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useFinanceResource } from '../shared/useFinanceResource';
-import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, SectionTitle, thCls, tdCls, tdNum, inpCls, lblCls, trCls } from '../shared/primitives';
+import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, SectionTitle, thCls, tdCls, tdNum, inpCls, lblCls, trCls, CellSparkline } from '../shared/primitives';
 import { fmt, monthLabel, parseMonth, fmtDate, isCountableCashflow, monthsInFinancialYear, financialYearLabel } from '../shared/format';
 import type { MonthlyRow, CashflowTxn, PendingInvoice, InvoiceStatus } from '../shared/types';
 import { DEPT_TURNOVER_TARGETS, TARGET_EXPENSE_PCT, TARGET_PROFIT_PCT } from '../shared/targets';
