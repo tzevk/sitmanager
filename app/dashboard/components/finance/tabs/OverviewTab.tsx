@@ -17,12 +17,20 @@ const TARGET_EXPENSE_PCT: Record<string, number> = {
 };
 
 // Hardcoded CBD income targets
-const CBD_MONTHLY_INCOME = 5_600_000;   // ₹56,00,000
+const CBD_MONTHLY_INCOME = 5_621_667;   // ₹56,21,667
 const CBD_YEARLY_INCOME  = 67_460_000;  // ₹6,74,60,000
 
 // Hardcoded Corporate Training income targets
-const CORPORATE_MONTHLY_INCOME = 2_000_000;  // ₹20,00,000
-const CORPORATE_YEARLY_INCOME  = 24_000_000; // ₹2,40,00,000 (₹20L × 12)
+const CORPORATE_MONTHLY_INCOME = 2_500_000;  // ₹25,00,000
+const CORPORATE_YEARLY_INCOME  = 30_000_000; // ₹3,00,00,000
+
+// Hardcoded Deputation target turnover
+const DEPUTATION_MONTHLY_TARGET = 2_083_333;  // ₹20,83,333
+const DEPUTATION_YEARLY_TARGET  = 25_000_000; // ₹2,50,00,000
+
+// Hardcoded Accent Projects target turnover
+const ACCENT_PROJECTS_MONTHLY_TARGET = 8_333_333;   // ₹83,33,333
+const ACCENT_PROJECTS_YEARLY_TARGET  = 100_000_000; // ₹10,00,00,000
 
 export default function OverviewTab() {
   const now = new Date();
@@ -223,6 +231,8 @@ export default function OverviewTab() {
     // CBD income target: monthly target as-is, or × 12 across the whole financial year
     base.cbd.turnoverTarget = isFY ? CBD_YEARLY_INCOME : CBD_MONTHLY_INCOME;
     base.corporate.turnoverTarget = isFY ? CORPORATE_YEARLY_INCOME : CORPORATE_MONTHLY_INCOME;
+    base.deputation.turnoverTarget = isFY ? DEPUTATION_YEARLY_TARGET : DEPUTATION_MONTHLY_TARGET;
+    base.accentProjects.turnoverTarget = isFY ? ACCENT_PROJECTS_YEARLY_TARGET : ACCENT_PROJECTS_MONTHLY_TARGET;
 
     return [base.cbd, base.deputation, base.corporate, base.accentProjects, base.other].map(item => {
       const targetPct = TARGET_EXPENSE_PCT[item.key];
@@ -374,7 +384,7 @@ export default function OverviewTab() {
                     <td className={`${tdCls} font-semibold text-[#2E3093] border border-gray-200 bg-[#f8f9ff]`}>{row.label}</td>
                     <td className={`${tdNum} border border-gray-200 ${showTurnover ? 'text-[#2E3093]' : 'text-gray-400'}`}>{showTurnover ? withPct(row.turnoverActual, row.turnoverTarget, fmt(row.turnoverActual)) : '—'}</td>
                     <td className={`${tdNum} border border-gray-200 ${showTurnover ? 'text-gray-700' : 'text-gray-400'}`}>{showTurnover ? fmt(row.turnoverTarget) : '—'}</td>
-                    <td className={`${tdNum} border border-gray-200 text-red-600`}>{withPct(row.expenseActual, row.expenseTarget, fmt(row.expenseActual))}</td>
+                    <td className={`${tdNum} border border-gray-200 ${row.expenseTarget > 0 && row.expenseActual > row.expenseTarget ? 'text-red-600' : 'text-gray-700'}`}>{withPct(row.expenseActual, row.expenseTarget, fmt(row.expenseActual))}</td>
                     <td className={`${tdNum} border border-gray-200 text-gray-700`}>{fmt(row.expenseTarget)}</td>
                     <td className={`${tdNum} border border-gray-200 font-semibold ${row.profitActual < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{showTurnover ? withPct(row.profitActual, row.profitTarget, fmt(row.profitActual)) : '—'}</td>
                     <td className={`${tdNum} border border-gray-200 font-semibold ${row.profitTarget < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{showTurnover ? fmt(row.profitTarget) : '—'}</td>
@@ -392,7 +402,7 @@ export default function OverviewTab() {
                   <td className="px-3 py-2 text-xs border border-gray-200 text-[#2E3093] text-center">Total</td>
                   <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{fmt(summaryTotals.turnoverActual)}</td>
                   <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{fmt(summaryTotals.turnoverTarget)}</td>
-                  <td className="px-3 py-2 text-xs text-center border border-gray-200 text-red-600">{fmt(summaryTotals.expenseActual)}</td>
+                  <td className={`px-3 py-2 text-xs text-center border border-gray-200 ${summaryTotals.expenseTarget > 0 && summaryTotals.expenseActual > summaryTotals.expenseTarget ? 'text-red-600' : 'text-gray-700'}`}>{fmt(summaryTotals.expenseActual)}</td>
                   <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{fmt(summaryTotals.expenseTarget)}</td>
                   <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${summaryTotals.profitActual < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(summaryTotals.profitActual)}</td>
                   <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${summaryTotals.profitTarget < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(summaryTotals.profitTarget)}</td>
