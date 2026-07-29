@@ -30,6 +30,11 @@ function mapCashflowDept(dept: string | null): string | null {
 
 const DEFAULT_DEPTS = ['CBD / Inhouse', 'Corporate Training', 'Accent Deputation', 'Accent Projects'];
 
+// Raw dept-performance department values that should never appear in the
+// filter dropdown as their own entries — they're duplicates of DEFAULT_DEPTS
+// under different spellings (e.g. "CBD" vs "CBD / Inhouse").
+const EXCLUDED_RAW_DEPTS = new Set(['CBD', 'Deputation - Accent', 'Projects - Accent']);
+
 export default function RevenueByDeptChart({ year }: { year: number }) {
   const [dept, setDept] = useState<string>('All');
   const [mode, setMode] = useState<'bar' | 'line'>('bar');
@@ -57,7 +62,7 @@ export default function RevenueByDeptChart({ year }: { year: number }) {
 
   const departments = useMemo(() => {
     const seen = new Set<string>(DEFAULT_DEPTS);
-    deptPerfRows.forEach(r => seen.add(r.department));
+    deptPerfRows.forEach(r => { if (!EXCLUDED_RAW_DEPTS.has(r.department)) seen.add(r.department); });
     return ['All', ...Array.from(seen)];
   }, [deptPerfRows]);
 
