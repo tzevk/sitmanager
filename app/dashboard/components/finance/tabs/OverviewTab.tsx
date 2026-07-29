@@ -8,6 +8,8 @@ import {
   buildYearOptions, isFinancialYearValue, monthsInFinancialYear, financialYearLabel,
 } from '../shared/format';
 import type { Loan, DeptPerf, DebtPlan, CtRow, MonthlyRow, CashflowTxn, PendingInvoice, SalaryCashflow } from '../shared/types';
+import { DEPT_TURNOVER_TARGETS } from '../shared/targets';
+
 
 const TARGET_EXPENSE_PCT: Record<string, number> = {
   cbd: 0.70,
@@ -23,21 +25,17 @@ const TARGET_PROFIT_PCT: Record<string, number> = {
   accentProjects: 0.20,
 };
 
-// Hardcoded CBD income targets
-const CBD_MONTHLY_INCOME = 5_621_667;   // ₹56,21,667
-const CBD_YEARLY_INCOME  = 67_460_000;  // ₹6,74,60,000
+const CBD_MONTHLY_INCOME = DEPT_TURNOVER_TARGETS.cbd.monthly;
+const CBD_YEARLY_INCOME  = DEPT_TURNOVER_TARGETS.cbd.yearly;
 
-// Hardcoded Corporate Training income targets
-const CORPORATE_MONTHLY_INCOME = 2_500_000;  // ₹25,00,000
-const CORPORATE_YEARLY_INCOME  = 30_000_000; // ₹3,00,00,000
+const CORPORATE_MONTHLY_INCOME = DEPT_TURNOVER_TARGETS.corporate.monthly;
+const CORPORATE_YEARLY_INCOME  = DEPT_TURNOVER_TARGETS.corporate.yearly;
 
-// Hardcoded Deputation target turnover
-const DEPUTATION_MONTHLY_TARGET = 2_083_333;  // ₹20,83,333
-const DEPUTATION_YEARLY_TARGET  = 25_000_000; // ₹2,50,00,000
+const DEPUTATION_MONTHLY_TARGET = DEPT_TURNOVER_TARGETS.deputation.monthly;
+const DEPUTATION_YEARLY_TARGET  = DEPT_TURNOVER_TARGETS.deputation.yearly;
 
-// Hardcoded Accent Projects target turnover
-const ACCENT_PROJECTS_MONTHLY_TARGET = 8_333_333;   // ₹83,33,333
-const ACCENT_PROJECTS_YEARLY_TARGET  = 100_000_000; // ₹10,00,00,000
+const ACCENT_PROJECTS_MONTHLY_TARGET = DEPT_TURNOVER_TARGETS.accentProjects.monthly;
+const ACCENT_PROJECTS_YEARLY_TARGET  = DEPT_TURNOVER_TARGETS.accentProjects.yearly;
 
 export default function OverviewTab() {
   const now = new Date();

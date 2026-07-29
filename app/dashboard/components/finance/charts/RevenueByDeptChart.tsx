@@ -5,14 +5,17 @@ import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContai
 import { apiFetch } from '../shared/api';
 import { fmt, monthLabel, isCountableCashflow, monthsInFinancialYear } from '../shared/format';
 import type { DeptPerf, CashflowTxn } from '../shared/types';
+import { DEPT_TURNOVER_TARGETS } from '../shared/targets';
 
 interface MonthlyRow { month_year: string; achieved: number; target: number }
 
-// Hardcoded income targets — same figures used by the Overview tab's
-// Department-wise Breakdown, kept in sync so both views agree.
+// Same monthly turnover targets used by the Overview tab's Department-wise
+// Breakdown table, so both views always agree.
 const HARDCODED_MONTHLY_TARGET: Record<string, number> = {
-  'CBD / Inhouse': 5_600_000,       // ₹56,00,000
-  'Corporate Training': 2_000_000,  // ₹20,00,000
+  'CBD / Inhouse': DEPT_TURNOVER_TARGETS.cbd.monthly,
+  'Corporate Training': DEPT_TURNOVER_TARGETS.corporate.monthly,
+  'Accent Deputation': DEPT_TURNOVER_TARGETS.deputation.monthly,
+  'Accent Projects': DEPT_TURNOVER_TARGETS.accentProjects.monthly,
 };
 
 // Maps a real finance_cashflow.department value to this chart's display label.
