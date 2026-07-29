@@ -280,13 +280,35 @@ export default function CtTab() {
                monthlyBreakdown.map((r, i) => (
                  <tr key={r.month} className={trCls(i)}>
                    <td className={tdCls}>{monthLabel(parseMonth(r.month))}</td>
-                   <td className={`${tdNum} text-[#2E3093]`}>{fmt(r.turnoverActual)}</td>
+                   <td className={`${tdNum} text-[#2E3093]`}>
+                     <div className="flex flex-col items-center">
+                       <span>{fmt(r.turnoverActual)}</span>
+                       <CellSparkline actual={r.turnoverActual} target={r.turnoverTarget} good={r.turnoverActual >= r.turnoverTarget} />
+                     </div>
+                   </td>
                    <td className={tdNum}>{fmt(r.turnoverTarget)}</td>
-                   <td className={`${tdNum} text-red-600`}>{fmt(r.expenseActual)}</td>
+                   <td className={`${tdNum} text-red-600`}>
+                     <div className="flex flex-col items-center">
+                       <span>{fmt(r.expenseActual)}</span>
+                       <CellSparkline actual={r.expenseActual} target={r.expenseTarget} good={r.expenseActual <= r.expenseTarget} />
+                     </div>
+                   </td>
                    <td className={tdNum}>{fmt(r.expenseTarget)}{r.override ? <span className="ml-1 text-[9px] text-amber-600 font-semibold" title="Manually overridden">•</span> : null}</td>
-                   <td className={`${tdNum} font-semibold ${r.profitActual < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(r.profitActual)}</td>
+                   <td className={`${tdNum} font-semibold ${r.profitActual < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                     <div className="flex flex-col items-center">
+                       <span>{fmt(r.profitActual)}</span>
+                       <CellSparkline actual={r.profitActual} target={r.profitTarget} good={r.profitActual >= r.profitTarget} />
+                     </div>
+                   </td>
                    <td className={`${tdNum} font-semibold ${r.profitTarget < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(r.profitTarget)}</td>
-                   <td className={`${tdNum} font-semibold ${(r.profitPctActual ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{r.profitPctActual != null ? `${r.profitPctActual.toFixed(1)}%` : '—'}</td>
+                   <td className={`${tdNum} font-semibold ${(r.profitPctActual ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                     {r.profitPctActual != null ? (
+                       <div className="flex flex-col items-center">
+                         <span>{`${r.profitPctActual.toFixed(1)}%`}</span>
+                         <CellSparkline actual={r.profitPctActual} target={r.profitPctTarget ?? 0} good={r.profitPctActual >= (r.profitPctTarget ?? 0)} />
+                       </div>
+                     ) : '—'}
+                   </td>
                    <td className={`${tdNum} font-semibold ${(r.profitPctTarget ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{r.profitPctTarget != null ? `${r.profitPctTarget.toFixed(1)}%` : '—'}</td>
                    <RowActions
                      onEdit={() => openSetExpenseTarget(r.month, r.override)}
