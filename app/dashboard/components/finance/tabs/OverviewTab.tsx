@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFinanceResource } from '../shared/useFinanceResource';
-import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, TotalRow, SectionTitle, StatCard, thCls, tdCls, tdNum, inpCls, lblCls, trCls, PctBar } from '../shared/primitives';
+import { Modal, TableHeader, TableSkeleton, EmptyRow, RowActions, TotalRow, SectionTitle, StatCard, thCls, tdCls, tdNum, inpCls, lblCls, trCls, PctBar, CellSparkline } from '../shared/primitives';
 import {
   fmt, pct, MONTHS_FULL, parseMonth, fmtDate, todayISO, isCountableCashflow,
   buildYearOptions, isFinancialYearValue, monthsInFinancialYear, financialYearLabel,
@@ -21,17 +21,6 @@ const DEPUTATION_YEARLY_TARGET  = DEPT_TURNOVER_TARGETS.deputation.yearly;
 
 const ACCENT_PROJECTS_MONTHLY_TARGET = DEPT_TURNOVER_TARGETS.accentProjects.monthly;
 const ACCENT_PROJECTS_YEARLY_TARGET  = DEPT_TURNOVER_TARGETS.accentProjects.yearly;
-
-/** Progress bar under an Actual cell: fills to actual/target (capped at 100%), green when on/above target, red when not. */
-function CellSparkline({ actual, target, good }: { actual: number; target: number; good: boolean }) {
-  if (!(target > 0)) return null;
-  const width = Math.min(100, Math.max(0, (Math.abs(actual) / target) * 100));
-  return (
-    <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden mt-1">
-      <div className={`h-full rounded-full ${good ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ width: `${width}%` }} />
-    </div>
-  );
-}
 
 export default function OverviewTab() {
   const now = new Date();

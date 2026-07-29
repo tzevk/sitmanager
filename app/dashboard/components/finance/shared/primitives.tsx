@@ -125,6 +125,17 @@ export function PctBar({ value, denominator }: { value: number | string; denomin
   );
 }
 
+/** Progress bar under an Actual cell: fills to actual/target (capped at 100%), green when on/above target, red when not. */
+export function CellSparkline({ actual, target, good }: { actual: number; target: number; good: boolean }) {
+  if (!(target > 0)) return null;
+  const width = Math.min(100, Math.max(0, (Math.abs(actual) / target) * 100));
+  return (
+    <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden mt-1">
+      <div className={`h-full rounded-full ${good ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ width: `${width}%` }} />
+    </div>
+  );
+}
+
 interface ModalProps {
   open: boolean;
   title: string;
