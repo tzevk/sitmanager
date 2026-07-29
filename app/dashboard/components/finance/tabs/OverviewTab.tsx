@@ -385,7 +385,7 @@ export default function OverviewTab() {
                     <td className={`${tdNum} border border-gray-200 ${showTurnover ? 'text-[#2E3093]' : 'text-gray-400'}`}>{showTurnover ? withPct(row.turnoverActual, row.turnoverTarget, fmt(row.turnoverActual)) : '—'}</td>
                     <td className={`${tdNum} border border-gray-200 ${showTurnover ? 'text-gray-700' : 'text-gray-400'}`}>{showTurnover ? fmt(row.turnoverTarget) : '—'}</td>
                     <td className={`${tdNum} border border-gray-200 ${row.expenseTarget > 0 && row.expenseActual > row.expenseTarget ? 'text-red-600' : 'text-gray-700'}`}>{withPct(row.expenseActual, row.expenseTarget, fmt(row.expenseActual))}</td>
-                    <td className={`${tdNum} border border-gray-200 text-gray-700`}>{fmt(row.expenseTarget)}</td>
+                    <td className={`${tdNum} border border-gray-200 text-gray-700`}>{withPct(row.expenseTarget, row.turnoverTarget, fmt(row.expenseTarget))}</td>
                     <td className={`${tdNum} border border-gray-200 font-semibold ${row.profitActual < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{showTurnover ? withPct(row.profitActual, row.profitTarget, fmt(row.profitActual)) : '—'}</td>
                     <td className={`${tdNum} border border-gray-200 font-semibold ${row.profitTarget < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{showTurnover ? fmt(row.profitTarget) : '—'}</td>
                     <td className={`${tdNum} border border-gray-200 font-semibold ${(row.profitPctActual ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
@@ -403,7 +403,7 @@ export default function OverviewTab() {
                   <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{fmt(summaryTotals.turnoverActual)}</td>
                   <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{fmt(summaryTotals.turnoverTarget)}</td>
                   <td className={`px-3 py-2 text-xs text-center border border-gray-200 ${summaryTotals.expenseTarget > 0 && summaryTotals.expenseActual > summaryTotals.expenseTarget ? 'text-red-600' : 'text-gray-700'}`}>{fmt(summaryTotals.expenseActual)}</td>
-                  <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{fmt(summaryTotals.expenseTarget)}</td>
+                  <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{summaryTotals.turnoverTarget > 0 ? `${fmt(summaryTotals.expenseTarget)} (${pct(summaryTotals.expenseTarget, summaryTotals.turnoverTarget)})` : fmt(summaryTotals.expenseTarget)}</td>
                   <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${summaryTotals.profitActual < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(summaryTotals.profitActual)}</td>
                   <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${summaryTotals.profitTarget < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(summaryTotals.profitTarget)}</td>
                   <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${(summaryProfitPctActual ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
