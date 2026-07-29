@@ -37,6 +37,17 @@ const DEPUTATION_YEARLY_TARGET  = DEPT_TURNOVER_TARGETS.deputation.yearly;
 const ACCENT_PROJECTS_MONTHLY_TARGET = DEPT_TURNOVER_TARGETS.accentProjects.monthly;
 const ACCENT_PROJECTS_YEARLY_TARGET  = DEPT_TURNOVER_TARGETS.accentProjects.yearly;
 
+/** Progress bar under an Actual cell: fills to actual/target (capped at 100%), green when on/above target, red when not. */
+function CellSparkline({ actual, target, good }: { actual: number; target: number; good: boolean }) {
+  if (!(target > 0)) return null;
+  const width = Math.min(100, Math.max(0, (Math.abs(actual) / target) * 100));
+  return (
+    <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden mt-1">
+      <div className={`h-full rounded-full ${good ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ width: `${width}%` }} />
+    </div>
+  );
+}
+
 export default function OverviewTab() {
   const now = new Date();
   const [monthIdx, setMonthIdx] = useState(now.getMonth());
@@ -388,14 +399,38 @@ export default function OverviewTab() {
                 return (
                   <tr key={row.key} className={trCls(i)}>
                     <td className={`${tdCls} font-semibold text-[#2E3093] border border-gray-200 bg-[#f8f9ff]`}>{row.label}</td>
-                    <td className={`${tdNum} border border-gray-200 ${showTurnover ? 'text-[#2E3093]' : 'text-gray-400'}`}>{showTurnover ? withPct(row.turnoverActual, row.turnoverTarget, fmt(row.turnoverActual)) : '—'}</td>
+                    <td className={`${tdNum} border border-gray-200 ${showTurnover ? 'text-[#2E3093]' : 'text-gray-400'}`}>
+                      {showTurnover ? (
+                        <div className="flex flex-col items-center">
+                          <span>{withPct(row.turnoverActual, row.turnoverTarget, fmt(row.turnoverActual))}</span>
+                          <CellSparkline actual={row.turnoverActual} target={row.turnoverTarget} good={row.turnoverActual >= row.turnoverTarget} />
+                        </div>
+                      ) : '—'}
+                    </td>
                     <td className={`${tdNum} border border-gray-200 ${showTurnover ? 'text-gray-700' : 'text-gray-400'}`}>{showTurnover ? fmt(row.turnoverTarget) : '—'}</td>
-                    <td className={`${tdNum} border border-gray-200 ${row.expenseTarget > 0 && row.expenseActual > row.expenseTarget ? 'text-red-600' : 'text-gray-700'}`}>{withPct(row.expenseActual, row.expenseTarget, fmt(row.expenseActual))}</td>
+                    <td className={`${tdNum} border border-gray-200 ${row.expenseTarget > 0 && row.expenseActual > row.expenseTarget ? 'text-red-600' : 'text-gray-700'}`}>
+                      <div className="flex flex-col items-center">
+                        <span>{withPct(row.expenseActual, row.expenseTarget, fmt(row.expenseActual))}</span>
+                        <CellSparkline actual={row.expenseActual} target={row.expenseTarget} good={row.expenseActual <= row.expenseTarget} />
+                      </div>
+                    </td>
                     <td className={`${tdNum} border border-gray-200 text-gray-700`}>{fmt(row.expenseTarget)}</td>
-                    <td className={`${tdNum} border border-gray-200 font-semibold ${row.profitActual < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{showTurnover ? withPct(row.profitActual, row.profitTarget, fmt(row.profitActual)) : '—'}</td>
+                    <td className={`${tdNum} border border-gray-200 font-semibold ${row.profitActual < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                      {showTurnover ? (
+                        <div className="flex flex-col items-center">
+                          <span>{withPct(row.profitActual, row.profitTarget, fmt(row.profitActual))}</span>
+                          <CellSparkline actual={row.profitActual} target={row.profitTarget} good={row.profitActual >= row.profitTarget} />
+                        </div>
+                      ) : '—'}
+                    </td>
                     <td className={`${tdNum} border border-gray-200 font-semibold ${row.profitTarget < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{showTurnover ? fmt(row.profitTarget) : '—'}</td>
                     <td className={`${tdNum} border border-gray-200 font-semibold ${(row.profitPctActual ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
-                      {showTurnover && row.profitPctActual != null ? `${row.profitPctActual.toFixed(1)}%` : '—'}
+                      {showTurnover && row.profitPctActual != null ? (
+                        <div className="flex flex-col items-center">
+                          <span>{`${row.profitPctActual.toFixed(1)}%`}</span>
+                          <CellSparkline actual={row.profitPctActual} target={row.profitPctTarget ?? 0} good={row.profitPctActual >= (row.profitPctTarget ?? 0)} />
+                        </div>
+                      ) : '—'}
                     </td>
                     <td className={`${tdNum} border border-gray-200 font-semibold ${(row.profitPctTarget ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
                       {showTurnover && row.profitPctTarget != null ? `${row.profitPctTarget.toFixed(1)}%` : '—'}
@@ -406,14 +441,34 @@ export default function OverviewTab() {
               {deptBreakdown.length > 0 && (
                 <TotalRow>
                   <td className="px-3 py-2 text-xs border border-gray-200 text-[#2E3093] text-center">Total</td>
-                  <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{fmt(summaryTotals.turnoverActual)}</td>
+                  <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">
+                    <div className="flex flex-col items-center">
+                      <span>{fmt(summaryTotals.turnoverActual)}</span>
+                      <CellSparkline actual={summaryTotals.turnoverActual} target={summaryTotals.turnoverTarget} good={summaryTotals.turnoverActual >= summaryTotals.turnoverTarget} />
+                    </div>
+                  </td>
                   <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{fmt(summaryTotals.turnoverTarget)}</td>
-                  <td className={`px-3 py-2 text-xs text-center border border-gray-200 ${summaryTotals.expenseTarget > 0 && summaryTotals.expenseActual > summaryTotals.expenseTarget ? 'text-red-600' : 'text-gray-700'}`}>{fmt(summaryTotals.expenseActual)}</td>
+                  <td className={`px-3 py-2 text-xs text-center border border-gray-200 ${summaryTotals.expenseTarget > 0 && summaryTotals.expenseActual > summaryTotals.expenseTarget ? 'text-red-600' : 'text-gray-700'}`}>
+                    <div className="flex flex-col items-center">
+                      <span>{fmt(summaryTotals.expenseActual)}</span>
+                      <CellSparkline actual={summaryTotals.expenseActual} target={summaryTotals.expenseTarget} good={summaryTotals.expenseActual <= summaryTotals.expenseTarget} />
+                    </div>
+                  </td>
                   <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{fmt(summaryTotals.expenseTarget)}</td>
-                  <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${summaryTotals.profitActual < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(summaryTotals.profitActual)}</td>
+                  <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${summaryTotals.profitActual < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                    <div className="flex flex-col items-center">
+                      <span>{fmt(summaryTotals.profitActual)}</span>
+                      <CellSparkline actual={summaryTotals.profitActual} target={summaryTotals.profitTarget} good={summaryTotals.profitActual >= summaryTotals.profitTarget} />
+                    </div>
+                  </td>
                   <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${summaryTotals.profitTarget < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(summaryTotals.profitTarget)}</td>
                   <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${(summaryProfitPctActual ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
-                    {summaryProfitPctActual != null ? `${summaryProfitPctActual.toFixed(1)}%` : '—'}
+                    {summaryProfitPctActual != null ? (
+                      <div className="flex flex-col items-center">
+                        <span>{`${summaryProfitPctActual.toFixed(1)}%`}</span>
+                        <CellSparkline actual={summaryProfitPctActual} target={summaryProfitPctTarget ?? 0} good={summaryProfitPctActual >= (summaryProfitPctTarget ?? 0)} />
+                      </div>
+                    ) : '—'}
                   </td>
                   <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${(summaryProfitPctTarget ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
                     {summaryProfitPctTarget != null ? `${summaryProfitPctTarget.toFixed(1)}%` : '—'}
