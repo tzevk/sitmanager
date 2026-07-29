@@ -411,7 +411,7 @@ export default function OverviewTab() {
                   <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{fmt(summaryTotals.turnoverActual)}</td>
                   <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{fmt(summaryTotals.turnoverTarget)}</td>
                   <td className={`px-3 py-2 text-xs text-center border border-gray-200 ${summaryTotals.expenseTarget > 0 && summaryTotals.expenseActual > summaryTotals.expenseTarget ? 'text-red-600' : 'text-gray-700'}`}>{fmt(summaryTotals.expenseActual)}</td>
-                  <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{summaryTotals.turnoverTarget > 0 ? `${fmt(summaryTotals.expenseTarget)} (${pct(summaryTotals.expenseTarget, summaryTotals.turnoverTarget)})` : fmt(summaryTotals.expenseTarget)}</td>
+                  <td className="px-3 py-2 text-xs text-center border border-gray-200 text-[#2E3093]">{fmt(summaryTotals.expenseTarget)}</td>
                   <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${summaryTotals.profitActual < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(summaryTotals.profitActual)}</td>
                   <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${summaryTotals.profitTarget < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{fmt(summaryTotals.profitTarget)}</td>
                   <td className={`px-3 py-2 text-xs text-center border border-gray-200 font-semibold ${(summaryProfitPctActual ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>

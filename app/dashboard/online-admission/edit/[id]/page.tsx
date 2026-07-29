@@ -19,6 +19,8 @@ interface PayAtOfficeAudit {
   enabledByEmail?: string;
 }
 
+
+
 type EduTab = 'SSC' | 'HSC' | 'Diploma' | 'Graduation' | 'Post-Grad';
 type MainTab = 'personal' | 'academic' | 'occupational' | 'training' | 'payment' | 'terms';
 
