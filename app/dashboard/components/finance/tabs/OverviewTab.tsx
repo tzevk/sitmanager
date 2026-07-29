@@ -8,22 +8,7 @@ import {
   buildYearOptions, isFinancialYearValue, monthsInFinancialYear, financialYearLabel,
 } from '../shared/format';
 import type { Loan, DeptPerf, DebtPlan, CtRow, MonthlyRow, CashflowTxn, PendingInvoice, SalaryCashflow } from '../shared/types';
-import { DEPT_TURNOVER_TARGETS } from '../shared/targets';
-
-
-const TARGET_EXPENSE_PCT: Record<string, number> = {
-  cbd: 0.70,
-  deputation: 0.80,
-  corporate: 0.50,
-  accentProjects: 0.80,
-};
-
-const TARGET_PROFIT_PCT: Record<string, number> = {
-  cbd: 0.30,
-  deputation: 0.15,
-  corporate: 0.40,
-  accentProjects: 0.20,
-};
+import { DEPT_TURNOVER_TARGETS, TARGET_EXPENSE_PCT, TARGET_PROFIT_PCT } from '../shared/targets';
 
 const CBD_MONTHLY_INCOME = DEPT_TURNOVER_TARGETS.cbd.monthly;
 const CBD_YEARLY_INCOME  = DEPT_TURNOVER_TARGETS.cbd.yearly;

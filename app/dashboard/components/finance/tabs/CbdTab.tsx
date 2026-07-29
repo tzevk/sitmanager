@@ -6,11 +6,7 @@ import { fmt, todayISO, monthLabel, parseMonth, isCountableCashflow, monthsInFin
 import type { PendingFee, MonthlyRow, CashflowTxn } from '../shared/types';
 import { useFinanceResource } from '../shared/useFinanceResource';
 import { feeRecoveryPriority } from '../shared/predictions';
-
-// Same figures as the Overview tab's Department-wise Breakdown, kept in sync
-// so both views agree on what CBD is being measured against.
-const CBD_MONTHLY_INCOME = 5_600_000; // ₹56,00,000
-const CBD_EXPENSE_TARGET_PCT = 0.20;  // target expense = 20% of actual turnover
+import { DEPT_TURNOVER_TARGETS, TARGET_EXPENSE_PCT, TARGET_PROFIT_PCT } from '../shared/targets';
 
 interface PlanRow {
   Plan_Id: number;
@@ -133,10 +129,10 @@ export default function CbdTab() {
       const turnoverActual = cfByMonth.turnover.get(m) || 0;
       const expenseActual  = cfByMonth.expense.get(m) || 0;
       const override = monthlyTargetOverrides.get(m);
-      const expenseTarget = override ? Number(override.target_cost || 0) : turnoverActual * CBD_EXPENSE_TARGET_PCT;
-      const turnoverTarget = CBD_MONTHLY_INCOME;
+      const turnoverTarget = DEPT_TURNOVER_TARGETS.cbd.monthly;
+      const expenseTarget = override ? Number(override.target_cost || 0) : turnoverActual * TARGET_EXPENSE_PCT.cbd;
       const profitActual = turnoverActual - expenseActual;
-      const profitTarget = turnoverTarget - expenseTarget;
+      const profitTarget = turnoverTarget * TARGET_PROFIT_PCT.cbd;
       return {
         month: m,
         turnoverActual, turnoverTarget,
@@ -343,7 +339,7 @@ export default function CbdTab() {
         <div>
           <label className={lblCls}>Expense Target (₹)</label>
           <p className="text-[11px] text-gray-400 mb-1">
-            Leave blank to use the default (20% of that month&apos;s actual turnover).
+            Leave blank to use the default ({(TARGET_EXPENSE_PCT.cbd * 100).toFixed(0)}% of that month&apos;s actual turnover).
           </p>
           <input
             type="number"
