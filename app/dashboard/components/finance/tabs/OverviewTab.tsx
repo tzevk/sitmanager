@@ -340,7 +340,7 @@ export default function OverviewTab() {
             </select>
           </div>
         </div>
-        <div className="w-full lg:w-1/2 overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <div className="w-full overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="w-full border-separate border-spacing-0">
             <thead>
               <tr className="bg-[#2E3093]">
