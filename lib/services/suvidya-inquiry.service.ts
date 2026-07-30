@@ -140,6 +140,23 @@ function extractPhoneForSync(record: SuvidyaInquiryRecord): string | null {
   return pickRawPhoneText(record);
 }
 
+// Suvidya's feed mixes multiple source tables with different field names
+// for the same concept (e.g. pune_enquiries uses full_name/email/course
+// instead of first_name/email_id/select_course). Try each candidate in order.
+function pickFirstText(record: SuvidyaInquiryRecord, fields: readonly string[]): string | null {
+  for (const field of fields) {
+    const value = normalizeText(record[field]);
+    if (value) return value;
+  }
+  return null;
+}
+
+const STUDENT_NAME_FIELD_CANDIDATES = ['first_name', 'full_name', 'name', 'student_name'] as const;
+const EMAIL_FIELD_CANDIDATES = ['email_id', 'email', 'email_address'] as const;
+const COURSE_FIELD_CANDIDATES = ['select_course', 'course', 'course_name'] as const;
+const QUALIFICATION_FIELD_CANDIDATES = ['select_qualification', 'qualification'] as const;
+const LOCATION_FIELD_CANDIDATES = ['your_location', 'location', 'city'] as const;
+
 function normalizeCourseKey(value: string): string {
   return value.replace(/\s+/g, ' ').trim().toLowerCase();
 }
@@ -178,7 +195,8 @@ function isWithinSinceHours(createdDate: unknown, sinceHours: number | undefined
 }
 
 function isPuneRecord(record: SuvidyaInquiryRecord): boolean {
-  const location = normalizeText(record.your_location)?.toLowerCase() || '';
+  if (normalizeText(record.table_name) === 'pune_enquiries') return true;
+  const location = pickFirstText(record, LOCATION_FIELD_CANDIDATES)?.toLowerCase() || '';
   const source = normalizeText(record.page_source)?.toLowerCase() || '';
   return location.includes('pune') || source.includes('pune');
 }
@@ -479,7 +497,7 @@ export async function syncSuvidyaInquiries(
     for (const record of consideredRecords) {
       const sourceId = toPositiveInt(record.id);
       const tableName = normalizeText(record.table_name);
-      const studentName = normalizeText(record.first_name);
+      const studentName = pickFirstText(record, STUDENT_NAME_FIELD_CANDIDATES);
       if (!sourceId || !tableName || !studentName) {
         summary.skippedInvalid += 1;
       } else {
@@ -542,11 +560,11 @@ export async function syncSuvidyaInquiries(
         continue;
       }
 
-      const email = normalizeText(record.email_id);
+      const email = pickFirstText(record, EMAIL_FIELD_CANDIDATES);
       const mobile = extractPhoneForSync(record);
-      const qualification = normalizeText(record.select_qualification);
-      const location = normalizeText(record.your_location);
-      const courseName = normalizeText(record.select_course);
+      const qualification = pickFirstText(record, QUALIFICATION_FIELD_CANDIDATES);
+      const location = pickFirstText(record, LOCATION_FIELD_CANDIDATES);
+      const courseName = pickFirstText(record, COURSE_FIELD_CANDIDATES);
       const fullPageSource = normalizeText(record.page_source);
       const pageSource = summarizeInquirySource(fullPageSource) || 'Suvidya Website';
       const inquiryDate = normalizeText(record.created_date) || new Date().toISOString().slice(0, 19).replace('T', ' ');
