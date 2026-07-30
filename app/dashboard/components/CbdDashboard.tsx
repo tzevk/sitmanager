@@ -164,9 +164,9 @@ function PulseRows({ cols, rows = 4 }: { cols: number; rows?: number }) {
   );
 }
 
-function Th({ children, center }: { children: React.ReactNode; center?: boolean }) {
+function Th({ children, center, className = '', colSpan, rowSpan }: { children: React.ReactNode; center?: boolean; className?: string; colSpan?: number; rowSpan?: number }) {
   return (
-    <th className={`py-2 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap ${center ? 'text-center' : 'text-left'}`}>
+    <th colSpan={colSpan} rowSpan={rowSpan} className={`py-2 px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap ${center ? 'text-center' : 'text-left'} ${className}`}>
       {children}
     </th>
   );
@@ -657,69 +657,97 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
           icon={Icons.batch}
           count={loading ? undefined : upcomingBatches.length}
         />
-        <div className="overflow-x-auto">
-          <div className="max-h-72 overflow-y-auto">
-            <table className={TABLE_CLS}>
-              <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
-                <tr>
-                  <Th>Batch number</Th>
-                  <Th>Training Program Name</Th>
-                  <Th center>Start Date</Th>
-                  <Th center>Enquiries Received</Th>
-                  <Th center>Enquiries Contacted</Th>
-                  <Th center>Interested Students</Th>
-                  <Th center>Confirmed Admissions</Th>
-                  <Th>% Filled</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <PulseRows cols={8} rows={5} />
-                ) : upcomingBatches.length === 0 ? (
-                  <tr><td colSpan={8}><Empty text="No upcoming batches for the next 3 months" /></td></tr>
-                ) : (
-                  upcomingBatches.map((b: any, i: number) => {
-                    // "% Filled" reflects confirmed admissions (students who submitted an
-                    // online form and were admitted/linked), matching the Confirmed
-                    // Admissions column — not raw admission_master rows.
-                    const enrolled  = Number(b.Confirmed_Admissions ?? 0);
-                    const max       = Number(b.Max_Students || 0);
-                    const fillPct   = max > 0 ? (enrolled / max) * 100 : 0;
-                    const sDate     = b.SDate ? String(b.SDate).slice(0, 10) : null;
-                    const fmtStart  = sDate ? `${sDate.slice(8)}/${sDate.slice(5,7)}/${sDate.slice(0,4)}` : '—';
-                    return (
-                      <tr key={`${b.Batch_Id || i}`} className="border-t border-gray-100 hover:bg-gray-50/50 transition-colors">
-                        <td className="px-4 py-2.5">
-                          <span className="font-mono font-semibold text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md border border-indigo-100">{toBatchNumber(b.Batch_code)}</span>
-                        </td>
-                        <td className="px-4 py-2.5 text-gray-700 font-medium">
-                          <span className="inline-flex items-center gap-2 flex-wrap">
-                            <span>{b.CourseName || '—'}</span>
-                            {batchCategoryLabel(b) && (
-                              <span className="inline-flex items-center rounded-full border border-sky-100 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 whitespace-nowrap">
-                                {batchCategoryLabel(b)}
-                              </span>
-                            )}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5 text-center tabular-nums text-[11px] font-medium text-gray-600 whitespace-nowrap">{fmtStart}</td>
-                        <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Enquiries_Received ?? 0}</td>
-                        <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Enquiries_Contacted ?? 0}</td>
-                        <td className="px-4 py-2.5 text-center tabular-nums text-gray-600">{b.Interested_Students ?? 0}</td>
-                        <td className="px-4 py-2.5 text-center tabular-nums font-semibold text-gray-800">{Number(b.Confirmed_Admissions ?? 0)}</td>
-                        <td className="px-4 py-2.5 w-40">
-                          <div className="space-y-1">
-                            <Bar value={fillPct} />
-                            <div className="text-[10px] font-semibold text-gray-400 tabular-nums text-right">{enrolled}/{max || 0}</div>
+        <div className="max-h-96 overflow-y-auto">
+          <table className={`${TABLE_CLS} table-fixed`}>
+            <colgroup>
+              <col className="w-[72px]" />
+              <col />
+              <col className="w-[72px]" />
+              <col className="w-[68px]" /><col className="w-[68px]" /><col className="w-[68px]" />
+              <col className="w-[68px]" /><col className="w-[68px]" /><col className="w-[68px]" />
+              <col className="w-[68px]" />
+              <col className="w-[92px]" />
+            </colgroup>
+            <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
+              <tr>
+                <Th rowSpan={2} className="align-bottom">Batch</Th>
+                <Th rowSpan={2} className="align-bottom">Training Program</Th>
+                <Th center rowSpan={2} className="align-bottom">Start</Th>
+                <Th center colSpan={3} className="bg-blue-50/70 text-blue-700 border-b-0">Enquiries</Th>
+                <Th center colSpan={3} className="bg-purple-50/70 text-purple-700 border-b-0">Meta Ads</Th>
+                <Th center rowSpan={2} className="align-bottom">Adm.</Th>
+                <Th center rowSpan={2} className="align-bottom">% Filled</Th>
+              </tr>
+              <tr>
+                <Th center className="bg-blue-50/40 text-blue-600">Recv</Th>
+                <Th center className="bg-blue-50/40 text-blue-600">Cont</Th>
+                <Th center className="bg-blue-50/40 text-blue-600">Int</Th>
+                <Th center className="bg-purple-50/40 text-purple-600">Recv</Th>
+                <Th center className="bg-purple-50/40 text-purple-600">Cont</Th>
+                <Th center className="bg-purple-50/40 text-purple-600">Conv</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <PulseRows cols={11} rows={5} />
+              ) : upcomingBatches.length === 0 ? (
+                <tr><td colSpan={11}><Empty text="No upcoming batches for the next 3 months" /></td></tr>
+              ) : (
+                upcomingBatches.map((b: any, i: number) => {
+                  // "% Filled" reflects confirmed admissions (students who submitted an
+                  // online form and were admitted/linked), matching the Confirmed
+                  // Admissions column — not raw admission_master rows.
+                  const enrolled  = Number(b.Confirmed_Admissions ?? 0);
+                  const max       = Number(b.Max_Students || 0);
+                  const fillPct   = max > 0 ? (enrolled / max) * 100 : 0;
+                  const sDate     = b.SDate ? String(b.SDate).slice(0, 10) : null;
+                  const startDay   = sDate ? Number(sDate.slice(8, 10)) : null;
+                  const startMonth = sDate ? MONTH_NAMES[Number(sDate.slice(5, 7)) - 1] : null;
+                  const startYear  = sDate ? sDate.slice(2, 4) : null;
+                  return (
+                    <tr key={`${b.Batch_Id || i}`} className="border-t border-gray-100 hover:bg-gray-50/50 transition-colors">
+                      <td className="px-2.5 py-3">
+                        <span className="font-mono font-semibold text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded-md border border-indigo-100 whitespace-nowrap">{toBatchNumber(b.Batch_code)}</span>
+                      </td>
+                      <td className="px-2.5 py-3 text-gray-700 font-medium">
+                        <span className="inline-flex items-center gap-1.5 min-w-0">
+                          <span className="truncate">{b.CourseName || '—'}</span>
+                          {batchCategoryLabel(b) && (
+                            <span className="inline-flex items-center rounded-full border border-sky-100 bg-sky-50 px-1.5 py-0.5 text-[9px] font-bold text-sky-700 whitespace-nowrap shrink-0">
+                              {batchCategoryLabel(b)}
+                            </span>
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-2.5 py-3 text-center whitespace-nowrap">
+                        {sDate ? (
+                          <div className="inline-flex flex-col items-center leading-tight">
+                            <span className="text-sm font-bold text-gray-800 tabular-nums">{startDay}</span>
+                            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{startMonth} &apos;{startYear}</span>
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-blue-50/20">{b.Enquiries_Received ?? 0}</td>
+                      <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-blue-50/20">{b.Enquiries_Contacted ?? 0}</td>
+                      <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-blue-50/20">{b.Interested_Students ?? 0}</td>
+                      <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-purple-50/20">{b.Meta_Received ?? 0}</td>
+                      <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-purple-50/20">{b.Meta_Contacted ?? 0}</td>
+                      <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-purple-50/20">{b.Meta_Converted ?? 0}</td>
+                      <td className="px-2.5 py-3 text-center tabular-nums font-semibold text-gray-800">{Number(b.Confirmed_Admissions ?? 0)}</td>
+                      <td className="px-2.5 py-3">
+                        <div className="space-y-0.5">
+                          <Bar value={fillPct} />
+                          <div className="text-[9px] font-semibold text-gray-400 tabular-nums text-right">{enrolled}/{max || 0}</div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

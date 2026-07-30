@@ -229,6 +229,7 @@ async function fetchDashboardData(dept?: string) {
     batchTargets,
     sparklineData,
     upcomingBatches,
+    metaCourseTotalsRows,
     enquirySummaryRows,
     recentEnquiries,
     corporateTotalRows,
@@ -353,6 +354,7 @@ async function fetchDashboardData(dept?: string) {
       SELECT
         b.Batch_Id,
         b.Batch_code,
+        b.Course_Id AS CourseId,
         DATE_FORMAT(${BATCH_SDATE_EXPR}, '%Y-%m-%d') AS SDate,
         DATE_FORMAT(b.EDate, '%Y-%m-%d') AS EDate,
         b.Category,
@@ -364,7 +366,7 @@ async function fetchDashboardData(dept?: string) {
         CAST(REPLACE(IFNULL(NULLIF(TRIM(CAST(b.Max_Students AS CHAR)), ''), '0'), ',', '') AS UNSIGNED) AS Max_Students,
         CAST(REPLACE(IFNULL(NULLIF(TRIM(CAST(b.NoStudent AS CHAR)), ''), '0'), ',', '') AS UNSIGNED) AS NoStudent,
         COALESCE(c.Course_Name, b.CourseName, '') AS CourseName,
-        COUNT(DISTINCT si.Inquiry_Id) + COALESCE(MAX(ml_count.cnt), 0) AS Enquiries_Received,
+        COUNT(DISTINCT si.Inquiry_Id) AS Enquiries_Received,
         COUNT(DISTINCT CASE WHEN (
           d_inq.id IS NOT NULL
           OR (si.Student_Id IS NOT NULL AND d_stu.id IS NOT NULL)
@@ -417,15 +419,6 @@ async function fetchDashboardData(dept?: string) {
       LEFT JOIN online_admission_payload oap ON oap.Inquiry_Id = si.Inquiry_Id
       LEFT JOIN student_master sm
         ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
-      -- Meta (Facebook/Instagram) leads that haven't been converted into student_inquiry
-      -- yet live in meta_ads_lead_sync and only carry a free-text course name (no batch
-      -- code), so they're matched by course and counted once per batch of that course.
-      LEFT JOIN (
-        SELECT LOWER(TRIM(course_name)) AS course_key, COUNT(*) AS cnt
-        FROM meta_ads_lead_sync
-        WHERE inquiry_id IS NULL AND course_name IS NOT NULL AND course_name != ''
-        GROUP BY LOWER(TRIM(course_name))
-      ) ml_count ON ml_count.course_key = LOWER(TRIM(COALESCE(c.Course_Name, b.CourseName, '')))
       WHERE ${BATCH_SDATE_EXPR} >= CURDATE()
         AND ${BATCH_SDATE_EXPR} <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
         AND (b.IsDelete IS NULL OR b.IsDelete = 0)
@@ -433,6 +426,7 @@ async function fetchDashboardData(dept?: string) {
       GROUP BY
         b.Batch_Id,
         b.Batch_code,
+        b.Course_Id,
         ${BATCH_SDATE_EXPR},
         b.EDate,
         b.Category,
@@ -446,6 +440,59 @@ async function fetchDashboardData(dept?: string) {
         COALESCE(c.Course_Name, b.CourseName, '')
       ORDER BY ${BATCH_SDATE_EXPR} ASC, Enquiries_Received DESC
       LIMIT 50
+    `, []) : Promise.resolve([]),
+
+    // 2b. Meta (Facebook/Instagram) lead totals per course — kept as its OWN query
+    // rather than joined into 2. above: it needs a fuzzy LIKE match (meta lead
+    // course names are free-text/campaign-suffixed, e.g. "EDD", "HVAC Engineering
+    // 07083", never the exact course_mst.Course_Name) against course_mst and a
+    // small alias table, then a converted-only join to awt_inquirydiscussion for
+    // "contacted". Even though each piece is individually cheap, adding it inline
+    // to query 2's already-heavy batch/inquiry join pushed the combined runtime
+    // past the dashboard's query timeout and silently emptied that whole widget
+    // (safeQuery swallows timeouts). Running it standalone means a slow/failed
+    // Meta computation only zeroes out the Meta columns, never the batch list.
+    // "Contacted" = converted lead's Inquiry_Id has a logged discussion note;
+    // "Converted" = lead has inquiry_id set. Contact tracking only exists once a
+    // lead is converted (adding a note auto-converts it), so Contacted is scoped
+    // to the already-converted subset — never a superset of Converted.
+    needsUpcomingBatches ? safeQuery(pool, `
+      SELECT cm.Course_Name AS CourseName,
+             SUM(g.total) AS Meta_Received,
+             SUM(g.converted) AS Meta_Converted,
+             SUM(g.contacted) AS Meta_Contacted
+      FROM course_mst cm
+      LEFT JOIN (
+        SELECT 'Engineering Design & Drafting' AS course_name, 'EDD' AS alias
+        UNION ALL SELECT 'Air Conditioning System Design (HVAC)', 'HVAC'
+        UNION ALL SELECT 'HVAC Design and Drafting', 'HVAC'
+        UNION ALL SELECT 'Piping Design & Drafting', 'PDD'
+        UNION ALL SELECT 'Structural Engineering', 'Structural Engg'
+        UNION ALL SELECT 'Rotating Equipment', 'Rotating Equipments'
+      ) course_alias ON course_alias.course_name = cm.Course_Name
+      JOIN (
+        SELECT m.course_name,
+               COUNT(*) AS total,
+               SUM(CASE WHEN m.inquiry_id IS NOT NULL THEN 1 ELSE 0 END) AS converted,
+               SUM(CASE WHEN conv.contacted IS NOT NULL THEN 1 ELSE 0 END) AS contacted
+        FROM meta_ads_lead_sync m
+        -- Pre-filter to converted-only leads before joining discussions: joining
+        -- the full 10k-row table against 100k+ discussion rows (with an INT vs
+        -- VARCHAR Inquiry_Id type mismatch that defeats the index) timed out.
+        -- Only ~250 leads are converted, so this join stays cheap.
+        LEFT JOIN (
+          SELECT c1.id, dd.Inquiry_id AS contacted
+          FROM (SELECT id, inquiry_id FROM meta_ads_lead_sync WHERE inquiry_id IS NOT NULL) c1
+          JOIN (
+            SELECT DISTINCT Inquiry_id FROM awt_inquirydiscussion WHERE (deleted = 0 OR deleted IS NULL)
+          ) dd ON dd.Inquiry_id = c1.inquiry_id
+        ) conv ON conv.id = m.id
+        WHERE m.course_name IS NOT NULL AND TRIM(m.course_name) != ''
+        GROUP BY m.course_name
+      ) g
+        ON LOWER(g.course_name) LIKE CONCAT('%', LOWER(cm.Course_Name), '%')
+        OR (course_alias.alias IS NOT NULL AND LOWER(g.course_name) LIKE CONCAT('%', LOWER(course_alias.alias), '%'))
+      GROUP BY cm.Course_Name
     `, []) : Promise.resolve([]),
 
     // 3a. Enquiry summary
@@ -1426,7 +1473,23 @@ async function fetchDashboardData(dept?: string) {
     last7Days: Number(metaInquiryRow.last_7_days || 0),
   };
 
-  const upcomingBatchesFinal = upcomingBatches;
+  const metaCourseTotalsMap: Record<string, { received: number; contacted: number; converted: number }> = {};
+  for (const row of metaCourseTotalsRows as any[]) {
+    metaCourseTotalsMap[row.CourseName] = {
+      received: Number(row.Meta_Received) || 0,
+      contacted: Number(row.Meta_Contacted) || 0,
+      converted: Number(row.Meta_Converted) || 0,
+    };
+  }
+  const upcomingBatchesFinal = (upcomingBatches as any[]).map((b: any) => {
+    const meta = metaCourseTotalsMap[b.CourseName];
+    return {
+      ...b,
+      Meta_Received: meta?.received ?? 0,
+      Meta_Contacted: meta?.contacted ?? 0,
+      Meta_Converted: meta?.converted ?? 0,
+    };
+  });
 
   // Merge placement data: batch rows + student aggregates + interview counts
   const studentAggMap: Record<string, { cv_received: number; self_placement: number; placement_blocked: number; avg_salary: number; salary_count: number }> = {};
