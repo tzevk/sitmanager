@@ -1,6 +1,8 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import BatchMarketingWidget from './BatchMarketingWidget';
 import AnnualTargetsWidget from './AnnualTargetsWidget';
 import ContentCalendarWidget from './ContentCalendarWidget';
@@ -206,6 +208,58 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
   const [localFunnel, setLocalFunnel] = React.useState<{ total: number; contacted: number; interested: number; converted: number } | null>(null);
   const [funnelLoading, setFunnelLoading] = React.useState(false);
   const fetchAbortRef = useRef<AbortController | null>(null);
+
+  // ── Admitted-students report download (Upcoming Batches "Adm." column) ──
+  const [downloadingBatch, setDownloadingBatch] = useState<string | null>(null);
+  const downloadAdmittedStudents = useCallback(async (batchCode: string, courseName: string) => {
+    if (!batchCode || downloadingBatch) return;
+    setDownloadingBatch(batchCode);
+    try {
+      const res = await fetch(`/api/dashboard/batch-admissions?batchCode=${encodeURIComponent(batchCode)}`);
+      if (!res.ok) throw new Error('Failed to fetch admitted students');
+      const { rows } = await res.json();
+
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'SIT Manager';
+      wb.created = new Date();
+      const ws = wb.addWorksheet('Admitted Students');
+
+      const headers = ['Sr No', 'Student ID', 'Name', 'Mobile', 'Email', 'Course', 'Batch Code', 'Admission Date'];
+      const headerRow = ws.addRow(headers);
+      headerRow.eachCell((cell) => {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A6BB5' } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      });
+
+      (rows as any[]).forEach((r, i) => {
+        ws.addRow([
+          i + 1,
+          r.Student_Id,
+          r.Student_Name || '—',
+          r.Present_Mobile || '—',
+          r.Email || '—',
+          r.Course_Name || courseName || '—',
+          r.Batch_Code || batchCode,
+          r.Admission_Dt || '—',
+        ]);
+      });
+
+      ws.columns = [
+        { width: 8 }, { width: 12 }, { width: 28 }, { width: 16 },
+        { width: 28 }, { width: 30 }, { width: 14 }, { width: 16 },
+      ];
+      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      saveAs(blob, `Admitted_Students_${batchCode}.xlsx`);
+    } catch (err) {
+      console.error('Admitted students download failed:', err);
+    } finally {
+      setDownloadingBatch(null);
+    }
+  }, [downloadingBatch]);
 
   // ── Pending Fees filters ────────────────────────────────────────
   const [pfOngoingOnly, setPfOngoingOnly] = React.useState(true);
@@ -735,7 +789,17 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                       <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-purple-50/20">{b.Meta_Received ?? 0}</td>
                       <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-purple-50/20">{b.Meta_Contacted ?? 0}</td>
                       <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-purple-50/20">{b.Meta_Converted ?? 0}</td>
-                      <td className="px-2.5 py-3 text-center tabular-nums font-semibold text-gray-800">{Number(b.Confirmed_Admissions ?? 0)}</td>
+                      <td className="px-2.5 py-3 text-center tabular-nums">
+                        <button
+                          type="button"
+                          onClick={() => downloadAdmittedStudents(b.Batch_code, b.CourseName)}
+                          disabled={downloadingBatch === b.Batch_code}
+                          className="font-semibold text-[#2A6BB5] hover:text-[#1d4d80] hover:underline underline-offset-2 disabled:opacity-50 disabled:cursor-wait"
+                          title="Download admitted students report for this batch"
+                        >
+                          {downloadingBatch === b.Batch_code ? '…' : Number(b.Confirmed_Admissions ?? 0)}
+                        </button>
+                      </td>
                       <td className="px-2.5 py-3">
                         <div className="space-y-0.5">
                           <Bar value={fillPct} />

@@ -372,10 +372,19 @@ async function fetchDashboardData(dept?: string) {
           OR (si.Student_Id IS NOT NULL AND d_stu.id IS NOT NULL)
         ) THEN si.Inquiry_Id END) AS Enquiries_Contacted,
         COUNT(DISTINCT CASE WHEN oap.Inquiry_Id IS NOT NULL THEN si.Inquiry_Id END) AS Interested_Students,
-        COUNT(DISTINCT CASE WHEN (
-          oap.Inquiry_Id IS NOT NULL
-          AND (si.OnlineState = 8 OR sm.Student_Id IS NOT NULL)
-        ) THEN si.Inquiry_Id END) AS Confirmed_Admissions
+        -- Confirmed Admissions comes straight from student_master (Status_id = 8 is the
+        -- canonical "admission confirmed" flag the student list itself filters on — see
+        -- ALLOWED_INQUIRY_STATUSES in lib/services/inquiry.service.ts), matched by
+        -- Batch_Code, NOT derived through the inquiry/online-admission-payload chain
+        -- above (that chain can miss students whose Status_id was set outside the
+        -- online-admission flow, e.g. manual admissions).
+        COALESCE((
+          SELECT COUNT(DISTINCT sm2.Student_Id)
+          FROM student_master sm2
+          WHERE sm2.Batch_Code = b.Batch_code
+            AND sm2.Status_id = 8
+            AND (sm2.IsDelete = 0 OR sm2.IsDelete IS NULL)
+        ), 0) AS Confirmed_Admissions
       FROM batch_mst b
       LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
       -- Inquiry↔batch matching, widened beyond a plain Batch_Code text match: an
@@ -417,8 +426,6 @@ async function fetchDashboardData(dept?: string) {
       LEFT JOIN awt_inquirydiscussion d_stu
         ON si.Student_Id IS NOT NULL AND d_stu.deleted = 0 AND d_stu.student_id = si.Student_Id
       LEFT JOIN online_admission_payload oap ON oap.Inquiry_Id = si.Inquiry_Id
-      LEFT JOIN student_master sm
-        ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
       WHERE ${BATCH_SDATE_EXPR} >= CURDATE()
         AND ${BATCH_SDATE_EXPR} <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
         AND (b.IsDelete IS NULL OR b.IsDelete = 0)
