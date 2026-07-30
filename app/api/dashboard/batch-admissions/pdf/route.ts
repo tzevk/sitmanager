@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
 
     const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
     const pageBottom = doc.page.height - doc.page.margins.bottom;
-    const colWidths = [30, 55, 130, 75, 130, 40]; // Sr, ID, Name, Mobile, Email, Adm. Date
+    const colWidths = [30, 55, 130, 75, 125, 70]; // Sr, ID, Name, Mobile, Email, Adm. Date
     const colX: number[] = [];
     let acc = doc.page.margins.left;
     for (const w of colWidths) { colX.push(acc); acc += w; }
