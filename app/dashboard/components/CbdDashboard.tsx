@@ -673,18 +673,18 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                 <Th rowSpan={2} className="align-bottom">Batch</Th>
                 <Th rowSpan={2} className="align-bottom">Training Program</Th>
                 <Th center rowSpan={2} className="align-bottom">Start</Th>
-                <Th center colSpan={3} className="bg-blue-50/70 text-blue-700 border-b-0">Enquiries</Th>
-                <Th center colSpan={3} className="bg-purple-50/70 text-purple-700 border-b-0">Meta Ads</Th>
+                <Th center colSpan={3} className="bg-blue-50/70 text-blue-700 border-b border-blue-200">Enquiries</Th>
+                <Th center colSpan={3} className="bg-purple-50/70 text-purple-700 border-b border-purple-200">Meta Ads</Th>
                 <Th center rowSpan={2} className="align-bottom">Adm.</Th>
                 <Th center rowSpan={2} className="align-bottom">% Filled</Th>
               </tr>
               <tr>
-                <Th center className="bg-blue-50/40 text-blue-600">Recv</Th>
-                <Th center className="bg-blue-50/40 text-blue-600">Cont</Th>
-                <Th center className="bg-blue-50/40 text-blue-600">Int</Th>
-                <Th center className="bg-purple-50/40 text-purple-600">Recv</Th>
-                <Th center className="bg-purple-50/40 text-purple-600">Cont</Th>
-                <Th center className="bg-purple-50/40 text-purple-600">Conv</Th>
+                <Th center className="bg-blue-50/40 text-blue-600 border-b border-gray-200">Recv</Th>
+                <Th center className="bg-blue-50/40 text-blue-600 border-b border-gray-200">Cont</Th>
+                <Th center className="bg-blue-50/40 text-blue-600 border-b border-gray-200">Int</Th>
+                <Th center className="bg-purple-50/40 text-purple-600 border-b border-gray-200">Recv</Th>
+                <Th center className="bg-purple-50/40 text-purple-600 border-b border-gray-200">Cont</Th>
+                <Th center className="bg-purple-50/40 text-purple-600 border-b border-gray-200">Conv</Th>
               </tr>
             </thead>
             <tbody>
