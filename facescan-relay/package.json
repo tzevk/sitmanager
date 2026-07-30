@@ -4,11 +4,16 @@
   "description": "Local relay app: polls the SIT facescan biometric device on the institute LAN and pushes punch logs to SIT Manager.",
   "main": "src/main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make"
   },
   "author": "SIT",
   "license": "UNLICENSED",
   "devDependencies": {
+    "@electron-forge/cli": "^7.11.2",
+    "@electron-forge/maker-squirrel": "^7.11.2",
+    "@electron-forge/maker-zip": "^7.11.2",
     "electron": "^33.0.0"
   },
   "dependencies": {
