@@ -4,6 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 
+interface Faculty {
+  Faculty_Id: number;
+  Faculty_Name: string;
+}
+
 interface Lecture {
   id: number;
   lecture_no: number | null;
@@ -57,6 +62,7 @@ export default function StandardLecturePlanEditPage() {
 
   const [courseInfo, setCourseInfo] = useState<CourseInfo | null>(null);
   const [lectures, setLectures] = useState<Lecture[]>([]);
+  const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingRowId, setSavingRowId] = useState<number | null>(null);
@@ -108,6 +114,13 @@ export default function StandardLecturePlanEditPage() {
   }, [courseName]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  useEffect(() => {
+    fetch('/api/masters/standard-lecture-plan/lectures?options=faculties')
+      .then(res => res.json())
+      .then(data => setFaculties(data.faculties || []))
+      .catch(() => {});
+  }, []);
 
   const fetchAssignments = useCallback(async () => {
     if (!courseName) return;
@@ -406,8 +419,16 @@ export default function StandardLecturePlanEditPage() {
                           </div>
                           <div>
                             <label className={labelCls}>Faculty</label>
-                            <input type="text" className={inputCls} value={selectedLecture.faculty ?? ''} disabled={!canUpdate}
-                              onChange={e => updateLectureInline(selectedLecture.id, { faculty: e.target.value })} />
+                            <select className={inputCls} value={selectedLecture.faculty ?? ''} disabled={!canUpdate}
+                              onChange={e => updateLectureInline(selectedLecture.id, { faculty: e.target.value || null })}>
+                              <option value="">— Select Trainer —</option>
+                              {selectedLecture.faculty && !faculties.some(f => f.Faculty_Name === selectedLecture.faculty) && (
+                                <option value={selectedLecture.faculty}>{selectedLecture.faculty}</option>
+                              )}
+                              {faculties.map(f => (
+                                <option key={f.Faculty_Id} value={f.Faculty_Name}>{f.Faculty_Name}</option>
+                              ))}
+                            </select>
                           </div>
                         </div>
                       </div>
@@ -558,8 +579,13 @@ export default function StandardLecturePlanEditPage() {
                     </div>
                     <div>
                       <label className={labelCls}>Trainer</label>
-                      <input type="text" className={inputCls} value={newAssignment.trainer}
-                        onChange={e => setNewAssignment({ ...newAssignment, trainer: e.target.value })} />
+                      <select className={inputCls} value={newAssignment.trainer}
+                        onChange={e => setNewAssignment({ ...newAssignment, trainer: e.target.value })}>
+                        <option value="">— Select Trainer —</option>
+                        {faculties.map(f => (
+                          <option key={f.Faculty_Id} value={f.Faculty_Name}>{f.Faculty_Name}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className={labelCls}>Department</label>

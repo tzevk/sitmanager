@@ -9,6 +9,16 @@ export async function GET(req: NextRequest) {
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
     const { searchParams } = new URL(req.url);
+
+    if (searchParams.get('options') === 'faculties') {
+      const [faculties] = await pool.query(
+        `SELECT Faculty_Id, Faculty_Name FROM faculty_master
+         WHERE (IsDelete = 0 OR IsDelete IS NULL)
+         ORDER BY Faculty_Name`
+      );
+      return NextResponse.json({ faculties });
+    }
+
     const course = searchParams.get('course')?.trim() || '';
 
     if (!course) {
