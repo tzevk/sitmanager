@@ -364,7 +364,7 @@ async function fetchDashboardData(dept?: string) {
         CAST(REPLACE(IFNULL(NULLIF(TRIM(CAST(b.Max_Students AS CHAR)), ''), '0'), ',', '') AS UNSIGNED) AS Max_Students,
         CAST(REPLACE(IFNULL(NULLIF(TRIM(CAST(b.NoStudent AS CHAR)), ''), '0'), ',', '') AS UNSIGNED) AS NoStudent,
         COALESCE(c.Course_Name, b.CourseName, '') AS CourseName,
-        COUNT(DISTINCT si.Inquiry_Id) AS Enquiries_Received,
+        COUNT(DISTINCT si.Inquiry_Id) + COALESCE(MAX(ml_count.cnt), 0) AS Enquiries_Received,
         COUNT(DISTINCT CASE WHEN (
           d_inq.id IS NOT NULL
           OR (si.Student_Id IS NOT NULL AND d_stu.id IS NOT NULL)
@@ -417,6 +417,15 @@ async function fetchDashboardData(dept?: string) {
       LEFT JOIN online_admission_payload oap ON oap.Inquiry_Id = si.Inquiry_Id
       LEFT JOIN student_master sm
         ON sm.Student_Id = si.Student_Id AND (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
+      -- Meta (Facebook/Instagram) leads that haven't been converted into student_inquiry
+      -- yet live in meta_ads_lead_sync and only carry a free-text course name (no batch
+      -- code), so they're matched by course and counted once per batch of that course.
+      LEFT JOIN (
+        SELECT LOWER(TRIM(course_name)) AS course_key, COUNT(*) AS cnt
+        FROM meta_ads_lead_sync
+        WHERE inquiry_id IS NULL AND course_name IS NOT NULL AND course_name != ''
+        GROUP BY LOWER(TRIM(course_name))
+      ) ml_count ON ml_count.course_key = LOWER(TRIM(COALESCE(c.Course_Name, b.CourseName, '')))
       WHERE ${BATCH_SDATE_EXPR} >= CURDATE()
         AND ${BATCH_SDATE_EXPR} <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
         AND (b.IsDelete IS NULL OR b.IsDelete = 0)
