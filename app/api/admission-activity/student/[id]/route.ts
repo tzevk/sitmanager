@@ -293,7 +293,8 @@ export async function GET(
     // filled may be spread across them. Fetch them all and merge so nothing is lost in the
     // edit view (newest non-empty value wins; older submissions backfill remaining gaps).
     const [inqRows] = await pool.query(
-      `SELECT Inquiry_Id, Qualification, Discipline, Percentage, Institute, Year, Marks
+      `SELECT Inquiry_Id, Qualification, Discipline, Percentage, Institute, Year, Marks,
+              Inquiry_From, Inquiry_Type, Refered_By
        FROM ${inquiryTable}
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
        ORDER BY Inquiry_Id DESC`,
@@ -306,10 +307,16 @@ export async function GET(
     // Merge education fallback fields across all inquiry rows.
     const inquiry: Record<string, any> = {};
     for (const r of inqRows as any[]) {
-      for (const k of ['Qualification', 'Discipline', 'Percentage', 'Institute', 'Year', 'Marks']) {
+      for (const k of ['Qualification', 'Discipline', 'Percentage', 'Institute', 'Year', 'Marks', 'Inquiry_From', 'Inquiry_Type', 'Refered_By']) {
         if (isEmpty(inquiry[k]) && !isEmpty(r[k])) inquiry[k] = r[k];
       }
     }
+
+    // Student master's own copy of "how they know SIT" wins when present;
+    // otherwise backfill from the source inquiry record.
+    if (isEmpty(rows[0].Inquiry_From)) rows[0].Inquiry_From = inquiry.Inquiry_From ?? null;
+    if (isEmpty(rows[0].Inquiry_Type)) rows[0].Inquiry_Type = inquiry.Inquiry_Type ?? null;
+    if (isEmpty(rows[0].Refered_By))   rows[0].Refered_By   = inquiry.Refered_By ?? null;
 
     // Merge ALL online-admission payloads for this student's inquiries.
     const payload: Record<string, any> = {};

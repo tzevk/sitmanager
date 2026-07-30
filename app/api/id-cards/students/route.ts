@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
     );
 
     const students = await Promise.all((studentRows as any[]).map(async (r) => ({
+      studentId: Number(r.Student_Id),
       name: String(r.Student_Name || '').trim(),
       contactNo: String(r.Present_Mobile || '').trim(),
       photo: await getStudentPhotoDataUrl(Number(r.Student_Id)),

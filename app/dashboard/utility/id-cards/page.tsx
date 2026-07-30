@@ -7,6 +7,7 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 
 interface IdCard {
   id: string;
+  studentId: number | null;
   name: string;
   course: string;
   batchNo: string;
@@ -17,6 +18,7 @@ interface IdCard {
 
 const blankCard = (): IdCard => ({
   id: Math.random().toString(36).slice(2),
+  studentId: null,
   name: '', course: '', batchNo: '', contactNo: '', validUpto: '', photo: null,
 });
 
@@ -42,10 +44,12 @@ async function imageUrlToDataUrl(url: string): Promise<string | null> {
 }
 
 export default function IdCardGeneratorPage() {
-  const { canView, loading } = useResourcePermissions('student');
+  const { canView, canUpdate, loading } = useResourcePermissions('student');
   const [cards, setCards] = useState<IdCard[]>([blankCard()]);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
+  const [savingPhotoId, setSavingPhotoId] = useState<string | null>(null);
+  const [savedPhotoId, setSavedPhotoId] = useState<string | null>(null);
 
   // Batchwise import
   const [courses, setCourses] = useState<{ id: number; name: string }[]>([]);
@@ -75,8 +79,9 @@ export default function IdCardGeneratorPage() {
       const res = await fetch(`/api/id-cards/students?batchId=${batchId}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Import failed');
-      const imported: IdCard[] = await Promise.all((data.students || []).map(async (s: { name: string; contactNo: string; photo?: string | null; photoUrl?: string }) => ({
+      const imported: IdCard[] = await Promise.all((data.students || []).map(async (s: { studentId?: number; name: string; contactNo: string; photo?: string | null; photoUrl?: string }) => ({
         id: Math.random().toString(36).slice(2),
+        studentId: s.studentId ?? null,
         name: s.name,
         course: data.course || '',
         batchNo: data.batchCode || '',
@@ -108,6 +113,37 @@ export default function IdCardGeneratorPage() {
     const reader = new FileReader();
     reader.onload = () => update(id, { photo: typeof reader.result === 'string' ? reader.result : null });
     reader.readAsDataURL(file);
+  };
+
+  const savePhotoToStudent = async (card: IdCard) => {
+    if (!card.studentId) {
+      setError('This card isn\'t linked to a student record — import it from a batch to save the photo to Student Master.');
+      return;
+    }
+    if (!card.photo) {
+      setError('Upload a photo first.');
+      return;
+    }
+    setError('');
+    setSavingPhotoId(card.id);
+    setSavedPhotoId(null);
+    try {
+      const blob = await (await fetch(card.photo)).blob();
+      const formData = new FormData();
+      formData.append('photo', blob, `student_${card.studentId}.jpg`);
+      const res = await fetch(`/api/admission-activity/student/${card.studentId}/photo`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to save photo');
+      setSavedPhotoId(card.id);
+      setTimeout(() => setSavedPhotoId(prev => (prev === card.id ? null : prev)), 2500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save photo');
+    } finally {
+      setSavingPhotoId(null);
+    }
   };
 
   const generate = async () => {
@@ -255,6 +291,13 @@ export default function IdCardGeneratorPage() {
                 {card.photo && (
                   <button onClick={() => update(card.id, { photo: null })}
                     className="mt-1 w-full text-[10px] text-slate-400 hover:text-red-500">Remove photo</button>
+                )}
+                {card.photo && card.studentId && canUpdate && (
+                  <button onClick={() => savePhotoToStudent(card)} disabled={savingPhotoId === card.id}
+                    title="Save this photo to the student's profile — it will also show on Student Master"
+                    className="mt-1 w-full text-[10px] font-semibold text-[#2E3093] hover:text-[#1f2270] disabled:opacity-50">
+                    {savingPhotoId === card.id ? 'Saving…' : savedPhotoId === card.id ? 'Saved ✓' : 'Save to Student Profile'}
+                  </button>
                 )}
               </div>
 
