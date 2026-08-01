@@ -4,6 +4,7 @@ import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { ensureStudentTransferColumns } from '@/lib/student-transfer';
 import { ensureAlumniColumn } from '@/lib/student-alumni';
+import { ensureFamilyContactColumn } from '@/lib/student-family-contact';
 import { saveStructuredAdmissionData } from '@/lib/services/online-admission.service';
 
 const ONLINE_ADMISSION_PAYLOAD_TABLE = 'online_admission_payload';
@@ -192,6 +193,7 @@ export async function GET(
     const pool = getPool();
     await ensureStudentTransferColumns(pool);
     await ensureAlumniColumn(pool);
+    await ensureFamilyContactColumn(pool);
   const inquiryTable = await resolveInquiryTableName(pool);
     const { id } = await params;
 
@@ -200,7 +202,7 @@ export async function GET(
       `SELECT
          s.Student_Id, s.Student_Name, s.FName, s.MName, s.LName, s.Photo,
          s.DOB, s.Sex, s.Nationality,
-         s.Email, s.Present_Mobile, s.Present_Mobile2,
+         s.Email, s.Present_Mobile, s.Present_Mobile2, s.Family_Contact,
          s.Present_Address, s.Present_City, s.Present_State, s.Present_Pin, s.Present_Country,
          s.Permanent_Address, s.Permanent_City, s.Permanent_State, s.Permanent_Pin, s.Permanent_Country,
          s.Qualification, s.Discipline, s.Percentage,
@@ -428,6 +430,7 @@ export async function PUT(
     const pool = getPool();
     await ensureStudentTransferColumns(pool);
     await ensureAlumniColumn(pool);
+    await ensureFamilyContactColumn(pool);
     const { id } = await params;
     const body = await req.json();
 
@@ -435,7 +438,7 @@ export async function PUT(
       // Personal
       FName, MName, LName, Student_Name,
       DOB, Sex, Nationality,
-      Email, Present_Mobile, Telephone,
+      Email, Present_Mobile, Telephone, Family_Contact,
       Present_Address, Present_City, Present_State, Present_Pin, Present_Country,
       Permanent_Address, Permanent_City, Permanent_Pin, Permanent_State, Permanent_Country,
       // Academic
@@ -582,6 +585,7 @@ export async function PUT(
       { col: 'MName',          val: MName || null },
       { col: 'LName',          val: LName || null },
       { col: 'Present_Mobile2', val: Telephone || null },
+      { col: 'Family_Contact',  val: Family_Contact || null },
       { col: 'Permanent_State', val: Permanent_State || null },
       { col: 'Discipline',     val: Discipline || null },
       { col: 'Designation',    val: Designation || null },

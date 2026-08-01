@@ -193,7 +193,7 @@ export default function EditStudentPage() {
     /* Personal */
     FName: '', MName: '', LName: '', Student_Name: '',
     DOB: '', Sex: '', Nationality: 'Indian',
-    Email: '', Present_Mobile: '', Telephone: '',
+    Email: '', Present_Mobile: '', Telephone: '', Family_Contact: '',
     Present_Address: '', Present_City: '', Present_State: '',
     Present_Pin: '', Present_Country: 'India',
     Permanent_Address: '', Permanent_City: '', Permanent_Pin: '',
@@ -274,6 +274,7 @@ export default function EditStudentPage() {
           Email:            s.Email            || '',
           Present_Mobile:   s.Present_Mobile   || '',
           Telephone:        s.Present_Mobile2  || s.Telephone || '',
+          Family_Contact:   s.Family_Contact   || '',
           Present_Address:  s.Present_Address  || '',
           Present_City:     s.Present_City     || '',
           Present_State:    s.Present_State    || '',
@@ -1078,6 +1079,10 @@ export default function EditStudentPage() {
                   <div>
                     <label className={labelCls}>Telephone</label>
                     <input type="tel" value={form.Telephone} onChange={(e) => set('Telephone', e.target.value)} className={inputCls} placeholder="Landline" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Family Contact</label>
+                    <input type="tel" value={form.Family_Contact} onChange={(e) => set('Family_Contact', e.target.value)} className={inputCls} placeholder="Emergency / family contact number" />
                   </div>
                 </div>
               </SectionCard>

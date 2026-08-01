@@ -3,6 +3,7 @@ import { getPool } from '@/lib/db';
 import { generateFeesReceiptNo } from '@/lib/fees-receipt';
 import { sendOnlineAdmissionSubmissionEmail } from '@/lib/mailer';
 import { getAdmissionInquiryAssetSummary, hasAdmissionUploads, type AdmissionUploadBundle, saveAdmissionAssetsForStudent, saveAdmissionAssetsForInquiry, attachInquiryAssetsToStudent } from '@/lib/student-documents.server';
+import { ensureFamilyContactColumn } from '@/lib/student-family-contact';
 
 let inquiryTableNameCache: string | null = null;
 let statusTableNameCache: string | null | undefined;
@@ -775,6 +776,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
   const studentMasterTable = await resolveStudentMasterTableName(pool);
   if (!studentMasterTable) return;
   await ensureStudentMasterRemarkColumn(pool, studentMasterTable);
+  await ensureFamilyContactColumn(pool);
 
   const [inquiryRows] = await pool.query(
     `SELECT Inquiry_Id, Student_Id, Student_Name, Email, Present_Mobile, Batch_Code, Course_Id, OnlineState
@@ -857,7 +859,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       `INSERT INTO \`${studentMasterTable}\` (
          Student_Name, FName, MName, LName,
          DOB, Sex, Nationality,
-         Email, Present_Mobile, Present_Mobile2,
+         Email, Present_Mobile, Present_Mobile2, Family_Contact,
          Present_Address, Present_City, Present_State, Present_Pin, Present_Country,
          Permanent_Address, Permanent_City, Permanent_Pin, Permanent_State, Permanent_Country,
          Qualification, Discipline, Percentage,
@@ -865,7 +867,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
          Company, Designation, Occupation, Total_Exp, Remark,
          Status_id, Status_date, Admission_Dt,
          IsActive, IsDelete
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
       [
         fullName || null,
         normalizeText(input.firstName) || null,
@@ -877,6 +879,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
         firstNonEmpty(input.email, inquiry.Email) || null,
         firstNonEmpty(input.mobile, inquiry.Present_Mobile) || null,
         normalizeText(input.telephone) || null,
+        normalizeText(input.familyContact) || null,
         presentAddress,
         normalizeText(input.presentCity) || null,
         normalizeText(input.presentState) || null,
@@ -926,6 +929,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       firstNonEmpty(input.email, inquiry.Email) || null,
       firstNonEmpty(input.mobile, inquiry.Present_Mobile) || null,
       normalizeText(input.telephone) || null,
+      normalizeText(input.familyContact) || null,
       presentAddress,
       normalizeText(input.presentCity) || null,
       normalizeText(input.presentState) || null,
@@ -976,6 +980,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
          Email = COALESCE(?, Email),
          Present_Mobile = COALESCE(?, Present_Mobile),
          Present_Mobile2 = COALESCE(?, Present_Mobile2),
+         Family_Contact = COALESCE(?, Family_Contact),
          Present_Address = COALESCE(?, Present_Address),
          Present_City = COALESCE(?, Present_City),
          Present_State = COALESCE(?, Present_State),
