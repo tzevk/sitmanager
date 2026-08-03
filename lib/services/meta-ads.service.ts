@@ -2834,23 +2834,35 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
   if (duplicatesOnly) {
     conditions.push(`m.duplicate_of_inquiry_id IS NOT NULL`);
   }
-  // "Untouched" = no follow-up ever logged. Deliberately NOT the correlated
-  // subquery the main SELECT below uses for its per-row Discussion column —
-  // awt_inquirydiscussion.Inquiry_id is VARCHAR(10) while student_inquiry's is
-  // INT, and correlating on that mismatch per-row defeats the index (the same
-  // class of bug called out elsewhere in this codebase), turning this into a
-  // full scan of the ~100k-row discussion table for every one of the ~10k
-  // meta leads. A one-time pre-aggregated anti-join avoids that: ~0.2s instead
-  // of 100+ seconds, verified directly against production data.
-  let discussionJoinClause = '';
-  if (untouchedOnly) {
-    discussionJoinClause = `
-      LEFT JOIN (
-        SELECT DISTINCT CAST(Inquiry_id AS UNSIGNED) AS Inquiry_Id
+  // Latest discussion per inquiry, pre-joined instead of the old per-row
+  // correlated subquery (`WHERE d.Inquiry_id = si.Inquiry_Id ORDER BY id DESC
+  // LIMIT 1`). That subquery compares awt_inquirydiscussion.Inquiry_id
+  // (VARCHAR(10)) against student_inquiry's INT Inquiry_Id — the implicit
+  // cast defeats the index (the same class of bug called out elsewhere in
+  // this codebase), forcing a full scan of the ~100k-row discussion table for
+  // every one of the ~10k meta leads once this page stopped paginating.
+  // Confirmed live against production: 100+ seconds, and it piled up 32 stuck
+  // queries on the DB server across real users before this fix.
+  //
+  // Scoped to just the inquiry_ids that actually appear in meta_ads_lead_sync
+  // (a few hundred, not the full ~100k discussion rows) so the join stays
+  // cheap regardless of how large awt_inquirydiscussion grows — verified at
+  // under a second for the full unpaginated listing.
+  const discussionJoinClause = `
+    LEFT JOIN (
+      SELECT CAST(d1.Inquiry_id AS UNSIGNED) AS Inquiry_Id, d1.discussion
+      FROM awt_inquirydiscussion d1
+      JOIN (
+        SELECT CAST(Inquiry_id AS UNSIGNED) AS Inquiry_Id, MAX(id) AS max_id
         FROM awt_inquirydiscussion
         WHERE (deleted = 0 OR deleted IS NULL)
-      ) has_disc ON has_disc.Inquiry_Id = si.Inquiry_Id`;
-    conditions.push(`has_disc.Inquiry_Id IS NULL AND TRIM(COALESCE(si.Discussion, '')) = ''`);
+          AND CAST(Inquiry_id AS UNSIGNED) IN (SELECT inquiry_id FROM ${META_LEADS_TABLE} WHERE inquiry_id IS NOT NULL)
+        GROUP BY CAST(Inquiry_id AS UNSIGNED)
+      ) latest ON latest.max_id = d1.id
+    ) latest_disc ON latest_disc.Inquiry_Id = si.Inquiry_Id`;
+
+  if (untouchedOnly) {
+    conditions.push(`latest_disc.discussion IS NULL AND TRIM(COALESCE(si.Discussion, '')) = ''`);
   }
 
   const whereClause = `WHERE ${conditions.join(' AND ')}`;
@@ -2885,14 +2897,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
          m.contact_source AS Inquiry_From,
          m.source_label AS Inquiry_Type,
          COALESCE(CAST(NULLIF(si.OnlineState,'') AS UNSIGNED), m.online_state) AS Status_id,
-         ${untouchedOnly
-           // untouchedOnly's WHERE already guarantees this resolves empty for
-           // every matching row — skip the expensive per-row correlated
-           // subquery entirely rather than re-run it for up to `limit` rows.
-           ? `'' AS Discussion,`
-           : `COALESCE((SELECT d.discussion FROM awt_inquirydiscussion d
-                   WHERE d.Inquiry_id = si.Inquiry_Id AND (d.deleted = 0 OR d.deleted IS NULL)
-                   ORDER BY d.id DESC LIMIT 1), si.Discussion) AS Discussion,`}
+         COALESCE(latest_disc.discussion, si.Discussion) AS Discussion,
          COALESCE(NULLIF(TRIM(m.campaign_name),''), NULLIF(TRIM(m.campaign_id),'')) AS MetaCampaignName,
          NULLIF(TRIM(m.form_name),'') AS MetaFormName,
          m.tags_json AS LeadTagsJson,
