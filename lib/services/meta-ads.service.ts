@@ -154,15 +154,10 @@ export interface StatusOption {
   label: string;
 }
 
+// Meta Leads' status vocabulary is deliberately narrowed to just these three
+// — the only statuses this page's leads actually need to move through.
 const FALLBACK_STATUSES: Record<number, string> = {
-  0: 'New Inquiry', 1: 'Follow Up', 2: 'Interested', 3: 'Confirmed',
-  4: 'Not Interested', 5: 'Batch Started', 6: 'Batch Completed',
-  7: 'Cancelled', 8: 'Admitted', 9: 'Left', 10: 'On Hold',
-  12: 'Prospective', 13: 'Walk In', 15: 'Re-inquiry', 16: 'Demo Attended',
-  17: 'Demo Scheduled', 19: 'Online Inquiry', 23: 'Document Pending',
-  24: 'Fees Pending', 25: 'Transfer', 26: 'Need Based Training',
-  27: 'Duplicate', 29: 'Corporate', 34: 'Assessment Done',
-  35: 'Refund', 40: 'Counselling Done', 41: 'Call Not Picked Up',
+  1: 'Follow Up', 2: 'Interested', 41: 'Call Not Picked Up',
 };
 
 export interface MetaLeadListParams {
