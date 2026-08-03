@@ -1046,8 +1046,13 @@ async function fetchDashboardData(dept?: string) {
         ) picked
         JOIN admission_master am ON am.Admission_Id = picked.Admission_Id
         JOIN ongoing_batches ob ON ob.Batch_Id = am.Batch_Id
-        WHERE LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
-          AND am.Roll_No IS NOT NULL AND am.Roll_No <> ''
+        -- No am.Cancel check here, matching the Fees Report's "Batch Wise Fees
+        -- Details" exactly — that report treats Roll_No as the sole membership
+        -- signal, and does show students whose admission was later marked
+        -- Cancel=1 after a roll number was already allotted (e.g. Piping
+        -- Engineering batch 01167 has 2 such students). Filtering them here
+        -- made this widget under-count relative to that report.
+        WHERE am.Roll_No IS NOT NULL AND am.Roll_No <> ''
       ),
       -- Same course-scoped ledger as the Fees Report (Ledger_Paid/Ledger_Posted_Debit/
       -- Ledger_Has_Membership_Debit in /api/reports/fees), rather than summing a
