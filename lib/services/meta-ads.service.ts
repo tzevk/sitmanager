@@ -206,6 +206,7 @@ export interface MetaLeadListResult {
     sources: string[];
     statusOptions: StatusOption[];
   };
+  tabCounts: { all: number; fresh: number; engaged: number };
 }
 
 export interface MetaLeadDetailResult {
@@ -2844,26 +2845,37 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
   // still triggered a slow temp-table/filesort plan at full-table scale — do
   // not "upgrade" this to return discussion text without re-verifying via
   // EXPLAIN, not just isolated benchmarks, against production data first).
-  let discussionJoinClause = '';
-  if (untouchedOnly) {
-    discussionJoinClause = `
+  const hasDiscussionJoinClause = `
       LEFT JOIN (
         SELECT DISTINCT CAST(Inquiry_id AS UNSIGNED) AS Inquiry_Id
         FROM awt_inquirydiscussion
         WHERE (deleted = 0 OR deleted IS NULL)
       ) has_disc ON has_disc.Inquiry_Id = si.Inquiry_Id`;
+  let discussionJoinClause = '';
+  if (untouchedOnly) {
+    discussionJoinClause = hasDiscussionJoinClause;
     conditions.push(`has_disc.Inquiry_Id IS NULL AND TRIM(COALESCE(si.Discussion, '')) = ''`);
   }
 
   const whereClause = `WHERE ${conditions.join(' AND ')}`;
+  // "Fresh" = still at the default new-lead status (Status_id unset or 1) AND
+  // no follow-up logged — same definition the frontend uses per-row, just
+  // aggregated here so the sub-tab counts reflect ALL matching leads, not
+  // just whatever's on the currently loaded page.
+  const freshCaseExpr = `
+    (COALESCE(CAST(NULLIF(si.OnlineState,'') AS UNSIGNED), m.online_state) IS NULL
+      OR COALESCE(CAST(NULLIF(si.OnlineState,'') AS UNSIGNED), m.online_state) = 1)
+    AND has_disc.Inquiry_Id IS NULL
+    AND TRIM(COALESCE(si.Discussion, '')) = ''`;
   const offset = (page - 1) * limit;
 
-  // Run count, main data, and filter-option queries in parallel.
+  // Run count, main data, filter-option, and tab-count queries in parallel.
   const [
     [countRowsRaw],
     [rowsRaw],
     [trainingRowsRaw],
     [sourceRowsRaw],
+    [tabCountRowsRaw],
   ] = await Promise.all([
     pool.query(
       `SELECT COUNT(*) AS total
@@ -2921,13 +2933,23 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
        WHERE source_label IS NOT NULL AND TRIM(source_label) != ''
        ORDER BY source_label`
     ),
+    pool.query(
+      `SELECT SUM(CASE WHEN ${freshCaseExpr} THEN 1 ELSE 0 END) AS fresh_count
+       FROM ${META_LEADS_TABLE} m
+       LEFT JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = m.inquiry_id
+       ${hasDiscussionJoinClause}
+       ${whereClause}`,
+      queryParams
+    ),
   ]);
 
   let countRows = countRowsRaw as any[];
   let rows = rowsRaw as any[];
   const trainingRows = trainingRowsRaw as any[];
   const sourceRows = sourceRowsRaw as any[];
+  const tabCountRows = tabCountRowsRaw as any[];
   let total = Number(countRows[0]?.total || 0);
+  const freshCount = Number(tabCountRows[0]?.fresh_count || 0);
 
   const normalizedSource = source.toLowerCase().trim();
   const platformFilterSelected =
@@ -3089,6 +3111,11 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
       trainings: trainingRows.map((row: any) => String(row.course_name).trim()).filter(Boolean),
       sources: sourceRows.map((row: any) => String(row.source_label).trim()).filter(Boolean),
       statusOptions,
+    },
+    tabCounts: {
+      all: total,
+      fresh: freshCount,
+      engaged: Math.max(0, total - freshCount),
     },
   };
 }

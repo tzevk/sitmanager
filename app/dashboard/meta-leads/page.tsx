@@ -99,6 +99,7 @@ interface MetaBatchRecommendationResponse {
 }
 
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
+interface TabCounts { all: number; fresh: number; engaged: number; }
 interface Filters { trainings: string[]; sources: string[]; statusOptions: { id: number; label: string }[]; }
 
 interface LeadRowDraft {
@@ -689,6 +690,7 @@ export default function MetaLeadsPage() {
   const [rows, setRows] = useState<InquiryRow[]>([]);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: PAGE_SIZE, total: 0, totalPages: 0 });
+  const [tabCounts, setTabCounts] = useState<TabCounts>({ all: 0, fresh: 0, engaged: 0 });
   const [filters, setFilters] = useState<Filters>({ trainings: [], sources: [], statusOptions: [] });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -738,11 +740,13 @@ export default function MetaLeadsPage() {
       if (!res.ok) throw new Error(data?.error || 'Failed to load Meta leads');
       setRows(data.rows ?? []);
       setPagination(data.pagination ?? { page: 1, limit: PAGE_SIZE, total: 0, totalPages: 0 });
+      setTabCounts(data.tabCounts ?? { all: 0, fresh: 0, engaged: 0 });
       if (data.filters) setFilters({ trainings: data.filters.trainings ?? [], sources: data.filters.sources ?? [], statusOptions: data.filters.statusOptions ?? [] });
     } catch (error) {
       console.error(error);
       setRows([]);
       setPagination({ page: 1, limit: PAGE_SIZE, total: 0, totalPages: 0 });
+      setTabCounts({ all: 0, fresh: 0, engaged: 0 });
     } finally {
       setLoading(false);
     }
@@ -1499,9 +1503,9 @@ export default function MetaLeadsPage() {
 
                 <div className="flex items-center gap-1.5 px-4 py-2 border-b border-slate-100 bg-slate-50/60">
                   {([
-                    { id: 'all' as const, label: 'All Leads', count: rows.length },
-                    { id: 'fresh' as const, label: 'Fresh Leads', count: freshRows.length },
-                    { id: 'engaged' as const, label: 'Contacted / Status Changed', count: engagedRows.length },
+                    { id: 'all' as const, label: 'All Leads', count: tabCounts.all },
+                    { id: 'fresh' as const, label: 'Fresh Leads', count: tabCounts.fresh },
+                    { id: 'engaged' as const, label: 'Contacted / Status Changed', count: tabCounts.engaged },
                   ]).map((t) => (
                     <button
                       key={t.id}
