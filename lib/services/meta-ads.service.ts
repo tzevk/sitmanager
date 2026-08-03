@@ -176,6 +176,7 @@ export interface MetaLeadListParams {
   dateTo?: string;
   training?: string;
   duplicatesOnly?: boolean;
+  untouchedOnly?: boolean;
 }
 
 export interface MetaLeadListRow {
@@ -2761,6 +2762,7 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
     dateTo = '',
     training = '',
     duplicatesOnly = false,
+    untouchedOnly = false,
   } = params;
 
   const conditions: string[] = ['1=1'];
@@ -2831,6 +2833,16 @@ export async function listMetaLeads(params: MetaLeadListParams): Promise<MetaLea
   }
   if (duplicatesOnly) {
     conditions.push(`m.duplicate_of_inquiry_id IS NOT NULL`);
+  }
+  if (untouchedOnly) {
+    // Same Discussion resolution as the main SELECT below (latest
+    // awt_inquirydiscussion row, falling back to si.Discussion) — "untouched"
+    // means that resolves to nothing, not just that inquiry_id is unset.
+    conditions.push(`TRIM(COALESCE((
+      SELECT d.discussion FROM awt_inquirydiscussion d
+      WHERE d.Inquiry_id = si.Inquiry_Id AND (d.deleted = 0 OR d.deleted IS NULL)
+      ORDER BY d.id DESC LIMIT 1
+    ), si.Discussion, '')) = ''`);
   }
 
   const whereClause = `WHERE ${conditions.join(' AND ')}`;

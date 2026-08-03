@@ -8,9 +8,14 @@ export async function GET(req: NextRequest) {
     if (auth instanceof NextResponse) return auth;
 
     const url = req.nextUrl;
+    const untouchedOnly = url.searchParams.get('untouchedOnly') === '1';
+    // Untouched-only is a narrow, action-focused list (leads with zero
+    // follow-up logged) rather than the main browsable table, so it's allowed
+    // a higher cap — the point is showing ALL of them, not a page of them.
+    const maxLimit = untouchedOnly ? 1000 : 100;
     const result = await listMetaLeads({
       page: Math.max(1, parseInt(url.searchParams.get('page') || '1')),
-      limit: Math.min(100, Math.max(10, parseInt(url.searchParams.get('limit') || '25'))),
+      limit: Math.min(maxLimit, Math.max(10, parseInt(url.searchParams.get('limit') || '25'))),
       search: url.searchParams.get('search')?.trim() || '',
       leadTag: url.searchParams.get('leadTag')?.trim() || '',
       source: url.searchParams.get('source')?.trim() || '',
@@ -19,6 +24,7 @@ export async function GET(req: NextRequest) {
       dateTo: url.searchParams.get('dateTo') || '',
       training: url.searchParams.get('training') || '',
       duplicatesOnly: url.searchParams.get('duplicatesOnly') === '1',
+      untouchedOnly,
     });
 
     return NextResponse.json(result);

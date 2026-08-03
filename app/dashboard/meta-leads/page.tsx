@@ -291,6 +291,12 @@ function normalizedFollowUpLines(raw: string | null | undefined): string[] {
 }
 
 function hasLatestFollowUp(r: InquiryRow) { return normalizedFollowUpLines(r.Discussion).length > 0; }
+// A lead is "fresh" while it's still at the default new-lead status (1, or
+// unset) AND has no follow-up note logged — either signal moving it out of
+// that state (a status change or a logged discussion) makes it "contacted".
+function isFreshLead(r: InquiryRow) {
+  return !hasLatestFollowUp(r) && (r.Status_id == null || r.Status_id === 1);
+}
 function isPendingFollowUp(r: InquiryRow) {
   if (r.Status_id != null && [4, 12, 15].includes(r.Status_id)) return true;
   const l = String(r.StatusLabel || '').toLowerCase();
@@ -688,6 +694,8 @@ export default function MetaLeadsPage() {
   const [duplicatesOnly, setDuplicatesOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [fetchTrigger, setFetchTrigger] = useState(0);
+  const [allUntouchedRows, setAllUntouchedRows] = useState<InquiryRow[]>([]);
+  const [allUntouchedTotal, setAllUntouchedTotal] = useState(0);
   const [metaPerf, setMetaPerf] = useState<MetaPerformanceSummary | null>(null);
   const [metaPerfError, setMetaPerfError] = useState('');
   const [metaReco, setMetaReco] = useState<MetaBatchRecommendationResponse | null>(null);
@@ -699,6 +707,7 @@ export default function MetaLeadsPage() {
   const [rowDrafts, setRowDrafts] = useState<Record<string, LeadRowDraft>>({});
   const [convertError, setConvertError] = useState('');
   const [untouchedExpanded, setUntouchedExpanded] = useState(false);
+  const [leadsSubTab, setLeadsSubTab] = useState<'fresh' | 'engaged' | 'all'>('fresh');
   const [followUpModalLeadId, setFollowUpModalLeadId] = useState<string | null>(null);
   const [metaDataModalLeadId, setMetaDataModalLeadId] = useState<string | null>(null);
   const [capturedFieldsModalLeadId, setCapturedFieldsModalLeadId] = useState<string | null>(null);
@@ -735,6 +744,23 @@ export default function MetaLeadsPage() {
   }, [dateFrom, dateTo, duplicatesOnly, page, search, source, status, training]);
 
   useEffect(() => { fetchData(); }, [fetchData, fetchTrigger]);
+
+  // Independent of the main table's pagination/filters — this is the true,
+  // system-wide "needs attention" list, not just whatever happens to be on
+  // the currently displayed page.
+  const fetchAllUntouched = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/meta-ads/leads?page=1&limit=1000&untouchedOnly=1`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to load untouched leads');
+      setAllUntouchedRows(data.rows ?? []);
+      setAllUntouchedTotal(Number(data.pagination?.total ?? (data.rows ?? []).length));
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+
+  useEffect(() => { fetchAllUntouched(); }, [fetchAllUntouched, fetchTrigger]);
 
   useEffect(() => {
     const nextDrafts: Record<string, LeadRowDraft> = {};
@@ -1046,7 +1072,12 @@ export default function MetaLeadsPage() {
     };
   }, [metaPerf, recommendations]);
 
-  const untouchedRows = useMemo(() => rows.filter((r) => !hasLatestFollowUp(r)).sort((a, b) => (a.Inquiry_Dt ?? '').localeCompare(b.Inquiry_Dt ?? '')), [rows]);
+  // Full, system-wide untouched list (fetched separately, not sliced to the
+  // current page) — see fetchAllUntouched above.
+  const untouchedRows = useMemo(() => [...allUntouchedRows].sort((a, b) => (a.Inquiry_Dt ?? '').localeCompare(b.Inquiry_Dt ?? '')), [allUntouchedRows]);
+  const freshRows = useMemo(() => rows.filter(isFreshLead), [rows]);
+  const engagedRows = useMemo(() => rows.filter((r) => !isFreshLead(r)), [rows]);
+  const displayRows = leadsSubTab === 'fresh' ? freshRows : leadsSubTab === 'engaged' ? engagedRows : rows;
   const perfLoading = !metaPerf && !metaPerfError;
   const fromRow = pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.limit + 1;
   const toRow = pagination.total === 0 ? 0 : Math.min(pagination.page * pagination.limit, pagination.total);
@@ -1400,7 +1431,9 @@ export default function MetaLeadsPage() {
                   <button type="button" onClick={() => setUntouchedExpanded((v) => !v)} className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-red-100/60 transition-colors">
                     <svg className="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                     <span className="font-bold text-red-800 text-sm flex-1">Untouched Leads — No Follow-Up Logged</span>
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-200 text-red-800 tabular-nums">{untouchedRows.length} of {rows.length}</span>
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-200 text-red-800 tabular-nums">
+                      {allUntouchedTotal}{untouchedRows.length < allUntouchedTotal ? ` (showing ${untouchedRows.length})` : ''}
+                    </span>
                     <svg className={`w-4 h-4 text-red-500 transition-transform ${untouchedExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
                   </button>
                   {untouchedExpanded && (
@@ -1452,18 +1485,36 @@ export default function MetaLeadsPage() {
                     <h3 className="text-sm font-bold text-slate-800">Meta Leads</h3>
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] text-slate-500 tabular-nums">{pagination.total.toLocaleString()} total</span>
-                      {!loading && untouchedRows.length > 0 && <><span className="text-slate-300 text-[10px]">·</span><span className="text-[11px] font-semibold text-red-500">{untouchedRows.length} untouched</span></>}
+                      {!loading && allUntouchedTotal > 0 && <><span className="text-slate-300 text-[10px]">·</span><span className="text-[11px] font-semibold text-red-500">{allUntouchedTotal} untouched</span></>}
                       {!loading && rows.filter((r) => r.IsDuplicateLead).length > 0 && <><span className="text-slate-300 text-[10px]">·</span><span className="text-[11px] font-semibold text-amber-600">{rows.filter((r) => r.IsDuplicateLead).length} dupes</span></>}
                     </div>
                   </div>
                   <span className="text-[11px] text-slate-400 tabular-nums">Page {pagination.page} of {Math.max(1, pagination.totalPages)}</span>
                 </div>
 
+                <div className="flex items-center gap-1.5 px-4 py-2 border-b border-slate-100 bg-slate-50/60">
+                  {([
+                    { id: 'all' as const, label: 'All Leads', count: rows.length },
+                    { id: 'fresh' as const, label: 'Fresh Leads', count: freshRows.length },
+                    { id: 'engaged' as const, label: 'Contacted / Status Changed', count: engagedRows.length },
+                  ]).map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setLeadsSubTab(t.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${leadsSubTab === t.id ? 'bg-[#6366F1] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}
+                    >
+                      {t.label}
+                      <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold tabular-nums ${leadsSubTab === t.id ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'}`}>{t.count}</span>
+                    </button>
+                  ))}
+                </div>
+
                 {convertError && <div className="border-b border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700">{convertError}</div>}
 
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                   <table className="w-full text-xs border-collapse">
-                    <thead>
+                    <thead className="sticky top-0 z-10">
                       <tr className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 border-b border-slate-200">
                         <th className="text-left font-bold border-r border-slate-200 py-2.5 px-3 w-8">#</th>
                         <th className="text-left font-bold border-r border-slate-200 py-2.5 px-3 min-w-[90px]">Date</th>
@@ -1483,13 +1534,21 @@ export default function MetaLeadsPage() {
                         Array.from({ length: 8 }).map((_, i) => (
                           <tr key={i}>{Array.from({ length: 11 }).map((__, j) => <td key={j} className="py-2.5 px-3 border-b border-slate-100 border-r border-slate-100"><div className="h-3 bg-slate-50 rounded animate-pulse" /></td>)}</tr>
                         ))
-                      ) : rows.length === 0 ? (
+                      ) : displayRows.length === 0 ? (
                         <tr><td colSpan={11} className="py-16 text-center">
                           <div className="text-slate-300 text-2xl mb-2">○</div>
-                          <div className="text-xs text-slate-400 font-medium">No Meta leads found</div>
+                          <div className="text-xs text-slate-400 font-medium">
+                            {rows.length === 0
+                              ? 'No Meta leads found'
+                              : leadsSubTab === 'fresh'
+                                ? 'No fresh leads — everything on this page has been contacted'
+                                : leadsSubTab === 'engaged'
+                                  ? 'No contacted/status-changed leads on this page yet'
+                                  : 'No Meta leads found'}
+                          </div>
                           <div className="text-xs text-slate-300 mt-1">Try adjusting your filters</div>
                         </td></tr>
-                      ) : rows.map((row, index) => {
+                      ) : displayRows.map((row, index) => {
                         const draft = rowDrafts[row.MetaLead_Id] ?? { studentName: row.Student_Name || '', courseName: row.CourseName || '', mobile: row.Present_Mobile || '', email: row.Email || '', city: row.City || '', discussion: toBulletEditorValue(row.Discussion), statusId: row.Status_id };
                         const sentEmail = Boolean(row.ApplicantEmailSentAt);
                         const baseBgCls = rowBg(row.Status_id, row.StatusLabel);
