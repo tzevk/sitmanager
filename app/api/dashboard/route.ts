@@ -476,6 +476,7 @@ async function fetchDashboardData(dept?: string) {
         UNION ALL SELECT 'Piping Design & Drafting', 'PDD'
         UNION ALL SELECT 'Structural Engineering', 'Structural Engg'
         UNION ALL SELECT 'Rotating Equipment', 'Rotating Equipments'
+        UNION ALL SELECT 'Piping Engineering', 'Piping'
       ) course_alias ON course_alias.course_name = cm.Course_Name
       JOIN (
         SELECT m.course_name,
