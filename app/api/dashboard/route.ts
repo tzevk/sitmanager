@@ -229,6 +229,7 @@ async function fetchDashboardData(dept?: string) {
     batchTargets,
     sparklineData,
     upcomingBatches,
+    metaBatchTotalsRows,
     metaCourseTotalsRows,
     enquirySummaryRows,
     recentEnquiries,
@@ -449,20 +450,43 @@ async function fetchDashboardData(dept?: string) {
       LIMIT 50
     `, []) : Promise.resolve([]),
 
-    // 2b. Meta (Facebook/Instagram) lead totals per course — kept as its OWN query
-    // rather than joined into 2. above: it needs a fuzzy LIKE match (meta lead
-    // course names are free-text/campaign-suffixed, e.g. "EDD", "HVAC Engineering
-    // 07083", never the exact course_mst.Course_Name) against course_mst and a
-    // small alias table, then a converted-only join to awt_inquirydiscussion for
-    // "contacted". Even though each piece is individually cheap, adding it inline
-    // to query 2's already-heavy batch/inquiry join pushed the combined runtime
-    // past the dashboard's query timeout and silently emptied that whole widget
-    // (safeQuery swallows timeouts). Running it standalone means a slow/failed
-    // Meta computation only zeroes out the Meta columns, never the batch list.
+    // 2b. Meta (Facebook/Instagram) lead totals per batch — matched by exact
+    // batch_code (set via a hidden field on the lead form, see meta-ads.service.ts
+    // resolveMetaBatchCode) rather than a fuzzy course-name/alias guess. Kept as
+    // its OWN query rather than joined into 2. above for the same reason as
+    // before: a slow/failed Meta computation should only zero out the Meta
+    // columns, never the whole batch list (safeQuery swallows timeouts).
     // "Contacted" = converted lead's Inquiry_Id has a logged discussion note;
     // "Converted" = lead has inquiry_id set. Contact tracking only exists once a
     // lead is converted (adding a note auto-converts it), so Contacted is scoped
     // to the already-converted subset — never a superset of Converted.
+    needsUpcomingBatches ? safeQuery(pool, `
+      SELECT b.Batch_code AS BatchCode,
+             COUNT(*) AS Meta_Received,
+             SUM(CASE WHEN m.inquiry_id IS NOT NULL THEN 1 ELSE 0 END) AS Meta_Converted,
+             SUM(CASE WHEN conv.contacted IS NOT NULL THEN 1 ELSE 0 END) AS Meta_Contacted
+      FROM meta_ads_lead_sync m
+      JOIN batch_mst b ON LOWER(TRIM(m.batch_code)) = LOWER(TRIM(b.Batch_code))
+      -- Pre-filter to converted-only leads before joining discussions: joining
+      -- the full 10k-row table against 100k+ discussion rows (with an INT vs
+      -- VARCHAR Inquiry_Id type mismatch that defeats the index) timed out.
+      -- Only ~250 leads are converted, so this join stays cheap.
+      LEFT JOIN (
+        SELECT c1.id, dd.Inquiry_id AS contacted
+        FROM (SELECT id, inquiry_id FROM meta_ads_lead_sync WHERE inquiry_id IS NOT NULL) c1
+        JOIN (
+          SELECT DISTINCT Inquiry_id FROM awt_inquirydiscussion WHERE (deleted = 0 OR deleted IS NULL)
+        ) dd ON dd.Inquiry_id = c1.inquiry_id
+      ) conv ON conv.id = m.id
+      WHERE m.batch_code IS NOT NULL AND TRIM(m.batch_code) != ''
+      GROUP BY b.Batch_code
+    `, []) : Promise.resolve([]),
+
+    // 2c. Meta lead totals per course — LEGACY fallback for leads captured before
+    // a form set the batch_code field (or from a form that never will, e.g. a
+    // generic course-wide ad not tied to one batch). Restricted to batch_code-less
+    // leads so a batch never gets counted under both 2b and 2c at once. Uses the
+    // same fuzzy course-name/alias match as before this batch_code feature existed.
     needsUpcomingBatches ? safeQuery(pool, `
       SELECT cm.Course_Name AS CourseName,
              SUM(g.total) AS Meta_Received,
@@ -484,10 +508,6 @@ async function fetchDashboardData(dept?: string) {
                SUM(CASE WHEN m.inquiry_id IS NOT NULL THEN 1 ELSE 0 END) AS converted,
                SUM(CASE WHEN conv.contacted IS NOT NULL THEN 1 ELSE 0 END) AS contacted
         FROM meta_ads_lead_sync m
-        -- Pre-filter to converted-only leads before joining discussions: joining
-        -- the full 10k-row table against 100k+ discussion rows (with an INT vs
-        -- VARCHAR Inquiry_Id type mismatch that defeats the index) timed out.
-        -- Only ~250 leads are converted, so this join stays cheap.
         LEFT JOIN (
           SELECT c1.id, dd.Inquiry_id AS contacted
           FROM (SELECT id, inquiry_id FROM meta_ads_lead_sync WHERE inquiry_id IS NOT NULL) c1
@@ -496,6 +516,7 @@ async function fetchDashboardData(dept?: string) {
           ) dd ON dd.Inquiry_id = c1.inquiry_id
         ) conv ON conv.id = m.id
         WHERE m.course_name IS NOT NULL AND TRIM(m.course_name) != ''
+          AND (m.batch_code IS NULL OR TRIM(m.batch_code) = '')
         GROUP BY m.course_name
       ) g
         ON LOWER(g.course_name) LIKE CONCAT('%', LOWER(cm.Course_Name), '%')
@@ -1008,28 +1029,58 @@ async function fetchDashboardData(dept?: string) {
           AND ${BATCH_PENDING_START_EXPR} < CURDATE()
           AND ${BATCH_PENDING_END_EXPR} >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
       ),
+      -- Matches the Fees Report's "Batch Wise Fees Details" membership rule
+      -- exactly: one row per (Student, Batch) — not per student globally — so a
+      -- transferred student can legitimately appear under both their old and
+      -- new batch, same as that report. Roll_No IS NOT NULL is the same "batch
+      -- admission actually confirmed/settled" gate the report uses (Allot Roll
+      -- Number); without it this widget was counting enquiry-stage admission
+      -- rows the report never treats as real batch membership.
       latest_admission AS (
-        SELECT am.Student_Id, MAX(am.Admission_Id) AS Admission_Id
-        FROM admission_master am
+        SELECT am.Student_Id, am.Batch_Id, am.Admission_Id
+        FROM (
+          SELECT Student_Id, Batch_Id, MAX(Admission_Id) AS Admission_Id
+          FROM admission_master
+          WHERE (IsDelete = 0 OR IsDelete IS NULL)
+          GROUP BY Student_Id, Batch_Id
+        ) picked
+        JOIN admission_master am ON am.Admission_Id = picked.Admission_Id
         JOIN ongoing_batches ob ON ob.Batch_Id = am.Batch_Id
-        WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
-          AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
-        GROUP BY am.Student_Id
+        WHERE LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+          AND am.Roll_No IS NOT NULL AND am.Roll_No <> ''
       ),
-      -- Same ledger aggregation as lib/fee-balance.ts (Fee Details' exact Total
-      -- Fees / Total Paid formula), so this dashboard's pending-fees figures
-      -- match the per-student Fee Details page instead of only counting the
-      -- tuition fee and ignoring posted debits / the one-time membership fee.
+      -- Same course-scoped ledger as the Fees Report (Ledger_Paid/Ledger_Posted_Debit/
+      -- Ledger_Has_Membership_Debit in /api/reports/fees), rather than summing a
+      -- student's entire fee history across every course they've ever taken —
+      -- scoping globally overstated/understated pending amounts for any student
+      -- enrolled in more than one course over time.
       student_ledger AS (
         SELECT
-          f.Student_Id AS Student_Id,
+          la.Student_Id,
+          la.Batch_Id,
           SUM(CASE WHEN f.TypeR = 'C' THEN COALESCE(f.Total_Amt, f.Amount, 0) ELSE 0 END) AS paid_amount,
           SUM(CASE WHEN f.TypeR = 'D' THEN COALESCE(f.Total_Amt, f.Amount, 0) ELSE 0 END) AS posted_debit,
           MAX(CASE WHEN f.TypeR = 'D' AND LOWER(IFNULL(f.Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END) AS has_membership_debit
-        FROM s_fees_mst f FORCE INDEX (idx_sfees_student)
-        JOIN latest_admission la ON la.Student_Id = f.Student_Id
-        WHERE (f.IsDelete = 0 OR f.IsDelete IS NULL)
-        GROUP BY f.Student_Id
+        FROM latest_admission la
+        JOIN ongoing_batches ob ON ob.Batch_Id = la.Batch_Id
+        JOIN s_fees_mst f
+          ON f.Student_Id = la.Student_Id
+         AND (f.IsDelete = 0 OR f.IsDelete IS NULL)
+         AND (
+           f.Batch_Id IN (SELECT Batch_Id FROM batch_mst WHERE Course_Id = ob.Course_Id)
+           OR (
+             (f.Batch_Id IS NULL OR f.Batch_Id = 0)
+             AND NOT EXISTS (
+               SELECT 1 FROM admission_master am_other
+               JOIN batch_mst bm_other ON bm_other.Batch_Id = am_other.Batch_Id
+               WHERE am_other.Student_Id = la.Student_Id
+                 AND bm_other.Course_Id <> ob.Course_Id
+                 AND (am_other.IsDelete = 0 OR am_other.IsDelete IS NULL)
+                 AND am_other.Roll_No IS NOT NULL AND am_other.Roll_No <> ''
+             )
+           )
+         )
+        GROUP BY la.Student_Id, la.Batch_Id
       ),
       visible_students AS (
         SELECT
@@ -1056,21 +1107,25 @@ async function fetchDashboardData(dept?: string) {
           COALESCE(sl.paid_amount, 0) AS paid_amount
         FROM latest_admission la
         JOIN admission_master am ON am.Admission_Id = la.Admission_Id
-        JOIN ongoing_batches ob ON ob.Batch_Id = am.Batch_Id
+        JOIN ongoing_batches ob ON ob.Batch_Id = la.Batch_Id
         JOIN student_master sm ON sm.Student_Id = la.Student_Id
-        LEFT JOIN student_ledger sl ON sl.Student_Id = sm.Student_Id
+        LEFT JOIN student_ledger sl ON sl.Student_Id = la.Student_Id AND sl.Batch_Id = la.Batch_Id
         WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL)
           AND (sm.IsActive = 1 OR sm.IsActive IS NULL)
           AND COALESCE(NULLIF(TRIM(sm.Student_Name), ''), '') <> ''
       ),
+      -- Dedup scoped to (person_key, Batch_Id) rather than person_key alone —
+      -- collapses duplicate student_master rows for the same physical person
+      -- within one batch, but still lets a genuinely transferred person appear
+      -- once under each of their (old, new) batches, per the rule above.
       deduped_students AS (
         SELECT vs.*
         FROM visible_students vs
         JOIN (
-          SELECT person_key, MAX(Student_Id) AS Student_Id
+          SELECT person_key, Batch_Id, MAX(Student_Id) AS Student_Id
           FROM visible_students
-          GROUP BY person_key
-        ) keep_one ON keep_one.person_key = vs.person_key AND keep_one.Student_Id = vs.Student_Id
+          GROUP BY person_key, Batch_Id
+        ) keep_one ON keep_one.person_key = vs.person_key AND keep_one.Batch_Id = vs.Batch_Id AND keep_one.Student_Id = vs.Student_Id
       )
       SELECT
         b.Batch_Id AS id,
@@ -1481,6 +1536,14 @@ async function fetchDashboardData(dept?: string) {
     last7Days: Number(metaInquiryRow.last_7_days || 0),
   };
 
+  const metaBatchTotalsMap: Record<string, { received: number; contacted: number; converted: number }> = {};
+  for (const row of metaBatchTotalsRows as any[]) {
+    metaBatchTotalsMap[String(row.BatchCode || '').trim().toLowerCase()] = {
+      received: Number(row.Meta_Received) || 0,
+      contacted: Number(row.Meta_Contacted) || 0,
+      converted: Number(row.Meta_Converted) || 0,
+    };
+  }
   const metaCourseTotalsMap: Record<string, { received: number; contacted: number; converted: number }> = {};
   for (const row of metaCourseTotalsRows as any[]) {
     metaCourseTotalsMap[row.CourseName] = {
@@ -1489,8 +1552,11 @@ async function fetchDashboardData(dept?: string) {
       converted: Number(row.Meta_Converted) || 0,
     };
   }
+  // Prefer exact batch_code attribution; fall back to the fuzzy course-name
+  // match only for batches with no batch_code-tagged leads yet (see query 2b/2c).
   const upcomingBatchesFinal = (upcomingBatches as any[]).map((b: any) => {
-    const meta = metaCourseTotalsMap[b.CourseName];
+    const meta = metaBatchTotalsMap[String(b.Batch_code || '').trim().toLowerCase()]
+      ?? metaCourseTotalsMap[b.CourseName];
     return {
       ...b,
       Meta_Received: meta?.received ?? 0,

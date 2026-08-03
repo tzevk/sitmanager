@@ -674,6 +674,7 @@ async function ensureMetaLeadTables() {
         mobile VARCHAR(30) NULL,
         email VARCHAR(191) NULL,
         course_name VARCHAR(255) NULL,
+        batch_code VARCHAR(100) NULL,
         utm_json LONGTEXT NULL,
         tags_json LONGTEXT NULL,
         fields_json LONGTEXT NULL,
@@ -692,7 +693,8 @@ async function ensureMetaLeadTables() {
         KEY idx_meta_ads_campaign_id (campaign_id),
         KEY idx_meta_ads_form_id (form_id),
         KEY idx_meta_ads_mobile (mobile),
-        KEY idx_meta_ads_email (email)
+        KEY idx_meta_ads_email (email),
+        KEY idx_meta_ads_batch_code (batch_code)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `),
     pool.query(`
@@ -744,6 +746,7 @@ async function ensureMetaLeadTables() {
     pool.query(`ALTER TABLE ${META_LEADS_TABLE} ADD COLUMN IF NOT EXISTS applicant_email_sent_at TIMESTAMP NULL`),
     pool.query(`ALTER TABLE ${META_LEADS_TABLE} ADD COLUMN IF NOT EXISTS applicant_email_last_error TEXT NULL`),
     pool.query(`ALTER TABLE ${META_LEADS_TABLE} ADD COLUMN IF NOT EXISTS online_state INT NULL`),
+    pool.query(`ALTER TABLE ${META_LEADS_TABLE} ADD COLUMN IF NOT EXISTS batch_code VARCHAR(100) NULL`),
   ]);
   metaTablesReady = true;
 }
@@ -1986,6 +1989,16 @@ function resolveMetaCourseName(fields: Record<string, string | null>, formName: 
   return resolveMetaCourseFieldValue(fields) || formName;
 }
 
+function resolveMetaBatchCode(fields: Record<string, string | null>): string | null {
+  return firstValue(fields, [
+    'batch_code',
+    'batch',
+    'batch_no',
+    'batch_number',
+    'batchcode',
+  ]);
+}
+
 function resolveMetaLeadSource(input: {
   rawPayload?: unknown;
   event?: Partial<MetaWebhookLeadEvent> | null;
@@ -2223,6 +2236,7 @@ async function upsertMetaLeadRow(params: {
   mobile: string | null;
   email: string | null;
   courseName: string | null;
+  batchCode: string | null;
   leadCreatedTime: string | null;
   ctx: MetaLeadContext;
   tags: string[];
@@ -2243,11 +2257,11 @@ async function upsertMetaLeadRow(params: {
        source_label, contact_source,
        page_id, page_name, form_id, form_name,
        campaign_id, campaign_name, adset_id, adset_name, ad_id, ad_name,
-       lead_created_time, student_name, mobile, email, course_name,
+       lead_created_time, student_name, mobile, email, course_name, batch_code,
        utm_json, tags_json, fields_json, payload_json,
        duplicate_reason, last_error, notifications_sent_at,
        applicant_email_sent_at, applicant_email_last_error
-     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
      ON DUPLICATE KEY UPDATE
        inquiry_id = COALESCE(VALUES(inquiry_id), inquiry_id),
        duplicate_of_inquiry_id = COALESCE(VALUES(duplicate_of_inquiry_id), duplicate_of_inquiry_id),
@@ -2268,6 +2282,7 @@ async function upsertMetaLeadRow(params: {
        mobile = VALUES(mobile),
        email = VALUES(email),
        course_name = VALUES(course_name),
+       batch_code = VALUES(batch_code),
        utm_json = VALUES(utm_json),
        tags_json = VALUES(tags_json),
        fields_json = VALUES(fields_json),
@@ -2301,6 +2316,7 @@ async function upsertMetaLeadRow(params: {
       params.mobile,
       params.email,
       params.courseName,
+      params.batchCode,
       JSON.stringify(params.utm),
       JSON.stringify(params.tags),
       JSON.stringify(params.fields),
@@ -2362,6 +2378,7 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
   const email = normalizeEmail(firstValue(fields, ['email', 'email_address']));
   const mobile = normalizeDigits(firstValue(fields, ['phone_number', 'phone', 'mobile', 'whatsapp_number', 'whatsapp']));
   const courseName = firstValue(fields, ['course', 'course_name', 'interested_course', 'training_programme', 'training_program']);
+  const batchCode = resolveMetaBatchCode(fields);
   const qualification = firstValue(fields, ['educational_qualification', 'qualification_', 'what_is_your_qualification_', 'qualification', 'highest_qualification', 'education_level', 'education']);
   const discipline = firstValue(fields, ['discipline', 'stream']);
   const percentage = parseNumber(firstValue(fields, ['percentage', 'marks_percentage']));
@@ -2503,6 +2520,7 @@ export async function syncMetaLead(event: MetaWebhookLeadEvent, rawPayload: unkn
     mobile,
     email,
     courseName,
+    batchCode,
     leadCreatedTime: normalizeText(lead.created_time || event.created_time),
     ctx,
     tags,
@@ -2666,6 +2684,7 @@ export async function syncLiveMetaLeadsToDb(options: MetaLeadSyncOptions = {}): 
             mobile: normalizeDigits(firstValue(fields, ['phone_number', 'phone', 'mobile', 'whatsapp_number', 'whatsapp'])),
             email: normalizeEmail(firstValue(fields, ['email', 'email_address'])),
             courseName: resolveMetaCourseName(fields, ctx.formName || fallbackFormName),
+            batchCode: resolveMetaBatchCode(fields),
             leadCreatedTime: normalizeText(lead.created_time),
             ctx,
             tags: Array.from(new Set([...buildTags(fields, ctx), sourceInfo.sourceTag])).sort(),
