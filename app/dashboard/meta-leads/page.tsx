@@ -113,7 +113,10 @@ interface LeadRowDraft {
 
 type DraftTextField = 'studentName' | 'courseName' | 'mobile' | 'email' | 'city' | 'discussion';
 
-const PAGE_SIZE = 100;
+// Pagination is deliberately not used on this page — everything matching the
+// current filters is fetched and rendered in one go. This is a ceiling, not a
+// real page size.
+const ALL_LEADS_LIMIT = 20000;
 
 function toBulletEditorValue(raw: string | null | undefined): string {
   const text = String(raw || '').trim();
@@ -682,7 +685,7 @@ export default function MetaLeadsPage() {
 
   const [activeTab, setActiveTab] = useState<'analytics' | 'leads'>('leads');
   const [rows, setRows] = useState<InquiryRow[]>([]);
-  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: PAGE_SIZE, total: 0, totalPages: 0 });
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: ALL_LEADS_LIMIT, total: 0, totalPages: 0 });
   const [filters, setFilters] = useState<Filters>({ trainings: [], sources: [], statusOptions: [] });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -692,7 +695,6 @@ export default function MetaLeadsPage() {
   const [dateTo, setDateTo] = useState('');
   const [training, setTraining] = useState('');
   const [duplicatesOnly, setDuplicatesOnly] = useState(false);
-  const [page, setPage] = useState(1);
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [allUntouchedRows, setAllUntouchedRows] = useState<InquiryRow[]>([]);
   const [allUntouchedTotal, setAllUntouchedTotal] = useState(0);
@@ -720,7 +722,7 @@ export default function MetaLeadsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
+      const p = new URLSearchParams({ limit: String(ALL_LEADS_LIMIT) });
       if (search) p.set('search', search);
       if (source) p.set('source', source);
       if (status) p.set('status', status);
@@ -732,16 +734,16 @@ export default function MetaLeadsPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Failed to load Meta leads');
       setRows(data.rows ?? []);
-      setPagination(data.pagination ?? { page: 1, limit: PAGE_SIZE, total: 0, totalPages: 0 });
+      setPagination(data.pagination ?? { page: 1, limit: ALL_LEADS_LIMIT, total: 0, totalPages: 0 });
       if (data.filters) setFilters({ trainings: data.filters.trainings ?? [], sources: data.filters.sources ?? [], statusOptions: data.filters.statusOptions ?? [] });
     } catch (error) {
       console.error(error);
       setRows([]);
-      setPagination({ page: 1, limit: PAGE_SIZE, total: 0, totalPages: 0 });
+      setPagination({ page: 1, limit: ALL_LEADS_LIMIT, total: 0, totalPages: 0 });
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, duplicatesOnly, page, search, source, status, training]);
+  }, [dateFrom, dateTo, duplicatesOnly, search, source, status, training]);
 
   useEffect(() => { fetchData(); }, [fetchData, fetchTrigger]);
 
@@ -822,16 +824,15 @@ export default function MetaLeadsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const doSearch = () => { setPage(1); setFetchTrigger((t) => t + 1); };
+  const doSearch = () => { setFetchTrigger((t) => t + 1); };
   const applyQuickSource = (keyword: 'instagram' | 'facebook') => {
     const matched = filters.sources.find((item) => item.toLowerCase().includes(keyword));
     setSource(matched || (keyword === 'instagram' ? 'Instagram Leads' : 'Facebook Leads'));
-    setPage(1);
     setFetchTrigger((t) => t + 1);
   };
   const doClear = () => {
     setSearch(''); setSource(''); setStatus(''); setDateFrom(''); setDateTo(''); setTraining(''); setDuplicatesOnly(false);
-    setPage(1); setFetchTrigger((t) => t + 1);
+    setFetchTrigger((t) => t + 1);
   };
 
   const exportCsv = () => {
@@ -1079,8 +1080,6 @@ export default function MetaLeadsPage() {
   const engagedRows = useMemo(() => rows.filter((r) => !isFreshLead(r)), [rows]);
   const displayRows = leadsSubTab === 'fresh' ? freshRows : leadsSubTab === 'engaged' ? engagedRows : rows;
   const perfLoading = !metaPerf && !metaPerfError;
-  const fromRow = pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.limit + 1;
-  const toRow = pagination.total === 0 ? 0 : Math.min(pagination.page * pagination.limit, pagination.total);
   const followUpModalRow = useMemo(() => followUpModalLeadId ? rows.find((r) => r.MetaLead_Id === followUpModalLeadId) ?? null : null, [followUpModalLeadId, rows]);
   const metaDataModalRow = useMemo(() => metaDataModalLeadId ? rows.find((r) => r.MetaLead_Id === metaDataModalLeadId) ?? null : null, [metaDataModalLeadId, rows]);
 
@@ -1407,7 +1406,7 @@ export default function MetaLeadsPage() {
                 >
                   Facebook
                 </button>
-                <select value={training} onChange={(e) => { setTraining(e.target.value); setPage(1); setFetchTrigger((t) => t + 1); }} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/20 focus:border-[#6366F1] transition-colors w-[160px]">
+                <select value={training} onChange={(e) => { setTraining(e.target.value); setFetchTrigger((t) => t + 1); }} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/20 focus:border-[#6366F1] transition-colors w-[160px]">
                   <option value="">All Courses</option>
                   {filters.trainings.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
@@ -1489,7 +1488,7 @@ export default function MetaLeadsPage() {
                       {!loading && rows.filter((r) => r.IsDuplicateLead).length > 0 && <><span className="text-slate-300 text-[10px]">·</span><span className="text-[11px] font-semibold text-amber-600">{rows.filter((r) => r.IsDuplicateLead).length} dupes</span></>}
                     </div>
                   </div>
-                  <span className="text-[11px] text-slate-400 tabular-nums">Page {pagination.page} of {Math.max(1, pagination.totalPages)}</span>
+                  <span className="text-[11px] text-slate-400 tabular-nums">{displayRows.length.toLocaleString()} shown</span>
                 </div>
 
                 <div className="flex items-center gap-1.5 px-4 py-2 border-b border-slate-100 bg-slate-50/60">
@@ -1566,7 +1565,7 @@ export default function MetaLeadsPage() {
                           <tr key={`${row.MetaLead_Id}-${index}`} className={`transition-colors group ${bgCls} ${hasFollowUp ? '[&>td]:text-purple-900' : isPending ? '[&>td]:text-purple-900' : '[&>td]:text-red-700'}`}>
                             <td className={`${tdBase} pl-4 relative`}>
                               <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${statusBar(row.Status_id, row.StatusLabel)} rounded-r`} />
-                              <span className="font-mono tabular-nums text-[10px] text-slate-400">{(pagination.page - 1) * pagination.limit + index + 1}</span>
+                              <span className="font-mono tabular-nums text-[10px] text-slate-400">{index + 1}</span>
                             </td>
                             <td className={`${tdBase} whitespace-nowrap`}>
                               <div className="text-[11px] text-slate-600">{formatDate(row.Inquiry_Dt)}</div>
@@ -1673,15 +1672,9 @@ export default function MetaLeadsPage() {
                   </table>
                 </div>
 
-                {/* Pagination */}
                 <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 bg-slate-50">
                   <div className="text-xs text-slate-400">
-                    Showing <span className="font-semibold text-slate-600">{fromRow.toLocaleString()}–{toRow.toLocaleString()}</span> of <span className="font-semibold text-slate-600">{pagination.total.toLocaleString()}</span> leads
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => setPage((c) => Math.max(1, c - 1))} disabled={loading || pagination.page <= 1} className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${pagination.page > 1 ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50' : 'border-slate-100 bg-white text-slate-300 cursor-not-allowed'}`}>← Prev</button>
-                    <span className="min-w-[100px] text-center text-xs font-semibold text-slate-600">Page {pagination.page} of {Math.max(1, pagination.totalPages)}</span>
-                    <button type="button" onClick={() => setPage((c) => Math.min(pagination.totalPages || 1, c + 1))} disabled={loading || pagination.page >= pagination.totalPages} className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${pagination.page < pagination.totalPages ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50' : 'border-slate-100 bg-white text-slate-300 cursor-not-allowed'}`}>Next →</button>
+                    Showing all <span className="font-semibold text-slate-600">{pagination.total.toLocaleString()}</span> leads
                   </div>
                 </div>
               </div>

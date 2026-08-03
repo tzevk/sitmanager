@@ -9,13 +9,11 @@ export async function GET(req: NextRequest) {
 
     const url = req.nextUrl;
     const untouchedOnly = url.searchParams.get('untouchedOnly') === '1';
-    // Untouched-only is a narrow, action-focused list (leads with zero
-    // follow-up logged) rather than the main browsable table, so it's allowed
-    // a higher cap — the point is showing ALL of them, not a page of them.
-    const maxLimit = untouchedOnly ? 1000 : 100;
+    // The Meta Leads page shows everything matching the current filters in
+    // one go (no pagination) — cap is a safety ceiling, not a real page size.
     const result = await listMetaLeads({
-      page: Math.max(1, parseInt(url.searchParams.get('page') || '1')),
-      limit: Math.min(maxLimit, Math.max(10, parseInt(url.searchParams.get('limit') || '25'))),
+      page: 1,
+      limit: Math.min(20000, Math.max(10, parseInt(url.searchParams.get('limit') || '20000'))),
       search: url.searchParams.get('search')?.trim() || '',
       leadTag: url.searchParams.get('leadTag')?.trim() || '',
       source: url.searchParams.get('source')?.trim() || '',
