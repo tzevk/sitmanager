@@ -9,11 +9,17 @@ export async function GET(req: NextRequest) {
 
     const url = req.nextUrl;
     const untouchedOnly = url.searchParams.get('untouchedOnly') === '1';
-    // The Meta Leads page shows everything matching the current filters in
-    // one go (no pagination) — cap is a safety ceiling, not a real page size.
+    // Untouched-only is a narrow, action-focused list computed via a cheap
+    // existence-only anti-join (no per-row Discussion text needed), so it can
+    // safely return far more rows than the main browsable table — which MUST
+    // stay bounded: its Discussion column is a per-row correlated subquery
+    // that's only safe at small scale (see listMetaLeads). Removing this cap
+    // previously caused a real production incident — do not raise it without
+    // re-verifying the Discussion query plan via EXPLAIN at full scale first.
+    const maxLimit = untouchedOnly ? 1000 : 100;
     const result = await listMetaLeads({
-      page: 1,
-      limit: Math.min(20000, Math.max(10, parseInt(url.searchParams.get('limit') || '20000'))),
+      page: Math.max(1, parseInt(url.searchParams.get('page') || '1')),
+      limit: Math.min(maxLimit, Math.max(10, parseInt(url.searchParams.get('limit') || '25'))),
       search: url.searchParams.get('search')?.trim() || '',
       leadTag: url.searchParams.get('leadTag')?.trim() || '',
       source: url.searchParams.get('source')?.trim() || '',

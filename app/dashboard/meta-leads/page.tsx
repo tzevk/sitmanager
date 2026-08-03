@@ -113,10 +113,12 @@ interface LeadRowDraft {
 
 type DraftTextField = 'studentName' | 'courseName' | 'mobile' | 'email' | 'city' | 'discussion';
 
-// Pagination is deliberately not used on this page — everything matching the
-// current filters is fetched and rendered in one go. This is a ceiling, not a
-// real page size.
-const ALL_LEADS_LIMIT = 20000;
+// Kept small deliberately — the main listing's Discussion column is a
+// per-row correlated subquery (see listMetaLeads) that's only safe to run at
+// small scale. A larger page size previously caused a real production
+// incident (stuck DB queries piling up under concurrent load); don't raise
+// this without fixing that query's plan first.
+const PAGE_SIZE = 100;
 
 function toBulletEditorValue(raw: string | null | undefined): string {
   const text = String(raw || '').trim();
@@ -685,7 +687,8 @@ export default function MetaLeadsPage() {
 
   const [activeTab, setActiveTab] = useState<'analytics' | 'leads'>('leads');
   const [rows, setRows] = useState<InquiryRow[]>([]);
-  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: ALL_LEADS_LIMIT, total: 0, totalPages: 0 });
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: PAGE_SIZE, total: 0, totalPages: 0 });
   const [filters, setFilters] = useState<Filters>({ trainings: [], sources: [], statusOptions: [] });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -722,7 +725,7 @@ export default function MetaLeadsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({ limit: String(ALL_LEADS_LIMIT) });
+      const p = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
       if (search) p.set('search', search);
       if (source) p.set('source', source);
       if (status) p.set('status', status);
@@ -734,16 +737,16 @@ export default function MetaLeadsPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Failed to load Meta leads');
       setRows(data.rows ?? []);
-      setPagination(data.pagination ?? { page: 1, limit: ALL_LEADS_LIMIT, total: 0, totalPages: 0 });
+      setPagination(data.pagination ?? { page: 1, limit: PAGE_SIZE, total: 0, totalPages: 0 });
       if (data.filters) setFilters({ trainings: data.filters.trainings ?? [], sources: data.filters.sources ?? [], statusOptions: data.filters.statusOptions ?? [] });
     } catch (error) {
       console.error(error);
       setRows([]);
-      setPagination({ page: 1, limit: ALL_LEADS_LIMIT, total: 0, totalPages: 0 });
+      setPagination({ page: 1, limit: PAGE_SIZE, total: 0, totalPages: 0 });
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, duplicatesOnly, search, source, status, training]);
+  }, [dateFrom, dateTo, duplicatesOnly, page, search, source, status, training]);
 
   useEffect(() => { fetchData(); }, [fetchData, fetchTrigger]);
 
@@ -824,15 +827,16 @@ export default function MetaLeadsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const doSearch = () => { setFetchTrigger((t) => t + 1); };
+  const doSearch = () => { setPage(1); setFetchTrigger((t) => t + 1); };
   const applyQuickSource = (keyword: 'instagram' | 'facebook') => {
     const matched = filters.sources.find((item) => item.toLowerCase().includes(keyword));
     setSource(matched || (keyword === 'instagram' ? 'Instagram Leads' : 'Facebook Leads'));
+    setPage(1);
     setFetchTrigger((t) => t + 1);
   };
   const doClear = () => {
     setSearch(''); setSource(''); setStatus(''); setDateFrom(''); setDateTo(''); setTraining(''); setDuplicatesOnly(false);
-    setFetchTrigger((t) => t + 1);
+    setPage(1); setFetchTrigger((t) => t + 1);
   };
 
   const exportCsv = () => {
