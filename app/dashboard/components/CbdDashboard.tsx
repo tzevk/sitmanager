@@ -86,8 +86,11 @@ function Bar({ value, className = '' }: { value: number; className?: string }) {
   const t = tone(value);
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${t.bar}`} style={{ width: `${clamp(value)}%` }} />
+      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden shadow-inner">
+        <div
+          className={`h-full rounded-full ${t.bar} transition-[width] duration-500`}
+          style={{ width: `${clamp(value)}%` }}
+        />
       </div>
       <span className={`text-[11px] font-bold tabular-nums w-10 text-right ${t.text}`}>
         {fmtPct(value)}
@@ -668,7 +671,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
               <col className="w-[68px]" />
               <col className="w-[92px]" />
             </colgroup>
-            <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
+            <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
               <tr>
                 <Th rowSpan={2} className="align-bottom">Batch</Th>
                 <Th rowSpan={2} className="align-bottom">Training Program</Th>
@@ -691,7 +694,14 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
               {loading ? (
                 <PulseRows cols={11} rows={5} />
               ) : upcomingBatches.length === 0 ? (
-                <tr><td colSpan={11}><Empty text="No upcoming batches for the next 3 months" /></td></tr>
+                <tr>
+                  <td colSpan={11} className="px-5 py-10 text-center">
+                    <span className="inline-flex flex-col items-center gap-2 text-gray-400">
+                      <span className="w-9 h-9 rounded-full bg-gray-50 flex items-center justify-center [&_svg]:w-4 [&_svg]:h-4">{Icons.batch}</span>
+                      <span className="text-sm">No upcoming batches for the next 3 months</span>
+                    </span>
+                  </td>
+                </tr>
               ) : (
                 upcomingBatches.map((b: any, i: number) => {
                   // "% Filled" reflects confirmed admissions (students who submitted an
@@ -705,7 +715,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                   const startMonth = sDate ? MONTH_NAMES[Number(sDate.slice(5, 7)) - 1] : null;
                   const startYear  = sDate ? sDate.slice(2, 4) : null;
                   return (
-                    <tr key={`${b.Batch_Id || i}`} className="border-t border-gray-100 hover:bg-gray-50/50 transition-colors">
+                    <tr key={`${b.Batch_Id || i}`} className={`border-t border-gray-100 hover:bg-blue-50/30 transition-colors ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
                       <td className="px-2.5 py-3">
                         <span className="font-mono font-semibold text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded-md border border-indigo-100 whitespace-nowrap">{toBatchNumber(b.Batch_code)}</span>
                       </td>
@@ -740,7 +750,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                           href={`/api/dashboard/batch-admissions/pdf?batchCode=${encodeURIComponent(b.Batch_code || '')}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="font-semibold text-[#2A6BB5] hover:text-[#1d4d80] hover:underline underline-offset-2"
+                          className="inline-flex items-center justify-center min-w-[1.75rem] px-1.5 py-0.5 rounded-full font-bold text-[#2A6BB5] bg-[#2A6BB5]/10 hover:bg-[#2A6BB5]/20 transition-colors"
                           title="View admitted students report (PDF) for this batch"
                         >
                           {Number(b.Confirmed_Admissions ?? 0)}

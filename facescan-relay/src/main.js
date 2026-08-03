@@ -37,6 +37,18 @@ function sendStatus(status) {
   }
 }
 
+/** Node's fetch wraps network errors as "fetch failed" with the real reason in .cause (possibly nested). */
+function describeError(err) {
+  if (!(err instanceof Error)) return String(err);
+  let cause = err.cause;
+  let detail = '';
+  while (cause) {
+    detail = cause.code ? `${cause.code}: ${cause.message ?? cause}` : String(cause.message ?? cause);
+    cause = cause.cause;
+  }
+  return detail ? `${err.message} (${detail})` : err.message;
+}
+
 /** Pulls today's punch logs from the device and pushes them to SIT Manager. */
 async function syncNow() {
   if (!config.deviceBaseUrl || !config.deviceApiKey) {
@@ -54,19 +66,29 @@ async function syncNow() {
     const date = todayISO();
     const deviceUrl = `${config.deviceBaseUrl}/api/v2/WebAPI/GetDeviceLogs?APIKey=${encodeURIComponent(config.deviceApiKey)}&FromDate=${date}&ToDate=${date}`;
 
-    const deviceRes = await fetch(deviceUrl);
+    let deviceRes;
+    try {
+      deviceRes = await fetch(deviceUrl);
+    } catch (err) {
+      throw new Error(`Device fetch failed: ${describeError(err)}`);
+    }
     if (!deviceRes.ok) throw new Error(`Device request failed (${deviceRes.status})`);
     const logs = await deviceRes.json();
     if (!Array.isArray(logs)) throw new Error('Unexpected device response shape');
 
-    const ingestRes = await fetch(config.ingestUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-facescan-secret': config.ingestSecret,
-      },
-      body: JSON.stringify({ logs }),
-    });
+    let ingestRes;
+    try {
+      ingestRes = await fetch(config.ingestUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-facescan-secret': config.ingestSecret,
+        },
+        body: JSON.stringify({ logs }),
+      });
+    } catch (err) {
+      throw new Error(`Ingest fetch failed: ${describeError(err)}`);
+    }
     const ingestData = await ingestRes.json().catch(() => ({}));
     if (!ingestRes.ok) throw new Error(ingestData.error || `Ingest failed (${ingestRes.status})`);
 
@@ -79,8 +101,9 @@ async function syncNow() {
       nextSyncAt,
     });
   } catch (err) {
+    console.error('Facescan relay sync failed:', err);
     nextSyncAt = Date.now() + config.pollIntervalMinutes * 60_000;
-    sendStatus({ ok: false, syncing: false, message: err instanceof Error ? err.message : 'Sync failed', at: new Date().toISOString(), nextSyncAt });
+    sendStatus({ ok: false, syncing: false, message: describeError(err), at: new Date().toISOString(), nextSyncAt });
   }
 }
 
