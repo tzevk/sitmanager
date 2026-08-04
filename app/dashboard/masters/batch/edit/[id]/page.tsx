@@ -731,8 +731,10 @@ export default function EditBatchPage() {
         body: JSON.stringify({
           id: row.id,
           lecture_no: row.lecture_no,
+          standard_seq: row.standard_seq ?? null,
           subject: (row.subject ?? null),
           subject_topic: (row.subject_topic ?? null),
+          department: row.department ?? null,
           lecturecontent: (row.lecturecontent ?? null),
           date: formatDateForInput(row.date) || null,
           lectureday: row.lectureday,
@@ -746,6 +748,7 @@ export default function EditBatchPage() {
           documents: row.documents,
           unit_test: row.unit_test,
           publish: row.publish,
+          covered_subtopics: row.covered_subtopics ?? null,
         }),
       });
       // Refresh to reflect any server-side normalization
@@ -2731,11 +2734,11 @@ export default function EditBatchPage() {
             {/* Right: this batch's own plan (drop target + sortable rows) */}
             <div
               ref={setPlanDropRef}
-              className={`border rounded overflow-hidden overflow-x-auto h-[75vh] flex flex-col ${
+              className={`border rounded h-[75vh] overflow-auto ${
                 isOverPlanDropZone ? 'border-[#2E3093] ring-2 ring-[#2E3093]/20' : 'border-gray-200'
               }`}
             >
-              <table className="w-full text-xs">
+              <table className="text-xs">
                 <thead className="sticky top-0 bg-slate-50 z-10">
                   <tr>
                     <th className="px-1 py-1.5 border-b" />
