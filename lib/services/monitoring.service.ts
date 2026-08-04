@@ -16,12 +16,12 @@ export interface MonitoringDayRow {
   incomingCalls: number;
   freshCallsMeta: number;
   freshCallsOthers: number;
-  whatsapp: number;
   followupCalls: number;
   walkIns: number;
-  emailsReplied: number;
   firstHalfSummary: string | null;
   secondHalfSummary: string | null;
+  whatsapp: number | null;
+  emailsReplied: number | null;
   socialMediaInquiries: number | null;
 }
 
@@ -37,6 +37,8 @@ async function ensureMonitoringTable(pool: ReturnType<typeof getPool>): Promise<
       Report_Date DATE NOT NULL,
       First_Half_Summary TEXT NULL,
       Second_Half_Summary TEXT NULL,
+      WhatsApp_Enquiries INT NULL,
+      Emails_Replied INT NULL,
       Social_Media_Inquiries INT NULL,
       Updated_By INT NULL,
       Updated_Date DATETIME NULL,
@@ -44,6 +46,20 @@ async function ensureMonitoringTable(pool: ReturnType<typeof getPool>): Promise<
       UNIQUE KEY uq_emp_date (Admin_User_Id, Report_Date)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
+
+  const [cols] = await pool.query<RowDataPacket[]>(
+    `SELECT COLUMN_NAME AS name FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'emp_daily_monitoring'
+       AND COLUMN_NAME IN ('WhatsApp_Enquiries', 'Emails_Replied')`
+  );
+  const existing = new Set(cols.map((c) => c.name as string));
+  if (!existing.has('WhatsApp_Enquiries')) {
+    await pool.query(`ALTER TABLE emp_daily_monitoring ADD COLUMN WhatsApp_Enquiries INT NULL`);
+  }
+  if (!existing.has('Emails_Replied')) {
+    await pool.query(`ALTER TABLE emp_daily_monitoring ADD COLUMN Emails_Replied INT NULL`);
+  }
+
   monitoringTableReady = true;
 }
 
@@ -91,7 +107,7 @@ export async function getEmployeeWeeklyMonitoring(
 
   // 1) Manual fields already saved for this employee/week
   const [manualRows] = await pool.query<RowDataPacket[]>(
-    `SELECT Report_Date, First_Half_Summary, Second_Half_Summary, Social_Media_Inquiries
+    `SELECT Report_Date, First_Half_Summary, Second_Half_Summary, WhatsApp_Enquiries, Emails_Replied, Social_Media_Inquiries
      FROM emp_daily_monitoring
      WHERE Admin_User_Id = ? AND Report_Date BETWEEN ? AND ?`,
     [adminUserId, weekStart, weekEnd]
@@ -101,7 +117,7 @@ export async function getEmployeeWeeklyMonitoring(
     manualByDate.set(toDateStr(new Date(r.Report_Date)), r);
   }
 
-  // 2) Contact-log channel counts (Incoming Calls / WhatsApp / Emails / Walk-ins), this employee only
+  // 2) Contact-log channel counts (Incoming Calls / Walk-ins), this employee only
   const [channelRows] = await pool.query<RowDataPacket[]>(
     `SELECT DATE(Created_At) AS d, Channel, COUNT(*) AS cnt
      FROM inquiry_contact_log
@@ -239,12 +255,12 @@ export async function getEmployeeWeeklyMonitoring(
       incomingCalls: channels['call'] ?? 0,
       freshCallsMeta: freshMetaByDate.get(date) ?? 0,
       freshCallsOthers: freshOthersByDate.get(date) ?? 0,
-      whatsapp: channels['whatsapp'] ?? 0,
       followupCalls: followupByDate.get(date) ?? 0,
       walkIns: channels['personal-inquiry'] ?? 0,
-      emailsReplied: channels['mail'] ?? 0,
       firstHalfSummary: manual ? (manual.First_Half_Summary ?? null) : null,
       secondHalfSummary: manual ? (manual.Second_Half_Summary ?? null) : null,
+      whatsapp: manual ? (manual.WhatsApp_Enquiries ?? null) : null,
+      emailsReplied: manual ? (manual.Emails_Replied ?? null) : null,
       socialMediaInquiries: manual ? (manual.Social_Media_Inquiries ?? null) : null,
     };
   });
@@ -255,6 +271,8 @@ export async function saveMonitoringManualFields(params: {
   date: string;
   firstHalfSummary?: string | null;
   secondHalfSummary?: string | null;
+  whatsapp?: number | null;
+  emailsReplied?: number | null;
   socialMediaInquiries?: number | null;
   updatedBy?: number | null;
 }): Promise<void> {
@@ -265,20 +283,24 @@ export async function saveMonitoringManualFields(params: {
     date,
     firstHalfSummary = null,
     secondHalfSummary = null,
+    whatsapp = null,
+    emailsReplied = null,
     socialMediaInquiries = null,
     updatedBy = null,
   } = params;
 
   await pool.query(
     `INSERT INTO emp_daily_monitoring
-       (Admin_User_Id, Report_Date, First_Half_Summary, Second_Half_Summary, Social_Media_Inquiries, Updated_By, Updated_Date)
-     VALUES (?, ?, ?, ?, ?, ?, NOW())
+       (Admin_User_Id, Report_Date, First_Half_Summary, Second_Half_Summary, WhatsApp_Enquiries, Emails_Replied, Social_Media_Inquiries, Updated_By, Updated_Date)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
      ON DUPLICATE KEY UPDATE
        First_Half_Summary = VALUES(First_Half_Summary),
        Second_Half_Summary = VALUES(Second_Half_Summary),
+       WhatsApp_Enquiries = VALUES(WhatsApp_Enquiries),
+       Emails_Replied = VALUES(Emails_Replied),
        Social_Media_Inquiries = VALUES(Social_Media_Inquiries),
        Updated_By = VALUES(Updated_By),
        Updated_Date = VALUES(Updated_Date)`,
-    [adminUserId, date, firstHalfSummary, secondHalfSummary, socialMediaInquiries, updatedBy]
+    [adminUserId, date, firstHalfSummary, secondHalfSummary, whatsapp, emailsReplied, socialMediaInquiries, updatedBy]
   );
 }

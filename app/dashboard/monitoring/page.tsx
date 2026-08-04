@@ -2,28 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useResourcePermissions } from '@/lib/permissions-context';
+import MonitoringWeeklyTable, { type MonitoringDayRow } from '../components/MonitoringWeeklyTable';
 
 interface AdminUserOption {
   id: number;
   firstname: string | null;
   lastname: string | null;
   email: string | null;
-}
-
-interface MonitoringDayRow {
-  date: string;
-  day: string;
-  admissions: number;
-  incomingCalls: number;
-  freshCallsMeta: number;
-  freshCallsOthers: number;
-  whatsapp: number;
-  followupCalls: number;
-  walkIns: number;
-  emailsReplied: number;
-  firstHalfSummary: string | null;
-  secondHalfSummary: string | null;
-  socialMediaInquiries: number | null;
 }
 
 function formatDate(d: string): string {
@@ -45,16 +30,6 @@ function shiftWeek(weekStart: string, weeks: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-const AUTO_ROWS: { key: keyof MonitoringDayRow; label: string }[] = [
-  { key: 'incomingCalls', label: 'Incoming Calls' },
-  { key: 'freshCallsMeta', label: 'Fresh Calls (Meta)' },
-  { key: 'freshCallsOthers', label: 'Fresh Calls (Others)' },
-  { key: 'whatsapp', label: 'WhatsApp Enquiries' },
-  { key: 'followupCalls', label: 'Followup Calls' },
-  { key: 'walkIns', label: 'No. of Walk-in Enquiries' },
-  { key: 'emailsReplied', label: 'No. of Emails Replied to' },
-];
-
 export default function MonitoringWeeklyReportPage() {
   const { canView, canUpdate, loading: permLoading } = useResourcePermissions('monitoring');
 
@@ -63,7 +38,6 @@ export default function MonitoringWeeklyReportPage() {
   const [weekStart, setWeekStart] = useState<string>(() => getMonday(new Date()));
   const [days, setDays] = useState<MonitoringDayRow[]>([]);
   const [loadingDays, setLoadingDays] = useState(false);
-  const [savingKey, setSavingKey] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/monitoring/employees')
@@ -91,13 +65,9 @@ export default function MonitoringWeeklyReportPage() {
 
   useEffect(() => { fetchWeek(); }, [fetchWeek]);
 
-  const updateDayLocal = (date: string, patch: Partial<MonitoringDayRow>) => {
-    setDays((prev) => prev.map((d) => (d.date === date ? { ...d, ...patch } : d)));
-  };
-
-  const saveManualFields = async (row: MonitoringDayRow) => {
+  const handleSaveDay = async (row: MonitoringDayRow) => {
     if (!selectedEmployeeId || !canUpdate) return;
-    setSavingKey(row.date);
+    setDays((prev) => prev.map((d) => (d.date === row.date ? row : d)));
     try {
       await fetch('/api/monitoring/weekly', {
         method: 'PUT',
@@ -107,11 +77,12 @@ export default function MonitoringWeeklyReportPage() {
           date: row.date,
           firstHalfSummary: row.firstHalfSummary,
           secondHalfSummary: row.secondHalfSummary,
+          whatsapp: row.whatsapp,
+          emailsReplied: row.emailsReplied,
           socialMediaInquiries: row.socialMediaInquiries,
         }),
       });
     } catch { /* ignore */ }
-    setSavingKey(null);
   };
 
   const selectedEmployee = employees.find((e) => e.id === selectedEmployeeId) || null;
@@ -135,10 +106,6 @@ export default function MonitoringWeeklyReportPage() {
       </div>
     );
   }
-
-  const cellCls = 'border border-black px-2 py-1.5 text-xs text-center align-middle';
-  const labelCellCls = 'border border-black px-2 py-1.5 text-xs font-medium align-middle';
-  const manualCellCls = `${cellCls} bg-yellow-200`;
 
   return (
     <div className="space-y-3">
@@ -195,108 +162,16 @@ export default function MonitoringWeeklyReportPage() {
           )}
         </div>
       ) : (
-        <div className="border border-gray-200 rounded overflow-auto">
-          <table className="border-collapse text-xs" style={{ minWidth: '900px' }}>
-            <tbody>
-              <tr>
-                <td className={`${labelCellCls} bg-slate-50`} colSpan={8}>
-                  Employee Name : {employeeLabel}
-                </td>
-              </tr>
-              <tr>
-                <td className={`${labelCellCls} bg-slate-50`}>Date</td>
-                {days.map((d) => (
-                  <td key={d.date} className={`${cellCls} bg-slate-50 font-semibold`}>{formatDate(d.date)}</td>
-                ))}
-              </tr>
-              <tr>
-                <td className={`${labelCellCls} bg-slate-50`}>Day</td>
-                {days.map((d) => (
-                  <td key={d.date} className={cellCls}>{d.day}</td>
-                ))}
-              </tr>
-              <tr>
-                <td className={labelCellCls}>First Half<br />Summary</td>
-                {days.map((d) => (
-                  <td key={d.date} className={manualCellCls}>
-                    <textarea
-                      defaultValue={d.firstHalfSummary ?? ''}
-                      disabled={!canUpdate}
-                      onBlur={(e) => {
-                        const value = e.target.value;
-                        updateDayLocal(d.date, { firstHalfSummary: value });
-                        saveManualFields({ ...d, firstHalfSummary: value });
-                      }}
-                      className="w-full min-w-[110px] h-14 bg-transparent text-xs resize-none focus:outline-none disabled:cursor-not-allowed"
-                    />
-                  </td>
-                ))}
-              </tr>
-              <tr>
-                <td className={labelCellCls}>Second Half<br />Summary</td>
-                {days.map((d) => (
-                  <td key={d.date} className={manualCellCls}>
-                    <textarea
-                      defaultValue={d.secondHalfSummary ?? ''}
-                      disabled={!canUpdate}
-                      onBlur={(e) => {
-                        const value = e.target.value;
-                        updateDayLocal(d.date, { secondHalfSummary: value });
-                        saveManualFields({ ...d, secondHalfSummary: value });
-                      }}
-                      className="w-full min-w-[110px] h-14 bg-transparent text-xs resize-none focus:outline-none disabled:cursor-not-allowed"
-                    />
-                  </td>
-                ))}
-              </tr>
-              <tr>
-                <td className={`${labelCellCls}`} colSpan={1}>No. of Admissions</td>
-                {days.map((d) => (
-                  <td key={d.date} className={cellCls}>{d.admissions}</td>
-                ))}
-              </tr>
-              {AUTO_ROWS.map((row, idx) => (
-                <tr key={row.key}>
-                  {idx === 0 && (
-                    <td className={`${labelCellCls} bg-slate-50 text-center`} rowSpan={AUTO_ROWS.length + 1}>
-                      Inquiries
-                    </td>
-                  )}
-                  <td className={labelCellCls}>{row.label}</td>
-                  {days.map((d) => (
-                    <td key={d.date} className={cellCls}>{d[row.key] as number}</td>
-                  ))}
-                </tr>
-              ))}
-              <tr>
-                <td className={labelCellCls}>Social Media Inquiries</td>
-                {days.map((d) => (
-                  <td key={d.date} className={manualCellCls}>
-                    <input
-                      type="number"
-                      defaultValue={d.socialMediaInquiries ?? ''}
-                      disabled={!canUpdate}
-                      onBlur={(e) => {
-                        const value = e.target.value === '' ? null : Number(e.target.value);
-                        updateDayLocal(d.date, { socialMediaInquiries: value });
-                        saveManualFields({ ...d, socialMediaInquiries: value });
-                      }}
-                      className="w-full min-w-[60px] bg-transparent text-xs text-center focus:outline-none disabled:cursor-not-allowed"
-                    />
-                  </td>
-                ))}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {savingKey && (
-        <div className="text-[10px] text-slate-400">Saving...</div>
+        <MonitoringWeeklyTable
+          employeeLabel={employeeLabel}
+          days={days}
+          canEdit={canUpdate}
+          onSaveDay={handleSaveDay}
+        />
       )}
 
       <div className="flex items-center gap-2 text-[10px] text-slate-500">
-        <span className="w-3 h-3 rounded-sm bg-yellow-200 border border-black inline-block" />
+        <span className="w-3 h-3 rounded-sm bg-yellow-300 border border-black inline-block" />
         This cell means that this is to be filled by employee, other cells are auto-generated from system data.
       </div>
     </div>

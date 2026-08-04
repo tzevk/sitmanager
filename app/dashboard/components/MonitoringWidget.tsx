@@ -2,25 +2,12 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { useResourcePermissions } from '@/lib/permissions-context';
+import { usePermissions } from '@/lib/permissions-context';
+import MonitoringWeeklyTable, { type MonitoringDayRow } from './MonitoringWeeklyTable';
 
-interface AdminUserOption {
-  id: number;
-  firstname: string | null;
-  lastname: string | null;
-  email: string | null;
-}
-
-interface MonitoringDayRow {
-  date: string;
-  admissions: number;
-  incomingCalls: number;
-  freshCallsMeta: number;
-  freshCallsOthers: number;
-  whatsapp: number;
-  followupCalls: number;
-  walkIns: number;
-  emailsReplied: number;
+function formatDate(d: string): string {
+  const [y, m, day] = d.split('-');
+  return `${day}/${m}/${y.slice(2)}`;
 }
 
 function getMonday(base: Date): string {
@@ -31,88 +18,115 @@ function getMonday(base: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-const STAT_LABELS: { key: keyof MonitoringDayRow; label: string }[] = [
-  { key: 'incomingCalls', label: 'Calls' },
-  { key: 'whatsapp', label: 'WhatsApp' },
-  { key: 'emailsReplied', label: 'Emails' },
-  { key: 'walkIns', label: 'Walk-ins' },
-  { key: 'admissions', label: 'Admissions' },
-];
+function shiftWeek(weekStart: string, weeks: number): string {
+  const d = new Date(`${weekStart}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + weeks * 7);
+  return d.toISOString().slice(0, 10);
+}
 
+/**
+ * "My Weekly Report" — the logged-in user's own monitoring table, shown right on
+ * their dashboard home. No employee dropdown (always their own data, via the
+ * self-service /api/monitoring/weekly/me endpoint keyed off the session).
+ */
 export default function MonitoringWidget() {
-  const { canView, loading: permLoading } = useResourcePermissions('monitoring');
-  const [employees, setEmployees] = useState<AdminUserOption[]>([]);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
-  const [today, setToday] = useState<MonitoringDayRow | null>(null);
+  const { session, loading: sessionLoading } = usePermissions();
+  const [weekStart, setWeekStart] = useState<string>(() => getMonday(new Date()));
+  const [days, setDays] = useState<MonitoringDayRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
 
-  useEffect(() => {
-    if (!canView) return;
-    fetch('/api/monitoring/employees')
-      .then((res) => res.json())
-      .then((data) => {
-        const list: AdminUserOption[] = data.employees || [];
-        setEmployees(list);
-        setSelectedEmployeeId((prev) => prev ?? list[0]?.id ?? null);
-      })
-      .catch(() => {});
-  }, [canView]);
-
-  const fetchToday = useCallback(async () => {
-    if (!selectedEmployeeId) return;
+  const fetchWeek = useCallback(async () => {
+    if (!session) return;
     setLoading(true);
     try {
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const weekStart = getMonday(new Date());
-      const res = await fetch(`/api/monitoring/weekly?adminUserId=${selectedEmployeeId}&weekStart=${weekStart}`);
+      const res = await fetch(`/api/monitoring/weekly/me?weekStart=${weekStart}`);
       const data = await res.json();
-      const days: MonitoringDayRow[] = data.days || [];
-      setToday(days.find((d) => d.date === todayStr) || days[days.length - 1] || null);
+      setDays(data.days || []);
     } catch {
-      setToday(null);
+      setDays([]);
     }
     setLoading(false);
-  }, [selectedEmployeeId]);
+  }, [session, weekStart]);
 
-  useEffect(() => { fetchToday(); }, [fetchToday]);
+  useEffect(() => { fetchWeek(); }, [fetchWeek]);
 
-  if (permLoading || !canView) return null;
+  const handleSaveDay = async (row: MonitoringDayRow) => {
+    setDays((prev) => prev.map((d) => (d.date === row.date ? row : d)));
+    try {
+      await fetch('/api/monitoring/weekly/me', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: row.date,
+          firstHalfSummary: row.firstHalfSummary,
+          secondHalfSummary: row.secondHalfSummary,
+          whatsapp: row.whatsapp,
+          emailsReplied: row.emailsReplied,
+          socialMediaInquiries: row.socialMediaInquiries,
+        }),
+      });
+    } catch { /* ignore */ }
+  };
+
+  if (sessionLoading || !session) return null;
+
+  const employeeLabel = `${session.firstName ?? ''} ${session.lastName ?? ''}`.trim() || session.email || 'Me';
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3">
       <div className="flex items-center justify-between gap-2 mb-2">
-        <h3 className="text-xs font-black text-[#2E3093] uppercase tracking-wide">Monitoring — Today</h3>
-        <Link href="/dashboard/monitoring" className="text-[11px] font-semibold text-[#2E3093] hover:underline">
-          View full report &rarr;
-        </Link>
+        <h3 className="text-xs font-black text-[#2E3093] uppercase tracking-wide">My Weekly Report</h3>
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard/monitoring" className="text-[11px] font-semibold text-[#2E3093] hover:underline">
+            Full Monitoring &rarr;
+          </Link>
+          <button
+            onClick={() => setCollapsed((c) => !c)}
+            className="text-[11px] font-semibold text-slate-400 hover:text-slate-600"
+          >
+            {collapsed ? 'Expand' : 'Collapse'}
+          </button>
+        </div>
       </div>
 
-      <select
-        value={selectedEmployeeId ?? ''}
-        onChange={(e) => setSelectedEmployeeId(e.target.value ? Number(e.target.value) : null)}
-        className="w-full mb-2 px-2 py-1 border border-slate-200 rounded text-xs"
-      >
-        <option value="">Select Employee</option>
-        {employees.map((e) => (
-          <option key={e.id} value={e.id}>
-            {`${e.firstname ?? ''} ${e.lastname ?? ''}`.trim() || e.email || `Employee #${e.id}`}
-          </option>
-        ))}
-      </select>
+      {!collapsed && (
+        <>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <button
+              onClick={() => setWeekStart((w) => shiftWeek(w, -1))}
+              className="px-2 py-1 border border-gray-300 rounded text-[11px] hover:bg-gray-50"
+            >
+              &larr; Prev
+            </button>
+            <span className="text-[11px] font-semibold text-slate-700">
+              {days.length ? `${formatDate(days[0].date)} – ${formatDate(days[6].date)}` : ''}
+            </span>
+            <button
+              onClick={() => setWeekStart((w) => shiftWeek(w, 1))}
+              className="px-2 py-1 border border-gray-300 rounded text-[11px] hover:bg-gray-50"
+            >
+              Next &rarr;
+            </button>
+            <button
+              onClick={() => setWeekStart(getMonday(new Date()))}
+              className="px-2 py-1 border border-gray-300 rounded text-[11px] hover:bg-gray-50"
+            >
+              This Week
+            </button>
+          </div>
 
-      {loading ? (
-        <div className="text-[11px] text-slate-400 py-3 text-center">Loading...</div>
-      ) : !today ? (
-        <div className="text-[11px] text-slate-400 py-3 text-center">No employee selected.</div>
-      ) : (
-        <div className="grid grid-cols-5 gap-1.5">
-          {STAT_LABELS.map((s) => (
-            <div key={s.key} className="text-center bg-slate-50 rounded-lg py-1.5">
-              <div className="text-sm font-black text-[#2E3093]">{today[s.key]}</div>
-              <div className="text-[9px] text-slate-500">{s.label}</div>
-            </div>
-          ))}
-        </div>
+          {loading ? (
+            <div className="text-[11px] text-slate-400 py-3 text-center">Loading...</div>
+          ) : (
+            <MonitoringWeeklyTable
+              employeeLabel={employeeLabel}
+              days={days}
+              canEdit
+              onSaveDay={handleSaveDay}
+            />
+          )}
+        </>
       )}
     </div>
   );
