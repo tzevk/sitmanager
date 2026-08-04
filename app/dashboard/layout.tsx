@@ -10,6 +10,7 @@ const MENU_ITEMS = [
   'General Master',
   'Masters',
   'Admission Activity',
+  'Monitoring',
   'Daily Activities',
   'Admin/Accounts',
   'Corporate Training',
@@ -46,6 +47,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Admission Activity > Meta Leads': '/dashboard/meta-leads',
   'Admission Activity > Online Admission': '/dashboard/online-admission',
   'Admission Activity > Student': '/dashboard/student',
+  'Monitoring > Weekly Report': '/dashboard/monitoring',
   'Corporate Training > Corporate Inquiry': '/dashboard/corporate-inquiry',
   'Corporate Training > Training Execution': '/dashboard/corporate-inquiry/execution',
   'Reports > Inquiry': '/dashboard/reports/inquiry',
@@ -132,6 +134,9 @@ const SUB_MENUS: Record<string, string[]> = {
     'Meta Leads',
     'Online Admission',
     'Student',
+  ],
+  'Monitoring': [
+    'Weekly Report',
   ],
   'Daily Activities': [
     'Attendance',
@@ -268,6 +273,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Admission Activity > Meta Leads': ['inquiry.view', 'meta_lead.view'],
   'Admission Activity > Online Admission': ['online_admission.view'],
   'Admission Activity > Student': ['student.view'],
+  'Monitoring > Weekly Report': ['monitoring.view'],
   'Corporate Training > Corporate Inquiry': ['corporate_inquiry.view'],
   'Corporate Training > Training Execution': ['corporate_inquiry.view'],
   'Reports > Inquiry': ['report_inquiry.view'],
@@ -334,6 +340,11 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   'Admission Activity': (
     <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+    </svg>
+  ),
+  'Monitoring': (
+    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
     </svg>
   ),
   'Daily Activities': (
@@ -456,6 +467,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     if (path.startsWith('/dashboard/utility')) return 'Utility';
     if (path.startsWith('/dashboard/support')) return 'Support';
     if (path.startsWith('/dashboard/inquiry') || path.startsWith('/dashboard/meta-leads') || path.startsWith('/dashboard/online-admission') || path.startsWith('/dashboard/student')) return 'Admission Activity';
+    if (path.startsWith('/dashboard/monitoring')) return 'Monitoring';
     if (path.startsWith('/dashboard/placement') || path.startsWith('/dashboard/cv-shortlisted')) return 'Placement';
     return 'Dashboard';
   };

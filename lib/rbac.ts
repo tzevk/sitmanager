@@ -144,6 +144,19 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   },
 
   // -------------------------------------------------------------------------
+  // MONITORING
+  // -------------------------------------------------------------------------
+  {
+    id: 'monitoring',
+    name: 'Monitoring',
+    description: 'Weekly employee activity monitoring',
+    icon: 'chart',
+    permissions: [
+      ...createPermissions('monitoring', 'Employee Monitoring', ['view', 'update']),
+    ],
+  },
+
+  // -------------------------------------------------------------------------
   // CORPORATE TRAINING
   // -------------------------------------------------------------------------
   {
@@ -574,6 +587,9 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/dashboard/corporate-inquiry/edit': ['corporate_inquiry.update'],
   '/dashboard/reports/college-follow-up': ['report_college_followup.view'],
 
+  // Monitoring
+  '/dashboard/monitoring': ['monitoring.view'],
+
   // Role Management
   '/dashboard/role-right': ['role.view'],
   '/dashboard/role-right/add': ['role.create'],
@@ -610,6 +626,13 @@ export const API_PERMISSIONS: Record<string, Record<string, string[]>> = {
   },
   '/api/masters/standard-lecture-plan': {
     GET: ['standard_lecture_plan.view'],
+  },
+  '/api/monitoring/employees': {
+    GET: ['monitoring.view'],
+  },
+  '/api/monitoring/weekly': {
+    GET: ['monitoring.view'],
+    PUT: ['monitoring.update'],
   },
   '/api/admission-activity/corporate-inquiry': {
     GET: ['corporate_inquiry.view'],

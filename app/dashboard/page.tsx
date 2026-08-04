@@ -18,6 +18,7 @@ import AdministrationDashboard from './components/AdministrationDashboard';
 import PlacementDepartmentDashboard from './components/PlacementDepartmentDashboard';
 import FinanceFullDashboard from './components/FinanceFullDashboard';
 import ChangelogWidget from './components/ChangelogWidget';
+import MonitoringWidget from './components/MonitoringWidget';
 
 interface TodoItem {
   id: string;
@@ -352,6 +353,7 @@ export default function DashboardPage() {
   );
 
   const changelogWidget = <ChangelogWidget />;
+  const monitoringWidget = <MonitoringWidget />;
 
   // Fetch dashboard data live from the API and refresh on an interval.
   useEffect(() => {
@@ -495,6 +497,7 @@ export default function DashboardPage() {
           </div>
         </div>
         {changelogWidget}
+        {monitoringWidget}
         <CbdDashboard data={data} loading={loading} />
         {showFollowupPopup && (
           <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
@@ -554,6 +557,7 @@ export default function DashboardPage() {
       <div className="space-y-4">
         {profileHeader}
         {changelogWidget}
+        {monitoringWidget}
         <FinanceFullDashboard />
       </div>
     );
@@ -564,6 +568,7 @@ export default function DashboardPage() {
       <div className="space-y-4">
         {profileHeader}
         {changelogWidget}
+        {monitoringWidget}
         <TrainingDevelopmentDashboard data={data} loading={loading} />
       </div>
     );
@@ -574,6 +579,7 @@ export default function DashboardPage() {
       <div className="space-y-4">
         {profileHeader}
         {changelogWidget}
+        {monitoringWidget}
         <AdministrationDashboard
           data={data}
           loading={loading}
@@ -591,6 +597,7 @@ export default function DashboardPage() {
       <div className="space-y-4">
         {profileHeader}
         {changelogWidget}
+        {monitoringWidget}
         <PlacementDepartmentDashboard data={data} loading={loading} />
         {showFollowupPopup && (
           <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
@@ -653,6 +660,7 @@ export default function DashboardPage() {
       />
       {profileHeader}
         {changelogWidget}
+        {monitoringWidget}
       {/* ── Quick Stats Row ── */}
       {widgetConfig.quickStats && (loading ? (
         <QuickStatsSkeleton />
