@@ -688,7 +688,6 @@ export default function EditBatchPage() {
   const [standardLectures, setStandardLectures] = useState<StandardLecture[]>([]);
   const [stdPlanLocked, setStdPlanLocked] = useState(false);
   const [savingSLectureRowId, setSavingSLectureRowId] = useState<number | null>(null);
-  const [autoLinkingLegacyTrainers, setAutoLinkingLegacyTrainers] = useState(false);
   const [sLectureSearch, setSLectureSearch] = useState('');
   const [loadingSLectures, setLoadingSLectures] = useState(false);
   const [hasStandardPlan, setHasStandardPlan] = useState(true);
@@ -753,120 +752,6 @@ export default function EditBatchPage() {
       fetchStandardLectures();
     } catch { /* ignore */ }
     setSavingSLectureRowId(null);
-  };
-
-  const normalizeTrainerName = (value: string | null | undefined) =>
-    (value ?? '')
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-  const handleAutoLinkLegacyTrainers = async () => {
-    if (stdPlanLocked) return;
-    if (!facultyList.length) {
-      alert('Faculty list is not loaded yet. Please refresh the tab and try again.');
-      return;
-    }
-
-    const legacyRows = standardLectures.filter(
-      (l) => l.faculty_id == null && Boolean((l.faculty_name ?? '').toString().trim())
-    );
-
-    if (!legacyRows.length) {
-      alert('No legacy trainer names found to auto-link.');
-      return;
-    }
-
-    const facultyByNormalized = new Map<string, Faculty>();
-    facultyList.forEach((f) => {
-      const key = normalizeTrainerName(f.Faculty_Name);
-      if (key && !facultyByNormalized.has(key)) {
-        facultyByNormalized.set(key, f);
-      }
-    });
-
-    const updates = legacyRows
-      .map((row) => {
-        const key = normalizeTrainerName(row.faculty_name);
-        const matched = key ? facultyByNormalized.get(key) : undefined;
-        if (!matched) return null;
-        return {
-          row,
-          facultyId: matched.Faculty_Id,
-          facultyName: matched.Faculty_Name,
-        };
-      })
-      .filter(Boolean) as Array<{
-      row: StandardLecture;
-      facultyId: number;
-      facultyName: string;
-    }>;
-
-    if (!updates.length) {
-      alert('No exact trainer-name matches found for auto-linking.');
-      return;
-    }
-
-    setAutoLinkingLegacyTrainers(true);
-    try {
-      const results = await Promise.all(
-        updates.map(async ({ row, facultyId, facultyName }) => {
-          const res = await fetch(`/api/masters/batch/${batchId}/slectures`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: row.id,
-              lecture_no: row.lecture_no,
-              subject: (row.subject ?? null),
-              subject_topic: (row.subject_topic ?? null),
-              lecturecontent: (row.lecturecontent ?? null),
-              date: formatDateForInput(row.date) || null,
-              lectureday: row.lectureday,
-              starttime: row.starttime,
-              endtime: row.endtime,
-              assignment: row.assignment,
-              assignment_date: formatDateForInput(row.assignment_date) || null,
-              faculty_id: facultyId,
-              faculty_name: facultyName,
-              class_room: row.class_room,
-              documents: row.documents,
-              unit_test: row.unit_test,
-              publish: row.publish,
-            }),
-          });
-
-          return { ok: res.ok };
-        })
-      );
-
-      const successCount = results.filter((r) => r.ok).length;
-      const failedCount = results.length - successCount;
-
-      if (successCount > 0) {
-        setStandardLectures((prev) =>
-          prev.map((row) => {
-            const matched = updates.find((u) => u.row.id === row.id);
-            if (!matched) return row;
-            return {
-              ...row,
-              faculty_id: matched.facultyId,
-              faculty_name: matched.facultyName,
-            };
-          })
-        );
-      }
-
-      await fetchStandardLectures();
-      alert(
-        failedCount > 0
-          ? `Auto-link complete: ${successCount} linked, ${failedCount} failed.`
-          : `Auto-link complete: ${successCount} trainer(s) linked.`
-      );
-    } catch {
-      alert('Auto-link failed. Please try again.');
-    }
-    setAutoLinkingLegacyTrainers(false);
   };
 
   /* Batch Details form state */
@@ -2779,14 +2664,6 @@ export default function EditBatchPage() {
             title={stdPlanLocked ? 'Unlock to edit' : 'Lock to prevent edits'}
           >
             {stdPlanLocked ? 'Locked' : 'Unlocked'}
-          </button>
-          <button
-            onClick={handleAutoLinkLegacyTrainers}
-            disabled={stdPlanLocked || autoLinkingLegacyTrainers || !facultyList.length}
-            className="px-2 py-1 border border-gray-300 text-gray-600 text-xs font-medium rounded h-7 hover:bg-gray-50 disabled:opacity-50"
-            title="Map legacy trainer names to linked trainer records"
-          >
-            {autoLinkingLegacyTrainers ? 'Auto Linking...' : 'Auto Link Trainers'}
           </button>
           <button
             onClick={handleResyncFromStandardPlan}
