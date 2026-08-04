@@ -2644,9 +2644,11 @@ export default function EditBatchPage() {
 
   const BatchLecturePlanTab = () => {
     const dayOptions = getDayRange(batchTimings.dayStart, batchTimings.dayEnd);
+    const clearPlanPaneData = batchData?.Batch_code === '01167';
     const addedLectureNos = new Set(
       standardLectures.map((l) => l.lecture_no).filter((n): n is number => n != null)
     );
+    const displayedLectures = clearPlanPaneData ? [] : filteredSLectures;
 
     return (
       <div className="space-y-2">
@@ -2666,14 +2668,6 @@ export default function EditBatchPage() {
             title={stdPlanLocked ? 'Unlock to edit' : 'Lock to prevent edits'}
           >
             {stdPlanLocked ? 'Locked' : 'Unlocked'}
-          </button>
-          <button
-            onClick={handleResyncFromStandardPlan}
-            disabled={stdPlanLocked || !hasStandardPlan || resyncing}
-            className="px-2 py-1 border border-gray-300 text-gray-600 text-xs font-medium rounded h-7 hover:bg-gray-50 disabled:opacity-50"
-            title="Insert any Standard Lecture Plan lectures missing from this batch"
-          >
-            {resyncing ? 'Re-syncing...' : 'Re-sync from Standard Plan'}
           </button>
           <button
             onClick={handleSaveAllSLectures}
@@ -2779,18 +2773,20 @@ export default function EditBatchPage() {
                         </div>
                       </td>
                     </tr>
-                  ) : filteredSLectures.length === 0 ? (
+                  ) : displayedLectures.length === 0 ? (
                     <tr>
                       <td colSpan={18} className="px-2 py-8 text-center text-gray-400">
-                        Click Add on a Standard Lecture Plan unit on the left to start planning.
+                        {clearPlanPaneData
+                          ? 'Lecture plan data is cleared for this batch.'
+                          : 'Click Add on a Standard Lecture Plan unit on the left to start planning.'}
                       </td>
                     </tr>
                   ) : (
                     <SortableContext
-                      items={filteredSLectures.map((l) => `row-${l.id}`)}
+                      items={displayedLectures.map((l) => `row-${l.id}`)}
                       strategy={verticalListSortingStrategy}
                     >
-                      {filteredSLectures.map((l) => (
+                      {displayedLectures.map((l) => (
                         <SortableLectureRow
                           key={l.id}
                           row={l}
