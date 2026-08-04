@@ -8,6 +8,7 @@ import { Modal, TableHeader, TableSkeleton, EmptyRow, TotalRow, inpCls, lblCls, 
 import { fmt, todayISO, fmtDate, isCountableCashflow, buildYearOptions, yearValueToRange, monthOptionsForYear } from '../shared/format';
 import type { CashflowTxn, CashflowType } from '../shared/types';
 import CashflowCategoryBars from '../charts/CashflowCategoryBars';
+import OtherDepartmentsBreakdown from '../charts/OtherDepartmentsBreakdown';
 import { detectCashflowAnomalies, categoryMoMGrowth, buildMoMInsights, buildMoMRecommendations } from '../shared/predictions';
 
 const CF_TYPES: CashflowType[] = ['Payment', 'Receipt'];
@@ -487,6 +488,11 @@ export default function CashflowTab() {
             currentYear={currentYear} calendarYearOptions={calendarYearOptions} financialYearOptions={financialYearOptions} />
         </div>
         <CashflowCategoryBars rows={countableFilteredRows} view="dept" />
+      </div>
+
+      {/* Other Departments — expense drill-down (see the "Other Departments" bar above) */}
+      <div>
+        <OtherDepartmentsBreakdown rows={countableFilteredRows} />
       </div>
 
       <div>

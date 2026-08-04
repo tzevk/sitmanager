@@ -76,42 +76,8 @@ export async function GET(
       hasStandardPlan = Number(templateCountRows[0]?.cnt ?? 0) > 0;
     }
 
-    // Check if current batch already has lectures
-    const [existingRows] = await pool.query<RowDataPacket[]>(`
-      SELECT id FROM batch_slecture_master
-      WHERE batch_id = ? AND (deleted IS NULL OR deleted = '0')
-      LIMIT 1
-    `, [batchId]);
-
-    if (existingRows.length === 0 && hasStandardPlan && courseName) {
-      // Seed this batch's plan from the Standard Lecture Plan template for its Training Programme.
-      const [templateRows] = await pool.query<RowDataPacket[]>(`
-        SELECT lecture_no, department, module, sub_topics, faculty, project_assignment
-        FROM standard_lecture_plan_template
-        WHERE course_name = ?
-        ORDER BY lecture_no ASC
-      `, [courseName]);
-
-      for (const t of templateRows) {
-        await pool.query(`
-          INSERT INTO batch_slecture_master
-          (batch_id, lecture_no, standard_seq, subject, subject_topic, department, faculty_name,
-           assignment, starttime, endtime, publish, lecture_status, deleted, created_date)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'No', 'pending', '0', NOW())
-        `, [
-          batchId,
-          t.lecture_no,
-          t.lecture_no,
-          t.module,
-          t.sub_topics,
-          t.department,
-          t.faculty,
-          t.project_assignment ? String(t.project_assignment).slice(0, 50) : null,
-          batchTimings.startTime,
-          batchTimings.endTime,
-        ]);
-      }
-    }
+    // Note: the batch's plan is no longer auto-seeded from the template on first load —
+    // it starts blank and is populated by dragging topics in (or "Re-sync from Standard Plan").
 
     // Fetch this batch's lectures
     const [rows] = await pool.query<RowDataPacket[]>(`

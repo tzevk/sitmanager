@@ -2705,7 +2705,7 @@ export default function EditBatchPage() {
         </div>
 
         <DndContext sensors={dndSensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-3 min-w-0">
             {/* Left: Standard Lecture Plan reference (drag source) */}
             <div className="border border-gray-200 rounded overflow-hidden flex flex-col h-[75vh]">
               <div className="px-2.5 py-2 border-b border-gray-200 bg-slate-50 shrink-0">
@@ -2733,11 +2733,11 @@ export default function EditBatchPage() {
 
             {/* Right: this batch's own plan (drop target + sortable rows) */}
             <div
-              ref={setPlanDropRef}
-              className={`border rounded h-[75vh] overflow-auto ${
+              className={`border rounded h-[75vh] min-w-0 flex flex-col ${
                 isOverPlanDropZone ? 'border-[#2E3093] ring-2 ring-[#2E3093]/20' : 'border-gray-200'
               }`}
             >
+              <div ref={setPlanDropRef} className="flex-1 min-h-0 min-w-0 overflow-auto">
               <table className="text-xs">
                 <thead className="sticky top-0 bg-slate-50 z-10">
                   <tr>
@@ -2801,6 +2801,7 @@ export default function EditBatchPage() {
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
 

@@ -13,13 +13,15 @@ const LOAN_CATS = ['OD Interest / Loan EMI'];
 // their own — so their expenses roll into CBD's profit % here, with the
 // split still called out underneath. This is a display-only merge: the raw
 // Cashflow tab / transaction table keeps each department separate.
-const CBD_COMBINED_DEPTS = ['CBD', 'TRAINERS', 'T&D'];
+// Exported so OtherDepartmentsBreakdown.tsx can classify "Other Departments"
+// the same way — anything not in this list or NAMED_DEPTS below.
+export const CBD_COMBINED_DEPTS = ['CBD', 'TRAINERS', 'T&D'];
 
 // Same 5-bucket grouping as the Overview tab's Department-wise Breakdown
 // (CBD / Deputation / Corporate Training / Accent Projects / Other) — with
 // 9+ real departments in the raw data, showing every one individually left
 // no room for readable bold labels at half chart width.
-const NAMED_DEPTS: Record<string, string> = {
+export const NAMED_DEPTS: Record<string, string> = {
   'DEPUTATION ACCENT': 'Deputation Accent',
   'CORPORATE TRAINING': 'Corporate Training',
   'PROJECT ACCENT': 'Project Accent',
