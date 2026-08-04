@@ -688,6 +688,7 @@ export default function EditBatchPage() {
   const [standardLectures, setStandardLectures] = useState<StandardLecture[]>([]);
   const [stdPlanLocked, setStdPlanLocked] = useState(false);
   const [savingSLectureRowId, setSavingSLectureRowId] = useState<number | null>(null);
+  const [savingAllSLectures, setSavingAllSLectures] = useState(false);
   const [sLectureSearch, setSLectureSearch] = useState('');
   const [loadingSLectures, setLoadingSLectures] = useState(false);
   const [hasStandardPlan, setHasStandardPlan] = useState(true);
@@ -721,40 +722,53 @@ export default function EditBatchPage() {
     setStandardLectures(prev => prev.map(l => (l.id === id ? { ...l, ...patch } : l)));
   };
 
+  const saveSLectureRow = (row: StandardLecture) =>
+    fetch(`/api/masters/batch/${batchId}/slectures`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: row.id,
+        lecture_no: row.lecture_no,
+        standard_seq: row.standard_seq ?? null,
+        subject: (row.subject ?? null),
+        subject_topic: (row.subject_topic ?? null),
+        department: row.department ?? null,
+        lecturecontent: (row.lecturecontent ?? null),
+        date: formatDateForInput(row.date) || null,
+        lectureday: row.lectureday,
+        starttime: row.starttime,
+        endtime: row.endtime,
+        assignment: row.assignment,
+        assignment_date: formatDateForInput(row.assignment_date) || null,
+        faculty_id: row.faculty_id ?? null,
+        faculty_name: row.faculty_name,
+        class_room: row.class_room,
+        documents: row.documents,
+        unit_test: row.unit_test,
+        publish: row.publish,
+        covered_subtopics: row.covered_subtopics ?? null,
+      }),
+    });
+
   const handleSaveSLectureInline = async (row: StandardLecture) => {
     if (stdPlanLocked) return;
     setSavingSLectureRowId(row.id);
     try {
-      await fetch(`/api/masters/batch/${batchId}/slectures`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: row.id,
-          lecture_no: row.lecture_no,
-          standard_seq: row.standard_seq ?? null,
-          subject: (row.subject ?? null),
-          subject_topic: (row.subject_topic ?? null),
-          department: row.department ?? null,
-          lecturecontent: (row.lecturecontent ?? null),
-          date: formatDateForInput(row.date) || null,
-          lectureday: row.lectureday,
-          starttime: row.starttime,
-          endtime: row.endtime,
-          assignment: row.assignment,
-          assignment_date: formatDateForInput(row.assignment_date) || null,
-          faculty_id: row.faculty_id ?? null,
-          faculty_name: row.faculty_name,
-          class_room: row.class_room,
-          documents: row.documents,
-          unit_test: row.unit_test,
-          publish: row.publish,
-          covered_subtopics: row.covered_subtopics ?? null,
-        }),
-      });
+      await saveSLectureRow(row);
       // Refresh to reflect any server-side normalization
       fetchStandardLectures();
     } catch { /* ignore */ }
     setSavingSLectureRowId(null);
+  };
+
+  const handleSaveAllSLectures = async () => {
+    if (stdPlanLocked || savingAllSLectures || !standardLectures.length) return;
+    setSavingAllSLectures(true);
+    try {
+      await Promise.all(standardLectures.map((row) => saveSLectureRow(row)));
+      await fetchStandardLectures();
+    } catch { /* ignore */ }
+    setSavingAllSLectures(false);
   };
 
   /* Batch Details form state */
@@ -2675,6 +2689,14 @@ export default function EditBatchPage() {
             title="Insert any Standard Lecture Plan lectures missing from this batch"
           >
             {resyncing ? 'Re-syncing...' : 'Re-sync from Standard Plan'}
+          </button>
+          <button
+            onClick={handleSaveAllSLectures}
+            disabled={stdPlanLocked || savingAllSLectures || !standardLectures.length}
+            className="px-2 py-1 bg-[#2E3093] text-white text-xs font-medium rounded h-7 hover:opacity-90 disabled:opacity-50"
+            title="Save all rows in the plan"
+          >
+            {savingAllSLectures ? 'Saving...' : 'Save All'}
           </button>
           <button
             onClick={handleExportSLectures}
