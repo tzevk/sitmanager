@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { ensureBatchTimingColumns } from '@/lib/batchTimingColumns';
 
 export async function GET(
   req: NextRequest,
@@ -8,10 +9,12 @@ export async function GET(
   try {
     const pool = getPool();
     const { id } = await params;
+    await ensureBatchTimingColumns(pool);
 
     const sql = `
       SELECT
         b.Batch_Id, b.Batch_code, b.Category, b.Location, b.Timings,
+        b.Day_Start, b.Day_End, b.Start_Time, b.End_Time,
         b.No_of_Lectures,
         IFNULL(b.UnitTestWtg, 0) AS UnitTestWtg,
         IFNULL(b.AssignWtg, 0)   AS AssignWtg,
@@ -56,11 +59,13 @@ export async function PUT(
   try {
     const pool = getPool();
     const { id } = await params;
+    await ensureBatchTimingColumns(pool);
     const body = await req.json();
 
     // Build dynamic update query based on provided fields
     const allowedFields = [
-      'Course_Id', 'Batch_code', 'Category', 'Location', 'Timings', 'SDate', 'EDate',
+      'Course_Id', 'Batch_code', 'Category', 'Location', 'Timings',
+      'Day_Start', 'Day_End', 'Start_Time', 'End_Time', 'SDate', 'EDate',
       'Admission_Date', 'ActualDate', 'Duration', 'Training_Coordinator',
       'Min_Qualification', 'Documents_Required', 'Passing_Criteria',
       'Fees_Full_Payment', 'Fees_Installment_Payment', 'Actual_Fees_Payment',

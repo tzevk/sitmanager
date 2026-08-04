@@ -2,12 +2,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { ensureBatchTimingColumns } from '@/lib/batchTimingColumns';
 
 export async function GET(req: NextRequest) {
   try {
     const auth = await requirePermission(req, 'batch.view');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
+    await ensureBatchTimingColumns(pool);
     const { searchParams } = new URL(req.url);
 
     const page = Math.max(1, Number(searchParams.get('page')) || 1);
@@ -94,10 +96,12 @@ export async function POST(req: NextRequest) {
     const auth = await requirePermission(req, 'batch.create');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
+    await ensureBatchTimingColumns(pool);
     const body = await req.json();
 
     const {
-      Course_Id, Batch_code, Category, Location, Timings, SDate, EDate,
+      Course_Id, Batch_code, Category, Location, Timings,
+      Day_Start, Day_End, Start_Time, End_Time, SDate, EDate,
       Admission_Date, Duration, Training_Coordinator,
       Min_Qualification, Documents_Required, Passing_Criteria,
       Max_Students, Course_description, CourseName, Comments,
@@ -128,7 +132,8 @@ export async function POST(req: NextRequest) {
 
     const sql = `
       INSERT INTO batch_mst (
-        Course_Id, Batch_code, Category, Location, Timings, SDate, EDate,
+        Course_Id, Batch_code, Category, Location, Timings,
+        Day_Start, Day_End, Start_Time, End_Time, SDate, EDate,
         Admission_Date, Duration, Training_Coordinator,
         Min_Qualification, Documents_Required, Passing_Criteria,
         Max_Students, Course_description, CourseName, Comments,
@@ -137,7 +142,7 @@ export async function POST(req: NextRequest) {
         Dollar_Basic, Dollar_ServiceTax, Dollar_Total,
         Actual_Fees_Payment, Fees_Full_Payment, Fees_Installment_Payment,
         IsActive, IsDelete
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)
     `;
     const [result] = await pool.query<any>(sql, [
       Course_Id ? Number(Course_Id) : null,
@@ -145,6 +150,10 @@ export async function POST(req: NextRequest) {
       Category?.trim() || null,
       Location?.trim() || null,
       Timings?.trim() || null,
+      Day_Start?.trim() || null,
+      Day_End?.trim() || null,
+      Start_Time?.trim() || null,
+      End_Time?.trim() || null,
       SDate || null,
       EDate || null,
       Admission_Date || null,

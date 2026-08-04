@@ -13,13 +13,18 @@ interface IdCard {
   batchNo: string;
   contactNo: string;
   validUpto: string;
-  photo: string | null; // data URL
+  photo: string | null; // data URL, resized for the card — see resizeImageFile
+  /** Original, full-resolution upload — only set for manually-uploaded photos,
+   *  used when saving to the student's profile so that save isn't degraded to
+   *  card-thumbnail quality. Null for batch-imported photos (already came
+   *  from the profile) or once the page reloads. */
+  photoFile: File | null;
 }
 
 const blankCard = (): IdCard => ({
   id: Math.random().toString(36).slice(2),
   studentId: null,
-  name: '', course: '', batchNo: '', contactNo: '', validUpto: '', photo: null,
+  name: '', course: '', batchNo: '', contactNo: '', validUpto: '', photo: null, photoFile: null,
 });
 
 const field = 'w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400';
@@ -88,6 +93,7 @@ export default function IdCardGeneratorPage() {
         contactNo: s.contactNo || '',
         validUpto: data.validUpto || '',
         photo: s.photo || (s.photoUrl ? await imageUrlToDataUrl(s.photoUrl) : null),
+        photoFile: null,
       })));
       if (imported.length === 0) { setError('No students found in this batch.'); return; }
       // Drop empty starter cards, keep any the user already filled, then append.
@@ -106,13 +112,43 @@ export default function IdCardGeneratorPage() {
   const addCard = () => setCards(prev => [...prev, blankCard()]);
   const removeCard = (id: string) => setCards(prev => (prev.length > 1 ? prev.filter(c => c.id !== id) : prev));
 
+  // Card photos are only ever displayed at 95x115px, but camera/phone uploads
+  // can be several MB each — sending those as-is (and, for batch imports,
+  // the server round-tripping them) risks hitting Vercel's 4.5MB request/
+  // response body cap once more than a couple of cards are involved. Shrink
+  // client-side before the photo ever enters a request body.
+  const resizeImageFile = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const maxW = 300, maxH = 360;
+      const scale = Math.min(1, maxW / img.width, maxH / img.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas unsupported')); return; }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Could not read image')); };
+    img.src = objectUrl;
+  });
+
   const onPhoto = (id: string, file: File | undefined) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) { setError('Please upload an image file.'); return; }
     if (file.size > 5 * 1024 * 1024) { setError('Photo must be under 5 MB.'); return; }
-    const reader = new FileReader();
-    reader.onload = () => update(id, { photo: typeof reader.result === 'string' ? reader.result : null });
-    reader.readAsDataURL(file);
+    resizeImageFile(file)
+      .then((dataUrl) => update(id, { photo: dataUrl, photoFile: file }))
+      .catch(() => {
+        // Fall back to the original file if client-side resize fails for
+        // any reason — still capped at 5MB by the check above.
+        const reader = new FileReader();
+        reader.onload = () => update(id, { photo: typeof reader.result === 'string' ? reader.result : null, photoFile: file });
+        reader.readAsDataURL(file);
+      });
   };
 
   const savePhotoToStudent = async (card: IdCard) => {
@@ -128,7 +164,11 @@ export default function IdCardGeneratorPage() {
     setSavingPhotoId(card.id);
     setSavedPhotoId(null);
     try {
-      const blob = await (await fetch(card.photo)).blob();
+      // Prefer the original full-resolution upload over the card's resized
+      // display copy — Photo_Data is reused elsewhere in the app (e.g.
+      // /api/student-photo) at full size, so saving the card thumbnail
+      // there would permanently degrade the student's profile photo.
+      const blob = card.photoFile ?? await (await fetch(card.photo)).blob();
       const formData = new FormData();
       formData.append('photo', blob, `student_${card.studentId}.jpg`);
       const res = await fetch(`/api/admission-activity/student/${card.studentId}/photo`, {

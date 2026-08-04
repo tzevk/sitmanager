@@ -2,6 +2,7 @@
 import { extname } from 'path';
 import { getPool } from '@/lib/db';
 import { getTableCols } from '@/lib/db-schema';
+import { resizeToThumbnail } from '@/lib/image-thumbnail.server';
 
 const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
@@ -120,6 +121,30 @@ export async function getStudentPhotoDataUrl(studentId: number): Promise<string 
   const bytes = Buffer.from(row.Photo_Data);
   const contentType = String(row.Photo_Content_Type || 'image/jpeg');
   return `data:${contentType};base64,${bytes.toString('base64')}`;
+}
+
+/**
+ * Same as getStudentPhotoDataUrl, but resized down to a small JPEG first.
+ * For bulk endpoints (e.g. ID card batch import) that return many students'
+ * photos in one response — full-resolution originals in bulk blow past
+ * Vercel's 4.5MB response cap for any batch of more than a handful of
+ * photographed students.
+ */
+export async function getStudentPhotoThumbnailDataUrl(studentId: number): Promise<string | null> {
+  const pool = getPool();
+  await ensureStudentPhotoBlobColumns(pool);
+  const [rows] = await pool.query(
+    `SELECT Photo_Data
+     FROM student_master
+     WHERE Student_Id = ? AND Photo_Data IS NOT NULL
+     LIMIT 1`,
+    [studentId]
+  ) as [any[], any];
+  const row = rows[0];
+  if (!row?.Photo_Data) return null;
+  const resized = await resizeToThumbnail(Buffer.from(row.Photo_Data), { width: 300, height: 360, quality: 82 });
+  if (!resized) return null;
+  return `data:image/jpeg;base64,${resized.toString('base64')}`;
 }
 
 // Documents are stored directly in the DB (LONGBLOB) rather than on the Plesk file

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
 import { getPool } from '@/lib/db';
-import { ensureStudentPhotoBlobColumns, getStudentPhotoDataUrl } from '@/lib/student-documents.server';
+import { ensureStudentPhotoBlobColumns, getStudentPhotoThumbnailDataUrl } from '@/lib/student-documents.server';
 
 export const runtime = 'nodejs';
 
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
       studentId: Number(r.Student_Id),
       name: String(r.Student_Name || '').trim(),
       contactNo: String(r.Present_Mobile || '').trim(),
-      photo: await getStudentPhotoDataUrl(Number(r.Student_Id)),
+      photo: await getStudentPhotoThumbnailDataUrl(Number(r.Student_Id)),
     })));
 
     return NextResponse.json({

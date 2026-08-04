@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 import { computeLectureStatuses } from '@/lib/lecturePlanStatus';
+import { ensureBatchTimingColumns } from '@/lib/batchTimingColumns';
 
 /** documents/assignment/etc. are varchar(50) columns; truncate instead of erroring on longer input. */
 const truncate = (value: unknown, maxLength = 50): string | null => {
@@ -11,19 +12,26 @@ const truncate = (value: unknown, maxLength = 50): string | null => {
 
 async function ensureFacultyIdColumn(pool: ReturnType<typeof getPool>) {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT COUNT(*) AS cnt
+    `SELECT COLUMN_NAME AS name
      FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
        AND TABLE_NAME = 'batch_slecture_master'
-       AND COLUMN_NAME = 'faculty_id'`
+       AND COLUMN_NAME IN ('faculty_id', 'covered_subtopics')`
   );
-  const cnt = Number(rows?.[0]?.cnt ?? 0);
-  if (cnt > 0) return;
+  const existing = new Set(rows.map((r) => r.name as string));
 
-  await pool.query(
-    `ALTER TABLE batch_slecture_master
-     ADD COLUMN faculty_id INT NULL AFTER assignment_date`
-  );
+  if (!existing.has('faculty_id')) {
+    await pool.query(
+      `ALTER TABLE batch_slecture_master
+       ADD COLUMN faculty_id INT NULL AFTER assignment_date`
+    );
+  }
+  if (!existing.has('covered_subtopics')) {
+    await pool.query(
+      `ALTER TABLE batch_slecture_master
+       ADD COLUMN covered_subtopics TEXT NULL`
+    );
+  }
 }
 
 // GET - fetch all standard lecture plans for a batch
@@ -35,10 +43,11 @@ export async function GET(
     const { id: batchId } = await params;
     const pool = getPool();
     await ensureFacultyIdColumn(pool);
+    await ensureBatchTimingColumns(pool);
 
-    // First, get the current batch info (Course_Id -> Course_Name)
+    // First, get the current batch info (Course_Id -> Course_Name, timing defaults)
     const [batchRows] = await pool.query<RowDataPacket[]>(`
-      SELECT b.Course_Id, c.Course_Name
+      SELECT b.Course_Id, c.Course_Name, b.Day_Start, b.Day_End, b.Start_Time, b.End_Time
       FROM batch_mst b
       LEFT JOIN course_mst c ON c.Course_Id = b.Course_Id
       WHERE b.Batch_Id = ?
@@ -50,6 +59,12 @@ export async function GET(
     }
 
     const courseName: string | null = currentBatch.Course_Name || null;
+    const batchTimings = {
+      dayStart: currentBatch.Day_Start || null,
+      dayEnd: currentBatch.Day_End || null,
+      startTime: currentBatch.Start_Time || null,
+      endTime: currentBatch.End_Time || null,
+    };
 
     // Does the Training Programme have a Standard Lecture Plan at all?
     let hasStandardPlan = false;
@@ -80,9 +95,9 @@ export async function GET(
       for (const t of templateRows) {
         await pool.query(`
           INSERT INTO batch_slecture_master
-          (batch_id, lecture_no, standard_seq, subject, subject_topic, department, faculty_name, publish,
-           lecture_status, deleted, created_date)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 'No', 'pending', '0', NOW())
+          (batch_id, lecture_no, standard_seq, subject, subject_topic, department, faculty_name,
+           assignment, starttime, endtime, publish, lecture_status, deleted, created_date)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'No', 'pending', '0', NOW())
         `, [
           batchId,
           t.lecture_no,
@@ -91,6 +106,9 @@ export async function GET(
           t.sub_topics,
           t.department,
           t.faculty,
+          t.project_assignment ? String(t.project_assignment).slice(0, 50) : null,
+          batchTimings.startTime,
+          batchTimings.endTime,
         ]);
       }
     }
@@ -118,7 +136,8 @@ export async function GET(
         s.unit_test,
         u.utdate AS unit_test_date,
         s.publish,
-        s.lecturecontent
+        s.lecturecontent,
+        s.covered_subtopics
       FROM batch_slecture_master s
       LEFT JOIN faculty_master f ON f.Faculty_Id = s.faculty_id
       LEFT JOIN awt_unittesttaken u ON u.id = CAST(s.unit_test AS UNSIGNED)
@@ -169,7 +188,7 @@ export async function GET(
       ORDER BY Faculty_Name ASC
     `);
 
-    return NextResponse.json({ lectures, facultyList: facultyRows, hasStandardPlan, courseName });
+    return NextResponse.json({ lectures, facultyList: facultyRows, hasStandardPlan, courseName, batchTimings });
   } catch (error) {
     console.error('Error fetching standard lectures:', error);
     return NextResponse.json({ error: 'Failed to fetch lectures' }, { status: 500 });
@@ -199,16 +218,17 @@ export async function POST(
 
     const [result] = await pool.query(`
       INSERT INTO batch_slecture_master
-      (batch_id, lecture_no, standard_seq, subject, subject_topic, date, lectureday, starttime, endtime,
+      (batch_id, lecture_no, standard_seq, subject, subject_topic, department, date, lectureday, starttime, endtime,
        assignment, assignment_date, faculty_id, faculty_name, class_room, documents, unit_test, publish, lecturecontent,
-       lecture_status, deleted, created_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '0', NOW())
+       covered_subtopics, lecture_status, deleted, created_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '0', NOW())
     `, [
       batchId,
       body.lecture_no || null,
       body.standard_seq ? Number(body.standard_seq) : null,
       body.subject || null,
       body.subject_topic || null,
+      body.department || null,
       truncate(body.date),
       truncate(body.lectureday),
       truncate(body.starttime),
@@ -222,6 +242,7 @@ export async function POST(
       truncate(body.unit_test),
       body.publish || 'No',
       body.lecturecontent || null,
+      body.covered_subtopics || null,
     ]);
 
     return NextResponse.json({ success: true, insertId: (result as { insertId: number }).insertId });
@@ -257,8 +278,10 @@ export async function PUT(request: NextRequest) {
     await pool.query(`
       UPDATE batch_slecture_master SET
         lecture_no = ?,
+        standard_seq = ?,
         subject = ?,
         subject_topic = ?,
+        department = ?,
         date = ?,
         lectureday = ?,
         starttime = ?,
@@ -271,12 +294,15 @@ export async function PUT(request: NextRequest) {
         documents = ?,
         unit_test = ?,
         publish = ?,
-        lecturecontent = ?
+        lecturecontent = ?,
+        covered_subtopics = ?
       WHERE id = ?
     `, [
       data.lecture_no || null,
+      data.standard_seq != null ? Number(data.standard_seq) : null,
       data.subject || null,
       data.subject_topic || null,
+      data.department || null,
       truncate(data.date),
       truncate(data.lectureday),
       truncate(data.starttime),
@@ -290,6 +316,7 @@ export async function PUT(request: NextRequest) {
       truncate(data.unit_test),
       data.publish || 'No',
       data.lecturecontent || null,
+      data.covered_subtopics || null,
       id,
     ]);
 

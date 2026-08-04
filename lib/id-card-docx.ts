@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import sharp from 'sharp';
 import {
   Document, Packer, Paragraph, TextRun, ImageRun,
   Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, VerticalAlign,
 } from 'docx';
+import { resizeToThumbnail } from '@/lib/image-thumbnail.server';
 
 export interface IdCardInput {
   name: string;
@@ -44,25 +44,14 @@ function decodeDataUrl(dataUrl?: string | null): Buffer | null {
 }
 
 // Card photos are only ever displayed at 95x115px (see buildCardTable below),
-// but student uploads are stored as full-resolution originals (avg ~400KB,
-// up to a few MB each — see student_master.Photo_Data). Embedding those
-// as-is meant a batch of ~40 students could produce a 15-30MB .docx, which
-// silently failed to download: Vercel Serverless Functions cap response
-// bodies at 4.5MB. Re-encoding to a card-appropriate size fixes both the
-// failed export and (as a side effect) lets any browser-supported image
-// format through instead of only png/jpeg, since sharp normalizes it.
+// but student uploads can be full-resolution originals. Embedding those
+// as-is risked a large batch producing a multi-MB .docx that silently failed
+// to download (Vercel Serverless Functions cap response bodies at 4.5MB).
+// Also lets any browser-supported image format through instead of only
+// png/jpeg, since sharp normalizes it — see lib/image-thumbnail.server.ts.
 async function resizeForCard(bytes: Buffer): Promise<{ data: Buffer; type: 'jpg' } | null> {
-  try {
-    const resized = await sharp(bytes)
-      .resize(300, 360, { fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 82 })
-      .toBuffer();
-    return { data: resized, type: 'jpg' };
-  } catch {
-    // Corrupt/unsupported image — drop the photo rather than failing the
-    // whole batch export over one bad upload.
-    return null;
-  }
+  const resized = await resizeToThumbnail(bytes, { width: 300, height: 360, quality: 82 });
+  return resized ? { data: resized, type: 'jpg' } : null;
 }
 
 function loadLogo(): { data: Buffer; type: 'png' } | null {

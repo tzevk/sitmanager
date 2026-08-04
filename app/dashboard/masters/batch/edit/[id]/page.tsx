@@ -4,6 +4,25 @@ import { useState, useCallback, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
+import { WEEKDAYS, getDayRange } from '@/lib/weekdays';
+import {
+  DndContext,
+  DragOverlay,
+  useDraggable,
+  useDroppable,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface Course {
   Course_Id: number;
@@ -80,6 +99,25 @@ interface StandardLecture {
   standard_seq?: number | null;
   actual_seq?: number | null;
   lecture_status?: string | null;
+  department?: string | null;
+  covered_subtopics?: string | null;
+}
+
+interface TemplateLecture {
+  id: number;
+  lecture_no: number | null;
+  department: string | null;
+  module: string | null;
+  sub_topics: string | null;
+  faculty: string | null;
+  project_assignment: string | null;
+}
+
+interface BatchTimings {
+  dayStart: string | null;
+  dayEnd: string | null;
+  startTime: string | null;
+  endTime: string | null;
 }
 
 interface FinalExam {
@@ -98,6 +136,10 @@ interface BatchData {
   Category: string | null;
   Location: string | null;
   Timings: string | null;
+  Day_Start: string | null;
+  Day_End: string | null;
+  Start_Time: string | null;
+  End_Time: string | null;
   SDate: string | null;
   EDate: string | null;
   Admission_Date: string | null;
@@ -205,6 +247,336 @@ const toStringOrNull = (value: unknown): string | null => {
   if (typeof value === 'string') return value;
   return String(value);
 };
+
+const getSubtopicList = (text: string | null | undefined): string[] => {
+  if (!text) return [];
+  return text.split('\n').map((s) => s.trim()).filter(Boolean);
+};
+
+const getCoveredSet = (covered: string | null | undefined): Set<number> => {
+  if (!covered) return new Set();
+  return new Set(
+    covered.split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n))
+  );
+};
+
+/* Draggable card representing one topic from the Standard Lecture Plan (left pane). */
+function TemplateLectureCard({ tmpl, added }: { tmpl: TemplateLecture; added: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `tmpl-${tmpl.id}`,
+    data: { type: 'template', template: tmpl },
+  });
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
+  const subtopics = getSubtopicList(tmpl.sub_topics);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className={`px-2.5 py-2 border border-slate-200 rounded-md bg-white cursor-grab active:cursor-grabbing select-none ${
+        isDragging ? 'opacity-40' : ''
+      }`}
+    >
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-[10px] font-bold text-[#2E3093]">Lec {tmpl.lecture_no ?? '—'}</span>
+        {added && (
+          <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+            Added
+          </span>
+        )}
+      </div>
+      <div className="text-xs font-semibold text-slate-800 mt-0.5">{tmpl.module || 'Untitled'}</div>
+      <div className="text-[10px] text-slate-400">
+        {tmpl.department || '—'}{tmpl.faculty ? ` · ${tmpl.faculty}` : ''}
+      </div>
+      {subtopics.length > 0 && (
+        <ul className="mt-1 space-y-0.5">
+          {subtopics.map((s, i) => (
+            <li key={i} className="text-[10px] text-slate-600 flex gap-1">
+              <span className="text-slate-300">&bull;</span>
+              <span>{s}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {tmpl.project_assignment && (
+        <div className="text-[10px] text-slate-500 mt-1 italic">Assignment: {tmpl.project_assignment}</div>
+      )}
+    </div>
+  );
+}
+
+/* Checkbox-dropdown for marking which sub-topics of a plan row are covered. */
+function SubtopicsCell({
+  row,
+  disabled,
+  onToggleItem,
+}: {
+  row: StandardLecture;
+  disabled: boolean;
+  onToggleItem: (idx: number) => void;
+}) {
+  const subtopics = getSubtopicList(row.subject_topic);
+  const covered = getCoveredSet(row.covered_subtopics);
+
+  if (!subtopics.length) return <span className="text-gray-300">&mdash;</span>;
+
+  return (
+    <details className="relative">
+      <summary className="list-none cursor-pointer inline-block px-1.5 py-0.5 border border-gray-200 rounded text-[11px] bg-white hover:bg-gray-50 whitespace-nowrap">
+        {covered.size}/{subtopics.length} covered
+      </summary>
+      <div className="absolute z-20 mt-1 w-56 bg-white border border-gray-200 rounded shadow-lg p-2 space-y-1">
+        {subtopics.map((s, idx) => (
+          <label key={idx} className="flex items-start gap-1.5 text-[11px] text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={covered.has(idx)}
+              disabled={disabled}
+              onChange={() => onToggleItem(idx)}
+              className="mt-0.5"
+            />
+            <span>{s}</span>
+          </label>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+/* One row of the batch's own lecture plan (right pane), drag-reorderable by the handle. */
+function SortableLectureRow({
+  row,
+  disabled,
+  facultyList,
+  dayOptions,
+  colorClass,
+  saving,
+  onChange,
+  onSave,
+  onDelete,
+  onToggleSubtopic,
+}: {
+  row: StandardLecture;
+  disabled: boolean;
+  facultyList: Faculty[];
+  dayOptions: string[];
+  colorClass: string;
+  saving: boolean;
+  onChange: (id: number, patch: Partial<StandardLecture>) => void;
+  onSave: (row: StandardLecture) => void;
+  onDelete: (id: number) => void;
+  onToggleSubtopic: (row: StandardLecture, idx: number) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `row-${row.id}`,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      className={`border-b border-gray-100 hover:bg-gray-50 ${colorClass} ${isDragging ? 'opacity-50' : ''}`}
+    >
+      <td className="px-1 py-1.5 text-center">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
+          title="Drag to reorder"
+        >
+          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M7 4a1 1 0 11-2 0 1 1 0 012 0zM7 10a1 1 0 11-2 0 1 1 0 012 0zM7 16a1 1 0 11-2 0 1 1 0 012 0zM15 4a1 1 0 11-2 0 1 1 0 012 0zM15 10a1 1 0 11-2 0 1 1 0 012 0zM15 16a1 1 0 11-2 0 1 1 0 012 0z" />
+          </svg>
+        </button>
+      </td>
+      <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{row.standard_seq ?? '—'}</td>
+      <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{row.actual_seq ?? '—'}</td>
+      <td className="px-2 py-1.5 text-gray-900 font-medium">
+        <input
+          type="text"
+          value={(row.subject ?? '').toString()}
+          disabled={disabled}
+          onChange={(e) => onChange(row.id, { subject: e.target.value })}
+          className="w-full min-w-[130px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+          placeholder="Module/Topic"
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <SubtopicsCell row={row} disabled={disabled} onToggleItem={(idx) => onToggleSubtopic(row, idx)} />
+      </td>
+      <td className="px-2 py-1.5">
+        <select
+          value={row.faculty_id != null ? String(row.faculty_id) : ((row.faculty_name ?? '').toString().trim() ? '__legacy__' : '')}
+          disabled={disabled}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (!v || v === '__legacy__') {
+              onChange(row.id, { faculty_id: null });
+              return;
+            }
+            const selected = facultyList.find((f) => String(f.Faculty_Id) === v);
+            onChange(row.id, {
+              faculty_id: selected?.Faculty_Id ?? null,
+              faculty_name: selected?.Faculty_Name ?? row.faculty_name,
+            });
+          }}
+          className="w-full min-w-[120px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+        >
+          <option value="">Select Trainer</option>
+          {row.faculty_id == null && (row.faculty_name ?? '').toString().trim() && (
+            <option value="__legacy__">Legacy: {(row.faculty_name ?? '').toString()}</option>
+          )}
+          {facultyList.map((f) => (
+            <option key={f.Faculty_Id} value={String(f.Faculty_Id)}>{f.Faculty_Name}</option>
+          ))}
+        </select>
+      </td>
+      <td className="px-2 py-1.5 whitespace-nowrap">
+        <input
+          type="date"
+          value={formatDateForInput(row.date)}
+          disabled={disabled}
+          onChange={(e) => onChange(row.id, { date: e.target.value })}
+          className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <select
+          value={(row.lectureday ?? '').toString()}
+          disabled={disabled}
+          onChange={(e) => onChange(row.id, { lectureday: e.target.value })}
+          className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+        >
+          <option value="">Day</option>
+          {dayOptions.map((d) => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+      </td>
+      <td className="px-2 py-1.5 whitespace-nowrap">
+        <input
+          type="time"
+          value={(row.starttime ?? '').toString()}
+          disabled={disabled}
+          onChange={(e) => onChange(row.id, { starttime: e.target.value })}
+          className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+        />
+      </td>
+      <td className="px-2 py-1.5 whitespace-nowrap">
+        <input
+          type="time"
+          value={(row.endtime ?? '').toString()}
+          disabled={disabled}
+          onChange={(e) => onChange(row.id, { endtime: e.target.value })}
+          className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="text"
+          value={(row.assignment ?? '').toString()}
+          disabled={disabled}
+          onChange={(e) => onChange(row.id, { assignment: e.target.value })}
+          className="w-full min-w-[110px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+          placeholder="Assignment"
+        />
+      </td>
+      <td className="px-2 py-1.5 whitespace-nowrap">
+        <input
+          type="date"
+          value={formatDateForInput(row.assignment_date)}
+          disabled={disabled}
+          onChange={(e) => onChange(row.id, { assignment_date: e.target.value })}
+          className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="text"
+          value={(row.documents ?? '').toString()}
+          disabled={disabled}
+          onChange={(e) => onChange(row.id, { documents: e.target.value })}
+          className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+          placeholder="Docs"
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="text"
+          value={(row.class_room ?? '').toString()}
+          disabled={disabled}
+          onChange={(e) => onChange(row.id, { class_room: e.target.value })}
+          className="w-20 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+          placeholder="Room"
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <input
+          type="text"
+          value={(row.unit_test ?? '').toString()}
+          disabled={disabled}
+          onChange={(e) => onChange(row.id, { unit_test: e.target.value })}
+          className="w-14 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+          placeholder="UT"
+        />
+      </td>
+      <td className="px-2 py-1.5 whitespace-nowrap">
+        <input
+          type="date"
+          value={formatDateForInput(row.unit_test_date || null)}
+          disabled
+          className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-gray-100"
+        />
+      </td>
+      <td className="px-2 py-1.5">
+        <select
+          value={(row.publish ?? 'No').toString()}
+          disabled={disabled}
+          onChange={(e) => onChange(row.id, { publish: e.target.value })}
+          className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+        >
+          <option value="No">No</option>
+          <option value="Yes">Yes</option>
+        </select>
+      </td>
+      <td className="px-2 py-1.5 text-center">
+        <div className="flex items-center justify-center gap-0.5">
+          <button
+            onClick={() => onSave(row)}
+            disabled={disabled || saving}
+            className="p-1 text-green-700 hover:bg-green-50 rounded disabled:opacity-50"
+            title={disabled ? 'Locked' : 'Save'}
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 21V13H7v8" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v4h8" />
+            </svg>
+          </button>
+          <button
+            onClick={() => onDelete(row.id)}
+            className="p-1 text-red-600 hover:bg-red-50 rounded"
+            title="Delete"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+            </svg>
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
 
 export default function EditBatchPage() {
   const router = useRouter();
@@ -323,6 +695,10 @@ export default function EditBatchPage() {
   const [slpCourseName, setSlpCourseName] = useState<string | null>(null);
   const [resyncing, setResyncing] = useState(false);
   // Standard Lecture Plan is edited inline (no modal)
+  const [templateLectures, setTemplateLectures] = useState<TemplateLecture[]>([]);
+  const [loadingTemplateLectures, setLoadingTemplateLectures] = useState(false);
+  const [batchTimings, setBatchTimings] = useState<BatchTimings>({ dayStart: null, dayEnd: null, startTime: null, endTime: null });
+  const [activeDragTemplate, setActiveDragTemplate] = useState<TemplateLecture | null>(null);
 
   /* Final Exam Details state */
   const [finalExams, setFinalExams] = useState<FinalExam[]>([]);
@@ -512,6 +888,10 @@ export default function EditBatchPage() {
     Duration: '',
     NoStudent: '',
     Timings: '',
+    Day_Start: '',
+    Day_End: '',
+    Start_Time: '',
+    End_Time: '',
     Comments: '',
     // Fees Structure fields
     INR_Basic: '',
@@ -724,9 +1104,27 @@ export default function EditBatchPage() {
       setFacultyList(json.facultyList || []);
       setHasStandardPlan(json.hasStandardPlan !== false);
       setSlpCourseName(json.courseName ?? null);
+      setBatchTimings(json.batchTimings || { dayStart: null, dayEnd: null, startTime: null, endTime: null });
     } catch { /* ignore */ }
     setLoadingSLectures(false);
   }, [batchId]);
+
+  const fetchTemplateLectures = useCallback(async (courseName: string) => {
+    if (!courseName) return;
+    setLoadingTemplateLectures(true);
+    try {
+      const res = await fetch(`/api/masters/standard-lecture-plan/lectures?course=${encodeURIComponent(courseName)}`);
+      const json = await res.json();
+      setTemplateLectures(json.rows || []);
+    } catch { /* ignore */ }
+    setLoadingTemplateLectures(false);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'lecture-plan' && slpCourseName) {
+      fetchTemplateLectures(slpCourseName);
+    }
+  }, [activeTab, slpCourseName, fetchTemplateLectures]);
 
   useEffect(() => {
     if (activeTab === 'lecture-plan' && batchId) {
@@ -812,6 +1210,10 @@ export default function EditBatchPage() {
           Duration: d.Duration || '',
           NoStudent: d.NoStudent?.toString() || '',
           Timings: d.Timings || '',
+          Day_Start: d.Day_Start || '',
+          Day_End: d.Day_End || '',
+          Start_Time: d.Start_Time || '',
+          End_Time: d.End_Time || '',
           Comments: d.Comments || '',
           // Fees Structure fields
           INR_Basic: d.INR_Basic?.toString() || '',
@@ -952,6 +1354,10 @@ export default function EditBatchPage() {
           Duration: formData.Duration,
           NoStudent: formData.NoStudent ? Number(formData.NoStudent) : null,
           Timings: formData.Timings,
+          Day_Start: formData.Day_Start || null,
+          Day_End: formData.Day_End || null,
+          Start_Time: formData.Start_Time || null,
+          End_Time: formData.End_Time || null,
           Comments: formData.Comments,
           // Fees Structure fields
           INR_Basic: formData.INR_Basic ? Number(formData.INR_Basic) : null,
@@ -1131,13 +1537,47 @@ export default function EditBatchPage() {
               />
             </div>
             <div>
-              <label className={labelCls}>Timings</label>
+              <label className={labelCls}>Day Start</label>
+              <select
+                value={formData.Day_Start}
+                onChange={(e) => handleChange('Day_Start', e.target.value)}
+                className={selectCls}
+              >
+                <option value="">Select Day</option>
+                {WEEKDAYS.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Day End</label>
+              <select
+                value={formData.Day_End}
+                onChange={(e) => handleChange('Day_End', e.target.value)}
+                className={selectCls}
+              >
+                <option value="">Select Day</option>
+                {WEEKDAYS.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Start Time</label>
               <input
-                type="text"
-                value={formData.Timings}
-                onChange={(e) => handleChange('Timings', e.target.value)}
+                type="time"
+                value={formData.Start_Time}
+                onChange={(e) => handleChange('Start_Time', e.target.value)}
                 className={inputCls}
-                placeholder="Timings"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>End Time</label>
+              <input
+                type="time"
+                value={formData.End_Time}
+                onChange={(e) => handleChange('End_Time', e.target.value)}
+                className={inputCls}
               />
             </div>
             <div className="md:col-span-2">
@@ -2106,6 +2546,120 @@ export default function EditBatchPage() {
     (l.lectureday || '').toLowerCase().includes(sLectureSearch.toLowerCase())
   );
 
+  /* Sub-topic coverage tracking */
+  const toggleSubtopicCovered = async (row: StandardLecture, idx: number) => {
+    if (stdPlanLocked) return;
+    const set = getCoveredSet(row.covered_subtopics);
+    if (set.has(idx)) set.delete(idx); else set.add(idx);
+    const covered_subtopics = set.size ? Array.from(set).sort((a, b) => a - b).join(',') : null;
+    updateStandardLectureInline(row.id, { covered_subtopics });
+    try {
+      await fetch(`/api/masters/batch/${batchId}/slectures`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...row, covered_subtopics }),
+      });
+    } catch { /* ignore */ }
+  };
+
+  /* Row color: grey = date passed, red = next-up unit with no date, yellow = sub-topics remaining */
+  const todayStr = formatDateForInput(new Date().toISOString());
+  const nextUpSeq = (() => {
+    const pendingSeqs = standardLectures
+      .filter((l) => l.lecture_status === 'pending' && l.standard_seq != null)
+      .map((l) => l.standard_seq as number);
+    return pendingSeqs.length ? Math.min(...pendingSeqs) : null;
+  })();
+
+  const getRowColorClass = (row: StandardLecture): string => {
+    const dateStr = formatDateForInput(row.date);
+    if (dateStr && dateStr < todayStr) return 'bg-slate-100 text-slate-400';
+    if (row.lecture_status === 'pending' && nextUpSeq != null && row.standard_seq === nextUpSeq) {
+      return 'bg-red-50 border-l-4 border-l-red-400';
+    }
+    const subtopics = getSubtopicList(row.subject_topic);
+    if (subtopics.length && getCoveredSet(row.covered_subtopics).size < subtopics.length) {
+      return 'bg-amber-50 border-l-4 border-l-amber-400';
+    }
+    return '';
+  };
+
+  /* Drag-and-drop: add a topic from the Standard Lecture Plan, or reorder existing rows */
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const { setNodeRef: setPlanDropRef, isOver: isOverPlanDropZone } = useDroppable({ id: 'plan-drop-zone' });
+
+  const handleAddFromTemplate = async (tmpl: TemplateLecture) => {
+    if (stdPlanLocked) return;
+    try {
+      await fetch(`/api/masters/batch/${batchId}/slectures`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lecture_no: tmpl.lecture_no,
+          standard_seq: tmpl.lecture_no,
+          subject: tmpl.module,
+          subject_topic: tmpl.sub_topics,
+          department: tmpl.department,
+          faculty_name: tmpl.faculty,
+          assignment: tmpl.project_assignment,
+          starttime: batchTimings.startTime,
+          endtime: batchTimings.endTime,
+          publish: 'No',
+        }),
+      });
+      await fetchStandardLectures();
+    } catch { /* ignore */ }
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const data = event.active.data.current as { type?: string; template?: TemplateLecture } | undefined;
+    if (data?.type === 'template' && data.template) {
+      setActiveDragTemplate(data.template);
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragTemplate(null);
+    if (!over) return;
+
+    const activeData = active.data.current as { type?: string; template?: TemplateLecture } | undefined;
+    if (activeData?.type === 'template' && activeData.template) {
+      await handleAddFromTemplate(activeData.template);
+      return;
+    }
+
+    // Reorder existing rows
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    if (!activeId.startsWith('row-') || !overId.startsWith('row-') || activeId === overId) return;
+
+    const oldIndex = filteredSLectures.findIndex((l) => `row-${l.id}` === activeId);
+    const newIndex = filteredSLectures.findIndex((l) => `row-${l.id}` === overId);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(filteredSLectures, oldIndex, newIndex);
+    const seqById = new Map(reordered.map((row, idx) => [row.id, idx + 1]));
+    const changedRows = reordered.filter((row) => row.standard_seq !== seqById.get(row.id));
+
+    setStandardLectures((prev) =>
+      prev.map((l) => (seqById.has(l.id) ? { ...l, standard_seq: seqById.get(l.id)! } : l))
+    );
+
+    try {
+      await Promise.all(
+        changedRows.map((row) =>
+          fetch(`/api/masters/batch/${batchId}/slectures`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...row, standard_seq: seqById.get(row.id) }),
+          })
+        )
+      );
+      await fetchStandardLectures();
+    } catch { /* ignore */ }
+  };
+
   const handleDeleteSLecture = async (lectureId: number) => {
     if (!confirm('Are you sure you want to delete this lecture?')) return;
     try {
@@ -2201,335 +2755,182 @@ export default function EditBatchPage() {
     setResyncing(false);
   };
 
-  const BatchLecturePlanTab = () => (
-    <div className="space-y-2">
-      {/* Toolbar: Training Programme, Lock, Auto Link, Re-sync, Export, Search */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5 px-2 py-1 border border-slate-200 bg-slate-50 rounded h-7">
-          <span className="text-[10px] font-semibold text-slate-500 uppercase">Training Programme</span>
-          <span className="text-xs font-semibold text-slate-800">
-            {slpCourseName || batchData?.Course_Name || '-'}
-          </span>
-        </div>
-        <button
-          onClick={() => setStdPlanLocked(v => !v)}
-          className={`flex items-center gap-1 px-2 py-1 border text-xs font-medium rounded h-7 hover:bg-gray-50 ${
-            stdPlanLocked ? 'border-red-300 text-red-700 bg-red-50' : 'border-gray-300 text-gray-600'
-          }`}
-          title={stdPlanLocked ? 'Unlock to edit' : 'Lock to prevent edits'}
-        >
-          {stdPlanLocked ? 'Locked' : 'Unlocked'}
-        </button>
-        <button
-          onClick={handleAutoLinkLegacyTrainers}
-          disabled={stdPlanLocked || autoLinkingLegacyTrainers || !facultyList.length}
-          className="flex items-center gap-1 px-2 py-1 border border-amber-300 text-amber-800 bg-amber-50 text-xs font-medium rounded h-7 hover:bg-amber-100 disabled:opacity-50"
-          title="Map legacy trainer names to linked trainer records"
-        >
-          {autoLinkingLegacyTrainers ? 'Auto Linking...' : 'Auto Link Legacy Trainers'}
-        </button>
-        <button
-          onClick={handleResyncFromStandardPlan}
-          disabled={stdPlanLocked || !hasStandardPlan || resyncing}
-          className="flex items-center gap-1 px-2 py-1 border border-[#2E3093]/30 text-[#2E3093] text-xs font-medium rounded h-7 hover:bg-[#2E3093]/5 disabled:opacity-50"
-          title="Insert any Standard Lecture Plan lectures missing from this batch"
-        >
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-          </svg>
-          {resyncing ? 'Re-syncing...' : 'Re-sync from Standard Plan'}
-        </button>
-        <button
-          onClick={handleExportSLectures}
-          className="flex items-center gap-1 px-2 py-1 border border-gray-300 text-gray-600 text-xs font-medium rounded h-7 hover:bg-gray-50"
-        >
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-          </svg>
-          Export
-        </button>
-        <div className="flex-1" />
-        <div className="relative">
+  const BatchLecturePlanTab = () => {
+    const dayOptions = getDayRange(batchTimings.dayStart, batchTimings.dayEnd);
+    const addedLectureNos = new Set(
+      standardLectures.map((l) => l.lecture_no).filter((n): n is number => n != null)
+    );
+
+    return (
+      <div className="space-y-2">
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2 py-1 border border-slate-200 rounded h-7">
+            <span className="text-[10px] font-semibold text-slate-500 uppercase">Training Programme</span>
+            <span className="text-xs font-semibold text-slate-800">
+              {slpCourseName || batchData?.Course_Name || '-'}
+            </span>
+          </div>
+          <button
+            onClick={() => setStdPlanLocked((v) => !v)}
+            className={`px-2 py-1 border text-xs font-medium rounded h-7 hover:bg-gray-50 ${
+              stdPlanLocked ? 'border-red-300 text-red-700 bg-red-50' : 'border-gray-300 text-gray-600'
+            }`}
+            title={stdPlanLocked ? 'Unlock to edit' : 'Lock to prevent edits'}
+          >
+            {stdPlanLocked ? 'Locked' : 'Unlocked'}
+          </button>
+          <button
+            onClick={handleAutoLinkLegacyTrainers}
+            disabled={stdPlanLocked || autoLinkingLegacyTrainers || !facultyList.length}
+            className="px-2 py-1 border border-gray-300 text-gray-600 text-xs font-medium rounded h-7 hover:bg-gray-50 disabled:opacity-50"
+            title="Map legacy trainer names to linked trainer records"
+          >
+            {autoLinkingLegacyTrainers ? 'Auto Linking...' : 'Auto Link Trainers'}
+          </button>
+          <button
+            onClick={handleResyncFromStandardPlan}
+            disabled={stdPlanLocked || !hasStandardPlan || resyncing}
+            className="px-2 py-1 border border-gray-300 text-gray-600 text-xs font-medium rounded h-7 hover:bg-gray-50 disabled:opacity-50"
+            title="Insert any Standard Lecture Plan lectures missing from this batch"
+          >
+            {resyncing ? 'Re-syncing...' : 'Re-sync from Standard Plan'}
+          </button>
+          <button
+            onClick={handleExportSLectures}
+            className="px-2 py-1 border border-gray-300 text-gray-600 text-xs font-medium rounded h-7 hover:bg-gray-50"
+          >
+            Export
+          </button>
+          <div className="flex-1" />
           <input
             type="text"
             placeholder="Search..."
             value={sLectureSearch}
             onChange={(e) => setSLectureSearch(e.target.value)}
-            className="w-32 pl-6 pr-2 py-1 border border-gray-300 rounded text-xs h-7"
+            className="w-40 px-2 py-1 border border-gray-300 rounded text-xs h-7"
           />
-          <svg className="absolute left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-          </svg>
         </div>
-      </div>
 
-      {/* Warning banner when the Training Programme has no Standard Lecture Plan */}
-      {!hasStandardPlan && (
-        <div className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 font-medium flex items-center gap-2">
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          No Standard Lecture Plan exists for this Training Programme &mdash; create one in Masters &gt; Standard Lecture Plan before this batch&apos;s lecture plan can be seeded.
+        {!hasStandardPlan && (
+          <div className="px-3 py-2 rounded border border-amber-200 bg-amber-50 text-xs text-amber-800">
+            No Standard Lecture Plan exists for this Training Programme &mdash; create one in Masters &gt; Standard Lecture Plan before this batch&apos;s lecture plan can be built.
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-500">
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-slate-200 inline-block" /> Date passed</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-red-300 inline-block" /> Next up, no date yet</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-amber-300 inline-block" /> Sub-topics remaining</span>
         </div>
-      )}
 
-      {/* Table */}
-      <div className="border border-gray-200 rounded overflow-hidden overflow-x-auto">
-        <table className="dashboard-table w-full text-xs">
-          <thead>
-            <tr className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5">
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Lec#</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Std Seq</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Actual Seq</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Subject</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Subject Topic</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Date</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Lecture Day</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Start</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">End</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Assign</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">AssignDt</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Trainer</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Room</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Docs</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">UT</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">UT Date</th>
-              <th className="text-left px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Pub</th>
-              <th className="text-center px-2 py-1.5 font-semibold text-[#2E3093] border-b whitespace-nowrap">Act</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loadingSLectures ? (
-              <tr>
-                <td colSpan={18} className="px-2 py-4 text-center text-gray-400">
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="w-3 h-3 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
-                    Loading...
+        <DndContext sensors={dndSensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-3">
+            {/* Left: Standard Lecture Plan reference (drag source) */}
+            <div className="border border-gray-200 rounded overflow-hidden flex flex-col h-[75vh]">
+              <div className="px-2.5 py-2 border-b border-gray-200 bg-slate-50 shrink-0">
+                <span className="text-xs font-bold text-slate-600">Standard Lecture Plan</span>
+                <p className="text-[10px] text-slate-400">Drag a topic onto the plan to add it</p>
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+                {loadingTemplateLectures ? (
+                  <div className="text-center text-xs text-gray-400 py-6">Loading...</div>
+                ) : templateLectures.length === 0 ? (
+                  <div className="text-center text-xs text-gray-400 py-6">
+                    No Standard Lecture Plan topics found for this Training Programme.
                   </div>
-                </td>
-              </tr>
-            ) : filteredSLectures.length === 0 ? (
-              <tr>
-                <td colSpan={18} className="px-2 py-4 text-center text-gray-400">
-                  No lecture plan found. Lectures are auto-loaded from the Standard Lecture Plan.
-                </td>
-              </tr>
-            ) : (
-              filteredSLectures.map((l) => {
-                const statusRowCls =
-                  l.lecture_status === 'cancelled'
-                    ? 'bg-red-50 border-l-4 border-l-red-400'
-                    : l.lecture_status === 'replacement'
-                    ? 'bg-emerald-50 border-l-4 border-l-emerald-400'
-                    : l.lecture_status === 'pending'
-                    ? 'bg-amber-50 border-l-4 border-l-amber-400'
-                    : '';
-                return (
-                <tr key={l.id} className={`border-b border-gray-100 hover:bg-gray-50 ${statusRowCls}`}>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <input
-                      type="number"
-                      value={l.lecture_no ?? ''}
-                      disabled={stdPlanLocked}
-                      onChange={(e) => updateStandardLectureInline(l.id, { lecture_no: e.target.value ? Number(e.target.value) : null })}
-                      className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                ) : (
+                  templateLectures.map((t) => (
+                    <TemplateLectureCard
+                      key={t.id}
+                      tmpl={t}
+                      added={t.lecture_no != null && addedLectureNos.has(t.lecture_no)}
                     />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">
-                    {l.standard_seq ?? '—'}
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">
-                    {l.actual_seq ?? '—'}
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-900 font-medium">
-                    <input
-                      type="text"
-                      value={(l.lecturecontent ?? l.subject ?? '').toString()}
-                      disabled={stdPlanLocked}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        updateStandardLectureInline(l.id, { lecturecontent: v, subject: v });
-                      }}
-                      className="w-full min-w-[140px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-                      placeholder="Subject"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <input
-                      type="text"
-                      value={(l.subject_topic ?? '').toString()}
-                      disabled={stdPlanLocked}
-                      onChange={(e) => updateStandardLectureInline(l.id, { subject_topic: e.target.value })}
-                      className="w-full min-w-[120px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-                      placeholder="Subject Topic"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
-                    <input
-                      type="date"
-                      value={formatDateForInput(l.date)}
-                      disabled={stdPlanLocked}
-                      onChange={(e) => updateStandardLectureInline(l.id, { date: e.target.value })}
-                      className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <input
-                      type="text"
-                      value={(l.lectureday ?? '').toString()}
-                      disabled={stdPlanLocked}
-                      onChange={(e) => updateStandardLectureInline(l.id, { lectureday: e.target.value })}
-                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-                      placeholder="Lecture Day"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
-                    <input
-                      type="time"
-                      value={(l.starttime ?? '').toString()}
-                      disabled={stdPlanLocked}
-                      onChange={(e) => updateStandardLectureInline(l.id, { starttime: e.target.value })}
-                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
-                    <input
-                      type="time"
-                      value={(l.endtime ?? '').toString()}
-                      disabled={stdPlanLocked}
-                      onChange={(e) => updateStandardLectureInline(l.id, { endtime: e.target.value })}
-                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <input
-                      type="text"
-                      value={(l.assignment ?? '').toString()}
-                      disabled={stdPlanLocked}
-                      onChange={(e) => updateStandardLectureInline(l.id, { assignment: e.target.value })}
-                      className="w-full min-w-[110px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-                      placeholder="Assignment"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
-                    <input
-                      type="date"
-                      value={formatDateForInput(l.assignment_date)}
-                      disabled={stdPlanLocked}
-                      onChange={(e) => updateStandardLectureInline(l.id, { assignment_date: e.target.value })}
-                      className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <select
-                      value={l.faculty_id != null ? String(l.faculty_id) : ((l.faculty_name ?? '').toString().trim() ? '__legacy__' : '')}
-                      disabled={stdPlanLocked}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (!v || v === '__legacy__') {
-                          updateStandardLectureInline(l.id, { faculty_id: null });
-                          return;
-                        }
-                        const selected = facultyList.find((f) => String(f.Faculty_Id) === v);
-                        updateStandardLectureInline(l.id, {
-                          faculty_id: selected?.Faculty_Id ?? null,
-                          faculty_name: selected?.Faculty_Name ?? l.faculty_name,
-                        });
-                      }}
-                      className="w-full min-w-[140px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Right: this batch's own plan (drop target + sortable rows) */}
+            <div
+              ref={setPlanDropRef}
+              className={`border rounded overflow-hidden overflow-x-auto h-[75vh] flex flex-col ${
+                isOverPlanDropZone ? 'border-[#2E3093] ring-2 ring-[#2E3093]/20' : 'border-gray-200'
+              }`}
+            >
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-slate-50 z-10">
+                  <tr>
+                    <th className="px-1 py-1.5 border-b" />
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Std Seq</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Actual Seq</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Module / Topic</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Sub Topics</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Faculty</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Date</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Day</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Start</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">End</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Assignment</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Submission Dt</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Docs</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Room</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">UT</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">UT Date</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Publish</th>
+                    <th className="text-center px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingSLectures ? (
+                    <tr>
+                      <td colSpan={18} className="px-2 py-8 text-center text-gray-400">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-3 h-3 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
+                          Loading...
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredSLectures.length === 0 ? (
+                    <tr>
+                      <td colSpan={18} className="px-2 py-8 text-center text-gray-400">
+                        Drag topics from the Standard Lecture Plan on the left to start planning.
+                      </td>
+                    </tr>
+                  ) : (
+                    <SortableContext
+                      items={filteredSLectures.map((l) => `row-${l.id}`)}
+                      strategy={verticalListSortingStrategy}
                     >
-                      <option value="">Select Trainer</option>
-                      {l.faculty_id == null && (l.faculty_name ?? '').toString().trim() && (
-                        <option value="__legacy__">Legacy: {(l.faculty_name ?? '').toString()}</option>
-                      )}
-                      {facultyList.map((f) => (
-                        <option key={f.Faculty_Id} value={String(f.Faculty_Id)}>{f.Faculty_Name}</option>
+                      {filteredSLectures.map((l) => (
+                        <SortableLectureRow
+                          key={l.id}
+                          row={l}
+                          disabled={stdPlanLocked}
+                          facultyList={facultyList}
+                          dayOptions={dayOptions}
+                          colorClass={getRowColorClass(l)}
+                          saving={savingSLectureRowId === l.id}
+                          onChange={updateStandardLectureInline}
+                          onSave={handleSaveSLectureInline}
+                          onDelete={handleDeleteSLecture}
+                          onToggleSubtopic={toggleSubtopicCovered}
+                        />
                       ))}
-                    </select>
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <input
-                      type="text"
-                      value={(l.class_room ?? '').toString()}
-                      disabled={stdPlanLocked}
-                      onChange={(e) => updateStandardLectureInline(l.id, { class_room: e.target.value })}
-                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-                      placeholder="Room"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <input
-                      type="text"
-                      value={(l.documents ?? '').toString()}
-                      disabled={stdPlanLocked}
-                      onChange={(e) => updateStandardLectureInline(l.id, { documents: e.target.value })}
-                      className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-                      placeholder="Docs"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <input
-                      type="text"
-                      value={(l.unit_test ?? '').toString()}
-                      disabled={stdPlanLocked}
-                      onChange={(e) => updateStandardLectureInline(l.id, { unit_test: e.target.value })}
-                      className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-                      placeholder="UT"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">
-                    <input
-                      type="date"
-                      value={formatDateForInput(l.unit_test_date || null)}
-                      disabled
-                      className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-gray-100"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-gray-700">
-                    <select
-                      value={(l.publish ?? 'No').toString()}
-                      disabled={stdPlanLocked}
-                      onChange={(e) => updateStandardLectureInline(l.id, { publish: e.target.value })}
-                      className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-                    >
-                      <option value="No">No</option>
-                      <option value="Yes">Yes</option>
-                    </select>
-                  </td>
-                  <td className="px-2 py-1.5 text-center">
-                    <div className="flex items-center justify-center gap-0.5">
-                      <button
-                        onClick={() => handleSaveSLectureInline(l)}
-                        disabled={stdPlanLocked || savingSLectureRowId === l.id}
-                        className="p-1 text-green-700 hover:bg-green-50 rounded disabled:opacity-50"
-                        title={stdPlanLocked ? 'Locked' : 'Save'}
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 21V13H7v8" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v4h8" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handleDeleteSLecture(l.id)}
-                        className="p-1 text-red-600 hover:bg-red-50 rounded"
-                        title="Delete"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                    </SortableContext>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <DragOverlay>
+            {activeDragTemplate ? <TemplateLectureCard tmpl={activeDragTemplate} added={false} /> : null}
+          </DragOverlay>
+        </DndContext>
       </div>
-    </div>
-  );
+    );
+  };
 
   /* Final Exam Details Tab - Table with Add Modal */
   const handleSaveFinalExam = async () => {
