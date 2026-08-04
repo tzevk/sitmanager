@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import sharp from 'sharp';
 import {
   Document, Packer, Paragraph, TextRun, ImageRun,
   Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, VerticalAlign,
@@ -31,14 +32,35 @@ const NO_BORDER = {
   right: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
 };
 
-function decodeDataUrl(dataUrl?: string | null): { data: Buffer; type: 'png' | 'jpg' } | null {
+function decodeDataUrl(dataUrl?: string | null): Buffer | null {
   if (!dataUrl) return null;
-  const match = /^data:image\/(png|jpe?g);base64,(.+)$/i.exec(dataUrl.trim());
+  const match = /^data:image\/[a-z0-9.+-]+;base64,(.+)$/i.exec(dataUrl.trim());
   if (!match) return null;
-  const type = match[1].toLowerCase().startsWith('jp') ? 'jpg' : 'png';
   try {
-    return { data: Buffer.from(match[2], 'base64'), type };
+    return Buffer.from(match[1], 'base64');
   } catch {
+    return null;
+  }
+}
+
+// Card photos are only ever displayed at 95x115px (see buildCardTable below),
+// but student uploads are stored as full-resolution originals (avg ~400KB,
+// up to a few MB each — see student_master.Photo_Data). Embedding those
+// as-is meant a batch of ~40 students could produce a 15-30MB .docx, which
+// silently failed to download: Vercel Serverless Functions cap response
+// bodies at 4.5MB. Re-encoding to a card-appropriate size fixes both the
+// failed export and (as a side effect) lets any browser-supported image
+// format through instead of only png/jpeg, since sharp normalizes it.
+async function resizeForCard(bytes: Buffer): Promise<{ data: Buffer; type: 'jpg' } | null> {
+  try {
+    const resized = await sharp(bytes)
+      .resize(300, 360, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 82 })
+      .toBuffer();
+    return { data: resized, type: 'jpg' };
+  } catch {
+    // Corrupt/unsupported image — drop the photo rather than failing the
+    // whole batch export over one bad upload.
     return null;
   }
 }
@@ -76,8 +98,9 @@ function headerCell(logo: ReturnType<typeof loadLogo>): TableCell {
   });
 }
 
-function buildCardTable(card: IdCardInput, logo: ReturnType<typeof loadLogo>): Table {
-  const photo = decodeDataUrl(card.photo);
+async function buildCardTable(card: IdCardInput, logo: ReturnType<typeof loadLogo>): Promise<Table> {
+  const rawPhoto = decodeDataUrl(card.photo);
+  const photo = rawPhoto ? await resizeForCard(rawPhoto) : null;
 
   // Right side: header band (logo + org), then body (photo + details), then footer.
   const headerBand = new Table({
@@ -183,14 +206,17 @@ export async function buildIdCardsDocx(cards: IdCardInput[]): Promise<Buffer> {
   const logo = loadLogo();
   const children: (Table | Paragraph)[] = [];
 
-  cards.forEach((card, i) => {
-    children.push(buildCardTable(card, logo));
+  // Sequential, not Promise.all — sharp holds decoded pixel buffers in memory
+  // per image, and a 200-card batch running them all concurrently risks
+  // spiking well past what the serverless function's memory allows.
+  for (let i = 0; i < cards.length; i++) {
+    children.push(await buildCardTable(cards[i], logo));
     // Spacer between cards; page break every 3 cards keeps the layout tidy.
     children.push(new Paragraph({ text: '' }));
     if ((i + 1) % 3 === 0 && i !== cards.length - 1) {
       children.push(new Paragraph({ pageBreakBefore: true }));
     }
-  });
+  }
 
   const doc = new Document({
     sections: [{

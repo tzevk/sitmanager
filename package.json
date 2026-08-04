@@ -48,6 +48,7 @@
     "react-dom": "19.2.3",
     "react-icons": "^5.5.0",
     "recharts": "^3.8.1",
+    "sharp": "^0.34.5",
     "vercel": "^50.41.0",
     "xlsx": "^0.18.5"
   },
