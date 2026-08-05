@@ -30,6 +30,10 @@ function shiftWeek(weekStart: string, weeks: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+function employeeName(e: AdminUserOption): string {
+  return `${e.firstname ?? ''} ${e.lastname ?? ''}`.trim() || e.email || `Employee #${e.id}`;
+}
+
 export default function MonitoringWeeklyReportPage() {
   const { canView, canUpdate, loading: permLoading } = useResourcePermissions('monitoring');
 
@@ -86,9 +90,7 @@ export default function MonitoringWeeklyReportPage() {
   };
 
   const selectedEmployee = employees.find((e) => e.id === selectedEmployeeId) || null;
-  const employeeLabel = selectedEmployee
-    ? `${selectedEmployee.firstname ?? ''} ${selectedEmployee.lastname ?? ''}`.trim() || selectedEmployee.email || `Employee #${selectedEmployee.id}`
-    : '—';
+  const employeeLabel = selectedEmployee ? employeeName(selectedEmployee) : '—';
 
   if (permLoading) {
     return (
@@ -109,49 +111,66 @@ export default function MonitoringWeeklyReportPage() {
 
   return (
     <div className="space-y-3">
-      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-4 py-2.5 shadow-sm">
-        <h2 className="text-base font-black text-white tracking-tight">Employee Monitoring — Weekly Report</h2>
+      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl px-4 py-3 shadow-sm flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-black text-white tracking-tight">Employee Monitoring</h2>
+          <p className="text-[11px] text-white/70 font-medium">Weekly activity report, sourced live from system data</p>
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <select
-          value={selectedEmployeeId ?? ''}
-          onChange={(e) => setSelectedEmployeeId(e.target.value ? Number(e.target.value) : null)}
-          className="px-2 py-1.5 border border-gray-300 rounded text-xs h-8 min-w-[220px]"
-        >
-          <option value="">Select Employee</option>
-          {employees.map((e) => (
-            <option key={e.id} value={e.id}>
-              {`${e.firstname ?? ''} ${e.lastname ?? ''}`.trim() || e.email || `Employee #${e.id}`}
-            </option>
-          ))}
-        </select>
+      <div className="flex flex-wrap items-center gap-2 bg-white rounded-lg border border-slate-200 shadow-sm px-3 py-2">
+        <div className="relative">
+          <select
+            value={selectedEmployeeId ?? ''}
+            onChange={(e) => setSelectedEmployeeId(e.target.value ? Number(e.target.value) : null)}
+            className="appearance-none pl-3 pr-8 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-slate-50 h-8 min-w-[220px] hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093]"
+          >
+            <option value="">Select Employee</option>
+            {employees.map((e) => (
+              <option key={e.id} value={e.id}>{employeeName(e)}</option>
+            ))}
+          </select>
+          <svg className="w-3 h-3 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+
+        <div className="h-5 w-px bg-slate-200 mx-1" />
+
+        <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+          <button
+            onClick={() => setWeekStart((w) => shiftWeek(w, -1))}
+            className="w-7 h-7 flex items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-[#2E3093] hover:shadow-sm transition-all"
+            title="Previous week"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <span className="text-xs font-bold text-slate-700 px-2 min-w-[130px] text-center">
+            {days.length ? `${formatDate(days[0].date)} – ${formatDate(days[6].date)}` : '—'}
+          </span>
+          <button
+            onClick={() => setWeekStart((w) => shiftWeek(w, 1))}
+            className="w-7 h-7 flex items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-[#2E3093] hover:shadow-sm transition-all"
+            title="Next week"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
 
         <button
-          onClick={() => setWeekStart((w) => shiftWeek(w, -1))}
-          className="px-2 py-1.5 border border-gray-300 rounded text-xs h-8 hover:bg-gray-50"
-        >
-          &larr; Prev Week
-        </button>
-        <span className="text-xs font-semibold text-slate-700 px-1">
-          {days.length ? `${formatDate(days[0].date)} – ${formatDate(days[6].date)}` : ''}
-        </span>
-        <button
-          onClick={() => setWeekStart((w) => shiftWeek(w, 1))}
-          className="px-2 py-1.5 border border-gray-300 rounded text-xs h-8 hover:bg-gray-50"
-        >
-          Next Week &rarr;
-        </button>
-        <button
           onClick={() => setWeekStart(getMonday(new Date()))}
-          className="px-2 py-1.5 border border-gray-300 rounded text-xs h-8 hover:bg-gray-50"
+          className="px-2.5 py-1.5 text-xs font-semibold text-[#2E3093] bg-[#2E3093]/5 border border-[#2E3093]/20 rounded-lg h-8 hover:bg-[#2E3093]/10 transition-colors"
         >
           This Week
         </button>
       </div>
 
       {loadingDays || days.length === 0 ? (
-        <div className="flex items-center justify-center py-20 text-gray-400 text-xs">
+        <div className="flex items-center justify-center py-20 text-gray-400 text-xs bg-white rounded-xl border border-slate-200">
           {loadingDays ? (
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
@@ -167,13 +186,9 @@ export default function MonitoringWeeklyReportPage() {
           days={days}
           canEdit={canUpdate}
           onSaveDay={handleSaveDay}
+          refreshKey={`${selectedEmployeeId ?? 'none'}:${weekStart}`}
         />
       )}
-
-      <div className="flex items-center gap-2 text-[10px] text-slate-500">
-        <span className="w-3 h-3 rounded-sm bg-yellow-300 border border-black inline-block" />
-        This cell means that this is to be filled by employee, other cells are auto-generated from system data.
-      </div>
     </div>
   );
 }

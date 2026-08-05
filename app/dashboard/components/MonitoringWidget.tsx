@@ -74,59 +74,75 @@ export default function MonitoringWidget() {
   const employeeLabel = `${session.firstName ?? ''} ${session.lastName ?? ''}`.trim() || session.email || 'Me';
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <h3 className="text-xs font-black text-[#2E3093] uppercase tracking-wide">My Weekly Report</h3>
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-slate-100">
         <div className="flex items-center gap-2">
-          <Link href="/dashboard/monitoring" className="text-[11px] font-semibold text-[#2E3093] hover:underline">
-            Full Monitoring &rarr;
+          <span className="w-1.5 h-4 rounded-full bg-[#2E3093]" />
+          <h3 className="text-xs font-black text-[#2E3093] uppercase tracking-wide">My Weekly Report</h3>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard/monitoring" className="text-[11px] font-bold text-[#2E3093] hover:opacity-70 flex items-center gap-0.5">
+            Full Monitoring
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+            </svg>
           </Link>
           <button
             onClick={() => setCollapsed((c) => !c)}
-            className="text-[11px] font-semibold text-slate-400 hover:text-slate-600"
+            className="text-slate-400 hover:text-slate-600 transition-colors"
+            title={collapsed ? 'Expand' : 'Collapse'}
           >
-            {collapsed ? 'Expand' : 'Collapse'}
+            <svg className={`w-3.5 h-3.5 transition-transform ${collapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
           </button>
         </div>
       </div>
 
       {!collapsed && (
-        <>
-          <div className="flex flex-wrap items-center gap-2 mb-2">
+        <div className="p-3 space-y-2">
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5 w-fit">
             <button
               onClick={() => setWeekStart((w) => shiftWeek(w, -1))}
-              className="px-2 py-1 border border-gray-300 rounded text-[11px] hover:bg-gray-50"
+              className="w-6 h-6 flex items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-[#2E3093] hover:shadow-sm transition-all"
+              title="Previous week"
             >
-              &larr; Prev
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
             </button>
-            <span className="text-[11px] font-semibold text-slate-700">
+            <span className="text-[11px] font-bold text-slate-700 px-2 min-w-[110px] text-center">
               {days.length ? `${formatDate(days[0].date)} – ${formatDate(days[6].date)}` : ''}
             </span>
             <button
               onClick={() => setWeekStart((w) => shiftWeek(w, 1))}
-              className="px-2 py-1 border border-gray-300 rounded text-[11px] hover:bg-gray-50"
+              className="w-6 h-6 flex items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-[#2E3093] hover:shadow-sm transition-all"
+              title="Next week"
             >
-              Next &rarr;
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
             </button>
             <button
               onClick={() => setWeekStart(getMonday(new Date()))}
-              className="px-2 py-1 border border-gray-300 rounded text-[11px] hover:bg-gray-50"
+              className="px-2 h-6 text-[10px] font-bold text-[#2E3093] hover:bg-white rounded-md transition-all"
             >
-              This Week
+              Today
             </button>
           </div>
 
           {loading ? (
-            <div className="text-[11px] text-slate-400 py-3 text-center">Loading...</div>
+            <div className="text-[11px] text-slate-400 py-6 text-center">Loading...</div>
           ) : (
             <MonitoringWeeklyTable
               employeeLabel={employeeLabel}
               days={days}
               canEdit
               onSaveDay={handleSaveDay}
+              refreshKey="me"
             />
           )}
-        </>
+        </div>
       )}
     </div>
   );
