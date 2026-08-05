@@ -5,24 +5,6 @@ import { useRouter, useParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 import { WEEKDAYS, getDayRange } from '@/lib/weekdays';
-import {
-  DndContext,
-  DragOverlay,
-  useDraggable,
-  useDroppable,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-  arrayMove,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 
 interface Course {
   Course_Id: number;
@@ -260,33 +242,39 @@ const getCoveredSet = (covered: string | null | undefined): Set<number> => {
   );
 };
 
-/* Draggable card representing one topic from the Standard Lecture Plan (left pane). */
-function TemplateLectureCard({ tmpl, added }: { tmpl: TemplateLecture; added: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `tmpl-${tmpl.id}`,
-    data: { type: 'template', template: tmpl },
-  });
-  const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
-    : undefined;
+/* Card representing one topic from the Standard Lecture Plan (left pane). */
+function TemplateLectureCard({
+  tmpl,
+  added,
+  disabled,
+  adding,
+  onAdd,
+}: {
+  tmpl: TemplateLecture;
+  added: boolean;
+  disabled: boolean;
+  adding: boolean;
+  onAdd: (tmpl: TemplateLecture) => void;
+}) {
   const subtopics = getSubtopicList(tmpl.sub_topics);
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...listeners}
-      {...attributes}
-      className={`px-2.5 py-2 border border-slate-200 rounded-md bg-white cursor-grab active:cursor-grabbing select-none ${
-        isDragging ? 'opacity-40' : ''
-      }`}
-    >
+    <div className="px-2.5 py-2 border border-slate-200 rounded-md bg-white select-none">
       <div className="flex items-center justify-between gap-1">
         <span className="text-[10px] font-bold text-[#2E3093]">Lec {tmpl.lecture_no ?? '—'}</span>
-        {added && (
+        {added ? (
           <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
             Added
           </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onAdd(tmpl)}
+            disabled={disabled || adding}
+            className="text-[9px] font-semibold text-white bg-[#2E3093] px-1.5 py-0.5 rounded hover:opacity-90 disabled:opacity-50"
+          >
+            {adding ? 'Adding...' : 'Add'}
+          </button>
         )}
       </div>
       <div className="text-xs font-semibold text-slate-800 mt-0.5">{tmpl.module || 'Untitled'}</div>
@@ -348,7 +336,7 @@ function SubtopicsCell({
   );
 }
 
-/* One row of the batch's own lecture plan (right pane), drag-reorderable by the handle. */
+/* One row of the batch's own lecture plan (right pane), reordered via up/down buttons. */
 function SortableLectureRow({
   row,
   disabled,
@@ -356,10 +344,14 @@ function SortableLectureRow({
   dayOptions,
   colorClass,
   saving,
+  isFirst,
+  isLast,
   onChange,
   onSave,
   onDelete,
   onToggleSubtopic,
+  onMoveUp,
+  onMoveDown,
 }: {
   row: StandardLecture;
   disabled: boolean;
@@ -367,37 +359,42 @@ function SortableLectureRow({
   dayOptions: string[];
   colorClass: string;
   saving: boolean;
+  isFirst: boolean;
+  isLast: boolean;
   onChange: (id: number, patch: Partial<StandardLecture>) => void;
   onSave: (row: StandardLecture) => void;
   onDelete: (id: number) => void;
   onToggleSubtopic: (row: StandardLecture, idx: number) => void;
+  onMoveUp: (row: StandardLecture) => void;
+  onMoveDown: (row: StandardLecture) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: `row-${row.id}`,
-  });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
   return (
-    <tr
-      ref={setNodeRef}
-      style={style}
-      className={`border-b border-gray-100 hover:bg-gray-50 ${colorClass} ${isDragging ? 'opacity-50' : ''}`}
-    >
-      <td className="px-1 py-1.5 text-center">
-        <button
-          type="button"
-          {...attributes}
-          {...listeners}
-          className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
-          title="Drag to reorder"
-        >
-          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M7 4a1 1 0 11-2 0 1 1 0 012 0zM7 10a1 1 0 11-2 0 1 1 0 012 0zM7 16a1 1 0 11-2 0 1 1 0 012 0zM15 4a1 1 0 11-2 0 1 1 0 012 0zM15 10a1 1 0 11-2 0 1 1 0 012 0zM15 16a1 1 0 11-2 0 1 1 0 012 0z" />
-          </svg>
-        </button>
+    <tr className={`border-b border-gray-100 hover:bg-gray-50 ${colorClass}`}>
+      <td className="px-1 py-1.5">
+        <div className="flex items-center justify-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => onMoveUp(row)}
+            disabled={disabled || isFirst}
+            className="text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Move up"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => onMoveDown(row)}
+            disabled={disabled || isLast}
+            className="text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Move down"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
       </td>
       <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{row.standard_seq ?? '—'}</td>
       <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{row.actual_seq ?? '—'}</td>
@@ -693,12 +690,12 @@ export default function EditBatchPage() {
   const [loadingSLectures, setLoadingSLectures] = useState(false);
   const [hasStandardPlan, setHasStandardPlan] = useState(true);
   const [slpCourseName, setSlpCourseName] = useState<string | null>(null);
-  const [resyncing, setResyncing] = useState(false);
+  const [reimporting, setReimporting] = useState(false);
   // Standard Lecture Plan is edited inline (no modal)
   const [templateLectures, setTemplateLectures] = useState<TemplateLecture[]>([]);
   const [loadingTemplateLectures, setLoadingTemplateLectures] = useState(false);
   const [batchTimings, setBatchTimings] = useState<BatchTimings>({ dayStart: null, dayEnd: null, startTime: null, endTime: null });
-  const [activeDragTemplate, setActiveDragTemplate] = useState<TemplateLecture | null>(null);
+  const [addingTemplateId, setAddingTemplateId] = useState<number | null>(null);
 
   /* Final Exam Details state */
   const [finalExams, setFinalExams] = useState<FinalExam[]>([]);
@@ -2486,12 +2483,10 @@ export default function EditBatchPage() {
     return '';
   };
 
-  /* Drag-and-drop: add a topic from the Standard Lecture Plan, or reorder existing rows */
-  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-  const { setNodeRef: setPlanDropRef, isOver: isOverPlanDropZone } = useDroppable({ id: 'plan-drop-zone' });
-
+  /* Add a topic from the Standard Lecture Plan into this batch's own plan. */
   const handleAddFromTemplate = async (tmpl: TemplateLecture) => {
     if (stdPlanLocked) return;
+    setAddingTemplateId(tmpl.id);
     try {
       await fetch(`/api/masters/batch/${batchId}/slectures`, {
         method: 'POST',
@@ -2511,53 +2506,41 @@ export default function EditBatchPage() {
       });
       await fetchStandardLectures();
     } catch { /* ignore */ }
+    setAddingTemplateId(null);
   };
 
-  const handleDragStart = (event: DragStartEvent) => {
-    const data = event.active.data.current as { type?: string; template?: TemplateLecture } | undefined;
-    if (data?.type === 'template' && data.template) {
-      setActiveDragTemplate(data.template);
-    }
-  };
+  /* Reorder existing rows by swapping standard_seq with the adjacent row. */
+  const handleMoveLecture = async (row: StandardLecture, direction: 'up' | 'down') => {
+    if (stdPlanLocked) return;
+    const index = filteredSLectures.findIndex((l) => l.id === row.id);
+    const swapIndex = direction === 'up' ? index - 1 : index + 1;
+    if (index === -1 || swapIndex < 0 || swapIndex >= filteredSLectures.length) return;
 
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    setActiveDragTemplate(null);
-    if (!over) return;
-
-    const activeData = active.data.current as { type?: string; template?: TemplateLecture } | undefined;
-    if (activeData?.type === 'template' && activeData.template) {
-      await handleAddFromTemplate(activeData.template);
-      return;
-    }
-
-    // Reorder existing rows
-    const activeId = String(active.id);
-    const overId = String(over.id);
-    if (!activeId.startsWith('row-') || !overId.startsWith('row-') || activeId === overId) return;
-
-    const oldIndex = filteredSLectures.findIndex((l) => `row-${l.id}` === activeId);
-    const newIndex = filteredSLectures.findIndex((l) => `row-${l.id}` === overId);
-    if (oldIndex === -1 || newIndex === -1) return;
-
-    const reordered = arrayMove(filteredSLectures, oldIndex, newIndex);
-    const seqById = new Map(reordered.map((row, idx) => [row.id, idx + 1]));
-    const changedRows = reordered.filter((row) => row.standard_seq !== seqById.get(row.id));
+    const other = filteredSLectures[swapIndex];
+    const rowSeq = other.standard_seq ?? swapIndex + 1;
+    const otherSeq = row.standard_seq ?? index + 1;
 
     setStandardLectures((prev) =>
-      prev.map((l) => (seqById.has(l.id) ? { ...l, standard_seq: seqById.get(l.id)! } : l))
+      prev.map((l) => {
+        if (l.id === row.id) return { ...l, standard_seq: rowSeq };
+        if (l.id === other.id) return { ...l, standard_seq: otherSeq };
+        return l;
+      })
     );
 
     try {
-      await Promise.all(
-        changedRows.map((row) =>
-          fetch(`/api/masters/batch/${batchId}/slectures`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...row, standard_seq: seqById.get(row.id) }),
-          })
-        )
-      );
+      await Promise.all([
+        fetch(`/api/masters/batch/${batchId}/slectures`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...row, standard_seq: rowSeq }),
+        }),
+        fetch(`/api/masters/batch/${batchId}/slectures`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...other, standard_seq: otherSeq }),
+        }),
+      ]);
       await fetchStandardLectures();
     } catch { /* ignore */ }
   };
@@ -2602,59 +2585,23 @@ export default function EditBatchPage() {
     link.click();
   };
 
-  /* Re-sync from Standard Plan: insert any template lecture_no not already present
-     in this batch's own plan. Source is always the batch's own Training Programme. */
-  const handleResyncFromStandardPlan = async () => {
-    if (stdPlanLocked || !hasStandardPlan || !slpCourseName || resyncing) return;
-    setResyncing(true);
-    try {
-      const res = await fetch(`/api/masters/standard-lecture-plan/lectures?course=${encodeURIComponent(slpCourseName)}`);
-      const data = await res.json();
-      const templateRows: Array<{
-        lecture_no: number | null;
-        module: string | null;
-        sub_topics: string | null;
-        faculty: string | null;
-        project_assignment: string | null;
-        department: string | null;
-      }> = data.rows || [];
-
-      const existingLectureNos = new Set(
-        standardLectures
-          .map((l) => l.lecture_no)
-          .filter((n): n is number => n != null)
-      );
-
-      const missingRows = templateRows.filter(
-        (r) => r.lecture_no != null && !existingLectureNos.has(r.lecture_no)
-      );
-
-      for (const r of missingRows) {
-        await fetch(`/api/masters/batch/${batchId}/slectures`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            lecture_no: r.lecture_no,
-            standard_seq: r.lecture_no,
-            subject: r.module,
-            subject_topic: r.sub_topics,
-            department: r.department,
-            faculty_name: r.faculty,
-            publish: 'No',
-          }),
-        });
-      }
-
-      await fetchStandardLectures();
-      if (missingRows.length > 0) {
-        alert(`Re-sync complete: ${missingRows.length} lecture(s) added from the Standard Lecture Plan.`);
-      } else {
-        alert('Already up to date with the Standard Lecture Plan.');
-      }
-    } catch {
-      alert('Re-sync failed. Please try again.');
+  /* Re-import from Standard Plan: wipe this batch's entire plan. Units then reappear
+     as un-added on the left pane, to be added back in one at a time (Add button) and
+     ordered manually (Up/Down), rather than being bulk-reinserted automatically. */
+  const handleReimportFromStandardPlan = async () => {
+    if (stdPlanLocked || !hasStandardPlan || !slpCourseName || reimporting) return;
+    if (!confirm('This will permanently delete all existing lecture plan entries for this batch. You can then re-add lectures one at a time from the Standard Lecture Plan on the left, in whatever order you choose. Continue?')) {
+      return;
     }
-    setResyncing(false);
+    setReimporting(true);
+    try {
+      await fetch(`/api/masters/batch/${batchId}/slectures?all=1`, { method: 'DELETE' });
+      await fetchStandardLectures();
+      alert('The lecture plan has been cleared. Add units back from the Standard Lecture Plan on the left.');
+    } catch {
+      alert('Re-import failed. Please try again.');
+    }
+    setReimporting(false);
   };
 
   const BatchLecturePlanTab = () => {
@@ -2683,12 +2630,12 @@ export default function EditBatchPage() {
             {stdPlanLocked ? 'Locked' : 'Unlocked'}
           </button>
           <button
-            onClick={handleResyncFromStandardPlan}
-            disabled={stdPlanLocked || !hasStandardPlan || resyncing}
-            className="px-2 py-1 border border-gray-300 text-gray-600 text-xs font-medium rounded h-7 hover:bg-gray-50 disabled:opacity-50"
-            title="Insert any Standard Lecture Plan lectures missing from this batch"
+            onClick={handleReimportFromStandardPlan}
+            disabled={stdPlanLocked || !hasStandardPlan || reimporting}
+            className="px-2 py-1 border border-red-300 text-red-700 text-xs font-medium rounded h-7 hover:bg-red-50 disabled:opacity-50"
+            title="Delete all current lecture plan entries so you can re-add units individually from the Standard Lecture Plan on the left"
           >
-            {resyncing ? 'Re-syncing...' : 'Re-sync from Standard Plan'}
+            {reimporting ? 'Re-importing...' : 'Re-import from Standard Plan'}
           </button>
           <button
             onClick={handleSaveAllSLectures}
@@ -2726,13 +2673,12 @@ export default function EditBatchPage() {
           <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-amber-300 inline-block" /> Sub-topics remaining</span>
         </div>
 
-        <DndContext sensors={dndSensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-3 min-w-0">
-            {/* Left: Standard Lecture Plan reference (drag source) */}
+        <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-3 min-w-0">
+            {/* Left: Standard Lecture Plan reference */}
             <div className="border border-gray-200 rounded overflow-hidden flex flex-col h-[75vh]">
               <div className="px-2.5 py-2 border-b border-gray-200 bg-slate-50 shrink-0">
                 <span className="text-xs font-bold text-slate-600">Standard Lecture Plan</span>
-                <p className="text-[10px] text-slate-400">Drag a topic onto the plan to add it</p>
+                <p className="text-[10px] text-slate-400">Click Add on a topic to add it to the plan</p>
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
                 {loadingTemplateLectures ? (
@@ -2747,19 +2693,18 @@ export default function EditBatchPage() {
                       key={t.id}
                       tmpl={t}
                       added={t.lecture_no != null && addedLectureNos.has(t.lecture_no)}
+                      disabled={stdPlanLocked}
+                      adding={addingTemplateId === t.id}
+                      onAdd={handleAddFromTemplate}
                     />
                   ))
                 )}
               </div>
             </div>
 
-            {/* Right: this batch's own plan (drop target + sortable rows) */}
-            <div
-              className={`border rounded h-[75vh] min-w-0 flex flex-col ${
-                isOverPlanDropZone ? 'border-[#2E3093] ring-2 ring-[#2E3093]/20' : 'border-gray-200'
-              }`}
-            >
-              <div ref={setPlanDropRef} className="flex-1 min-h-0 min-w-0 overflow-auto">
+            {/* Right: this batch's own plan */}
+            <div className="border border-gray-200 rounded h-[75vh] min-w-0 flex flex-col">
+              <div className="flex-1 min-h-0 min-w-0 overflow-auto">
               <table className="text-xs">
                 <thead className="sticky top-0 bg-slate-50 z-10">
                   <tr>
@@ -2796,41 +2741,35 @@ export default function EditBatchPage() {
                   ) : filteredSLectures.length === 0 ? (
                     <tr>
                       <td colSpan={18} className="px-2 py-8 text-center text-gray-400">
-                        Drag topics from the Standard Lecture Plan on the left to start planning.
+                        Click Add on a topic in the Standard Lecture Plan on the left to start planning.
                       </td>
                     </tr>
                   ) : (
-                    <SortableContext
-                      items={filteredSLectures.map((l) => `row-${l.id}`)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      {filteredSLectures.map((l) => (
-                        <SortableLectureRow
-                          key={l.id}
-                          row={l}
-                          disabled={stdPlanLocked}
-                          facultyList={facultyList}
-                          dayOptions={dayOptions}
-                          colorClass={getRowColorClass(l)}
-                          saving={savingSLectureRowId === l.id}
-                          onChange={updateStandardLectureInline}
-                          onSave={handleSaveSLectureInline}
-                          onDelete={handleDeleteSLecture}
-                          onToggleSubtopic={toggleSubtopicCovered}
-                        />
-                      ))}
-                    </SortableContext>
+                    filteredSLectures.map((l, idx) => (
+                      <SortableLectureRow
+                        key={l.id}
+                        row={l}
+                        disabled={stdPlanLocked}
+                        facultyList={facultyList}
+                        dayOptions={dayOptions}
+                        colorClass={getRowColorClass(l)}
+                        saving={savingSLectureRowId === l.id}
+                        isFirst={idx === 0}
+                        isLast={idx === filteredSLectures.length - 1}
+                        onChange={updateStandardLectureInline}
+                        onSave={handleSaveSLectureInline}
+                        onDelete={handleDeleteSLecture}
+                        onToggleSubtopic={toggleSubtopicCovered}
+                        onMoveUp={(row) => handleMoveLecture(row, 'up')}
+                        onMoveDown={(row) => handleMoveLecture(row, 'down')}
+                      />
+                    ))
                   )}
                 </tbody>
               </table>
               </div>
             </div>
           </div>
-
-          <DragOverlay>
-            {activeDragTemplate ? <TemplateLectureCard tmpl={activeDragTemplate} added={false} /> : null}
-          </DragOverlay>
-        </DndContext>
       </div>
     );
   };

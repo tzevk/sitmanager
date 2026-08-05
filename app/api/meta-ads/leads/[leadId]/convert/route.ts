@@ -11,7 +11,7 @@ export async function POST(
     if (auth instanceof NextResponse) return auth;
 
     const { leadId } = await params;
-    const lead = await convertMetaLeadToInquiry(leadId);
+    const lead = await convertMetaLeadToInquiry(leadId, auth.session.userId);
     if (!lead) {
       return NextResponse.json({ error: 'Meta lead not found' }, { status: 404 });
     }

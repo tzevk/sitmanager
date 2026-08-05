@@ -293,18 +293,29 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE - soft delete a standard lecture plan
-export async function DELETE(request: NextRequest) {
+// DELETE - soft delete a single lecture, or (?all=1) hard-delete the entire plan for this batch
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const { searchParams } = new URL(request.url);
     const lectureId = searchParams.get('lectureId');
-    
+    const all = searchParams.get('all');
+
+    const pool = getPool();
+    await ensureFacultyIdColumn(pool);
+
+    if (all === '1') {
+      const { id: batchId } = await params;
+      await pool.query(`DELETE FROM batch_slecture_master WHERE batch_id = ?`, [batchId]);
+      return NextResponse.json({ success: true });
+    }
+
     if (!lectureId) {
       return NextResponse.json({ error: 'Lecture ID required' }, { status: 400 });
     }
 
-    const pool = getPool();
-    await ensureFacultyIdColumn(pool);
     await pool.query(`UPDATE batch_slecture_master SET deleted = '1' WHERE id = ?`, [lectureId]);
 
     return NextResponse.json({ success: true });

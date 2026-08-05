@@ -9,6 +9,7 @@ let inquiryTableNameCache: string | null = null;
 let statusTableNameCache: string | null | undefined;
 let studentMasterTableNameCache: string | null | undefined;
 let studentMasterRemarkReady = false;
+let studentMasterAcceptedByReady = false;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -300,6 +301,24 @@ async function ensureStudentMasterRemarkColumn(pool: ReturnType<typeof getPool>,
   }
 
   studentMasterRemarkReady = true;
+}
+
+/** Tracks which employee (awt_adminuser.id) accepted/granted an admission — used by Employee Monitoring. */
+async function ensureStudentMasterAcceptedByColumn(pool: ReturnType<typeof getPool>, tableName: string): Promise<void> {
+  if (studentMasterAcceptedByReady) return;
+
+  const [rows] = await pool.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'Accepted_By'
+     LIMIT 1`,
+    [tableName]
+  ) as [any[], any];
+
+  if (!(rows as any[]).length) {
+    await pool.query(`ALTER TABLE \`${tableName}\` ADD COLUMN Accepted_By INT NULL`);
+  }
+
+  studentMasterAcceptedByReady = true;
 }
 
 async function ensurePayloadTable(pool: ReturnType<typeof getPool>): Promise<void> {
@@ -767,7 +786,7 @@ function resolveFullName(input: Record<string, unknown>, fallbackName: unknown):
 export async function syncOnlineAdmissionIntoCurrentDb(
   inquiryId: number,
   input: Record<string, unknown>,
-  options?: { statusAction?: 'accept' | 'reject' | 'update' | '' }
+  options?: { statusAction?: 'accept' | 'reject' | 'update' | ''; acceptedBy?: number | null }
 ): Promise<void> {
   if (!Number.isFinite(inquiryId) || inquiryId <= 0) return;
 
@@ -776,6 +795,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
   const studentMasterTable = await resolveStudentMasterTableName(pool);
   if (!studentMasterTable) return;
   await ensureStudentMasterRemarkColumn(pool, studentMasterTable);
+  await ensureStudentMasterAcceptedByColumn(pool, studentMasterTable);
   await ensureFamilyContactColumn(pool);
 
   const [inquiryRows] = await pool.query(
@@ -792,6 +812,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
   const fullName = resolveFullName(input, inquiry.Student_Name);
   const statusAction = options?.statusAction || normalizeText(input.statusAction);
   const nextStatusId = statusAction === 'accept' ? 8 : statusAction === 'reject' ? 7 : null;
+  const acceptedBy = Number.isFinite(options?.acceptedBy) ? Number(options?.acceptedBy) : null;
   const courseId = parseOptionalNumber(input.trainingProgrammeId) ?? parseOptionalNumber(input.Course_Id) ?? parseOptionalNumber(inquiry.Course_Id);
   // Prefer the batch the applicant actually picked in the form (payload), then the inquiry.
   const rawBatchCode = firstNonEmpty(input.batchCode, input.Batch_Code, inquiry.Batch_Code) || null;
@@ -1109,9 +1130,10 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       `UPDATE \`${studentMasterTable}\` SET
          Status_id = 8,
          Status_date = COALESCE(Status_date, ?),
-         Admission_Dt = COALESCE(Admission_Dt, ?)
+         Admission_Dt = COALESCE(Admission_Dt, ?),
+         Accepted_By = COALESCE(Accepted_By, ?)
        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
-      [new Date().toISOString().slice(0, 10), admissionDate, resolvedStudentId]
+      [new Date().toISOString().slice(0, 10), admissionDate, acceptedBy, resolvedStudentId]
     );
 
     // Move any documents the applicant uploaded during the form (stashed against the

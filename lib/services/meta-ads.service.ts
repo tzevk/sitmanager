@@ -3394,7 +3394,7 @@ export async function updateMetaLeadDetail(metaLeadId: string, input: MetaLeadUp
   return getMetaLeadDetail(metaLeadId);
 }
 
-export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<MetaLeadDetailResult | null> {
+export async function convertMetaLeadToInquiry(metaLeadId: string, createdBy = 1): Promise<MetaLeadDetailResult | null> {
   await ensureMetaLeadTables();
   const pool = getPool();
 
@@ -3548,7 +3548,11 @@ export async function convertMetaLeadToInquiry(metaLeadId: string): Promise<Meta
       Discipline: discipline,
       Percentage: percentage != null ? String(percentage) : null,
       Status_id: 1,
-    });
+      // Without an initial Discussion, createInquiry never creates a first
+      // awt_inquirydiscussion row — and that row is the only place employee
+      // attribution for this conversion can be recorded (Employee Monitoring).
+      Discussion: 'Converted from Meta Ads lead',
+    }, createdBy);
   }
 
   await pool.query(

@@ -36,14 +36,11 @@ const AUTO_ROWS_AFTER_WHATSAPP: { key: 'followupCalls' | 'walkIns'; label: strin
   { key: 'walkIns', label: 'No. of Walk-in Enquiries' },
 ];
 
-const headCellBase = 'border border-slate-200 px-2.5 py-2 text-xs align-middle';
-const labelCellCls = `${headCellBase} font-semibold text-slate-600 bg-slate-50 whitespace-nowrap`;
-const dataCellCls = `${headCellBase} text-center text-slate-700 font-medium`;
-const inquiriesLabelCls = `${headCellBase} font-bold text-[#2E3093] bg-[#2E3093]/5 text-center align-middle`;
-
-function todayRing(date: string): string {
-  return isToday(date) ? 'ring-2 ring-inset ring-[#2E3093]/40' : '';
-}
+const cellBase = 'border border-gray-100 px-2.5 py-2 text-xs align-middle';
+const labelCellCls = `${cellBase} font-semibold text-slate-600 bg-slate-50/80 whitespace-nowrap`;
+const dataCellCls = `${cellBase} text-center text-slate-700 font-semibold tabular-nums`;
+const manualCellCls = `${cellBase} bg-[#FAE452]/25`;
+const inquiriesLabelCls = `${cellBase} font-bold text-[#2E3093] bg-[#2E3093]/[0.04] text-center align-middle tracking-wide`;
 
 export default function MonitoringWeeklyTable({
   employeeLabel,
@@ -71,66 +68,85 @@ export default function MonitoringWeeklyTable({
   const cellKey = (date: string) => `${refreshKey}:${date}`;
 
   return (
-    <div className="rounded-xl border border-slate-200 shadow-sm overflow-hidden bg-white">
-      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] px-4 py-2.5">
+    <div className="rounded-2xl border border-gray-100 shadow-sm overflow-hidden bg-white">
+      <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] px-4 py-2.5 flex items-center gap-2">
+        <svg className="w-4 h-4 text-white/80 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
         <span className="text-sm font-bold text-white tracking-tight">Employee Name : {employeeLabel}</span>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="border-collapse text-xs w-full" style={{ minWidth: '900px' }}>
+        <table className="border-collapse text-xs w-full table-fixed" style={{ minWidth: '900px' }}>
+          <colgroup>
+            {/* Narrow spanning "Inquiries" column — only rendered as its own <td> on one row
+                (rowSpan covers the rest), but it's still a real column the table must size. */}
+            <col style={{ width: '36px' }} />
+            <col style={{ width: '150px' }} />
+            {days.map((d) => (
+              <col key={cellKey(d.date)} style={{ width: 'calc((100% - 186px) / 7)' }} />
+            ))}
+          </colgroup>
           <tbody>
             <tr>
-              <td className={labelCellCls}>Date</td>
+              <td className={labelCellCls} colSpan={2}>Date</td>
               {days.map((d) => (
-                <td key={cellKey(d.date)} className={`${dataCellCls} ${todayRing(d.date)} bg-slate-50 font-bold`}>
-                  {formatDate(d.date)}
+                <td key={cellKey(d.date)} className={`${dataCellCls} bg-slate-50`}>
+                  <div className="flex items-center justify-center gap-1">
+                    {formatDate(d.date)}
+                    {isToday(d.date) && (
+                      <span className="text-[8px] font-bold text-white bg-[#2E3093] rounded-full px-1.5 py-0.5 leading-none">
+                        TODAY
+                      </span>
+                    )}
+                  </div>
                 </td>
               ))}
             </tr>
             <tr>
-              <td className={labelCellCls}>Day</td>
+              <td className={labelCellCls} colSpan={2}>Day</td>
               {days.map((d) => (
-                <td key={cellKey(d.date)} className={`${dataCellCls} ${todayRing(d.date)} bg-slate-50`}>
+                <td key={cellKey(d.date)} className={`${dataCellCls} bg-slate-50 font-medium text-slate-500`}>
                   {d.day}
                 </td>
               ))}
             </tr>
 
             <tr>
-              <td className={labelCellCls}>First Half<br />Summary</td>
+              <td className={labelCellCls} colSpan={2}>First Half<br />Summary</td>
               {days.map((d) => (
-                <td key={cellKey(d.date)} className={`${headCellBase} bg-[#FAE452]/40 ${todayRing(d.date)}`}>
+                <td key={cellKey(d.date)} className={manualCellCls}>
                   <textarea
                     key={cellKey(d.date)}
                     defaultValue={d.firstHalfSummary ?? ''}
                     disabled={!canEdit}
                     placeholder={canEdit ? 'Type here…' : ''}
                     onBlur={(e) => updateLocal(d.date, { firstHalfSummary: e.target.value })}
-                    className="w-full min-w-[110px] h-14 bg-transparent text-xs text-slate-800 placeholder:text-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-[#2E3093]/30 rounded disabled:cursor-not-allowed"
+                    className="w-full h-14 bg-transparent text-xs text-slate-800 placeholder:text-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-[#2E3093]/25 rounded-md disabled:cursor-not-allowed"
                   />
                 </td>
               ))}
             </tr>
             <tr>
-              <td className={labelCellCls}>Second Half<br />Summary</td>
+              <td className={labelCellCls} colSpan={2}>Second Half<br />Summary</td>
               {days.map((d) => (
-                <td key={cellKey(d.date)} className={`${headCellBase} bg-[#FAE452]/40 ${todayRing(d.date)}`}>
+                <td key={cellKey(d.date)} className={manualCellCls}>
                   <textarea
                     key={cellKey(d.date)}
                     defaultValue={d.secondHalfSummary ?? ''}
                     disabled={!canEdit}
                     placeholder={canEdit ? 'Type here…' : ''}
                     onBlur={(e) => updateLocal(d.date, { secondHalfSummary: e.target.value })}
-                    className="w-full min-w-[110px] h-14 bg-transparent text-xs text-slate-800 placeholder:text-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-[#2E3093]/30 rounded disabled:cursor-not-allowed"
+                    className="w-full h-14 bg-transparent text-xs text-slate-800 placeholder:text-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-[#2E3093]/25 rounded-md disabled:cursor-not-allowed"
                   />
                 </td>
               ))}
             </tr>
 
             <tr>
-              <td className={labelCellCls}>No. of Admissions</td>
+              <td className={labelCellCls} colSpan={2}>No. of Admissions</td>
               {days.map((d) => (
-                <td key={cellKey(d.date)} className={`${dataCellCls} ${todayRing(d.date)}`}>
+                <td key={cellKey(d.date)} className={dataCellCls}>
                   {d.admissions}
                 </td>
               ))}
@@ -140,12 +156,12 @@ export default function MonitoringWeeklyTable({
               <tr key={row.key}>
                 {idx === 0 && (
                   <td className={inquiriesLabelCls} rowSpan={8}>
-                    Inquiries
+                    <span className="[writing-mode:vertical-rl] rotate-180 inline-block">Inquiries</span>
                   </td>
                 )}
                 <td className={labelCellCls}>{row.label}</td>
                 {days.map((d) => (
-                  <td key={cellKey(d.date)} className={`${dataCellCls} ${todayRing(d.date)}`}>
+                  <td key={cellKey(d.date)} className={dataCellCls}>
                     {d[row.key]}
                   </td>
                 ))}
@@ -155,14 +171,14 @@ export default function MonitoringWeeklyTable({
             <tr>
               <td className={labelCellCls}>WhatsApp Enquiries</td>
               {days.map((d) => (
-                <td key={cellKey(d.date)} className={`${headCellBase} bg-[#FAE452]/40 ${todayRing(d.date)}`}>
+                <td key={cellKey(d.date)} className={manualCellCls}>
                   <input
                     key={cellKey(d.date)}
                     type="number"
                     defaultValue={d.whatsapp ?? ''}
                     disabled={!canEdit}
                     onBlur={(e) => updateLocal(d.date, { whatsapp: e.target.value === '' ? null : Number(e.target.value) })}
-                    className="w-full min-w-[60px] bg-transparent text-xs text-center text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/30 rounded disabled:cursor-not-allowed"
+                    className="w-full bg-transparent text-xs text-center text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/25 rounded-md disabled:cursor-not-allowed"
                   />
                 </td>
               ))}
@@ -172,7 +188,7 @@ export default function MonitoringWeeklyTable({
               <tr key={row.key}>
                 <td className={labelCellCls}>{row.label}</td>
                 {days.map((d) => (
-                  <td key={cellKey(d.date)} className={`${dataCellCls} ${todayRing(d.date)}`}>
+                  <td key={cellKey(d.date)} className={dataCellCls}>
                     {d[row.key]}
                   </td>
                 ))}
@@ -182,14 +198,14 @@ export default function MonitoringWeeklyTable({
             <tr>
               <td className={labelCellCls}>No. of Emails Replied to</td>
               {days.map((d) => (
-                <td key={cellKey(d.date)} className={`${headCellBase} bg-[#FAE452]/40 ${todayRing(d.date)}`}>
+                <td key={cellKey(d.date)} className={manualCellCls}>
                   <input
                     key={cellKey(d.date)}
                     type="number"
                     defaultValue={d.emailsReplied ?? ''}
                     disabled={!canEdit}
                     onBlur={(e) => updateLocal(d.date, { emailsReplied: e.target.value === '' ? null : Number(e.target.value) })}
-                    className="w-full min-w-[60px] bg-transparent text-xs text-center text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/30 rounded disabled:cursor-not-allowed"
+                    className="w-full bg-transparent text-xs text-center text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/25 rounded-md disabled:cursor-not-allowed"
                   />
                 </td>
               ))}
@@ -198,14 +214,14 @@ export default function MonitoringWeeklyTable({
             <tr>
               <td className={labelCellCls}>Social Media Inquiries</td>
               {days.map((d) => (
-                <td key={cellKey(d.date)} className={`${headCellBase} bg-[#FAE452]/40 ${todayRing(d.date)}`}>
+                <td key={cellKey(d.date)} className={manualCellCls}>
                   <input
                     key={cellKey(d.date)}
                     type="number"
                     defaultValue={d.socialMediaInquiries ?? ''}
                     disabled={!canEdit}
                     onBlur={(e) => updateLocal(d.date, { socialMediaInquiries: e.target.value === '' ? null : Number(e.target.value) })}
-                    className="w-full min-w-[60px] bg-transparent text-xs text-center text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/30 rounded disabled:cursor-not-allowed"
+                    className="w-full bg-transparent text-xs text-center text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/25 rounded-md disabled:cursor-not-allowed"
                   />
                 </td>
               ))}
@@ -214,7 +230,7 @@ export default function MonitoringWeeklyTable({
         </table>
       </div>
 
-      <div className="flex items-center gap-2 px-3 py-2 border-t border-slate-100 bg-slate-50/60 text-[10px] text-slate-500">
+      <div className="flex items-center gap-2 px-4 py-2 border-t border-gray-100 bg-slate-50/60 text-[10px] text-slate-500">
         <span className="w-3 h-3 rounded-sm bg-[#FAE452] border border-slate-300 inline-block shrink-0" />
         Yellow cells are filled in by the employee — everything else is generated automatically from system data.
       </div>

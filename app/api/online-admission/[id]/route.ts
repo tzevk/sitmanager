@@ -707,7 +707,10 @@ export async function PUT(
     // this portion of the Update button's latency.
     const [structuredResult, syncResult] = await Promise.allSettled([
       saveStructuredAdmissionData(inquiryId, savedPayload),
-      syncOnlineAdmissionIntoCurrentDb(inquiryId, cleanBody, { statusAction: body.statusAction || 'update' }),
+      syncOnlineAdmissionIntoCurrentDb(inquiryId, cleanBody, {
+        statusAction: body.statusAction || 'update',
+        acceptedBy: auth.session.userId,
+      }),
     ]);
     if (structuredResult.status === 'rejected') {
       console.warn('[OnlineAdmission] saveStructuredAdmissionData failed on PUT:', structuredResult.reason);
