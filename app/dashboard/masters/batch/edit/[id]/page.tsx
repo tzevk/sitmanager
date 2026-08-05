@@ -7,11 +7,14 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 import { WEEKDAYS, getDayRange } from '@/lib/weekdays';
 import {
   DndContext,
+  DragOverlay,
+  useDraggable,
   useDroppable,
   PointerSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -257,20 +260,27 @@ const getCoveredSet = (covered: string | null | undefined): Set<number> => {
   );
 };
 
-/* Standard Lecture Plan card representing one unit that can be added with a button. */
-function TemplateLectureCard({
-  tmpl,
-  added,
-  onAdd,
-}: {
-  tmpl: TemplateLecture;
-  added: boolean;
-  onAdd: (tmpl: TemplateLecture) => void;
-}) {
+/* Draggable card representing one topic from the Standard Lecture Plan (left pane). */
+function TemplateLectureCard({ tmpl, added }: { tmpl: TemplateLecture; added: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `tmpl-${tmpl.id}`,
+    data: { type: 'template', template: tmpl },
+  });
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
   const subtopics = getSubtopicList(tmpl.sub_topics);
 
   return (
-    <div className="px-2.5 py-2 border border-slate-200 rounded-md bg-white select-none">
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className={`px-2.5 py-2 border border-slate-200 rounded-md bg-white cursor-grab active:cursor-grabbing select-none ${
+        isDragging ? 'opacity-40' : ''
+      }`}
+    >
       <div className="flex items-center justify-between gap-1">
         <span className="text-[10px] font-bold text-[#2E3093]">Lec {tmpl.lecture_no ?? '—'}</span>
         {added && (
@@ -296,16 +306,6 @@ function TemplateLectureCard({
       {tmpl.project_assignment && (
         <div className="text-[10px] text-slate-500 mt-1 italic">Assignment: {tmpl.project_assignment}</div>
       )}
-      <div className="mt-2 flex justify-end">
-        <button
-          type="button"
-          onClick={() => onAdd(tmpl)}
-          disabled={added}
-          className="px-2 py-1 rounded text-[10px] font-semibold border border-[#2E3093] text-[#2E3093] hover:bg-[#2E3093] hover:text-white disabled:border-emerald-200 disabled:text-emerald-700 disabled:bg-emerald-50 disabled:cursor-not-allowed"
-        >
-          {added ? 'Added' : 'Add'}
-        </button>
-      </div>
     </div>
   );
 }
@@ -698,6 +698,7 @@ export default function EditBatchPage() {
   const [templateLectures, setTemplateLectures] = useState<TemplateLecture[]>([]);
   const [loadingTemplateLectures, setLoadingTemplateLectures] = useState(false);
   const [batchTimings, setBatchTimings] = useState<BatchTimings>({ dayStart: null, dayEnd: null, startTime: null, endTime: null });
+  const [activeDragTemplate, setActiveDragTemplate] = useState<TemplateLecture | null>(null);
 
   /* Final Exam Details state */
   const [finalExams, setFinalExams] = useState<FinalExam[]>([]);
@@ -2485,7 +2486,7 @@ export default function EditBatchPage() {
     return '';
   };
 
-  /* Drag-and-drop: reorder existing rows in the batch lecture plan */
+  /* Drag-and-drop: add a topic from the Standard Lecture Plan, or reorder existing rows */
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const { setNodeRef: setPlanDropRef, isOver: isOverPlanDropZone } = useDroppable({ id: 'plan-drop-zone' });
 
@@ -2512,9 +2513,23 @@ export default function EditBatchPage() {
     } catch { /* ignore */ }
   };
 
+  const handleDragStart = (event: DragStartEvent) => {
+    const data = event.active.data.current as { type?: string; template?: TemplateLecture } | undefined;
+    if (data?.type === 'template' && data.template) {
+      setActiveDragTemplate(data.template);
+    }
+  };
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
+    setActiveDragTemplate(null);
     if (!over) return;
+
+    const activeData = active.data.current as { type?: string; template?: TemplateLecture } | undefined;
+    if (activeData?.type === 'template' && activeData.template) {
+      await handleAddFromTemplate(activeData.template);
+      return;
+    }
 
     // Reorder existing rows
     const activeId = String(active.id);
@@ -2644,11 +2659,9 @@ export default function EditBatchPage() {
 
   const BatchLecturePlanTab = () => {
     const dayOptions = getDayRange(batchTimings.dayStart, batchTimings.dayEnd);
-    const clearPlanPaneData = batchData?.Batch_code === '01167';
     const addedLectureNos = new Set(
       standardLectures.map((l) => l.lecture_no).filter((n): n is number => n != null)
     );
-    const displayedLectures = clearPlanPaneData ? [] : filteredSLectures;
 
     return (
       <div className="space-y-2">
@@ -2668,6 +2681,14 @@ export default function EditBatchPage() {
             title={stdPlanLocked ? 'Unlock to edit' : 'Lock to prevent edits'}
           >
             {stdPlanLocked ? 'Locked' : 'Unlocked'}
+          </button>
+          <button
+            onClick={handleResyncFromStandardPlan}
+            disabled={stdPlanLocked || !hasStandardPlan || resyncing}
+            className="px-2 py-1 border border-gray-300 text-gray-600 text-xs font-medium rounded h-7 hover:bg-gray-50 disabled:opacity-50"
+            title="Insert any Standard Lecture Plan lectures missing from this batch"
+          >
+            {resyncing ? 'Re-syncing...' : 'Re-sync from Standard Plan'}
           </button>
           <button
             onClick={handleSaveAllSLectures}
@@ -2705,13 +2726,13 @@ export default function EditBatchPage() {
           <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-amber-300 inline-block" /> Sub-topics remaining</span>
         </div>
 
-        <DndContext sensors={dndSensors} onDragEnd={handleDragEnd}>
+        <DndContext sensors={dndSensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-3 min-w-0">
-            {/* Left: Standard Lecture Plan reference */}
+            {/* Left: Standard Lecture Plan reference (drag source) */}
             <div className="border border-gray-200 rounded overflow-hidden flex flex-col h-[75vh]">
               <div className="px-2.5 py-2 border-b border-gray-200 bg-slate-50 shrink-0">
                 <span className="text-xs font-bold text-slate-600">Standard Lecture Plan</span>
-                <p className="text-[10px] text-slate-400">Click Add on a unit to include it in the batch plan</p>
+                <p className="text-[10px] text-slate-400">Drag a topic onto the plan to add it</p>
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
                 {loadingTemplateLectures ? (
@@ -2726,7 +2747,6 @@ export default function EditBatchPage() {
                       key={t.id}
                       tmpl={t}
                       added={t.lecture_no != null && addedLectureNos.has(t.lecture_no)}
-                      onAdd={handleAddFromTemplate}
                     />
                   ))
                 )}
@@ -2773,20 +2793,18 @@ export default function EditBatchPage() {
                         </div>
                       </td>
                     </tr>
-                  ) : displayedLectures.length === 0 ? (
+                  ) : filteredSLectures.length === 0 ? (
                     <tr>
                       <td colSpan={18} className="px-2 py-8 text-center text-gray-400">
-                        {clearPlanPaneData
-                          ? 'Lecture plan data is cleared for this batch.'
-                          : 'Click Add on a Standard Lecture Plan unit on the left to start planning.'}
+                        Drag topics from the Standard Lecture Plan on the left to start planning.
                       </td>
                     </tr>
                   ) : (
                     <SortableContext
-                      items={displayedLectures.map((l) => `row-${l.id}`)}
+                      items={filteredSLectures.map((l) => `row-${l.id}`)}
                       strategy={verticalListSortingStrategy}
                     >
-                      {displayedLectures.map((l) => (
+                      {filteredSLectures.map((l) => (
                         <SortableLectureRow
                           key={l.id}
                           row={l}
@@ -2808,6 +2826,10 @@ export default function EditBatchPage() {
               </div>
             </div>
           </div>
+
+          <DragOverlay>
+            {activeDragTemplate ? <TemplateLectureCard tmpl={activeDragTemplate} added={false} /> : null}
+          </DragOverlay>
         </DndContext>
       </div>
     );
