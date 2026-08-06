@@ -15,7 +15,8 @@ async function getTestChildSchema(pool: any): Promise<{
   try {
     const [rows] = await pool.query(
       `SELECT COLUMN_NAME FROM information_schema.COLUMNS
-       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'test_taken_child'`
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'test_taken_child'
+       ORDER BY ORDINAL_POSITION`
     );
     const cols = new Set((rows as any[]).map((r: any) => String(r.COLUMN_NAME)));
 
@@ -23,12 +24,16 @@ async function getTestChildSchema(pool: any): Promise<{
     let marksCol = 'Marks';
     let statusCol = 'Status';
     let idCol = 'ID';
+    // "Marks_from" (the test's max/out-of marks) also loosely matches the 'mark' substring
+    // check below — checking exact/likely names first avoids ever locking onto it instead
+    // of the real marks-obtained column (which silently broke absent-student marks before).
+    if (cols.has('Marks_Given')) marksCol = 'Marks_Given';
     for (const col of cols) {
       const lc = col.toLowerCase();
       if (studentCol === 'Student_Id' && ['student_id', 'admission_id', 'studentid'].some(c => lc.includes(c))) {
         studentCol = col;
       }
-      if (marksCol === 'Marks' && ['mark', 'score', 'obtain'].some(c => lc.includes(c))) {
+      if (marksCol === 'Marks' && lc !== 'marks_from' && ['mark', 'score', 'obtain'].some(c => lc.includes(c))) {
         marksCol = col;
       }
       if (lc === 'status') statusCol = col;

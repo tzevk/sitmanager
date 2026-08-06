@@ -148,13 +148,17 @@ export default function AddVivaMocTakenPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const payload: any = {
         batchcode: form.Batch_Id || null,
-        students: students.map(s => ({
-          Student_Id: s.Student_Id,
-          Admission_Id: s.Admission_Id,
-          marks: studentEdits[s.Student_Id]?.marks || null,
-          discipline_marks: studentEdits[s.Student_Id]?.discipline_marks || null,
-          status: studentEdits[s.Student_Id]?.status || 'Present',
-        })),
+        students: students.map(s => {
+          const edit = studentEdits[s.Student_Id];
+          const isAbsent = edit?.status === 'Absent';
+          return {
+            Student_Id: s.Student_Id,
+            Admission_Id: s.Admission_Id,
+            marks: isAbsent ? '0' : (edit?.marks || null),
+            discipline_marks: isAbsent ? '0' : (edit?.discipline_marks || null),
+            status: edit?.status || 'Present',
+          };
+        }),
       };
       if (isEdit) payload.id = parseInt(editId!);
 
@@ -293,7 +297,7 @@ export default function AddVivaMocTakenPage() {
                     <thead>
                       <tr className="bg-gray-50 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                         <th className="py-2.5 px-3 text-left w-10">#</th>
-                        <th className="py-2.5 px-3 text-left">Student Code</th>
+                        <th className="py-2.5 px-3 text-left">Roll No</th>
                         <th className="py-2.5 px-3 text-left">Student Name</th>
                         <th className="py-2.5 px-3 text-center w-36">Status</th>
                         <th className="py-2.5 px-3 text-center w-28">Viva Marks</th>
@@ -307,7 +311,7 @@ export default function AddVivaMocTakenPage() {
                         return (
                           <tr key={s.Student_Id} className={`transition-colors ${isAbsent ? 'bg-red-50/40' : 'hover:bg-blue-50/20'}`}>
                             <td className="py-2 px-3 text-gray-400 font-mono">{s.row_num}</td>
-                            <td className="py-2 px-3 text-gray-500">{s.Student_Code || '—'}</td>
+                            <td className="py-2 px-3 text-gray-500">{s.Roll_No || '—'}</td>
                             <td className="py-2 px-3 font-medium text-gray-800">{s.Student_Name}</td>
                             <td className="py-2 px-3 text-center">
                               <select

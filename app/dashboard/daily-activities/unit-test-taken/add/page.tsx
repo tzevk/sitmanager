@@ -66,7 +66,15 @@ export default function AddUnitTestTakenPage() {
   const [markEdits, setMarkEdits] = useState<Record<number, MarkEdit>>({});
 
   const setStudentMark = (studentId: number, field: 'marks' | 'status', value: string) =>
-    setMarkEdits(prev => ({ ...prev, [studentId]: { ...prev[studentId], [field]: value } }));
+    setMarkEdits(prev => {
+      const current = prev[studentId];
+      // Absent always means 0 marks — clear/lock the marks field the moment status flips,
+      // so a stale or mistyped value from before can never get saved for an absent student.
+      const next = field === 'status' && value === 'Absent'
+        ? { ...current, status: value, marks: '' }
+        : { ...current, [field]: value };
+      return { ...prev, [studentId]: next };
+    });
 
   /* ── Load courses on mount ── */
   useEffect(() => {
@@ -192,7 +200,7 @@ export default function AddUnitTestTakenPage() {
         payload.studentMarks = Object.entries(markEdits).map(([studentId, edit]) => ({
           Student_Id: parseInt(studentId),
           Student_Name: edit.Student_Name,
-          marks_obtained: edit.marks !== '' ? parseInt(edit.marks) : null,
+          marks_obtained: edit.status === 'Absent' ? 0 : (edit.marks !== '' ? parseInt(edit.marks) : null),
           status: edit.status || null,
           child_id: edit.child_id,
         }));
@@ -367,7 +375,7 @@ export default function AddUnitTestTakenPage() {
                     <thead>
                       <tr className="bg-gray-100 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                         <th className="py-2 px-3 text-left w-10">#</th>
-                        <th className="py-2 px-3 text-left">Student Code</th>
+                        <th className="py-2 px-3 text-left">Roll No</th>
                         <th className="py-2 px-3 text-left">Student Name</th>
                         <th className="py-2 px-3 text-center w-28">Marks Obtained</th>
                         <th className="py-2 px-3 text-center w-24">Max Marks</th>
@@ -378,15 +386,16 @@ export default function AddUnitTestTakenPage() {
                     <tbody className="divide-y divide-gray-100 bg-white">
                       {students.map((s) => {
                         const edit = markEdits[s.Student_Id];
+                        const isAbsent = edit?.status === 'Absent';
                         const maxMarks = form.Marks ? parseInt(form.Marks) : null;
-                        const marksVal = edit?.marks ?? '';
+                        const marksVal = isAbsent ? '' : (edit?.marks ?? '');
                         const pct = marksVal !== '' && maxMarks
                           ? Math.round((parseInt(marksVal) / maxMarks) * 100)
                           : null;
                         return (
-                          <tr key={s.Student_Id} className="hover:bg-blue-50/20 transition-colors">
+                          <tr key={s.Student_Id} className={`transition-colors ${isAbsent ? 'bg-red-50/40' : 'hover:bg-blue-50/20'}`}>
                             <td className="py-1.5 px-3 text-gray-400 font-mono">{s.row_num}</td>
-                            <td className="py-1.5 px-3 text-gray-500">{s.Student_Code || '—'}</td>
+                            <td className="py-1.5 px-3 text-gray-500">{s.Roll_No || '—'}</td>
                             <td className="py-1.5 px-3 font-medium text-gray-800">{s.Student_Name}</td>
                             <td className="py-1.5 px-3 text-center">
                               <input
@@ -394,14 +403,17 @@ export default function AddUnitTestTakenPage() {
                                 min={0}
                                 max={maxMarks ?? undefined}
                                 value={marksVal}
+                                disabled={isAbsent}
                                 onChange={(e) => setStudentMark(s.Student_Id, 'marks', e.target.value)}
-                                placeholder="—"
-                                className="w-20 h-7 rounded border border-gray-300 px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white"
+                                placeholder={isAbsent ? '0' : '—'}
+                                className="w-20 h-7 rounded border border-gray-300 px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white disabled:opacity-40 disabled:bg-gray-50"
                               />
                             </td>
                             <td className="py-1.5 px-3 text-center text-gray-500">{maxMarks ?? '—'}</td>
                             <td className="py-1.5 px-3 text-center">
-                              {pct != null ? (
+                              {isAbsent ? (
+                                <span className="text-gray-300">—</span>
+                              ) : pct != null ? (
                                 <span className={`text-xs font-semibold ${
                                   pct >= 75 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'
                                 }`}>
@@ -415,7 +427,9 @@ export default function AddUnitTestTakenPage() {
                               <select
                                 value={edit?.status ?? 'Present'}
                                 onChange={(e) => setStudentMark(s.Student_Id, 'status', e.target.value)}
-                                className="h-7 rounded border border-gray-300 px-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white"
+                                className={`h-7 rounded border px-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] ${
+                                  isAbsent ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-300 bg-white'
+                                }`}
                               >
                                 <option value="Present">Present</option>
                                 <option value="Absent">Absent</option>

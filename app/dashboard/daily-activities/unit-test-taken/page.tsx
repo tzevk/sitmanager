@@ -442,7 +442,7 @@ function UnitTestTakenContent({ canCreate, canUpdate, canDelete }: { canView: bo
                                   <thead>
                                     <tr className="bg-gray-100 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                                       <th className="py-2 px-3 text-left w-10">#</th>
-                                      <th className="py-2 px-3 text-left">Student Code</th>
+                                      <th className="py-2 px-3 text-left">Roll No</th>
                                       <th className="py-2 px-3 text-left">Student Name</th>
                                       <th className="py-2 px-3 text-center w-28">Marks Obtained</th>
                                       <th className="py-2 px-3 text-center w-24">Max Marks</th>
@@ -457,7 +457,7 @@ function UnitTestTakenContent({ canCreate, canUpdate, canDelete }: { canView: bo
                                       return (
                                         <tr key={s.Student_Id} className="hover:bg-blue-50/20 transition-colors">
                                           <td className="py-1.5 px-3 text-gray-400 font-mono">{s.row_num}</td>
-                                          <td className="py-1.5 px-3 text-gray-500">{s.Student_Code || '—'}</td>
+                                          <td className="py-1.5 px-3 text-gray-500">{s.Roll_No || '—'}</td>
                                           <td className="py-1.5 px-3 font-medium text-gray-800">{s.Student_Name}</td>
                                           <td className="py-1.5 px-3 text-center">
                                             {s.marks_obtained != null ? (

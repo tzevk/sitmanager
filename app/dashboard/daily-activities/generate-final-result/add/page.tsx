@@ -11,6 +11,7 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 interface Course { Course_Id: number; Course_Name: string; }
 interface Batch { Batch_Id: number; Batch_code: string; Category: string | null; Timings: string | null; }
 interface Employee { Emp_Id: number; Employee_Name: string; }
+interface Faculty { Faculty_Id: number; Faculty_Name: string; }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type ReportCardRow = Record<string, any>;
@@ -24,6 +25,8 @@ interface FormData {
   Approved_By: string;
   Period_Start: string;
   Period_End: string;
+  Faculty1: string;
+  Faculty2: string;
 }
 
 const emptyForm: FormData = {
@@ -34,6 +37,8 @@ const emptyForm: FormData = {
   Approved_By: '',
   Period_Start: '',
   Period_End: '',
+  Faculty1: '',
+  Faculty2: '',
 };
 
 /* ------------------------------------------------------------------ */
@@ -51,6 +56,7 @@ export default function AddGenerateFinalResultPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [error, setError] = useState('');
@@ -65,14 +71,17 @@ export default function AddGenerateFinalResultPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [courseRes, empRes] = await Promise.all([
+        const [courseRes, empRes, facRes] = await Promise.all([
           fetch('/api/daily-activities/generate-final-result?options=courses'),
           fetch('/api/daily-activities/generate-final-result?options=employees'),
+          fetch('/api/daily-activities/generate-final-result?options=faculties'),
         ]);
         const courseData = await courseRes.json();
         const empData = await empRes.json();
+        const facData = await facRes.json();
         setCourses(courseData.courses || []);
         setEmployees(empData.employees || []);
+        setFaculties(facData.faculties || []);
       } catch { /* ignore */ }
     })();
   }, []);
@@ -95,6 +104,8 @@ export default function AddGenerateFinalResultPage() {
             Approved_By: String(a.Approved_By || ''),
             Period_Start: a.Period_Start ? a.Period_Start.slice(0, 10) : '',
             Period_End: a.Period_End ? a.Period_End.slice(0, 10) : '',
+            Faculty1: String(a.Faculty1 || ''),
+            Faculty2: String(a.Faculty2 || ''),
           });
         }
       } catch { /* ignore */ }
@@ -151,6 +162,8 @@ export default function AddGenerateFinalResultPage() {
         Approved_By: form.Approved_By ? parseInt(form.Approved_By) : null,
         Period_Start: form.Period_Start || null,
         Period_End: form.Period_End || null,
+        Faculty1: form.Faculty1 ? parseInt(form.Faculty1) : null,
+        Faculty2: form.Faculty2 ? parseInt(form.Faculty2) : null,
       };
       if (isEdit) payload.Result_Id = parseInt(editId!);
 
@@ -231,7 +244,7 @@ export default function AddGenerateFinalResultPage() {
 
           <div class="info-row">
             <span>Student Name</span><span class="fill">${s.Student_Name || ''}</span>
-            <span>Student Code</span><span class="fill">${s.Student_Code || ''}</span>
+            <span>Roll No</span><span class="fill">${s.Roll_No || s.Student_Code || ''}</span>
           </div>
           <div class="info-row">
             <span>Course</span><span class="fill">${s.Course_Name || ''}</span>
@@ -440,6 +453,26 @@ export default function AddGenerateFinalResultPage() {
                 <input type="date" value={form.Period_End} onChange={set('Period_End')}
                   className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
               </div>
+
+              {/* Faculty Name */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-gray-600">Faculty Name</label>
+                <select value={form.Faculty1} onChange={set('Faculty1')}
+                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white">
+                  <option value="">Select</option>
+                  {faculties.map(f => <option key={f.Faculty_Id} value={f.Faculty_Id}>{f.Faculty_Name}</option>)}
+                </select>
+              </div>
+
+              {/* Training Coordinator */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-gray-600">Training Coordinator</label>
+                <select value={form.Faculty2} onChange={set('Faculty2')}
+                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white">
+                  <option value="">Select</option>
+                  {faculties.map(f => <option key={f.Faculty_Id} value={f.Faculty_Id}>{f.Faculty_Name}</option>)}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -522,7 +555,7 @@ export default function AddGenerateFinalResultPage() {
                     <thead>
                       <tr className="bg-gray-50 text-gray-600">
                         {[
-                          'Student Code', 'Student Name',
+                          'Roll No', 'Student Name',
                           'Ass1 Given', 'Ass1 Max', 'Ass1 Status', 'Ass %',
                           'Test1 Given', 'Test1 Max', 'Test1 Status', 'Test %',
                           'Final %', 'Full Attend', 'Total Lectures', 'Atten. Lectures', 'Absents',
@@ -536,7 +569,7 @@ export default function AddGenerateFinalResultPage() {
                     <tbody>
                       {reportCardRows.map((s, i) => (
                         <tr key={s.id ?? i} className="hover:bg-gray-50">
-                          <td className="border border-gray-200 px-2.5 py-1.5 whitespace-nowrap">{s.Student_Code || ''}</td>
+                          <td className="border border-gray-200 px-2.5 py-1.5 whitespace-nowrap">{s.Roll_No || s.Student_Code || ''}</td>
                           <td className="border border-gray-200 px-2.5 py-1.5 whitespace-nowrap">{s.Student_Name || ''}</td>
                           <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Ass1_Given ?? ''}</td>
                           <td className="border border-gray-200 px-2.5 py-1.5 text-center">{s.Ass1_Max ?? ''}</td>

@@ -100,6 +100,7 @@ export async function GET(req: NextRequest) {
            a.Admission_Id,
            a.Student_Id,
            a.Student_Code,
+           a.Roll_No,
            s.Student_Name
          FROM admission_master a
          JOIN student_master s ON a.Student_Id = s.Student_Id

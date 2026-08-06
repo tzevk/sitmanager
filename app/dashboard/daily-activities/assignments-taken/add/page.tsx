@@ -17,6 +17,7 @@ interface StudentRow {
   Admission_Id: number;
   Student_Id: number;
   Student_Code: string;
+  Roll_No: string | null;
   Student_Name: string;
   row_num: number;
   marks: string;
@@ -174,7 +175,13 @@ export default function AddAssignmentTakenPage() {
     setForm(prev => ({ ...prev, [field]: e.target.value }));
 
   const updateStudent = (idx: number, field: 'marks' | 'status' | 'actual_dt', value: string) => {
-    setStudents(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+    setStudents(prev => prev.map((s, i) => {
+      if (i !== idx) return s;
+      // Absent always means 0 marks — clear/lock the marks field the moment status flips,
+      // so a stale or mistyped value from before can never get saved for an absent student.
+      if (field === 'status' && value === 'Absent') return { ...s, status: value, marks: '' };
+      return { ...s, [field]: value };
+    }));
   };
 
   /* ── Submit ── */
@@ -195,7 +202,7 @@ export default function AddAssignmentTakenPage() {
         Return_Dt: form.Return_Dt || null,
         students: students.map(s => ({
           Student_Id: s.Student_Id,
-          marks: s.marks,
+          marks: s.status === 'Absent' ? '0' : s.marks,
           status: s.status,
           actual_dt: s.actual_dt || null,
         })),
@@ -393,7 +400,7 @@ export default function AddAssignmentTakenPage() {
                   <thead className="bg-gradient-to-r from-gray-50 to-gray-100/80">
                     <tr className="text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                       <th className="py-3 px-4 border-b border-gray-200 w-12">Id</th>
-                      <th className="py-3 px-4 border-b border-gray-200 w-36">Student Code</th>
+                      <th className="py-3 px-4 border-b border-gray-200 w-36">Roll No</th>
                       <th className="py-3 px-4 border-b border-gray-200">Student Name</th>
                       <th className="py-3 px-4 border-b border-gray-200 w-40">Marks</th>
                       <th className="py-3 px-4 border-b border-gray-200 w-40">Status</th>
@@ -401,29 +408,34 @@ export default function AddAssignmentTakenPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {students.map((s, idx) => (
-                      <tr key={s.Student_Id} className="hover:bg-blue-50/20 transition-colors">
+                    {students.map((s, idx) => {
+                      const isAbsent = s.status === 'Absent';
+                      return (
+                      <tr key={s.Student_Id} className={`transition-colors ${isAbsent ? 'bg-red-50/40' : 'hover:bg-blue-50/20'}`}>
                         <td className="py-2.5 px-4 text-xs text-gray-400">{s.row_num}</td>
                         <td className="py-2.5 px-4">
-                          <span className="text-xs font-mono text-gray-700">{s.Student_Code || s.Student_Id}</span>
+                          <span className="text-xs font-mono text-gray-700">{s.Roll_No || '—'}</span>
                         </td>
                         <td className="py-2.5 px-4 text-sm font-medium text-gray-800">{s.Student_Name}</td>
                         <td className="py-2.5 px-4">
                           <input
                             type="number"
-                            value={s.marks}
+                            value={isAbsent ? '' : s.marks}
                             onChange={e => updateStudent(idx, 'marks', e.target.value)}
-                            placeholder="—"
+                            disabled={isAbsent}
+                            placeholder={isAbsent ? '0' : '—'}
                             min={0}
                             max={form.Marks ? parseInt(form.Marks) : undefined}
-                            className="w-full h-8 px-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]"
+                            className="w-full h-8 px-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] disabled:opacity-40 disabled:bg-gray-50"
                           />
                         </td>
                         <td className="py-2.5 px-4">
                           <select
                             value={s.status}
                             onChange={e => updateStudent(idx, 'status', e.target.value)}
-                            className="w-full h-8 px-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white"
+                            className={`w-full h-8 px-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] ${
+                              isAbsent ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-200 bg-white'
+                            }`}
                           >
                             <option value="Present">Present</option>
                             <option value="Absent">Absent</option>
@@ -438,7 +450,8 @@ export default function AddAssignmentTakenPage() {
                           />
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               )}

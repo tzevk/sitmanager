@@ -71,6 +71,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ employees });
     }
 
+    if (fetchOptions === 'faculties') {
+      const [faculties] = await pool.query(
+        `SELECT Faculty_Id, Faculty_Name FROM faculty_master
+         WHERE IsActive = 1 AND IsDelete = 0
+         ORDER BY Faculty_Name`
+      );
+      return NextResponse.json({ faculties });
+    }
+
     /* --- List with pagination --- */
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
     const limit = Math.min(100, Math.max(10, parseInt(searchParams.get('limit') || '25')));
@@ -170,7 +179,7 @@ export async function POST(req: NextRequest) {
     const pool = getPool();
     const body = await req.json();
 
-    const { Course_Id, Batch_Id, Result_Dt, Print_Dt, Approved_By, Period_Start, Period_End } = body;
+    const { Course_Id, Batch_Id, Result_Dt, Print_Dt, Approved_By, Period_Start, Period_End, Faculty1, Faculty2 } = body;
 
     if (!Course_Id || !Batch_Id || !Result_Dt) {
       return NextResponse.json(
@@ -181,13 +190,16 @@ export async function POST(req: NextRequest) {
 
     const [result] = await pool.query(
       `INSERT INTO generate_final_result
-       (Course_Id, Batch_Id, Result_date, Print_date, Approve, Start_date, End_date, IsActive, IsDelete)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+       (Course_Id, Batch_Id, Result_date, Print_date, Approve, Start_date, End_date,
+        Label1, Faculty1, Label2, Faculty2, IsActive, IsDelete)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
       [
         Course_Id, Batch_Id,
         Result_Dt, Print_Dt || null,
         Approved_By || null,
         Period_Start || null, Period_End || null,
+        'Faculty', Faculty1 || null,
+        'Training Coordinator', Faculty2 || null,
       ]
     );
     const insertId = (result as any).insertId;
@@ -218,13 +230,16 @@ export async function PUT(req: NextRequest) {
     await pool.query(
       `UPDATE generate_final_result SET
         Course_Id = ?, Batch_Id = ?, Result_date = ?, Print_date = ?,
-        Approve = ?, Start_date = ?, End_date = ?
+        Approve = ?, Start_date = ?, End_date = ?,
+        Label1 = ?, Faculty1 = ?, Label2 = ?, Faculty2 = ?
        WHERE Id = ?`,
       [
         body.Course_Id || null, body.Batch_Id || null,
         body.Result_Dt || null, body.Print_Dt || null,
         body.Approved_By || null,
         body.Period_Start || null, body.Period_End || null,
+        'Faculty', body.Faculty1 || null,
+        'Training Coordinator', body.Faculty2 || null,
         Result_Id,
       ]
     );

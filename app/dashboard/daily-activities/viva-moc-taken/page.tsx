@@ -21,6 +21,7 @@ interface StudentMark {
   row_num: number;
   Student_Id: number;
   Student_Code: string | null;
+  Roll_No: string | null;
   Student_Name: string;
   marks_obtained: number | null;
   discipline_marks: number | null;
@@ -428,7 +429,7 @@ function VivaMocTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
                                   <thead>
                                     <tr className="bg-gray-100 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                                       <th className="py-2 px-3 text-left w-10">#</th>
-                                      <th className="py-2 px-3 text-left">Student Code</th>
+                                      <th className="py-2 px-3 text-left">Roll No</th>
                                       <th className="py-2 px-3 text-left">Student Name</th>
                                       <th className="py-2 px-3 text-center w-24">Status</th>
                                       <th className="py-2 px-3 text-center w-28">Viva Marks</th>
@@ -441,7 +442,7 @@ function VivaMocTakenContent({ canCreate, canUpdate, canDelete }: { canView: boo
                                       return (
                                         <tr key={s.Student_Id} className={`transition-colors ${isAbsent ? 'bg-red-50/40' : 'hover:bg-blue-50/20'}`}>
                                           <td className="py-1.5 px-3 text-gray-400 font-mono">{s.row_num}</td>
-                                          <td className="py-1.5 px-3 text-gray-500">{s.Student_Code || '—'}</td>
+                                          <td className="py-1.5 px-3 text-gray-500">{s.Roll_No || '—'}</td>
                                           <td className="py-1.5 px-3 font-medium text-gray-800">{s.Student_Name}</td>
                                           <td className="py-1.5 px-3 text-center">
                                             <span className={`inline-flex items-center px-2 py-0.5 text-[11px] font-semibold rounded-full ${

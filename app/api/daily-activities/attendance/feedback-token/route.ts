@@ -135,18 +135,56 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'batchId and date are required' }, { status: 400 });
     }
 
-    // valid for 24 hours
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    // Valid for 48 hours — generous enough that a link shared once in the morning still
+    // works for evening submissions, and for late/next-day makeup feedback.
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
     const normalizedTrainerId = Number.isFinite(Number(trainerId)) && Number(trainerId) > 0 ? Number(trainerId) : null;
 
     const links = await Promise.all(FEEDBACK_SESSIONS.map(async (session) => {
+      // Attendance gets saved/re-saved multiple times a day (corrections, late marks) and
+      // each save used to mint a brand-new token — so several different links ended up
+      // being shared across the day for the same session, and whichever one a student
+      // held onto could look broken once a newer save superseded it in the UI. Reuse the
+      // existing still-valid token for this batch+date+session instead of minting a new
+      // one every time, so exactly one link is ever in circulation per session.
+      const [existingRows] = await pool.query<any[]>(
+        `SELECT token, expires_at FROM attendance_feedback_token
+         WHERE Batch_Id = ? AND date = ? AND feedback_session = ? AND expires_at > NOW()
+         ORDER BY created_at DESC LIMIT 1`,
+        [batchId, date, session]
+      );
+
+      if (existingRows.length) {
+        const existing = existingRows[0];
+        // Refresh trainer/batch display info and extend expiry so the same link keeps
+        // working through the rest of the (possibly re-saved) session.
+        await pool.query(
+          `UPDATE attendance_feedback_token
+           SET batch_name = ?, trainer_id = ?, trainer_name = ?, trainer_time_from = ?, trainer_time_to = ?, expires_at = ?
+           WHERE token = ?`,
+          [
+            batchName || null,
+            normalizedTrainerId,
+            trainerName?.trim() || null,
+            trainerTimeFrom || null,
+            trainerTimeTo || null,
+            expiresAt,
+            existing.token,
+          ]
+        );
+        return {
+          session,
+          token: existing.token,
+          url: `${buildBaseUrl(req)}/public/feedback/${existing.token}`,
+        };
+      }
+
       const token = randomBytes(24).toString('hex');
       await pool.query(
         `INSERT INTO attendance_feedback_token (
            token, Batch_Id, date, batch_name, trainer_id, trainer_name, trainer_time_from, trainer_time_to, feedback_session, expires_at
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE token = token`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           token,
           batchId,
