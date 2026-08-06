@@ -60,6 +60,7 @@ interface FeeDetailsData {
     TaxType: string;
     RDate: string | null;
   } | null;
+  pendingRefund: { Fees_Id: number; Amount: number } | null;
 }
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors w-full';
@@ -100,6 +101,7 @@ export default function FeeDetailsEditPage() {
   const [emailSending, setEmailSending] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [refundActionLoading, setRefundActionLoading] = useState<'confirm' | 'reject' | null>(null);
   const [students, setStudents] = useState<StudentOption[]>([]);
   const [studentSearchLoading, setStudentSearchLoading] = useState(false);
   const [studentNameInput, setStudentNameInput] = useState('');
@@ -153,6 +155,25 @@ export default function FeeDetailsEditPage() {
       setLoading(false);
     }
   }, [params.studentId, feesId]);
+
+  const handleRefundAction = async (action: 'confirm' | 'reject') => {
+    if (!data?.pendingRefund) return;
+    setRefundActionLoading(action);
+    setError('');
+    try {
+      const res = await fetch(`/api/fee-details/${params.studentId}/${data.pendingRefund.Fees_Id}/refund`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setError(d.error ?? 'Failed to update refund'); return; }
+      setMessage(action === 'confirm' ? `Refund confirmed — receipt ${d.Fees_Code}` : 'Refund draft rejected');
+      await load();
+    } finally {
+      setRefundActionLoading(null);
+    }
+  };
 
   const resolveStudentSelection = (value: string): number | null => {
     const trimmed = value.trim();
@@ -600,6 +621,32 @@ ${copy('Student Copy')}
 
       {error && <div className="rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2">{error}</div>}
       {message && <div className="rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs px-3 py-2">{message}</div>}
+
+      {data.pendingRefund && (
+        <div className="rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-xs px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+          <span>
+            <span className="font-bold">Pending Refund:</span> {fmt(data.pendingRefund.Amount)} — this student was marked Cancelled and has this amount paid on record. Confirm to issue a receipt, or reject to discard.
+          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => handleRefundAction('reject')}
+              disabled={refundActionLoading !== null}
+              className="h-7 px-3 rounded-md border border-amber-300 text-amber-800 font-semibold hover:bg-amber-100 disabled:opacity-50"
+            >
+              {refundActionLoading === 'reject' ? 'Rejecting…' : 'Reject'}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRefundAction('confirm')}
+              disabled={refundActionLoading !== null}
+              className="h-7 px-3 rounded-md bg-amber-600 text-white font-semibold hover:bg-amber-700 disabled:opacity-50"
+            >
+              {refundActionLoading === 'confirm' ? 'Confirming…' : 'Confirm Refund'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-5">
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">

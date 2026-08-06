@@ -94,15 +94,29 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
     // Generate the next receipt number in parallel rather than as a serial round-trip
     // after the other queries — only needed for the "new entry" (no feesId) view.
     const receiptNoPromise = feesId ? Promise.resolve('') : generateReceiptNo();
+    // A pending refund draft — created automatically when this student was marked
+    // Cancel (see app/api/admission-activity/student/[id]/route.ts) — is IsDelete=1
+    // with no Fees_Code yet, so it's invisible in ledgerPromise above until confirmed.
+    const pendingRefundPromise = pool.query<any[]>(
+      `SELECT Fees_Id, Amount FROM s_fees_mst
+       WHERE Student_Id = ? AND IsDelete = 1 AND Fees_Code IS NULL AND Notes = 'Refund - Admission Cancelled'
+       LIMIT 1`,
+      [sid]
+    );
 
-    const [admissionResult, feeResult, banksResult, ledgerResult, recordResult, generatedReceiptNo] = await Promise.all([
+    const [admissionResult, feeResult, banksResult, ledgerResult, recordResult, generatedReceiptNo, pendingRefundResult] = await Promise.all([
       admissionPromise,
       feePromise,
       banksPromise,
       ledgerPromise,
       recordPromise,
       receiptNoPromise,
+      pendingRefundPromise,
     ]);
+    const pendingRefundRow = pendingRefundResult[0]?.[0] ?? null;
+    const pendingRefund = pendingRefundRow
+      ? { Fees_Id: pendingRefundRow.Fees_Id, Amount: Math.abs(Number(pendingRefundRow.Amount ?? 0)) }
+      : null;
 
     const admissionRows = admissionResult[0];
     const admission = admissionRows[0] ?? null;
@@ -289,6 +303,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
       totals: { debit: ledgerTotalDebit, credit: totalCredit, balance },
       nextReceiptNo: record?.Fees_Code ?? generatedReceiptNo,
       record,
+      pendingRefund,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Server error' }, { status: 500 });

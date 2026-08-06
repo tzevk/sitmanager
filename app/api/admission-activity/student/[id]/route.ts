@@ -6,6 +6,58 @@ import { ensureStudentTransferColumns } from '@/lib/student-transfer';
 import { ensureAlumniColumn } from '@/lib/student-alumni';
 import { ensureFamilyContactColumn } from '@/lib/student-family-contact';
 import { saveStructuredAdmissionData } from '@/lib/services/online-admission.service';
+import { computeStudentFeeBalance } from '@/lib/fee-balance';
+
+const REFUND_NOTE = 'Refund - Admission Cancelled';
+
+/**
+ * On the Cancel=0 → Cancel=1 transition, drop a pending refund draft into the
+ * fee ledger for whatever the student has paid so far — IsDelete=1 and
+ * Fees_Code=NULL keep it invisible everywhere until staff explicitly confirm
+ * it (see /api/fee-details/[studentId]/[feesId]/refund), which is when the
+ * real receipt number gets assigned. Never fires twice for the same student.
+ */
+async function createRefundDraftIfNeeded(pool: ReturnType<typeof getPool>, studentId: number): Promise<void> {
+  try {
+    const [existing] = await pool.query(
+      `SELECT 1 FROM s_fees_mst WHERE Student_Id = ? AND Notes = ? LIMIT 1`,
+      [studentId, REFUND_NOTE]
+    ) as [any[], any];
+    if (existing.length) return;
+
+    const { totalPaid } = await computeStudentFeeBalance(pool, studentId);
+    if (!(totalPaid > 0)) return;
+
+    const [studentRows] = await pool.query(
+      `SELECT sm.Course_Id, bm.Batch_Id, am.Admission_Id
+       FROM student_master sm
+       LEFT JOIN batch_mst bm ON bm.Batch_code = sm.Batch_Code AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
+       LEFT JOIN admission_master am ON am.Student_Id = sm.Student_Id AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+       WHERE sm.Student_Id = ?
+       ORDER BY am.Admission_Id DESC
+       LIMIT 1`,
+      [studentId]
+    ) as [any[], any];
+    const s = studentRows[0] ?? {};
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+
+    await pool.query(
+      `INSERT INTO s_fees_mst
+        (Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type, Amount, Total_Amt, TypeR, Notes,
+         RDate, Date_Added, FeesMonth, FeesYear, IsDelete)
+       VALUES (?, ?, ?, ?, 'Refund', ?, ?, 'C', ?, ?, ?, ?, ?, 1)`,
+      [
+        studentId, s.Course_Id ?? null, s.Batch_Id ?? null, s.Admission_Id ?? null,
+        -totalPaid, -totalPaid, REFUND_NOTE,
+        today, now, now.getMonth() + 1, now.getFullYear(),
+      ]
+    );
+  } catch (err) {
+    // Never let refund-draft bookkeeping block the actual Cancel save.
+    console.warn('Student PUT: refund draft creation skipped:', (err as Error)?.message);
+  }
+}
 
 const ONLINE_ADMISSION_PAYLOAD_TABLE = 'online_admission_payload';
 
@@ -632,7 +684,7 @@ export async function PUT(
       // un-cancel it, or edit an unrelated field), and would instead fall into
       // the "no active admission" branch and create a stray duplicate row.
       const [admRows] = await pool.query(
-        `SELECT Admission_Id FROM admission_master
+        `SELECT Admission_Id, Cancel FROM admission_master
          WHERE Student_Id = ?
            AND (IsDelete = 0 OR IsDelete IS NULL)
          ORDER BY Admission_Id DESC
@@ -642,6 +694,7 @@ export async function PUT(
 
       if (admRows.length) {
         const admissionId = admRows[0].Admission_Id;
+        const wasCancelled = Number(admRows[0].Cancel ?? 0) === 1;
         const setClauses: string[] = [];
         const setVals: (string | number | null)[] = [];
 
@@ -655,6 +708,12 @@ export async function PUT(
             `UPDATE admission_master SET ${setClauses.join(', ')} WHERE Admission_Id = ?`,
             [...setVals, admissionId]
           );
+        }
+
+        // Newly cancelled (not already) — drop a pending refund draft for whatever
+        // this student has paid so far, for staff to confirm in Fee Details.
+        if (resolvedCancel === 1 && !wasCancelled) {
+          await createRefundDraftIfNeeded(pool, Number(id));
         }
       } else if (batchId !== null) {
         // No active admission row to update — e.g. a transferred student whose only
