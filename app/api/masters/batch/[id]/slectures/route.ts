@@ -16,7 +16,7 @@ async function ensureFacultyIdColumn(pool: ReturnType<typeof getPool>) {
      FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
        AND TABLE_NAME = 'batch_slecture_master'
-       AND COLUMN_NAME IN ('faculty_id', 'covered_subtopics')`
+       AND COLUMN_NAME IN ('faculty_id', 'covered_subtopics', 'session')`
   );
   const existing = new Set(rows.map((r) => r.name as string));
 
@@ -30,6 +30,12 @@ async function ensureFacultyIdColumn(pool: ReturnType<typeof getPool>) {
     await pool.query(
       `ALTER TABLE batch_slecture_master
        ADD COLUMN covered_subtopics TEXT NULL`
+    );
+  }
+  if (!existing.has('session')) {
+    await pool.query(
+      `ALTER TABLE batch_slecture_master
+       ADD COLUMN session VARCHAR(20) NULL AFTER lectureday`
     );
   }
 }
@@ -91,6 +97,7 @@ export async function GET(
         s.subject_topic,
         s.date,
         s.lectureday,
+        s.session,
         s.starttime,
         s.endtime,
         s.assignment,
@@ -184,10 +191,10 @@ export async function POST(
 
     const [result] = await pool.query(`
       INSERT INTO batch_slecture_master
-      (batch_id, lecture_no, standard_seq, subject, subject_topic, department, date, lectureday, starttime, endtime,
+      (batch_id, lecture_no, standard_seq, subject, subject_topic, department, date, lectureday, session, starttime, endtime,
        assignment, assignment_date, faculty_id, faculty_name, class_room, documents, unit_test, publish, lecturecontent,
        covered_subtopics, lecture_status, deleted, created_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '0', NOW())
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '0', NOW())
     `, [
       batchId,
       body.lecture_no || null,
@@ -197,6 +204,7 @@ export async function POST(
       body.department || null,
       truncate(body.date),
       truncate(body.lectureday),
+      truncate(body.session, 20),
       truncate(body.starttime),
       truncate(body.endtime),
       truncate(body.assignment),
@@ -250,6 +258,7 @@ export async function PUT(request: NextRequest) {
         department = ?,
         date = ?,
         lectureday = ?,
+        session = ?,
         starttime = ?,
         endtime = ?,
         assignment = ?,
@@ -271,6 +280,7 @@ export async function PUT(request: NextRequest) {
       data.department || null,
       truncate(data.date),
       truncate(data.lectureday),
+      truncate(data.session, 20),
       truncate(data.starttime),
       truncate(data.endtime),
       truncate(data.assignment),

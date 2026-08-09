@@ -67,6 +67,7 @@ interface StandardLecture {
   lecturecontent?: string | null;
   date: string | null;
   lectureday?: string | null;
+  session?: string | null;
   starttime: string | null;
   endtime: string | null;
   assignment: string | null;
@@ -460,6 +461,18 @@ function SortableLectureRow({
           ))}
         </select>
       </td>
+      <td className="px-2 py-1.5">
+        <select
+          value={(row.session ?? '').toString()}
+          disabled={disabled}
+          onChange={(e) => onChange(row.id, { session: e.target.value })}
+          className="w-28 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
+        >
+          <option value="">Session</option>
+          <option value="First Half">First Half</option>
+          <option value="Second Half">Second Half</option>
+        </select>
+      </td>
       <td className="px-2 py-1.5 whitespace-nowrap">
         <input
           type="time"
@@ -733,6 +746,7 @@ export default function EditBatchPage() {
         lecturecontent: (row.lecturecontent ?? null),
         date: formatDateForInput(row.date) || null,
         lectureday: row.lectureday,
+        session: row.session ?? null,
         starttime: row.starttime,
         endtime: row.endtime,
         assignment: row.assignment,
@@ -2558,13 +2572,14 @@ export default function EditBatchPage() {
   };
 
   const handleExportSLectures = () => {
-    const headers = ['LectureNo', 'LectureContent', 'SubjectTopics', 'Date', 'LectureDay', 'StartTime', 'EndTime', 'Assignment', 'AssignmentDate', 'TrainerName', 'ClassRoom', 'Documents', 'UnitTest', 'UnitTestDate', 'Publish'];
+    const headers = ['LectureNo', 'LectureContent', 'SubjectTopics', 'Date', 'LectureDay', 'Session', 'StartTime', 'EndTime', 'Assignment', 'AssignmentDate', 'TrainerName', 'ClassRoom', 'Documents', 'UnitTest', 'UnitTestDate', 'Publish'];
     const rows = filteredSLectures.map(l => [
       l.lecture_no || '',
       l.lecturecontent || l.subject || '',
       l.subject_topic || '',
       l.date || '',
       l.lectureday || '',
+      l.session || '',
       l.starttime || '',
       l.endtime || '',
       l.assignment || '',
@@ -2716,6 +2731,7 @@ export default function EditBatchPage() {
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Faculty</th>
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Date</th>
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Day</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Session</th>
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Start</th>
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">End</th>
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Assignment</th>
