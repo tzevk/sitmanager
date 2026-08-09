@@ -118,8 +118,10 @@ export async function GET(
     `, [batchId]);
 
     // Recompute Actual Sequence + status on every read (idempotent, self-healing).
+    // `lecture_no` is this batch's own, freely-reorderable build position; `standard_seq`
+    // stays fixed as the row's original reference number from the Standard Lecture Plan.
     const computed = computeLectureStatuses(
-      rows.map((r) => ({ id: r.id, standard_seq: r.standard_seq, date: r.date, starttime: r.starttime }))
+      rows.map((r) => ({ id: r.id, order_seq: r.lecture_no, date: r.date, starttime: r.starttime }))
     );
     const computedById = new Map(computed.map((c) => [c.id, c]));
     const lectures: Array<RowDataPacket & { actual_seq: number | null; lecture_status: string }> = rows
@@ -128,7 +130,7 @@ export async function GET(
         return { ...r, actual_seq: c?.actual_seq ?? null, lecture_status: c?.lecture_status ?? 'pending' };
       });
     lectures.sort((a, b) => {
-        // Conducted rows first, ordered by date ascending; then not-yet-conducted by standard_seq ascending.
+        // Conducted rows first, ordered by date ascending; then not-yet-conducted by lecture_no ascending.
         const aConducted = Boolean(a.date);
         const bConducted = Boolean(b.date);
         if (aConducted !== bConducted) return aConducted ? -1 : 1;
@@ -136,8 +138,8 @@ export async function GET(
           if (a.date !== b.date) return String(a.date) < String(b.date) ? -1 : 1;
           return (a.actual_seq ?? 0) - (b.actual_seq ?? 0);
         }
-        const aSeq = a.standard_seq ?? Number.MAX_SAFE_INTEGER;
-        const bSeq = b.standard_seq ?? Number.MAX_SAFE_INTEGER;
+        const aSeq = a.lecture_no ?? Number.MAX_SAFE_INTEGER;
+        const bSeq = b.lecture_no ?? Number.MAX_SAFE_INTEGER;
         return aSeq - bSeq;
       });
 

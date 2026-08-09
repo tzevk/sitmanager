@@ -3,12 +3,13 @@
  * for a batch's lecture rows.
  *
  * Actual Sequence numbers every row (not just conducted ones) in build order: conducted rows
- * first (ordered by date/time), then not-yet-conducted rows ordered by standard_seq — i.e. the
- * order the plan was actually assembled/arranged in, so it's populated as soon as topics are
- * dragged in and reordered, not only once a date gets filled in.
+ * first (ordered by date/time), then not-yet-conducted rows ordered by `order_seq` — the
+ * batch's own, freely-reorderable build/arrangement position (distinct from the fixed
+ * `standard_seq` reference back to the Standard Lecture Plan template) — so it's populated
+ * as soon as topics are dragged in and reordered, not only once a date gets filled in.
  *
- * "Conducted" = date is non-blank. Cancelled = skipped over by a later-standard-sequence
- * row that already has a date. Replacement = a later-standard-sequence row that got
+ * "Conducted" = date is non-blank. Cancelled = skipped over by a later-order-sequence
+ * row that already has a date. Replacement = a later-order-sequence row that got
  * conducted ahead of an earlier, not-yet-conducted one. Pending = not yet conducted and
  * not skipped (nothing later has been conducted yet).
  */
@@ -17,7 +18,7 @@ export type LectureStatus = 'normal' | 'cancelled' | 'replacement' | 'pending';
 
 export interface LectureStatusInput {
   id: number;
-  standard_seq: number | null;
+  order_seq: number | null;
   date: string | null;
   starttime?: string | null;
 }
@@ -40,7 +41,7 @@ function normalizeDate(value: string | null | undefined): string | null {
 export function computeLectureStatuses(rows: LectureStatusInput[]): LectureStatusResult[] {
   const withSeq = rows.map((r) => ({
     id: r.id,
-    seq: r.standard_seq == null ? Infinity : r.standard_seq,
+    seq: r.order_seq == null ? Infinity : r.order_seq,
     date: normalizeDate(r.date),
     starttime: r.starttime ?? null,
   }));

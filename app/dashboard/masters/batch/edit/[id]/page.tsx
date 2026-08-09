@@ -2542,7 +2542,9 @@ export default function EditBatchPage() {
     setAddingTemplateId(null);
   };
 
-  /* Reorder existing rows by swapping standard_seq with the adjacent row. */
+  /* Reorder existing rows by swapping lecture_no (this batch's own build position) with the
+     adjacent row. standard_seq is left untouched — it stays fixed as the row's original
+     reference number from the Standard Lecture Plan. */
   const handleMoveLecture = async (row: StandardLecture, direction: 'up' | 'down') => {
     if (stdPlanLocked) return;
     const index = filteredSLectures.findIndex((l) => l.id === row.id);
@@ -2550,13 +2552,13 @@ export default function EditBatchPage() {
     if (index === -1 || swapIndex < 0 || swapIndex >= filteredSLectures.length) return;
 
     const other = filteredSLectures[swapIndex];
-    const rowSeq = other.standard_seq ?? swapIndex + 1;
-    const otherSeq = row.standard_seq ?? index + 1;
+    const rowSeq = other.lecture_no ?? swapIndex + 1;
+    const otherSeq = row.lecture_no ?? index + 1;
 
     setStandardLectures((prev) =>
       prev.map((l) => {
-        if (l.id === row.id) return { ...l, standard_seq: rowSeq };
-        if (l.id === other.id) return { ...l, standard_seq: otherSeq };
+        if (l.id === row.id) return { ...l, lecture_no: rowSeq };
+        if (l.id === other.id) return { ...l, lecture_no: otherSeq };
         return l;
       })
     );
@@ -2566,12 +2568,12 @@ export default function EditBatchPage() {
         fetch(`/api/masters/batch/${batchId}/slectures`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...row, standard_seq: rowSeq }),
+          body: JSON.stringify({ ...row, lecture_no: rowSeq }),
         }),
         fetch(`/api/masters/batch/${batchId}/slectures`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...other, standard_seq: otherSeq }),
+          body: JSON.stringify({ ...other, lecture_no: otherSeq }),
         }),
       ]);
       await fetchStandardLectures();
