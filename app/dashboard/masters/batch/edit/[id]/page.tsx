@@ -84,6 +84,7 @@ interface StandardLecture {
   lecture_status?: string | null;
   department?: string | null;
   covered_subtopics?: string | null;
+  taken_id?: number | null;
 }
 
 interface TemplateLecture {
@@ -332,25 +333,24 @@ function SubtopicsCell({
   if (!subtopics.length) return <span className="text-gray-300">&mdash;</span>;
 
   return (
-    <details className="relative">
-      <summary className="list-none cursor-pointer inline-block px-1.5 py-0.5 border border-gray-200 rounded text-[11px] bg-white hover:bg-gray-50 whitespace-nowrap">
-        {covered.size}/{subtopics.length} covered
-      </summary>
-      <div className="absolute z-20 mt-1 w-56 bg-white border border-gray-200 rounded shadow-lg p-2 space-y-1">
-        {subtopics.map((s, idx) => (
-          <label key={idx} className="flex items-start gap-1.5 text-[11px] text-gray-700 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={covered.has(idx)}
-              disabled={disabled}
-              onChange={() => onToggleItem(idx)}
-              className="mt-0.5"
-            />
+    <div className="min-w-[180px] space-y-0.5">
+      <div className="text-[9px] font-semibold text-gray-400 mb-0.5">{covered.size}/{subtopics.length} covered</div>
+      {subtopics.map((s, idx) => (
+        <label key={idx} className="flex items-start gap-1.5 text-[11px] text-gray-700 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={covered.has(idx)}
+            disabled={disabled}
+            onChange={() => onToggleItem(idx)}
+            className="mt-0.5 shrink-0"
+          />
+          <span className="flex gap-1">
+            <span className="text-gray-300">&bull;</span>
             <span>{s}</span>
-          </label>
-        ))}
-      </div>
-    </details>
+          </span>
+        </label>
+      ))}
+    </div>
   );
 }
 
@@ -368,6 +368,7 @@ function SortableLectureRow({
   onSave,
   onDelete,
   onMarkTaken,
+  onEditTaken,
   onToggleSubtopic,
   onMoveUp,
   onMoveDown,
@@ -384,6 +385,7 @@ function SortableLectureRow({
   onSave: (row: StandardLecture) => void;
   onDelete: (id: number) => void;
   onMarkTaken: (row: StandardLecture) => void;
+  onEditTaken: (takenId: number) => void;
   onToggleSubtopic: (row: StandardLecture, idx: number) => void;
   onMoveUp: (row: StandardLecture) => void;
   onMoveDown: (row: StandardLecture) => void;
@@ -427,6 +429,11 @@ function SortableLectureRow({
           className="w-full min-w-[130px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
           placeholder="Module/Topic"
         />
+        {row.taken_id != null && (
+          <span className="inline-block mt-0.5 text-[9px] font-semibold px-1 py-0.5 rounded bg-emerald-50 text-emerald-600">
+            Converted — frozen
+          </span>
+        )}
       </td>
       <td className="px-2 py-1.5">
         <SubtopicsCell row={row} disabled={disabled} onToggleItem={(idx) => onToggleSubtopic(row, idx)} />
@@ -517,7 +524,7 @@ function SortableLectureRow({
           disabled={disabled}
           onChange={(e) => onChange(row.id, { assignment: e.target.value })}
           className="w-full min-w-[110px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-          placeholder="Assignment"
+          placeholder="Assignment Given"
         />
       </td>
       <td className="px-2 py-1.5 whitespace-nowrap">
@@ -536,7 +543,7 @@ function SortableLectureRow({
           disabled={disabled}
           onChange={(e) => onChange(row.id, { documents: e.target.value })}
           className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-          placeholder="Docs"
+          placeholder="Documents"
         />
       </td>
       <td className="px-2 py-1.5">
@@ -546,7 +553,7 @@ function SortableLectureRow({
           disabled={disabled}
           onChange={(e) => onChange(row.id, { class_room: e.target.value })}
           className="w-20 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
-          placeholder="Room"
+          placeholder="Classroom"
         />
       </td>
       <td className="px-2 py-1.5">
@@ -580,30 +587,44 @@ function SortableLectureRow({
       </td>
       <td className="px-2 py-1.5 text-center">
         <div className="flex items-center justify-center gap-0.5">
-          {!row.date && (
+          {row.taken_id != null ? (
             <button
-              onClick={() => onMarkTaken(row)}
-              disabled={disabled || saving}
-              className="p-1 text-blue-700 hover:bg-blue-50 rounded disabled:opacity-50"
-              title="Mark Lecture Taken (sets date to today)"
+              onClick={() => onEditTaken(row.taken_id as number)}
+              className="p-1 text-indigo-700 hover:bg-indigo-50 rounded"
+              title="Edit in Lecture Taken"
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
             </button>
+          ) : (
+            <>
+              {!row.date && (
+                <button
+                  onClick={() => onMarkTaken(row)}
+                  disabled={disabled || saving}
+                  className="p-1 text-blue-700 hover:bg-blue-50 rounded disabled:opacity-50"
+                  title="Mark Lecture Taken"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
+              )}
+              <button
+                onClick={() => onSave(row)}
+                disabled={disabled || saving}
+                className="p-1 text-green-700 hover:bg-green-50 rounded disabled:opacity-50"
+                title={disabled ? 'Locked' : 'Save'}
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 21V13H7v8" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v4h8" />
+                </svg>
+              </button>
+            </>
           )}
-          <button
-            onClick={() => onSave(row)}
-            disabled={disabled || saving}
-            className="p-1 text-green-700 hover:bg-green-50 rounded disabled:opacity-50"
-            title={disabled ? 'Locked' : 'Save'}
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 21V13H7v8" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v4h8" />
-            </svg>
-          </button>
           <button
             onClick={() => onDelete(row.id)}
             className="p-1 text-red-600 hover:bg-red-50 rounded"
@@ -813,12 +834,14 @@ export default function EditBatchPage() {
     if (formData.Course_Id) qp.set('courseId', formData.Course_Id);
     qp.set('batchId', batchId);
     qp.set('lectureId', String(row.id));
-    qp.set('date', today);
+    qp.set('date', formatDateForInput(row.date) || today);
     qp.set('topic', row.subject_topic || row.subject || '');
     if (row.faculty_id != null) qp.set('facultyId', String(row.faculty_id));
     if (row.class_room) qp.set('classRoom', row.class_room);
     if (row.starttime) qp.set('start', row.starttime);
     if (row.endtime) qp.set('end', row.endtime);
+    if (row.assignment) qp.set('assignGiven', row.assignment);
+    if (row.documents) qp.set('documents', row.documents);
     router.push(`/dashboard/daily-activities/lecture-taken/add?${qp.toString()}`);
   };
 
@@ -2782,16 +2805,16 @@ export default function EditBatchPage() {
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Actual Seq</th>
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Module / Topic</th>
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Sub Topics</th>
-                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Faculty</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Trainer</th>
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Date</th>
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Day</th>
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Session</th>
-                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Start</th>
-                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">End</th>
-                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Assignment</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Lecture Start</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Lecture End</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Assignment Given</th>
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Submission Dt</th>
-                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Docs</th>
-                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Room</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Documents</th>
+                    <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Classroom</th>
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">UT</th>
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">UT Date</th>
                     <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Publish</th>
@@ -2819,7 +2842,7 @@ export default function EditBatchPage() {
                       <SortableLectureRow
                         key={l.id}
                         row={l}
-                        disabled={stdPlanLocked}
+                        disabled={stdPlanLocked || l.taken_id != null}
                         facultyList={facultyList}
                         dayOptions={dayOptions}
                         colorClass={getRowColorClass(l)}
@@ -2830,6 +2853,7 @@ export default function EditBatchPage() {
                         onSave={handleSaveSLectureInline}
                         onDelete={handleDeleteSLecture}
                         onMarkTaken={handleMarkLectureTaken}
+                        onEditTaken={(takenId) => router.push(`/dashboard/daily-activities/lecture-taken/add?id=${takenId}`)}
                         onToggleSubtopic={toggleSubtopicCovered}
                         onMoveUp={(row) => handleMoveLecture(row, 'up')}
                         onMoveDown={(row) => handleMoveLecture(row, 'down')}

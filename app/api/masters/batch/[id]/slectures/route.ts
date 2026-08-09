@@ -110,10 +110,13 @@ export async function GET(
         u.utdate AS unit_test_date,
         s.publish,
         s.lecturecontent,
-        s.covered_subtopics
+        s.covered_subtopics,
+        lt.Take_Id AS taken_id
       FROM batch_slecture_master s
       LEFT JOIN faculty_master f ON f.Faculty_Id = s.faculty_id
       LEFT JOIN awt_unittesttaken u ON u.id = CAST(s.unit_test AS UNSIGNED)
+      LEFT JOIN lecture_taken_master lt
+        ON lt.Lecture_Id = s.id AND lt.Batch_Id = s.batch_id AND (lt.IsDelete = 0 OR lt.IsDelete IS NULL)
       WHERE s.batch_id = ? AND (s.deleted IS NULL OR s.deleted = '0')
     `, [batchId]);
 

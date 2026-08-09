@@ -101,6 +101,8 @@ export default function AddLectureTakenPage() {
       ClassRoom: searchParams.get('classRoom') || prev.ClassRoom,
       Lecture_Start: searchParams.get('start') || prev.Lecture_Start,
       Lecture_End: searchParams.get('end') || prev.Lecture_End,
+      Assign_Given: searchParams.get('assignGiven') || prev.Assign_Given,
+      Documents: searchParams.get('documents') || prev.Documents,
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editId]);
