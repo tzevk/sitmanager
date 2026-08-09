@@ -12,6 +12,8 @@ interface Faculty {
 interface Lecture {
   id: number;
   lecture_no: number | null;
+  day_no: number | null;
+  session: string | null;
   department: string | null;
   module: string | null;
   sub_topics: string | null;
@@ -370,6 +372,9 @@ export default function StandardLecturePlanEditPage() {
                         <button onClick={() => setSelectedId(l.id)} className="flex-1 min-w-0 text-left">
                           <div className="flex items-center justify-between gap-1">
                             <span className="text-[10px] font-black text-[#2E3093]">Lec {l.lecture_no ?? '—'}</span>
+                            {l.session && (
+                              <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-slate-100 text-slate-500">{l.session}</span>
+                            )}
                           </div>
                           <div className="text-[11px] font-semibold text-slate-800 truncate">{l.module || 'Untitled'}</div>
                           <div className="text-[9px] text-slate-400 truncate">{l.department || '—'}</div>
@@ -411,6 +416,20 @@ export default function StandardLecturePlanEditPage() {
                             <label className={labelCls}>Lecture No.</label>
                             <input type="number" className={inputCls} value={selectedLecture.lecture_no ?? ''} disabled={!canUpdate}
                               onChange={e => updateLectureInline(selectedLecture.id, { lecture_no: e.target.value ? Number(e.target.value) : null })} />
+                          </div>
+                          <div>
+                            <label className={labelCls}>Day No.</label>
+                            <input type="number" className={inputCls} value={selectedLecture.day_no ?? ''} disabled={!canUpdate}
+                              onChange={e => updateLectureInline(selectedLecture.id, { day_no: e.target.value ? Number(e.target.value) : null })} />
+                          </div>
+                          <div>
+                            <label className={labelCls}>Session</label>
+                            <select className={inputCls} value={selectedLecture.session ?? ''} disabled={!canUpdate}
+                              onChange={e => updateLectureInline(selectedLecture.id, { session: e.target.value || null })}>
+                              <option value="">— Select —</option>
+                              <option value="First Half">First Half</option>
+                              <option value="Second Half">Second Half</option>
+                            </select>
                           </div>
                           <div>
                             <label className={labelCls}>Department</label>

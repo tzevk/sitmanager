@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     }
 
     const [rows] = await pool.query<any[]>(
-      `SELECT id, lecture_no, department, module, sub_topics, faculty, project_assignment
+      `SELECT id, lecture_no, day_no, session, department, module, sub_topics, faculty, project_assignment
        FROM standard_lecture_plan_template
        WHERE course_name = ?
        ORDER BY lecture_no ASC`,
@@ -55,11 +55,13 @@ export async function POST(req: NextRequest) {
 
     const [result] = await pool.query<any>(
       `INSERT INTO standard_lecture_plan_template
-       (course_name, lecture_no, department, module, sub_topics, faculty, project_assignment, created_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+       (course_name, lecture_no, day_no, session, department, module, sub_topics, faculty, project_assignment, created_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         courseName,
         body.lecture_no ? Number(body.lecture_no) : null,
+        body.day_no ? Number(body.day_no) : null,
+        body.session?.trim() || null,
         body.department?.trim() || null,
         body.module?.trim() || null,
         body.sub_topics?.trim() || null,
@@ -91,6 +93,8 @@ export async function PUT(req: NextRequest) {
     await pool.query(
       `UPDATE standard_lecture_plan_template SET
          lecture_no = ?,
+         day_no = ?,
+         session = ?,
          department = ?,
          module = ?,
          sub_topics = ?,
@@ -99,6 +103,8 @@ export async function PUT(req: NextRequest) {
        WHERE id = ?`,
       [
         data.lecture_no ? Number(data.lecture_no) : null,
+        data.day_no ? Number(data.day_no) : null,
+        data.session?.trim() || null,
         data.department?.trim() || null,
         data.module?.trim() || null,
         data.sub_topics?.trim() || null,

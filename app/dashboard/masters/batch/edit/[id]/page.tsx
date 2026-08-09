@@ -89,6 +89,8 @@ interface StandardLecture {
 interface TemplateLecture {
   id: number;
   lecture_no: number | null;
+  day_no: number | null;
+  session: string | null;
   department: string | null;
   module: string | null;
   sub_topics: string | null;
@@ -184,6 +186,28 @@ const labelCls = 'block text-[10px] font-semibold text-slate-600 mb-0.5';
 const inputCls = 'w-full bg-white border border-slate-300 rounded-md px-2.5 py-1.5 text-xs text-slate-900 shadow-sm hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-500';
 const selectCls = 'w-full bg-white border border-slate-300 rounded-md px-2.5 py-1.5 text-xs text-slate-900 shadow-sm hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-100 disabled:text-slate-500';
 
+/* Split a batch's day (Start_Time-End_Time) at the midpoint, for First/Second Half session defaults. */
+const getSessionTimes = (session: string | null | undefined, dayStart: string | null, dayEnd: string | null): { starttime: string | null; endtime: string | null } => {
+  if (!dayStart || !dayEnd || (session !== 'First Half' && session !== 'Second Half')) {
+    return { starttime: dayStart, endtime: dayEnd };
+  }
+  const toMinutes = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + (m || 0);
+  };
+  const toTimeStr = (mins: number) => {
+    const h = Math.floor(mins / 60).toString().padStart(2, '0');
+    const m = Math.round(mins % 60).toString().padStart(2, '0');
+    return `${h}:${m}`;
+  };
+  const startMins = toMinutes(dayStart);
+  const endMins = toMinutes(dayEnd);
+  const midMins = startMins + (endMins - startMins) / 2;
+  return session === 'First Half'
+    ? { starttime: dayStart, endtime: toTimeStr(midMins) }
+    : { starttime: toTimeStr(midMins), endtime: dayEnd };
+};
+
 /* Format date for input */
 const formatDateForInput = (d: string | null) => {
   if (!d) return '';
@@ -262,7 +286,12 @@ function TemplateLectureCard({
   return (
     <div className="px-2.5 py-2 border border-slate-200 rounded-md bg-white select-none">
       <div className="flex items-center justify-between gap-1">
-        <span className="text-[10px] font-bold text-[#2E3093]">Lec {tmpl.lecture_no ?? '—'}</span>
+        <span className="flex items-center gap-1">
+          <span className="text-[10px] font-bold text-[#2E3093]">Lec {tmpl.lecture_no ?? '—'}</span>
+          {tmpl.session && (
+            <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-slate-100 text-slate-500">{tmpl.session}</span>
+          )}
+        </span>
         {added ? (
           <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
             Added
@@ -2502,6 +2531,7 @@ export default function EditBatchPage() {
     if (stdPlanLocked) return;
     setAddingTemplateId(tmpl.id);
     try {
+      const { starttime, endtime } = getSessionTimes(tmpl.session, batchTimings.startTime, batchTimings.endTime);
       await fetch(`/api/masters/batch/${batchId}/slectures`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2513,8 +2543,9 @@ export default function EditBatchPage() {
           department: tmpl.department,
           faculty_name: tmpl.faculty,
           assignment: tmpl.project_assignment,
-          starttime: batchTimings.startTime,
-          endtime: batchTimings.endTime,
+          session: tmpl.session,
+          starttime,
+          endtime,
           publish: 'No',
         }),
       });
