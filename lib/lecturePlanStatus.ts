@@ -1,6 +1,11 @@
 /**
  * Derives Actual Lecture Sequence and lecture status (normal/cancelled/replacement/pending)
- * for a batch's lecture rows, purely from whether each row's own `date` is filled in.
+ * for a batch's lecture rows.
+ *
+ * Actual Sequence numbers every row (not just conducted ones) in build order: conducted rows
+ * first (ordered by date/time), then not-yet-conducted rows ordered by standard_seq — i.e. the
+ * order the plan was actually assembled/arranged in, so it's populated as soon as topics are
+ * dragged in and reordered, not only once a date gets filled in.
  *
  * "Conducted" = date is non-blank. Cancelled = skipped over by a later-standard-sequence
  * row that already has a date. Replacement = a later-standard-sequence row that got
@@ -49,8 +54,12 @@ export function computeLectureStatuses(rows: LectureStatusInput[]): LectureStatu
       return a.id - b.id;
     });
 
+  const pending = withSeq
+    .filter((r) => r.date === null)
+    .sort((a, b) => (a.seq !== b.seq ? a.seq - b.seq : a.id - b.id));
+
   const actualSeqById = new Map<number, number>();
-  conducted.forEach((r, i) => actualSeqById.set(r.id, i + 1));
+  [...conducted, ...pending].forEach((r, i) => actualSeqById.set(r.id, i + 1));
 
   return withSeq.map((r) => {
     if (r.date !== null) {
@@ -67,7 +76,7 @@ export function computeLectureStatuses(rows: LectureStatusInput[]): LectureStatu
     const isCancelled = conducted.some((r2) => r2.seq > r.seq);
     return {
       id: r.id,
-      actual_seq: null,
+      actual_seq: actualSeqById.get(r.id) ?? null,
       lecture_status: isCancelled ? 'cancelled' : 'pending',
     };
   });
