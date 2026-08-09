@@ -367,6 +367,7 @@ function SortableLectureRow({
   onChange,
   onSave,
   onDelete,
+  onMarkTaken,
   onToggleSubtopic,
   onMoveUp,
   onMoveDown,
@@ -382,6 +383,7 @@ function SortableLectureRow({
   onChange: (id: number, patch: Partial<StandardLecture>) => void;
   onSave: (row: StandardLecture) => void;
   onDelete: (id: number) => void;
+  onMarkTaken: (row: StandardLecture) => void;
   onToggleSubtopic: (row: StandardLecture, idx: number) => void;
   onMoveUp: (row: StandardLecture) => void;
   onMoveDown: (row: StandardLecture) => void;
@@ -578,6 +580,18 @@ function SortableLectureRow({
       </td>
       <td className="px-2 py-1.5 text-center">
         <div className="flex items-center justify-center gap-0.5">
+          {!row.date && (
+            <button
+              onClick={() => onMarkTaken(row)}
+              disabled={disabled || saving}
+              className="p-1 text-blue-700 hover:bg-blue-50 rounded disabled:opacity-50"
+              title="Mark Lecture Taken (sets date to today)"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={() => onSave(row)}
             disabled={disabled || saving}
@@ -785,6 +799,21 @@ export default function EditBatchPage() {
       await saveSLectureRow(row);
       // Refresh to reflect any server-side normalization
       fetchStandardLectures();
+    } catch { /* ignore */ }
+    setSavingSLectureRowId(null);
+  };
+
+  /* Mark a still-pending row as conducted today — fills in `date` and saves immediately,
+     which flips its status from pending to normal/conducted (see lib/lecturePlanStatus.ts). */
+  const handleMarkLectureTaken = async (row: StandardLecture) => {
+    if (stdPlanLocked) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const updated = { ...row, date: today };
+    updateStandardLectureInline(row.id, { date: today });
+    setSavingSLectureRowId(row.id);
+    try {
+      await saveSLectureRow(updated);
+      await fetchStandardLectures();
     } catch { /* ignore */ }
     setSavingSLectureRowId(null);
   };
@@ -2796,6 +2825,7 @@ export default function EditBatchPage() {
                         onChange={updateStandardLectureInline}
                         onSave={handleSaveSLectureInline}
                         onDelete={handleDeleteSLecture}
+                        onMarkTaken={handleMarkLectureTaken}
                         onToggleSubtopic={toggleSubtopicCovered}
                         onMoveUp={(row) => handleMoveLecture(row, 'up')}
                         onMoveDown={(row) => handleMoveLecture(row, 'down')}
