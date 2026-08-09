@@ -11,7 +11,39 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 interface Course { Course_Id: number; Course_Name: string; }
 interface Batch { Batch_Id: number; Batch_code: string; Category: string | null; Timings: string | null; }
 interface Faculty { Faculty_Id: number; Faculty_Name: string; }
-interface BatchLecture { id: number; lecture_no: number; subject_topic: string | null; subject: string | null; faculty_name: string | null; starttime: string | null; endtime: string | null; duration: string | null; class_room: string | null; date: string | null; }
+interface BatchLecture {
+  id: number;
+  lecture_no: number;
+  standard_seq: number | null;
+  actual_seq: number | null;
+  subject: string | null;
+  subject_topic: string | null;
+  covered_subtopics: string | null;
+  date: string | null;
+  lectureday: string | null;
+  session: string | null;
+  starttime: string | null;
+  endtime: string | null;
+  faculty_id: number | null;
+  faculty_name: string | null;
+  class_room: string | null;
+  documents: string | null;
+  assignment: string | null;
+  assignment_date: string | null;
+  unit_test: string | null;
+  unit_test_date: string | null;
+  publish: string | null;
+}
+
+/* Sub Topics is stored as a newline-separated list — same convention as the batch Lecture Plan. */
+const getSubtopicList = (text: string | null): string[] => {
+  if (!text) return [];
+  return text.split('\n').filter((s) => s.trim() !== '');
+};
+const getCoveredSet = (text: string | null | undefined): Set<number> => {
+  if (!text) return new Set();
+  return new Set(String(text).split(',').map((n) => parseInt(n, 10)).filter((n) => !Number.isNaN(n)));
+};
 
 interface FormData {
   Course_Id: string;
@@ -60,6 +92,9 @@ export default function AddLectureTakenPage() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [batchLectures, setBatchLectures] = useState<BatchLecture[]>([]);
+  /* Full Lecture Plan row for the selected/pre-filled lecture — drives the read-only
+     Lecture Plan Reference panel (Std Seq, Actual Seq, Day, Session, Sub Topics, etc.). */
+  const [planLecture, setPlanLecture] = useState<BatchLecture | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(false);
   /* Fields whose values were carried over from the batch's Lecture Plan (via "Mark Lecture
@@ -202,21 +237,43 @@ export default function AddLectureTakenPage() {
     })();
   }, [form.Batch_Id]);
 
-  /* ── Auto-fill from selected batch lecture ── */
+  /* ── Resolve the Lecture Plan Reference panel once batchLectures loads for a URL-prefilled Lecture_Id ── */
+  useEffect(() => {
+    if (!form.Lecture_Id || !batchLectures.length) return;
+    const lec = batchLectures.find(l => String(l.id) === form.Lecture_Id);
+    if (lec) setPlanLecture(lec);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchLectures, form.Lecture_Id]);
+
+  /* ── Auto-fill from selected batch lecture (also drives the read-only Lecture Plan Reference panel) ── */
   const handleLectureSelect = (lectureId: string) => {
     setForm(prev => ({ ...prev, Lecture_Id: lectureId }));
     const lec = batchLectures.find(l => String(l.id) === lectureId);
+    setPlanLecture(lec ?? null);
     if (lec) {
+      const filled = new Set<keyof FormData>();
       setForm(prev => ({
         ...prev,
         Lecture_Id: lectureId,
-        Lecture_Name: lec.subject_topic || lec.subject || '',
-        Topic: lec.subject_topic || lec.subject || '',
-        Duration: lec.duration || '',
-        ClassRoom: lec.class_room || '',
-        Lecture_Start: lec.starttime || '',
-        Lecture_End: lec.endtime || '',
+        Lecture_Name: lec.subject || lec.subject_topic || '',
+        Topic: lec.subject || lec.subject_topic || '',
+        ClassRoom: lec.class_room || prev.ClassRoom,
+        Lecture_Start: lec.starttime || prev.Lecture_Start,
+        Lecture_End: lec.endtime || prev.Lecture_End,
+        Faculty_Id: lec.faculty_id != null ? String(lec.faculty_id) : prev.Faculty_Id,
+        Assign_Given: lec.assignment || prev.Assign_Given,
+        Documents: lec.documents || prev.Documents,
       }));
+      filled.add('Lecture_Name'); filled.add('Topic');
+      if (lec.class_room) filled.add('ClassRoom');
+      if (lec.starttime) filled.add('Lecture_Start');
+      if (lec.endtime) filled.add('Lecture_End');
+      if (lec.faculty_id != null) filled.add('Faculty_Id');
+      if (lec.assignment) filled.add('Assign_Given');
+      if (lec.documents) filled.add('Documents');
+      setFromPlanFields(filled);
+    } else {
+      setFromPlanFields(new Set());
     }
   };
 
@@ -370,6 +427,60 @@ export default function AddLectureTakenPage() {
               </div>
             </div>
           </div>
+
+          {/* ── Lecture Plan Reference Card — read-only, mirrors every column of the batch's frozen Lecture Plan row ── */}
+          {planLecture && (
+            <div className="bg-slate-50 rounded-xl border border-slate-200 shadow-sm p-5">
+              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                Lecture Plan Reference
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 normal-case tracking-normal">Read-only</span>
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-xs">
+                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Std Seq</div><div className="text-slate-700 font-medium">{planLecture.standard_seq ?? '—'}</div></div>
+                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Actual Seq</div><div className="text-slate-700 font-medium">{planLecture.actual_seq ?? '—'}</div></div>
+                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Date</div><div className="text-slate-700 font-medium">{planLecture.date || '—'}</div></div>
+                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Day</div><div className="text-slate-700 font-medium">{planLecture.lectureday || '—'}</div></div>
+                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Session</div><div className="text-slate-700 font-medium">{planLecture.session || '—'}</div></div>
+                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Trainer</div><div className="text-slate-700 font-medium">{planLecture.faculty_name || '—'}</div></div>
+                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Start Time</div><div className="text-slate-700 font-medium">{planLecture.starttime || '—'}</div></div>
+                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">End Time</div><div className="text-slate-700 font-medium">{planLecture.endtime || '—'}</div></div>
+                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Classroom</div><div className="text-slate-700 font-medium">{planLecture.class_room || '—'}</div></div>
+                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Documents</div><div className="text-slate-700 font-medium">{planLecture.documents || '—'}</div></div>
+                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Assignment Given</div><div className="text-slate-700 font-medium">{planLecture.assignment || '—'}</div></div>
+                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Submission Dt</div><div className="text-slate-700 font-medium">{planLecture.assignment_date || '—'}</div></div>
+                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">UT</div><div className="text-slate-700 font-medium">{planLecture.unit_test || '—'}</div></div>
+                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">UT Date</div><div className="text-slate-700 font-medium">{planLecture.unit_test_date || '—'}</div></div>
+                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Publish</div><div className="text-slate-700 font-medium">{planLecture.publish || '—'}</div></div>
+              </div>
+
+              <div className="mt-4">
+                <div className="text-[9px] font-semibold text-slate-400 uppercase mb-1">Topic</div>
+                <div className="text-xs text-slate-700 font-medium bg-white border border-slate-200 rounded-lg px-3 py-2">
+                  {planLecture.subject || '—'}
+                </div>
+              </div>
+
+              {getSubtopicList(planLecture.subject_topic).length > 0 && (
+                <div className="mt-3">
+                  <div className="text-[9px] font-semibold text-slate-400 uppercase mb-1">Sub Topics</div>
+                  <div className="bg-white border border-slate-200 rounded-lg px-3 py-2 space-y-1">
+                    {getSubtopicList(planLecture.subject_topic).map((s, idx) => {
+                      const covered = getCoveredSet(planLecture.covered_subtopics).has(idx);
+                      return (
+                        <div key={idx} className="flex items-start gap-1.5 text-xs text-slate-700">
+                          <input type="checkbox" checked={covered} disabled className="mt-0.5 shrink-0" />
+                          <span className="flex gap-1">
+                            <span className="text-slate-300">&bull;</span>
+                            <span>{s}</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Lecture Details Card — ordered to match the Lecture Plan's columns ── */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">

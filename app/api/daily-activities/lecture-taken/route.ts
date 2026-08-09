@@ -86,11 +86,23 @@ export async function GET(req: NextRequest) {
     if (fetchOptions === 'lectures') {
       const batchId = searchParams.get('batchId');
       if (!batchId) return NextResponse.json({ lectures: [] });
+      // Standard Lecture Plan (batch_slecture_master) is the live source the batch's own
+      // Lecture Plan tab is built from — pull every field so the Lecture Taken form can show
+      // the full plan context (Std Seq, Actual Seq, Day, Session, Sub Topics, etc.), not just
+      // the handful of fields it directly edits.
       const [lectures] = await pool.query(
-        `SELECT id, lecture_no, subject_topic, subject, faculty_name, starttime, endtime, duration, class_room, date
-         FROM batch_lecture_master
-         WHERE batch_id = ? AND (deleted = '0' OR deleted IS NULL)
-         ORDER BY lecture_no`,
+        `SELECT
+           s.id, s.lecture_no, s.standard_seq, s.actual_seq,
+           s.subject, s.subject_topic, s.covered_subtopics,
+           s.date, s.lectureday, s.session, s.starttime, s.endtime,
+           s.faculty_id, COALESCE(f.Faculty_Name, s.faculty_name) AS faculty_name,
+           s.class_room, s.documents, s.assignment, s.assignment_date,
+           s.unit_test, u.utdate AS unit_test_date, s.publish
+         FROM batch_slecture_master s
+         LEFT JOIN faculty_master f ON f.Faculty_Id = s.faculty_id
+         LEFT JOIN awt_unittesttaken u ON u.id = CAST(s.unit_test AS UNSIGNED)
+         WHERE s.batch_id = ? AND (s.deleted IS NULL OR s.deleted = '0')
+         ORDER BY s.lecture_no`,
         [batchId]
       );
       return NextResponse.json({ lectures });
