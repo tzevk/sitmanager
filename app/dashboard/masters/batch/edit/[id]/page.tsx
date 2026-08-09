@@ -803,19 +803,23 @@ export default function EditBatchPage() {
     setSavingSLectureRowId(null);
   };
 
-  /* Mark a still-pending row as conducted today — fills in `date` and saves immediately,
-     which flips its status from pending to normal/conducted (see lib/lecturePlanStatus.ts). */
-  const handleMarkLectureTaken = async (row: StandardLecture) => {
+  /* Mark a still-pending row as conducted — opens the Lecture Taken form pre-filled with
+     this row's details (topic, faculty, timing) and today's date, for staff to confirm/adjust
+     and save as a proper lecture-taken record. */
+  const handleMarkLectureTaken = (row: StandardLecture) => {
     if (stdPlanLocked) return;
     const today = new Date().toISOString().slice(0, 10);
-    const updated = { ...row, date: today };
-    updateStandardLectureInline(row.id, { date: today });
-    setSavingSLectureRowId(row.id);
-    try {
-      await saveSLectureRow(updated);
-      await fetchStandardLectures();
-    } catch { /* ignore */ }
-    setSavingSLectureRowId(null);
+    const qp = new URLSearchParams();
+    if (formData.Course_Id) qp.set('courseId', formData.Course_Id);
+    qp.set('batchId', batchId);
+    qp.set('lectureId', String(row.id));
+    qp.set('date', today);
+    qp.set('topic', row.subject_topic || row.subject || '');
+    if (row.faculty_id != null) qp.set('facultyId', String(row.faculty_id));
+    if (row.class_room) qp.set('classRoom', row.class_room);
+    if (row.starttime) qp.set('start', row.starttime);
+    if (row.endtime) qp.set('end', row.endtime);
+    router.push(`/dashboard/daily-activities/lecture-taken/add?${qp.toString()}`);
   };
 
   const handleSaveAllSLectures = async () => {

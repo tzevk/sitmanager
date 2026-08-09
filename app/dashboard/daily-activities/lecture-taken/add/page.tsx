@@ -81,6 +81,30 @@ export default function AddLectureTakenPage() {
     })();
   }, []);
 
+  /* ── Prefill from a batch's Lecture Plan (e.g. "Mark Lecture Taken" action) ── */
+  useEffect(() => {
+    if (editId) return;
+    const courseId = searchParams.get('courseId');
+    const batchId = searchParams.get('batchId');
+    const lectureId = searchParams.get('lectureId');
+    const date = searchParams.get('date');
+    if (!courseId && !batchId && !lectureId && !date) return;
+    setForm(prev => ({
+      ...prev,
+      Course_Id: courseId || prev.Course_Id,
+      Batch_Id: batchId || prev.Batch_Id,
+      Lecture_Id: lectureId || prev.Lecture_Id,
+      Take_Dt: date || prev.Take_Dt,
+      Lecture_Name: searchParams.get('topic') || prev.Lecture_Name,
+      Topic: searchParams.get('topic') || prev.Topic,
+      Faculty_Id: searchParams.get('facultyId') || prev.Faculty_Id,
+      ClassRoom: searchParams.get('classRoom') || prev.ClassRoom,
+      Lecture_Start: searchParams.get('start') || prev.Lecture_Start,
+      Lecture_End: searchParams.get('end') || prev.Lecture_End,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId]);
+
   /* ── Load edit data ── */
   useEffect(() => {
     if (!editId) return;
