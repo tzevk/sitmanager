@@ -449,7 +449,7 @@ function SortableLectureRow({
         >
           <option value="">Select Trainer</option>
           {row.faculty_id == null && (row.faculty_name ?? '').toString().trim() && (
-            <option value="__legacy__">Legacy: {(row.faculty_name ?? '').toString()}</option>
+            <option value="__legacy__">{(row.faculty_name ?? '').toString()}</option>
           )}
           {facultyList.map((f) => (
             <option key={f.Faculty_Id} value={String(f.Faculty_Id)}>{f.Faculty_Name}</option>
