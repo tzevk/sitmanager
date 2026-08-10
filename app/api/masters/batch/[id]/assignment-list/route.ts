@@ -85,7 +85,17 @@ export async function GET(
       [batchId]
     );
 
-    return NextResponse.json({ assignments: withActualNo(rows as any[]), courseName, hasStandardAssignments });
+    // Sort by Actual No. (this batch's own date-driven order) rather than the fixed Standard No.
+    // Undated assignments have no actual number yet, so they sort after every dated one.
+    const withActual = withActualNo(rows as any[]);
+    withActual.sort((a, b) => {
+      if (a.actual_no == null && b.actual_no == null) return a.id - b.id;
+      if (a.actual_no == null) return 1;
+      if (b.actual_no == null) return -1;
+      return a.actual_no - b.actual_no;
+    });
+
+    return NextResponse.json({ assignments: withActual, courseName, hasStandardAssignments });
   } catch (error) {
     console.error('Error fetching batch assignment list:', error);
     return NextResponse.json({ error: 'Failed to fetch assignment list' }, { status: 500 });

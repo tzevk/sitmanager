@@ -3862,8 +3862,8 @@ export default function EditBatchPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-          {/* Left: Standard Assignment List (reference) */}
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-2">
+          {/* Left: Standard Assignment List (reference) — click a card to add it */}
           <div className="border border-slate-200 rounded-lg overflow-hidden">
             <div className="px-2.5 py-1.5 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
               Standard Assignment List
@@ -3876,21 +3876,24 @@ export default function EditBatchPage() {
               ) : (
                 templateAssignments.map((t) => {
                   const added = t.assignment_no != null && addedAssignmentNos.has(t.assignment_no);
+                  const adding = addingTemplateAssignmentId === t.id;
                   return (
-                    <div key={t.id} className="px-2.5 py-2 border border-slate-200 rounded-md bg-white select-none">
+                    <button
+                      type="button"
+                      key={t.id}
+                      onClick={() => !added && !adding && handleAddAssignmentFromTemplate(t)}
+                      disabled={added || adding}
+                      className={`w-full text-left px-2.5 py-2 border rounded-md select-none transition-colors ${
+                        added ? 'border-emerald-200 bg-emerald-50/40 cursor-default' : 'border-slate-200 bg-white hover:border-[#2E3093] hover:bg-[#2E3093]/5 cursor-pointer'
+                      } disabled:opacity-70`}
+                    >
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-[10px] font-bold text-[#2E3093]">#{t.assignment_no ?? '—'}</span>
-                        {added ? (
+                        {added && (
                           <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Added</span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleAddAssignmentFromTemplate(t)}
-                            disabled={addingTemplateAssignmentId === t.id}
-                            className="text-[9px] font-semibold text-white bg-[#2E3093] px-1.5 py-0.5 rounded hover:opacity-90 disabled:opacity-50"
-                          >
-                            {addingTemplateAssignmentId === t.id ? 'Adding...' : 'Add'}
-                          </button>
+                        )}
+                        {adding && (
+                          <span className="text-[9px] font-semibold text-slate-400">Adding...</span>
                         )}
                       </div>
                       <div className="text-xs font-semibold text-slate-800 mt-0.5">{t.assignment_name || 'Untitled'}</div>
@@ -3901,7 +3904,7 @@ export default function EditBatchPage() {
                       {t.deliverable_produced && (
                         <div className="text-[10px] text-slate-500 mt-1 italic">Deliverable: {t.deliverable_produced}</div>
                       )}
-                    </div>
+                    </button>
                   );
                 })
               )}
