@@ -135,6 +135,8 @@ export default function AddLectureTakenPage() {
   const [batchLectures, setBatchLectures] = useState<BatchLecture[]>([]);
   const [assignmentOptions, setAssignmentOptions] = useState<StandardAssignmentOption[]>([]);
   const [assigningAssignment, setAssigningAssignment] = useState(false);
+  const [customAssignment, setCustomAssignment] = useState(false);
+  const [actualAssignmentNo, setActualAssignmentNo] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [error, setError] = useState('');
@@ -285,22 +287,55 @@ export default function AddLectureTakenPage() {
   const set = (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(prev => ({ ...prev, [field]: e.target.value }));
 
+  /* Re-reads the batch's Assignments tab to pick up the freshly-computed Actual Assignment No.
+     (rank by assignment_date among the batch's own assignments) for the linked row. */
+  const refreshActualAssignmentNo = async (assignmentId: string, batchId: string) => {
+    if (!assignmentId || !batchId) { setActualAssignmentNo(null); return; }
+    try {
+      const res = await fetch(`/api/masters/batch/${batchId}/assignment-list`);
+      const data = await res.json();
+      const row = (data.assignments || []).find((a: BatchAssignmentRow) => String(a.id) === assignmentId);
+      setActualAssignmentNo(row?.actual_no ?? null);
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => {
+    if (form.Assignment_Id && form.Batch_Id) refreshActualAssignmentNo(form.Assignment_Id, form.Batch_Id);
+    else setActualAssignmentNo(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.Assignment_Id, form.Batch_Id]);
+
   /* ── Assignment No. (dropdown, sourced from the course's Standard Assignment List) ──
-     Picking one fills Assignment Name/Description/Deliverables here, and auto-adds (or reuses)
-     the matching row in the batch's own Assignments tab — one-way sync, that tab never pushes
-     changes back into an already-saved Lecture Taken record. */
-  const handleAssignmentSelect = async (assignmentNo: string) => {
-    const opt = assignmentOptions.find(a => String(a.assignment_no) === assignmentNo);
+     Picking one fills Assignment Name/Description/Deliverables/Input Documents/Department/Trainer
+     here, and auto-adds (or reuses) the matching row in the batch's own Assignments tab — one-way
+     sync, that tab never pushes changes back into an already-saved Lecture Taken record.
+     "+ Custom Assignment" switches to free manual entry instead (not tied to the Standard list). */
+  const handleAssignmentSelect = async (value: string) => {
+    if (value === '__custom__') {
+      setCustomAssignment(true);
+      setForm(prev => ({
+        ...prev, Assignment_No: '', Assignment_Id: '', Assign_Given: '',
+        Assignment_Description: '', Deliverables: '',
+        Assignment_Input_Documents: '', Assignment_Department: '', Assignment_Trainer: '',
+      }));
+      setActualAssignmentNo(null);
+      return;
+    }
+    setCustomAssignment(false);
+    const opt = assignmentOptions.find(a => String(a.assignment_no) === value);
     if (!opt) {
       setForm(prev => ({ ...prev, Assignment_No: '', Assignment_Id: '' }));
       return;
     }
     setForm(prev => ({
       ...prev,
-      Assignment_No: assignmentNo,
+      Assignment_No: value,
       Assign_Given: opt.assignment_name || '',
       Assignment_Description: opt.description || '',
       Deliverables: opt.deliverable_produced || '',
+      Assignment_Input_Documents: opt.input_documents || '',
+      Assignment_Department: opt.department || '',
+      Assignment_Trainer: opt.trainer || '',
     }));
 
     if (!form.Batch_Id) return;
@@ -314,6 +349,10 @@ export default function AddLectureTakenPage() {
           assignment_name: opt.assignment_name,
           description: opt.description,
           deliverable_produced: opt.deliverable_produced,
+          input_documents: opt.input_documents,
+          trainer: opt.trainer,
+          department: opt.department,
+          assignment_date: form.Assignment_Date,
         }),
       });
       const data = await res.json();
@@ -322,6 +361,58 @@ export default function AddLectureTakenPage() {
       }
     } catch { /* ignore */ }
     setAssigningAssignment(false);
+  };
+
+  /* Custom assignment number entered manually — saved to the batch's Assignments tab on blur. */
+  const handleCustomAssignmentSync = async () => {
+    if (!form.Batch_Id || !form.Assignment_No) return;
+    setAssigningAssignment(true);
+    try {
+      const res = await fetch(`/api/masters/batch/${form.Batch_Id}/assignment-list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignment_no: form.Assignment_No,
+          assignment_name: form.Assign_Given,
+          description: form.Assignment_Description,
+          deliverable_produced: form.Deliverables,
+          input_documents: form.Assignment_Input_Documents,
+          trainer: form.Assignment_Trainer,
+          department: form.Assignment_Department,
+          assignment_date: form.Assignment_Date,
+        }),
+      });
+      const data = await res.json();
+      if (data?.insertId) {
+        setForm(prev => ({ ...prev, Assignment_Id: String(data.insertId) }));
+      }
+    } catch { /* ignore */ }
+    setAssigningAssignment(false);
+  };
+
+  /* Assignment Date drives the computed Actual Assignment No. — sync it back to the batch's
+     Assignments tab whenever it changes (only once this record is linked to a batch assignment). */
+  const handleAssignmentDateChange = async (date: string) => {
+    setForm(prev => ({ ...prev, Assignment_Date: date }));
+    if (!form.Assignment_Id || !form.Batch_Id) return;
+    try {
+      await fetch(`/api/masters/batch/${form.Batch_Id}/assignment-list`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: Number(form.Assignment_Id),
+          assignment_no: form.Assignment_No || null,
+          assignment_name: form.Assign_Given,
+          description: form.Assignment_Description,
+          deliverable_produced: form.Deliverables,
+          input_documents: form.Assignment_Input_Documents,
+          trainer: form.Assignment_Trainer,
+          department: form.Assignment_Department,
+          assignment_date: date,
+        }),
+      });
+      await refreshActualAssignmentNo(form.Assignment_Id, form.Batch_Id);
+    } catch { /* ignore */ }
   };
 
   /* ── Sub Topics — checkbox "done" list, synced back to the Lecture Plan row's covered_subtopics ── */
@@ -539,24 +630,6 @@ export default function AddLectureTakenPage() {
                 <input type="time" value={form.Lecture_End} onChange={set('Lecture_End')} className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className={labelCls}>Assignment No.{assigningAssignment && <span className="text-[10px] text-gray-400 ml-1">(adding to batch...)</span>}</label>
-                <select value={form.Assignment_No} onChange={(e) => handleAssignmentSelect(e.target.value)} disabled={!form.Batch_Id}
-                  className={`${inputCls} disabled:opacity-50`}>
-                  <option value="">— Select Assignment —</option>
-                  {assignmentOptions.map(a => (
-                    <option key={a.id} value={String(a.assignment_no)}>#{a.assignment_no ?? '—'} — {a.assignment_name || 'Untitled'}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className={labelCls}>Assignment Date</label>
-                <input type="date" value={form.Assignment_Date} onChange={set('Assignment_Date')} className={inputCls} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className={labelCls}>Assignment Name</label>
-                <input type="text" value={form.Assign_Given} onChange={set('Assign_Given')} placeholder="Assignment name" className={inputCls} />
-              </div>
-              <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Documents</label>
                 <input type="text" value={form.Documents} onChange={set('Documents')} placeholder="e.g. Projector/Laptop" className={inputCls} />
               </div>
@@ -581,16 +654,73 @@ export default function AddLectureTakenPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              <div className="flex flex-col gap-1.5">
-                <label className={labelCls}>Assignment Description</label>
-                <textarea value={form.Assignment_Description} onChange={set('Assignment_Description')} rows={2} placeholder="Assignment description..."
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white resize-none" />
+            {/* ── Assignment ── */}
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">
+                Assignment{assigningAssignment && <span className="text-[10px] text-gray-400 ml-1 normal-case">(saving to batch...)</span>}
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="flex flex-col gap-1.5 md:col-span-2">
+                  <label className={labelCls}>Standard Assignment No.</label>
+                  {customAssignment ? (
+                    <div className="flex items-center gap-1.5">
+                      <input type="number" value={form.Assignment_No}
+                        onChange={set('Assignment_No')} onBlur={handleCustomAssignmentSync}
+                        placeholder="Custom no." className={inputCls} />
+                      <button type="button" onClick={() => { setCustomAssignment(false); handleAssignmentSelect(''); }}
+                        className="text-[10px] font-semibold text-[#2A6BB5] hover:underline whitespace-nowrap">
+                        Choose from list
+                      </button>
+                    </div>
+                  ) : (
+                    <select value={form.Assignment_No} onChange={(e) => handleAssignmentSelect(e.target.value)} disabled={!form.Batch_Id}
+                      className={`${inputCls} disabled:opacity-50`}>
+                      <option value="">— Select Assignment —</option>
+                      <option value="__custom__">+ Custom Assignment (manual entry)</option>
+                      {assignmentOptions.map(a => (
+                        <option key={a.id} value={String(a.assignment_no)}>#{a.assignment_no ?? '—'} — {a.assignment_name || 'Untitled'}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className={labelCls}>Actual Assignment No.</label>
+                  <input type="text" value={actualAssignmentNo ?? '—'} disabled title="Computed from the batch's assignment dates" className={disabledInputCls} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className={labelCls}>Assignment Date</label>
+                  <input type="date" value={form.Assignment_Date} onChange={(e) => handleAssignmentDateChange(e.target.value)} className={inputCls} />
+                </div>
+                <div className="flex flex-col gap-1.5 md:col-span-2">
+                  <label className={labelCls}>Assignment Name</label>
+                  <input type="text" value={form.Assign_Given} onChange={set('Assign_Given')} placeholder="Assignment name" className={inputCls} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className={labelCls}>Department</label>
+                  <input type="text" value={form.Assignment_Department} onChange={set('Assignment_Department')} placeholder="Department" className={inputCls} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className={labelCls}>Trainer</label>
+                  <input type="text" value={form.Assignment_Trainer} onChange={set('Assignment_Trainer')} placeholder="Trainer" className={inputCls} />
+                </div>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <label className={labelCls}>Deliverables</label>
-                <textarea value={form.Deliverables} onChange={set('Deliverables')} rows={2} placeholder="Deliverable produced..."
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white resize-none" />
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className={labelCls}>Input Documents</label>
+                  <textarea value={form.Assignment_Input_Documents} onChange={set('Assignment_Input_Documents')} rows={2} placeholder="Input documents..."
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white resize-none" />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className={labelCls}>Assignment Description</label>
+                  <textarea value={form.Assignment_Description} onChange={set('Assignment_Description')} rows={2} placeholder="Assignment description..."
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white resize-none" />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className={labelCls}>Deliverables</label>
+                  <textarea value={form.Deliverables} onChange={set('Deliverables')} rows={2} placeholder="Deliverable produced..."
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white resize-none" />
+                </div>
               </div>
             </div>
           </div>
