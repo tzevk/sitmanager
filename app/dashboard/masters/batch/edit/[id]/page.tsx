@@ -121,6 +121,7 @@ interface BatchAssignment {
   trainer: string | null;
   department: string | null;
   assignment_date: string | null;
+  submission_date: string | null;
 }
 
 interface BatchTimings {
@@ -1206,6 +1207,20 @@ export default function EditBatchPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...a, id: a.id, assignment_date: date || null }),
+      });
+      await fetchBatchAssignments();
+    } catch { /* ignore */ }
+  };
+
+  /* Submission Date is set from Daily Activities > Lecture Taken and reflected here — editable
+     from either side, but only Lecture Taken writes to it automatically. */
+  const handleUpdateBatchAssignmentSubmissionDate = async (a: BatchAssignment, date: string) => {
+    setBatchAssignments((prev) => prev.map((x) => (x.id === a.id ? { ...x, submission_date: date || null } : x)));
+    try {
+      await fetch(`/api/masters/batch/${batchId}/assignment-list`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...a, id: a.id, submission_date: date || null }),
       });
       await fetchBatchAssignments();
     } catch { /* ignore */ }
@@ -3913,6 +3928,7 @@ export default function EditBatchPage() {
                       <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Actual No.</th>
                       <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b">Assignment Name</th>
                       <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Date</th>
+                      <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Submission Dt</th>
                       <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Trainer</th>
                       <th className="text-center px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Actions</th>
                     </tr>
@@ -3928,6 +3944,14 @@ export default function EditBatchPage() {
                             type="date"
                             value={formatDateForInput(a.assignment_date)}
                             onChange={(e) => handleUpdateBatchAssignmentDate(a, e.target.value)}
+                            className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                          />
+                        </td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">
+                          <input
+                            type="date"
+                            value={formatDateForInput(a.submission_date)}
+                            onChange={(e) => handleUpdateBatchAssignmentSubmissionDate(a, e.target.value)}
                             className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
                           />
                         </td>

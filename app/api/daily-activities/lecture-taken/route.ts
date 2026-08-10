@@ -14,7 +14,7 @@ async function ensureLectureTakenColumns(pool: ReturnType<typeof getPool>) {
      FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
        AND TABLE_NAME = 'lecture_taken_master'
-       AND COLUMN_NAME IN ('Day', 'Session', 'Standard_Seq', 'Actual_Seq', 'Sub_Topics', 'Covered_Subtopics', 'Unit_Test', 'Unit_Test_Date', 'Publish', 'Assignment_No', 'Assignment_Date', 'Assignment_Description', 'Deliverables', 'Assignment_Input_Documents', 'Assignment_Department', 'Assignment_Trainer')`
+       AND COLUMN_NAME IN ('Day', 'Session', 'Standard_Seq', 'Actual_Seq', 'Sub_Topics', 'Covered_Subtopics', 'Unit_Test', 'Unit_Test_Date', 'Publish', 'Assignment_No', 'Assignment_Date', 'Assignment_Description', 'Deliverables', 'Assignment_Input_Documents', 'Assignment_Department', 'Assignment_Trainer', 'Submission_Date')`
   );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const existing = new Set((rows as any[]).map((r) => r.name as string));
@@ -36,6 +36,7 @@ async function ensureLectureTakenColumns(pool: ReturnType<typeof getPool>) {
   if (!existing.has('Assignment_Input_Documents')) alters.push(`ADD COLUMN Assignment_Input_Documents VARCHAR(255) NULL AFTER Deliverables`);
   if (!existing.has('Assignment_Department')) alters.push(`ADD COLUMN Assignment_Department VARCHAR(150) NULL AFTER Assignment_Input_Documents`);
   if (!existing.has('Assignment_Trainer')) alters.push(`ADD COLUMN Assignment_Trainer VARCHAR(150) NULL AFTER Assignment_Department`);
+  if (!existing.has('Submission_Date')) alters.push(`ADD COLUMN Submission_Date DATE NULL AFTER Assignment_Trainer`);
 
   for (const alter of alters) {
     await pool.query(`ALTER TABLE lecture_taken_master ${alter}`);
@@ -374,6 +375,7 @@ export async function POST(req: NextRequest) {
       Assignment_Input_Documents,
       Assignment_Department,
       Assignment_Trainer,
+      Submission_Date,
       Assign_Start,
       Assign_End,
       Test_Given,
@@ -397,9 +399,9 @@ export async function POST(req: NextRequest) {
         Lecture_Start, Lecture_End, Faculty_Start, Faculty_End,
         Material, Documents, Assign_Given, Assignment_Id, Assignment_No, Assignment_Date,
         Assignment_Description, Deliverables, Assignment_Input_Documents, Assignment_Department, Assignment_Trainer,
-        Assign_Start, Assign_End,
+        Submission_Date, Assign_Start, Assign_End,
         Test_Given, Unit_Test, Unit_Test_Date, Publish, Next_Planning, IsActive, IsDelete
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)
     `;
 
     const params = [
@@ -433,6 +435,7 @@ export async function POST(req: NextRequest) {
       Assignment_Input_Documents || null,
       Assignment_Department || null,
       Assignment_Trainer || null,
+      Submission_Date || null,
       Assign_Start || null,
       Assign_End || null,
       Test_Given || null,
@@ -476,7 +479,7 @@ export async function PUT(req: NextRequest) {
         Lecture_Start = ?, Lecture_End = ?, Faculty_Start = ?, Faculty_End = ?,
         Material = ?, Documents = ?, Assign_Given = ?, Assignment_Id = ?, Assignment_No = ?, Assignment_Date = ?,
         Assignment_Description = ?, Deliverables = ?, Assignment_Input_Documents = ?, Assignment_Department = ?, Assignment_Trainer = ?,
-        Assign_Start = ?, Assign_End = ?,
+        Submission_Date = ?, Assign_Start = ?, Assign_End = ?,
         Test_Given = ?, Unit_Test = ?, Unit_Test_Date = ?, Publish = ?, Next_Planning = ?
       WHERE Take_Id = ?
     `;
@@ -512,6 +515,7 @@ export async function PUT(req: NextRequest) {
       body.Assignment_Input_Documents || null,
       body.Assignment_Department || null,
       body.Assignment_Trainer || null,
+      body.Submission_Date || null,
       body.Assign_Start || null,
       body.Assign_End || null,
       body.Test_Given || null,

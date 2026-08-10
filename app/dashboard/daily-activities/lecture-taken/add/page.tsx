@@ -91,6 +91,7 @@ interface FormData {
   Assignment_Input_Documents: string;
   Assignment_Department: string;
   Assignment_Trainer: string;
+  Submission_Date: string;
   Assign_Start: string;
   Assign_End: string;
   Test_Given: string;
@@ -109,6 +110,7 @@ const emptyForm: FormData = {
   Material: '', Documents: '', Assign_Given: '', Assignment_Id: '',
   Assignment_No: '', Assignment_Date: '', Assignment_Description: '', Deliverables: '',
   Assignment_Input_Documents: '', Assignment_Department: '', Assignment_Trainer: '',
+  Submission_Date: '',
   Assign_Start: '', Assign_End: '',
   Test_Given: '', Unit_Test: '', Unit_Test_Date: '', Publish: 'No', Next_Planning: '',
 };
@@ -234,6 +236,7 @@ export default function AddLectureTakenPage() {
             Assignment_Input_Documents: l.Assignment_Input_Documents || '',
             Assignment_Department: l.Assignment_Department || '',
             Assignment_Trainer: l.Assignment_Trainer || '',
+            Submission_Date: l.Submission_Date || '',
             Assign_Start: l.Assign_Start || '',
             Assign_End: l.Assign_End || '',
             Test_Given: l.Test_Given || '',
@@ -353,6 +356,7 @@ export default function AddLectureTakenPage() {
           trainer: opt.trainer,
           department: opt.department,
           assignment_date: form.Assignment_Date,
+          submission_date: form.Submission_Date,
         }),
       });
       const data = await res.json();
@@ -380,6 +384,7 @@ export default function AddLectureTakenPage() {
           trainer: form.Assignment_Trainer,
           department: form.Assignment_Department,
           assignment_date: form.Assignment_Date,
+          submission_date: form.Submission_Date,
         }),
       });
       const data = await res.json();
@@ -392,8 +397,7 @@ export default function AddLectureTakenPage() {
 
   /* Assignment Date drives the computed Actual Assignment No. — sync it back to the batch's
      Assignments tab whenever it changes (only once this record is linked to a batch assignment). */
-  const handleAssignmentDateChange = async (date: string) => {
-    setForm(prev => ({ ...prev, Assignment_Date: date }));
+  const syncAssignmentToBatch = async (overrides: { assignment_date?: string; submission_date?: string }) => {
     if (!form.Assignment_Id || !form.Batch_Id) return;
     try {
       await fetch(`/api/masters/batch/${form.Batch_Id}/assignment-list`, {
@@ -408,11 +412,25 @@ export default function AddLectureTakenPage() {
           input_documents: form.Assignment_Input_Documents,
           trainer: form.Assignment_Trainer,
           department: form.Assignment_Department,
-          assignment_date: date,
+          assignment_date: form.Assignment_Date,
+          submission_date: form.Submission_Date,
+          ...overrides,
         }),
       });
       await refreshActualAssignmentNo(form.Assignment_Id, form.Batch_Id);
     } catch { /* ignore */ }
+  };
+
+  const handleAssignmentDateChange = async (date: string) => {
+    setForm(prev => ({ ...prev, Assignment_Date: date }));
+    await syncAssignmentToBatch({ assignment_date: date });
+  };
+
+  /* Submission Date drives when the assignment is due — synced to the batch's Assignments tab
+     the same one-way way as Assignment Date. */
+  const handleSubmissionDateChange = async (date: string) => {
+    setForm(prev => ({ ...prev, Submission_Date: date }));
+    await syncAssignmentToBatch({ submission_date: date });
   };
 
   /* ── Sub Topics — checkbox "done" list, synced back to the Lecture Plan row's covered_subtopics ── */
@@ -690,6 +708,10 @@ export default function AddLectureTakenPage() {
                 <div className="flex flex-col gap-1.5">
                   <label className={labelCls}>Assignment Date</label>
                   <input type="date" value={form.Assignment_Date} onChange={(e) => handleAssignmentDateChange(e.target.value)} className={inputCls} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className={labelCls}>Submission Date</label>
+                  <input type="date" value={form.Submission_Date} onChange={(e) => handleSubmissionDateChange(e.target.value)} className={inputCls} />
                 </div>
                 <div className="flex flex-col gap-1.5 md:col-span-2">
                   <label className={labelCls}>Assignment Name</label>
