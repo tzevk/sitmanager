@@ -422,8 +422,14 @@ async function fetchDashboardData(dept?: string) {
       ) im ON im.Batch_Id = b.Batch_Id
       LEFT JOIN student_inquiry si
         ON si.Inquiry_Id = im.Inquiry_Id AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
+      -- awt_inquirydiscussion.Inquiry_id is varchar while student_inquiry.Inquiry_Id is
+      -- int; comparing them directly forces an implicit cast MariaDB can't push through
+      -- idx_disc_lookup, degrading this join to a ~100k-row scan per dashboard load (the
+      -- actual cause of "upcoming batches" going empty — it blew the query's 8s cap).
+      -- Inquiry_Id_Int is a virtual generated column of matching type with its own index
+      -- (idx_disc_inquiry_int) so this becomes an indexed ref lookup instead.
       LEFT JOIN awt_inquirydiscussion d_inq
-        ON d_inq.deleted = 0 AND d_inq.Inquiry_id = si.Inquiry_Id
+        ON d_inq.deleted = 0 AND d_inq.Inquiry_Id_Int = si.Inquiry_Id
       LEFT JOIN awt_inquirydiscussion d_stu
         ON si.Student_Id IS NOT NULL AND d_stu.deleted = 0 AND d_stu.student_id = si.Student_Id
       LEFT JOIN online_admission_payload oap ON oap.Inquiry_Id = si.Inquiry_Id
