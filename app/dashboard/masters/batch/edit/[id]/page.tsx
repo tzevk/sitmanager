@@ -99,6 +99,28 @@ interface TemplateLecture {
   project_assignment: string | null;
 }
 
+interface TemplateAssignment {
+  id: number;
+  assignment_no: number | null;
+  assignment_name: string | null;
+  description: string | null;
+  input_documents: string | null;
+  deliverable_produced: string | null;
+  trainer: string | null;
+  department: string | null;
+}
+
+interface BatchAssignment {
+  id: number;
+  assignment_no: number | null;
+  assignment_name: string | null;
+  description: string | null;
+  input_documents: string | null;
+  deliverable_produced: string | null;
+  trainer: string | null;
+  department: string | null;
+}
+
 interface BatchTimings {
   dayStart: string | null;
   dayEnd: string | null;
@@ -172,7 +194,8 @@ interface BatchData {
 const TABS = [
   { id: 'batch-details',         label: 'Batch Details' },
   { id: 'fees-structure',        label: 'Fees Structure' },
-  { id: 'assignment-details',    label: 'Assignment Details' },
+  { id: 'assignment-details',    label: 'Assignment Test Details' },
+  { id: 'assignments',           label: 'Assignments' },
   { id: 'unit-test-details',     label: 'Unit Test Details' },
   { id: 'discipline-moc',        label: 'DISCIPLINE / MOC Details' },
   { id: 'feedback-details',      label: 'FeedBack Details' },
@@ -744,6 +767,14 @@ export default function EditBatchPage() {
   const [batchTimings, setBatchTimings] = useState<BatchTimings>({ dayStart: null, dayEnd: null, startTime: null, endTime: null });
   const [addingTemplateId, setAddingTemplateId] = useState<number | null>(null);
 
+  /* Assignments tab (batch's own imported copy of the Standard Assignment List) */
+  const [batchAssignments, setBatchAssignments] = useState<BatchAssignment[]>([]);
+  const [loadingBatchAssignments, setLoadingBatchAssignments] = useState(false);
+  const [hasStandardAssignments, setHasStandardAssignments] = useState(true);
+  const [templateAssignments, setTemplateAssignments] = useState<TemplateAssignment[]>([]);
+  const [loadingTemplateAssignments, setLoadingTemplateAssignments] = useState(false);
+  const [addingTemplateAssignmentId, setAddingTemplateAssignmentId] = useState<number | null>(null);
+
   /* Final Exam Details state */
   const [finalExams, setFinalExams] = useState<FinalExam[]>([]);
   const [finalExamSearch, setFinalExamSearch] = useState('');
@@ -1096,6 +1127,73 @@ export default function EditBatchPage() {
       fetchStandardLectures();
     }
   }, [activeTab, batchId, fetchStandardLectures]);
+
+  /* Fetch (batch-level) Assignments list, sourced from batch_assignment_list and imported
+     from the Standard Assignment List (matches the Lecture Plan's import pattern). */
+  const [assignmentsCourseName, setAssignmentsCourseName] = useState<string | null>(null);
+  const fetchBatchAssignments = useCallback(async () => {
+    setLoadingBatchAssignments(true);
+    try {
+      const res = await fetch(`/api/masters/batch/${batchId}/assignment-list`);
+      const json = await res.json();
+      setBatchAssignments(json.assignments || []);
+      setHasStandardAssignments(json.hasStandardAssignments !== false);
+      setAssignmentsCourseName(json.courseName ?? null);
+    } catch { /* ignore */ }
+    setLoadingBatchAssignments(false);
+  }, [batchId]);
+
+  const fetchTemplateAssignments = useCallback(async (courseName: string) => {
+    if (!courseName) return;
+    setLoadingTemplateAssignments(true);
+    try {
+      const res = await fetch(`/api/masters/standard-lecture-plan/assignments?course=${encodeURIComponent(courseName)}`);
+      const json = await res.json();
+      setTemplateAssignments(json.rows || []);
+    } catch { /* ignore */ }
+    setLoadingTemplateAssignments(false);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'assignments' && batchId) {
+      fetchBatchAssignments();
+    }
+  }, [activeTab, batchId, fetchBatchAssignments]);
+
+  useEffect(() => {
+    if (activeTab === 'assignments' && assignmentsCourseName) {
+      fetchTemplateAssignments(assignmentsCourseName);
+    }
+  }, [activeTab, assignmentsCourseName, fetchTemplateAssignments]);
+
+  const handleAddAssignmentFromTemplate = async (tmpl: TemplateAssignment) => {
+    setAddingTemplateAssignmentId(tmpl.id);
+    try {
+      await fetch(`/api/masters/batch/${batchId}/assignment-list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignment_no: tmpl.assignment_no,
+          assignment_name: tmpl.assignment_name,
+          description: tmpl.description,
+          input_documents: tmpl.input_documents,
+          deliverable_produced: tmpl.deliverable_produced,
+          trainer: tmpl.trainer,
+          department: tmpl.department,
+        }),
+      });
+      await fetchBatchAssignments();
+    } catch { /* ignore */ }
+    setAddingTemplateAssignmentId(null);
+  };
+
+  const handleDeleteBatchAssignment = async (assignmentId: number) => {
+    if (!confirm('Remove this assignment from the batch?')) return;
+    try {
+      await fetch(`/api/masters/batch/${batchId}/assignment-list?assignmentId=${assignmentId}`, { method: 'DELETE' });
+      await fetchBatchAssignments();
+    } catch { /* ignore */ }
+  };
 
   /* Fetch final exams for this batch */
   const fetchFinalExams = useCallback(async () => {
@@ -3708,6 +3806,128 @@ export default function EditBatchPage() {
     );
   };
 
+  /* Assignments tab — the batch's own copy of the Standard Assignment List, imported the same
+     way the Lecture Plan imports from the Standard Lecture Plan. This is what populates the
+     "Assignment Given" dropdown on Daily Activities > Lecture Taken. */
+  const AssignmentsTab = () => {
+    const addedAssignmentNos = new Set(
+      batchAssignments.map((a) => a.assignment_no).filter((n): n is number => n != null)
+    );
+
+    return (
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2 py-1 border border-slate-200 rounded h-7">
+            <span className="text-[10px] font-semibold text-slate-500 uppercase">Training Programme</span>
+            <span className="text-xs font-semibold text-slate-800">
+              {assignmentsCourseName || batchData?.Course_Name || '-'}
+            </span>
+          </div>
+        </div>
+
+        {!hasStandardAssignments && (
+          <div className="px-3 py-2 rounded border border-amber-200 bg-amber-50 text-xs text-amber-800">
+            No Standard Assignment List exists for this Training Programme &mdash; create one in Masters &gt; Standard Lecture Plan before this batch&apos;s assignments can be imported.
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+          {/* Left: Standard Assignment List (reference) */}
+          <div className="border border-slate-200 rounded-lg overflow-hidden">
+            <div className="px-2.5 py-1.5 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
+              Standard Assignment List
+            </div>
+            <div className="max-h-[65vh] overflow-y-auto p-2 space-y-1.5">
+              {loadingTemplateAssignments ? (
+                <div className="text-center py-8 text-xs text-gray-400">Loading...</div>
+              ) : templateAssignments.length === 0 ? (
+                <div className="text-center py-8 text-xs text-gray-400">No standard assignments found.</div>
+              ) : (
+                templateAssignments.map((t) => {
+                  const added = t.assignment_no != null && addedAssignmentNos.has(t.assignment_no);
+                  return (
+                    <div key={t.id} className="px-2.5 py-2 border border-slate-200 rounded-md bg-white select-none">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[10px] font-bold text-[#2E3093]">#{t.assignment_no ?? '—'}</span>
+                        {added ? (
+                          <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Added</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleAddAssignmentFromTemplate(t)}
+                            disabled={addingTemplateAssignmentId === t.id}
+                            className="text-[9px] font-semibold text-white bg-[#2E3093] px-1.5 py-0.5 rounded hover:opacity-90 disabled:opacity-50"
+                          >
+                            {addingTemplateAssignmentId === t.id ? 'Adding...' : 'Add'}
+                          </button>
+                        )}
+                      </div>
+                      <div className="text-xs font-semibold text-slate-800 mt-0.5">{t.assignment_name || 'Untitled'}</div>
+                      <div className="text-[10px] text-slate-400">
+                        {t.department || '—'}{t.trainer ? ` · ${t.trainer}` : ''}
+                      </div>
+                      {t.description && <div className="text-[10px] text-slate-600 mt-1">{t.description}</div>}
+                      {t.deliverable_produced && (
+                        <div className="text-[10px] text-slate-500 mt-1 italic">Deliverable: {t.deliverable_produced}</div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Right: this batch's own Assignments list */}
+          <div className="border border-slate-200 rounded-lg overflow-hidden">
+            <div className="px-2.5 py-1.5 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
+              This Batch&apos;s Assignments
+            </div>
+            <div className="max-h-[65vh] overflow-y-auto">
+              {loadingBatchAssignments ? (
+                <div className="text-center py-8 text-xs text-gray-400">Loading...</div>
+              ) : batchAssignments.length === 0 ? (
+                <div className="text-center py-8 text-xs text-gray-400">
+                  Click Add on an assignment on the left to add it to this batch.
+                </div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-slate-50 z-10">
+                    <tr>
+                      <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">No.</th>
+                      <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b">Assignment Name</th>
+                      <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Trainer</th>
+                      <th className="text-center px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {batchAssignments.map((a) => (
+                      <tr key={a.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{a.assignment_no ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-gray-900 font-medium">{a.assignment_name || 'Untitled'}</td>
+                        <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{a.trainer || '—'}</td>
+                        <td className="px-2 py-1.5 text-center">
+                          <button
+                            onClick={() => handleDeleteBatchAssignment(a.id)}
+                            className="p-1 text-red-600 hover:bg-red-50 rounded"
+                            title="Remove"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderTabContent = () => {
     if (!batchData) return null;
 
@@ -3718,6 +3938,8 @@ export default function EditBatchPage() {
         return FeesStructureTab();
       case 'assignment-details':
         return AssignmentDetailsTab();
+      case 'assignments':
+        return AssignmentsTab();
       case 'unit-test-details':
         return UnitTestDetailsTab();
       case 'discipline-moc':

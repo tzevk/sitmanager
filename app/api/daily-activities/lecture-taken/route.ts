@@ -14,7 +14,7 @@ async function ensureLectureTakenColumns(pool: ReturnType<typeof getPool>) {
      FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
        AND TABLE_NAME = 'lecture_taken_master'
-       AND COLUMN_NAME IN ('Day', 'Session', 'Standard_Seq', 'Actual_Seq', 'Sub_Topics', 'Unit_Test', 'Unit_Test_Date', 'Publish')`
+       AND COLUMN_NAME IN ('Day', 'Session', 'Standard_Seq', 'Actual_Seq', 'Sub_Topics', 'Covered_Subtopics', 'Unit_Test', 'Unit_Test_Date', 'Publish')`
   );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const existing = new Set((rows as any[]).map((r) => r.name as string));
@@ -25,6 +25,7 @@ async function ensureLectureTakenColumns(pool: ReturnType<typeof getPool>) {
   if (!existing.has('Standard_Seq')) alters.push(`ADD COLUMN Standard_Seq INT NULL AFTER Lecture_Id`);
   if (!existing.has('Actual_Seq')) alters.push(`ADD COLUMN Actual_Seq INT NULL AFTER Standard_Seq`);
   if (!existing.has('Sub_Topics')) alters.push(`ADD COLUMN Sub_Topics TEXT NULL AFTER Topic`);
+  if (!existing.has('Covered_Subtopics')) alters.push(`ADD COLUMN Covered_Subtopics VARCHAR(255) NULL AFTER Sub_Topics`);
   if (!existing.has('Unit_Test')) alters.push(`ADD COLUMN Unit_Test VARCHAR(50) NULL AFTER Test_Id`);
   if (!existing.has('Unit_Test_Date')) alters.push(`ADD COLUMN Unit_Test_Date DATE NULL AFTER Unit_Test`);
   if (!existing.has('Publish')) alters.push(`ADD COLUMN Publish VARCHAR(10) NULL AFTER Unit_Test_Date`);
@@ -124,7 +125,7 @@ export async function GET(req: NextRequest) {
       const [lectures] = await pool.query(
         `SELECT
            s.id, s.lecture_no, s.standard_seq, s.actual_seq,
-           s.subject, s.subject_topic, s.covered_subtopics,
+           s.subject, s.subject_topic, s.covered_subtopics, s.department, s.lecturecontent,
            s.date, s.lectureday, s.session, s.starttime, s.endtime,
            s.faculty_id, COALESCE(f.Faculty_Name, s.faculty_name) AS faculty_name,
            s.class_room, s.documents, s.assignment, s.assignment_date,
@@ -137,6 +138,21 @@ export async function GET(req: NextRequest) {
         [batchId]
       );
       return NextResponse.json({ lectures });
+    }
+
+    if (fetchOptions === 'assignments') {
+      const batchId = searchParams.get('batchId');
+      if (!batchId) return NextResponse.json({ assignments: [] });
+      // The batch's own Assignments tab (batch_assignment_list) — its own imported copy of
+      // the Standard Assignment List, matching the Lecture Plan's import pattern.
+      const [assignments] = await pool.query(
+        `SELECT id, assignment_no, assignment_name
+         FROM batch_assignment_list
+         WHERE batch_id = ? AND (deleted IS NULL OR deleted = '0')
+         ORDER BY assignment_no ASC, id ASC`,
+        [batchId]
+      );
+      return NextResponse.json({ assignments });
     }
 
     /* --- List lectures with pagination --- */
@@ -322,6 +338,7 @@ export async function POST(req: NextRequest) {
       Session,
       Topic,
       Sub_Topics,
+      Covered_Subtopics,
       Duration,
       ClassRoom,
       Lecture_Start,
@@ -331,6 +348,7 @@ export async function POST(req: NextRequest) {
       Material,
       Documents,
       Assign_Given,
+      Assignment_Id,
       Assign_Start,
       Assign_End,
       Test_Given,
@@ -350,11 +368,11 @@ export async function POST(req: NextRequest) {
     const sql = `
       INSERT INTO lecture_taken_master (
         Course_Id, Batch_Id, Lecture_Id, Standard_Seq, Actual_Seq, Lecture_Name, Faculty_Id,
-        Take_Dt, Day, Session, Topic, Sub_Topics, Duration, ClassRoom,
+        Take_Dt, Day, Session, Topic, Sub_Topics, Covered_Subtopics, Duration, ClassRoom,
         Lecture_Start, Lecture_End, Faculty_Start, Faculty_End,
-        Material, Documents, Assign_Given, Assign_Start, Assign_End,
+        Material, Documents, Assign_Given, Assignment_Id, Assign_Start, Assign_End,
         Test_Given, Unit_Test, Unit_Test_Date, Publish, Next_Planning, IsActive, IsDelete
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)
     `;
 
     const params = [
@@ -370,6 +388,7 @@ export async function POST(req: NextRequest) {
       Session || null,
       Topic?.trim() || null,
       Sub_Topics?.trim() || null,
+      Covered_Subtopics || null,
       Duration || null,
       ClassRoom || null,
       Lecture_Start || null,
@@ -379,6 +398,7 @@ export async function POST(req: NextRequest) {
       Material || null,
       Documents || null,
       Assign_Given || null,
+      Assignment_Id != null && Assignment_Id !== '' ? Number(Assignment_Id) : null,
       Assign_Start || null,
       Assign_End || null,
       Test_Given || null,
@@ -418,9 +438,9 @@ export async function PUT(req: NextRequest) {
     const sql = `
       UPDATE lecture_taken_master SET
         Course_Id = ?, Batch_Id = ?, Lecture_Id = ?, Standard_Seq = ?, Actual_Seq = ?, Lecture_Name = ?,
-        Faculty_Id = ?, Take_Dt = ?, Day = ?, Session = ?, Topic = ?, Sub_Topics = ?, Duration = ?, ClassRoom = ?,
+        Faculty_Id = ?, Take_Dt = ?, Day = ?, Session = ?, Topic = ?, Sub_Topics = ?, Covered_Subtopics = ?, Duration = ?, ClassRoom = ?,
         Lecture_Start = ?, Lecture_End = ?, Faculty_Start = ?, Faculty_End = ?,
-        Material = ?, Documents = ?, Assign_Given = ?, Assign_Start = ?, Assign_End = ?,
+        Material = ?, Documents = ?, Assign_Given = ?, Assignment_Id = ?, Assign_Start = ?, Assign_End = ?,
         Test_Given = ?, Unit_Test = ?, Unit_Test_Date = ?, Publish = ?, Next_Planning = ?
       WHERE Take_Id = ?
     `;
@@ -438,6 +458,7 @@ export async function PUT(req: NextRequest) {
       body.Session || null,
       body.Topic?.trim() || null,
       body.Sub_Topics?.trim() || null,
+      body.Covered_Subtopics || null,
       body.Duration || null,
       body.ClassRoom || null,
       body.Lecture_Start || null,
@@ -447,6 +468,7 @@ export async function PUT(req: NextRequest) {
       body.Material || null,
       body.Documents || null,
       body.Assign_Given || null,
+      body.Assignment_Id != null && body.Assignment_Id !== '' ? Number(body.Assignment_Id) : null,
       body.Assign_Start || null,
       body.Assign_End || null,
       body.Test_Given || null,

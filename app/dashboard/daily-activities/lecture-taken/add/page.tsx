@@ -11,13 +11,17 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 interface Course { Course_Id: number; Course_Name: string; }
 interface Batch { Batch_Id: number; Batch_code: string; Category: string | null; Timings: string | null; }
 interface Faculty { Faculty_Id: number; Faculty_Name: string; }
+interface BatchAssignmentOption { id: number; assignment_no: number | null; assignment_name: string | null; }
 interface BatchLecture {
   id: number;
-  lecture_no: number;
+  lecture_no: number | null;
   standard_seq: number | null;
   actual_seq: number | null;
   subject: string | null;
   subject_topic: string | null;
+  covered_subtopics: string | null;
+  department: string | null;
+  lecturecontent: string | null;
   date: string | null;
   lectureday: string | null;
   session: string | null;
@@ -35,10 +39,9 @@ interface BatchLecture {
 }
 
 /* Sub Topics is stored as a newline-separated list — same convention as the batch Lecture Plan. */
-const getSubtopicList = (text: string): string[] => {
-  const items = text.split('\n');
-  return items.length ? items : [''];
-};
+const getSubtopicList = (text: string): string[] => text.split('\n').filter((s) => s.trim() !== '');
+const getCoveredSet = (text: string): Set<number> =>
+  new Set(text.split(',').map((n) => parseInt(n, 10)).filter((n) => !Number.isNaN(n)));
 
 interface FormData {
   Course_Id: string;
@@ -53,6 +56,7 @@ interface FormData {
   Session: string;
   Topic: string;
   Sub_Topics: string;
+  Covered_Subtopics: string;
   Duration: string;
   ClassRoom: string;
   Lecture_Start: string;
@@ -62,6 +66,7 @@ interface FormData {
   Material: string;
   Documents: string;
   Assign_Given: string;
+  Assignment_Id: string;
   Assign_Start: string;
   Assign_End: string;
   Test_Given: string;
@@ -75,14 +80,15 @@ const emptyForm: FormData = {
   Course_Id: '', Batch_Id: '', Lecture_Id: '', Standard_Seq: '', Actual_Seq: '',
   Lecture_Name: '', Faculty_Id: '',
   Take_Dt: new Date().toISOString().slice(0, 10), Day: '', Session: '',
-  Topic: '', Sub_Topics: '', Duration: '', ClassRoom: '',
+  Topic: '', Sub_Topics: '', Covered_Subtopics: '', Duration: '', ClassRoom: '',
   Lecture_Start: '', Lecture_End: '', Faculty_Start: '', Faculty_End: '',
-  Material: '', Documents: '', Assign_Given: '', Assign_Start: '', Assign_End: '',
+  Material: '', Documents: '', Assign_Given: '', Assignment_Id: '', Assign_Start: '', Assign_End: '',
   Test_Given: '', Unit_Test: '', Unit_Test_Date: '', Publish: 'No', Next_Planning: '',
 };
 
 const labelCls = 'text-xs font-semibold text-gray-600';
 const inputCls = 'h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white';
+const disabledInputCls = 'h-10 w-full rounded-lg border border-gray-200 px-3 text-sm bg-gray-100 text-gray-500';
 
 /* ------------------------------------------------------------------ */
 /*  Page                                                               */
@@ -100,6 +106,7 @@ export default function AddLectureTakenPage() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [batchLectures, setBatchLectures] = useState<BatchLecture[]>([]);
+  const [batchAssignmentOptions, setBatchAssignmentOptions] = useState<BatchAssignmentOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [error, setError] = useState('');
@@ -179,6 +186,7 @@ export default function AddLectureTakenPage() {
             Session: l.Session || '',
             Topic: l.Topic || '',
             Sub_Topics: l.Sub_Topics || '',
+            Covered_Subtopics: l.Covered_Subtopics || '',
             Duration: l.Duration || '',
             ClassRoom: l.ClassRoom || '',
             Lecture_Start: l.Lecture_Start || '',
@@ -188,6 +196,7 @@ export default function AddLectureTakenPage() {
             Material: l.Material || '',
             Documents: l.Documents || '',
             Assign_Given: l.Assign_Given || '',
+            Assignment_Id: l.Assignment_Id != null ? String(l.Assignment_Id) : '',
             Assign_Start: l.Assign_Start || '',
             Assign_End: l.Assign_End || '',
             Test_Given: l.Test_Given || '',
@@ -214,63 +223,60 @@ export default function AddLectureTakenPage() {
     })();
   }, [form.Course_Id]);
 
-  /* ── Load batch lectures when batch changes ── */
+  /* ── Load this batch's Lecture Plan rows (needed to sync Sub Topics "done" checkboxes back to
+     the plan) and its Assignments list (for the Assignment Given dropdown) when batch changes ── */
   useEffect(() => {
-    if (!form.Batch_Id) { setBatchLectures([]); return; }
+    if (!form.Batch_Id) { setBatchLectures([]); setBatchAssignmentOptions([]); return; }
     (async () => {
       try {
-        const res = await fetch(`/api/daily-activities/lecture-taken?options=lectures&batchId=${form.Batch_Id}`);
-        const data = await res.json();
-        setBatchLectures(data.lectures || []);
+        const [lRes, aRes] = await Promise.all([
+          fetch(`/api/daily-activities/lecture-taken?options=lectures&batchId=${form.Batch_Id}`),
+          fetch(`/api/daily-activities/lecture-taken?options=assignments&batchId=${form.Batch_Id}`),
+        ]);
+        const lData = await lRes.json();
+        const aData = await aRes.json();
+        setBatchLectures(lData.lectures || []);
+        setBatchAssignmentOptions(aData.assignments || []);
       } catch { /* ignore */ }
     })();
   }, [form.Batch_Id]);
 
-  /* ── Auto-fill every matching field from the selected Planned Lecture ── */
-  const handleLectureSelect = (lectureId: string) => {
-    setForm(prev => ({ ...prev, Lecture_Id: lectureId }));
-    const lec = batchLectures.find(l => String(l.id) === lectureId);
-    if (lec) {
-      setForm(prev => ({
-        ...prev,
-        Lecture_Id: lectureId,
-        Standard_Seq: lec.standard_seq != null ? String(lec.standard_seq) : prev.Standard_Seq,
-        Actual_Seq: lec.actual_seq != null ? String(lec.actual_seq) : prev.Actual_Seq,
-        Lecture_Name: lec.subject || lec.subject_topic || '',
-        Topic: lec.subject || lec.subject_topic || '',
-        Sub_Topics: lec.subject_topic || prev.Sub_Topics,
-        Day: lec.lectureday || prev.Day,
-        Session: lec.session || prev.Session,
-        ClassRoom: lec.class_room || prev.ClassRoom,
-        Lecture_Start: lec.starttime || prev.Lecture_Start,
-        Lecture_End: lec.endtime || prev.Lecture_End,
-        Faculty_Id: lec.faculty_id != null ? String(lec.faculty_id) : prev.Faculty_Id,
-        Assign_Given: lec.assignment || prev.Assign_Given,
-        Documents: lec.documents || prev.Documents,
-        Unit_Test: lec.unit_test || prev.Unit_Test,
-        Unit_Test_Date: lec.unit_test_date || prev.Unit_Test_Date,
-        Publish: lec.publish || prev.Publish,
-      }));
-    }
-  };
+  /* The Lecture Plan row this record is linked to (if any) — used to write Sub Topics "done"
+     state back to the plan without touching any of its other, otherwise-frozen fields. */
+  const linkedPlanRow = batchLectures.find(l => String(l.id) === form.Lecture_Id) || null;
 
   /* ── Update form field ── */
   const set = (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(prev => ({ ...prev, [field]: e.target.value }));
 
-  /* ── Sub Topics editor (multi-line, bulleted, matching the Lecture Plan's list convention) ── */
+  /* ── Assignment Given (dropdown, sourced from this batch's own Assignments tab) ── */
+  const handleAssignmentSelect = (assignmentId: string) => {
+    const opt = batchAssignmentOptions.find(a => String(a.id) === assignmentId);
+    setForm(prev => ({
+      ...prev,
+      Assignment_Id: assignmentId,
+      Assign_Given: opt ? `#${opt.assignment_no ?? '—'} — ${opt.assignment_name ?? ''}` : prev.Assign_Given,
+    }));
+  };
+
+  /* ── Sub Topics — checkbox "done" list, synced back to the Lecture Plan row's covered_subtopics ── */
   const subtopicItems = getSubtopicList(form.Sub_Topics);
-  const updateSubtopicItem = (index: number, value: string) => {
-    const items = [...subtopicItems];
-    items[index] = value;
-    setForm(prev => ({ ...prev, Sub_Topics: items.join('\n') }));
-  };
-  const addSubtopicItem = () => {
-    setForm(prev => ({ ...prev, Sub_Topics: [...subtopicItems, ''].join('\n') }));
-  };
-  const removeSubtopicItem = (index: number) => {
-    const items = subtopicItems.filter((_, i) => i !== index);
-    setForm(prev => ({ ...prev, Sub_Topics: items.join('\n') }));
+  const coveredSet = getCoveredSet(form.Covered_Subtopics);
+  const toggleSubtopicCovered = async (idx: number) => {
+    const next = new Set(coveredSet);
+    if (next.has(idx)) next.delete(idx); else next.add(idx);
+    const nextValue = Array.from(next).sort((a, b) => a - b).join(',');
+    setForm(prev => ({ ...prev, Covered_Subtopics: nextValue }));
+
+    if (linkedPlanRow && form.Batch_Id) {
+      try {
+        await fetch(`/api/masters/batch/${form.Batch_Id}/slectures`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...linkedPlanRow, id: linkedPlanRow.id, covered_subtopics: nextValue }),
+        });
+      } catch { /* ignore */ }
+    }
   };
 
   /* ── Submit ── */
@@ -288,6 +294,7 @@ export default function AddLectureTakenPage() {
         Batch_Id: form.Batch_Id ? parseInt(form.Batch_Id) : null,
         Lecture_Id: form.Lecture_Id ? parseInt(form.Lecture_Id) : null,
         Faculty_Id: form.Faculty_Id ? parseInt(form.Faculty_Id) : null,
+        Assignment_Id: form.Assignment_Id ? parseInt(form.Assignment_Id) : null,
       };
       if (isEdit) payload.Take_Id = parseInt(editId!);
 
@@ -372,7 +379,7 @@ export default function AddLectureTakenPage() {
           {/* ── Batch & Schedule Selection ── */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
             <h3 className="text-sm font-bold text-[#2E3093] uppercase tracking-wider mb-4">Batch & Schedule Selection</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Course <span className="text-red-400">*</span></label>
                 <select value={form.Course_Id} onChange={set('Course_Id')} required className={inputCls}>
@@ -393,18 +400,6 @@ export default function AddLectureTakenPage() {
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className={labelCls}>Planned Lecture</label>
-                <select value={form.Lecture_Id} onChange={(e) => handleLectureSelect(e.target.value)} disabled={!form.Batch_Id}
-                  className={`${inputCls} disabled:opacity-50`}>
-                  <option value="">— Select Lecture —</option>
-                  {batchLectures.map(l => (
-                    <option key={l.id} value={l.id}>
-                      #{l.lecture_no} — {l.subject || l.subject_topic || 'Untitled'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Date <span className="text-red-400">*</span></label>
                 <input type="date" value={form.Take_Dt} onChange={set('Take_Dt')} required className={inputCls} />
               </div>
@@ -417,7 +412,7 @@ export default function AddLectureTakenPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Std Seq</label>
-                <input type="number" value={form.Standard_Seq} onChange={set('Standard_Seq')} className={inputCls} />
+                <input type="number" value={form.Standard_Seq} disabled title="Fixed reference from the Standard Lecture Plan" className={disabledInputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Actual Seq</label>
@@ -443,31 +438,24 @@ export default function AddLectureTakenPage() {
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white resize-none" />
             </div>
 
-            <div className="mt-4 flex flex-col gap-1.5">
-              <label className={labelCls}>Sub Topics</label>
-              <div className="space-y-1">
-                {subtopicItems.map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-1.5">
-                    <span className="text-gray-400 text-xs shrink-0">&bull;</span>
-                    <input type="text" value={item} onChange={(e) => updateSubtopicItem(idx, e.target.value)}
-                      className="flex-1 h-9 rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
-                    <button type="button" onClick={() => removeSubtopicItem(idx)} title="Remove"
-                      className="p-1 text-gray-400 hover:text-red-500 shrink-0">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-                <button type="button" onClick={addSubtopicItem}
-                  className="flex items-center gap-1 text-xs font-bold text-[#2E3093] hover:opacity-80 mt-1">
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                  </svg>
-                  Add sub-topic
-                </button>
+            {subtopicItems.length > 0 && (
+              <div className="mt-4 flex flex-col gap-1.5">
+                <label className={labelCls}>Sub Topics — check off what&apos;s done</label>
+                <div className="space-y-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                  {subtopicItems.map((s, idx) => (
+                    <label key={idx} className="flex items-start gap-1.5 text-sm text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={coveredSet.has(idx)}
+                        onChange={() => toggleSubtopicCovered(idx)}
+                        className="mt-0.5 shrink-0"
+                      />
+                      <span>{s}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
               <div className="flex flex-col gap-1.5">
@@ -479,15 +467,21 @@ export default function AddLectureTakenPage() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Lecture Start</label>
-                <input type="text" value={form.Lecture_Start} onChange={set('Lecture_Start')} placeholder="e.g. 2:00PM" className={inputCls} />
+                <input type="time" value={form.Lecture_Start} onChange={set('Lecture_Start')} className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Lecture End</label>
-                <input type="text" value={form.Lecture_End} onChange={set('Lecture_End')} placeholder="e.g. 5:30PM" className={inputCls} />
+                <input type="time" value={form.Lecture_End} onChange={set('Lecture_End')} className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Assignment Given</label>
-                <input type="text" value={form.Assign_Given} onChange={set('Assign_Given')} placeholder="Assignment description" className={inputCls} />
+                <select value={form.Assignment_Id} onChange={(e) => handleAssignmentSelect(e.target.value)} disabled={!form.Batch_Id}
+                  className={`${inputCls} disabled:opacity-50`}>
+                  <option value="">— Select Assignment —</option>
+                  {batchAssignmentOptions.map(a => (
+                    <option key={a.id} value={a.id}>#{a.assignment_no ?? '—'} — {a.assignment_name || 'Untitled'}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Documents</label>
@@ -521,15 +515,15 @@ export default function AddLectureTakenPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Trainer Start</label>
-                <input type="text" value={form.Faculty_Start} onChange={set('Faculty_Start')} placeholder="e.g. 1:45PM" className={inputCls} />
+                <input type="time" value={form.Faculty_Start} onChange={set('Faculty_Start')} className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Trainer End</label>
-                <input type="text" value={form.Faculty_End} onChange={set('Faculty_End')} placeholder="e.g. 5:30PM" className={inputCls} />
+                <input type="time" value={form.Faculty_End} onChange={set('Faculty_End')} className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Duration</label>
-                <input type="text" value={form.Duration} onChange={set('Duration')} placeholder="e.g. 4 hrs" className={inputCls} />
+                <input type="time" value={form.Duration} onChange={set('Duration')} className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Material</label>
