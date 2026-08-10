@@ -88,6 +88,9 @@ interface FormData {
   Assignment_Date: string;
   Assignment_Description: string;
   Deliverables: string;
+  Assignment_Input_Documents: string;
+  Assignment_Department: string;
+  Assignment_Trainer: string;
   Assign_Start: string;
   Assign_End: string;
   Test_Given: string;
@@ -105,6 +108,7 @@ const emptyForm: FormData = {
   Lecture_Start: '', Lecture_End: '', Faculty_Start: '', Faculty_End: '',
   Material: '', Documents: '', Assign_Given: '', Assignment_Id: '',
   Assignment_No: '', Assignment_Date: '', Assignment_Description: '', Deliverables: '',
+  Assignment_Input_Documents: '', Assignment_Department: '', Assignment_Trainer: '',
   Assign_Start: '', Assign_End: '',
   Test_Given: '', Unit_Test: '', Unit_Test_Date: '', Publish: 'No', Next_Planning: '',
 };
