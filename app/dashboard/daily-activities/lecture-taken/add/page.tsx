@@ -11,7 +11,16 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 interface Course { Course_Id: number; Course_Name: string; }
 interface Batch { Batch_Id: number; Batch_code: string; Category: string | null; Timings: string | null; }
 interface Faculty { Faculty_Id: number; Faculty_Name: string; }
-interface BatchAssignmentOption { id: number; assignment_no: number | null; assignment_name: string | null; }
+/* Options come from the course's Standard Assignment List (standard_assignment_list.id) — NOT
+   the batch's own Assignments tab. Picking one auto-adds/reuses a matching row in the batch's
+   Assignments tab (batch_assignment_list) and stores THAT id as Assignment_Id. */
+interface StandardAssignmentOption {
+  id: number;
+  assignment_no: number | null;
+  assignment_name: string | null;
+  description: string | null;
+  deliverable_produced: string | null;
+}
 interface BatchLecture {
   id: number;
   lecture_no: number | null;
@@ -67,6 +76,10 @@ interface FormData {
   Documents: string;
   Assign_Given: string;
   Assignment_Id: string;
+  Assignment_No: string;
+  Assignment_Date: string;
+  Assignment_Description: string;
+  Deliverables: string;
   Assign_Start: string;
   Assign_End: string;
   Test_Given: string;
@@ -82,7 +95,9 @@ const emptyForm: FormData = {
   Take_Dt: new Date().toISOString().slice(0, 10), Day: '', Session: '',
   Topic: '', Sub_Topics: '', Covered_Subtopics: '', Duration: '', ClassRoom: '',
   Lecture_Start: '', Lecture_End: '', Faculty_Start: '', Faculty_End: '',
-  Material: '', Documents: '', Assign_Given: '', Assignment_Id: '', Assign_Start: '', Assign_End: '',
+  Material: '', Documents: '', Assign_Given: '', Assignment_Id: '',
+  Assignment_No: '', Assignment_Date: '', Assignment_Description: '', Deliverables: '',
+  Assign_Start: '', Assign_End: '',
   Test_Given: '', Unit_Test: '', Unit_Test_Date: '', Publish: 'No', Next_Planning: '',
 };
 
@@ -106,7 +121,8 @@ export default function AddLectureTakenPage() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [batchLectures, setBatchLectures] = useState<BatchLecture[]>([]);
-  const [batchAssignmentOptions, setBatchAssignmentOptions] = useState<BatchAssignmentOption[]>([]);
+  const [assignmentOptions, setAssignmentOptions] = useState<StandardAssignmentOption[]>([]);
+  const [assigningAssignment, setAssigningAssignment] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [error, setError] = useState('');
@@ -197,6 +213,10 @@ export default function AddLectureTakenPage() {
             Documents: l.Documents || '',
             Assign_Given: l.Assign_Given || '',
             Assignment_Id: l.Assignment_Id != null ? String(l.Assignment_Id) : '',
+            Assignment_No: l.Assignment_No != null ? String(l.Assignment_No) : '',
+            Assignment_Date: l.Assignment_Date || '',
+            Assignment_Description: l.Assignment_Description || '',
+            Deliverables: l.Deliverables || '',
             Assign_Start: l.Assign_Start || '',
             Assign_End: l.Assign_End || '',
             Test_Given: l.Test_Given || '',
@@ -224,9 +244,10 @@ export default function AddLectureTakenPage() {
   }, [form.Course_Id]);
 
   /* ── Load this batch's Lecture Plan rows (needed to sync Sub Topics "done" checkboxes back to
-     the plan) and its Assignments list (for the Assignment Given dropdown) when batch changes ── */
+     the plan) and the course's Standard Assignment List (for the Assignment No. dropdown) when
+     batch changes ── */
   useEffect(() => {
-    if (!form.Batch_Id) { setBatchLectures([]); setBatchAssignmentOptions([]); return; }
+    if (!form.Batch_Id) { setBatchLectures([]); setAssignmentOptions([]); return; }
     (async () => {
       try {
         const [lRes, aRes] = await Promise.all([
@@ -236,7 +257,7 @@ export default function AddLectureTakenPage() {
         const lData = await lRes.json();
         const aData = await aRes.json();
         setBatchLectures(lData.lectures || []);
-        setBatchAssignmentOptions(aData.assignments || []);
+        setAssignmentOptions(aData.assignments || []);
       } catch { /* ignore */ }
     })();
   }, [form.Batch_Id]);
@@ -249,14 +270,43 @@ export default function AddLectureTakenPage() {
   const set = (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(prev => ({ ...prev, [field]: e.target.value }));
 
-  /* ── Assignment Given (dropdown, sourced from this batch's own Assignments tab) ── */
-  const handleAssignmentSelect = (assignmentId: string) => {
-    const opt = batchAssignmentOptions.find(a => String(a.id) === assignmentId);
+  /* ── Assignment No. (dropdown, sourced from the course's Standard Assignment List) ──
+     Picking one fills Assignment Name/Description/Deliverables here, and auto-adds (or reuses)
+     the matching row in the batch's own Assignments tab — one-way sync, that tab never pushes
+     changes back into an already-saved Lecture Taken record. */
+  const handleAssignmentSelect = async (assignmentNo: string) => {
+    const opt = assignmentOptions.find(a => String(a.assignment_no) === assignmentNo);
+    if (!opt) {
+      setForm(prev => ({ ...prev, Assignment_No: '', Assignment_Id: '' }));
+      return;
+    }
     setForm(prev => ({
       ...prev,
-      Assignment_Id: assignmentId,
-      Assign_Given: opt ? `#${opt.assignment_no ?? '—'} — ${opt.assignment_name ?? ''}` : prev.Assign_Given,
+      Assignment_No: assignmentNo,
+      Assign_Given: opt.assignment_name || '',
+      Assignment_Description: opt.description || '',
+      Deliverables: opt.deliverable_produced || '',
     }));
+
+    if (!form.Batch_Id) return;
+    setAssigningAssignment(true);
+    try {
+      const res = await fetch(`/api/masters/batch/${form.Batch_Id}/assignment-list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignment_no: opt.assignment_no,
+          assignment_name: opt.assignment_name,
+          description: opt.description,
+          deliverable_produced: opt.deliverable_produced,
+        }),
+      });
+      const data = await res.json();
+      if (data?.insertId) {
+        setForm(prev => ({ ...prev, Assignment_Id: String(data.insertId) }));
+      }
+    } catch { /* ignore */ }
+    setAssigningAssignment(false);
   };
 
   /* ── Sub Topics — checkbox "done" list, synced back to the Lecture Plan row's covered_subtopics ── */
@@ -474,14 +524,22 @@ export default function AddLectureTakenPage() {
                 <input type="time" value={form.Lecture_End} onChange={set('Lecture_End')} className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className={labelCls}>Assignment Given</label>
-                <select value={form.Assignment_Id} onChange={(e) => handleAssignmentSelect(e.target.value)} disabled={!form.Batch_Id}
+                <label className={labelCls}>Assignment No.{assigningAssignment && <span className="text-[10px] text-gray-400 ml-1">(adding to batch...)</span>}</label>
+                <select value={form.Assignment_No} onChange={(e) => handleAssignmentSelect(e.target.value)} disabled={!form.Batch_Id}
                   className={`${inputCls} disabled:opacity-50`}>
                   <option value="">— Select Assignment —</option>
-                  {batchAssignmentOptions.map(a => (
-                    <option key={a.id} value={a.id}>#{a.assignment_no ?? '—'} — {a.assignment_name || 'Untitled'}</option>
+                  {assignmentOptions.map(a => (
+                    <option key={a.id} value={String(a.assignment_no)}>#{a.assignment_no ?? '—'} — {a.assignment_name || 'Untitled'}</option>
                   ))}
                 </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Assignment Date</label>
+                <input type="date" value={form.Assignment_Date} onChange={set('Assignment_Date')} className={inputCls} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Assignment Name</label>
+                <input type="text" value={form.Assign_Given} onChange={set('Assign_Given')} placeholder="Assignment name" className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Documents</label>
@@ -505,6 +563,19 @@ export default function AddLectureTakenPage() {
                   <option value="No">No</option>
                   <option value="Yes">Yes</option>
                 </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Assignment Description</label>
+                <textarea value={form.Assignment_Description} onChange={set('Assignment_Description')} rows={2} placeholder="Assignment description..."
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white resize-none" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Deliverables</label>
+                <textarea value={form.Deliverables} onChange={set('Deliverables')} rows={2} placeholder="Deliverable produced..."
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white resize-none" />
               </div>
             </div>
           </div>

@@ -63,7 +63,9 @@ export async function GET(
   }
 }
 
-// POST - add an assignment into the batch's own list (from the Standard Assignment List, or manually)
+// POST - add an assignment into the batch's own list (from the Standard Assignment List, or manually).
+// Idempotent when assignment_no is given: reuses an existing row instead of creating a duplicate,
+// so repeatedly picking the same Standard Assignment (e.g. from the Lecture Taken dropdown) is safe.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -73,6 +75,18 @@ export async function POST(
     const body = await request.json();
     const pool = getPool();
     await ensureTable(pool);
+
+    if (body.assignment_no != null && body.assignment_no !== '') {
+      const [existing] = await pool.query<RowDataPacket[]>(
+        `SELECT id FROM batch_assignment_list
+         WHERE batch_id = ? AND assignment_no = ? AND (deleted IS NULL OR deleted = '0')
+         LIMIT 1`,
+        [batchId, Number(body.assignment_no)]
+      );
+      if (existing.length) {
+        return NextResponse.json({ success: true, insertId: existing[0].id, existed: true });
+      }
+    }
 
     const [result] = await pool.query(`
       INSERT INTO batch_assignment_list
