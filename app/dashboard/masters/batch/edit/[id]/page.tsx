@@ -806,13 +806,21 @@ export default function EditBatchPage() {
     qp.set('batchId', batchId);
     qp.set('lectureId', String(row.id));
     qp.set('date', formatDateForInput(row.date) || today);
-    qp.set('topic', row.subject_topic || row.subject || '');
+    qp.set('topic', row.subject || row.subject_topic || '');
+    if (row.subject_topic) qp.set('subTopics', row.subject_topic);
+    if (row.standard_seq != null) qp.set('standardSeq', String(row.standard_seq));
+    if (row.actual_seq != null) qp.set('actualSeq', String(row.actual_seq));
+    if (row.lectureday) qp.set('day', row.lectureday);
+    if (row.session) qp.set('session', row.session);
     if (row.faculty_id != null) qp.set('facultyId', String(row.faculty_id));
     if (row.class_room) qp.set('classRoom', row.class_room);
     if (row.starttime) qp.set('start', row.starttime);
     if (row.endtime) qp.set('end', row.endtime);
     if (row.assignment) qp.set('assignGiven', row.assignment);
     if (row.documents) qp.set('documents', row.documents);
+    if (row.unit_test) qp.set('unitTest', row.unit_test);
+    if (row.unit_test_date) qp.set('unitTestDate', formatDateForInput(row.unit_test_date));
+    if (row.publish) qp.set('publish', row.publish);
     router.push(`/dashboard/daily-activities/lecture-taken/add?${qp.toString()}`);
   };
 

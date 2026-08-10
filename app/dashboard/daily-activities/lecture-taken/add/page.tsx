@@ -18,7 +18,6 @@ interface BatchLecture {
   actual_seq: number | null;
   subject: string | null;
   subject_topic: string | null;
-  covered_subtopics: string | null;
   date: string | null;
   lectureday: string | null;
   session: string | null;
@@ -36,23 +35,24 @@ interface BatchLecture {
 }
 
 /* Sub Topics is stored as a newline-separated list — same convention as the batch Lecture Plan. */
-const getSubtopicList = (text: string | null): string[] => {
-  if (!text) return [];
-  return text.split('\n').filter((s) => s.trim() !== '');
-};
-const getCoveredSet = (text: string | null | undefined): Set<number> => {
-  if (!text) return new Set();
-  return new Set(String(text).split(',').map((n) => parseInt(n, 10)).filter((n) => !Number.isNaN(n)));
+const getSubtopicList = (text: string): string[] => {
+  const items = text.split('\n');
+  return items.length ? items : [''];
 };
 
 interface FormData {
   Course_Id: string;
   Batch_Id: string;
   Lecture_Id: string;
+  Standard_Seq: string;
+  Actual_Seq: string;
   Lecture_Name: string;
   Faculty_Id: string;
   Take_Dt: string;
+  Day: string;
+  Session: string;
   Topic: string;
+  Sub_Topics: string;
   Duration: string;
   ClassRoom: string;
   Lecture_Start: string;
@@ -65,16 +65,24 @@ interface FormData {
   Assign_Start: string;
   Assign_End: string;
   Test_Given: string;
+  Unit_Test: string;
+  Unit_Test_Date: string;
+  Publish: string;
   Next_Planning: string;
 }
 
 const emptyForm: FormData = {
-  Course_Id: '', Batch_Id: '', Lecture_Id: '', Lecture_Name: '', Faculty_Id: '',
-  Take_Dt: new Date().toISOString().slice(0, 10), Topic: '', Duration: '', ClassRoom: '',
+  Course_Id: '', Batch_Id: '', Lecture_Id: '', Standard_Seq: '', Actual_Seq: '',
+  Lecture_Name: '', Faculty_Id: '',
+  Take_Dt: new Date().toISOString().slice(0, 10), Day: '', Session: '',
+  Topic: '', Sub_Topics: '', Duration: '', ClassRoom: '',
   Lecture_Start: '', Lecture_End: '', Faculty_Start: '', Faculty_End: '',
   Material: '', Documents: '', Assign_Given: '', Assign_Start: '', Assign_End: '',
-  Test_Given: '', Next_Planning: '',
+  Test_Given: '', Unit_Test: '', Unit_Test_Date: '', Publish: 'No', Next_Planning: '',
 };
+
+const labelCls = 'text-xs font-semibold text-gray-600';
+const inputCls = 'h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white';
 
 /* ------------------------------------------------------------------ */
 /*  Page                                                               */
@@ -92,15 +100,8 @@ export default function AddLectureTakenPage() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [batchLectures, setBatchLectures] = useState<BatchLecture[]>([]);
-  /* Full Lecture Plan row for the selected/pre-filled lecture — drives the read-only
-     Lecture Plan Reference panel (Std Seq, Actual Seq, Day, Session, Sub Topics, etc.). */
-  const [planLecture, setPlanLecture] = useState<BatchLecture | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(false);
-  /* Fields whose values were carried over from the batch's Lecture Plan (via "Mark Lecture
-     Taken") — highlighted below so staff can see at a glance what came from the plan vs. what
-     they're entering fresh. */
-  const [fromPlanFields, setFromPlanFields] = useState<Set<keyof FormData>>(new Set());
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -129,51 +130,31 @@ export default function AddLectureTakenPage() {
     const date = searchParams.get('date');
     if (!courseId && !batchId && !lectureId && !date) return;
 
-    const topic = searchParams.get('topic');
-    const facultyId = searchParams.get('facultyId');
-    const classRoom = searchParams.get('classRoom');
-    const start = searchParams.get('start');
-    const end = searchParams.get('end');
-    const assignGiven = searchParams.get('assignGiven');
-    const documents = searchParams.get('documents');
-
     setForm(prev => ({
       ...prev,
       Course_Id: courseId || prev.Course_Id,
       Batch_Id: batchId || prev.Batch_Id,
       Lecture_Id: lectureId || prev.Lecture_Id,
       Take_Dt: date || prev.Take_Dt,
-      Lecture_Name: topic || prev.Lecture_Name,
-      Topic: topic || prev.Topic,
-      Faculty_Id: facultyId || prev.Faculty_Id,
-      ClassRoom: classRoom || prev.ClassRoom,
-      Lecture_Start: start || prev.Lecture_Start,
-      Lecture_End: end || prev.Lecture_End,
-      Assign_Given: assignGiven || prev.Assign_Given,
-      Documents: documents || prev.Documents,
+      Standard_Seq: searchParams.get('standardSeq') || prev.Standard_Seq,
+      Actual_Seq: searchParams.get('actualSeq') || prev.Actual_Seq,
+      Day: searchParams.get('day') || prev.Day,
+      Session: searchParams.get('session') || prev.Session,
+      Lecture_Name: searchParams.get('topic') || prev.Lecture_Name,
+      Topic: searchParams.get('topic') || prev.Topic,
+      Sub_Topics: searchParams.get('subTopics') || prev.Sub_Topics,
+      Faculty_Id: searchParams.get('facultyId') || prev.Faculty_Id,
+      ClassRoom: searchParams.get('classRoom') || prev.ClassRoom,
+      Lecture_Start: searchParams.get('start') || prev.Lecture_Start,
+      Lecture_End: searchParams.get('end') || prev.Lecture_End,
+      Assign_Given: searchParams.get('assignGiven') || prev.Assign_Given,
+      Documents: searchParams.get('documents') || prev.Documents,
+      Unit_Test: searchParams.get('unitTest') || prev.Unit_Test,
+      Unit_Test_Date: searchParams.get('unitTestDate') || prev.Unit_Test_Date,
+      Publish: searchParams.get('publish') || prev.Publish,
     }));
-
-    const filled = new Set<keyof FormData>();
-    if (date) filled.add('Take_Dt');
-    if (topic) { filled.add('Lecture_Name'); filled.add('Topic'); }
-    if (facultyId) filled.add('Faculty_Id');
-    if (classRoom) filled.add('ClassRoom');
-    if (start) filled.add('Lecture_Start');
-    if (end) filled.add('Lecture_End');
-    if (assignGiven) filled.add('Assign_Given');
-    if (documents) filled.add('Documents');
-    setFromPlanFields(filled);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editId]);
-
-  /* Extra styling + a "From Plan" chip for fields whose value was carried over from the
-     batch's Lecture Plan, so staff can see at a glance what's pre-filled vs. entered fresh. */
-  const fromPlanCls = (field: keyof FormData) =>
-    fromPlanFields.has(field) ? 'border-amber-300 bg-amber-50 ring-1 ring-amber-200' : 'border-gray-300 bg-white';
-  const FromPlanChip = ({ field }: { field: keyof FormData }) =>
-    fromPlanFields.has(field) ? (
-      <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-100 text-amber-700">From Plan</span>
-    ) : null;
 
   /* ── Load edit data ── */
   useEffect(() => {
@@ -189,10 +170,15 @@ export default function AddLectureTakenPage() {
             Course_Id: String(l.Course_Id || ''),
             Batch_Id: String(l.Batch_Id || ''),
             Lecture_Id: String(l.Lecture_Id || ''),
+            Standard_Seq: l.Standard_Seq != null ? String(l.Standard_Seq) : '',
+            Actual_Seq: l.Actual_Seq != null ? String(l.Actual_Seq) : '',
             Lecture_Name: l.Lecture_Name || '',
             Faculty_Id: String(l.Faculty_Id || ''),
             Take_Dt: l.Take_Dt || '',
+            Day: l.Day || '',
+            Session: l.Session || '',
             Topic: l.Topic || '',
+            Sub_Topics: l.Sub_Topics || '',
             Duration: l.Duration || '',
             ClassRoom: l.ClassRoom || '',
             Lecture_Start: l.Lecture_Start || '',
@@ -205,6 +191,9 @@ export default function AddLectureTakenPage() {
             Assign_Start: l.Assign_Start || '',
             Assign_End: l.Assign_End || '',
             Test_Given: l.Test_Given || '',
+            Unit_Test: l.Unit_Test || '',
+            Unit_Test_Date: l.Unit_Test_Date || '',
+            Publish: l.Publish || 'No',
             Next_Planning: l.Next_Planning || '',
           });
         }
@@ -237,49 +226,52 @@ export default function AddLectureTakenPage() {
     })();
   }, [form.Batch_Id]);
 
-  /* ── Resolve the Lecture Plan Reference panel once batchLectures loads for a URL-prefilled Lecture_Id ── */
-  useEffect(() => {
-    if (!form.Lecture_Id || !batchLectures.length) return;
-    const lec = batchLectures.find(l => String(l.id) === form.Lecture_Id);
-    if (lec) setPlanLecture(lec);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batchLectures, form.Lecture_Id]);
-
-  /* ── Auto-fill from selected batch lecture (also drives the read-only Lecture Plan Reference panel) ── */
+  /* ── Auto-fill every matching field from the selected Planned Lecture ── */
   const handleLectureSelect = (lectureId: string) => {
     setForm(prev => ({ ...prev, Lecture_Id: lectureId }));
     const lec = batchLectures.find(l => String(l.id) === lectureId);
-    setPlanLecture(lec ?? null);
     if (lec) {
-      const filled = new Set<keyof FormData>();
       setForm(prev => ({
         ...prev,
         Lecture_Id: lectureId,
+        Standard_Seq: lec.standard_seq != null ? String(lec.standard_seq) : prev.Standard_Seq,
+        Actual_Seq: lec.actual_seq != null ? String(lec.actual_seq) : prev.Actual_Seq,
         Lecture_Name: lec.subject || lec.subject_topic || '',
         Topic: lec.subject || lec.subject_topic || '',
+        Sub_Topics: lec.subject_topic || prev.Sub_Topics,
+        Day: lec.lectureday || prev.Day,
+        Session: lec.session || prev.Session,
         ClassRoom: lec.class_room || prev.ClassRoom,
         Lecture_Start: lec.starttime || prev.Lecture_Start,
         Lecture_End: lec.endtime || prev.Lecture_End,
         Faculty_Id: lec.faculty_id != null ? String(lec.faculty_id) : prev.Faculty_Id,
         Assign_Given: lec.assignment || prev.Assign_Given,
         Documents: lec.documents || prev.Documents,
+        Unit_Test: lec.unit_test || prev.Unit_Test,
+        Unit_Test_Date: lec.unit_test_date || prev.Unit_Test_Date,
+        Publish: lec.publish || prev.Publish,
       }));
-      filled.add('Lecture_Name'); filled.add('Topic');
-      if (lec.class_room) filled.add('ClassRoom');
-      if (lec.starttime) filled.add('Lecture_Start');
-      if (lec.endtime) filled.add('Lecture_End');
-      if (lec.faculty_id != null) filled.add('Faculty_Id');
-      if (lec.assignment) filled.add('Assign_Given');
-      if (lec.documents) filled.add('Documents');
-      setFromPlanFields(filled);
-    } else {
-      setFromPlanFields(new Set());
     }
   };
 
   /* ── Update form field ── */
   const set = (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(prev => ({ ...prev, [field]: e.target.value }));
+
+  /* ── Sub Topics editor (multi-line, bulleted, matching the Lecture Plan's list convention) ── */
+  const subtopicItems = getSubtopicList(form.Sub_Topics);
+  const updateSubtopicItem = (index: number, value: string) => {
+    const items = [...subtopicItems];
+    items[index] = value;
+    setForm(prev => ({ ...prev, Sub_Topics: items.join('\n') }));
+  };
+  const addSubtopicItem = () => {
+    setForm(prev => ({ ...prev, Sub_Topics: [...subtopicItems, ''].join('\n') }));
+  };
+  const removeSubtopicItem = (index: number) => {
+    const items = subtopicItems.filter((_, i) => i !== index);
+    setForm(prev => ({ ...prev, Sub_Topics: items.join('\n') }));
+  };
 
   /* ── Submit ── */
   const handleSubmit = async (e: React.FormEvent) => {
@@ -377,25 +369,21 @@ export default function AddLectureTakenPage() {
             </div>
           )}
 
-          {/* ── Batch & Schedule Selection Card ── */}
+          {/* ── Batch & Schedule Selection ── */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
             <h3 className="text-sm font-bold text-[#2E3093] uppercase tracking-wider mb-4">Batch & Schedule Selection</h3>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {/* Course */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Course <span className="text-red-400">*</span></label>
-                <select value={form.Course_Id} onChange={set('Course_Id')} required
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white">
+                <label className={labelCls}>Course <span className="text-red-400">*</span></label>
+                <select value={form.Course_Id} onChange={set('Course_Id')} required className={inputCls}>
                   <option value="">— Select Course —</option>
                   {courses.map(c => <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>)}
                 </select>
               </div>
-
-              {/* Batch */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Batch Code <span className="text-red-400">*</span></label>
+                <label className={labelCls}>Batch Code <span className="text-red-400">*</span></label>
                 <select value={form.Batch_Id} onChange={set('Batch_Id')} required disabled={!form.Course_Id}
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white disabled:opacity-50">
+                  className={`${inputCls} disabled:opacity-50`}>
                   <option value="">— Select Batch —</option>
                   {batches.map(b => (
                     <option key={b.Batch_Id} value={b.Batch_Id}>
@@ -404,172 +392,164 @@ export default function AddLectureTakenPage() {
                   ))}
                 </select>
               </div>
-
-              {/* Batch Lecture (optional) */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Planned Lecture</label>
+                <label className={labelCls}>Planned Lecture</label>
                 <select value={form.Lecture_Id} onChange={(e) => handleLectureSelect(e.target.value)} disabled={!form.Batch_Id}
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white disabled:opacity-50">
+                  className={`${inputCls} disabled:opacity-50`}>
                   <option value="">— Select Lecture —</option>
                   {batchLectures.map(l => (
                     <option key={l.id} value={l.id}>
-                      #{l.lecture_no} — {l.subject_topic || l.subject || 'Untitled'}
+                      #{l.lecture_no} — {l.subject || l.subject_topic || 'Untitled'}
                     </option>
                   ))}
                 </select>
               </div>
-
-              {/* Date */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">Date <span className="text-red-400">*</span> <FromPlanChip field="Take_Dt" /></label>
-                <input type="date" value={form.Take_Dt} onChange={set('Take_Dt')} required
-                  className={`h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] ${fromPlanCls('Take_Dt')}`} />
+                <label className={labelCls}>Date <span className="text-red-400">*</span></label>
+                <input type="date" value={form.Take_Dt} onChange={set('Take_Dt')} required className={inputCls} />
               </div>
             </div>
           </div>
 
-          {/* ── Lecture Plan Reference Card — read-only, mirrors every column of the batch's frozen Lecture Plan row ── */}
-          {planLecture && (
-            <div className="bg-slate-50 rounded-xl border border-slate-200 shadow-sm p-5">
-              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                Lecture Plan Reference
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 normal-case tracking-normal">Read-only</span>
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-xs">
-                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Std Seq</div><div className="text-slate-700 font-medium">{planLecture.standard_seq ?? '—'}</div></div>
-                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Actual Seq</div><div className="text-slate-700 font-medium">{planLecture.actual_seq ?? '—'}</div></div>
-                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Date</div><div className="text-slate-700 font-medium">{planLecture.date || '—'}</div></div>
-                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Day</div><div className="text-slate-700 font-medium">{planLecture.lectureday || '—'}</div></div>
-                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Session</div><div className="text-slate-700 font-medium">{planLecture.session || '—'}</div></div>
-                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Trainer</div><div className="text-slate-700 font-medium">{planLecture.faculty_name || '—'}</div></div>
-                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Start Time</div><div className="text-slate-700 font-medium">{planLecture.starttime || '—'}</div></div>
-                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">End Time</div><div className="text-slate-700 font-medium">{planLecture.endtime || '—'}</div></div>
-                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Classroom</div><div className="text-slate-700 font-medium">{planLecture.class_room || '—'}</div></div>
-                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Documents</div><div className="text-slate-700 font-medium">{planLecture.documents || '—'}</div></div>
-                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Assignment Given</div><div className="text-slate-700 font-medium">{planLecture.assignment || '—'}</div></div>
-                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Submission Dt</div><div className="text-slate-700 font-medium">{planLecture.assignment_date || '—'}</div></div>
-                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">UT</div><div className="text-slate-700 font-medium">{planLecture.unit_test || '—'}</div></div>
-                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">UT Date</div><div className="text-slate-700 font-medium">{planLecture.unit_test_date || '—'}</div></div>
-                <div><div className="text-[9px] font-semibold text-slate-400 uppercase">Publish</div><div className="text-slate-700 font-medium">{planLecture.publish || '—'}</div></div>
-              </div>
-
-              <div className="mt-4">
-                <div className="text-[9px] font-semibold text-slate-400 uppercase mb-1">Topic</div>
-                <div className="text-xs text-slate-700 font-medium bg-white border border-slate-200 rounded-lg px-3 py-2">
-                  {planLecture.subject || '—'}
-                </div>
-              </div>
-
-              {getSubtopicList(planLecture.subject_topic).length > 0 && (
-                <div className="mt-3">
-                  <div className="text-[9px] font-semibold text-slate-400 uppercase mb-1">Sub Topics</div>
-                  <div className="bg-white border border-slate-200 rounded-lg px-3 py-2 space-y-1">
-                    {getSubtopicList(planLecture.subject_topic).map((s, idx) => {
-                      const covered = getCoveredSet(planLecture.covered_subtopics).has(idx);
-                      return (
-                        <div key={idx} className="flex items-start gap-1.5 text-xs text-slate-700">
-                          <input type="checkbox" checked={covered} disabled className="mt-0.5 shrink-0" />
-                          <span className="flex gap-1">
-                            <span className="text-slate-300">&bull;</span>
-                            <span>{s}</span>
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Lecture Details Card — ordered to match the Lecture Plan's columns ── */}
+          {/* ── Lecture Plan Fields — arranged in the same order as the batch's Lecture Plan columns ── */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
             <h3 className="text-sm font-bold text-[#2E3093] uppercase tracking-wider mb-4">Lecture Details</h3>
-            <div className="flex flex-col gap-1.5 mb-4">
-              <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">Topic (Module / Topic) <FromPlanChip field="Topic" /></label>
-              <textarea value={form.Topic} onChange={set('Topic')} rows={2} placeholder="Lecture topic..."
-                className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] resize-none ${fromPlanCls('Topic')}`} />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">Trainer <FromPlanChip field="Faculty_Id" /></label>
-                <select value={form.Faculty_Id} onChange={set('Faculty_Id')}
-                  className={`h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] ${fromPlanCls('Faculty_Id')}`}>
+                <label className={labelCls}>Std Seq</label>
+                <input type="number" value={form.Standard_Seq} onChange={set('Standard_Seq')} className={inputCls} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Actual Seq</label>
+                <input type="number" value={form.Actual_Seq} onChange={set('Actual_Seq')} className={inputCls} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Day</label>
+                <input type="text" value={form.Day} onChange={set('Day')} placeholder="e.g. Monday" className={inputCls} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Session</label>
+                <select value={form.Session} onChange={set('Session')} className={inputCls}>
+                  <option value="">— Select —</option>
+                  <option value="First Half">First Half</option>
+                  <option value="Second Half">Second Half</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-1.5">
+              <label className={labelCls}>Topic (Module / Topic)</label>
+              <textarea value={form.Topic} onChange={set('Topic')} rows={2} placeholder="Lecture topic..."
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white resize-none" />
+            </div>
+
+            <div className="mt-4 flex flex-col gap-1.5">
+              <label className={labelCls}>Sub Topics</label>
+              <div className="space-y-1">
+                {subtopicItems.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-1.5">
+                    <span className="text-gray-400 text-xs shrink-0">&bull;</span>
+                    <input type="text" value={item} onChange={(e) => updateSubtopicItem(idx, e.target.value)}
+                      className="flex-1 h-9 rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
+                    <button type="button" onClick={() => removeSubtopicItem(idx)} title="Remove"
+                      className="p-1 text-gray-400 hover:text-red-500 shrink-0">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+                <button type="button" onClick={addSubtopicItem}
+                  className="flex items-center gap-1 text-xs font-bold text-[#2E3093] hover:opacity-80 mt-1">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  Add sub-topic
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Trainer</label>
+                <select value={form.Faculty_Id} onChange={set('Faculty_Id')} className={inputCls}>
                   <option value="">— Select Trainer —</option>
                   {faculties.map(f => <option key={f.Faculty_Id} value={f.Faculty_Id}>{f.Faculty_Name}</option>)}
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">Lecture Start <FromPlanChip field="Lecture_Start" /></label>
-                <input type="text" value={form.Lecture_Start} onChange={set('Lecture_Start')} placeholder="e.g. 2:00PM"
-                  className={`h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] ${fromPlanCls('Lecture_Start')}`} />
+                <label className={labelCls}>Lecture Start</label>
+                <input type="text" value={form.Lecture_Start} onChange={set('Lecture_Start')} placeholder="e.g. 2:00PM" className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">Lecture End <FromPlanChip field="Lecture_End" /></label>
-                <input type="text" value={form.Lecture_End} onChange={set('Lecture_End')} placeholder="e.g. 5:30PM"
-                  className={`h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] ${fromPlanCls('Lecture_End')}`} />
+                <label className={labelCls}>Lecture End</label>
+                <input type="text" value={form.Lecture_End} onChange={set('Lecture_End')} placeholder="e.g. 5:30PM" className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">Assignment Given <FromPlanChip field="Assign_Given" /></label>
-                <input type="text" value={form.Assign_Given} onChange={set('Assign_Given')} placeholder="Assignment description"
-                  className={`h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] ${fromPlanCls('Assign_Given')}`} />
+                <label className={labelCls}>Assignment Given</label>
+                <input type="text" value={form.Assign_Given} onChange={set('Assign_Given')} placeholder="Assignment description" className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">Documents <FromPlanChip field="Documents" /></label>
-                <input type="text" value={form.Documents} onChange={set('Documents')} placeholder="e.g. Projector/Laptop"
-                  className={`h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] ${fromPlanCls('Documents')}`} />
+                <label className={labelCls}>Documents</label>
+                <input type="text" value={form.Documents} onChange={set('Documents')} placeholder="e.g. Projector/Laptop" className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">Classroom <FromPlanChip field="ClassRoom" /></label>
-                <input type="text" value={form.ClassRoom} onChange={set('ClassRoom')} placeholder="e.g. SIT TR 03"
-                  className={`h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] ${fromPlanCls('ClassRoom')}`} />
+                <label className={labelCls}>Classroom</label>
+                <input type="text" value={form.ClassRoom} onChange={set('ClassRoom')} placeholder="e.g. SIT TR 03" className={inputCls} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>UT</label>
+                <input type="text" value={form.Unit_Test} onChange={set('Unit_Test')} placeholder="Unit test" className={inputCls} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>UT Date</label>
+                <input type="date" value={form.Unit_Test_Date} onChange={set('Unit_Test_Date')} className={inputCls} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Publish</label>
+                <select value={form.Publish} onChange={set('Publish')} className={inputCls}>
+                  <option value="No">No</option>
+                  <option value="Yes">Yes</option>
+                </select>
               </div>
             </div>
           </div>
 
-          {/* ── Additional Details Card — fields with no Lecture Plan equivalent ── */}
+          {/* ── Additional Details — fields with no Lecture Plan equivalent ── */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
             <h3 className="text-sm font-bold text-[#2E3093] uppercase tracking-wider mb-4">Additional Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Trainer Start</label>
-                <input type="text" value={form.Faculty_Start} onChange={set('Faculty_Start')} placeholder="e.g. 1:45PM"
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
+                <label className={labelCls}>Trainer Start</label>
+                <input type="text" value={form.Faculty_Start} onChange={set('Faculty_Start')} placeholder="e.g. 1:45PM" className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Trainer End</label>
-                <input type="text" value={form.Faculty_End} onChange={set('Faculty_End')} placeholder="e.g. 5:30PM"
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
+                <label className={labelCls}>Trainer End</label>
+                <input type="text" value={form.Faculty_End} onChange={set('Faculty_End')} placeholder="e.g. 5:30PM" className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Duration</label>
-                <input type="text" value={form.Duration} onChange={set('Duration')} placeholder="e.g. 4 hrs"
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
+                <label className={labelCls}>Duration</label>
+                <input type="text" value={form.Duration} onChange={set('Duration')} placeholder="e.g. 4 hrs" className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Material</label>
-                <input type="text" value={form.Material} onChange={set('Material')} placeholder="Material issued"
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
+                <label className={labelCls}>Material</label>
+                <input type="text" value={form.Material} onChange={set('Material')} placeholder="Material issued" className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Assignment Start</label>
-                <input type="date" value={form.Assign_Start} onChange={set('Assign_Start')}
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
+                <label className={labelCls}>Assignment Start</label>
+                <input type="date" value={form.Assign_Start} onChange={set('Assign_Start')} className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Assignment End</label>
-                <input type="date" value={form.Assign_End} onChange={set('Assign_End')}
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
+                <label className={labelCls}>Assignment End</label>
+                <input type="date" value={form.Assign_End} onChange={set('Assign_End')} className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Test Given</label>
-                <input type="text" value={form.Test_Given} onChange={set('Test_Given')} placeholder="Test description"
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
+                <label className={labelCls}>Test Given</label>
+                <input type="text" value={form.Test_Given} onChange={set('Test_Given')} placeholder="Test description" className={inputCls} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Next Planning</label>
-                <input type="text" value={form.Next_Planning} onChange={set('Next_Planning')} placeholder="Next planned topic"
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
+                <label className={labelCls}>Next Planning</label>
+                <input type="text" value={form.Next_Planning} onChange={set('Next_Planning')} placeholder="Next planned topic" className={inputCls} />
               </div>
             </div>
           </div>

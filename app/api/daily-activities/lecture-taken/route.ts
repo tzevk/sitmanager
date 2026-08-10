@@ -4,6 +4,36 @@ import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 
 export const dynamic = 'force-dynamic';
+
+/** Adds the Lecture Plan fields (Day, Session, Std/Actual Seq, Sub Topics, UT, Publish) to
+ * lecture_taken_master so they're directly editable here, matching the batch Lecture Plan's
+ * own columns (which are now a frozen, read-only reference — editing happens on this page). */
+async function ensureLectureTakenColumns(pool: ReturnType<typeof getPool>) {
+  const [rows] = await pool.query(
+    `SELECT COLUMN_NAME AS name
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'lecture_taken_master'
+       AND COLUMN_NAME IN ('Day', 'Session', 'Standard_Seq', 'Actual_Seq', 'Sub_Topics', 'Unit_Test', 'Unit_Test_Date', 'Publish')`
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const existing = new Set((rows as any[]).map((r) => r.name as string));
+
+  const alters: string[] = [];
+  if (!existing.has('Day')) alters.push(`ADD COLUMN Day VARCHAR(20) NULL AFTER Take_Dt`);
+  if (!existing.has('Session')) alters.push(`ADD COLUMN Session VARCHAR(20) NULL AFTER Day`);
+  if (!existing.has('Standard_Seq')) alters.push(`ADD COLUMN Standard_Seq INT NULL AFTER Lecture_Id`);
+  if (!existing.has('Actual_Seq')) alters.push(`ADD COLUMN Actual_Seq INT NULL AFTER Standard_Seq`);
+  if (!existing.has('Sub_Topics')) alters.push(`ADD COLUMN Sub_Topics TEXT NULL AFTER Topic`);
+  if (!existing.has('Unit_Test')) alters.push(`ADD COLUMN Unit_Test VARCHAR(50) NULL AFTER Test_Id`);
+  if (!existing.has('Unit_Test_Date')) alters.push(`ADD COLUMN Unit_Test_Date DATE NULL AFTER Unit_Test`);
+  if (!existing.has('Publish')) alters.push(`ADD COLUMN Publish VARCHAR(10) NULL AFTER Unit_Test_Date`);
+
+  for (const alter of alters) {
+    await pool.query(`ALTER TABLE lecture_taken_master ${alter}`);
+  }
+}
+
 function normalizeTextKey(v: unknown) {
   return String(v ?? '').trim().toLowerCase();
 }
@@ -19,6 +49,7 @@ export async function GET(req: NextRequest) {
     const auth = await requirePermission(req, 'lecture.view');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
+    await ensureLectureTakenColumns(pool);
     const { searchParams } = new URL(req.url);
 
     /* --- Single lecture by id --- */
@@ -275,16 +306,22 @@ export async function POST(req: NextRequest) {
     const auth = await requirePermission(req, 'lecture.create');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
+    await ensureLectureTakenColumns(pool);
     const body = await req.json();
 
     const {
       Course_Id,
       Batch_Id,
       Lecture_Id,
+      Standard_Seq,
+      Actual_Seq,
       Lecture_Name,
       Faculty_Id,
       Take_Dt,
+      Day,
+      Session,
       Topic,
+      Sub_Topics,
       Duration,
       ClassRoom,
       Lecture_Start,
@@ -297,6 +334,9 @@ export async function POST(req: NextRequest) {
       Assign_Start,
       Assign_End,
       Test_Given,
+      Unit_Test,
+      Unit_Test_Date,
+      Publish,
       Next_Planning,
     } = body;
 
@@ -309,22 +349,27 @@ export async function POST(req: NextRequest) {
 
     const sql = `
       INSERT INTO lecture_taken_master (
-        Course_Id, Batch_Id, Lecture_Id, Lecture_Name, Faculty_Id,
-        Take_Dt, Topic, Duration, ClassRoom,
+        Course_Id, Batch_Id, Lecture_Id, Standard_Seq, Actual_Seq, Lecture_Name, Faculty_Id,
+        Take_Dt, Day, Session, Topic, Sub_Topics, Duration, ClassRoom,
         Lecture_Start, Lecture_End, Faculty_Start, Faculty_End,
         Material, Documents, Assign_Given, Assign_Start, Assign_End,
-        Test_Given, Next_Planning, IsActive, IsDelete
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)
+        Test_Given, Unit_Test, Unit_Test_Date, Publish, Next_Planning, IsActive, IsDelete
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)
     `;
 
     const params = [
       Course_Id,
       Batch_Id,
       Lecture_Id || null,
+      Standard_Seq != null && Standard_Seq !== '' ? Number(Standard_Seq) : null,
+      Actual_Seq != null && Actual_Seq !== '' ? Number(Actual_Seq) : null,
       Lecture_Name?.trim() || null,
       Faculty_Id || null,
       Take_Dt,
+      Day || null,
+      Session || null,
       Topic?.trim() || null,
+      Sub_Topics?.trim() || null,
       Duration || null,
       ClassRoom || null,
       Lecture_Start || null,
@@ -337,6 +382,9 @@ export async function POST(req: NextRequest) {
       Assign_Start || null,
       Assign_End || null,
       Test_Given || null,
+      Unit_Test || null,
+      Unit_Test_Date || null,
+      Publish || null,
       Next_Planning || null,
     ];
 
@@ -359,6 +407,7 @@ export async function PUT(req: NextRequest) {
     const auth = await requirePermission(req, 'lecture.update');
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
+    await ensureLectureTakenColumns(pool);
     const body = await req.json();
 
     const { Take_Id } = body;
@@ -368,11 +417,11 @@ export async function PUT(req: NextRequest) {
 
     const sql = `
       UPDATE lecture_taken_master SET
-        Course_Id = ?, Batch_Id = ?, Lecture_Id = ?, Lecture_Name = ?,
-        Faculty_Id = ?, Take_Dt = ?, Topic = ?, Duration = ?, ClassRoom = ?,
+        Course_Id = ?, Batch_Id = ?, Lecture_Id = ?, Standard_Seq = ?, Actual_Seq = ?, Lecture_Name = ?,
+        Faculty_Id = ?, Take_Dt = ?, Day = ?, Session = ?, Topic = ?, Sub_Topics = ?, Duration = ?, ClassRoom = ?,
         Lecture_Start = ?, Lecture_End = ?, Faculty_Start = ?, Faculty_End = ?,
         Material = ?, Documents = ?, Assign_Given = ?, Assign_Start = ?, Assign_End = ?,
-        Test_Given = ?, Next_Planning = ?
+        Test_Given = ?, Unit_Test = ?, Unit_Test_Date = ?, Publish = ?, Next_Planning = ?
       WHERE Take_Id = ?
     `;
 
@@ -380,10 +429,15 @@ export async function PUT(req: NextRequest) {
       body.Course_Id || null,
       body.Batch_Id || null,
       body.Lecture_Id || null,
+      body.Standard_Seq != null && body.Standard_Seq !== '' ? Number(body.Standard_Seq) : null,
+      body.Actual_Seq != null && body.Actual_Seq !== '' ? Number(body.Actual_Seq) : null,
       body.Lecture_Name?.trim() || null,
       body.Faculty_Id || null,
       body.Take_Dt || null,
+      body.Day || null,
+      body.Session || null,
       body.Topic?.trim() || null,
+      body.Sub_Topics?.trim() || null,
       body.Duration || null,
       body.ClassRoom || null,
       body.Lecture_Start || null,
@@ -396,6 +450,9 @@ export async function PUT(req: NextRequest) {
       body.Assign_Start || null,
       body.Assign_End || null,
       body.Test_Given || null,
+      body.Unit_Test || null,
+      body.Unit_Test_Date || null,
+      body.Publish || null,
       body.Next_Planning || null,
       Take_Id,
     ];
