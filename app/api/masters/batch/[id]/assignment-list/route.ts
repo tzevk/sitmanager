@@ -15,6 +15,7 @@ async function ensureTable(pool: ReturnType<typeof getPool>) {
       trainer VARCHAR(150) NULL,
       department VARCHAR(150) NULL,
       assignment_date DATE NULL,
+      submission_date DATE NULL,
       deleted VARCHAR(1) DEFAULT '0',
       created_date DATETIME NULL,
       INDEX idx_batch (batch_id)
@@ -23,10 +24,14 @@ async function ensureTable(pool: ReturnType<typeof getPool>) {
 
   const [cols] = await pool.query<RowDataPacket[]>(
     `SELECT COLUMN_NAME AS name FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'batch_assignment_list' AND COLUMN_NAME = 'assignment_date'`
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'batch_assignment_list' AND COLUMN_NAME IN ('assignment_date', 'submission_date')`
   );
-  if (!cols.length) {
+  const existing = new Set(cols.map((c) => c.name as string));
+  if (!existing.has('assignment_date')) {
     await pool.query(`ALTER TABLE batch_assignment_list ADD COLUMN assignment_date DATE NULL AFTER department`);
+  }
+  if (!existing.has('submission_date')) {
+    await pool.query(`ALTER TABLE batch_assignment_list ADD COLUMN submission_date DATE NULL AFTER assignment_date`);
   }
 }
 
@@ -73,7 +78,7 @@ export async function GET(
     }
 
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT id, assignment_no, assignment_name, description, input_documents, deliverable_produced, trainer, department, assignment_date
+      `SELECT id, assignment_no, assignment_name, description, input_documents, deliverable_produced, trainer, department, assignment_date, submission_date
        FROM batch_assignment_list
        WHERE batch_id = ? AND (deleted IS NULL OR deleted = '0')
        ORDER BY assignment_no ASC, id ASC`,
@@ -114,8 +119,8 @@ export async function POST(
 
     const [result] = await pool.query(`
       INSERT INTO batch_assignment_list
-      (batch_id, assignment_no, assignment_name, description, input_documents, deliverable_produced, trainer, department, assignment_date, deleted, created_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
+      (batch_id, assignment_no, assignment_name, description, input_documents, deliverable_produced, trainer, department, assignment_date, submission_date, deleted, created_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '0', NOW())
     `, [
       batchId,
       body.assignment_no ? Number(body.assignment_no) : null,
@@ -126,6 +131,7 @@ export async function POST(
       body.trainer?.trim() || null,
       body.department?.trim() || null,
       body.assignment_date || null,
+      body.submission_date || null,
     ]);
 
     return NextResponse.json({ success: true, insertId: (result as { insertId: number }).insertId });
@@ -151,7 +157,7 @@ export async function PUT(request: NextRequest) {
     await pool.query(
       `UPDATE batch_assignment_list SET
          assignment_no = ?, assignment_name = ?, description = ?, input_documents = ?,
-         deliverable_produced = ?, trainer = ?, department = ?, assignment_date = ?
+         deliverable_produced = ?, trainer = ?, department = ?, assignment_date = ?, submission_date = ?
        WHERE id = ?`,
       [
         data.assignment_no != null && data.assignment_no !== '' ? Number(data.assignment_no) : null,
@@ -162,6 +168,7 @@ export async function PUT(request: NextRequest) {
         data.trainer?.trim() || null,
         data.department?.trim() || null,
         data.assignment_date || null,
+        data.submission_date || null,
         id,
       ]
     );
