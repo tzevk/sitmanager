@@ -20,6 +20,14 @@ interface StandardAssignmentOption {
   assignment_name: string | null;
   description: string | null;
   deliverable_produced: string | null;
+  input_documents: string | null;
+  trainer: string | null;
+  department: string | null;
+}
+interface BatchAssignmentRow {
+  id: number;
+  assignment_no: number | null;
+  actual_no: number | null;
 }
 interface BatchLecture {
   id: number;
