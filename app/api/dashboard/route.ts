@@ -402,7 +402,7 @@ async function fetchDashboardData(dept?: string) {
         SELECT si1.Inquiry_Id, b1.Batch_Id
         FROM student_inquiry si1
         JOIN batch_mst b1
-          ON LOWER(TRIM(si1.Batch_Code)) = LOWER(TRIM(b1.Batch_code))
+          ON si1.Batch_Code_Norm = b1.Batch_code_Norm
          AND ${BATCH_SDATE_EXPR.replace(/\bb\./g, 'b1.')} >= CURDATE()
          AND ${BATCH_SDATE_EXPR.replace(/\bb\./g, 'b1.')} <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
          AND (b1.IsDelete IS NULL OR b1.IsDelete = 0)
