@@ -113,12 +113,14 @@ interface TemplateAssignment {
 interface BatchAssignment {
   id: number;
   assignment_no: number | null;
+  actual_no: number | null;
   assignment_name: string | null;
   description: string | null;
   input_documents: string | null;
   deliverable_produced: string | null;
   trainer: string | null;
   department: string | null;
+  assignment_date: string | null;
 }
 
 interface BatchTimings {
@@ -1191,6 +1193,20 @@ export default function EditBatchPage() {
     if (!confirm('Remove this assignment from the batch?')) return;
     try {
       await fetch(`/api/masters/batch/${batchId}/assignment-list?assignmentId=${assignmentId}`, { method: 'DELETE' });
+      await fetchBatchAssignments();
+    } catch { /* ignore */ }
+  };
+
+  /* Setting an assignment's date is what drives its computed Actual Assignment No.
+     (rank by date among the batch's own assignments — see withActualNo in the API route). */
+  const handleUpdateBatchAssignmentDate = async (a: BatchAssignment, date: string) => {
+    setBatchAssignments((prev) => prev.map((x) => (x.id === a.id ? { ...x, assignment_date: date || null } : x)));
+    try {
+      await fetch(`/api/masters/batch/${batchId}/assignment-list`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...a, id: a.id, assignment_date: date || null }),
+      });
       await fetchBatchAssignments();
     } catch { /* ignore */ }
   };
@@ -3893,8 +3909,10 @@ export default function EditBatchPage() {
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-slate-50 z-10">
                     <tr>
-                      <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">No.</th>
+                      <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Std No.</th>
+                      <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Actual No.</th>
                       <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b">Assignment Name</th>
+                      <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Date</th>
                       <th className="text-left px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Trainer</th>
                       <th className="text-center px-2 py-1.5 font-semibold text-slate-600 border-b whitespace-nowrap">Actions</th>
                     </tr>
@@ -3903,7 +3921,16 @@ export default function EditBatchPage() {
                     {batchAssignments.map((a) => (
                       <tr key={a.id} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{a.assignment_no ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{a.actual_no ?? '—'}</td>
                         <td className="px-2 py-1.5 text-gray-900 font-medium">{a.assignment_name || 'Untitled'}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">
+                          <input
+                            type="date"
+                            value={formatDateForInput(a.assignment_date)}
+                            onChange={(e) => handleUpdateBatchAssignmentDate(a, e.target.value)}
+                            className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white"
+                          />
+                        </td>
                         <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{a.trainer || '—'}</td>
                         <td className="px-2 py-1.5 text-center">
                           <button
