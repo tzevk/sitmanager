@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useResourcePermissions, usePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 import { FilterBar, GhostBtn, PageHeader } from '@/components/ui/PageHeader';
+import BroadcastTab from './BroadcastTab';
 
 interface InquiryRow {
   MetaLead_Id: string;
@@ -686,7 +687,7 @@ export default function MetaLeadsPage() {
   const { hasAnyPermission, isSuperAdmin } = usePermissions();
   const canConvert = isSuperAdmin || canCreate || hasAnyPermission(['meta_lead.convert']);
 
-  const [activeTab, setActiveTab] = useState<'analytics' | 'leads'>('leads');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'leads' | 'broadcast'>('leads');
   const [rows, setRows] = useState<InquiryRow[]>([]);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: PAGE_SIZE, total: 0, totalPages: 0 });
@@ -843,20 +844,31 @@ export default function MetaLeadsPage() {
     setPage(1); setFetchTrigger((t) => t + 1);
   };
 
+  const EXPORT_HEADERS = ['Name','Qualification','Mobile','City','Email','Campaign','Form','Tags','Duplicate','Status','Date','Time'];
+  const buildExportRows = () => rows.map((r) => [
+    r.Student_Name, r.CourseName, r.Present_Mobile, r.City, r.Email,
+    r.MetaCampaignName, r.MetaFormName, r.LeadTags?.join(' | '),
+    r.IsDuplicateLead ? 'Yes' : 'No', r.StatusLabel, formatDate(r.Inquiry_Dt), formatTime(r.Inquiry_Dt),
+  ]);
+
   const exportCsv = () => {
     if (!rows.length) return;
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const hdrs = ['Name','Qualification','Mobile','City','Email','Campaign','Form','Tags','Duplicate','Status','Date','Time'];
-    const csv = [hdrs.join(',')].concat(rows.map((r) => [
-      r.Student_Name, r.CourseName, r.Present_Mobile, r.City, r.Email,
-      r.MetaCampaignName, r.MetaFormName, r.LeadTags?.join(' | '),
-      r.IsDuplicateLead ? 'Yes' : 'No', r.StatusLabel, formatDate(r.Inquiry_Dt), formatTime(r.Inquiry_Dt),
-    ].map(esc).join(','))).join('\n');
+    const csv = [EXPORT_HEADERS.join(',')].concat(buildExportRows().map((row) => row.map(esc).join(','))).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url;
     a.download = `meta-leads-${new Date().toISOString().slice(0,10)}.csv`; a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const exportExcel = async () => {
+    if (!rows.length) return;
+    const XLSX = await import('xlsx');
+    const sheet = XLSX.utils.aoa_to_sheet([EXPORT_HEADERS, ...buildExportRows()]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Meta Leads');
+    XLSX.writeFile(workbook, `meta-leads-${new Date().toISOString().slice(0,10)}.xlsx`);
   };
 
   const buildMetaReturnTo = useCallback(() => {
@@ -1105,6 +1117,7 @@ export default function MetaLeadsPage() {
               <GhostBtn href="/dashboard/meta-leads/outbound">Outbound</GhostBtn>
               <GhostBtn href="/dashboard/inquiry">Inquiry Listing</GhostBtn>
               <GhostBtn onClick={exportCsv}>Export CSV</GhostBtn>
+              <GhostBtn onClick={exportExcel}>Export Excel</GhostBtn>
             </>}
           />
 
@@ -1123,20 +1136,23 @@ export default function MetaLeadsPage() {
 
           {/* Tab switcher */}
           <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 gap-1 shadow-sm">
-            {(['leads', 'analytics'] as const).map((tab) => (
+            {(['leads', 'analytics', 'broadcast'] as const).map((tab) => (
               <button
                 key={tab}
                 type="button"
                 onClick={() => setActiveTab(tab)}
                 className={`px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${activeTab === tab ? 'bg-[#6366F1] text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
               >
-                {tab === 'analytics' ? 'Campaign Analytics' : 'Meta Ads'}
+                {tab === 'analytics' ? 'Campaign Analytics' : tab === 'broadcast' ? 'WhatsApp Broadcast' : 'Meta Ads'}
                 {tab === 'leads' && pagination.total > 0 && (
                   <span className={`ml-2 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${activeTab === 'leads' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{pagination.total}</span>
                 )}
               </button>
             ))}
           </div>
+
+          {/* ── WhatsApp Broadcast Tab ── */}
+          {activeTab === 'broadcast' && <BroadcastTab />}
 
           {/* ── Campaign Analytics Tab ── */}
           {activeTab === 'analytics' && (
