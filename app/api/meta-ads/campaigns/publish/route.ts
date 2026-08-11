@@ -44,16 +44,6 @@ export async function POST(req: NextRequest) {
       specialAdCategories: normalizeSpecialAdCategories(body?.specialAdCategories),
       pageId: typeof body?.pageId === 'string' ? body.pageId : null,
       websiteUrl: typeof body?.websiteUrl === 'string' ? body.websiteUrl : null,
-      instantForm: body?.instantForm && typeof body.instantForm === 'object'
-        ? {
-            name: typeof body.instantForm.name === 'string' ? body.instantForm.name : '',
-            privacyPolicyUrl: typeof body.instantForm.privacyPolicyUrl === 'string' ? body.instantForm.privacyPolicyUrl : '',
-            thankYouTitle: typeof body.instantForm.thankYouTitle === 'string' ? body.instantForm.thankYouTitle : null,
-            thankYouBody: typeof body.instantForm.thankYouBody === 'string' ? body.instantForm.thankYouBody : null,
-            followUpActionUrl: typeof body.instantForm.followUpActionUrl === 'string' ? body.instantForm.followUpActionUrl : null,
-            questionKeys: normalizeStringArray(body.instantForm.questionKeys),
-          }
-        : null,
       creative: body?.creative && typeof body.creative === 'object'
         ? {
             name: typeof body.creative.name === 'string' ? body.creative.name : '',

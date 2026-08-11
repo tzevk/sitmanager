@@ -277,19 +277,9 @@ export interface MetaCampaignPublishInput {
   specialAdCategories?: Array<(typeof META_SPECIAL_AD_CATEGORIES)[number]> | null;
   pageId?: string | null;
   websiteUrl?: string | null;
-  instantForm?: MetaInstantFormPublishInput | null;
   creative?: MetaAdCreativePublishInput | null;
   adSet?: MetaAdSetPublishInput | null;
   ad?: MetaAdPublishInput | null;
-}
-
-export interface MetaInstantFormPublishInput {
-  name: string;
-  privacyPolicyUrl: string;
-  thankYouTitle?: string | null;
-  thankYouBody?: string | null;
-  followUpActionUrl?: string | null;
-  questionKeys?: string[] | null;
 }
 
 export interface MetaAdCreativePublishInput {
@@ -328,8 +318,6 @@ export interface MetaCampaignPublishResult {
   specialAdCategories: string[];
   adAccountId: string;
   pageId: string | null;
-  instantFormId: string | null;
-  instantFormName: string | null;
   creativeId: string | null;
   creativeName: string | null;
   adSetId: string | null;
@@ -357,19 +345,9 @@ interface NormalizedMetaCampaignPublishInput {
   specialAdCategories: Array<(typeof META_SPECIAL_AD_CATEGORIES)[number]>;
   pageId: string | null;
   websiteUrl: string | null;
-  instantForm: NormalizedMetaInstantFormPublishInput | null;
   creative: NormalizedMetaAdCreativePublishInput | null;
   adSet: NormalizedMetaAdSetPublishInput | null;
   ad: NormalizedMetaAdPublishInput | null;
-}
-
-interface NormalizedMetaInstantFormPublishInput {
-  name: string;
-  privacyPolicyUrl: string;
-  thankYouTitle: string;
-  thankYouBody: string;
-  followUpActionUrl: string | null;
-  questionKeys: string[];
 }
 
 interface NormalizedMetaAdCreativePublishInput {
@@ -400,7 +378,6 @@ interface NormalizedMetaAdPublishInput {
 }
 
 interface MetaPublishPipelineIds {
-  instantFormId: string | null;
   creativeId: string | null;
   adSetId: string | null;
   adId: string | null;
@@ -939,20 +916,6 @@ async function assertMetaPublishAccess(): Promise<void> {
   }
 }
 
-async function assertMetaPagePublishAccess(needsPageWrite: boolean): Promise<void> {
-  if (!needsPageWrite) return;
-
-  const stored = await getStoredMetaTokenConfig();
-  if (!stored) return;
-
-  const granted = new Set(stored.grantedScopes.map((scope) => String(scope || '').trim().toLowerCase()).filter(Boolean));
-  if (granted.size === 0) return;
-
-  if (!granted.has('pages_manage_ads')) {
-    throw new Error('Connected Meta OAuth token is missing pages_manage_ads. Reconnect Meta before creating instant forms.');
-  }
-}
-
 async function buildGraphUrl(path: string, fields?: string[]): Promise<URL> {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}${cleanPath}`);
@@ -1111,42 +1074,6 @@ function normalizeSpecialAdCategories(categories: MetaCampaignPublishInput['spec
   return cleaned.filter((value) => META_SPECIAL_AD_CATEGORIES.includes(value as (typeof META_SPECIAL_AD_CATEGORIES)[number])) as Array<(typeof META_SPECIAL_AD_CATEGORIES)[number]>;
 }
 
-function normalizeQuestionKeys(questionKeys: string[] | null | undefined): string[] {
-  const cleaned = Array.from(new Set(
-    (Array.isArray(questionKeys) ? questionKeys : ['FULL_NAME', 'EMAIL', 'PHONE'])
-      .map((value) => String(value || '').trim().toUpperCase())
-      .filter(Boolean)
-  ));
-
-  return cleaned.length > 0 ? cleaned : ['FULL_NAME', 'EMAIL', 'PHONE'];
-}
-
-function validateMetaInstantFormPublishInput(input: MetaInstantFormPublishInput | null | undefined): NormalizedMetaInstantFormPublishInput | null {
-  if (!input) return null;
-
-  const name = String(input.name || '').trim();
-  if (!name) {
-    throw new Error('Instant form name is required');
-  }
-
-  const privacyPolicyUrl = normalizeUrl(input.privacyPolicyUrl);
-  if (!privacyPolicyUrl) {
-    throw new Error('Instant form privacy policy URL must be a valid http or https URL');
-  }
-
-  const thankYouTitle = String(input.thankYouTitle || 'Thanks for your interest').trim() || 'Thanks for your interest';
-  const thankYouBody = String(input.thankYouBody || 'We will contact you shortly.').trim() || 'We will contact you shortly.';
-
-  return {
-    name,
-    privacyPolicyUrl,
-    thankYouTitle,
-    thankYouBody,
-    followUpActionUrl: normalizeUrl(input.followUpActionUrl),
-    questionKeys: normalizeQuestionKeys(input.questionKeys),
-  };
-}
-
 function validateMetaAdCreativePublishInput(input: MetaAdCreativePublishInput | null | undefined): NormalizedMetaAdCreativePublishInput | null {
   if (!input) return null;
 
@@ -1272,13 +1199,12 @@ function validateMetaCampaignPublishInput(input: MetaCampaignPublishInput): Norm
   const specialAdCategories = normalizeSpecialAdCategories(input.specialAdCategories);
   const pageId = normalizeText(input.pageId);
   const websiteUrl = normalizeUrl(input.websiteUrl);
-  const instantForm = validateMetaInstantFormPublishInput(input.instantForm);
   const creative = validateMetaAdCreativePublishInput(input.creative);
   const adSet = validateMetaAdSetPublishInput(input.adSet);
   const ad = validateMetaAdPublishInput(input.ad);
 
-  if ((instantForm || creative || adSet || ad) && !pageId) {
-    throw new Error('Page ID is required when creating instant forms, creatives, ad sets, or ads');
+  if ((creative || adSet || ad) && !pageId) {
+    throw new Error('Page ID is required when creating creatives, ad sets, or ads');
   }
 
   if (ad && !adSet) {
@@ -1289,8 +1215,8 @@ function validateMetaCampaignPublishInput(input: MetaCampaignPublishInput): Norm
     throw new Error('Ad creation requires a creative configuration');
   }
 
-  if (creative && !websiteUrl && !instantForm?.followUpActionUrl && !creative.linkUrl) {
-    throw new Error('Creative publishing requires a website URL, a creative link URL, or an instant form follow-up URL');
+  if (creative && !websiteUrl && !creative.linkUrl) {
+    throw new Error('Creative publishing requires a website URL or a creative link URL');
   }
 
   return {
@@ -1300,44 +1226,10 @@ function validateMetaCampaignPublishInput(input: MetaCampaignPublishInput): Norm
     specialAdCategories,
     pageId,
     websiteUrl,
-    instantForm,
     creative,
     adSet,
     ad,
   };
-}
-
-function buildLeadFormQuestions(questionKeys: string[]): Array<Record<string, unknown>> {
-  return questionKeys.map((key) => ({ type: key }));
-}
-
-async function createMetaInstantForm(
-  pageId: string,
-  input: NormalizedMetaInstantFormPublishInput
-): Promise<{ id: string; name: string }> {
-  const result = await postGraphJson<MetaGraphCreateResponse>(
-    `/${pageId}/leadgen_forms`,
-    {
-      name: input.name,
-      locale: 'en_US',
-      questions: buildLeadFormQuestions(input.questionKeys),
-      privacy_policy: {
-        url: input.privacyPolicyUrl,
-        link_text: 'Privacy Policy',
-      },
-      thank_you_page: {
-        title: input.thankYouTitle,
-        body: input.thankYouBody,
-        button_type: input.followUpActionUrl ? 'VIEW_WEBSITE' : 'NO_BUTTON',
-        website_url: input.followUpActionUrl,
-      },
-      follow_up_action_url: input.followUpActionUrl,
-    }
-  );
-
-  const id = normalizeText(result.id);
-  if (!id) throw new Error('Meta instant form creation succeeded but no form id was returned');
-  return { id, name: input.name };
 }
 
 async function createMetaAdCreative(params: {
@@ -1345,12 +1237,9 @@ async function createMetaAdCreative(params: {
   pageId: string;
   websiteUrl: string | null;
   input: NormalizedMetaAdCreativePublishInput;
-  instantFormId: string | null;
 }): Promise<{ id: string; name: string }> {
   const linkUrl = params.input.linkUrl || params.websiteUrl || `https://facebook.com/${params.pageId}`;
-  const callToActionValue = params.instantFormId
-    ? { lead_gen_form_id: params.instantFormId }
-    : { link: linkUrl };
+  const callToActionValue = { link: linkUrl };
 
   const linkData: Record<string, unknown> = {
     message: params.input.message,
@@ -1447,15 +1336,12 @@ export async function publishMetaCampaign(
   await assertMetaPublishAccess();
 
   const payload = validateMetaCampaignPublishInput(input);
-  await assertMetaPagePublishAccess(Boolean(payload.instantForm));
   const adAccountId = getMetaAdAccountIdRequired();
   const created: MetaPublishPipelineIds = {
-    instantFormId: null,
     creativeId: null,
     adSetId: null,
     adId: null,
   };
-  let instantFormName: string | null = null;
   let creativeName: string | null = null;
   let adSetName: string | null = null;
   let adName: string | null = null;
@@ -1477,19 +1363,12 @@ export async function publishMetaCampaign(
       throw new Error('Meta campaign publish succeeded but no campaign id was returned');
     }
 
-    if (payload.pageId && payload.instantForm) {
-      const form = await createMetaInstantForm(payload.pageId, payload.instantForm);
-      created.instantFormId = form.id;
-      instantFormName = form.name;
-    }
-
     if (payload.pageId && payload.creative) {
       const creative = await createMetaAdCreative({
         adAccountId,
         pageId: payload.pageId,
         websiteUrl: payload.websiteUrl,
         input: payload.creative,
-        instantFormId: created.instantFormId,
       });
       created.creativeId = creative.id;
       creativeName = creative.name;
@@ -1523,7 +1402,6 @@ export async function publishMetaCampaign(
       input: payload,
       result: {
         ...result,
-        instant_form_id: created.instantFormId,
         creative_id: created.creativeId,
         adset_id: created.adSetId,
         ad_id: created.adId,
@@ -1532,7 +1410,6 @@ export async function publishMetaCampaign(
 
     const createdParts = [
       campaignId ? `campaign ${campaignId}` : null,
-      created.instantFormId ? `form ${created.instantFormId}` : null,
       created.creativeId ? `creative ${created.creativeId}` : null,
       created.adSetId ? `ad set ${created.adSetId}` : null,
       created.adId ? `ad ${created.adId}` : null,
@@ -1547,8 +1424,6 @@ export async function publishMetaCampaign(
       specialAdCategories: payload.specialAdCategories,
       adAccountId,
       pageId: payload.pageId,
-      instantFormId: created.instantFormId,
-      instantFormName,
       creativeId: created.creativeId,
       creativeName,
       adSetId: created.adSetId,

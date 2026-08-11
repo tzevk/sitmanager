@@ -254,7 +254,9 @@
       "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless --disable-gpu --no-sandbox --screenshot=voucher-preview6.png --window-size=1000,850 --default-background-color=FFFFFFFF --virtual-time-budget=3000 \"file://$\\(pwd\\)/voucher-preview6.html\")",
       "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless --disable-gpu --no-sandbox --screenshot=voucher-preview7.png --window-size=1000,850 --default-background-color=FFFFFFFF --virtual-time-budget=3000 \"file://$\\(pwd\\)/voucher-preview7.html\")",
       "Bash(node scripts/log-change.mjs --title \"Cash Voucher table: full-height column lines, joined footer\" --category Fix --description \"Fixed the items table per the exact reference: vertical column lines \\(Sr.No/Bill Date/Bill No/Account Head/Amount/Description\\) now run the full height of the table through all 8 rows, with no horizontal lines between rows — only the header keeps its own separating line. The Paid By/Total footer row is now directly joined to the table in one continuous frame \\(no gap\\), while the signature row remains its own separate container below.\")",
-      "Bash(npx vercel *)"
+      "Bash(npx vercel *)",
+      "Bash(rm -f /private/tmp/claude-501/-Users-tanvikadam-Desktop-SIT-sitmanager/d7b5219d-5396-4ab6-8527-cc46b2fa4247/scratchpad/*.png)",
+      "Bash(rm -f /private/tmp/claude-501/-Users-tanvikadam-Desktop-SIT-sitmanager/d7b5219d-5396-4ab6-8527-cc46b2fa4247/scratchpad/verify_outbound*.js*)"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

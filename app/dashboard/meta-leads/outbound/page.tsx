@@ -87,12 +87,6 @@ export default function MetaOutboundPage() {
   const [publishSpecialCategory, setPublishSpecialCategory] = useState<string>('NONE');
   const [publishPageId, setPublishPageId] = useState('');
   const [publishWebsiteUrl, setPublishWebsiteUrl] = useState('');
-  const [publishFormName, setPublishFormName] = useState('');
-  const [publishFormPrivacyUrl, setPublishFormPrivacyUrl] = useState('');
-  const [publishFormFollowUpUrl, setPublishFormFollowUpUrl] = useState('');
-  const [publishFormThankYouTitle, setPublishFormThankYouTitle] = useState('Thanks for your interest');
-  const [publishFormThankYouBody, setPublishFormThankYouBody] = useState('We will contact you shortly.');
-  const [publishFormQuestions, setPublishFormQuestions] = useState('FULL_NAME, EMAIL, PHONE');
   const [publishCreativeName, setPublishCreativeName] = useState('');
   const [publishCreativeMessage, setPublishCreativeMessage] = useState('');
   const [publishCreativeHeadline, setPublishCreativeHeadline] = useState('');
@@ -197,7 +191,6 @@ export default function MetaOutboundPage() {
     setPublishSuccess('');
     try {
       const specialAdCategories = publishSpecialCategory === 'NONE' ? ['NONE'] : [publishSpecialCategory];
-      const questionKeys = publishFormQuestions.split(',').map((item) => item.trim().toUpperCase()).filter(Boolean);
       const countries = publishAdSetCountries.split(',').map((item) => item.trim().toUpperCase()).filter(Boolean);
       const res = await fetch('/api/meta-ads/campaigns/publish', {
         method: 'POST',
@@ -209,14 +202,6 @@ export default function MetaOutboundPage() {
           specialAdCategories,
           pageId: publishPageId.trim() || null,
           websiteUrl: publishWebsiteUrl.trim() || null,
-          instantForm: {
-            name: publishFormName.trim(),
-            privacyPolicyUrl: publishFormPrivacyUrl.trim(),
-            followUpActionUrl: publishFormFollowUpUrl.trim() || null,
-            thankYouTitle: publishFormThankYouTitle.trim() || null,
-            thankYouBody: publishFormThankYouBody.trim() || null,
-            questionKeys,
-          },
           creative: {
             name: publishCreativeName.trim(),
             message: publishCreativeMessage.trim(),
@@ -255,12 +240,6 @@ export default function MetaOutboundPage() {
       setPublishSpecialCategory('NONE');
       setPublishPageId('');
       setPublishWebsiteUrl('');
-      setPublishFormName('');
-      setPublishFormPrivacyUrl('');
-      setPublishFormFollowUpUrl('');
-      setPublishFormThankYouTitle('Thanks for your interest');
-      setPublishFormThankYouBody('We will contact you shortly.');
-      setPublishFormQuestions('FULL_NAME, EMAIL, PHONE');
       setPublishCreativeName('');
       setPublishCreativeMessage('');
       setPublishCreativeHeadline('');
@@ -284,7 +263,7 @@ export default function MetaOutboundPage() {
     } finally {
       setPublishBusy(false);
     }
-  }, [publishAdName, publishAdSetBillingEvent, publishAdSetBudget, publishAdSetCountries, publishAdSetDestinationType, publishAdSetEndTime, publishAdSetName, publishAdSetOptimizationGoal, publishAdSetStartTime, publishCreativeCta, publishCreativeHeadline, publishCreativeImageHash, publishCreativeImageUrl, publishCreativeMessage, publishCreativeName, publishFormFollowUpUrl, publishFormName, publishFormPrivacyUrl, publishFormQuestions, publishFormThankYouBody, publishFormThankYouTitle, publishName, publishObjective, publishPageId, publishSpecialCategory, publishWebsiteUrl, refreshHistory]);
+  }, [publishAdName, publishAdSetBillingEvent, publishAdSetBudget, publishAdSetCountries, publishAdSetDestinationType, publishAdSetEndTime, publishAdSetName, publishAdSetOptimizationGoal, publishAdSetStartTime, publishCreativeCta, publishCreativeHeadline, publishCreativeImageHash, publishCreativeImageUrl, publishCreativeMessage, publishCreativeName, publishName, publishObjective, publishPageId, publishSpecialCategory, publishWebsiteUrl, refreshHistory]);
 
   return (
     <div className="space-y-5">
@@ -379,24 +358,11 @@ export default function MetaOutboundPage() {
                   </section>
                 </div>
 
-                <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-                  <section className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm shadow-emerald-100/40">
-                    <div className="mb-4"><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-500">Step 4</p><h4 className="mt-1 text-sm font-semibold text-slate-900">Instant form setup</h4></div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Form Name</span><input value={publishFormName} onChange={e => setPublishFormName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Questions</span><input value={publishFormQuestions} onChange={e => setPublishFormQuestions(e.target.value)} placeholder="FULL_NAME, EMAIL, PHONE" className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Privacy URL</span><input value={publishFormPrivacyUrl} onChange={e => setPublishFormPrivacyUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Follow-up URL</span><input value={publishFormFollowUpUrl} onChange={e => setPublishFormFollowUpUrl(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                      <label><span className="mb-1 block text-[11px] font-semibold text-slate-600">Thank-you Title</span><input value={publishFormThankYouTitle} onChange={e => setPublishFormThankYouTitle(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                      <label className="md:col-span-2"><span className="mb-1 block text-[11px] font-semibold text-slate-600">Thank-you Body</span><input value={publishFormThankYouBody} onChange={e => setPublishFormThankYouBody(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                    </div>
-                  </section>
-                  <section className="rounded-2xl border border-orange-200 bg-white p-4 shadow-sm shadow-orange-100/40">
-                    <div className="mb-4"><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-orange-500">Step 5</p><h4 className="mt-1 text-sm font-semibold text-slate-900">Final ad shell</h4></div>
-                    <label className="block"><span className="mb-1 block text-[11px] font-semibold text-slate-600">Ad Name</span><input value={publishAdName} onChange={e => setPublishAdName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
-                    <div className="mt-4 rounded-xl border border-orange-100 bg-orange-50/70 px-3 py-3 text-[11px] leading-5 text-orange-800">Everything created here is submitted in paused mode so you can review the objects safely in Meta before activation.</div>
-                  </section>
-                </div>
+                <section className="rounded-2xl border border-orange-200 bg-white p-4 shadow-sm shadow-orange-100/40">
+                  <div className="mb-4"><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-orange-500">Step 4</p><h4 className="mt-1 text-sm font-semibold text-slate-900">Final ad shell</h4></div>
+                  <label className="block"><span className="mb-1 block text-[11px] font-semibold text-slate-600">Ad Name</span><input value={publishAdName} onChange={e => setPublishAdName(e.target.value)} className={ctrl} disabled={!canUpdate || publishBusy} /></label>
+                  <div className="mt-4 rounded-xl border border-orange-100 bg-orange-50/70 px-3 py-3 text-[11px] leading-5 text-orange-800">Everything created here is submitted in paused mode so you can review the objects safely in Meta before activation. New leads are welcomed automatically via the WhatsApp welcome message, not a Meta Instant Form.</div>
+                </section>
 
                 {!canUpdate && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] text-amber-700">View-only — creation requires update permission.</p>}
                 {publishError && <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[11px] text-red-700">{publishError}</p>}
@@ -404,7 +370,7 @@ export default function MetaOutboundPage() {
               </div>
 
               <div className="flex flex-col gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap gap-2">{['Campaign', 'Ad Set', 'Creative', 'Form', 'Ad'].map((l) => <span key={l} className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{l}</span>)}</div>
+                <div className="flex flex-wrap gap-2">{['Campaign', 'Ad Set', 'Creative', 'Ad'].map((l) => <span key={l} className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{l}</span>)}</div>
                 <button type="button" onClick={submitCampaignPublish} disabled={!canUpdate || publishBusy || !publishName.trim()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#6366F1] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-[#6366F1]/20 transition-colors hover:bg-[#25277a] disabled:cursor-not-allowed disabled:bg-slate-300 sm:min-w-[180px]">{publishBusy ? <><div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />Publishing...</> : <>Publish Campaign Stack</>}</button>
               </div>
             </div>
