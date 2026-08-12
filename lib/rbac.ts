@@ -308,6 +308,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       ...createPermissions('batch_transfer', 'Batch Transfer'),
       ...createPermissions('batch_cancellation', 'Batch Cancellation'),
       ...createPermissions('finance', 'Finance Dashboard'),
+      ...createPermissions('nsdc_format', 'NSDC Format', ['view', 'create']),
     ],
   },
 
