@@ -43,6 +43,89 @@ async function ensureLectureTakenColumns(pool: ReturnType<typeof getPool>) {
   }
 }
 
+/** batch_slecture_master fields are mostly varchar(50); truncate instead of erroring on longer input. */
+function truncate(value: unknown, maxLength = 50): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  return String(value).slice(0, maxLength);
+}
+
+/** Insert a plan row for a lecture taken standalone (no linked plan row), appended at the
+ * end of this batch's own lecture plan build order, and return its new id. Keeps the Lecture
+ * Plan tab (batch_slecture_master) and Lecture Taken in sync so a manually-added lecture
+ * shows up in the plan instead of only existing in the taken log. */
+async function createLinkedPlanRow(pool: ReturnType<typeof getPool>, data: {
+  Batch_Id: number; Standard_Seq?: number | null; Topic?: string | null; Lecture_Name?: string | null;
+  Sub_Topics?: string | null; Take_Dt?: string | null; Day?: string | null; Session?: string | null;
+  Lecture_Start?: string | null; Lecture_End?: string | null; Faculty_Id?: number | null;
+  ClassRoom?: string | null; Assign_Given?: string | null; Documents?: string | null;
+  Unit_Test?: string | null; Publish?: string | null; Covered_Subtopics?: string | null;
+}): Promise<number> {
+  const [seqRows] = await pool.query<any[]>(
+    `SELECT COALESCE(MAX(lecture_no), 0) + 1 AS nextSeq FROM batch_slecture_master WHERE batch_id = ?`,
+    [data.Batch_Id]
+  );
+  const nextSeq = seqRows[0]?.nextSeq ?? 1;
+
+  const [result] = await pool.query(`
+    INSERT INTO batch_slecture_master
+    (batch_id, lecture_no, standard_seq, subject, subject_topic, date, lectureday, session, starttime, endtime,
+     assignment, faculty_id, class_room, documents, unit_test, publish, covered_subtopics, lecture_status, deleted, created_date)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'normal', '0', NOW())
+  `, [
+    data.Batch_Id,
+    nextSeq,
+    data.Standard_Seq ?? null,
+    truncate(data.Topic?.trim() || data.Lecture_Name?.trim() || null, 255),
+    data.Sub_Topics?.trim() || null,
+    truncate(data.Take_Dt),
+    truncate(data.Day),
+    truncate(data.Session, 20),
+    truncate(data.Lecture_Start),
+    truncate(data.Lecture_End),
+    truncate(data.Assign_Given),
+    data.Faculty_Id ?? null,
+    truncate(data.ClassRoom),
+    truncate(data.Documents),
+    truncate(data.Unit_Test),
+    data.Publish || 'No',
+    data.Covered_Subtopics || null,
+  ]);
+
+  return (result as any).insertId;
+}
+
+/** Push edits made on the Lecture Taken form back onto the linked Lecture Plan row so the
+ * plan reflects the latest date/topic/faculty/etc., not a stale snapshot. */
+async function syncLinkedPlanRow(pool: ReturnType<typeof getPool>, lectureId: number, data: {
+  Topic?: string | null; Lecture_Name?: string | null; Sub_Topics?: string | null; Take_Dt?: string | null;
+  Day?: string | null; Session?: string | null; Lecture_Start?: string | null; Lecture_End?: string | null;
+  Faculty_Id?: number | null; ClassRoom?: string | null; Assign_Given?: string | null; Documents?: string | null;
+  Unit_Test?: string | null; Publish?: string | null; Covered_Subtopics?: string | null;
+}) {
+  await pool.query(`
+    UPDATE batch_slecture_master SET
+      subject = ?, subject_topic = ?, date = ?, lectureday = ?, session = ?, starttime = ?, endtime = ?,
+      assignment = ?, faculty_id = ?, class_room = ?, documents = ?, unit_test = ?, publish = ?, covered_subtopics = ?
+    WHERE id = ?
+  `, [
+    truncate(data.Topic?.trim() || data.Lecture_Name?.trim() || null, 255),
+    data.Sub_Topics?.trim() || null,
+    truncate(data.Take_Dt),
+    truncate(data.Day),
+    truncate(data.Session, 20),
+    truncate(data.Lecture_Start),
+    truncate(data.Lecture_End),
+    truncate(data.Assign_Given),
+    data.Faculty_Id ?? null,
+    truncate(data.ClassRoom),
+    truncate(data.Documents),
+    truncate(data.Unit_Test),
+    data.Publish || 'No',
+    data.Covered_Subtopics || null,
+    lectureId,
+  ]);
+}
+
 function normalizeTextKey(v: unknown) {
   return String(v ?? '').trim().toLowerCase();
 }
@@ -392,6 +475,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Standalone add (no plan row picked via "Mark Taken") — create one now, appended at
+    // the end of this batch's lecture plan, and link it so it shows up in the Lecture Plan tab.
+    let linkedLectureId: number | null = Lecture_Id || null;
+    if (!linkedLectureId) {
+      linkedLectureId = await createLinkedPlanRow(pool, {
+        Batch_Id, Standard_Seq, Topic, Lecture_Name, Sub_Topics, Take_Dt, Day, Session,
+        Lecture_Start, Lecture_End, Faculty_Id, ClassRoom, Assign_Given: Assign_Given || null,
+        Documents, Unit_Test, Publish, Covered_Subtopics,
+      });
+    }
+
     const sql = `
       INSERT INTO lecture_taken_master (
         Course_Id, Batch_Id, Lecture_Id, Standard_Seq, Actual_Seq, Lecture_Name, Faculty_Id,
@@ -407,7 +501,7 @@ export async function POST(req: NextRequest) {
     const params = [
       Course_Id,
       Batch_Id,
-      Lecture_Id || null,
+      linkedLectureId,
       Standard_Seq != null && Standard_Seq !== '' ? Number(Standard_Seq) : null,
       Actual_Seq != null && Actual_Seq !== '' ? Number(Actual_Seq) : null,
       Lecture_Name?.trim() || null,
@@ -527,6 +621,19 @@ export async function PUT(req: NextRequest) {
     ];
 
     await pool.query(sql, params);
+
+    // Keep the Lecture Plan tab in sync with edits made here.
+    if (body.Lecture_Id) {
+      await syncLinkedPlanRow(pool, Number(body.Lecture_Id), {
+        Topic: body.Topic, Lecture_Name: body.Lecture_Name, Sub_Topics: body.Sub_Topics,
+        Take_Dt: body.Take_Dt, Day: body.Day, Session: body.Session,
+        Lecture_Start: body.Lecture_Start, Lecture_End: body.Lecture_End,
+        Faculty_Id: body.Faculty_Id || null, ClassRoom: body.ClassRoom,
+        Assign_Given: body.Assign_Given, Documents: body.Documents,
+        Unit_Test: body.Unit_Test, Publish: body.Publish, Covered_Subtopics: body.Covered_Subtopics,
+      });
+    }
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Lecture taken PUT error:', error);

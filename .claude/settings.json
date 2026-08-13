@@ -259,7 +259,8 @@
       "Bash(rm -f /private/tmp/claude-501/-Users-tanvikadam-Desktop-SIT-sitmanager/d7b5219d-5396-4ab6-8527-cc46b2fa4247/scratchpad/verify_outbound*.js*)",
       "Bash(git log *)",
       "Bash(break)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000)",
+      "Bash(node scripts/log-change.mjs --title 'Lecture Plan: highlight conducted lectures; Attendance: double-click to clear a marked status' --category Improvement --description 'Batch Lecture Plan tab \\(app/dashboard/masters/batch/edit/[id]/page.tsx\\): rows for lectures linked to a Lecture Taken record via taken_id are now highlighted with a green row \\(bg-emerald-50, left border\\) in addition to the existing Converted badge, so conducted lectures are visible at a glance. Attendance page \\(app/dashboard/daily-activities/attendance/page.tsx\\): double-clicking an already-selected P/L/A status now clears that student'\\\\''s attendance for the half-day; the clear persists via the save API \\(app/api/daily-activities/attendance/route.ts\\), updated to accept an empty status and correctly remove the corresponding Lecture Taken child record instead of miscounting it as Present.')"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

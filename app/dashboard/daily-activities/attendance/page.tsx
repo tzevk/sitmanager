@@ -406,6 +406,44 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
     }
   };
 
+  /* double-click a selected status button → clear it (persists immediately) */
+  const handleStatusClear = async (student: Student, half: 'FH' | 'SH') => {
+    const currentMap = half === 'FH' ? statusMapFH : statusMapSH;
+    const current    = currentMap[student.Student_Id] ?? '';
+    if (!current) return; // nothing to clear
+
+    const key     = `${student.Student_Id}-${half}`;
+    const session = half === 'FH' ? 'first_half' : 'second_half';
+
+    const setter = half === 'FH' ? setStatusMapFH : setStatusMapSH;
+    setter(prev => ({ ...prev, [student.Student_Id]: '' }));
+    setSavingSet(prev => new Set([...prev, key]));
+    setRowErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
+
+    try {
+      const res = await fetch('/api/daily-activities/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          batchId: Number(batchId),
+          date,
+          session,
+          records: [{ studentId: student.Student_Id, admissionId: student.Admission_Id, status: '' }],
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'Clear failed');
+      }
+    } catch (e: unknown) {
+      // Revert
+      setter(prev => ({ ...prev, [student.Student_Id]: current }));
+      setRowErrors(prev => ({ ...prev, [key]: e instanceof Error ? e.message : 'Clear failed' }));
+    } finally {
+      setSavingSet(prev => { const n = new Set(prev); n.delete(key); return n; });
+    }
+  };
+
   /* save both halves — accepts optional pre-computed maps (used by facescan apply-and-save) */
   const save = async (fhOverride?: StatusMap, shOverride?: StatusMap, fhMetaOverride?: MetaMap, shMetaOverride?: MetaMap) => {
     const toRecords = (map: StatusMap, meta: MetaMap) =>
@@ -1172,13 +1210,13 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5">
-                            <button onClick={() => handleStatusClick(student, 'P', 'FH')} className={btnBase(fh==='P','bg-green-500 text-white shadow-sm shadow-green-200','bg-gray-100 text-gray-500 hover:bg-green-100 hover:text-green-700')}>
+                            <button onClick={() => handleStatusClick(student, 'P', 'FH')} onDoubleClick={() => handleStatusClear(student, 'FH')} title="Double-click to clear" className={btnBase(fh==='P','bg-green-500 text-white shadow-sm shadow-green-200','bg-gray-100 text-gray-500 hover:bg-green-100 hover:text-green-700')}>
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>P
                             </button>
-                            <button onClick={() => handleStatusClick(student, 'L', 'FH')} className={btnBase(fh==='L','bg-amber-500 text-white shadow-sm shadow-amber-200','bg-gray-100 text-gray-500 hover:bg-amber-100 hover:text-amber-700')}>
+                            <button onClick={() => handleStatusClick(student, 'L', 'FH')} onDoubleClick={() => handleStatusClear(student, 'FH')} title="Double-click to clear" className={btnBase(fh==='L','bg-amber-500 text-white shadow-sm shadow-amber-200','bg-gray-100 text-gray-500 hover:bg-amber-100 hover:text-amber-700')}>
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3" /></svg>L
                             </button>
-                            <button onClick={() => handleStatusClick(student, 'A', 'FH')} className={btnBase(fh==='A','bg-red-500 text-white shadow-sm shadow-red-200','bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600')}>
+                            <button onClick={() => handleStatusClick(student, 'A', 'FH')} onDoubleClick={() => handleStatusClear(student, 'FH')} title="Double-click to clear" className={btnBase(fh==='A','bg-red-500 text-white shadow-sm shadow-red-200','bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600')}>
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>A
                             </button>
                           </div>
@@ -1193,13 +1231,13 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5">
-                            <button onClick={() => handleStatusClick(student, 'P', 'SH')} className={btnBase(sh==='P','bg-green-500 text-white shadow-sm shadow-green-200','bg-gray-100 text-gray-500 hover:bg-green-100 hover:text-green-700')}>
+                            <button onClick={() => handleStatusClick(student, 'P', 'SH')} onDoubleClick={() => handleStatusClear(student, 'SH')} title="Double-click to clear" className={btnBase(sh==='P','bg-green-500 text-white shadow-sm shadow-green-200','bg-gray-100 text-gray-500 hover:bg-green-100 hover:text-green-700')}>
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>P
                             </button>
-                            <button onClick={() => handleStatusClick(student, 'L', 'SH')} className={btnBase(sh==='L','bg-amber-500 text-white shadow-sm shadow-amber-200','bg-gray-100 text-gray-500 hover:bg-amber-100 hover:text-amber-700')}>
+                            <button onClick={() => handleStatusClick(student, 'L', 'SH')} onDoubleClick={() => handleStatusClear(student, 'SH')} title="Double-click to clear" className={btnBase(sh==='L','bg-amber-500 text-white shadow-sm shadow-amber-200','bg-gray-100 text-gray-500 hover:bg-amber-100 hover:text-amber-700')}>
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3" /></svg>L
                             </button>
-                            <button onClick={() => handleStatusClick(student, 'A', 'SH')} className={btnBase(sh==='A','bg-red-500 text-white shadow-sm shadow-red-200','bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600')}>
+                            <button onClick={() => handleStatusClick(student, 'A', 'SH')} onDoubleClick={() => handleStatusClear(student, 'SH')} title="Double-click to clear" className={btnBase(sh==='A','bg-red-500 text-white shadow-sm shadow-red-200','bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600')}>
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>A
                             </button>
                           </div>
@@ -1313,6 +1351,8 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                                   <button
                                     key={s}
                                     onClick={() => handleStatusClick(student, s, 'FH')}
+                                    onDoubleClick={() => handleStatusClear(student, 'FH')}
+                                    title="Double-click to clear"
                                     className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ${
                                       fh === s
                                         ? s === 'P' ? 'bg-green-500 text-white shadow-sm scale-105'
@@ -1361,6 +1401,8 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                                   <button
                                     key={s}
                                     onClick={() => handleStatusClick(student, s, 'SH')}
+                                    onDoubleClick={() => handleStatusClear(student, 'SH')}
+                                    title="Double-click to clear"
                                     className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ${
                                       sh === s
                                         ? s === 'P' ? 'bg-green-500 text-white shadow-sm scale-105'

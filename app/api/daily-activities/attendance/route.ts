@@ -257,7 +257,7 @@ export async function POST(req: NextRequest) {
       batchId: number;
       date: string;
       session?: 'first_half' | 'second_half';
-      records: { studentId: number; admissionId: number; status: 'P' | 'A' | 'L'; In_Time?: string; Out_Time?: string; Remarks?: string }[];
+      records: { studentId: number; admissionId: number; status: 'P' | 'A' | 'L' | ''; In_Time?: string; Out_Time?: string; Remarks?: string }[];
       topics?: string[];
       subtopics?: string[];
       activityType?: 'lecture' | 'assignment' | 'test';
@@ -354,13 +354,25 @@ export async function POST(req: NextRequest) {
       // Upsert lecture_taken_child for each student
       for (const rec of records) {
         const studentName = nameMap[rec.studentId] || '';
-        const studentAtten = rec.status === 'A' ? 'Absent' : 'Present';
-        const late = rec.status === 'L' ? 'Yes' : 'No';
 
         const [existing] = await conn.query<any[]>(
           `SELECT ID FROM lecture_taken_child WHERE Take_Id = ? AND Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
           [takeId, rec.studentId]
         );
+
+        // Cleared attendance (status === '') should drop out of the lecture-taken report, not read as "Present"
+        if (!rec.status) {
+          if (existing.length > 0) {
+            await conn.query(
+              `UPDATE lecture_taken_child SET IsActive = 0, IsDelete = 1 WHERE Take_Id = ? AND Student_Id = ?`,
+              [takeId, rec.studentId]
+            );
+          }
+          continue;
+        }
+
+        const studentAtten = rec.status === 'A' ? 'Absent' : 'Present';
+        const late = rec.status === 'L' ? 'Yes' : 'No';
 
         if (existing.length > 0) {
           await conn.query(

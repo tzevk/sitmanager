@@ -2666,6 +2666,7 @@ export default function EditBatchPage() {
   })();
 
   const getRowColorClass = (row: StandardLecture): string => {
+    if (row.taken_id != null) return 'bg-emerald-50 border-l-4 border-l-emerald-400';
     const dateStr = formatDateForInput(row.date);
     if (dateStr && dateStr < todayStr) return 'bg-slate-100 text-slate-400';
     if (row.lecture_status === 'pending' && nextUpSeq != null && row.standard_seq === nextUpSeq) {
