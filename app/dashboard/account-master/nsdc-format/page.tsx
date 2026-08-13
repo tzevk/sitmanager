@@ -1,205 +1,169 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
-import { GhostBtn, PageHeader } from '@/components/ui/PageHeader';
+import { FilterBar, PageHeader } from '@/components/ui/PageHeader';
 
-interface UploadBatch {
-  id: number;
-  source_filename: string;
-  row_count: number;
-  columns_json: string[];
-  uploaded_by: number | null;
-  created_at: string;
+interface NsdcRow {
+  Student_Id: number;
+  Student_Name: string;
+  Father_Name: string | null;
+  Mother_Name: string | null;
+  Sex: string | null;
+  DOB: string | null;
+  Aadhar_Number: string | null;
+  Social_Category: string | null;
+  Present_Mobile: string | null;
+  Email: string | null;
+  Present_City: string | null;
+  Present_State: string | null;
+  Qualification: string | null;
+  Batch_Code: string | null;
+  Course_Name: string | null;
 }
 
-interface UploadRow {
-  id: number;
-  row_index: number;
-  row_data: Record<string, string>;
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 }
 
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return '—';
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${String(d.getDate()).padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}, ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
-}
+const PAGE_SIZE = 25;
+const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6366F1]/20 focus:border-[#6366F1] placeholder:text-slate-400 transition-colors';
 
-export default function NsdcFormatPage() {
+export default function NsdcFormatListPage() {
+  const router = useRouter();
   const perms = useResourcePermissions('nsdc_format');
-  const { loading: permLoading, canView, canCreate } = perms;
+  const { loading: permLoading, canView } = perms;
 
-  const [batches, setBatches] = useState<UploadBatch[]>([]);
-  const [batchesLoading, setBatchesLoading] = useState(true);
-  const [selectedBatch, setSelectedBatch] = useState<UploadBatch | null>(null);
-  const [previewRows, setPreviewRows] = useState<UploadRow[]>([]);
-  const [previewLoading, setPreviewLoading] = useState(false);
+  const [rows, setRows] = useState<NsdcRow[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: PAGE_SIZE, total: 0, totalPages: 0 });
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState('');
-  const [uploadSuccess, setUploadSuccess] = useState('');
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const fetchBatches = useCallback(async () => {
-    setBatchesLoading(true);
+  const fetchRows = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch('/api/account-master/nsdc-format');
+      const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
+      if (search) params.set('search', search);
+      const res = await fetch(`/api/account-master/nsdc-format?${params.toString()}`);
       const data = await res.json().catch(() => ({}));
-      if (res.ok) setBatches(Array.isArray(data.batches) ? data.batches : []);
+      if (res.ok) {
+        setRows(Array.isArray(data.rows) ? data.rows : []);
+        setPagination(data.pagination || { page: 1, limit: PAGE_SIZE, total: 0, totalPages: 0 });
+      }
     } catch {
-      setBatches([]);
+      setRows([]);
     } finally {
-      setBatchesLoading(false);
+      setLoading(false);
     }
-  }, []);
+  }, [page, search]);
 
   useEffect(() => {
-    if (canView) fetchBatches();
-  }, [canView, fetchBatches]);
+    if (canView) fetchRows();
+  }, [canView, fetchRows]);
 
-  const openBatch = useCallback(async (batch: UploadBatch) => {
-    setSelectedBatch(batch);
-    setPreviewLoading(true);
-    try {
-      const res = await fetch(`/api/account-master/nsdc-format?batchId=${batch.id}`);
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) setPreviewRows(Array.isArray(data.rows) ? data.rows : []);
-    } catch {
-      setPreviewRows([]);
-    } finally {
-      setPreviewLoading(false);
-    }
-  }, []);
-
-  const handleUpload = useCallback(async (file: File) => {
-    setUploading(true);
-    setUploadError('');
-    setUploadSuccess('');
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch('/api/account-master/nsdc-format', { method: 'POST', body: formData });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Upload failed');
-      setUploadSuccess(`Uploaded ${data.rowCount} row${data.rowCount === 1 ? '' : 's'} from ${file.name}.`);
-      await fetchBatches();
-    } catch (error: unknown) {
-      setUploadError(error instanceof Error ? error.message : 'Upload failed');
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  }, [fetchBatches]);
-
-  const handleFilePick = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) void handleUpload(file);
-  }, [handleUpload]);
+  const doSearch = () => { setSearch(searchInput.trim()); setPage(1); };
+  const doClear = () => { setSearch(''); setSearchInput(''); setPage(1); };
 
   if (permLoading) return <PermissionLoading />;
   if (!canView) return <AccessDenied message="You do not have permission to view NSDC Format." />;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader
         title="NSDC Format"
         breadcrumbs={[{ label: 'Admin/Accounts' }, { label: 'NSDC Format' }]}
-        meta="Candidate upload sheet"
+        meta={`${pagination.total.toLocaleString()} students`}
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-4">
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Upload</p>
-            <h3 className="mt-1 text-sm font-semibold text-slate-900">Candidate Upload Sheet (NSDC format)</h3>
-            <p className="mt-1 text-xs text-slate-500">Upload the candidate_upload Excel or CSV sheet. Columns are read directly from the file&apos;s header row — no fixed template is assumed.</p>
+      <FilterBar>
+        <input
+          type="text"
+          value={searchInput}
+          placeholder="Search name, mobile, email, Aadhar…"
+          onChange={(e) => setSearchInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && doSearch()}
+          className={`${ctrl} flex-1 min-w-[220px]`}
+        />
+        <button type="button" onClick={doSearch} className="px-3 py-1.5 rounded-lg bg-[#6366F1] text-white text-xs font-semibold hover:bg-[#6366F1]/90">Search</button>
+        {search && <button type="button" onClick={doClear} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50">Clear</button>}
+      </FilterBar>
 
-            <div className="mt-3">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                onChange={handleFilePick}
-                disabled={!canCreate || uploading}
-                className="block w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#6366F1]/10 file:text-[#6366F1] hover:file:bg-[#6366F1]/20 disabled:opacity-50"
-              />
-            </div>
-            {!canCreate && <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">View-only — uploading requires create permission.</p>}
-            {uploading && <p className="mt-2 text-xs text-slate-500">Uploading…</p>}
-            {uploadError && <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{uploadError}</p>}
-            {uploadSuccess && <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{uploadSuccess}</p>}
-          </div>
-
-          {selectedBatch && (
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Preview</p>
-                  <h3 className="text-sm font-semibold text-slate-900">{selectedBatch.source_filename}</h3>
-                </div>
-                <GhostBtn onClick={() => { setSelectedBatch(null); setPreviewRows([]); }}>Close</GhostBtn>
-              </div>
-              <div className="overflow-x-auto max-h-[500px]">
-                {previewLoading ? (
-                  <div className="p-6 text-center text-xs text-slate-400">Loading…</div>
-                ) : previewRows.length === 0 ? (
-                  <div className="p-6 text-center text-xs text-slate-400">No rows found.</div>
-                ) : (
-                  <table className="min-w-full text-xs">
-                    <thead className="bg-slate-50 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-semibold text-slate-500">#</th>
-                        {(selectedBatch.columns_json || []).map((col) => (
-                          <th key={col} className="px-3 py-2 text-left font-semibold text-slate-500 whitespace-nowrap">{col}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {previewRows.map((row) => (
-                        <tr key={row.id}>
-                          <td className="px-3 py-1.5 text-slate-400">{row.row_index + 1}</td>
-                          {(selectedBatch.columns_json || []).map((col) => (
-                            <td key={col} className="px-3 py-1.5 text-slate-700 whitespace-nowrap">{row.row_data[col] || ''}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-          )}
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-xs">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-3 py-2 text-left font-semibold text-slate-500">ID</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-500">Candidate Name</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-500">Father&apos;s Name</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-500">Gender</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-500">DOB</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-500">Aadhar Number</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-500">Category</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-500">Mobile</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-500">Email</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-500">City</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-500">State</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-500">Qualification</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-500">Course</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-500">Batch Code</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-500">Edit</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {loading ? (
+                <tr><td colSpan={15} className="px-3 py-10 text-center text-slate-400">Loading…</td></tr>
+              ) : rows.length === 0 ? (
+                <tr><td colSpan={15} className="px-3 py-10 text-center text-slate-400">No students found.</td></tr>
+              ) : (
+                rows.map((r) => (
+                  <tr key={r.Student_Id} className="hover:bg-slate-50">
+                    <td className="px-3 py-1.5 text-slate-400">{r.Student_Id}</td>
+                    <td className="px-3 py-1.5 font-medium text-slate-800 whitespace-nowrap">{r.Student_Name}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{r.Father_Name || '—'}</td>
+                    <td className="px-3 py-1.5">{r.Sex || '—'}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{r.DOB || '—'}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{r.Aadhar_Number || <span className="text-amber-500">Missing</span>}</td>
+                    <td className="px-3 py-1.5">{r.Social_Category || <span className="text-amber-500">Missing</span>}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{r.Present_Mobile || '—'}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{r.Email || '—'}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{r.Present_City || '—'}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{r.Present_State || '—'}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{r.Qualification || '—'}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{r.Course_Name || '—'}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{r.Batch_Code || '—'}</td>
+                    <td className="px-3 py-1.5">
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/dashboard/account-master/nsdc-format/${r.Student_Id}`)}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 text-[11px] font-semibold text-[#2A6BB5] hover:bg-slate-50"
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">History</p>
-            <h3 className="text-sm font-semibold text-slate-900">Past uploads</h3>
+        {pagination.totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
+            <span className="text-[11px] text-slate-500">Page {pagination.page} of {pagination.totalPages}</span>
+            <div className="flex gap-2">
+              <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">Previous</button>
+              <button type="button" disabled={page >= pagination.totalPages} onClick={() => setPage((p) => p + 1)} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">Next</button>
+            </div>
           </div>
-          <div className="max-h-[600px] overflow-y-auto divide-y divide-slate-100">
-            {batchesLoading ? (
-              <div className="space-y-2 p-4">{[1, 2, 3].map((i) => <div key={i} className="h-14 rounded-lg bg-slate-50 animate-pulse" />)}</div>
-            ) : batches.length === 0 ? (
-              <div className="px-4 py-10 text-center text-xs text-slate-400">No uploads yet.</div>
-            ) : (
-              batches.map((batch) => (
-                <button
-                  key={batch.id}
-                  type="button"
-                  onClick={() => openBatch(batch)}
-                  className={`block w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors ${selectedBatch?.id === batch.id ? 'bg-[#6366F1]/5' : ''}`}
-                >
-                  <p className="truncate text-xs font-semibold text-slate-800">{batch.source_filename}</p>
-                  <p className="mt-1 text-[11px] text-slate-500">{batch.row_count} row{batch.row_count === 1 ? '' : 's'}</p>
-                  <p className="mt-1 text-[10px] text-slate-400">{formatDate(batch.created_at)}</p>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
