@@ -43,6 +43,21 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/api/reports/fees/pdf/route': ['./node_modules/pdfkit/js/data/**/*'],
     '/api/fee-details/[studentId]/[feesId]/email/route': ['./node_modules/@sparticuz/chromium/bin/**/*'],
+    // secure-spreadsheet is spawned as a subprocess (real MS-OFFCRYPTO/AES-256
+    // xlsx encryption has no pure-JS-import library available) via a string
+    // path, so Next's static import tracer can't see it — it and its
+    // dependency tree must be explicitly included or the binary is missing
+    // at runtime on Vercel even though the build succeeds locally.
+    '/api/admission-activity/student/nsdc-export/route': [
+      './node_modules/secure-spreadsheet/**/*',
+      './node_modules/.bin/secure-spreadsheet',
+      './node_modules/csv-parse/**/*',
+      './node_modules/xlsx-populate/**/*',
+      './node_modules/cfb/**/*',
+      './node_modules/jszip/**/*',
+      './node_modules/lodash/**/*',
+      './node_modules/sax/**/*',
+    ],
   },
 
   experimental: {

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { ensureStudentTransferColumns } from '@/lib/student-transfer';
+import { ensureNsdcColumns } from '@/lib/student-nsdc';
 
 // A transferred student belongs to their destination batch (Moved_To_Batch_Code).
 // Fall back to their own/admission batch code when not transferred. Used for both
@@ -105,6 +106,14 @@ export async function GET(req: NextRequest) {
     const offset = (page - 1) * limit;
     const field  = searchParams.get('field')?.trim()  || '';
     const search = searchParams.get('search')?.trim() || '';
+    // NSDC candidate-format columns are only selected on demand — they add
+    // nothing to the default list's query cost otherwise.
+    const nsdcFormat = searchParams.get('format') === 'nsdc';
+    if (nsdcFormat) await ensureNsdcColumns(pool);
+    const NSDC_COLUMNS = nsdcFormat
+      ? `, sm.Father_Name, sm.DOB, sm.Sex, sm.Aadhar_Number, sm.Social_Category, sm.Qualification, c.Course_Name`
+      : '';
+    const NSDC_JOIN = nsdcFormat ? `LEFT JOIN course_mst c ON c.Course_Id = sm.Course_Id` : '';
 
     const { clause, params } = buildSearch(field, search);
 
@@ -138,6 +147,7 @@ export async function GET(req: NextRequest) {
            COALESCE(fp.Paid, 0) AS Paid_Fees,
            COALESCE(fp.PostedDebit, 0) AS Posted_Debit,
            COALESCE(fp.HasMembershipDebit, 0) AS Has_Membership_Debit
+           ${NSDC_COLUMNS}
          FROM admission_master am
          ${LATEST_ADMISSION_JOIN}
          JOIN student_master sm ON sm.Student_Id = am.Student_Id
@@ -153,6 +163,7 @@ export async function GET(req: NextRequest) {
          LEFT JOIN course_mst mtc ON mtc.Course_Id = sm.Moved_To_Course_Id
          ${FEES_STRUCTURE_JOIN}
          ${FEES_JOIN}
+         ${NSDC_JOIN}
          WHERE ${BASE_WHERE} ${clause}
          ORDER BY sm.Student_Id DESC, am.Admission_Id DESC
          LIMIT ? OFFSET ?`,

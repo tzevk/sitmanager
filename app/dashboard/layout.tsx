@@ -43,7 +43,6 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Admin/Accounts > Fees Details': '/dashboard/fee-details',
   'Admin/Accounts > Cash Voucher': '/dashboard/account-master/cash-voucher',
   'Admin/Accounts > Batch Transfer / Cancelled Students': '/dashboard/account-master/batch-transfer',
-  'Admin/Accounts > NSDC Format': '/dashboard/account-master/nsdc-format',
   'Admission Activity > Inquiry': '/dashboard/inquiry',
   'Admission Activity > Meta Leads': '/dashboard/meta-leads',
   'Admission Activity > Online Admission': '/dashboard/online-admission',
@@ -202,7 +201,6 @@ const SUB_MENUS: Record<string, string[]> = {
     'Batch Transfer / Cancelled Students',
     'Batch Cancellation',
     'Employee Training',
-    'NSDC Format',
   ],
   'Corporate Training': [
     'Corporate Inquiry',
@@ -271,7 +269,6 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Admin/Accounts > Fees Details': ['finance.view'],
   'Admin/Accounts > Cash Voucher': ['finance.view'],
   'Admin/Accounts > Batch Transfer / Cancelled Students': ['student.view'],
-  'Admin/Accounts > NSDC Format': ['nsdc_format.view'],
   'Admission Activity > Inquiry': ['inquiry.view'],
   'Admission Activity > Meta Leads': ['inquiry.view', 'meta_lead.view'],
   'Admission Activity > Online Admission': ['online_admission.view'],

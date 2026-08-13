@@ -24,7 +24,17 @@ interface StudentRow {
   Moved_From_Batch_Code?: string | null;
   Moved_To_Course_Name?: string | null;
   Cancelled?: number | null;
+  // NSDC candidate-format fields — only populated when fetched with format=nsdc
+  Father_Name?: string | null;
+  DOB?: string | null;
+  Sex?: string | null;
+  Aadhar_Number?: string | null;
+  Social_Category?: string | null;
+  Qualification?: string | null;
+  Course_Name?: string | null;
 }
+
+const NSDC_SOCIAL_CATEGORIES = ['General', 'OBC', 'SC', 'ST', 'EWS', 'Other'];
 
 interface Pagination { page: number; limit: number; total: number; totalPages: number }
 
@@ -67,6 +77,14 @@ export default function StudentPage() {
   const searchRef      = useRef<HTMLInputElement>(null);
   const [fetchTrigger, setFetchTrigger] = useState(0);
 
+  const [nsdcMode, setNsdcMode] = useState(false);
+  const [nsdcSavingId, setNsdcSavingId] = useState<number | null>(null);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [exportPassword, setExportPassword] = useState('');
+  const [exportPasswordConfirm, setExportPasswordConfirm] = useState('');
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState('');
+
   // Keep the saved filters in sync so a remount (navigation / Back) restores them.
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -83,6 +101,7 @@ export default function StudentPage() {
       p.set('limit', '25');
       if (field)  p.set('field',  field);
       if (search) p.set('search', search);
+      if (nsdcMode) p.set('format', 'nsdc');
 
       const res  = await fetch(`/api/admission-activity/student?${p.toString()}`);
       const data = await res.json();
@@ -95,7 +114,7 @@ export default function StudentPage() {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, fetchTrigger]);
+  }, [page, fetchTrigger, nsdcMode]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -132,6 +151,66 @@ export default function StudentPage() {
       const res = await fetch(`/api/admission-activity/student?id=${id}`, { method: 'DELETE' });
       if (res.ok) fetchData();
     } catch { /* ignore */ }
+  };
+
+  const handleNsdcFieldSave = async (studentId: number, field: 'Aadhar_Number' | 'Social_Category', value: string) => {
+    setNsdcSavingId(studentId);
+    const prevRows = rows;
+    setRows(prev => prev.map(x => x.Student_Id === studentId ? { ...x, [field]: value } : x));
+    try {
+      const res = await fetch(`/api/admission-activity/student/${studentId}/nsdc`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value }),
+      });
+      if (!res.ok) throw new Error('save failed');
+    } catch {
+      setRows(prevRows);
+    } finally {
+      setNsdcSavingId(null);
+    }
+  };
+
+  const openNsdcDownload = () => {
+    setExportPassword('');
+    setExportPasswordConfirm('');
+    setExportError('');
+    setShowPasswordModal(true);
+  };
+
+  const handleNsdcDownload = async () => {
+    if (exportPassword.length < 6) {
+      setExportError('Password must be at least 6 characters.');
+      return;
+    }
+    if (exportPassword !== exportPasswordConfirm) {
+      setExportError('Passwords do not match.');
+      return;
+    }
+    setExportBusy(true);
+    setExportError('');
+    try {
+      const res = await fetch('/api/admission-activity/student/nsdc-export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: exportPassword, field, search }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || 'Failed to generate export');
+      }
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `nsdc-candidate-format-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setShowPasswordModal(false);
+    } catch (e: unknown) {
+      setExportError(e instanceof Error ? e.message : 'Failed to generate export');
+    } finally {
+      setExportBusy(false);
+    }
   };
 
   const fmtMoney = (v: number | null) =>
@@ -177,13 +256,36 @@ export default function StudentPage() {
             <h2 className="text-sm font-black text-white tracking-tight leading-none">Student</h2>
             <p className="text-[11px] text-white/60 mt-0.5">Total Student: {legacyTotalStudentCount.toLocaleString()}</p>
           </div>
-          <button onClick={handleExport}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white/15 text-white border border-white/20 hover:bg-white/25 transition-all">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Export
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setNsdcMode(m => !m); setPage(1); }}
+              title="Toggle NSDC candidate-format columns"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                nsdcMode ? 'bg-white text-[#2E3093] border-white' : 'bg-white/15 text-white border-white/20 hover:bg-white/25'
+              }`}>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+              </svg>
+              NSDC Format
+            </button>
+            {nsdcMode ? (
+              <button onClick={openNsdcDownload}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white/15 text-white border border-white/20 hover:bg-white/25 transition-all">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 15V3m0 12l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+                </svg>
+                Download Excel (Password Protected)
+              </button>
+            ) : (
+              <button onClick={handleExport}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white/15 text-white border border-white/20 hover:bg-white/25 transition-all">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -222,22 +324,40 @@ export default function StudentPage() {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex-1 min-h-0 flex flex-col">
         <div className="flex-1 min-h-0 overflow-auto">
           <table className="dashboard-table w-full">
-            <thead className="sticky top-0 z-10 [&_th]:bg-slate-50">
-              <tr className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 border-b border-slate-200">
-                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Student Id</th>
-                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Batch Code</th>
-                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Student Name</th>
-                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Address</th>
-                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Email</th>
-                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Mobile</th>
-                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Payment</th>
-                <th className="text-right py-1.5 px-3 font-bold whitespace-nowrap">Total Fees</th>
-                <th className="text-right py-1.5 px-3 font-bold whitespace-nowrap">Paid</th>
-                <th className="text-right py-1.5 px-3 font-bold whitespace-nowrap">Balance</th>
-                <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Status</th>
-                <th className="text-center py-1.5 px-3 font-bold whitespace-nowrap">Action</th>
-              </tr>
-            </thead>
+            {nsdcMode ? (
+              <thead className="sticky top-0 z-10 [&_th]:bg-slate-50">
+                <tr className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 border-b border-slate-200">
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Student Id</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Candidate Name</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Father&apos;s Name</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Gender</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">DOB</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Aadhar Number</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Category</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Mobile</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Qualification</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Course</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Batch Code</th>
+                </tr>
+              </thead>
+            ) : (
+              <thead className="sticky top-0 z-10 [&_th]:bg-slate-50">
+                <tr className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50 border-b border-slate-200">
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Student Id</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Batch Code</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Student Name</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Address</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Email</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Mobile</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Payment</th>
+                  <th className="text-right py-1.5 px-3 font-bold whitespace-nowrap">Total Fees</th>
+                  <th className="text-right py-1.5 px-3 font-bold whitespace-nowrap">Paid</th>
+                  <th className="text-right py-1.5 px-3 font-bold whitespace-nowrap">Balance</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Status</th>
+                  <th className="text-center py-1.5 px-3 font-bold whitespace-nowrap">Action</th>
+                </tr>
+              </thead>
+            )}
             <tbody>
               {loading ? (
                 <tr><td colSpan={12} className="py-10 text-center">
@@ -248,7 +368,44 @@ export default function StudentPage() {
                 </td></tr>
               ) : rows.length === 0 ? (
                 <tr><td colSpan={12} className="py-10 text-center text-xs text-slate-400">No students found</td></tr>
-              ) : rows.map((r, index) => (
+              ) : nsdcMode ? rows.map((r, index) => (
+                <tr key={r.Admission_Id ?? `${r.Student_Id}-${index}`} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
+                  <td className="py-1.5 px-3 text-xs text-slate-700 font-mono whitespace-nowrap">{r.Student_Id}</td>
+                  <td className="py-1.5 px-3 font-semibold text-slate-900 text-xs whitespace-nowrap">{r.Student_Name || '—'}</td>
+                  <td className="py-1.5 px-3 text-slate-600 text-xs whitespace-nowrap">{r.Father_Name || '—'}</td>
+                  <td className="py-1.5 px-3 text-slate-600 text-xs whitespace-nowrap">{r.Sex || '—'}</td>
+                  <td className="py-1.5 px-3 text-slate-600 text-xs whitespace-nowrap">{r.DOB || '—'}</td>
+                  <td className="py-1.5 px-3 whitespace-nowrap">
+                    <input
+                      type="text"
+                      defaultValue={r.Aadhar_Number || ''}
+                      disabled={!canUpdate || nsdcSavingId === r.Student_Id}
+                      maxLength={20}
+                      placeholder="Missing"
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (v !== (r.Aadhar_Number || '')) handleNsdcFieldSave(r.Student_Id, 'Aadhar_Number', v);
+                      }}
+                      className="bg-white border border-slate-200 rounded px-1.5 py-1 text-xs text-slate-700 w-32 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] disabled:opacity-50"
+                    />
+                  </td>
+                  <td className="py-1.5 px-3 whitespace-nowrap">
+                    <select
+                      defaultValue={r.Social_Category || ''}
+                      disabled={!canUpdate || nsdcSavingId === r.Student_Id}
+                      onChange={(e) => handleNsdcFieldSave(r.Student_Id, 'Social_Category', e.target.value)}
+                      className="bg-white border border-slate-200 rounded px-1.5 py-1 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] disabled:opacity-50"
+                    >
+                      <option value="">Select…</option>
+                      {NSDC_SOCIAL_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </td>
+                  <td className="py-1.5 px-3 text-slate-600 font-mono text-xs whitespace-nowrap">{r.Present_Mobile || '—'}</td>
+                  <td className="py-1.5 px-3 text-slate-600 text-xs whitespace-nowrap">{r.Qualification || '—'}</td>
+                  <td className="py-1.5 px-3 text-slate-600 text-xs whitespace-nowrap">{r.Course_Name || '—'}</td>
+                  <td className="py-1.5 px-3 text-slate-500 font-mono text-xs whitespace-nowrap">{r.Batch_Code || '—'}</td>
+                </tr>
+              )) : rows.map((r, index) => (
                 <tr key={r.Admission_Id ?? `${r.Student_Id}-${index}`} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
                   <td className="py-1.5 px-3 text-xs text-slate-700 font-mono whitespace-nowrap">{r.Student_Id}</td>
                   <td className="py-1.5 px-3 text-slate-500 font-mono text-xs whitespace-nowrap">{r.Batch_Code || '—'}</td>
@@ -367,6 +524,59 @@ export default function StudentPage() {
           </div>
         )}
       </div>
+
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/40 backdrop-blur-[2px] p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-900">Set a download password</h3>
+              <p className="mt-1 text-[11px] text-slate-500">The exported Excel file will be encrypted — Excel will ask for this password when opening it.</p>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold text-slate-600">Password</span>
+                <input
+                  type="password"
+                  value={exportPassword}
+                  onChange={(e) => setExportPassword(e.target.value)}
+                  minLength={6}
+                  className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 w-full focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093]"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold text-slate-600">Confirm Password</span>
+                <input
+                  type="password"
+                  value={exportPasswordConfirm}
+                  onChange={(e) => setExportPasswordConfirm(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleNsdcDownload()}
+                  minLength={6}
+                  className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 w-full focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093]"
+                />
+              </label>
+              {exportError && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">{exportError}</p>}
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowPasswordModal(false)}
+                disabled={exportBusy}
+                className="px-4 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleNsdcDownload}
+                disabled={exportBusy}
+                className="px-4 py-2 rounded-lg bg-[#2E3093] text-white text-xs font-semibold hover:bg-[#252880] disabled:opacity-50"
+              >
+                {exportBusy ? 'Generating…' : 'Download'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </>)}
       </div>
     </div>
