@@ -454,10 +454,7 @@ export default function PublicAdmissionFormPage() {
       if (bestProgress && Number.isFinite(Number(bestProgress.currentStep))) {
         const s = Number(bestProgress.currentStep);
         if (s >= 1 && s <= 7) {
-          // Public users can no longer reach step 7 (submission temporarily paused at
-          // Terms & Conditions) — clamp a stale draft back to step 6 instead of showing
-          // a step they can't act on. Preview mode is unaffected.
-          setCurrentStep(!isPreviewTermsMode && s === 7 ? 6 : s);
+          setCurrentStep(s);
         }
       }
       if (Array.isArray(bestProgress?.completedSteps)) {
@@ -4190,22 +4187,15 @@ export default function PublicAdmissionFormPage() {
                       </button>
 
                       {currentStep < 7 ? (
-                        currentStep === 6 && allSectionsChecked && formData.termsAgreed && !isPreviewTermsMode ? (
-                          <p className="text-xs sm:text-sm font-semibold text-green-700 flex items-center gap-2 px-1">
-                            <i className="fas fa-check-circle"></i>
-                            Thank you — online admissions submission is temporarily paused here. Our team will contact you shortly.
-                          </p>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => nextStep(currentStep + 1)}
-                            disabled={currentStep === 6 && (!allSectionsChecked || !formData.termsAgreed)}
-                            title={currentStep === 6 && (!allSectionsChecked || !formData.termsAgreed) ? 'Read and accept the Terms & Conditions to continue' : undefined}
-                            className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#FAE452] to-[#FDD835] text-[#2E3093] rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
-                          >
-                            <span className="hidden sm:inline">Continue</span><span className="sm:hidden">Next</span> <i className="fas fa-arrow-right ml-1 sm:ml-2"></i>
-                          </button>
-                        )
+                        <button
+                          type="button"
+                          onClick={() => nextStep(currentStep + 1)}
+                          disabled={currentStep === 6 && (!allSectionsChecked || !formData.termsAgreed)}
+                          title={currentStep === 6 && (!allSectionsChecked || !formData.termsAgreed) ? 'Read and accept the Terms & Conditions to continue' : undefined}
+                          className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#FAE452] to-[#FDD835] text-[#2E3093] rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
+                        >
+                          <span className="hidden sm:inline">Continue</span><span className="sm:hidden">Next</span> <i className="fas fa-arrow-right ml-1 sm:ml-2"></i>
+                        </button>
                       ) : (
                         <button
                           type="submit"
