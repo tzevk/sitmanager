@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
 import { buildAdmissionFormMailContent, sendAdmissionFormEmail } from '@/lib/mailer';
 import { getPool } from '@/lib/db';
+import { logAdmissionFormSent } from '@/lib/services/admissionFormSentLog';
 
 async function resolveInquiryTableName(pool: any): Promise<string> {
   const [rows] = await pool.query(
@@ -78,6 +79,10 @@ export async function POST(req: NextRequest) {
       ...(customSubject ? { subject: customSubject } : {}),
       ...(customText ? { text: customText } : {}),
     });
+
+    await logAdmissionFormSent(getPool(), inquiryId, 'email').catch((e) =>
+      console.error('Failed to log admission form sent:', e),
+    );
 
     return NextResponse.json({
       success: true,

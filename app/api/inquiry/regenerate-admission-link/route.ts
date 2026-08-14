@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
 import { getPool } from '@/lib/db';
+import { logAdmissionFormSent } from '@/lib/services/admissionFormSentLog';
 
 const ONLINE_ADMISSION_PAYLOAD_TABLE = 'online_admission_payload';
 
@@ -65,6 +66,10 @@ export async function POST(req: NextRequest) {
     );
 
     const admissionFormUrl = `${req.nextUrl.origin}/admission/${inquiryId}?resetDraft=${Date.now()}`;
+
+    await logAdmissionFormSent(pool, inquiryId, 'manual').catch((e) =>
+      console.error('Failed to log admission form sent:', e),
+    );
 
     return NextResponse.json({
       success: true,

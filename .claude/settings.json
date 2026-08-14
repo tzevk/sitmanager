@@ -269,7 +269,12 @@
       "Bash(python3 build_docx_verbatim.py)",
       "Bash(python3 build_docx_consent_verbatim.py)",
       "Bash(grep -rln \"admission/\\\\${.*inquiryId\\\\|admission form link\\\\|Admission Form Link\\\\|admissionFormUrl\\\\|admission_form_url\" --include=\"*.ts\" --include=\"*.tsx\" /Users/tanvikadam/Desktop/SIT/sitmanager/app /Users/tanvikadam/Desktop/SIT/sitmanager/lib)",
-      "Bash(grep -n \"INSERT INTO \\\\${PAYLOAD_TABLE}\\\\|INSERT INTO.*online_admission_payload\\\\|PAYLOAD_TABLE =\" /Users/tanvikadam/Desktop/SIT/sitmanager/lib/services/online-admission.service.ts)"
+      "Bash(grep -n \"INSERT INTO \\\\${PAYLOAD_TABLE}\\\\|INSERT INTO.*online_admission_payload\\\\|PAYLOAD_TABLE =\" /Users/tanvikadam/Desktop/SIT/sitmanager/lib/services/online-admission.service.ts)",
+      "Bash(grep -n \"CREATE TABLE \\\\`student_inquiry\\\\`\\\\|CREATE TABLE \\\\`Student_Inquiry\\\\`\" -A 80 /Users/tanvikadam/Desktop/SIT/sitmanager/docs/db-schema-dump/current-schema.sql)",
+      "Bash(grep -iE \"^\\\\s*\\\\`|admission|sent|link\")",
+      "Bash(grep -rln \"admission/\\\\${.*}\\\\`\\\\|/admission/\\\\\" + \\\\|admissionFormUrl\\\\|admission-form\" --include=\"*.tsx\" /Users/tanvikadam/Desktop/SIT/sitmanager/app/dashboard)",
+      "Bash(grep -n \"admission/\\\\${.*}\\\\`\\\\|admissionFormUrl\\\\|send-admission-form\\\\|regenerate-admission-link\\\\|whatsapp\\\\|wa.me\" /Users/tanvikadam/Desktop/SIT/sitmanager/app/dashboard/inquiry/components/InquiryForm.tsx)",
+      "Bash(node scripts/log-change.mjs --title 'Dashboard: add '\\\\''Form Sent'\\\\'' column to Upcoming Batches funnel widget' --category Feature --description 'There was no way to distinguish an admission form that was sent to an enquiry from one that was submitted. Added admission_form_sent_log table, logged on both the email-send and regenerate-link admission-form actions, and a new '\\\\''Sent'\\\\'' column \\(between Cont and Int\\) in the CBD dashboard'\\\\''s Upcoming Batches enquiry funnel, scoped per batch the same way as the existing Recv/Cont/Int columns.')"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",

@@ -11,6 +11,7 @@ import {
 } from '@/lib/services/training-dashboard.service';
 import { ensurePlacementDashboardTables, getPlacementCampusInterviews, getPlacementCompanyVisits, getPlacementDeputationOpenings } from '@/lib/services/placement-dashboard.service';
 import { ensureAlumniColumn } from '@/lib/student-alumni';
+import { ensureAdmissionFormSentLogTable } from '@/lib/services/admissionFormSentLog';
 
 const DASHBOARD_CACHE_TTL = cacheTTL.short;
 
@@ -223,6 +224,12 @@ async function fetchDashboardData(dept?: string) {
     } catch { /* best-effort: placement widgets can still use other sources */ }
   }
 
+  if (needsUpcomingBatches) {
+    try {
+      await ensureAdmissionFormSentLogTable(pool);
+    } catch { /* best-effort: Forms_Sent column just reads 0 if this fails */ }
+  }
+
   // ── Run ALL independent queries in parallel ──────────────────────
   const [
     annualTargets,
@@ -373,6 +380,7 @@ async function fetchDashboardData(dept?: string) {
           OR (si.Student_Id IS NOT NULL AND d_stu.id IS NOT NULL)
         ) THEN si.Inquiry_Id END) AS Enquiries_Contacted,
         COUNT(DISTINCT CASE WHEN oap.Inquiry_Id IS NOT NULL THEN si.Inquiry_Id END) AS Interested_Students,
+        COUNT(DISTINCT CASE WHEN afs.Inquiry_Id IS NOT NULL THEN si.Inquiry_Id END) AS Forms_Sent,
         -- Confirmed Admissions comes straight from student_master (Status_id = 8 is the
         -- canonical "admission confirmed" flag the student list itself filters on — see
         -- ALLOWED_INQUIRY_STATUSES in lib/services/inquiry.service.ts), matched by
@@ -433,6 +441,7 @@ async function fetchDashboardData(dept?: string) {
       LEFT JOIN awt_inquirydiscussion d_stu
         ON si.Student_Id IS NOT NULL AND d_stu.deleted = 0 AND d_stu.student_id = si.Student_Id
       LEFT JOIN online_admission_payload oap ON oap.Inquiry_Id = si.Inquiry_Id
+      LEFT JOIN admission_form_sent_log afs ON afs.Inquiry_Id = si.Inquiry_Id
       WHERE ${BATCH_SDATE_EXPR} >= CURDATE()
         AND ${BATCH_SDATE_EXPR} <= DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
         AND (b.IsDelete IS NULL OR b.IsDelete = 0)

@@ -666,7 +666,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
               <col className="w-[72px]" />
               <col />
               <col className="w-[72px]" />
-              <col className="w-[68px]" /><col className="w-[68px]" /><col className="w-[68px]" />
+              <col className="w-[68px]" /><col className="w-[68px]" /><col className="w-[68px]" /><col className="w-[68px]" />
               <col className="w-[68px]" /><col className="w-[68px]" /><col className="w-[68px]" />
               <col className="w-[68px]" />
               <col className="w-[92px]" />
@@ -676,7 +676,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                 <Th rowSpan={2} className="align-bottom">Batch</Th>
                 <Th rowSpan={2} className="align-bottom">Training Program</Th>
                 <Th center rowSpan={2} className="align-bottom">Start</Th>
-                <Th center colSpan={3} className="bg-blue-50/70 text-blue-700 border-b border-blue-200">Enquiries</Th>
+                <Th center colSpan={4} className="bg-blue-50/70 text-blue-700 border-b border-blue-200">Enquiries</Th>
                 <Th center colSpan={3} className="bg-purple-50/70 text-purple-700 border-b border-purple-200">Meta Ads</Th>
                 <Th center rowSpan={2} className="align-bottom">Adm.</Th>
                 <Th center rowSpan={2} className="align-bottom">% Filled</Th>
@@ -684,6 +684,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
               <tr>
                 <Th center className="bg-blue-50/40 text-blue-600 border-b border-gray-200">Recv</Th>
                 <Th center className="bg-blue-50/40 text-blue-600 border-b border-gray-200">Cont</Th>
+                <Th center className="bg-blue-50/40 text-blue-600 border-b border-gray-200">Sent</Th>
                 <Th center className="bg-blue-50/40 text-blue-600 border-b border-gray-200">Int</Th>
                 <Th center className="bg-purple-50/40 text-purple-600 border-b border-gray-200">Recv</Th>
                 <Th center className="bg-purple-50/40 text-purple-600 border-b border-gray-200">Cont</Th>
@@ -692,10 +693,10 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
             </thead>
             <tbody>
               {loading ? (
-                <PulseRows cols={11} rows={5} />
+                <PulseRows cols={12} rows={5} />
               ) : upcomingBatches.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-5 py-10 text-center">
+                  <td colSpan={12} className="px-5 py-10 text-center">
                     <span className="inline-flex flex-col items-center gap-2 text-gray-400">
                       <span className="w-9 h-9 rounded-full bg-gray-50 flex items-center justify-center [&_svg]:w-4 [&_svg]:h-4">{Icons.batch}</span>
                       <span className="text-sm">No upcoming batches for the next 3 months</span>
@@ -741,6 +742,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                       </td>
                       <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-blue-50/20">{b.Enquiries_Received ?? 0}</td>
                       <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-blue-50/20">{b.Enquiries_Contacted ?? 0}</td>
+                      <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-blue-50/20">{b.Forms_Sent ?? 0}</td>
                       <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-blue-50/20">{b.Interested_Students ?? 0}</td>
                       <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-purple-50/20">{b.Meta_Received ?? 0}</td>
                       <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-purple-50/20">{b.Meta_Contacted ?? 0}</td>
