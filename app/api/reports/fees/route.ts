@@ -120,6 +120,7 @@ export async function GET(req: NextRequest) {
              COALESCE(mtc.Course_Name, '') AS Moved_To_Course_Name,
              COALESCE(sm.Student_Name, CONCAT_WS(' ', sm.FName, sm.MName, sm.LName), '') AS Student_Name,
              COALESCE(sm.Present_Mobile,'') AS Present_Mobile,
+             am.Payment_Type AS Admission_Payment_Type,
              sfm.Fees_Id, sfm.Fees_Code, sfm.Date_Added, sfm.RDate,
              sfm.Payment_Type, sfm.Cheque_No, sfm.Cheque_Bank, sfm.Cheque_Branch,
              sfm.Cheque_Date, sfm.Amount, sfm.Service_Tax, sfm.Total_Amt,
@@ -230,7 +231,11 @@ export async function GET(req: NextRequest) {
                     )
                   )
                 )
-             ) AS Ledger_Has_Membership_Debit
+             ) AS Ledger_Has_Membership_Debit,
+             (SELECT MAX(CASE WHEN TypeR = 'C' AND LOWER(IFNULL(Payment_Type, '')) = 'discount' THEN 1 ELSE 0 END)
+              FROM s_fees_mst
+              WHERE Student_Id = sm.Student_Id AND (IsDelete = 0 OR IsDelete IS NULL)
+             ) AS Ledger_Has_Discount
            FROM (
              SELECT Student_Id, Batch_Id, MAX(Admission_Id) AS Admission_Id
              FROM admission_master
@@ -282,10 +287,22 @@ export async function GET(req: NextRequest) {
           const postedDebit = Number(r.Ledger_Posted_Debit ?? 0);
           const paid = Number(r.Ledger_Paid ?? 0);
           const membership = tuition > 0 && !Number(r.Ledger_Has_Membership_Debit ?? 0) ? MEMBERSHIP_FEE : 0;
+          const received = Math.max(paid, 0);
+          const tuitionReceived = Math.min(received, tuition);
+          const alumniReceived = Math.max(received - tuition, 0);
+          const paymentType = String(r.Admission_Payment_Type ?? '').toLowerCase();
+          const tags = [
+            paymentType.includes('loan') ? 'Loan' : '',
+            paymentType.includes('installment') ? 'Installment' : '',
+            Number(r.Ledger_Has_Discount ?? 0) ? 'Discount' : '',
+          ].filter(Boolean);
           return {
             ...r,
             Total_Fees_Exact: tuition + postedDebit + membership,
             Total_Paid_Exact: paid,
+            Tuition_Fees_Received: tuitionReceived,
+            Alumni_Fees_Received: alumniReceived,
+            Fee_Tags: tags,
           };
         });
         return NextResponse.json({ rows: rowsWithExact });

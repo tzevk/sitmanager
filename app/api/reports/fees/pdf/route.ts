@@ -61,6 +61,7 @@ export async function GET(req: NextRequest) {
     const [students] = await pool.query<any[]>(
       `SELECT
          sm.Student_Id, MAX(bm.Course_Id) AS Course_Id, MAX(am.Admission_Date) AS Admission_Date, MAX(am.Fees) AS Fees,
+         MAX(am.Payment_Type) AS Admission_Payment_Type,
          COALESCE(MAX(sm.Student_Name), MAX(CONCAT_WS(' ', sm.FName, sm.MName, sm.LName)), '') AS Student_Name,
          COALESCE(MAX(bm.Batch_code),'') AS Batch_Code, MAX(bm.Fees_Full_Payment) AS Fees_Full_Payment,
          MAX(bm.SDate) AS SDate, MAX(bm.EDate) AS EDate,
@@ -122,6 +123,7 @@ export async function GET(req: NextRequest) {
       `SELECT sfm.Student_Id,
          SUM(CASE WHEN sfm.TypeR = 'C' THEN COALESCE(sfm.Total_Amt, sfm.Amount, 0) ELSE 0 END) AS paid,
          SUM(CASE WHEN sfm.TypeR = 'D' THEN COALESCE(sfm.Total_Amt, sfm.Amount, 0) ELSE 0 END) AS posted_debit,
+         MAX(CASE WHEN sfm.TypeR = 'C' AND LOWER(IFNULL(sfm.Payment_Type, '')) = 'discount' THEN 1 ELSE 0 END) AS has_discount,
          MAX(CASE WHEN sfm.TypeR = 'D' AND LOWER(IFNULL(sfm.Notes, '')) LIKE '%one time membership fees%' THEN 1 ELSE 0 END) AS has_membership_debit
        FROM s_fees_mst sfm
        WHERE sfm.Student_Id IN (?) AND (sfm.IsDelete = 0 OR sfm.IsDelete IS NULL)
@@ -157,14 +159,26 @@ export async function GET(req: NextRequest) {
     }
     const amountByStudent = new Map<number, number>();
     const paidByStudent = new Map<number, number>();
+    const tuitionReceivedByStudent = new Map<number, number>();
+    const alumniReceivedByStudent = new Map<number, number>();
+    const tagsByStudent = new Map<number, string[]>();
     for (const stu of students) {
       const id = Number(stu.Student_Id);
       const ledger = ledgerByStudent.get(id);
       const tuition = parseFee(stu.Fees) || Number(stu.Resolved_Batch_Fee) || 0;
       const postedDebit = Number(ledger?.posted_debit ?? 0);
       const membership = tuition > 0 && !Number(ledger?.has_membership_debit ?? 0) ? MEMBERSHIP_FEE : 0;
+      const received = Math.max(Number(ledger?.paid ?? 0), 0);
       amountByStudent.set(id, tuition + postedDebit + membership);
-      paidByStudent.set(id, Number(ledger?.paid ?? 0));
+      paidByStudent.set(id, received);
+      tuitionReceivedByStudent.set(id, Math.min(received, tuition));
+      alumniReceivedByStudent.set(id, Math.max(received - tuition, 0));
+      const paymentType = String(stu.Admission_Payment_Type ?? '').toLowerCase();
+      tagsByStudent.set(id, [
+        paymentType.includes('loan') ? 'Loan' : '',
+        paymentType.includes('installment') ? 'Installment' : '',
+        Number(ledger?.has_discount ?? 0) ? 'Discount' : '',
+      ].filter(Boolean));
     }
 
     // ── Build PDF ─────────────────────────────────────────────────
@@ -177,12 +191,10 @@ export async function GET(req: NextRequest) {
 
     const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
     const pageBottom = doc.page.height - doc.page.margins.bottom;
-    const colWidths = [35, 270, 70, 70, 70]; // S.No, Student Name, Amount, Paid Amount, Rem Amount
+    const colWidths = [28, 145, 58, 58, 58, 58, 58, 52]; // S.No, Name, Tuition, Alumni, Total, Paid, Remaining, Tags
     const colX: number[] = [];
     let acc = doc.page.margins.left;
     for (const w of colWidths) { colX.push(acc); acc += w; }
-    const tableRight = doc.page.margins.left + pageWidth;
-
     const drawCell = (x: number, y: number, w: number, h: number, text: string, opts: {
       bold?: boolean; align?: 'left' | 'center' | 'right'; size?: number; fill?: string; textColor?: string;
     } = {}) => {
@@ -200,7 +212,7 @@ export async function GET(req: NextRequest) {
       });
     };
 
-    const headers = ['S.No', 'Student Name', 'Amount', 'Paid Amount', 'Rem Amount'];
+    const headers = ['S.No', 'Student Name', 'Tuition Fees received', 'Alumni fees received', 'Total', 'Paid', 'Remaining', 'Tags'];
     const headerH = 24;
     const rowH = 22;
 
@@ -277,6 +289,8 @@ export async function GET(req: NextRequest) {
 
       const amount = amountByStudent.get(Number(stu.Student_Id)) ?? 0;
       const paid = paidByStudent.get(Number(stu.Student_Id)) ?? 0;
+      const tuitionReceived = tuitionReceivedByStudent.get(Number(stu.Student_Id)) ?? 0;
+      const alumniReceived = alumniReceivedByStudent.get(Number(stu.Student_Id)) ?? 0;
       const rem = amount - paid;
 
       grandAmount += amount;
@@ -294,12 +308,15 @@ export async function GET(req: NextRequest) {
 
       drawCell(colX[0], y, colWidths[0], rowH, String(idx + 1), { align: 'center', fill: rowFill, textColor });
       drawCell(colX[1], y, colWidths[1], rowH, nameLabel, { bold: true, fill: rowFill, textColor });
-      drawCell(colX[2], y, colWidths[2], rowH, fmtMoney(amount), { align: 'right', fill: rowFill, textColor });
-      drawCell(colX[3], y, colWidths[3], rowH, fmtMoney(paid), { align: 'right', fill: rowFill, textColor });
-      drawCell(colX[4], y, colWidths[4], rowH, fmtMoney(rem), {
+      drawCell(colX[2], y, colWidths[2], rowH, fmtMoney(tuitionReceived), { align: 'right', fill: rowFill, textColor });
+      drawCell(colX[3], y, colWidths[3], rowH, fmtMoney(alumniReceived), { align: 'right', fill: rowFill, textColor });
+      drawCell(colX[4], y, colWidths[4], rowH, fmtMoney(amount), { align: 'right', fill: rowFill, textColor });
+      drawCell(colX[5], y, colWidths[5], rowH, fmtMoney(paid), { align: 'right', fill: rowFill, textColor });
+      drawCell(colX[6], y, colWidths[6], rowH, fmtMoney(rem), {
         align: 'right', fill: rowFill,
         textColor: status !== 'Active' ? textColor : (rem > 0 ? '#B91C1C' : '#15803D'),
       });
+      drawCell(colX[7], y, colWidths[7], rowH, (tagsByStudent.get(Number(stu.Student_Id)) ?? []).join(', ') || '—', { align: 'center', fill: rowFill, textColor, size: 7.5 });
       y += rowH;
     });
 
@@ -310,9 +327,14 @@ export async function GET(req: NextRequest) {
 
     // ── Grand total row ─────────────────────────────────────────────
     drawCell(colX[0], y, colWidths[0] + colWidths[1], rowH, 'Grand Total', { bold: true, align: 'center', fill: '#F3F4F6' });
-    drawCell(colX[2], y, colWidths[2], rowH, fmtMoney(grandAmount), { bold: true, align: 'right', fill: '#F3F4F6' });
-    drawCell(colX[3], y, colWidths[3], rowH, fmtMoney(grandPaid), { bold: true, align: 'right', fill: '#F3F4F6' });
-    drawCell(colX[4], y, colWidths[4], rowH, fmtMoney(grandRem), { bold: true, align: 'right', fill: '#F3F4F6' });
+    const grandTuition = students.reduce((sum, stu) => sum + (tuitionReceivedByStudent.get(Number(stu.Student_Id)) ?? 0), 0);
+    const grandAlumni = students.reduce((sum, stu) => sum + (alumniReceivedByStudent.get(Number(stu.Student_Id)) ?? 0), 0);
+    drawCell(colX[2], y, colWidths[2], rowH, fmtMoney(grandTuition), { bold: true, align: 'right', fill: '#F3F4F6' });
+    drawCell(colX[3], y, colWidths[3], rowH, fmtMoney(grandAlumni), { bold: true, align: 'right', fill: '#F3F4F6' });
+    drawCell(colX[4], y, colWidths[4], rowH, fmtMoney(grandAmount), { bold: true, align: 'right', fill: '#F3F4F6' });
+    drawCell(colX[5], y, colWidths[5], rowH, fmtMoney(grandPaid), { bold: true, align: 'right', fill: '#F3F4F6' });
+    drawCell(colX[6], y, colWidths[6], rowH, fmtMoney(grandRem), { bold: true, align: 'right', fill: '#F3F4F6' });
+    drawCell(colX[7], y, colWidths[7], rowH, '', { bold: true, fill: '#F3F4F6' });
     y += rowH;
 
     // ── Legend ──────────────────────────────────────────────────────

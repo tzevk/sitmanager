@@ -75,6 +75,9 @@ interface BatchWiseFeesRow {
   Print: number | null;
   Total_Fees_Exact?: number | null;
   Total_Paid_Exact?: number | null;
+  Tuition_Fees_Received?: number | null;
+  Alumni_Fees_Received?: number | null;
+  Fee_Tags?: string[];
 }
 
 interface FacultyRow {
@@ -258,7 +261,6 @@ function FeesReportContent() {
         setFaculties(data.faculties ?? []);
       } catch { /* ignore */ }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [faculties.length]);
 
   const handleSubTabChange = (st: SubTab) => { setSubTab(st); clearResults(); };
@@ -267,7 +269,6 @@ function FeesReportContent() {
   const totalAmt      = feesRows.reduce((s, r) => s + (r.Amount ?? 0), 0);
   const totalTax      = feesRows.reduce((s, r) => s + (r.Service_Tax ?? 0), 0);
   const totalNet      = feesRows.reduce((s, r) => s + (r.Total_Amt ?? 0), 0);
-  const totalBwNet    = batchWiseFeesRows.reduce((s, r) => s + (r.Total_Amt ?? 0), 0);
   const totalFacNet   = facultyRows.reduce((s, r) => s + (r.Net_Payment ?? 0), 0);
 
   const showPrintToggle = activeTab !== 'faculty-payment' &&
@@ -289,7 +290,7 @@ function FeesReportContent() {
     const borders = (c: string) => ({ top: border(c), bottom: border(c), left: border(c), right: border(c) });
     const fill = (argb: string): ExcelJS.Fill => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
 
-    const colCount = 7; // Sr, Student ID, Name, Total, Paid, Remaining, Payment Type
+    const colCount = 10; // Sr, Student ID, Name, Tuition, Alumni, Total, Paid, Remaining, Payment Type, Tags
 
     const wb = new ExcelJS.Workbook();
     wb.creator = 'SIT Manager';
@@ -333,7 +334,7 @@ function FeesReportContent() {
     ws.getRow(4).height = 4;
 
     /* ── Row 5: Column headers ── */
-    const headers = ['Sr No', 'Student ID', 'Name of Student', 'Total Amount', 'Amount Paid', 'Remaining Amount', 'Payment Type'];
+    const headers = ['Sr No', 'Student ID', 'Name of Student', 'Tuition Fees received', 'Alumni fees received', 'Total Amount', 'Amount Paid', 'Remaining Amount', 'Payment Type', 'Tags'];
     const headerRow = ws.getRow(5);
     headerRow.height = 26;
     headers.forEach((h, ci) => {
@@ -399,6 +400,8 @@ function FeesReportContent() {
       const r = g.first;
       const totalFees = r.Total_Fees_Exact ?? r.Fees_Full_Payment ?? 0;
       const totalPaid = r.Total_Paid_Exact ?? 0;
+      const tuitionReceived = r.Tuition_Fees_Received ?? 0;
+      const alumniReceived = r.Alumni_Fees_Received ?? 0;
       const remaining = totalFees - totalPaid;
       sumTotal += totalFees;
       sumPaid += totalPaid;
@@ -415,7 +418,8 @@ function FeesReportContent() {
 
       const vals: (string | number)[] = [
         srNo++, r.Student_Id ?? '', r.Student_Name || '—',
-        totalFees, totalPaid, remaining, paymentTypeLabel,
+        tuitionReceived, alumniReceived, totalFees, totalPaid, remaining, paymentTypeLabel,
+        (r.Fee_Tags ?? []).join(', ') || '—',
       ];
 
       const dataRow = ws.getRow(rowIdx);
@@ -434,7 +438,7 @@ function FeesReportContent() {
         } else if (ci === 1 || ci === 2) {
           cell.font = { name: 'Calibri', size: 9, color: { argb: 'FF6B7280' } };
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
-        } else if (ci === 3) {
+        } else if (ci === 2) {
           cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: sFont } };
           if (status === 'Cancelled') {
             cell.value = `${r.Student_Name || '—'}  [Cancelled]`;
@@ -444,16 +448,16 @@ function FeesReportContent() {
               : r.Moved_To_Batch_Code ? ` → ${r.Moved_To_Batch_Code}` : '';
             cell.value = `${r.Student_Name || '—'}  [Transferred${route}]`;
           }
-        } else if (ci === 4 || ci === 5) {
-          cell.numFmt = '₹#,##0';
-          cell.alignment = { horizontal: 'right', vertical: 'middle' };
-        } else if (ci === 6) {
+        } else if (ci === 7) {
           cell.numFmt = '₹#,##0';
           cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: remaining > 0 ? 'FFB91C1C' : 'FF15803D' } };
           cell.fill = fill(remaining > 0 ? 'FFFEF3C7' : 'FFDCFCE7');
           cell.alignment = { horizontal: 'right', vertical: 'middle' };
-        } else if (ci === 7) {
-          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        } else if (ci >= 3 && ci <= 6) {
+          cell.numFmt = '₹#,##0';
+          cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        } else if (ci === 8 || ci === 9) {
+          cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
         }
       });
       rowIdx++;
@@ -463,19 +467,19 @@ function FeesReportContent() {
     const totalsRow = ws.getRow(rowIdx);
     totalsRow.height = 24;
     const totalLabelCell = ws.getCell(rowIdx, 1);
-    ws.mergeCells(rowIdx, 1, rowIdx, 4);
+    ws.mergeCells(rowIdx, 1, rowIdx, 5);
     totalLabelCell.value = `GRAND TOTAL  (${groups.length} students)`;
     totalLabelCell.alignment = { horizontal: 'right', vertical: 'middle' };
-    [1, 2, 3, 4, 5, 6, 7, 8].forEach(ci => {
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].forEach(ci => {
       const cell = ws.getCell(rowIdx, ci);
       cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
       cell.fill = fill('FF1E3A5F');
       cell.border = borders('FF1E3A5F');
       cell.alignment = cell.alignment || { vertical: 'middle' };
     });
-    const tTotal = ws.getCell(rowIdx, 5); tTotal.value = sumTotal; tTotal.numFmt = '₹#,##0'; tTotal.alignment = { horizontal: 'right', vertical: 'middle' };
-    const tPaid = ws.getCell(rowIdx, 6); tPaid.value = sumPaid; tPaid.numFmt = '₹#,##0'; tPaid.alignment = { horizontal: 'right', vertical: 'middle' };
-    const tRem = ws.getCell(rowIdx, 7); tRem.value = sumRemaining; tRem.numFmt = '₹#,##0'; tRem.alignment = { horizontal: 'right', vertical: 'middle' };
+    const tTotal = ws.getCell(rowIdx, 6); tTotal.value = sumTotal; tTotal.numFmt = '₹#,##0'; tTotal.alignment = { horizontal: 'right', vertical: 'middle' };
+    const tPaid = ws.getCell(rowIdx, 7); tPaid.value = sumPaid; tPaid.numFmt = '₹#,##0'; tPaid.alignment = { horizontal: 'right', vertical: 'middle' };
+    const tRem = ws.getCell(rowIdx, 8); tRem.value = sumRemaining; tRem.numFmt = '₹#,##0'; tRem.alignment = { horizontal: 'right', vertical: 'middle' };
 
     /* ── Legend row ── */
     rowIdx += 2;
@@ -505,10 +509,13 @@ function FeesReportContent() {
       { width: 6 },   // Sr No
       { width: 12 },  // Student ID
       { width: 32 },  // Name of Student
+      { width: 20 },  // Tuition Fees received
+      { width: 20 },  // Alumni fees received
       { width: 16 },  // Total Amount
       { width: 16 },  // Amount Paid
       { width: 18 },  // Remaining Amount
       { width: 16 },  // Payment Type
+      { width: 18 },  // Tags
     ];
 
     /* ── Auto-filter on header row ── */
@@ -710,7 +717,7 @@ function FeesReportContent() {
               <ChequePdcTable rows={feesRows} totalAmt={totalAmt} totalTax={totalTax} totalNet={totalNet} />
             )}
             {activeTab === 'fees-details' && subTab === 'batch-wise-fees' && (
-              <BatchWiseFeesTable rows={batchWiseFeesRows} totalNet={totalBwNet} />
+              <BatchWiseFeesTable rows={batchWiseFeesRows} />
             )}
             {activeTab === 'faculty-payment' && (
               <FacultyPaymentTable rows={facultyRows} totalNet={totalFacNet} />
@@ -802,7 +809,7 @@ function ChequePdcTable({ rows, totalAmt, totalTax, totalNet }: {
 }
 
 /* ── Batch Wise Fees Details table ───────────────────────────────────── */
-function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; totalNet: number }) {
+function BatchWiseFeesTable({ rows }: { rows: BatchWiseFeesRow[] }) {
   if (!rows.length) return <EmptyState />;
 
   return (
@@ -815,8 +822,10 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
             <th className={TH}>Receipt Number</th>
             <th className={TH}>Name of Student</th>
             <th className={TH}>Status</th>
-            <th className={THR}>Amount</th>
+            <th className={THR}>Tuition Fees received</th>
+            <th className={THR}>Alumni fees received</th>
             <th className={TH}>Payment Type</th>
+            <th className={TH}>Tags</th>
             <th className={TH}>Transaction Details</th>
           </tr>
         </thead>
@@ -851,7 +860,7 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
                         </span>
                       </td>
                       <td className={TD}><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusBadge(status)}`}>{status}</span></td>
-                      <td colSpan={3} />
+                      <td colSpan={5} />
                     </>
                   ) : (
                     <>
@@ -869,8 +878,16 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
                         </div>
                       </td>
                       <td className={TD}><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusBadge(status)}`}>{status}</span></td>
-                      <td className={`${TD} text-right font-mono font-semibold`}>{fmt(r.Amount)}</td>
+                      <td className={`${TD} text-right font-mono font-semibold`}>{fmt(r.Tuition_Fees_Received)}</td>
+                      <td className={`${TD} text-right font-mono font-semibold`}>{fmt(r.Alumni_Fees_Received)}</td>
                       <td className={TD}><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${payBadge(r.Payment_Type)}`}>{r.Payment_Type || '—'}</span></td>
+                      <td className={`${TD} max-w-[140px]`}>
+                        <div className="flex flex-wrap gap-1">
+                          {(r.Fee_Tags ?? []).length ? r.Fee_Tags?.map(tag => (
+                            <span key={tag} className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200">{tag}</span>
+                          )) : <span className="text-slate-300">—</span>}
+                        </div>
+                      </td>
                       <td className={`${TD} max-w-[200px] truncate text-slate-500`}>{transactionDetails}</td>
                     </>
                   )}
@@ -882,8 +899,7 @@ function BatchWiseFeesTable({ rows, totalNet }: { rows: BatchWiseFeesRow[]; tota
         <tfoot>
           <tr className="bg-slate-50 border-t-2 border-slate-200">
             <td colSpan={5} className="py-2 px-3 text-xs text-slate-600 text-right font-bold">Total ({rows.length} records)</td>
-            <td className="py-2 px-3 text-xs text-right font-mono font-bold text-[#2E3093]">{fmt(totalNet)}</td>
-            <td colSpan={2} />
+            <td colSpan={5} />
           </tr>
         </tfoot>
       </table>
