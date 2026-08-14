@@ -45,6 +45,20 @@ const STEP_GUIDANCE: Record<number, { focus: string; tip: string }> = {
   },
 };
 
+// Education Path — the applicant picks one of these at the top of Step 2
+// (Academic) and only the academic-level tabs relevant to that path are shown.
+// SSC (10th) is always required and Post-Graduation is always an optional
+// extra tab, regardless of which path is chosen — neither appears in this list.
+type AcademicLevel = 'ssc' | 'hsc' | 'diploma' | 'iti' | 'graduation';
+const EDUCATION_PATHS: { id: string; label: string; levels: AcademicLevel[] }[] = [
+  { id: 'ssc_hsc', label: '10th + 12th (Only for EDD)', levels: ['ssc', 'hsc'] },
+  { id: 'ssc_diploma', label: '10th + Diploma', levels: ['ssc', 'diploma'] },
+  { id: 'ssc_hsc_grad', label: '10th + 12th + Graduation', levels: ['ssc', 'hsc', 'graduation'] },
+  { id: 'ssc_hsc_diploma_grad', label: '10th + 12th + Diploma + Graduation', levels: ['ssc', 'hsc', 'diploma', 'graduation'] },
+  { id: 'ssc_diploma_grad', label: '10th + Diploma + Graduation', levels: ['ssc', 'diploma', 'graduation'] },
+  { id: 'ssc_iti', label: '10th + ITI', levels: ['ssc', 'iti'] },
+];
+
 const stepEnterStyle = { animation: 'stepEnter 320ms ease-out' };
 
 
@@ -137,7 +151,7 @@ export default function PublicAdmissionFormPage() {
   const toggleSection = (idx: number) => setSectionChecks(prev => prev.map((v, i) => i === idx ? !v : v));
   const checkedCount = sectionChecks.filter(Boolean).length;
   const allSectionsChecked = checkedCount === 15;
-  const [academicTab, setAcademicTab] = useState<'ssc' | 'hsc' | 'diploma' | 'graduation' | 'postgrad'>('ssc');
+  const [academicTab, setAcademicTab] = useState<'ssc' | 'hsc' | 'diploma' | 'iti' | 'graduation' | 'postgrad'>('ssc');
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [manualSaving, setManualSaving] = useState(false);
   const [savedAdmissionAssets, setSavedAdmissionAssets] = useState<SavedAdmissionAssets>({ photo: false, documents: false });
@@ -244,7 +258,13 @@ export default function PublicAdmissionFormPage() {
     diploma_yearOfPassing: '',
     diploma_percentage: '',
     diploma_marksheetFile: null as File | null,
-    
+
+    iti_tradeName: '',
+    iti_instituteName: '',
+    iti_yearOfPassing: '',
+    iti_percentage: '',
+    iti_marksheetFile: null as File | null,
+
     grad_degree: '',
     grad_specialization: '',
     grad_university: '',
@@ -290,6 +310,16 @@ export default function PublicAdmissionFormPage() {
       marksheetFile: File | null;
     }>,
     
+    iti_ktCount: '0',
+    iti_ktDetails: [] as Array<{
+      subjectName: string;
+      year: string;
+      semester: string;
+      clearedYear: string;
+      marks: string;
+      marksheetFile: File | null;
+    }>,
+
     grad_ktCount: '0',
     grad_ktDetails: [] as Array<{
       subjectName: string;
@@ -299,7 +329,7 @@ export default function PublicAdmissionFormPage() {
       marks: string;
       marksheetFile: File | null;
     }>,
-    
+
     postgrad_ktCount: '0',
     postgrad_ktDetails: [] as Array<{
       subjectName: string;
@@ -311,6 +341,7 @@ export default function PublicAdmissionFormPage() {
     }>,
     
     educationRemark: '',
+    educationPath: '',
     occupationalStatus: '',
     jobOrganisation: '',
     jobDescription: '',
@@ -526,11 +557,13 @@ export default function PublicAdmissionFormPage() {
         ssc_marksheetFile: null,
         hsc_marksheetFile: null,
         diploma_marksheetFile: null,
+        iti_marksheetFile: null,
         grad_marksheetFile: null,
         postgrad_marksheetFile: null,
         ssc_ktDetails:      formData.ssc_ktDetails.map(d => ({ ...d, marksheetFile: null })),
         hsc_ktDetails:      formData.hsc_ktDetails.map(d => ({ ...d, marksheetFile: null })),
         diploma_ktDetails:  formData.diploma_ktDetails.map(d => ({ ...d, marksheetFile: null })),
+        iti_ktDetails:      formData.iti_ktDetails.map(d => ({ ...d, marksheetFile: null })),
         grad_ktDetails:     formData.grad_ktDetails.map(d => ({ ...d, marksheetFile: null })),
         postgrad_ktDetails: formData.postgrad_ktDetails.map(d => ({ ...d, marksheetFile: null })),
       };
@@ -569,11 +602,13 @@ export default function PublicAdmissionFormPage() {
         || Boolean(formData.ssc_marksheetFile)
         || Boolean(formData.hsc_marksheetFile)
         || Boolean(formData.diploma_marksheetFile)
+        || Boolean(formData.iti_marksheetFile)
         || Boolean(formData.grad_marksheetFile)
         || Boolean(formData.postgrad_marksheetFile)
         || formData.ssc_ktDetails.some((detail) => Boolean(detail.marksheetFile))
         || formData.hsc_ktDetails.some((detail) => Boolean(detail.marksheetFile))
         || formData.diploma_ktDetails.some((detail) => Boolean(detail.marksheetFile))
+        || formData.iti_ktDetails.some((detail) => Boolean(detail.marksheetFile))
         || formData.grad_ktDetails.some((detail) => Boolean(detail.marksheetFile))
         || formData.postgrad_ktDetails.some((detail) => Boolean(detail.marksheetFile));
 
@@ -590,11 +625,12 @@ export default function PublicAdmissionFormPage() {
         appendFile('ssc_marksheetFile', formData.ssc_marksheetFile);
         appendFile('hsc_marksheetFile', formData.hsc_marksheetFile);
         appendFile('diploma_marksheetFile', formData.diploma_marksheetFile);
+        appendFile('iti_marksheetFile', formData.iti_marksheetFile);
         appendFile('grad_marksheetFile', formData.grad_marksheetFile);
         appendFile('postgrad_marksheetFile', formData.postgrad_marksheetFile);
 
         const appendKtFiles = (
-          level: 'ssc' | 'hsc' | 'diploma' | 'grad' | 'postgrad',
+          level: 'ssc' | 'hsc' | 'diploma' | 'iti' | 'grad' | 'postgrad',
           details: Array<{ marksheetFile: File | null }>
         ) => {
           details.forEach((detail, index) => {
@@ -607,6 +643,7 @@ export default function PublicAdmissionFormPage() {
         appendKtFiles('ssc', formData.ssc_ktDetails);
         appendKtFiles('hsc', formData.hsc_ktDetails);
         appendKtFiles('diploma', formData.diploma_ktDetails);
+        appendKtFiles('iti', formData.iti_ktDetails);
         appendKtFiles('grad', formData.grad_ktDetails);
         appendKtFiles('postgrad', formData.postgrad_ktDetails);
 
@@ -1114,7 +1151,7 @@ export default function PublicAdmissionFormPage() {
     }
   };
 
-  const handleKtDetailChange = (level: 'ssc' | 'hsc' | 'diploma' | 'grad' | 'postgrad', index: number, field: string, value: string | File | null) => {
+  const handleKtDetailChange = (level: 'ssc' | 'hsc' | 'diploma' | 'iti' | 'grad' | 'postgrad', index: number, field: string, value: string | File | null) => {
     const detailsField = `${level}_ktDetails` as keyof typeof formData;
     setFormData(prev => {
       const currentDetails = prev[detailsField] as { subjectName: string; year: string; semester: string; clearedYear: string; marks: string; marksheetFile: File | null }[];
@@ -1127,11 +1164,13 @@ export default function PublicAdmissionFormPage() {
   const hasSelectedAcademicDocument = () => Boolean(formData.ssc_marksheetFile)
     || Boolean(formData.hsc_marksheetFile)
     || Boolean(formData.diploma_marksheetFile)
+    || Boolean(formData.iti_marksheetFile)
     || Boolean(formData.grad_marksheetFile)
     || Boolean(formData.postgrad_marksheetFile)
     || formData.ssc_ktDetails.some((detail) => Boolean(detail.marksheetFile))
     || formData.hsc_ktDetails.some((detail) => Boolean(detail.marksheetFile))
     || formData.diploma_ktDetails.some((detail) => Boolean(detail.marksheetFile))
+    || formData.iti_ktDetails.some((detail) => Boolean(detail.marksheetFile))
     || formData.grad_ktDetails.some((detail) => Boolean(detail.marksheetFile))
     || formData.postgrad_ktDetails.some((detail) => Boolean(detail.marksheetFile));
 
@@ -1185,6 +1224,22 @@ export default function PublicAdmissionFormPage() {
       case 2:
         if (!hasRequiredAcademicDocument()) {
           alert('Please upload at least one academic document before continuing.');
+          return false;
+        }
+        // 10th (SSC) is common to every education path, so it is always compulsory —
+        // even before a path has been picked.
+        if (!formData.ssc_board || !formData.ssc_schoolName.trim() || !formData.ssc_yearOfPassing || !formData.ssc_percentage.trim()) {
+          alert('Please fill all required SSC (10th) details before continuing.');
+          setAcademicTab('ssc');
+          return false;
+        }
+        if (!formData.ssc_marksheetFile && !savedAssetUrl('ssc_marksheet')) {
+          alert('Please upload the SSC (10th) marksheet before continuing.');
+          setAcademicTab('ssc');
+          return false;
+        }
+        if (!formData.educationPath) {
+          alert('Please select an Education Path before continuing.');
           return false;
         }
         break;
@@ -1300,6 +1355,23 @@ export default function PublicAdmissionFormPage() {
     }
     if (!hasRequiredAcademicDocument()) {
       alert('Please complete Step 2: Upload at least one academic document');
+      setCurrentStep(2);
+      return;
+    }
+    if (!formData.ssc_board || !formData.ssc_schoolName.trim() || !formData.ssc_yearOfPassing || !formData.ssc_percentage.trim()) {
+      alert('Please complete Step 2: Fill all required SSC (10th) details');
+      setCurrentStep(2);
+      setAcademicTab('ssc');
+      return;
+    }
+    if (!formData.ssc_marksheetFile && !savedAssetUrl('ssc_marksheet')) {
+      alert('Please complete Step 2: Upload the SSC (10th) marksheet');
+      setCurrentStep(2);
+      setAcademicTab('ssc');
+      return;
+    }
+    if (!formData.educationPath) {
+      alert('Please complete Step 2: Select an Education Path');
       setCurrentStep(2);
       return;
     }
@@ -1431,17 +1503,24 @@ export default function PublicAdmissionFormPage() {
         diploma_institute: formData.diploma_institute,
         diploma_yearOfPassing: formData.diploma_yearOfPassing,
         diploma_percentage: formData.diploma_percentage,
+        iti_tradeName: formData.iti_tradeName,
+        iti_instituteName: formData.iti_instituteName,
+        iti_yearOfPassing: formData.iti_yearOfPassing,
+        iti_percentage: formData.iti_percentage,
         ssc_ktCount: formData.ssc_ktCount,
         ssc_ktDetails: formData.ssc_ktDetails,
         hsc_ktCount: formData.hsc_ktCount,
         hsc_ktDetails: formData.hsc_ktDetails,
         diploma_ktCount: formData.diploma_ktCount,
         diploma_ktDetails: formData.diploma_ktDetails,
+        iti_ktCount: formData.iti_ktCount,
+        iti_ktDetails: formData.iti_ktDetails,
         grad_ktCount: formData.grad_ktCount,
         grad_ktDetails: formData.grad_ktDetails,
         postgrad_ktCount: formData.postgrad_ktCount,
         postgrad_ktDetails: formData.postgrad_ktDetails,
         educationRemark: formData.educationRemark,
+        educationPath: formData.educationPath,
         occupationalStatus: formData.occupationalStatus,
         jobOrganisation: formData.jobOrganisation,
         jobDescription: formData.jobDescription,
@@ -1490,11 +1569,12 @@ export default function PublicAdmissionFormPage() {
       appendFile('ssc_marksheetFile', formData.ssc_marksheetFile);
       appendFile('hsc_marksheetFile', formData.hsc_marksheetFile);
       appendFile('diploma_marksheetFile', formData.diploma_marksheetFile);
+      appendFile('iti_marksheetFile', formData.iti_marksheetFile);
       appendFile('grad_marksheetFile', formData.grad_marksheetFile);
       appendFile('postgrad_marksheetFile', formData.postgrad_marksheetFile);
 
       const appendKtFiles = (
-        level: 'ssc' | 'hsc' | 'diploma' | 'grad' | 'postgrad',
+        level: 'ssc' | 'hsc' | 'diploma' | 'iti' | 'grad' | 'postgrad',
         details: Array<{ marksheetFile: File | null }>
       ) => {
         details.forEach((detail, index) => {
@@ -1507,6 +1587,7 @@ export default function PublicAdmissionFormPage() {
       appendKtFiles('ssc', formData.ssc_ktDetails);
       appendKtFiles('hsc', formData.hsc_ktDetails);
       appendKtFiles('diploma', formData.diploma_ktDetails);
+      appendKtFiles('iti', formData.iti_ktDetails);
       appendKtFiles('grad', formData.grad_ktDetails);
       appendKtFiles('postgrad', formData.postgrad_ktDetails);
 
@@ -2196,72 +2277,75 @@ export default function PublicAdmissionFormPage() {
                   )}
 
                   {/* ── STEP 2: Academic ── */}
-                  {currentStep === 2 && (
+                  {currentStep === 2 && (() => {
+                    const selectedEducationPath = EDUCATION_PATHS.find(p => p.id === formData.educationPath);
+                    // SSC is always required; Post-Graduation is always available as an
+                    // optional extra tab — neither is part of any EDUCATION_PATHS entry.
+                    const visibleAcademicLevels = new Set<string>(['ssc', 'postgrad', ...(selectedEducationPath?.levels ?? [])]);
+                    const academicTabConfig: { id: 'ssc' | 'hsc' | 'diploma' | 'iti' | 'graduation' | 'postgrad'; icon: string; full: string; short: string }[] = [
+                      { id: 'ssc', icon: 'fa-school', full: 'SSC (10th)', short: 'SSC' },
+                      { id: 'hsc', icon: 'fa-graduation-cap', full: 'HSC (12th)', short: 'HSC' },
+                      { id: 'diploma', icon: 'fa-certificate', full: 'Diploma', short: 'Diploma' },
+                      { id: 'iti', icon: 'fa-cogs', full: 'ITI', short: 'ITI' },
+                      { id: 'graduation', icon: 'fa-user-graduate', full: 'Graduation', short: 'Grad' },
+                      { id: 'postgrad', icon: 'fa-award', full: 'Post-Graduation', short: 'PG' },
+                    ];
+                    return (
                     <div className="space-y-4 sm:space-y-5" style={stepEnterStyle}>
+                      {/* Education Path Selector */}
+                      <div>
+                        <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
+                          <i className="fas fa-route text-[#2A6BB5]"></i>
+                          Education Path
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                          {EDUCATION_PATHS.map((path) => (
+                            <button
+                              key={path.id}
+                              type="button"
+                              onClick={() => {
+                                const newVisibleLevels = new Set<string>(['ssc', 'postgrad', ...path.levels]);
+                                setFormData(prev => ({ ...prev, educationPath: path.id }));
+                                setAcademicTab(prev => (newVisibleLevels.has(prev) ? prev : 'ssc'));
+                              }}
+                              className={`text-left px-3.5 py-2.5 text-xs sm:text-sm font-semibold transition-all rounded-xl border shadow-sm ${
+                                formData.educationPath === path.id
+                                  ? 'text-white bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] border-[#2A6BB5] shadow-[0_10px_24px_rgba(46,48,147,0.22)]'
+                                  : 'text-gray-600 bg-white border-gray-200 hover:text-[#2A6BB5] hover:border-gray-300 hover:shadow-md'
+                              }`}
+                            >
+                              <i className={`fas ${formData.educationPath === path.id ? 'fa-check-circle' : 'fa-circle-notch'} mr-2`}></i>
+                              {path.label}
+                            </button>
+                          ))}
+                        </div>
+                        {!formData.educationPath && (
+                          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2.5 flex items-center gap-2">
+                            <i className="fas fa-info-circle"></i>
+                            Please select an education path above — the relevant qualification tabs will appear once you do. SSC (10th) details are always required.
+                          </p>
+                        )}
+                      </div>
+
                       {/* Tab Navigation */}
                       <div className="border-b border-gray-200 sm:border-b-gray-300 pb-2 sm:pb-0">
                         <div className="-mx-2.5 px-2.5 sm:mx-0 sm:px-0 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none]">
                           <div className="flex w-max min-w-full gap-2 sm:gap-3 pb-1 sm:pb-0 -mb-px pr-2 sm:pr-0">
-                          <button
-                            type="button"
-                            onClick={() => setAcademicTab('ssc')}
-                            className={`snap-center sm:snap-none px-3.5 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex-shrink-0 rounded-full border shadow-sm ${
-                              academicTab === 'ssc'
-                                ? 'text-white bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] border-[#2A6BB5] shadow-[0_10px_24px_rgba(46,48,147,0.22)]'
-                                : 'text-gray-600 bg-white border-gray-200 hover:text-[#2A6BB5] hover:border-gray-300 hover:shadow-md'
-                            }`}
-                          >
-                            <i className="fas fa-school mr-1 sm:mr-2"></i>
-                            <span className="hidden sm:inline">SSC (10th)</span><span className="sm:hidden">SSC</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setAcademicTab('hsc')}
-                            className={`snap-center sm:snap-none px-3.5 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex-shrink-0 rounded-full border shadow-sm ${
-                              academicTab === 'hsc'
-                                ? 'text-white bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] border-[#2A6BB5] shadow-[0_10px_24px_rgba(46,48,147,0.22)]'
-                                : 'text-gray-600 bg-white border-gray-200 hover:text-[#2A6BB5] hover:border-gray-300 hover:shadow-md'
-                            }`}
-                          >
-                            <i className="fas fa-graduation-cap mr-1 sm:mr-2"></i>
-                            <span className="hidden sm:inline">HSC (12th)</span><span className="sm:hidden">HSC</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setAcademicTab('diploma')}
-                            className={`snap-center sm:snap-none px-3.5 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex-shrink-0 rounded-full border shadow-sm ${
-                              academicTab === 'diploma'
-                                ? 'text-white bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] border-[#2A6BB5] shadow-[0_10px_24px_rgba(46,48,147,0.22)]'
-                                : 'text-gray-600 bg-white border-gray-200 hover:text-[#2A6BB5] hover:border-gray-300 hover:shadow-md'
-                            }`}
-                          >
-                            <i className="fas fa-certificate mr-1 sm:mr-2"></i>
-                            Diploma
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setAcademicTab('graduation')}
-                            className={`snap-center sm:snap-none px-3.5 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex-shrink-0 rounded-full border shadow-sm ${
-                              academicTab === 'graduation'
-                                ? 'text-white bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] border-[#2A6BB5] shadow-[0_10px_24px_rgba(46,48,147,0.22)]'
-                                : 'text-gray-600 bg-white border-gray-200 hover:text-[#2A6BB5] hover:border-gray-300 hover:shadow-md'
-                            }`}
-                          >
-                            <i className="fas fa-user-graduate mr-1 sm:mr-2"></i>
-                            <span className="hidden sm:inline">Graduation</span><span className="sm:hidden">Grad</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setAcademicTab('postgrad')}
-                            className={`snap-center sm:snap-none px-3.5 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex-shrink-0 rounded-full border shadow-sm ${
-                              academicTab === 'postgrad'
-                                ? 'text-white bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] border-[#2A6BB5] shadow-[0_10px_24px_rgba(46,48,147,0.22)]'
-                                : 'text-gray-600 bg-white border-gray-200 hover:text-[#2A6BB5] hover:border-gray-300 hover:shadow-md'
-                            }`}
-                          >
-                            <i className="fas fa-award mr-1 sm:mr-2"></i>
-                            <span className="hidden sm:inline">Post-Graduation</span><span className="sm:hidden">PG</span>
-                          </button>
+                          {academicTabConfig.filter(tab => visibleAcademicLevels.has(tab.id)).map((tab) => (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              onClick={() => setAcademicTab(tab.id)}
+                              className={`snap-center sm:snap-none px-3.5 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex-shrink-0 rounded-full border shadow-sm ${
+                                academicTab === tab.id
+                                  ? 'text-white bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] border-[#2A6BB5] shadow-[0_10px_24px_rgba(46,48,147,0.22)]'
+                                  : 'text-gray-600 bg-white border-gray-200 hover:text-[#2A6BB5] hover:border-gray-300 hover:shadow-md'
+                              }`}
+                            >
+                              <i className={`fas ${tab.icon} mr-1 sm:mr-2`}></i>
+                              <span className="hidden sm:inline">{tab.full}</span><span className="sm:hidden">{tab.short}</span>
+                            </button>
+                          ))}
                           </div>
                         </div>
                       </div>
@@ -2648,6 +2732,125 @@ export default function PublicAdmissionFormPage() {
                         </div>
                       )}
 
+                      {/* ITI Tab */}
+                      {academicTab === 'iti' && (
+                        <div className="space-y-4 sm:space-y-5">
+                          <div>
+                            <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
+                              <i className="fas fa-cogs text-[#2A6BB5]"></i>
+                              ITI Education
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                              <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Trade Name</label>
+                                <input type="text" value={formData.iti_tradeName} onChange={(e) => handleChange('iti_tradeName', e.target.value)} placeholder="e.g. Electrician, Fitter" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                              </div>
+                              <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Institute Name</label>
+                                <input type="text" value={formData.iti_instituteName} onChange={(e) => handleChange('iti_instituteName', e.target.value)} placeholder="Enter institute name" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Year of Passing</label>
+                                <input type="number" value={formData.iti_yearOfPassing} onChange={(e) => handleChange('iti_yearOfPassing', e.target.value)} placeholder="YYYY" min="1990" max="2030" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Percentage / CGPA</label>
+                                <input type="text" value={formData.iti_percentage} onChange={(e) => handleChange('iti_percentage', e.target.value)} placeholder="e.g. 85% or 8.5 CGPA" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                              </div>
+                              <div className="lg:col-span-3">
+                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                                  <i className="fas fa-file-upload text-[#2A6BB5] mr-1"></i>
+                                  Upload ITI Marksheet / Certificate
+                                </label>
+                                <input
+                                  type="file"
+                                  onChange={(e) => handleChange('iti_marksheetFile', e.target.files?.[0] || null)}
+                                  accept=".pdf,.jpg,.jpeg,.png"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] transition-all"
+                                />
+                                {formData.iti_marksheetFile && (
+                                  <span className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                                    <i className="fas fa-check-circle"></i>
+                                    {formData.iti_marksheetFile.name}
+                                  </span>
+                                )}
+                                {!formData.iti_marksheetFile && savedAssetUrl('iti_marksheet') && (
+                                  <span className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                                    <i className="fas fa-check-circle"></i>
+                                    A marksheet is already on file.
+                                    <a href={savedAssetUrl('iti_marksheet')} target="_blank" rel="noopener noreferrer" className="text-[#2A6BB5] underline font-semibold">View</a>
+                                  </span>
+                                )}
+                                <p className="text-xs text-gray-500 mt-1">PDF, JPG, or PNG (max 5MB)</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <h3 className="text-base font-bold text-gray-800 mb-3 pb-1.5 border-b border-gray-200 flex items-center gap-2">
+                              <i className="fas fa-exclamation-triangle text-[#FAE452]"></i>
+                              KT / Backlog Details (ITI)
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Number of KT Subjects (if any)</label>
+                                <select value={formData.iti_ktCount} onChange={(e) => handleChange('iti_ktCount', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all">
+                                  <option value="0">No KT</option>
+                                  {[1,2,3,4].map(n => <option key={n} value={n}>{n} Subject{n>1?'s':''}</option>)}
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+
+                          {parseInt(formData.iti_ktCount) > 0 && (
+                            <div>
+                              <h4 className="text-sm font-bold text-gray-700 mb-3">ITI KT Subject Details</h4>
+                              <div className="space-y-4">
+                                {formData.iti_ktDetails.map((kt, index) => (
+                                  <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                    <h5 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                                      <span className="bg-[#2E3093] text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">{index + 1}</span>
+                                      KT Subject {index + 1}
+                                    </h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                      <div className="lg:col-span-3">
+                                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Subject Name</label>
+                                        <input type="text" value={kt.subjectName} onChange={(e) => handleKtDetailChange('iti', index, 'subjectName', e.target.value)} placeholder="Enter subject name" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Year</label>
+                                        <input type="number" value={kt.year} onChange={(e) => handleKtDetailChange('iti', index, 'year', e.target.value)} placeholder="YYYY" min="2000" max="2030" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Semester</label>
+                                        <select value={kt.semester} onChange={(e) => handleKtDetailChange('iti', index, 'semester', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all">
+                                          <option value="">Select Semester</option>
+                                          {[1,2,3,4,5,6].map(s => <option key={s} value={s}>Semester {s}</option>)}
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Cleared Year</label>
+                                        <input type="number" value={kt.clearedYear} onChange={(e) => handleKtDetailChange('iti', index, 'clearedYear', e.target.value)} placeholder="YYYY (if cleared)" min="2000" max="2030" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Marks Obtained</label>
+                                        <input type="number" value={kt.marks} onChange={(e) => handleKtDetailChange('iti', index, 'marks', e.target.value)} placeholder="If cleared" min="0" max="100" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                                      </div>
+                                      <div className="lg:col-span-2">
+                                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Marksheet Upload</label>
+                                        <input type="file" onChange={(e) => handleKtDetailChange('iti', index, 'marksheetFile', e.target.files?.[0] || null)} accept=".pdf,.jpg,.jpeg,.png" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] transition-all" />
+                                        {kt.marksheetFile && <span className="text-xs text-green-600 flex items-center gap-1 mt-1"><i className="fas fa-check-circle"></i>{kt.marksheetFile.name}</span>}
+                                        <p className="text-xs text-gray-500 mt-1">PDF, JPG, or PNG (max 5MB)</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Graduation Tab */}
                       {academicTab === 'graduation' && (
                         <div className="space-y-4 sm:space-y-5">
@@ -2915,7 +3118,8 @@ export default function PublicAdmissionFormPage() {
                         <textarea value={formData.educationRemark} onChange={(e) => handleChange('educationRemark', e.target.value)} rows={3} placeholder="Any additional information about your educational qualifications" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all resize-none" />
                       </div>
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {/* ── STEP 3: Occupational Information ── */}
                   {currentStep === 3 && (

@@ -144,6 +144,12 @@ const FORM_COLUMNS: [string, string][] = [
   ['Diploma_Year_Passing',   'VARCHAR(10) NULL'],
   ['Diploma_Percentage',     'DECIMAL(5,2) NULL'],
   ['Diploma_KT_Count',       'INT NULL DEFAULT 0'],
+  // ITI
+  ['ITI_Trade_Name',         'VARCHAR(200) NULL'],
+  ['ITI_Institute_Name',     'VARCHAR(300) NULL'],
+  ['ITI_Year_Passing',       'VARCHAR(10) NULL'],
+  ['ITI_Percentage',         'DECIMAL(5,2) NULL'],
+  ['ITI_KT_Count',           'INT NULL DEFAULT 0'],
   // Graduation
   ['Grad_Degree',            'VARCHAR(200) NULL'],
   ['Grad_Specialization',    'VARCHAR(200) NULL'],
@@ -163,6 +169,7 @@ const FORM_COLUMNS: [string, string][] = [
   ['Discipline',             'VARCHAR(200) NULL'],
   ['Percentage',             'DECIMAL(5,2) NULL'],
   ['Education_Remark',       'TEXT NULL'],
+  ['Education_Path',         'VARCHAR(100) NULL'],
   // Occupational
   ['Occupational_Status',       'VARCHAR(200) NULL'],
   ['Job_Organisation',          'VARCHAR(300) NULL'],
@@ -495,6 +502,12 @@ export async function saveStructuredAdmissionData(
     ['Diploma_Year_Passing',    n(input.diploma_yearOfPassing)],
     ['Diploma_Percentage',      num(input.diploma_percentage)],
     ['Diploma_KT_Count',        num(input.diploma_ktCount) ?? 0],
+    // ITI
+    ['ITI_Trade_Name',      n(input.iti_tradeName)],
+    ['ITI_Institute_Name',  n(input.iti_instituteName)],
+    ['ITI_Year_Passing',    n(input.iti_yearOfPassing)],
+    ['ITI_Percentage',      num(input.iti_percentage)],
+    ['ITI_KT_Count',        num(input.iti_ktCount) ?? 0],
     // Graduation
     ['Grad_Degree',         n(input.grad_degree)],
     ['Grad_Specialization', n(input.grad_specialization)],
@@ -514,6 +527,7 @@ export async function saveStructuredAdmissionData(
     ['Discipline',        academic.discipline],
     ['Percentage',        academic.percentage],
     ['Education_Remark',  n(input.educationRemark)],
+    ['Education_Path',    n(input.educationPath)],
     // Occupational
     ['Occupational_Status',     n(input.occupationalStatus)],
     ['Job_Organisation',        n(input.jobOrganisation)],
@@ -566,7 +580,7 @@ export async function saveStructuredAdmissionData(
   }
 
   // KT details — only replace when at least one level array is present in the input
-  const ktLevels = ['ssc', 'hsc', 'diploma', 'grad', 'postgrad'] as const;
+  const ktLevels = ['ssc', 'hsc', 'diploma', 'iti', 'grad', 'postgrad'] as const;
   const hasKtData = ktLevels.some((l) => Array.isArray(input[`${l}_ktDetails`]));
   if (!hasKtData) return;
 
@@ -644,7 +658,10 @@ function safeDate(value: unknown): string | null {
 }
 
 function resolveCategory(statusId: number, statusText: string): StatusCategory {
-  if ([8, 10].includes(statusId)) return 'completed';
+  // 23/24 (Document Pending / Fees Pending) are only ever set once the applicant has
+  // submitted the online admission form — treat them as "completed" alongside
+  // Admitted/On Hold, matching the completed-tab definition in listOnlineAdmissions().
+  if ([8, 10, 23, 24].includes(statusId)) return 'completed';
   if ([4, 7, 9].includes(statusId)) return 'rejected';
   const base = (statusText || '').toLowerCase();
   if (/accepted|admitted|confirm|taken/.test(base)) return 'completed';
@@ -754,6 +771,15 @@ function resolveAcademicProfile(input: Record<string, unknown>) {
       qualification: normalizeText(input.diploma_degree),
       discipline: normalizeText(input.diploma_specialization),
       percentage: parseOptionalNumber(input.diploma_percentage),
+    },
+    // ITI (vocational training) sits at the same precedence tier as Diploma —
+    // it only ever pairs with SSC in the "10th + ITI" education path, never
+    // alongside HSC/Graduation, so it's checked right after Diploma and
+    // before HSC/SSC.
+    {
+      qualification: normalizeText(input.iti_tradeName) ? 'ITI' : '',
+      discipline: normalizeText(input.iti_tradeName),
+      percentage: parseOptionalNumber(input.iti_percentage),
     },
     {
       qualification: normalizeText(input.hsc_stream) ? 'HSC' : '',
@@ -1462,17 +1488,18 @@ export async function listOnlineAdmissions(
     AND ${hasAdmissionActivityExpr}
     AND ${NOT_DECIDED}
   )`;
-  // Tabs: In Progress now holds everything still awaiting a decision — both drafts
-  // being filled AND fully-submitted forms that haven't been granted/rejected yet
-  // (the old "Pending" tab is folded in here). Completed/Rejected stay decision-based.
-  //   in_progress → draft (filling) OR submitted-awaiting-decision
-  //   completed   → submitted, admitted    rejected → submitted, cancelled/left
+  // Tabs: "Completed" means the applicant finished and submitted the form — it no
+  // longer waits on a staff admit/hold decision. In Progress is only the drafting
+  // stage (not yet submitted). Rejected stays its own outcome, carved out of Completed.
+  //   in_progress → draft, still being filled, not yet submitted
+  //   completed   → submitted, not rejected (awaiting decision, admitted, or on-hold)
+  //   rejected    → submitted, cancelled/left/not-interested
   if (tab === 'in_progress') {
-    newConds.push(`(${IN_PROGRESS} OR (${SUBMITTED} AND ${NOT_DECIDED}))`);
+    newConds.push(IN_PROGRESS);
   } else if (tab === 'pending') {
     newConds.push(`${SUBMITTED} AND ${NOT_DECIDED}`);
   } else if (tab === 'completed') {
-    newConds.push(`${SUBMITTED} AND ${effectiveStatusExpr} IN (8, 10)`);
+    newConds.push(`${SUBMITTED} AND (${effectiveStatusExpr} IS NULL OR ${effectiveStatusExpr} NOT IN (4, 7, 9))`);
   } else if (tab === 'rejected') {
     newConds.push(`${SUBMITTED} AND ${effectiveStatusExpr} IN (4, 7, 9)`);
   } else {

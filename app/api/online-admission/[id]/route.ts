@@ -13,6 +13,7 @@ const STATIC_DOCUMENT_FIELDS = [
   ['ssc_marksheetFile', 'ssc_marksheet'],
   ['hsc_marksheetFile', 'hsc_marksheet'],
   ['diploma_marksheetFile', 'diploma_marksheet'],
+  ['iti_marksheetFile', 'iti_marksheet'],
   ['grad_marksheetFile', 'graduation_marksheet'],
   ['postgrad_marksheetFile', 'postgraduation_marksheet'],
 ] as const;
@@ -66,7 +67,7 @@ function buildUploads(formData: FormData, body: Record<string, any>): AdmissionU
     if (file) documents.push({ key, file });
   }
 
-  const levels = ['ssc', 'hsc', 'diploma', 'grad', 'postgrad'] as const;
+  const levels = ['ssc', 'hsc', 'diploma', 'iti', 'grad', 'postgrad'] as const;
   for (const level of levels) {
     const details = Array.isArray(body[`${level}_ktDetails`]) ? body[`${level}_ktDetails`] : [];
     details.forEach((_: unknown, index: number) => {
