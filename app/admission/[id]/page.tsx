@@ -1304,17 +1304,22 @@ export default function PublicAdmissionFormPage() {
           alert('Please select how you would like to pay — Pay Online, Pay by QR, or Pay by NEFT.');
           return false;
         }
-        if (paymentSubMethod === 'qr' && !upiTransferConfirmed) {
-          alert('Please confirm your QR payment before proceeding.');
-          return false;
-        }
-        if (paymentSubMethod === 'razorpay' && !razorpayPaid) {
-          alert('Please complete the online payment before proceeding.');
-          return false;
-        }
-        if (paymentSubMethod === 'neft' && !neftTransactionNumber.trim()) {
-          alert('Please enter the NEFT transaction number before proceeding.');
-          return false;
+        // Pay at Office is fully verified via the password override above — the
+        // Pay Online/QR/NEFT sub-method checks below only apply when that mode
+        // is NOT selected (paymentSubMethod can be stale from an earlier choice).
+        if (formData.modeOfPayment !== 'Pay at Office') {
+          if (paymentSubMethod === 'qr' && !upiTransferConfirmed) {
+            alert('Please confirm your QR payment before proceeding.');
+            return false;
+          }
+          if (paymentSubMethod === 'razorpay' && !razorpayPaid) {
+            alert('Please complete the online payment before proceeding.');
+            return false;
+          }
+          if (paymentSubMethod === 'neft' && !neftTransactionNumber.trim()) {
+            alert('Please enter the NEFT transaction number before proceeding.');
+            return false;
+          }
         }
         break;
     }
@@ -1424,20 +1429,25 @@ export default function PublicAdmissionFormPage() {
       setCurrentStep(7);
       return;
     }
-    if (paymentSubMethod === 'qr' && !upiTransferConfirmed) {
-      alert('Please confirm your QR payment in Step 7 before submitting.');
-      setCurrentStep(7);
-      return;
-    }
-    if (paymentSubMethod === 'razorpay' && !razorpayPaid) {
-      alert('Please complete the online payment in Step 7 before submitting.');
-      setCurrentStep(7);
-      return;
-    }
-    if (paymentSubMethod === 'neft' && !neftTransactionNumber.trim()) {
-      alert('Please enter the NEFT transaction number in Step 7 before submitting.');
-      setCurrentStep(7);
-      return;
+    // Pay at Office is fully verified via the password override above — the
+    // Pay Online/QR/NEFT sub-method checks below only apply when that mode is
+    // NOT selected (paymentSubMethod can be stale from an earlier choice).
+    if (formData.modeOfPayment !== 'Pay at Office') {
+      if (paymentSubMethod === 'qr' && !upiTransferConfirmed) {
+        alert('Please confirm your QR payment in Step 7 before submitting.');
+        setCurrentStep(7);
+        return;
+      }
+      if (paymentSubMethod === 'razorpay' && !razorpayPaid) {
+        alert('Please complete the online payment in Step 7 before submitting.');
+        setCurrentStep(7);
+        return;
+      }
+      if (paymentSubMethod === 'neft' && !neftTransactionNumber.trim()) {
+        alert('Please enter the NEFT transaction number in Step 7 before submitting.');
+        setCurrentStep(7);
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -3977,6 +3987,7 @@ export default function PublicAdmissionFormPage() {
                               onClick={() => {
                                 if (payAtOfficeVerified) {
                                   setFormData(prev => ({ ...prev, modeOfPayment: 'Pay at Office' }));
+                                  setPaymentSubMethod('');
                                   setRazorpayPaid(false);
                                   setRazorpayPaymentId('');
                                   setRazorpayOrderId('');
