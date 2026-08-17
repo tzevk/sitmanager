@@ -448,7 +448,7 @@ function SortableLectureRow({
         <input
           type="text"
           value={(row.subject ?? '').toString()}
-          disabled
+          disabled={disabled}
           onChange={(e) => onChange(row.id, { subject: e.target.value })}
           className="w-full min-w-[130px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
           placeholder="Module/Topic"
@@ -460,12 +460,12 @@ function SortableLectureRow({
         )}
       </td>
       <td className="px-2 py-1.5">
-        <SubtopicsCell row={row} disabled={true} onToggleItem={(idx) => onToggleSubtopic(row, idx)} />
+        <SubtopicsCell row={row} disabled={disabled} onToggleItem={(idx) => onToggleSubtopic(row, idx)} />
       </td>
       <td className="px-2 py-1.5">
         <select
           value={row.faculty_id != null ? String(row.faculty_id) : ((row.faculty_name ?? '').toString().trim() ? '__legacy__' : '')}
-          disabled
+          disabled={disabled}
           onChange={(e) => {
             const v = e.target.value;
             if (!v || v === '__legacy__') {
@@ -493,7 +493,7 @@ function SortableLectureRow({
         <input
           type="date"
           value={formatDateForInput(row.date)}
-          disabled
+          disabled={disabled}
           onChange={(e) => onChange(row.id, { date: e.target.value })}
           className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
         />
@@ -501,7 +501,7 @@ function SortableLectureRow({
       <td className="px-2 py-1.5">
         <select
           value={(row.lectureday ?? '').toString()}
-          disabled
+          disabled={disabled}
           onChange={(e) => onChange(row.id, { lectureday: e.target.value })}
           className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
         >
@@ -514,7 +514,7 @@ function SortableLectureRow({
       <td className="px-2 py-1.5">
         <select
           value={(row.session ?? '').toString()}
-          disabled
+          disabled={disabled}
           onChange={(e) => onChange(row.id, { session: e.target.value })}
           className="w-28 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
         >
@@ -527,7 +527,7 @@ function SortableLectureRow({
         <input
           type="time"
           value={(row.starttime ?? '').toString()}
-          disabled
+          disabled={disabled}
           onChange={(e) => onChange(row.id, { starttime: e.target.value })}
           className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
         />
@@ -536,7 +536,7 @@ function SortableLectureRow({
         <input
           type="time"
           value={(row.endtime ?? '').toString()}
-          disabled
+          disabled={disabled}
           onChange={(e) => onChange(row.id, { endtime: e.target.value })}
           className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
         />
@@ -545,7 +545,7 @@ function SortableLectureRow({
         <input
           type="text"
           value={(row.assignment ?? '').toString()}
-          disabled
+          disabled={disabled}
           onChange={(e) => onChange(row.id, { assignment: e.target.value })}
           className="w-full min-w-[110px] px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
           placeholder="Assignment Given"
@@ -555,7 +555,7 @@ function SortableLectureRow({
         <input
           type="date"
           value={formatDateForInput(row.assignment_date)}
-          disabled
+          disabled={disabled}
           onChange={(e) => onChange(row.id, { assignment_date: e.target.value })}
           className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
         />
@@ -564,7 +564,7 @@ function SortableLectureRow({
         <input
           type="text"
           value={(row.documents ?? '').toString()}
-          disabled
+          disabled={disabled}
           onChange={(e) => onChange(row.id, { documents: e.target.value })}
           className="w-24 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
           placeholder="Documents"
@@ -574,7 +574,7 @@ function SortableLectureRow({
         <input
           type="text"
           value={(row.class_room ?? '').toString()}
-          disabled
+          disabled={disabled}
           onChange={(e) => onChange(row.id, { class_room: e.target.value })}
           className="w-20 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
           placeholder="Classroom"
@@ -584,7 +584,7 @@ function SortableLectureRow({
         <input
           type="text"
           value={(row.unit_test ?? '').toString()}
-          disabled
+          disabled={disabled}
           onChange={(e) => onChange(row.id, { unit_test: e.target.value })}
           className="w-14 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
           placeholder="UT"
@@ -601,7 +601,7 @@ function SortableLectureRow({
       <td className="px-2 py-1.5">
         <select
           value={(row.publish ?? 'No').toString()}
-          disabled
+          disabled={disabled}
           onChange={(e) => onChange(row.id, { publish: e.target.value })}
           className="w-16 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
         >
