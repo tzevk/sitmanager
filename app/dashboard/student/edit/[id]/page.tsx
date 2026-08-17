@@ -162,6 +162,12 @@ export default function EditStudentPage() {
   /* fees */
   const [fees, setFees] = useState<{ total: number; paid: number; balance: number }>({ total: 0, paid: 0, balance: 0 });
 
+  /* admission declarations (read-only, sourced from the online admission payload) */
+  const [admissionPaymentType, setAdmissionPaymentType] = useState('');
+  const [paymentSubMethod, setPaymentSubMethod] = useState('');
+  const [medicalHistory, setMedicalHistory] = useState(false);
+  const [medicalHistoryDetails, setMedicalHistoryDetails] = useState('');
+
   /* installments */
   const [paymentType, setPaymentType] = useState('');
   const [installments, setInstallments] = useState<InstallmentRow[]>([]);
@@ -318,6 +324,10 @@ export default function EditStudentPage() {
         setBatchStartDate(s.Batch_StartDate ? String(s.Batch_StartDate).slice(0, 10) : '');
         setBatchEndDate(s.Batch_EndDate ? String(s.Batch_EndDate).slice(0, 10) : '');
         setPaymentType(s.Payment_Type || '');
+        setAdmissionPaymentType(s.Payment_Type || s.ModeOfPayment || '');
+        setPaymentSubMethod(s.PaymentSubMethod || '');
+        setMedicalHistory(Boolean(s.MedicalHistory));
+        setMedicalHistoryDetails(s.MedicalHistoryDetails || '');
 
         // Structured academic data (admission payload)
         const e = (data.education ?? {}) as Record<string, unknown>;
@@ -1086,6 +1096,46 @@ export default function EditStudentPage() {
                   </div>
                 </div>
               </SectionCard>
+
+              {/* ── Full-width: Admission Declarations (read-only, from the online admission form) ── */}
+              {(admissionPaymentType || paymentSubMethod || medicalHistory || medicalHistoryDetails) && (
+                <SectionCard
+                  title="Admission Declarations"
+                  icon={
+                    <svg className="w-3.5 h-3.5 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  }
+                >
+                  <p className="text-[11px] text-slate-400 -mt-1 mb-2">As declared on the online admission form — not editable here.</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
+                    <div>
+                      <label className={labelCls}>Payment Type</label>
+                      <input value={admissionPaymentType || '—'} readOnly className={`${inputCls} bg-slate-100 cursor-default`} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Payment Channel</label>
+                      <input value={paymentSubMethod || '—'} readOnly className={`${inputCls} bg-slate-100 cursor-default`} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Medical History</label>
+                      <div className={`${inputCls} bg-slate-100 flex items-center`}>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          medicalHistory ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          {medicalHistory ? 'Declared' : 'None declared'}
+                        </span>
+                      </div>
+                    </div>
+                    {medicalHistory && medicalHistoryDetails && (
+                      <div className="col-span-2 md:col-span-4">
+                        <label className={labelCls}>Medical History Details</label>
+                        <textarea value={medicalHistoryDetails} readOnly rows={2} className={`${textareaCls} bg-slate-100 cursor-default`} />
+                      </div>
+                    )}
+                  </div>
+                </SectionCard>
+              )}
             </div>
           )}
 

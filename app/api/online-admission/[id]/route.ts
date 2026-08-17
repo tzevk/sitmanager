@@ -681,6 +681,16 @@ export async function PUT(
 
     cleanBody.payAtOfficeAudit = payAtOfficeAudit;
 
+    // Any successful admin save through this route (a data edit, or a grant/reject
+    // decision) means the record has been "filled" — stamp submittedAt if it's not
+    // already set, so an admin-entered admission surfaces in the Completed/Rejected
+    // tabs like a student-submitted one, instead of staying invisible in every tab
+    // (those tabs key off submittedAt, which previously only submitOnlineAdmission()
+    // ever set — an admin editing/granting a record here never went through that).
+    if (!String(existingPayload?.submittedAt || '').trim() && !String(cleanBody?.submittedAt || '').trim()) {
+      cleanBody.submittedAt = new Date().toISOString();
+    }
+
     // Count meaningful (non-empty, non-meta) fields in the payload we're about to save.
     const metaKeys = new Set(['statusAction', 'payAtOfficeAudit', '__draftProgress']);
     const countFields = (obj: Record<string, any>) =>
@@ -698,7 +708,7 @@ export async function PUT(
       savedPayload = cleanBody;
     } else {
       // Data would be lost — stamp just the statusAction on the existing stored payload.
-      const safePayload = { ...existingPayload, statusAction: cleanBody.statusAction, payAtOfficeAudit };
+      const safePayload = { ...existingPayload, statusAction: cleanBody.statusAction, payAtOfficeAudit, submittedAt: cleanBody.submittedAt };
       await savePayload(pool, inquiryId, safePayload);
       savedPayload = safePayload;
     }

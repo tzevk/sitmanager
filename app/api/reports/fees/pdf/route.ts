@@ -168,11 +168,15 @@ export async function GET(req: NextRequest) {
       const tuition = parseFee(stu.Fees) || Number(stu.Resolved_Batch_Fee) || 0;
       const postedDebit = Number(ledger?.posted_debit ?? 0);
       const membership = tuition > 0 && !Number(ledger?.has_membership_debit ?? 0) ? MEMBERSHIP_FEE : 0;
+      // Tuition/Alumni are the default fee amounts owed (not a split of what's
+      // been paid), so Total is always exactly their sum and only Paid/Remaining
+      // move based on actual payments.
+      const alumni = postedDebit + membership;
       const received = Math.max(Number(ledger?.paid ?? 0), 0);
-      amountByStudent.set(id, tuition + postedDebit + membership);
+      amountByStudent.set(id, tuition + alumni);
       paidByStudent.set(id, received);
-      tuitionReceivedByStudent.set(id, Math.min(received, tuition));
-      alumniReceivedByStudent.set(id, Math.max(received - tuition, 0));
+      tuitionReceivedByStudent.set(id, tuition);
+      alumniReceivedByStudent.set(id, alumni);
       const paymentType = String(stu.Admission_Payment_Type ?? '').toLowerCase();
       tagsByStudent.set(id, [
         paymentType.includes('loan') ? 'Loan' : '',

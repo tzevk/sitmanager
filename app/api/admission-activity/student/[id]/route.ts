@@ -230,6 +230,12 @@ function overlayStudentFromPayload(student: Record<string, any>, payload: Record
     TotalExperience: firstNonEmpty(student.TotalExperience, payload.totalOccupationYears),
     Refered_By: firstNonEmpty(student.Refered_By, payload.referredBy),
     OnlineAdmission_Date: onlineAdmissionDate,
+    // Not columns on student_master — sourced purely from the online admission
+    // payload so the student edit page can display what was declared at admission.
+    MedicalHistory: payload.medicalHistory === true || payload.medicalHistory === 'true',
+    MedicalHistoryDetails: firstNonEmpty(payload.medicalHistoryDetails),
+    ModeOfPayment: firstNonEmpty(payload.modeOfPayment),
+    PaymentSubMethod: firstNonEmpty(payload.paymentSubMethod),
   };
 }
 

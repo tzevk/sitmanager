@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
@@ -28,6 +29,7 @@ function fmtDateTime(value: string): string {
 }
 
 export default function PendingAdmissionFormsPage() {
+  const router = useRouter();
   const { canView, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('online_admission');
 
   const [rows, setRows] = useState<DraftRow[]>([]);
@@ -161,7 +163,7 @@ export default function PendingAdmissionFormsPage() {
                   <td className="py-1.5 px-3 text-center">
                     <div className="inline-flex items-center gap-1.5">
                       <button
-                        onClick={() => window.open(`/admission/${r.Inquiry_Id}`, '_blank')}
+                        onClick={() => router.push(`/dashboard/online-admission/view/${r.Inquiry_Id}`)}
                         className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold text-[#2E3093] bg-[#2E3093]/10 hover:bg-[#2E3093]/15"
                       >
                         Open

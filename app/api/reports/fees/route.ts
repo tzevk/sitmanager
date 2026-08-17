@@ -287,9 +287,10 @@ export async function GET(req: NextRequest) {
           const postedDebit = Number(r.Ledger_Posted_Debit ?? 0);
           const paid = Number(r.Ledger_Paid ?? 0);
           const membership = tuition > 0 && !Number(r.Ledger_Has_Membership_Debit ?? 0) ? MEMBERSHIP_FEE : 0;
-          const received = Math.max(paid, 0);
-          const tuitionReceived = Math.min(received, tuition);
-          const alumniReceived = Math.max(received - tuition, 0);
+          // Tuition/Alumni are the default fee amounts owed (not a split of
+          // what's been paid), so Total is always exactly their sum and only
+          // Paid/Remaining move based on actual payments.
+          const alumni = postedDebit + membership;
           const paymentType = String(r.Admission_Payment_Type ?? '').toLowerCase();
           const tags = [
             paymentType.includes('loan') ? 'Loan' : '',
@@ -298,10 +299,10 @@ export async function GET(req: NextRequest) {
           ].filter(Boolean);
           return {
             ...r,
-            Total_Fees_Exact: tuition + postedDebit + membership,
+            Total_Fees_Exact: tuition + alumni,
             Total_Paid_Exact: paid,
-            Tuition_Fees_Received: tuitionReceived,
-            Alumni_Fees_Received: alumniReceived,
+            Tuition_Fees_Received: tuition,
+            Alumni_Fees_Received: alumni,
             Fee_Tags: tags,
           };
         });
