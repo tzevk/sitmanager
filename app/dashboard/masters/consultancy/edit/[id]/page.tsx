@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -137,6 +137,15 @@ export default function EditConsultancyPage() {
     Followup_Date: today(), Contact_Person: '', Designation: '', Mobile: '', email: '',
     Purpose: '', Course: '', Direct_Line: '', Remarks: '',
   });
+  const followupRemarksRef = useRef<HTMLTextAreaElement | null>(null);
+  // Auto-grow the Remarks box to fit its content (including when a followup with
+  // long remarks is loaded for editing, not just while typing).
+  useEffect(() => {
+    const el = followupRemarksRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [followupForm.Remarks]);
 
   /* ---- student details (list) ---- */
   const [studentRows, setStudentRows] = useState<StudentRow[]>([]);
@@ -907,7 +916,15 @@ export default function EditConsultancyPage() {
                   </div>
                   <div>
                     <label className={labelCls}>Remarks</label>
-                    <textarea className={textareaCls} rows={1} value={followupForm.Remarks} onChange={e => setFollowupForm(f => ({ ...f, Remarks: e.target.value }))} placeholder="Remarks" />
+                    <textarea
+                      ref={followupRemarksRef}
+                      className={textareaCls}
+                      rows={1}
+                      value={followupForm.Remarks}
+                      onChange={e => setFollowupForm(f => ({ ...f, Remarks: e.target.value }))}
+                      placeholder="Remarks"
+                      style={{ resize: 'none', overflow: 'hidden' }}
+                    />
                   </div>
                 </div>
                 <div className="flex justify-end mt-3 gap-2">
