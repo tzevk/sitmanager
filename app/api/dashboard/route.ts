@@ -380,7 +380,10 @@ async function fetchDashboardData(dept?: string) {
           OR (si.Student_Id IS NOT NULL AND d_stu.id IS NOT NULL)
         ) THEN si.Inquiry_Id END) AS Enquiries_Contacted,
         COUNT(DISTINCT CASE WHEN oap.Inquiry_Id IS NOT NULL THEN si.Inquiry_Id END) AS Interested_Students,
-        COUNT(DISTINCT CASE WHEN afs.Inquiry_Id IS NOT NULL THEN si.Inquiry_Id END) AS Forms_Sent,
+        -- admission_form_sent_log only exists since 2026-08-14; an online_admission_payload
+        -- row (draft or submitted) is proof the form was reached and used regardless of when,
+        -- so it's counted alongside the log to avoid undercounting forms sent before that date.
+        COUNT(DISTINCT CASE WHEN afs.Inquiry_Id IS NOT NULL OR oap.Inquiry_Id IS NOT NULL THEN si.Inquiry_Id END) AS Forms_Sent,
         -- Confirmed Admissions comes straight from student_master (Status_id = 8 is the
         -- canonical "admission confirmed" flag the student list itself filters on — see
         -- ALLOWED_INQUIRY_STATUSES in lib/services/inquiry.service.ts), matched by
