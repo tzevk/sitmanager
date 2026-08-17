@@ -489,6 +489,14 @@ export async function sendAdmissionFormEmail(params: {
       user: SMTP_USER,
       pass: SMTP_PASS,
     },
+    // Without these, an unreachable/blocked SMTP host hangs on the OS-level TCP
+    // timeout (can be well over a minute) — long enough to stall the admission
+    // form submit request until the browser gives up with a generic connection
+    // error, even though the email step here is already non-fatal (caught by
+    // the caller). Fail fast instead so submission never blocks on mail delivery.
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 8000,
   });
 
   const fromEmail = SMTP_FROM || SMTP_USER!;

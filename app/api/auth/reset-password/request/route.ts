@@ -101,6 +101,11 @@ export async function POST(request: NextRequest) {
         port: parseInt(process.env.ADMISSION_SMTP_PORT || '587', 10),
         secure: process.env.ADMISSION_SMTP_SECURE === '1',
         auth: { user: process.env.ADMISSION_SMTP_USER, pass: process.env.ADMISSION_SMTP_PASS },
+        // Fail fast instead of hanging on the OS-level TCP timeout if SMTP is
+        // unreachable/blocked — see lib/mailer.ts for the same fix and rationale.
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+        socketTimeout: 8000,
       });
       await transporter.sendMail({
         from: process.env.ADMISSION_SMTP_FROM || process.env.ADMISSION_SMTP_USER,
