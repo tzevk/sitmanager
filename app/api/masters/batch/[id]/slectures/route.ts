@@ -301,6 +301,48 @@ export async function PUT(request: NextRequest) {
       id,
     ]);
 
+    // Reverse sync: if this plan row is linked to a Lecture Taken record
+    // (converted), push the same edit onto it too — otherwise editing a
+    // converted row here would only update the plan, leaving Lecture Taken
+    // stale again (mirrors the Lecture Taken → Plan sync in the lecture-taken
+    // API, which pushes edits made there back onto this table).
+    await pool.query(`
+      UPDATE lecture_taken_master SET
+        Topic = COALESCE(?, Topic),
+        Lecture_Name = COALESCE(?, Lecture_Name),
+        Sub_Topics = ?,
+        Take_Dt = COALESCE(?, Take_Dt),
+        Day = ?,
+        Session = ?,
+        Lecture_Start = ?,
+        Lecture_End = ?,
+        Faculty_Id = COALESCE(?, Faculty_Id),
+        ClassRoom = ?,
+        Assign_Given = ?,
+        Documents = ?,
+        Unit_Test = ?,
+        Publish = ?,
+        Covered_Subtopics = ?
+      WHERE Lecture_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+    `, [
+      data.subject || null,
+      data.subject || null,
+      data.subject_topic || null,
+      truncate(data.date),
+      truncate(data.lectureday),
+      truncate(data.session, 20),
+      truncate(data.starttime),
+      truncate(data.endtime),
+      facultyId,
+      truncate(data.class_room),
+      truncate(data.assignment),
+      truncate(data.documents),
+      truncate(data.unit_test),
+      data.publish || 'No',
+      data.covered_subtopics || null,
+      id,
+    ]).catch((e) => console.error('Failed to reverse-sync plan edit onto Lecture Taken:', e));
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error updating standard lecture:', error);
