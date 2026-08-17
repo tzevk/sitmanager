@@ -2951,7 +2951,7 @@ export default function EditBatchPage() {
                       <SortableLectureRow
                         key={l.id}
                         row={l}
-                        disabled={stdPlanLocked || l.taken_id != null}
+                        disabled={stdPlanLocked}
                         facultyList={facultyList}
                         dayOptions={dayOptions}
                         colorClass={getRowColorClass(l)}
