@@ -684,8 +684,8 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
               <tr>
                 <Th center className="bg-blue-50/40 text-blue-600 border-b border-gray-200">Recv</Th>
                 <Th center className="bg-blue-50/40 text-blue-600 border-b border-gray-200">Cont</Th>
-                <Th center className="bg-blue-50/40 text-blue-600 border-b border-gray-200">Sent</Th>
                 <Th center className="bg-blue-50/40 text-blue-600 border-b border-gray-200">Int</Th>
+                <Th center className="bg-blue-50/40 text-blue-600 border-b border-gray-200">Sent</Th>
                 <Th center className="bg-purple-50/40 text-purple-600 border-b border-gray-200">Recv</Th>
                 <Th center className="bg-purple-50/40 text-purple-600 border-b border-gray-200">Cont</Th>
                 <Th center className="bg-purple-50/40 text-purple-600 border-b border-gray-200">Conv</Th>
@@ -742,8 +742,8 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                       </td>
                       <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-blue-50/20">{b.Enquiries_Received ?? 0}</td>
                       <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-blue-50/20">{b.Enquiries_Contacted ?? 0}</td>
-                      <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-blue-50/20">{b.Forms_Sent ?? 0}</td>
                       <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-blue-50/20">{b.Interested_Students ?? 0}</td>
+                      <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-blue-50/20">{b.Forms_Sent ?? 0}</td>
                       <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-purple-50/20">{b.Meta_Received ?? 0}</td>
                       <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-purple-50/20">{b.Meta_Contacted ?? 0}</td>
                       <td className="px-2.5 py-3 text-center tabular-nums text-gray-700 bg-purple-50/20">{b.Meta_Converted ?? 0}</td>
