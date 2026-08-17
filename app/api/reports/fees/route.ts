@@ -235,7 +235,30 @@ export async function GET(req: NextRequest) {
              (SELECT MAX(CASE WHEN TypeR = 'C' AND LOWER(IFNULL(Payment_Type, '')) = 'discount' THEN 1 ELSE 0 END)
               FROM s_fees_mst
               WHERE Student_Id = sm.Student_Id AND (IsDelete = 0 OR IsDelete IS NULL)
-             ) AS Ledger_Has_Discount
+             ) AS Ledger_Has_Discount,
+             -- Discount rows are recorded as a TypeR='C' credit (so they're already
+             -- included in Ledger_Paid above) — summed separately here so the report
+             -- can show the discount as its own column and back it out of "Amount
+             -- Paid" to reflect actual cash received, not a waiver.
+             (SELECT SUM(COALESCE(Total_Amt, Amount, 0))
+              FROM s_fees_mst
+              WHERE Student_Id = sm.Student_Id AND (IsDelete = 0 OR IsDelete IS NULL)
+                AND TypeR = 'C' AND LOWER(IFNULL(Payment_Type, '')) = 'discount'
+                AND (
+                  Batch_Id IN (SELECT Batch_Id FROM batch_mst WHERE Course_Id = bm.Course_Id)
+                  OR (
+                    (Batch_Id IS NULL OR Batch_Id = 0)
+                    AND NOT EXISTS (
+                      SELECT 1 FROM admission_master am_other
+                      JOIN batch_mst bm_other ON bm_other.Batch_Id = am_other.Batch_Id
+                      WHERE am_other.Student_Id = sm.Student_Id
+                        AND bm_other.Course_Id <> bm.Course_Id
+                        AND (am_other.IsDelete = 0 OR am_other.IsDelete IS NULL)
+                        AND am_other.Roll_No IS NOT NULL AND am_other.Roll_No <> ''
+                    )
+                  )
+                )
+             ) AS Ledger_Discount_Amt
            FROM (
              SELECT Student_Id, Batch_Id, MAX(Admission_Id) AS Admission_Id
              FROM admission_master
@@ -291,6 +314,8 @@ export async function GET(req: NextRequest) {
           // what's been paid), so Total is always exactly their sum and only
           // Paid/Remaining move based on actual payments.
           const alumni = postedDebit + membership;
+          const discount = Number(r.Ledger_Discount_Amt ?? 0);
+          const totalFees = tuition + alumni;
           const paymentType = String(r.Admission_Payment_Type ?? '').toLowerCase();
           const tags = [
             paymentType.includes('loan') ? 'Loan' : '',
@@ -299,10 +324,17 @@ export async function GET(req: NextRequest) {
           ].filter(Boolean);
           return {
             ...r,
-            Total_Fees_Exact: tuition + alumni,
+            Total_Fees_Exact: totalFees,
             Total_Paid_Exact: paid,
             Tuition_Fees_Received: tuition,
             Alumni_Fees_Received: alumni,
+            // Discount is a credit already folded into Ledger_Paid — back it out of
+            // both sides so "Fees to be Paid" is the net payable and "Amount Paid" is
+            // actual cash received, while Remaining (= either side's difference) is
+            // unchanged from the pre-discount-split Total_Fees_Exact - Total_Paid_Exact.
+            Discount_Amt: discount,
+            Fees_To_Be_Paid: totalFees - discount,
+            Amount_Paid_Net: paid - discount,
             Fee_Tags: tags,
           };
         });

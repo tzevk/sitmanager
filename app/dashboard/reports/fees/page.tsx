@@ -77,6 +77,9 @@ interface BatchWiseFeesRow {
   Total_Paid_Exact?: number | null;
   Tuition_Fees_Received?: number | null;
   Alumni_Fees_Received?: number | null;
+  Discount_Amt?: number | null;
+  Fees_To_Be_Paid?: number | null;
+  Amount_Paid_Net?: number | null;
   Fee_Tags?: string[];
 }
 
@@ -809,36 +812,49 @@ function ChequePdcTable({ rows, totalAmt, totalTax, totalNet }: {
 }
 
 /* ── Batch Wise Fees Details table ───────────────────────────────────── */
+// One row per student (Tuition/Alumni/Discount/Fees-to-be-Paid/Paid/Remaining are
+// already student-level totals, repeated identically across every receipt row for
+// that student — see Total_Fees_Exact etc. in the API) rather than one row per
+// receipt, so Sr No lines up with students, not individual payments.
 function BatchWiseFeesTable({ rows }: { rows: BatchWiseFeesRow[] }) {
   if (!rows.length) return <EmptyState />;
+
+  type StudentRow = BatchWiseFeesRow & { isNewBatch: boolean };
+  const studentRows: StudentRow[] = [];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const key = `${r.Batch_Code}::${r.Student_Id ?? r.Student_Name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const isNewBatch = studentRows.length === 0 || studentRows[studentRows.length - 1].Batch_Code !== r.Batch_Code;
+    studentRows.push({ ...r, isNewBatch });
+  }
+
+  const sum = (pick: (r: StudentRow) => number | null | undefined) =>
+    studentRows.reduce((total, r) => total + (Number(pick(r)) || 0), 0);
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
           <tr className="border-b border-slate-200">
-            <th className={TH}>Sr No</th>
-            <th className={TH}>Receipt Date</th>
-            <th className={TH}>Receipt Number</th>
-            <th className={TH}>Name of Student</th>
-            <th className={TH}>Status</th>
-            <th className={THR}>Tuition Fees received</th>
-            <th className={THR}>Alumni fees received</th>
-            <th className={TH}>Payment Type</th>
-            <th className={TH}>Tags</th>
-            <th className={TH}>Transaction Details</th>
+            <th className={TH}>Sr. No.</th>
+            <th className={TH}>Student Name</th>
+            <th className={THR}>Tuition Fees</th>
+            <th className={THR}>Alumni Fees</th>
+            <th className={THR}>Discount</th>
+            <th className={THR}>Fees to be Paid</th>
+            <th className={THR}>Amount Paid</th>
+            <th className={THR}>Remaining Amount</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => {
-            const isNewBatch = i === 0 || rows[i - 1].Batch_Code !== r.Batch_Code;
-            const transactionDetails = r.Payment_Type && ['cheque','dd','pdc'].includes(r.Payment_Type.toLowerCase())
-              ? [r.Cheque_No, r.Cheque_Bank, r.Cheque_Branch].filter(Boolean).join(' / ') || '—'
-              : (r.Payment_Type || '—');
+          {studentRows.map((r, i) => {
             const status = studentStatus(r);
+            const remaining = (Number(r.Fees_To_Be_Paid) || 0) - (Number(r.Amount_Paid_Net) || 0);
             return (
-              <React.Fragment key={`${r.Batch_Code}-${r.Fees_Id ?? 'np'}-${i}`}>
-                {isNewBatch && (
+              <React.Fragment key={`${r.Batch_Code}-${r.Student_Id ?? r.Student_Name}-${i}`}>
+                {r.isNewBatch && (
                   <tr className="bg-[#2E3093]/5 border-y border-[#2E3093]/10">
                     <td colSpan={8} className="py-1.5 px-3">
                       <div className="flex items-center gap-3">
@@ -849,48 +865,28 @@ function BatchWiseFeesTable({ rows }: { rows: BatchWiseFeesRow[] }) {
                     </td>
                   </tr>
                 )}
-                <tr className={`hover:bg-slate-50/60 transition-colors ${!r.Fees_Id ? 'bg-red-50/40' : ''}`}>
+                <tr className="hover:bg-slate-50/60 transition-colors">
                   <td className={`${TD} text-slate-400`}>{i + 1}</td>
-                  {!r.Fees_Id ? (
-                    <>
-                      <td colSpan={3} className="py-2 px-3 text-xs text-center border-b border-slate-100">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-[10px] font-semibold border border-red-200">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                          {r.Student_Name} — No Payment Recorded
-                        </span>
-                      </td>
-                      <td className={TD}><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusBadge(status)}`}>{status}</span></td>
-                      <td colSpan={5} />
-                    </>
-                  ) : (
-                    <>
-                      <td className={TD}>{fmtDate(r.RDate || r.Date_Added)}</td>
-                      <td className={TD}><span className="font-mono text-[11px] font-semibold text-[#2E3093]">{r.Fees_Code || '—'}</span></td>
-                      <td className={`${TD} font-medium max-w-[180px]`}>
-                        <div className="flex flex-col gap-1">
-                          <span className="truncate block">{r.Student_Name || '—'}</span>
-                          <StudentTransferBadge
-                            transferred={r.Transfered}
-                            movedFromBatchCode={r.Moved_From_Batch_Code}
-                            movedToCourseName={r.Moved_To_Course_Name}
-                            movedToBatchCode={r.Moved_To_Batch_Code}
-                          />
-                        </div>
-                      </td>
-                      <td className={TD}><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusBadge(status)}`}>{status}</span></td>
-                      <td className={`${TD} text-right font-mono font-semibold`}>{fmt(r.Tuition_Fees_Received)}</td>
-                      <td className={`${TD} text-right font-mono font-semibold`}>{fmt(r.Alumni_Fees_Received)}</td>
-                      <td className={TD}><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${payBadge(r.Payment_Type)}`}>{r.Payment_Type || '—'}</span></td>
-                      <td className={`${TD} max-w-[140px]`}>
-                        <div className="flex flex-wrap gap-1">
-                          {(r.Fee_Tags ?? []).length ? r.Fee_Tags?.map(tag => (
-                            <span key={tag} className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200">{tag}</span>
-                          )) : <span className="text-slate-300">—</span>}
-                        </div>
-                      </td>
-                      <td className={`${TD} max-w-[200px] truncate text-slate-500`}>{transactionDetails}</td>
-                    </>
-                  )}
+                  <td className={`${TD} font-medium max-w-[220px]`}>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate">{r.Student_Name || '—'}</span>
+                        <span className={`shrink-0 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusBadge(status)}`}>{status}</span>
+                      </div>
+                      <StudentTransferBadge
+                        transferred={r.Transfered}
+                        movedFromBatchCode={r.Moved_From_Batch_Code}
+                        movedToCourseName={r.Moved_To_Course_Name}
+                        movedToBatchCode={r.Moved_To_Batch_Code}
+                      />
+                    </div>
+                  </td>
+                  <td className={`${TD} text-right font-mono font-semibold`}>{fmt(r.Tuition_Fees_Received)}</td>
+                  <td className={`${TD} text-right font-mono font-semibold`}>{fmt(r.Alumni_Fees_Received)}</td>
+                  <td className={`${TD} text-right font-mono ${Number(r.Discount_Amt) ? 'text-emerald-600 font-semibold' : 'text-slate-400'}`}>{fmt(r.Discount_Amt)}</td>
+                  <td className={`${TD} text-right font-mono font-semibold`}>{fmt(r.Fees_To_Be_Paid)}</td>
+                  <td className={`${TD} text-right font-mono font-semibold text-[#2E3093]`}>{fmt(r.Amount_Paid_Net)}</td>
+                  <td className={`${TD} text-right font-mono font-bold ${remaining > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{fmt(remaining)}</td>
                 </tr>
               </React.Fragment>
             );
@@ -898,8 +894,13 @@ function BatchWiseFeesTable({ rows }: { rows: BatchWiseFeesRow[] }) {
         </tbody>
         <tfoot>
           <tr className="bg-slate-50 border-t-2 border-slate-200">
-            <td colSpan={5} className="py-2 px-3 text-xs text-slate-600 text-right font-bold">Total ({rows.length} records)</td>
-            <td colSpan={5} />
+            <td colSpan={2} className="py-2 px-3 text-xs text-slate-600 text-right font-bold">Total ({studentRows.length} students)</td>
+            <td className="py-2 px-3 text-xs text-right font-mono font-bold">{fmt(sum(r => r.Tuition_Fees_Received))}</td>
+            <td className="py-2 px-3 text-xs text-right font-mono font-bold">{fmt(sum(r => r.Alumni_Fees_Received))}</td>
+            <td className="py-2 px-3 text-xs text-right font-mono font-bold">{fmt(sum(r => r.Discount_Amt))}</td>
+            <td className="py-2 px-3 text-xs text-right font-mono font-bold">{fmt(sum(r => r.Fees_To_Be_Paid))}</td>
+            <td className="py-2 px-3 text-xs text-right font-mono font-bold text-[#2E3093]">{fmt(sum(r => r.Amount_Paid_Net))}</td>
+            <td className="py-2 px-3 text-xs text-right font-mono font-bold">{fmt(sum(r => r.Fees_To_Be_Paid) - sum(r => r.Amount_Paid_Net))}</td>
           </tr>
         </tfoot>
       </table>
