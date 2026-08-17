@@ -15,6 +15,7 @@ interface Student {
   Present_Mobile: string | null;
   Email: string | null;
   Admission_Id: number | null;
+  Admission_Payment_Type: string | null;
   Transfered: string;
   Moved_To_Batch_Code: string;
   Moved_From_Batch_Code: string;
@@ -926,6 +927,65 @@ ${copy('Student Copy')}
           </table>
         </div>
       </div>
+
+      {/* Fees Summary — same 8-column format as Reports > Fees Report > Batch Wise
+          Fees, computed from the ledger/totals already returned above (no new
+          calculation logic — Tuition/Alumni read off their existing ledger rows,
+          Discount is the existing "Discount" ledger credit, Fees to be Paid =
+          Tuition + Alumni - Discount, Amount Paid = totals.credit - Discount,
+          Remaining Amount = totals.balance, unchanged). */}
+      {(() => {
+        const tuitionRow = data.ledger.find((r) => /^Tuition Fees/i.test(r.Particular));
+        const alumniRow = data.ledger.find((r) => /one\s*time\s+membership\s+fees/i.test(r.Particular));
+        const discount = data.ledger
+          .filter((r) => r.Particular.trim().toLowerCase() === 'discount')
+          .reduce((sum, r) => sum + r.Credit, 0);
+        const tuition = tuitionRow?.Debit ?? 0;
+        const alumni = alumniRow?.Debit ?? 0;
+        const feesToBePaid = tuition + alumni - discount;
+        const amountPaid = data.totals.credit - discount;
+        const isLoan = /loan/i.test(data.student.Admission_Payment_Type || '');
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+              <h3 className="text-xs font-bold text-slate-700">Fees Summary</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border border-slate-300 bg-slate-50">
+                    <th className="text-center py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-14">Sr. No.</th>
+                    <th className="text-left py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300">Student Name</th>
+                    <th className="text-right py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-32">Tuition Fees</th>
+                    <th className="text-right py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-32">Alumni Fees</th>
+                    <th className="text-right py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-28">Discount</th>
+                    <th className="text-right py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-36">Fees to be Paid</th>
+                    <th className="text-right py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-32">Amount Paid</th>
+                    <th className="text-right py-2 px-3 font-bold text-[11px] text-slate-700 border border-slate-300 w-36">Remaining Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="py-2 px-3 text-xs border border-slate-300 text-center text-slate-400">1</td>
+                    <td className="py-2 px-3 text-xs border border-slate-300 font-medium">
+                      {isLoan && (
+                        <span className="inline-flex mr-1.5 items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200">Loan</span>
+                      )}
+                      {data.student.Student_Name}
+                    </td>
+                    <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono font-semibold">{fmt(tuition)}</td>
+                    <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono font-semibold">{fmt(alumni)}</td>
+                    <td className={`py-2 px-3 text-xs border border-slate-300 text-right font-mono ${discount ? 'text-emerald-600 font-semibold' : 'text-slate-400'}`}>{fmt(discount)}</td>
+                    <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono font-semibold">{fmt(feesToBePaid)}</td>
+                    <td className="py-2 px-3 text-xs border border-slate-300 text-right font-mono font-semibold text-[#2E3093]">{fmt(amountPaid)}</td>
+                    <td className={`py-2 px-3 text-xs border border-slate-300 text-right font-mono font-bold ${data.totals.balance > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{fmt(data.totals.balance)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Balance Details */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-5">

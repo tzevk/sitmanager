@@ -290,6 +290,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
         Present_Mobile: student.Present_Mobile,
         Email: student.Email,
         Admission_Id: admission?.Admission_Id ?? null,
+        Admission_Payment_Type: admission?.Payment_Type ?? null,
         Transfered: student.Transfered || '',
         Moved_To_Batch_Code: student.Moved_To_Batch_Code || '',
         Moved_From_Batch_Code: student.Moved_From_Batch_Code || '',

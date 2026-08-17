@@ -870,6 +870,9 @@ function BatchWiseFeesTable({ rows }: { rows: BatchWiseFeesRow[] }) {
                   <td className={`${TD} font-medium max-w-[220px]`}>
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2">
+                        {(r.Fee_Tags ?? []).includes('Loan') && (
+                          <span className="shrink-0 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200">Loan</span>
+                        )}
                         <span className="truncate">{r.Student_Name || '—'}</span>
                         <span className={`shrink-0 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusBadge(status)}`}>{status}</span>
                       </div>
