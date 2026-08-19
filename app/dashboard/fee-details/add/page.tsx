@@ -626,10 +626,20 @@ export default function AddFeeDetailsPage() {
             type="button"
             onClick={handleSave}
             disabled={!canUpdate || !studentId || saving}
+            title={
+              !canUpdate ? "You don't have permission to add fee receipts — ask an admin to grant Finance access on your role."
+              : !studentId ? 'Search for and select a student above before adding a receipt.'
+              : undefined
+            }
             className="h-9 px-5 rounded-lg bg-[#2E3093] text-white text-xs font-bold hover:bg-[#252880] disabled:opacity-50"
           >
             {saving ? 'Saving…' : 'Add'}
           </button>
+          {!canUpdate && !permLoading && (
+            <p className="w-full text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+              You don&apos;t have permission to add fee receipts. Ask an admin to grant Finance access on your role (Role Rights).
+            </p>
+          )}
           <button
             type="button"
             onClick={() => handlePrint('Receipt')}

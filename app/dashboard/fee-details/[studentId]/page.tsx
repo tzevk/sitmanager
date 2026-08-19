@@ -612,6 +612,7 @@ ${copy('Student Copy')}
             <button
               onClick={handleSave}
               disabled={saving || !canUpdate}
+              title={!canUpdate ? "You don't have permission to add fee receipts — ask an admin to grant Finance access on your role." : undefined}
               className="h-9 px-4 rounded-lg bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 disabled:opacity-50"
             >
               {saving ? 'Saving…' : (data.record ? 'Update' : 'Add')}
@@ -622,6 +623,11 @@ ${copy('Student Copy')}
 
       {error && <div className="rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2">{error}</div>}
       {message && <div className="rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs px-3 py-2">{message}</div>}
+      {!canUpdate && !permLoading && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs px-3 py-2">
+          You don&apos;t have permission to add or edit fee receipts. Ask an admin to grant Finance access on your role (Role Rights).
+        </div>
+      )}
 
       {data.pendingRefund && (
         <div className="rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-xs px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
@@ -810,6 +816,7 @@ ${copy('Student Copy')}
             type="button"
             onClick={handleSave}
             disabled={saving || !canUpdate}
+            title={!canUpdate ? "You don't have permission to add fee receipts — ask an admin to grant Finance access on your role." : undefined}
             className="h-9 px-5 rounded-lg bg-[#2E3093] text-white text-xs font-bold hover:bg-[#252880] disabled:opacity-50"
           >
             {saving ? 'Saving…' : (data.record ? 'Update' : 'Add')}
