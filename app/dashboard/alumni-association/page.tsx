@@ -12,7 +12,7 @@ interface StudentAccountRow {
   mobile: string | null;
   email: string | null;
   hasAccount: boolean;
-  matchType: 'phone' | 'name' | null;
+  matchType: 'phone' | 'name' | 'manual' | null;
   currentAlumniStatus: string | null;
   hasReceipt: boolean;
   csvEmail: string | null;
@@ -22,6 +22,18 @@ interface StudentAccountRow {
   csvTrainingProgram: string | null;
 }
 
+interface AlumniCsvRow {
+  csvName: string;
+  csvPhone: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  secondaryEmail: string;
+  dob: string;
+  batchNumber: string;
+  trainingProgram: string;
+}
+
 interface PreviewResult {
   totalRows: number;
   totalStudents: number;
@@ -29,8 +41,16 @@ interface PreviewResult {
   noAccountCount: number;
   batchCodes: string[];
   students: StudentAccountRow[];
-  unmatchedCsvRows: { csvName: string; csvPhone: string }[];
+  unmatchedCsvRows: AlumniCsvRow[];
   fileName: string;
+}
+
+interface StudentSearchResult {
+  studentId: number;
+  studentName: string;
+  batchCode: string | null;
+  mobile: string | null;
+  email: string | null;
 }
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] transition-colors';
@@ -41,6 +61,94 @@ function ReceiptBadge({ hasReceipt }: { hasReceipt: boolean }) {
     <span className="inline-block px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#2E3093]/10 text-[#2E3093]">Receipt Generated</span>
   ) : (
     <span className="text-slate-300 text-[10px]">—</span>
+  );
+}
+
+function LinkStudentModal({
+  csvRow,
+  onClose,
+  onLink,
+}: {
+  csvRow: AlumniCsvRow;
+  onClose: () => void;
+  onLink: (student: StudentSearchResult) => void;
+}) {
+  const [query, setQuery] = useState(csvRow.csvName);
+  const [results, setResults] = useState<StudentSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+
+  const runSearch = async () => {
+    if (query.trim().length < 2) { setSearchError('Type at least 2 characters'); return; }
+    setSearchError('');
+    setSearching(true);
+    try {
+      const res = await fetch(`/api/admission-activity/alumni/search-students?q=${encodeURIComponent(query.trim())}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Search failed');
+      setResults(data.students ?? []);
+    } catch (err: unknown) {
+      setSearchError(err instanceof Error ? err.message : 'Search failed');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-lg rounded-xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
+        <div className="px-5 py-3 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] flex items-center justify-between">
+          <h3 className="text-sm font-bold text-white">Link to Student Master</h3>
+          <button onClick={onClose} className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/15 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="rounded-lg bg-slate-50 border border-slate-100 p-2 text-xs text-slate-600">
+            <div className="font-semibold text-slate-800">{csvRow.csvName || '—'}</div>
+            <div>{csvRow.csvPhone || 'no phone'} {csvRow.email ? `· ${csvRow.email}` : ''}</div>
+            {csvRow.trainingProgram && <div className="text-slate-400">{csvRow.trainingProgram}</div>}
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && runSearch()}
+              placeholder="Search student by name, mobile or email"
+              className={`${ctrl} flex-1`}
+              autoFocus
+            />
+            <button onClick={runSearch} disabled={searching}
+              className="px-3 py-1.5 text-xs font-bold bg-[#2E3093] hover:bg-[#252780] text-white rounded-lg transition-colors disabled:opacity-50">
+              {searching ? 'Searching…' : 'Search'}
+            </button>
+          </div>
+          {searchError && <div className="text-xs text-red-600 font-semibold">{searchError}</div>}
+          <div className="max-h-64 overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-100">
+            {results.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-400">
+                {searching ? 'Searching…' : 'No results yet — search above.'}
+              </div>
+            ) : results.map((s) => (
+              <button
+                key={s.studentId}
+                onClick={() => onLink(s)}
+                className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors flex items-center justify-between gap-2"
+              >
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-slate-800 truncate">{s.studentName}</div>
+                  <div className="text-[10px] text-slate-500">{s.mobile || '—'} · {s.email || '—'} {s.batchCode ? `· ${s.batchCode}` : ''}</div>
+                </div>
+                <span className="text-[10px] font-bold text-[#2E3093] shrink-0">Link</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -87,6 +195,9 @@ function StudentList({ title, rows, accentClass }: { title: string; rows: Studen
                     <div className="flex flex-col gap-0.5 text-[10px] text-slate-500">
                       <span className="truncate">{s.csvTrainingProgram || '—'}</span>
                       <span className="truncate">{s.csvDob || ''}</span>
+                      {s.matchType === 'manual' && (
+                        <span className="inline-block w-fit px-1 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-bold uppercase tracking-wide">Manually Linked</span>
+                      )}
                     </div>
                   ) : <span className="text-slate-300">—</span>}
                 </td>
@@ -123,6 +234,32 @@ export default function AlumniAssociationPage() {
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [appliedCount, setAppliedCount] = useState<{ updatedCount: number; markedNoCount: number } | null>(null);
   const [batchFilter, setBatchFilter] = useState('');
+  const [linkingCsvRow, setLinkingCsvRow] = useState<AlumniCsvRow | null>(null);
+
+  const handleLink = (student: StudentSearchResult) => {
+    if (!linkingCsvRow) return;
+    const row = linkingCsvRow;
+    setPreview((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        unmatchedCsvRows: prev.unmatchedCsvRows.filter((r) => r !== row),
+        students: prev.students.map((s) => s.studentId === student.studentId
+          ? {
+              ...s,
+              hasAccount: true,
+              matchType: 'manual',
+              csvEmail: row.email || null,
+              csvSecondaryEmail: row.secondaryEmail || null,
+              csvDob: row.dob || null,
+              csvBatchNumber: row.batchNumber || null,
+              csvTrainingProgram: row.trainingProgram || null,
+            }
+          : s),
+      };
+    });
+    setLinkingCsvRow(null);
+  };
 
   const runPreview = async () => {
     if (!file) { setError('Choose a CSV file first'); return; }
@@ -158,7 +295,7 @@ export default function AlumniAssociationPage() {
           studentIds,
           fileName: preview.fileName,
           totalRows: preview.totalRows,
-          matchedCount: preview.matchedCount,
+          matchedCount: studentIds.length,
           markOthersAsNo: true,
         }),
       });
@@ -180,6 +317,11 @@ export default function AlumniAssociationPage() {
 
   const withAccount = useMemo(() => filteredStudents.filter((s) => s.hasAccount), [filteredStudents]);
   const withoutAccount = useMemo(() => filteredStudents.filter((s) => !s.hasAccount), [filteredStudents]);
+
+  // Unfiltered totals — Save always applies to every student regardless of the batch
+  // filter, and manual linking can change these counts after the initial preview.
+  const totalWithAccount = useMemo(() => preview?.students.filter((s) => s.hasAccount).length ?? 0, [preview]);
+  const totalWithoutAccount = useMemo(() => preview?.students.filter((s) => !s.hasAccount).length ?? 0, [preview]);
 
   if (permLoading) return <PermissionLoading />;
   if (!canView) return <AccessDenied message="You do not have permission to view Alumni Association." />;
@@ -220,7 +362,7 @@ export default function AlumniAssociationPage() {
               disabled={applying}
               className="px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors disabled:opacity-50"
             >
-              {applying ? 'Saving…' : `Save (${preview.matchedCount} Yes, ${preview.noAccountCount} No)`}
+              {applying ? 'Saving…' : `Save (${totalWithAccount} Yes, ${totalWithoutAccount} No)`}
             </button>
           )}
         </div>
@@ -261,14 +403,32 @@ export default function AlumniAssociationPage() {
               <div className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2">
                 Alumni portal entries with no matching student ({preview.unmatchedCsvRows.length})
               </div>
-              <div className="max-h-48 overflow-y-auto text-xs text-slate-500 flex flex-col gap-0.5">
+              <div className="max-h-64 overflow-y-auto flex flex-col divide-y divide-slate-100">
                 {preview.unmatchedCsvRows.map((r, i) => (
-                  <div key={i}>{r.csvName || '—'} — {r.csvPhone || 'no phone'}</div>
+                  <div key={i} className="flex items-center justify-between gap-2 py-1.5 text-xs text-slate-600">
+                    <span className="truncate">{r.csvName || '—'} — {r.csvPhone || 'no phone'}</span>
+                    {canUpdate && (
+                      <button
+                        onClick={() => setLinkingCsvRow(r)}
+                        className="shrink-0 px-2 py-1 text-[10px] font-bold border border-[#2E3093]/30 text-[#2E3093] rounded hover:bg-[#2E3093]/10 transition-colors"
+                      >
+                        Link to Student
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
           )}
         </>
+      )}
+
+      {linkingCsvRow && (
+        <LinkStudentModal
+          csvRow={linkingCsvRow}
+          onClose={() => setLinkingCsvRow(null)}
+          onLink={handleLink}
+        />
       )}
     </div>
   );
