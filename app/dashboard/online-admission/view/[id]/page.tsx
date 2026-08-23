@@ -1237,6 +1237,30 @@ export default function EditOnlineAdmissionPage() {
                 color: 'violet',
               },
               {
+                value: '2-Payment Plan',
+                label: '2-Payment Plan',
+                sub: 'Pay in two scheduled instalments',
+                color: 'violet',
+              },
+              {
+                value: '3-Installment Plan',
+                label: '3-Installment Plan',
+                sub: 'Pay in three scheduled instalments',
+                color: 'violet',
+              },
+              {
+                value: '6-Installment Plan',
+                label: '6-Installment Plan',
+                sub: 'Pay in six scheduled instalments',
+                color: 'violet',
+              },
+              {
+                value: 'Loan (0% Interest)',
+                label: 'Loan (0% Interest)',
+                sub: 'Financed via a 0% interest loan partner',
+                color: 'rose',
+              },
+              {
                 value: 'Pay at Office',
                 label: 'Pay at Office (Staff Only)',
                 sub: 'Allow offline payment collection at office counter',
@@ -1253,12 +1277,14 @@ export default function EditOnlineAdmissionPage() {
               const colors: Record<string, string> = {
                 emerald: isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:border-emerald-300',
                 violet:  isSelected ? 'border-violet-500 bg-violet-50'  : 'border-gray-200 hover:border-violet-300',
+                rose:    isSelected ? 'border-rose-500 bg-rose-50'      : 'border-gray-200 hover:border-rose-300',
                 amber:   isSelected ? 'border-amber-500 bg-amber-50'   : 'border-gray-200 hover:border-amber-300',
                 sky:     isSelected ? 'border-sky-500 bg-sky-50'       : 'border-gray-200 hover:border-sky-300',
               };
               const dotColors: Record<string, string> = {
                 emerald: 'border-emerald-500 bg-emerald-500',
                 violet:  'border-violet-500 bg-violet-500',
+                rose:    'border-rose-500 bg-rose-500',
                 amber:   'border-amber-500 bg-amber-500',
                 sky:     'border-sky-500 bg-sky-500',
               };
@@ -1286,6 +1312,12 @@ export default function EditOnlineAdmissionPage() {
 
             {!formData.modeOfPayment && (
               <p className="text-[11px] text-amber-600 italic">No payment mode was selected by the candidate.</p>
+            )}
+            {formData.modeOfPayment && ![
+              'Full Payment', '50% Installment', '2-Payment Plan', '3-Installment Plan',
+              '6-Installment Plan', 'Loan (0% Interest)', 'Pay at Office', 'Direct UPI Transfer',
+            ].includes(formData.modeOfPayment) && (
+              <p className="text-[11px] text-amber-600 italic">Saved value: {formData.modeOfPayment} (not one of the options above)</p>
             )}
 
             {formData.modeOfPayment === 'Pay at Office' && (
