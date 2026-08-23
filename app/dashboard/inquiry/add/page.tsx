@@ -169,6 +169,11 @@ export default function AddInquiryPage() {
     matches: { Inquiry_Id: number; CourseName: string | null; Inquiry_Dt: string | null; StatusLabel: string | null }[];
   } | null>(null);
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
+  const [reminderAt, setReminderAt] = useState<string | null>(null);
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [reminderOption, setReminderOption] = useState<'12' | '24' | '48' | 'custom'>('24');
+  const [customHours, setCustomHours] = useState('');
+  const [savingReminder, setSavingReminder] = useState(false);
   const [showMailModal, setShowMailModal] = useState(false);
   const [sendingMail, setSendingMail] = useState(false);
   const [loggingContact, setLoggingContact] = useState<string | null>(null);
@@ -224,6 +229,7 @@ export default function AddInquiryPage() {
       setQualification(d.Qualification || '');
       setDiscipline(d.DisciplineName || d.Discipline || '');
       setPercentage(d.Percentage != null ? String(d.Percentage) : '');
+      setReminderAt(d.Reminder_At || null);
     }).catch(console.error);
   }, [editId, opts]);
 
@@ -459,6 +465,55 @@ export default function AddInquiryPage() {
     }
   };
 
+  const openReminderModal = () => {
+    setReminderOption('24');
+    setCustomHours('');
+    setShowReminderModal(true);
+  };
+
+  const setReminder = async () => {
+    if (!editId) return;
+    const hours = reminderOption === 'custom' ? parseFloat(customHours) : parseInt(reminderOption, 10);
+    if (!Number.isFinite(hours) || hours <= 0) {
+      alert('Enter a valid number of hours');
+      return;
+    }
+    setSavingReminder(true);
+    try {
+      const res = await fetch('/api/inquiry/reminder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquiryId: editId, hours }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to set reminder');
+      setReminderAt(data.reminderAt);
+      setShowReminderModal(false);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to set reminder');
+    } finally {
+      setSavingReminder(false);
+    }
+  };
+
+  const clearReminder = async () => {
+    if (!editId) return;
+    setSavingReminder(true);
+    try {
+      const res = await fetch(`/api/inquiry/reminder?inquiryId=${editId}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to clear reminder');
+      setReminderAt(null);
+      setShowReminderModal(false);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to clear reminder');
+    } finally {
+      setSavingReminder(false);
+    }
+  };
+
+  const reminderIsDue = Boolean(reminderAt && new Date(reminderAt.includes('T') ? reminderAt : reminderAt.replace(' ', 'T')).getTime() <= Date.now());
+
   if (permLoading) return <PermissionLoading />;
   if (editId && !canUpdate) return <AccessDenied message="You do not have permission to edit inquiries." />;
   if (!editId && !canCreate) return <AccessDenied message="You do not have permission to create inquiries." />;
@@ -507,6 +562,18 @@ export default function AddInquiryPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
               Mail
+            </button>
+          )}
+          {editId && (
+            <button onClick={openReminderModal}
+              title={reminderAt ? (reminderIsDue ? 'Reminder due' : `Reminder set for ${new Date(reminderAt.includes('T') ? reminderAt : reminderAt.replace(' ', 'T')).toLocaleString()}`) : 'Set a reminder'}
+              className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                reminderIsDue ? 'bg-sky-200 text-sky-900 hover:bg-sky-300' : 'bg-white/15 hover:bg-white/25 text-white'
+              }`}>
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18M4.5 4.5h13.5l-2.5 3.75 2.5 3.75H4.5" />
+              </svg>
+              {reminderAt ? (reminderIsDue ? 'Reminder Due' : 'Reminder Set') : 'Reminder'}
             </button>
           )}
           <button onClick={goBackToList}
@@ -820,6 +887,65 @@ export default function AddInquiryPage() {
                 className="px-3 py-1.5 text-xs font-bold bg-[#2E3093] hover:bg-[#252780] text-white rounded-lg transition-colors"
               >
                 Yes – Add Enquiry
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reminder Modal */}
+      {showReminderModal && editId && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
+            <div className="px-5 py-3 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white">Set Reminder</h3>
+              <button onClick={() => setShowReminderModal(false)} className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/15 transition-colors">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              {reminderAt && (
+                <div className={`rounded-lg px-3 py-2 text-xs font-semibold ${reminderIsDue ? 'bg-sky-100 text-sky-900' : 'bg-slate-50 text-slate-600'}`}>
+                  {reminderIsDue ? 'Reminder is due — ' : 'Currently set for '}
+                  {new Date(reminderAt.includes('T') ? reminderAt : reminderAt.replace(' ', 'T')).toLocaleString()}
+                </div>
+              )}
+              <div>
+                <label className={lbl}>Remind me after</label>
+                <select value={reminderOption} onChange={e => setReminderOption(e.target.value as typeof reminderOption)} className={ctrl}>
+                  <option value="12">12 hours</option>
+                  <option value="24">24 hours</option>
+                  <option value="48">48 hours</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+              {reminderOption === 'custom' && (
+                <div>
+                  <label className={lbl}>Hours from now</label>
+                  <input
+                    type="number"
+                    min="0.5"
+                    step="0.5"
+                    value={customHours}
+                    onChange={e => setCustomHours(e.target.value)}
+                    placeholder="e.g. 6"
+                    className={ctrl}
+                  />
+                </div>
+              )}
+            </div>
+            <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-2">
+              {reminderAt ? (
+                <button onClick={clearReminder} disabled={savingReminder}
+                  className="px-3 py-1.5 text-xs font-bold border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50">
+                  Clear Reminder
+                </button>
+              ) : <span />}
+              <button onClick={setReminder} disabled={savingReminder}
+                className="px-3 py-1.5 text-xs font-bold bg-[#2E3093] hover:bg-[#252780] text-white rounded-lg transition-colors disabled:opacity-50">
+                {savingReminder ? 'Saving…' : 'Set Reminder'}
               </button>
             </div>
           </div>

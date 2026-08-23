@@ -50,11 +50,34 @@ const MAIN_TABS: { id: MainTab; label: string }[] = [
   { id: 'terms',        label: 'Terms & Consent' },
 ];
 
+/* ─── Section header icons ───────────────────────────────────────────────── */
+const SECTION_ICON_PATHS = {
+  camera:     'M3 9a2 2 0 012-2h1.172a2 2 0 001.414-.586l.828-.828A2 2 0 0110 5h4a2 2 0 011.414.586l.828.828A2 2 0 0017.828 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M12 17a4 4 0 100-8 4 4 0 000 8z',
+  user:       'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14c-4.418 0-8 1.79-8 4v1h16v-1c0-2.21-3.582-4-8-4z',
+  phone:      'M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-1.687.845a11.037 11.037 0 006.105 6.105l.845-1.687a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z',
+  map:        'M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7',
+  cap:        'M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422A12.083 12.083 0 0112 20.055 12.083 12.083 0 015.84 10.578L12 14zm0 0v6',
+  briefcase:  'M20 7h-3V5a2 2 0 00-2-2H9a2 2 0 00-2 2v2H4a1 1 0 00-1 1v10a2 2 0 002 2h14a2 2 0 002-2V8a1 1 0 00-1-1zM9 5h6v2H9V5z',
+  training:   'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
+  card:       'M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3M3.75 4.5h16.5a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5H3.75a1.5 1.5 0 01-1.5-1.5V6a1.5 1.5 0 011.5-1.5z',
+  shield:     'M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z',
+  clipboard:  'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
+  doc:        'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+} as const;
+type SectionIcon = keyof typeof SECTION_ICON_PATHS;
+
 /* ─── Helper components ──────────────────────────────────────────────────── */
-function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+function SectionCard({ title, icon, children }: { title: string; icon?: SectionIcon; children: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-      <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-4 py-2 border-b border-gray-200">
+      <div className="bg-gradient-to-r from-[#2E3093]/5 to-[#2A6BB5]/5 px-4 py-2.5 border-b border-gray-200 flex items-center gap-2">
+        {icon && (
+          <span className="w-6 h-6 shrink-0 rounded-md bg-[#2E3093]/10 text-[#2E3093] flex items-center justify-center">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d={SECTION_ICON_PATHS[icon]} />
+            </svg>
+          </span>
+        )}
         <h3 className="text-[13px] font-bold text-[#2E3093]">{title}</h3>
       </div>
       <div className="px-4 py-3">{children}</div>
@@ -741,6 +764,16 @@ export default function EditOnlineAdmissionPage() {
             {statusLabel}
           </span>
         </div>
+
+        {/* Section-completion strip */}
+        <div className="mt-3.5 flex items-center gap-2.5">
+          <div className="flex-1 h-1.5 rounded-full bg-white/20 overflow-hidden">
+            <div className="h-full rounded-full bg-white/80 transition-all" style={{ width: `${studentProgressPercent}%` }} />
+          </div>
+          <span className="shrink-0 text-[11px] font-semibold text-white/80">
+            {completedStepCount}/{studentStepProgress.length} sections &middot; {studentProgressPercent}%
+          </span>
+        </div>
       </div>
 
       {/* ── Main tab bar ── */}
@@ -751,7 +784,7 @@ export default function EditOnlineAdmissionPage() {
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`relative px-4 py-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-4 py-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'border-[#2E3093] text-[#2E3093] bg-[#2E3093]/5'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
@@ -759,7 +792,11 @@ export default function EditOnlineAdmissionPage() {
             >
               {tab.label}
               {tabFilled[tab.id] && (
-                <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block align-middle" />
+                <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 text-white inline-flex items-center justify-center shrink-0">
+                  <svg className="w-2 h-2" fill="none" stroke="currentColor" strokeWidth={3.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </span>
               )}
             </button>
           ))}
@@ -773,7 +810,7 @@ export default function EditOnlineAdmissionPage() {
         <div className="space-y-4">
 
           {/* Photo */}
-          <SectionCard title="Photograph">
+          <SectionCard title="Photograph" icon="camera">
             <div className="flex items-start gap-5">
               {/* Photo preview */}
               <div className="shrink-0">
@@ -840,7 +877,7 @@ export default function EditOnlineAdmissionPage() {
           </SectionCard>
 
           {/* Personal details */}
-          <SectionCard title="Personal Details">
+          <SectionCard title="Personal Details" icon="user">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
               <div>
                 <label className={lbl}>First Name <span className="text-red-400">*</span></label>
@@ -878,7 +915,7 @@ export default function EditOnlineAdmissionPage() {
           </SectionCard>
 
           {/* Contact */}
-          <SectionCard title="Contact Information">
+          <SectionCard title="Contact Information" icon="phone">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
               <div>
                 <label className={lbl}>Email Address <span className="text-red-400">*</span></label>
@@ -912,7 +949,7 @@ export default function EditOnlineAdmissionPage() {
           </SectionCard>
 
           {/* Address */}
-          <SectionCard title="Address Details">
+          <SectionCard title="Address Details" icon="map">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <AddressBlock prefix="present" label="Present Address" />
               <div>
@@ -956,19 +993,25 @@ export default function EditOnlineAdmissionPage() {
           TAB: Academic
       ══════════════════════════════════════════════ */}
       {activeTab === 'academic' && (
-        <SectionCard title="Academic Details">
+        <SectionCard title="Academic Details" icon="cap">
           {/* Sub-tab bar */}
           <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto">
             {eduTabs.map(tab => (
               <button key={tab} type="button" onClick={() => setActiveEduTab(tab)}
-                className={`relative shrink-0 px-3 py-2 text-[11px] font-semibold transition-colors border-b-2 -mb-px ${
+                className={`flex items-center gap-1.5 shrink-0 px-3 py-2 text-[11px] font-semibold transition-colors border-b-2 -mb-px ${
                   activeEduTab === tab
                     ? 'border-[#2E3093] text-[#2E3093]'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
                 {tab}
-                {eduFilled[tab] && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />}
+                {eduFilled[tab] && (
+                  <span className="w-3 h-3 rounded-full bg-emerald-500 text-white inline-flex items-center justify-center shrink-0">
+                    <svg className="w-1.5 h-1.5" fill="none" stroke="currentColor" strokeWidth={4} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -1187,7 +1230,7 @@ export default function EditOnlineAdmissionPage() {
           TAB: Occupational
       ══════════════════════════════════════════════ */}
       {activeTab === 'occupational' && (
-        <SectionCard title="Occupational Information">
+        <SectionCard title="Occupational Information" icon="briefcase">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
             <div>
               <label className={lbl}>Occupational Status</label>
@@ -1255,7 +1298,7 @@ export default function EditOnlineAdmissionPage() {
           TAB: Training
       ══════════════════════════════════════════════ */}
       {activeTab === 'training' && (
-        <SectionCard title="Training Programme">
+        <SectionCard title="Training Programme" icon="training">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-x-3 gap-y-2">
             <div>
               <label className={lbl}>Training Programme</label>
@@ -1315,7 +1358,7 @@ export default function EditOnlineAdmissionPage() {
           TAB: Payment
       ══════════════════════════════════════════════ */}
       {activeTab === 'payment' && (
-        <SectionCard title="Mode of Payment">
+        <SectionCard title="Mode of Payment" icon="card">
           <p className="text-xs text-gray-500 mb-5">Payment preference selected by the candidate during admission. Pay at Office can only be set here by staff.</p>
 
           {!formData.modeOfPayment && (
@@ -1461,33 +1504,38 @@ export default function EditOnlineAdmissionPage() {
       {activeTab === 'terms' && (
         <div className="space-y-4">
           {/* Summary badges */}
-          <SectionCard title="Agreement Status">
-            <div className="space-y-3">
+          <SectionCard title="Agreement Status" icon="shield">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {[
                 { label: 'Terms & Conditions', value: formData.termsAgreed },
                 { label: 'Student Eligibility Consent', value: formData.consentAcknowledged },
                 { label: 'Experienced Candidate Consent', value: formData.experiencedConsentAcknowledged },
               ].map(item => (
-                <div key={item.label} className="flex items-center gap-3">
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
-                    item.value ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'
+                <div
+                  key={item.label}
+                  className={`flex items-start gap-2.5 rounded-lg border p-3 ${
+                    item.value ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                    item.value ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-400'
                   }`}>
                     {item.value ? (
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                     ) : (
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     )}
                   </div>
-                  <span className="text-xs text-gray-700">{item.label}</span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    item.value ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {item.value ? 'Agreed' : 'Not agreed'}
-                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-gray-800 leading-tight">{item.label}</p>
+                    <p className={`text-[10.5px] font-bold mt-1 ${item.value ? 'text-emerald-700' : 'text-gray-500'}`}>
+                      {item.value ? 'Agreed' : 'Not agreed'}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1495,7 +1543,7 @@ export default function EditOnlineAdmissionPage() {
 
           {/* Consent checks */}
           {formData.consentChecks.length > 0 && (
-            <SectionCard title="Consent Checklist">
+            <SectionCard title="Consent Checklist" icon="clipboard">
               <div className="space-y-1.5">
                 {formData.consentChecks.map((checked, i) => (
                   <div key={i} className="flex items-center gap-2">
@@ -1517,7 +1565,7 @@ export default function EditOnlineAdmissionPage() {
 
           {/* Consent data */}
           {(formData.consentData?.eligibility || formData.consentData?.qualification || formData.consentData?.candidateRemark) && (
-            <SectionCard title="Consent Details">
+            <SectionCard title="Consent Details" icon="doc">
               <div className="space-y-2">
                 {formData.consentData.eligibility && (
                   <div>

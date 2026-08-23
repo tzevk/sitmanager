@@ -112,6 +112,15 @@ interface PersonEnquiry {
   DiscussionDate?: string | null;
 }
 
+interface DueReminder {
+  Inquiry_Id: number;
+  Student_Name: string;
+  CourseName: string | null;
+  Present_Mobile: string | null;
+  StatusLabel: string | null;
+  Reminder_At: string;
+}
+
 function statusPill(id: number | null, label: string) {
   if (id === 1 || label.toLowerCase() === 'new') return 'border-red-300 bg-white/70 text-red-700';
   return 'border-slate-400 bg-white/70 text-slate-800';
@@ -164,6 +173,36 @@ export default function InquiryPage() {
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Due reminders — a pinned tray shown above the (unmodified) paginated list/table
+  // views, rather than folded into their sort order, since reminders can be due on
+  // enquiries that aren't even on the current filtered page.
+  const [dueReminders, setDueReminders] = useState<DueReminder[]>([]);
+  const [dismissingReminderId, setDismissingReminderId] = useState<number | null>(null);
+
+  const fetchDueReminders = useCallback(async () => {
+    try {
+      const res = await fetch('/api/inquiry/reminders/due');
+      const data = await res.json();
+      if (res.ok) setDueReminders(data.reminders ?? []);
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  useEffect(() => { fetchDueReminders(); }, [fetchDueReminders, fetchTrigger]);
+
+  const dismissReminder = async (inquiryId: number) => {
+    setDismissingReminderId(inquiryId);
+    try {
+      const res = await fetch(`/api/inquiry/reminder?inquiryId=${inquiryId}`, { method: 'DELETE' });
+      if (res.ok) setDueReminders((prev) => prev.filter((r) => r.Inquiry_Id !== inquiryId));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDismissingReminderId(null);
+    }
+  };
 
   // Person-grouped view — the default "one row per person" Enquiry Master. The flat,
   // fully-featured table (CSV export, Meta/Pune badges, etc.) stays available as a
@@ -402,6 +441,49 @@ export default function InquiryPage() {
           )}
         </>}
       />
+
+      {dueReminders.length > 0 && (
+        <div className="rounded-xl border border-sky-300 bg-sky-100 overflow-hidden">
+          <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-sky-200">
+            <svg className="w-3.5 h-3.5 text-sky-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18M4.5 4.5h13.5l-2.5 3.75 2.5 3.75H4.5" />
+            </svg>
+            <span className="text-[11px] font-black uppercase tracking-wider text-sky-900">
+              Reminders Due ({dueReminders.length})
+            </span>
+          </div>
+          <div className="divide-y divide-sky-200 max-h-56 overflow-y-auto">
+            {dueReminders.map((r) => (
+              <div key={r.Inquiry_Id} className="flex items-center gap-3 px-3 py-1.5 text-xs hover:bg-sky-200/50 transition-colors">
+                <svg className="w-3 h-3 text-sky-700 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M5 21V4a1 1 0 011-1h11.382a1 1 0 01.894 1.447L16 8l2.276 3.553A1 1 0 0117.382 13H7v8" />
+                </svg>
+                <span className="font-semibold text-slate-800 truncate max-w-[160px]">{formatName(r.Student_Name)}</span>
+                <span className="text-slate-500 truncate max-w-[140px]">{r.CourseName || '—'}</span>
+                <span className="text-slate-400 font-mono">{r.Present_Mobile || '—'}</span>
+                <span className="text-slate-400 whitespace-nowrap">
+                  Due {new Date(r.Reminder_At.includes('T') ? r.Reminder_At : r.Reminder_At.replace(' ', 'T')).toLocaleString()}
+                </span>
+                <div className="ml-auto flex items-center gap-2 shrink-0">
+                  <a
+                    href={`/dashboard/inquiry/add?editId=${r.Inquiry_Id}&returnTo=${encodeURIComponent(pathname)}`}
+                    className="text-[10px] font-bold text-[#2E3093] hover:underline"
+                  >
+                    Open
+                  </a>
+                  <button
+                    onClick={() => dismissReminder(r.Inquiry_Id)}
+                    disabled={dismissingReminderId === r.Inquiry_Id}
+                    className="text-[10px] font-bold text-slate-500 hover:text-slate-700 disabled:opacity-50"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <FilterBar>
         <input

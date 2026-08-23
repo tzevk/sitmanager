@@ -534,6 +534,94 @@ async function ensureInquiryPreferredLocationColumn(pool: ReturnType<typeof getP
   });
 }
 
+async function ensureInquiryReminderColumn(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<void> {
+  await cached(`schema:inquiry_reminder:${inquiryTable}`, 60 * 60 * 1000, async () => {
+    const [rows] = await pool.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'Reminder_At'`,
+      [inquiryTable]
+    );
+    if ((rows as any[]).length === 0) {
+      await pool.query(`ALTER TABLE \`${inquiryTable}\` ADD COLUMN Reminder_At DATETIME NULL`);
+    }
+    const [indexRows] = await pool.query(
+      `SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = 'idx_si_reminder'`,
+      [inquiryTable]
+    );
+    if ((indexRows as any[]).length === 0) {
+      await pool.query(`ALTER TABLE \`${inquiryTable}\` ADD INDEX idx_si_reminder (Reminder_At)`);
+    }
+    return true;
+  });
+}
+
+/** Sets a reminder N hours from now on an enquiry. Deliberately a standalone,
+ * single-column write (not routed through updateInquiry) so it can be set from the
+ * list/detail view without touching or re-validating the rest of the enquiry form. */
+export async function setInquiryReminder(inquiryId: number, hours: number): Promise<string> {
+  if (!Number.isInteger(inquiryId) || inquiryId <= 0) {
+    throw Object.assign(new Error('Valid inquiryId is required'), { status: 400 });
+  }
+  if (!Number.isFinite(hours) || hours <= 0 || hours > 24 * 30) {
+    throw Object.assign(new Error('hours must be a positive number (up to 30 days)'), { status: 400 });
+  }
+  const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
+  await ensureInquiryReminderColumn(pool, inquiryTable);
+  await pool.query(
+    `UPDATE \`${inquiryTable}\` SET Reminder_At = DATE_ADD(NOW(), INTERVAL ? MINUTE) WHERE Inquiry_Id = ?`,
+    [Math.round(hours * 60), inquiryId]
+  );
+  invalidateCache('inquiry:reminders-due');
+  const [rows] = await pool.query(`SELECT Reminder_At FROM \`${inquiryTable}\` WHERE Inquiry_Id = ?`, [inquiryId]);
+  return (rows as any[])[0]?.Reminder_At ?? null;
+}
+
+export async function clearInquiryReminder(inquiryId: number): Promise<void> {
+  if (!Number.isInteger(inquiryId) || inquiryId <= 0) {
+    throw Object.assign(new Error('Valid inquiryId is required'), { status: 400 });
+  }
+  const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
+  await ensureInquiryReminderColumn(pool, inquiryTable);
+  await pool.query(`UPDATE \`${inquiryTable}\` SET Reminder_At = NULL WHERE Inquiry_Id = ?`, [inquiryId]);
+  invalidateCache('inquiry:reminders-due');
+}
+
+export interface DueReminderRow {
+  Inquiry_Id: number;
+  Student_Name: string;
+  CourseName: string | null;
+  Present_Mobile: string | null;
+  StatusLabel: string | null;
+  Reminder_At: string;
+}
+
+/** Enquiries whose reminder time has passed, across all pages/filters — rendered as a
+ * pinned "brought to the top" tray above the (unmodified) paginated list, rather than
+ * folded into that list's already perf-tuned ORDER BY/pagination. Capped and briefly
+ * cached since this loads on every visit to the inquiry list. */
+export async function getDueReminders(): Promise<DueReminderRow[]> {
+  const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
+  await ensureInquiryReminderColumn(pool, inquiryTable);
+  return cached('inquiry:reminders-due', 20_000, async () => {
+    const [rows] = await pool.query(
+      `SELECT si.Inquiry_Id, si.Student_Name, c.Course_Name as CourseName, si.Present_Mobile,
+              s.Status as StatusLabel, si.Reminder_At
+       FROM \`${inquiryTable}\` si
+       LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
+       LEFT JOIN status_master s ON s.Id = CAST(NULLIF(si.OnlineState,'') AS UNSIGNED)
+       WHERE si.Reminder_At IS NOT NULL AND si.Reminder_At <= NOW()
+         AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
+       ORDER BY si.Reminder_At ASC
+       LIMIT 200`
+    );
+    return rows as DueReminderRow[];
+  });
+}
+
 async function ensureSchemaIndexes(
   pool: ReturnType<typeof getPool>,
   indexes: InquirySchemaIndexSpec[]
@@ -943,6 +1031,7 @@ export async function getInquiryById(id: number): Promise<any | null> {
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
   await ensureInquiryPreferredLocationColumn(pool, inquiryTable);
+  await ensureInquiryReminderColumn(pool, inquiryTable);
   const disciplineTable = await resolveDisciplineTableName(pool);
   const disciplineJoin = disciplineTable
     ? `LEFT JOIN \`${disciplineTable}\` md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)`
@@ -959,7 +1048,7 @@ export async function getInquiryById(id: number): Promise<any | null> {
         si.Inquiry_Dt, si.Date_Added, si.Inquiry_From, si.Inquiry_Type,
        si.Course_Id, si.Batch_Category_id, si.Batch_Code,
        si.Qualification, si.Discipline, ${disciplineExpr} as DisciplineName, si.Percentage,
-       si.Preferred_Location,
+       si.Preferred_Location, si.Reminder_At,
        c.Course_Name as CourseName
     FROM \`${inquiryTable}\` si
      LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
