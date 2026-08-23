@@ -55,9 +55,11 @@ function StudentList({ title, rows, accentClass }: { title: string; rows: Studen
         <span className="text-xs font-black uppercase tracking-wider">{title}</span>
         <span className="text-[11px] font-semibold opacity-80">{rows.length.toLocaleString()}</span>
       </div>
-      <div className="overflow-x-auto">
+      {/* Fixed height + the row count below keep both tables the same size regardless
+          of how many rows happen to be on the current page of either list. */}
+      <div className="overflow-x-auto overflow-y-auto h-[520px]">
         <table className="w-full text-xs border-collapse [&_th]:border-r [&_th]:border-slate-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-slate-200 [&_td:last-child]:border-r-0">
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr className="text-[10px] uppercase tracking-wider text-slate-700 bg-slate-100 border-b border-slate-200">
               <th className="text-left py-2 px-3 font-bold whitespace-nowrap">Student</th>
               <th className="text-left py-2 px-3 font-bold whitespace-nowrap">Batch</th>
@@ -94,20 +96,20 @@ function StudentList({ title, rows, accentClass }: { title: string; rows: Studen
           </tbody>
         </table>
       </div>
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between px-3 py-1.5 border-t border-slate-100 bg-slate-50/50">
-          <p className="text-[10px] text-slate-400">
-            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, rows.length)} of {rows.length}
-          </p>
-          <div className="flex items-center gap-1">
-            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
-              className="px-2 py-0.5 text-[10px] rounded border border-slate-200 hover:bg-white disabled:opacity-30 font-semibold text-slate-600">Prev</button>
-            <span className="text-[10px] text-slate-500 px-1">{page} / {totalPages}</span>
-            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
-              className="px-2 py-0.5 text-[10px] rounded border border-slate-200 hover:bg-white disabled:opacity-30 font-semibold text-slate-600">Next</button>
-          </div>
+      {/* Always rendered (not just when totalPages > 1) so both lists' footers take the
+          same space and the two cards stay visually the same height either way. */}
+      <div className="flex items-center justify-between px-3 py-1.5 border-t border-slate-100 bg-slate-50/50">
+        <p className="text-[10px] text-slate-400">
+          {rows.length === 0 ? '0 of 0' : `${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, rows.length)} of ${rows.length}`}
+        </p>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
+            className="px-2 py-0.5 text-[10px] rounded border border-slate-200 hover:bg-white disabled:opacity-30 font-semibold text-slate-600">Prev</button>
+          <span className="text-[10px] text-slate-500 px-1">{page} / {totalPages}</span>
+          <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+            className="px-2 py-0.5 text-[10px] rounded border border-slate-200 hover:bg-white disabled:opacity-30 font-semibold text-slate-600">Next</button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
