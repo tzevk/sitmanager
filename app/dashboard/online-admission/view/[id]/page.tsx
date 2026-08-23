@@ -62,6 +62,27 @@ function SectionCard({ title, children }: { title: string; children: React.React
   );
 }
 
+/* Small "View" link for a saved marksheet/document, or a muted note when none was uploaded. */
+function DocumentViewLink({ label, url }: { label: string; url?: string }) {
+  if (!url) {
+    return <p className="text-[11px] text-gray-400 italic mt-1">No {label.toLowerCase()} uploaded</p>;
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 text-[11px] text-[#2A6BB5] hover:underline font-semibold mt-1"
+    >
+      <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+      </svg>
+      View {label}
+    </a>
+  );
+}
+
 function KTTable({ ktCount, ktDetails }: { ktCount: string; ktDetails: KTDetail[] }) {
   const count = Number(ktCount);
   if (!count || !ktDetails.length) return null;
@@ -123,6 +144,18 @@ export default function EditOnlineAdmissionPage() {
   const [draftProgressMeta, setDraftProgressMeta] = useState<Record<string, unknown> | null>(null);
   const [payAtOfficeAudit, setPayAtOfficeAudit] = useState<PayAtOfficeAudit | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // Real Student_Id (only set once the admission is granted) — distinct from the
+  // `id` route param above, which is the Inquiry_Id. Photo upload and the
+  // post-grant document list both need the real student record, not the inquiry.
+  const [realStudentId, setRealStudentId] = useState('');
+  // Inquiry-scoped saved uploads (photo + marksheets), used before an admission is
+  // granted. Once granted, the same files live on the student's own document row
+  // instead, fetched separately into studentDocuments below.
+  const [savedAdmissionAssetsDetail, setSavedAdmissionAssetsDetail] =
+    useState<Array<{ key: string; isPhoto: boolean; url: string }>>([]);
+  const [studentDocuments, setStudentDocuments] =
+    useState<Array<{ id: number; doc_name: string; upload_image: string }>>([]);
 
   // Training cascade
   const [courses, setCourses]                   = useState<Course[]>([]);
@@ -191,6 +224,33 @@ export default function EditOnlineAdmissionPage() {
       .catch(() => {});
   }, []);
 
+  /* ── Once granted, saved marksheets/documents move onto the student's own
+     record — load that list so "View" links keep working after grant too. ── */
+  useEffect(() => {
+    if (!realStudentId) { setStudentDocuments([]); return; }
+    fetch(`/api/admission-activity/student/${realStudentId}/documents`)
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d.documents)) setStudentDocuments(d.documents); })
+      .catch(() => {});
+  }, [realStudentId]);
+
+  /* ── Resolve a "View" link for a saved marksheet/document by its key
+     (e.g. 'ssc_marksheet') — prefers the post-grant student document, falls
+     back to the inquiry-scoped upload for admissions not yet granted. ── */
+  const savedAssetUrl = (key: string): string | undefined => {
+    const studentDoc = studentDocuments.find(doc => doc.doc_name === `oa:${key}`);
+    if (studentDoc && realStudentId) {
+      const safePath = String(studentDoc.upload_image || '')
+        .replace(/\\/g, '/')
+        .split('/')
+        .filter(Boolean)
+        .map(encodeURIComponent)
+        .join('/');
+      return `/api/student-documents/${encodeURIComponent(realStudentId)}/${safePath}`;
+    }
+    return savedAdmissionAssetsDetail.find(a => a.key === key)?.url;
+  };
+
   /* ── Restore cascade after data + courses ready ── */
   useEffect(() => {
     if (loading || cascadeRestoredRef.current || !courses.length) return;
@@ -239,8 +299,23 @@ export default function EditOnlineAdmissionPage() {
       setStatusLabel(d.statusLabel || 'Unknown');
       setStatusCategory(d.statusCategory || 'open');
       setStudentName([d.firstName, d.middleName, d.lastName].filter(Boolean).join(' '));
-      setPhotoUrl(d.photo || '');
       setPayAtOfficeAudit(d.payAtOfficeAudit && typeof d.payAtOfficeAudit === 'object' ? d.payAtOfficeAudit : null);
+
+      // `d.photo` is just a boolean flag (whether a photo was ever saved), not a URL —
+      // resolve the real, viewable source: once granted, the student has their own
+      // photo endpoint; before that, fall back to the inquiry-scoped saved upload.
+      const realSid = d.studentId ? String(d.studentId) : '';
+      setRealStudentId(realSid);
+      const assetDetails: Array<{ key: string; isPhoto: boolean; url: string }> =
+        Array.isArray(d.savedAdmissionAssetsDetail) ? d.savedAdmissionAssetsDetail : [];
+      setSavedAdmissionAssetsDetail(assetDetails);
+      if (realSid && Boolean(d.photo)) {
+        setPhotoUrl(`/api/student-photo/${encodeURIComponent(realSid)}`);
+      } else if (!realSid) {
+        setPhotoUrl(assetDetails.find(a => a.isPhoto)?.url || '');
+      } else {
+        setPhotoUrl('');
+      }
 
       const nd = (v: unknown) => {
         if (!v && v !== 0) return '';
@@ -336,6 +411,10 @@ export default function EditOnlineAdmissionPage() {
   /* ── Photo upload ── */
   const handlePhotoUpload = async (file: File) => {
     if (!file) return;
+    if (!realStudentId) {
+      alert('This admission has not been granted yet — a photo can only be replaced once the applicant is a student.');
+      return;
+    }
     if (file.size > 2 * 1024 * 1024) { alert('Photo must be smaller than 2 MB'); return; }
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       alert('Only JPEG, PNG and WebP images are allowed'); return;
@@ -344,7 +423,7 @@ export default function EditOnlineAdmissionPage() {
     try {
       const fd = new FormData();
       fd.append('photo', file);
-      const res = await fetch(`/api/admission-activity/student/${studentId}/photo`, {
+      const res = await fetch(`/api/admission-activity/student/${realStudentId}/photo`, {
         method: 'POST', body: fd,
       });
       const data = await res.json();
@@ -649,6 +728,16 @@ export default function EditOnlineAdmissionPage() {
                   )}
                   {uploadingPhoto ? 'Uploading…' : photoUrl ? 'Change Photo' : 'Upload Photo'}
                 </button>
+                {photoUrl && (
+                  <a
+                    href={photoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-[#2A6BB5] hover:underline font-semibold"
+                  >
+                    View full size
+                  </a>
+                )}
               </div>
             </div>
           </SectionCard>
@@ -811,6 +900,7 @@ export default function EditOnlineAdmissionPage() {
                   <input type="text" value={formData.ssc_percentage} onChange={e => set('ssc_percentage', e.target.value)} className={inp} />
                 </div>
               </div>
+              <DocumentViewLink label="SSC Marksheet" url={savedAssetUrl('ssc_marksheet')} />
               <KTTable ktCount={formData.ssc_ktCount} ktDetails={formData.ssc_ktDetails} />
             </div>
           )}
@@ -846,6 +936,7 @@ export default function EditOnlineAdmissionPage() {
                   <input type="text" value={formData.hsc_percentage} onChange={e => set('hsc_percentage', e.target.value)} className={inp} />
                 </div>
               </div>
+              <DocumentViewLink label="HSC Marksheet" url={savedAssetUrl('hsc_marksheet')} />
               <KTTable ktCount={formData.hsc_ktCount} ktDetails={formData.hsc_ktDetails} />
             </div>
           )}
@@ -882,6 +973,7 @@ export default function EditOnlineAdmissionPage() {
                   <input type="text" value={formData.diploma_percentage} onChange={e => set('diploma_percentage', e.target.value)} className={inp} />
                 </div>
               </div>
+              <DocumentViewLink label="Diploma Marksheet" url={savedAssetUrl('diploma_marksheet')} />
               <KTTable ktCount={formData.diploma_ktCount} ktDetails={formData.diploma_ktDetails} />
             </div>
           )}
@@ -920,6 +1012,7 @@ export default function EditOnlineAdmissionPage() {
                   <input type="text" value={formData.grad_percentage} onChange={e => set('grad_percentage', e.target.value)} className={inp} />
                 </div>
               </div>
+              <DocumentViewLink label="Graduation Marksheet" url={savedAssetUrl('graduation_marksheet')} />
               <KTTable ktCount={formData.grad_ktCount} ktDetails={formData.grad_ktDetails} />
             </div>
           )}
@@ -957,6 +1050,7 @@ export default function EditOnlineAdmissionPage() {
                   <input type="text" value={formData.postgrad_percentage} onChange={e => set('postgrad_percentage', e.target.value)} className={inp} />
                 </div>
               </div>
+              <DocumentViewLink label="Post-Graduation Marksheet" url={savedAssetUrl('postgraduation_marksheet')} />
               <KTTable ktCount={formData.postgrad_ktCount} ktDetails={formData.postgrad_ktDetails} />
             </div>
           )}
