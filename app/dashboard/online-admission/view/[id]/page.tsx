@@ -62,165 +62,6 @@ function SectionCard({ title, children }: { title: string; children: React.React
   );
 }
 
-/* Click-to-edit field: renders as plain text; click turns it into an input.
-   Commits on blur/Enter, cancels (reverts) on Escape. */
-function InlineField({
-  label, value, onChange, type = 'text', required, placeholder, min, max, maxLength, className,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  required?: boolean;
-  placeholder?: string;
-  min?: string | number;
-  max?: string | number;
-  maxLength?: number;
-  className?: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const ref = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { if (editing) { ref.current?.focus(); ref.current?.select(); } }, [editing]);
-
-  const startEditing = () => { setDraft(value); setEditing(true); };
-  const commit = () => { onChange(draft); setEditing(false); };
-  const cancel = () => { setDraft(value); setEditing(false); };
-
-  return (
-    <div className={className}>
-      <label className={lbl}>{label}{required && <span className="text-red-400"> *</span>}</label>
-      {editing ? (
-        <input
-          ref={ref}
-          type={type}
-          value={draft}
-          min={min}
-          max={max}
-          maxLength={maxLength}
-          onChange={e => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={e => {
-            if (e.key === 'Enter') { e.preventDefault(); commit(); }
-            if (e.key === 'Escape') { e.preventDefault(); cancel(); }
-          }}
-          className={inp}
-        />
-      ) : (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={startEditing}
-          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEditing(); } }}
-          className="min-h-[30px] px-2.5 py-1.5 text-xs text-gray-900 rounded-md hover:bg-gray-50 cursor-text border border-transparent hover:border-gray-200 transition-colors break-words"
-        >
-          {value ? value : <span className="text-gray-300 italic">{placeholder || 'Click to add'}</span>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* Click-to-edit select: renders selected label as plain text; click turns it
-   into a real <select> (auto-opened via focus) for choosing a new value. */
-function InlineSelect({
-  label, value, onChange, options, required, placeholder, className,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-  required?: boolean;
-  placeholder?: string;
-  className?: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const ref = useRef<HTMLSelectElement>(null);
-
-  useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
-
-  const selectedLabel = options.find(o => o.value === value)?.label || value;
-
-  return (
-    <div className={className}>
-      <label className={lbl}>{label}{required && <span className="text-red-400"> *</span>}</label>
-      {editing ? (
-        <select
-          ref={ref}
-          value={value}
-          onChange={e => { onChange(e.target.value); setEditing(false); }}
-          onBlur={() => setEditing(false)}
-          onKeyDown={e => { if (e.key === 'Escape') setEditing(false); }}
-          className={sel}
-        >
-          {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      ) : (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setEditing(true)}
-          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true); } }}
-          className="min-h-[30px] px-2.5 py-1.5 text-xs text-gray-900 rounded-md hover:bg-gray-50 cursor-pointer border border-transparent hover:border-gray-200 transition-colors"
-        >
-          {value ? selectedLabel : <span className="text-gray-300 italic">{placeholder || 'Click to select'}</span>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* Click-to-edit textarea, same commit/cancel behavior as InlineField. */
-function InlineTextarea({
-  label, value, onChange, placeholder, rows = 3, required, className,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  rows?: number;
-  required?: boolean;
-  className?: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const ref = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
-
-  const startEditing = () => { setDraft(value); setEditing(true); };
-  const commit = () => { onChange(draft); setEditing(false); };
-  const cancel = () => { setDraft(value); setEditing(false); };
-
-  return (
-    <div className={className}>
-      <label className={lbl}>{label}{required && <span className="text-red-400"> *</span>}</label>
-      {editing ? (
-        <textarea
-          ref={ref}
-          value={draft}
-          rows={rows}
-          onChange={e => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); cancel(); } }}
-          className={txta}
-        />
-      ) : (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={startEditing}
-          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEditing(); } }}
-          className="min-h-[30px] px-2.5 py-1.5 text-xs text-gray-900 rounded-md hover:bg-gray-50 cursor-text border border-transparent hover:border-gray-200 transition-colors whitespace-pre-wrap break-words"
-        >
-          {value ? value : <span className="text-gray-300 italic">{placeholder || 'Click to add'}</span>}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function KTTable({ ktCount, ktDetails }: { ktCount: string; ktDetails: KTDetail[] }) {
   const count = Number(ktCount);
   if (!count || !ktDetails.length) return null;
@@ -617,17 +458,26 @@ export default function EditOnlineAdmissionPage() {
             [`${p}City`, 'City / Town'],
             [`${p}District`, 'District'],
           ].map(([field, label]) => (
-            <InlineField key={field} label={label} value={f[field]} onChange={v => set(field, v)} />
+            <div key={field}>
+              <label className={lbl}>{label}</label>
+              <input type="text" value={f[field]} onChange={e => set(field, e.target.value)} className={inp} />
+            </div>
           ))}
-          <InlineSelect
-            label="State"
-            value={f[`${p}State`]}
-            onChange={v => set(`${p}State`, v)}
-            options={[{ value: '', label: '— Select State —' }, ...INDIAN_STATES.map(s => ({ value: s, label: s }))]}
-            placeholder="— Select State —"
-          />
-          <InlineField label="PIN Code" value={f[`${p}Pin`]} onChange={v => set(`${p}Pin`, v)} maxLength={6} />
-          <InlineField label="Country" value={f[`${p}Country`]} onChange={v => set(`${p}Country`, v)} />
+          <div>
+            <label className={lbl}>State</label>
+            <select value={f[`${p}State`]} onChange={e => set(`${p}State`, e.target.value)} className={sel}>
+              <option value="">— Select State —</option>
+              {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={lbl}>PIN Code</label>
+            <input type="text" value={f[`${p}Pin`]} onChange={e => set(`${p}Pin`, e.target.value)} className={inp} maxLength={6} />
+          </div>
+          <div>
+            <label className={lbl}>Country</label>
+            <input type="text" value={f[`${p}Country`]} onChange={e => set(`${p}Country`, e.target.value)} className={inp} />
+          </div>
         </div>
       </div>
     );
@@ -806,47 +656,72 @@ export default function EditOnlineAdmissionPage() {
           {/* Personal details */}
           <SectionCard title="Personal Details">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
-              <InlineField label="First Name" value={formData.firstName} onChange={v => set('firstName', v)} required />
-              <InlineField label="Middle Name" value={formData.middleName} onChange={v => set('middleName', v)} />
-              <InlineField label="Last Name" value={formData.lastName} onChange={v => set('lastName', v)} required />
-              <InlineField label="Short Name (ID Card)" value={formData.shortName} onChange={v => set('shortName', v)} />
-              <InlineField label="Date of Birth" value={formData.dob} onChange={v => set('dob', v)} type="date" required />
-              <InlineSelect
-                label="Gender"
-                value={formData.gender}
-                onChange={v => set('gender', v)}
-                required
-                options={[
-                  { value: '', label: '— Select —' },
-                  { value: 'Male', label: 'Male' },
-                  { value: 'Female', label: 'Female' },
-                ]}
-              />
-              <InlineField label="Nationality" value={formData.nationality} onChange={v => set('nationality', v)} />
+              <div>
+                <label className={lbl}>First Name <span className="text-red-400">*</span></label>
+                <input type="text" value={formData.firstName} onChange={e => set('firstName', e.target.value)} className={inp} required />
+              </div>
+              <div>
+                <label className={lbl}>Middle Name</label>
+                <input type="text" value={formData.middleName} onChange={e => set('middleName', e.target.value)} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Last Name <span className="text-red-400">*</span></label>
+                <input type="text" value={formData.lastName} onChange={e => set('lastName', e.target.value)} className={inp} required />
+              </div>
+              <div>
+                <label className={lbl}>Short Name (ID Card)</label>
+                <input type="text" value={formData.shortName} onChange={e => set('shortName', e.target.value)} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Date of Birth <span className="text-red-400">*</span></label>
+                <input type="date" value={formData.dob} onChange={e => set('dob', e.target.value)} className={inp} required />
+              </div>
+              <div>
+                <label className={lbl}>Gender <span className="text-red-400">*</span></label>
+                <select value={formData.gender} onChange={e => set('gender', e.target.value)} className={sel} required>
+                  <option value="">— Select —</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              </div>
+              <div>
+                <label className={lbl}>Nationality</label>
+                <input type="text" value={formData.nationality} onChange={e => set('nationality', e.target.value)} className={inp} />
+              </div>
             </div>
           </SectionCard>
 
           {/* Contact */}
           <SectionCard title="Contact Information">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
-              <InlineField label="Email Address" value={formData.email} onChange={v => set('email', v)} type="email" required />
-              <InlineField label="Mobile Number" value={formData.mobile} onChange={v => set('mobile', v)} type="tel" required />
-              <InlineField label="Telephone" value={formData.telephone} onChange={v => set('telephone', v)} type="tel" />
-              <InlineField label="Family Contact" value={formData.familyContact} onChange={v => set('familyContact', v)} type="tel" />
-              <InlineSelect
-                label="ID Proof Type"
-                value={formData.idProofType}
-                onChange={v => set('idProofType', v)}
-                options={[
-                  { value: '', label: '— Select —' },
-                  { value: 'Aadhar Card', label: 'Aadhar Card' },
-                  { value: 'PAN Card', label: 'PAN Card' },
-                  { value: 'Passport', label: 'Passport' },
-                  { value: 'Voter ID', label: 'Voter ID' },
-                  { value: 'Driving Licence', label: 'Driving Licence' },
-                  { value: 'Other', label: 'Other' },
-                ]}
-              />
+              <div>
+                <label className={lbl}>Email Address <span className="text-red-400">*</span></label>
+                <input type="email" value={formData.email} onChange={e => set('email', e.target.value)} className={inp} required />
+              </div>
+              <div>
+                <label className={lbl}>Mobile Number <span className="text-red-400">*</span></label>
+                <input type="tel" value={formData.mobile} onChange={e => set('mobile', e.target.value)} className={inp} required />
+              </div>
+              <div>
+                <label className={lbl}>Telephone</label>
+                <input type="tel" value={formData.telephone} onChange={e => set('telephone', e.target.value)} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Family Contact</label>
+                <input type="tel" value={formData.familyContact} onChange={e => set('familyContact', e.target.value)} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>ID Proof Type</label>
+                <select value={formData.idProofType} onChange={e => set('idProofType', e.target.value)} className={sel}>
+                  <option value="">— Select —</option>
+                  <option value="Aadhar Card">Aadhar Card</option>
+                  <option value="PAN Card">PAN Card</option>
+                  <option value="Passport">Passport</option>
+                  <option value="Voter ID">Voter ID</option>
+                  <option value="Driving Licence">Driving Licence</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
             </div>
           </SectionCard>
 
@@ -916,22 +791,25 @@ export default function EditOnlineAdmissionPage() {
           {activeEduTab === 'SSC' && (
             <div className="space-y-3">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
-                <InlineSelect
-                  label="Board"
-                  value={formData.ssc_board}
-                  onChange={v => set('ssc_board', v)}
-                  required
-                  options={[
-                    { value: '', label: '— Select —' },
-                    { value: 'CBSE', label: 'CBSE' },
-                    { value: 'ICSE', label: 'ICSE' },
-                    { value: 'State Board', label: 'State Board' },
-                    { value: 'Other', label: 'Other' },
-                  ]}
-                />
-                <InlineField className="md:col-span-2" label="School Name" value={formData.ssc_schoolName} onChange={v => set('ssc_schoolName', v)} required />
-                <InlineField label="Year of Passing" value={formData.ssc_yearOfPassing} onChange={v => set('ssc_yearOfPassing', v)} type="number" required />
-                <InlineField label="Percentage / CGPA" value={formData.ssc_percentage} onChange={v => set('ssc_percentage', v)} required />
+                <div>
+                  <label className={lbl}>Board <span className="text-red-400">*</span></label>
+                  <select value={formData.ssc_board} onChange={e => set('ssc_board', e.target.value)} className={sel}>
+                    <option value="">— Select —</option>
+                    <option>CBSE</option><option>ICSE</option><option>State Board</option><option>Other</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className={lbl}>School Name <span className="text-red-400">*</span></label>
+                  <input type="text" value={formData.ssc_schoolName} onChange={e => set('ssc_schoolName', e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className={lbl}>Year of Passing <span className="text-red-400">*</span></label>
+                  <input type="number" value={formData.ssc_yearOfPassing} onChange={e => set('ssc_yearOfPassing', e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className={lbl}>Percentage / CGPA <span className="text-red-400">*</span></label>
+                  <input type="text" value={formData.ssc_percentage} onChange={e => set('ssc_percentage', e.target.value)} className={inp} />
+                </div>
               </div>
               <KTTable ktCount={formData.ssc_ktCount} ktDetails={formData.ssc_ktDetails} />
             </div>
@@ -941,32 +819,32 @@ export default function EditOnlineAdmissionPage() {
           {activeEduTab === 'HSC' && (
             <div className="space-y-3">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
-                <InlineSelect
-                  label="Board"
-                  value={formData.hsc_board}
-                  onChange={v => set('hsc_board', v)}
-                  options={[
-                    { value: '', label: '— Select —' },
-                    { value: 'CBSE', label: 'CBSE' },
-                    { value: 'ICSE', label: 'ICSE' },
-                    { value: 'State Board', label: 'State Board' },
-                    { value: 'Other', label: 'Other' },
-                  ]}
-                />
-                <InlineField className="md:col-span-2" label="College / Junior College Name" value={formData.hsc_collegeName} onChange={v => set('hsc_collegeName', v)} />
-                <InlineSelect
-                  label="Stream"
-                  value={formData.hsc_stream}
-                  onChange={v => set('hsc_stream', v)}
-                  options={[
-                    { value: '', label: '— Select —' },
-                    { value: 'Science', label: 'Science' },
-                    { value: 'Commerce', label: 'Commerce' },
-                    { value: 'Arts', label: 'Arts' },
-                  ]}
-                />
-                <InlineField label="Year of Passing" value={formData.hsc_yearOfPassing} onChange={v => set('hsc_yearOfPassing', v)} type="number" />
-                <InlineField label="Percentage / CGPA" value={formData.hsc_percentage} onChange={v => set('hsc_percentage', v)} />
+                <div>
+                  <label className={lbl}>Board</label>
+                  <select value={formData.hsc_board} onChange={e => set('hsc_board', e.target.value)} className={sel}>
+                    <option value="">— Select —</option>
+                    <option>CBSE</option><option>ICSE</option><option>State Board</option><option>Other</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className={lbl}>College / Junior College Name</label>
+                  <input type="text" value={formData.hsc_collegeName} onChange={e => set('hsc_collegeName', e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className={lbl}>Stream</label>
+                  <select value={formData.hsc_stream} onChange={e => set('hsc_stream', e.target.value)} className={sel}>
+                    <option value="">— Select —</option>
+                    <option>Science</option><option>Commerce</option><option>Arts</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={lbl}>Year of Passing</label>
+                  <input type="number" value={formData.hsc_yearOfPassing} onChange={e => set('hsc_yearOfPassing', e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className={lbl}>Percentage / CGPA</label>
+                  <input type="text" value={formData.hsc_percentage} onChange={e => set('hsc_percentage', e.target.value)} className={inp} />
+                </div>
               </div>
               <KTTable ktCount={formData.hsc_ktCount} ktDetails={formData.hsc_ktDetails} />
             </div>
@@ -976,35 +854,33 @@ export default function EditOnlineAdmissionPage() {
           {activeEduTab === 'Diploma' && (
             <div className="space-y-3">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
-                <InlineSelect
-                  label="Diploma Degree"
-                  value={formData.diploma_degree}
-                  onChange={v => set('diploma_degree', v)}
-                  options={[
-                    { value: '', label: '— Select —' },
-                    { value: 'Diploma', label: 'Diploma' },
-                    { value: 'I.T.I.', label: 'I.T.I.' },
-                    { value: 'Mech. Draughtsman', label: 'Mech. Draughtsman' },
-                  ]}
-                />
-                <InlineSelect
-                  label="Specialization"
-                  value={formData.diploma_specialization}
-                  onChange={v => set('diploma_specialization', v)}
-                  options={[
-                    { value: '', label: '— Select —' },
-                    { value: 'Mechanical', label: 'Mechanical' },
-                    { value: 'Chemical', label: 'Chemical' },
-                    { value: 'Computers', label: 'Computers' },
-                    { value: 'Electrical', label: 'Electrical' },
-                    { value: 'Civil', label: 'Civil' },
-                    { value: 'Electronics', label: 'Electronics' },
-                    { value: 'Other', label: 'Other' },
-                  ]}
-                />
-                <InlineField label="Institute Name" value={formData.diploma_institute} onChange={v => set('diploma_institute', v)} />
-                <InlineField label="Year of Passing" value={formData.diploma_yearOfPassing} onChange={v => set('diploma_yearOfPassing', v)} type="number" />
-                <InlineField label="Percentage / CGPA" value={formData.diploma_percentage} onChange={v => set('diploma_percentage', v)} />
+                <div>
+                  <label className={lbl}>Diploma Degree</label>
+                  <select value={formData.diploma_degree} onChange={e => set('diploma_degree', e.target.value)} className={sel}>
+                    <option value="">— Select —</option>
+                    <option>Diploma</option><option>I.T.I.</option><option>Mech. Draughtsman</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={lbl}>Specialization</label>
+                  <select value={formData.diploma_specialization} onChange={e => set('diploma_specialization', e.target.value)} className={sel}>
+                    <option value="">— Select —</option>
+                    <option>Mechanical</option><option>Chemical</option><option>Computers</option>
+                    <option>Electrical</option><option>Civil</option><option>Electronics</option><option>Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={lbl}>Institute Name</label>
+                  <input type="text" value={formData.diploma_institute} onChange={e => set('diploma_institute', e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className={lbl}>Year of Passing</label>
+                  <input type="number" value={formData.diploma_yearOfPassing} onChange={e => set('diploma_yearOfPassing', e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className={lbl}>Percentage / CGPA</label>
+                  <input type="text" value={formData.diploma_percentage} onChange={e => set('diploma_percentage', e.target.value)} className={inp} />
+                </div>
               </div>
               <KTTable ktCount={formData.diploma_ktCount} ktDetails={formData.diploma_ktDetails} />
             </div>
@@ -1014,41 +890,35 @@ export default function EditOnlineAdmissionPage() {
           {activeEduTab === 'Graduation' && (
             <div className="space-y-3">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
-                <InlineSelect
-                  label="Degree"
-                  value={formData.grad_degree}
-                  onChange={v => set('grad_degree', v)}
-                  options={[
-                    { value: '', label: '— Select —' },
-                    { value: 'B.SC', label: 'B.SC' },
-                    { value: 'B.E.', label: 'B.E.' },
-                    { value: 'B.TECH', label: 'B.TECH' },
-                    { value: 'B.COM', label: 'B.COM' },
-                    { value: 'B.A.', label: 'B.A.' },
-                    { value: 'BBA', label: 'BBA' },
-                    { value: 'Other', label: 'Other' },
-                  ]}
-                />
-                <InlineSelect
-                  label="Specialization"
-                  value={formData.grad_specialization}
-                  onChange={v => set('grad_specialization', v)}
-                  options={[
-                    { value: '', label: '— Select —' },
-                    { value: 'Mechanical', label: 'Mechanical' },
-                    { value: 'Chemical', label: 'Chemical' },
-                    { value: 'Petrochemical', label: 'Petrochemical' },
-                    { value: 'Computers', label: 'Computers' },
-                    { value: 'Electrical', label: 'Electrical' },
-                    { value: 'Civil', label: 'Civil' },
-                    { value: 'Electronics', label: 'Electronics' },
-                    { value: 'Instrumentation', label: 'Instrumentation' },
-                    { value: 'Other', label: 'Other' },
-                  ]}
-                />
-                <InlineField className="md:col-span-2" label="University Name" value={formData.grad_university} onChange={v => set('grad_university', v)} />
-                <InlineField label="Year of Passing" value={formData.grad_yearOfPassing} onChange={v => set('grad_yearOfPassing', v)} type="number" />
-                <InlineField label="Percentage / CGPA" value={formData.grad_percentage} onChange={v => set('grad_percentage', v)} />
+                <div>
+                  <label className={lbl}>Degree</label>
+                  <select value={formData.grad_degree} onChange={e => set('grad_degree', e.target.value)} className={sel}>
+                    <option value="">— Select —</option>
+                    <option>B.SC</option><option>B.E.</option><option>B.TECH</option><option>B.COM</option>
+                    <option>B.A.</option><option>BBA</option><option>Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={lbl}>Specialization</label>
+                  <select value={formData.grad_specialization} onChange={e => set('grad_specialization', e.target.value)} className={sel}>
+                    <option value="">— Select —</option>
+                    <option>Mechanical</option><option>Chemical</option><option>Petrochemical</option>
+                    <option>Computers</option><option>Electrical</option><option>Civil</option>
+                    <option>Electronics</option><option>Instrumentation</option><option>Other</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className={lbl}>University Name</label>
+                  <input type="text" value={formData.grad_university} onChange={e => set('grad_university', e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className={lbl}>Year of Passing</label>
+                  <input type="number" value={formData.grad_yearOfPassing} onChange={e => set('grad_yearOfPassing', e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className={lbl}>Percentage / CGPA</label>
+                  <input type="text" value={formData.grad_percentage} onChange={e => set('grad_percentage', e.target.value)} className={inp} />
+                </div>
               </div>
               <KTTable ktCount={formData.grad_ktCount} ktDetails={formData.grad_ktDetails} />
             </div>
@@ -1058,37 +928,34 @@ export default function EditOnlineAdmissionPage() {
           {activeEduTab === 'Post-Grad' && (
             <div className="space-y-3">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
-                <InlineSelect
-                  label="Degree"
-                  value={formData.postgrad_degree}
-                  onChange={v => set('postgrad_degree', v)}
-                  options={[
-                    { value: '', label: '— Select —' },
-                    { value: 'M.E.', label: 'M.E.' },
-                    { value: 'M.TECH', label: 'M.TECH' },
-                    { value: 'M.SC', label: 'M.SC' },
-                    { value: 'MBA', label: 'MBA' },
-                    { value: 'M.COM', label: 'M.COM' },
-                    { value: 'Other', label: 'Other' },
-                  ]}
-                />
-                <InlineSelect
-                  label="Specialization"
-                  value={formData.postgrad_specialization}
-                  onChange={v => set('postgrad_specialization', v)}
-                  options={[
-                    { value: '', label: '— Select —' },
-                    { value: 'Mechanical', label: 'Mechanical' },
-                    { value: 'Chemical', label: 'Chemical' },
-                    { value: 'Computers', label: 'Computers' },
-                    { value: 'Electrical', label: 'Electrical' },
-                    { value: 'Civil', label: 'Civil' },
-                    { value: 'Other', label: 'Other' },
-                  ]}
-                />
-                <InlineField className="md:col-span-2" label="University Name" value={formData.postgrad_university} onChange={v => set('postgrad_university', v)} />
-                <InlineField label="Year of Passing" value={formData.postgrad_yearOfPassing} onChange={v => set('postgrad_yearOfPassing', v)} type="number" />
-                <InlineField label="Percentage / CGPA" value={formData.postgrad_percentage} onChange={v => set('postgrad_percentage', v)} />
+                <div>
+                  <label className={lbl}>Degree</label>
+                  <select value={formData.postgrad_degree} onChange={e => set('postgrad_degree', e.target.value)} className={sel}>
+                    <option value="">— Select —</option>
+                    <option>M.E.</option><option>M.TECH</option><option>M.SC</option>
+                    <option>MBA</option><option>M.COM</option><option>Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={lbl}>Specialization</label>
+                  <select value={formData.postgrad_specialization} onChange={e => set('postgrad_specialization', e.target.value)} className={sel}>
+                    <option value="">— Select —</option>
+                    <option>Mechanical</option><option>Chemical</option><option>Computers</option>
+                    <option>Electrical</option><option>Civil</option><option>Other</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className={lbl}>University Name</label>
+                  <input type="text" value={formData.postgrad_university} onChange={e => set('postgrad_university', e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className={lbl}>Year of Passing</label>
+                  <input type="number" value={formData.postgrad_yearOfPassing} onChange={e => set('postgrad_yearOfPassing', e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className={lbl}>Percentage / CGPA</label>
+                  <input type="text" value={formData.postgrad_percentage} onChange={e => set('postgrad_percentage', e.target.value)} className={inp} />
+                </div>
               </div>
               <KTTable ktCount={formData.postgrad_ktCount} ktDetails={formData.postgrad_ktDetails} />
             </div>
@@ -1096,28 +963,30 @@ export default function EditOnlineAdmissionPage() {
 
           {/* Education remarks */}
           <div className="mt-4 pt-3 border-t border-gray-100">
-            <InlineTextarea label="Education Remarks" value={formData.educationRemark} onChange={v => set('educationRemark', v)} rows={2} />
+            <label className={lbl}>Education Remarks</label>
+            <textarea value={formData.educationRemark} onChange={e => set('educationRemark', e.target.value)} rows={2} className={txta} />
           </div>
 
           {/* Education Summary — synced to student record on accept */}
           <div className="mt-4 pt-3 border-t border-gray-100">
             <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">Education Summary (synced to student on accept)</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-2">
-              <InlineSelect
-                label="Highest Qualification"
-                value={formData.qualification}
-                onChange={v => set('qualification', v)}
-                options={[
-                  { value: '', label: '— Select —' },
-                  { value: 'SSC', label: 'SSC' },
-                  { value: 'HSC', label: 'HSC' },
-                  { value: 'Diploma', label: 'Diploma' },
-                  { value: 'Graduate', label: 'Graduate' },
-                  { value: 'Post Graduate', label: 'Post Graduate' },
-                ]}
-              />
-              <InlineField label="Discipline / Stream" value={formData.discipline} onChange={v => set('discipline', v)} placeholder="e.g. Mechanical, Computers" />
-              <InlineField label="Overall Percentage" value={formData.percentage} onChange={v => set('percentage', v)} placeholder="e.g. 72.5" />
+              <div>
+                <label className={lbl}>Highest Qualification</label>
+                <select value={formData.qualification} onChange={e => set('qualification', e.target.value)} className={sel}>
+                  <option value="">— Select —</option>
+                  <option>SSC</option><option>HSC</option><option>Diploma</option>
+                  <option>Graduate</option><option>Post Graduate</option>
+                </select>
+              </div>
+              <div>
+                <label className={lbl}>Discipline / Stream</label>
+                <input type="text" value={formData.discipline} onChange={e => set('discipline', e.target.value)} className={inp} placeholder="e.g. Mechanical, Computers" />
+              </div>
+              <div>
+                <label className={lbl}>Overall Percentage</label>
+                <input type="text" value={formData.percentage} onChange={e => set('percentage', e.target.value)} className={inp} placeholder="e.g. 72.5" />
+              </div>
             </div>
           </div>
         </SectionCard>
@@ -1129,38 +998,63 @@ export default function EditOnlineAdmissionPage() {
       {activeTab === 'occupational' && (
         <SectionCard title="Occupational Information">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
-            <InlineSelect
-              label="Occupational Status"
-              value={formData.occupationalStatus}
-              onChange={v => set('occupationalStatus', v)}
-              options={[
-                { value: '', label: '— Select —' },
-                { value: 'Student', label: 'Student' },
-                { value: 'Employee', label: 'Employee' },
-                { value: 'Self Employee', label: 'Self Employee' },
-              ]}
-            />
+            <div>
+              <label className={lbl}>Occupational Status</label>
+              <select value={formData.occupationalStatus} onChange={e => set('occupationalStatus', e.target.value)} className={sel}>
+                <option value="">— Select —</option>
+                <option value="Student">Student</option>
+                <option value="Employee">Employee</option>
+                <option value="Self Employee">Self Employee</option>
+              </select>
+            </div>
 
             {formData.occupationalStatus === 'Employee' && (<>
-              <InlineField label="Job Organisation" value={formData.jobOrganisation} onChange={v => set('jobOrganisation', v)} />
-              <InlineField label="Designation" value={formData.jobDesignation} onChange={v => set('jobDesignation', v)} />
-              <InlineField label="Working From (Years)" value={formData.workingFromYears} onChange={v => set('workingFromYears', v)} type="number" min={0} />
-              <InlineField label="Working From (Months)" value={formData.workingFromMonths} onChange={v => set('workingFromMonths', v)} type="number" min={0} max={11} />
+              <div>
+                <label className={lbl}>Job Organisation</label>
+                <input type="text" value={formData.jobOrganisation} onChange={e => set('jobOrganisation', e.target.value)} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Designation</label>
+                <input type="text" value={formData.jobDesignation} onChange={e => set('jobDesignation', e.target.value)} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Working From (Years)</label>
+                <input type="number" min={0} value={formData.workingFromYears} onChange={e => set('workingFromYears', e.target.value)} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Working From (Months)</label>
+                <input type="number" min={0} max={11} value={formData.workingFromMonths} onChange={e => set('workingFromMonths', e.target.value)} className={inp} />
+              </div>
               <div>
                 <label className={lbl}>Total Experience (Years)</label>
                 <input type="text" value={formData.totalOccupationYears} readOnly className={`${inp} bg-gray-50`} />
               </div>
-              <InlineTextarea className="col-span-2 md:col-span-3" label="Job Description" value={formData.jobDescription} onChange={v => set('jobDescription', v)} rows={3} />
+              <div className="col-span-2 md:col-span-3">
+                <label className={lbl}>Job Description</label>
+                <textarea value={formData.jobDescription} onChange={e => set('jobDescription', e.target.value)} rows={3} className={txta} />
+              </div>
             </>)}
 
             {formData.occupationalStatus === 'Self Employee' && (
-              <InlineTextarea className="col-span-2 md:col-span-3" label="Business Details" value={formData.selfEmploymentDetails} onChange={v => set('selfEmploymentDetails', v)} rows={3} />
+              <div className="col-span-2 md:col-span-3">
+                <label className={lbl}>Business Details</label>
+                <textarea value={formData.selfEmploymentDetails} onChange={e => set('selfEmploymentDetails', e.target.value)} rows={3} className={txta} />
+              </div>
             )}
 
             {formData.occupationalStatus && !['Student', 'Employee', 'Self Employee'].includes(formData.occupationalStatus) && (<>
-              <InlineField label="Organisation" value={formData.jobOrganisation} onChange={v => set('jobOrganisation', v)} />
-              <InlineField label="Designation" value={formData.jobDesignation} onChange={v => set('jobDesignation', v)} />
-              <InlineField label="Total Experience (Years)" value={formData.totalOccupationYears} onChange={v => set('totalOccupationYears', v)} />
+              <div>
+                <label className={lbl}>Organisation</label>
+                <input type="text" value={formData.jobOrganisation} onChange={e => set('jobOrganisation', e.target.value)} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Designation</label>
+                <input type="text" value={formData.jobDesignation} onChange={e => set('jobDesignation', e.target.value)} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Total Experience (Years)</label>
+                <input type="text" value={formData.totalOccupationYears} onChange={e => set('totalOccupationYears', e.target.value)} className={inp} />
+              </div>
             </>)}
           </div>
         </SectionCard>
