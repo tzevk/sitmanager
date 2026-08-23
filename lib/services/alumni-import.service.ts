@@ -204,7 +204,7 @@ export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPrevi
     const match = matchByStudentId.get(s.Student_Id);
     return {
       studentId: s.Student_Id,
-      studentName: s.Student_Name,
+      studentName: s.Student_Name || '',
       mobile: s.Present_Mobile,
       email: s.Email,
       hasAccount: Boolean(match),
