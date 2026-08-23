@@ -40,10 +40,16 @@ interface PreviewResult {
   matchedCount: number;
   noAccountCount: number;
   batchCodes: string[];
+  trainingPrograms: string[];
   students: StudentAccountRow[];
   unmatchedCsvRows: AlumniCsvRow[];
   fileName: string;
 }
+
+const BLANK_CSV_ROW: AlumniCsvRow = {
+  csvName: '', csvPhone: '', firstName: '', lastName: '',
+  email: '', secondaryEmail: '', dob: '', batchNumber: '', trainingProgram: '',
+};
 
 interface StudentSearchResult {
   studentId: number;
@@ -98,7 +104,7 @@ function LinkStudentModal({
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="w-full max-w-lg rounded-xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
         <div className="px-5 py-3 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] flex items-center justify-between">
-          <h3 className="text-sm font-bold text-white">Link to Student Master</h3>
+          <h3 className="text-sm font-bold text-white">{csvRow.csvName ? 'Link to Student Master' : 'Manually Link Student'}</h3>
           <button onClick={onClose} className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/15 transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -106,11 +112,17 @@ function LinkStudentModal({
           </button>
         </div>
         <div className="p-4 space-y-3">
-          <div className="rounded-lg bg-slate-50 border border-slate-100 p-2 text-xs text-slate-600">
-            <div className="font-semibold text-slate-800">{csvRow.csvName || '—'}</div>
-            <div>{csvRow.csvPhone || 'no phone'} {csvRow.email ? `· ${csvRow.email}` : ''}</div>
-            {csvRow.trainingProgram && <div className="text-slate-400">{csvRow.trainingProgram}</div>}
-          </div>
+          {csvRow.csvName ? (
+            <div className="rounded-lg bg-slate-50 border border-slate-100 p-2 text-xs text-slate-600">
+              <div className="font-semibold text-slate-800">{csvRow.csvName || '—'}</div>
+              <div>{csvRow.csvPhone || 'no phone'} {csvRow.email ? `· ${csvRow.email}` : ''}</div>
+              {csvRow.trainingProgram && <div className="text-slate-400">{csvRow.trainingProgram}</div>}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">
+              Search for a student and mark them as a registered alumnus directly, without an alumni-portal CSV row.
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <input
               type="text"
@@ -234,6 +246,7 @@ export default function AlumniAssociationPage() {
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [appliedCount, setAppliedCount] = useState<{ updatedCount: number; markedNoCount: number } | null>(null);
   const [batchFilter, setBatchFilter] = useState('');
+  const [trainingFilter, setTrainingFilter] = useState('');
   const [linkingCsvRow, setLinkingCsvRow] = useState<AlumniCsvRow | null>(null);
 
   const handleLink = (student: StudentSearchResult) => {
@@ -266,6 +279,7 @@ export default function AlumniAssociationPage() {
     setError('');
     setAppliedCount(null);
     setBatchFilter('');
+    setTrainingFilter('');
     setPreviewing(true);
     try {
       const form = new FormData();
@@ -311,9 +325,11 @@ export default function AlumniAssociationPage() {
 
   const filteredStudents = useMemo(() => {
     if (!preview) return [];
-    if (!batchFilter) return preview.students;
-    return preview.students.filter((s) => s.batchCode === batchFilter);
-  }, [preview, batchFilter]);
+    return preview.students.filter((s) =>
+      (!batchFilter || s.batchCode === batchFilter) &&
+      (!trainingFilter || s.csvTrainingProgram === trainingFilter)
+    );
+  }, [preview, batchFilter, trainingFilter]);
 
   const withAccount = useMemo(() => filteredStudents.filter((s) => s.hasAccount), [filteredStudents]);
   const withoutAccount = useMemo(() => filteredStudents.filter((s) => !s.hasAccount), [filteredStudents]);
@@ -351,10 +367,24 @@ export default function AlumniAssociationPage() {
             {previewing ? 'Checking…' : 'Check Accounts'}
           </button>
           {preview && (
+            <select value={trainingFilter} onChange={(e) => setTrainingFilter(e.target.value)} className={`${ctrl} w-[180px]`}>
+              <option value="">All Training Programs</option>
+              {preview.trainingPrograms.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          )}
+          {preview && (
             <select value={batchFilter} onChange={(e) => setBatchFilter(e.target.value)} className={`${ctrl} w-[140px]`}>
               <option value="">All Batches</option>
               {preview.batchCodes.map((b) => <option key={b} value={b}>{b}</option>)}
             </select>
+          )}
+          {preview && canUpdate && (
+            <button
+              onClick={() => setLinkingCsvRow(BLANK_CSV_ROW)}
+              className="px-3 py-1.5 text-xs font-bold border border-[#2E3093]/30 text-[#2E3093] rounded-lg hover:bg-[#2E3093]/10 transition-colors"
+            >
+              Manually Link Student
+            </button>
           )}
           {preview && canUpdate && (
             <button

@@ -63,6 +63,7 @@ export interface AlumniPreviewResult {
   matchedCount: number;
   noAccountCount: number;
   batchCodes: string[];
+  trainingPrograms: string[];
   students: StudentAccountRow[];
   /** CSV rows that didn't match any current student (e.g. not yet admitted, or a
    * mismatched name/phone) — kept for reference, not the primary view. */
@@ -256,6 +257,8 @@ export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPrevi
 
   const batchCodes = [...new Set(students.map((s) => s.Batch_Code).filter((b): b is string => Boolean(b)))]
     .sort((a, b) => a.localeCompare(b));
+  const trainingPrograms = [...new Set(students_.map((s) => s.csvTrainingProgram).filter((t): t is string => Boolean(t)))]
+    .sort((a, b) => a.localeCompare(b));
 
   return {
     totalRows: rows.length,
@@ -263,6 +266,7 @@ export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPrevi
     matchedCount: matchByStudentId.size,
     noAccountCount: students.length - matchByStudentId.size,
     batchCodes,
+    trainingPrograms,
     students: students_,
     unmatchedCsvRows,
   };
