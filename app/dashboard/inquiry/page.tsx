@@ -88,6 +88,14 @@ interface PersonRow {
   Email: string | null;
   EnquiryCount: number;
   LatestEnquiryDate: string | null;
+  LatestInquiryId: number;
+  CourseName: string | null;
+  Discipline: string | null;
+  Source: string | null;
+  Status_id: number | null;
+  StatusLabel: string | null;
+  Discussion: string | null;
+  DiscussionDate: string | null;
   UnlinkedInquiryId?: number;
 }
 
@@ -97,6 +105,11 @@ interface PersonEnquiry {
   Inquiry_Dt: string | null;
   StatusLabel: string | null;
   Is_Re_Enquiry?: number | null;
+  Discipline?: string | null;
+  Source?: string | null;
+  Status_id?: number | null;
+  Discussion?: string | null;
+  DiscussionDate?: string | null;
 }
 
 function statusPill(id: number | null, label: string) {
@@ -449,81 +462,138 @@ export default function InquiryPage() {
             <table className="w-full text-xs border-collapse [&_th]:border-r [&_th]:border-slate-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-slate-200 [&_td:last-child]:border-r-0">
               <thead>
                 <tr className="text-[10px] uppercase tracking-wider text-slate-700 bg-slate-200 border-b border-slate-300">
-                  <th className="text-left py-2 px-3 font-bold w-8"></th>
+                  <th className="text-left py-2 px-3 font-bold">#</th>
                   <th className="text-left py-2 px-3 font-bold">Name</th>
+                  <th className="text-left py-2 px-3 font-bold">Training</th>
                   <th className="text-left py-2 px-3 font-bold">Mobile</th>
                   <th className="text-left py-2 px-3 font-bold">Email</th>
-                  <th className="text-center py-2 px-3 font-bold">Enquiries</th>
-                  <th className="text-left py-2 px-3 font-bold">Latest Enquiry</th>
+                  <th className="text-left py-2 px-3 font-bold">Discipline</th>
+                  <th className="text-left py-2 px-3 font-bold w-[118px]">Source</th>
+                  <th className="text-left py-2 px-3 font-bold">Inquiry</th>
+                  <th className="text-left py-2 px-3 font-bold">Last Discussion</th>
+                  <th className="text-center py-2 px-3 font-bold">Status</th>
                   <th className="text-center py-2 px-3 font-bold">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {personLoading ? (
-                  <tr><td colSpan={7} className="py-10 text-center text-xs text-slate-400">Loading…</td></tr>
+                  <tr><td colSpan={11} className="py-10 text-center text-xs text-slate-400">Loading…</td></tr>
                 ) : personRows.length === 0 ? (
-                  <tr><td colSpan={7} className="py-10 text-center text-xs text-slate-400">No enquiries found.</td></tr>
-                ) : personRows.map((p) => {
+                  <tr><td colSpan={11} className="py-10 text-center text-xs text-slate-400">No enquiries found.</td></tr>
+                ) : personRows.map((p, i) => {
                   const key = p.Person_Id ?? `u${p.UnlinkedInquiryId}`;
                   const isExpanded = p.Person_Id != null && expandedPersonId === p.Person_Id;
-                  const editHref = p.Person_Id == null
-                    ? `/dashboard/inquiry/add?editId=${p.UnlinkedInquiryId}&returnTo=${encodeURIComponent(buildReturnTo())}`
-                    : null;
+                  const editHref = `/dashboard/inquiry/add?editId=${p.Person_Id == null ? p.UnlinkedInquiryId : p.LatestInquiryId}&returnTo=${encodeURIComponent(buildReturnTo())}`;
+                  const rowStatusCls = statusRow(p.Status_id, p.StatusLabel || '');
                   return (
                     <>
                       <tr
                         key={key}
-                        className={`border-b border-slate-100 hover:bg-slate-50 ${p.Person_Id != null ? 'cursor-pointer' : ''}`}
-                        onClick={() => p.Person_Id != null && toggleExpand(p.Person_Id)}
+                        className={`border-b border-slate-200 transition-colors ${rowStatusCls} ${p.Person_Id != null && p.EnquiryCount > 1 ? 'cursor-pointer' : ''}`}
+                        onClick={() => p.Person_Id != null && p.EnquiryCount > 1 && toggleExpand(p.Person_Id)}
                       >
-                        <td className="py-2 px-3">
-                          {p.Person_Id != null && p.EnquiryCount > 1 && (
-                            <svg className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                            </svg>
-                          )}
+                        <td className="py-1 px-2 font-semibold font-mono tabular-nums relative pl-3">
+                          {(personPagination.page - 1) * personPagination.limit + i + 1}
                         </td>
-                        <td className="py-2 px-3 font-semibold text-slate-700">{formatName(p.Name)}</td>
-                        <td className="py-2 px-3 text-slate-600">{p.Mobile || '—'}</td>
-                        <td className="py-2 px-3 text-slate-600">{p.Email || '—'}</td>
-                        <td className="py-2 px-3 text-center">
-                          <span className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold ${p.EnquiryCount > 1 ? 'bg-[#2E3093]/10 text-[#2E3093]' : 'bg-slate-100 text-slate-500'}`}>
-                            {p.EnquiryCount}
+                        <td className="py-1 px-2 font-semibold max-w-[160px]">
+                          <span className="flex items-center gap-1">
+                            {p.Person_Id != null && p.EnquiryCount > 1 && (
+                              <svg className={`w-3 h-3 text-slate-400 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                              </svg>
+                            )}
+                            <span className="truncate">{formatName(p.Name)}</span>
+                            {p.EnquiryCount > 1 && (
+                              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[9px] font-bold bg-[#2E3093]/10 text-[#2E3093] shrink-0">
+                                {p.EnquiryCount}
+                              </span>
+                            )}
                           </span>
                         </td>
-                        <td className="py-2 px-3 text-slate-600">{formatDate(p.LatestEnquiryDate)}</td>
-                        <td className="py-2 px-3 text-center">
-                          {editHref && (
-                            <a href={editHref} onClick={(e) => e.stopPropagation()} className="text-[10px] font-bold text-[#2E3093] hover:underline">
-                              View / Edit
-                            </a>
-                          )}
+                        <td className="py-1 px-2 max-w-[120px]">
+                          <span className="truncate block text-red-600">{p.CourseName || '—'}</span>
+                        </td>
+                        <td className="py-1 px-2 whitespace-nowrap font-mono">{p.Mobile || '—'}</td>
+                        <td className="py-1 px-2 max-w-[140px]">
+                          <span className="truncate block">{p.Email || '—'}</span>
+                        </td>
+                        <td className="py-1 px-2 whitespace-nowrap">
+                          {p.Discipline && p.Discipline !== 'NULL' && p.Discipline !== 'Select' ? p.Discipline : '—'}
+                        </td>
+                        <td className="py-1 px-2 w-[118px] max-w-[118px]">
+                          <span className="font-semibold break-words leading-tight">{p.Source || '—'}</span>
+                        </td>
+                        <td className="py-1 px-2 whitespace-nowrap min-w-[108px]">
+                          <span className="font-semibold text-slate-700">{formatDate(p.LatestEnquiryDate)}</span>
+                        </td>
+                        <td className="py-1 px-2 min-w-[240px] max-w-[420px] align-top">
+                          <span className="block whitespace-pre-wrap break-words text-slate-600 leading-snug">
+                            {p.Discussion && p.Discussion.trim() && p.Discussion !== 'NULL' ? p.Discussion : <span className="text-slate-300">—</span>}
+                          </span>
+                        </td>
+                        <td className="py-1 px-2 text-center">
+                          <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(p.Status_id, p.StatusLabel || '')}`}>
+                            {p.StatusLabel || 'New'}
+                          </span>
+                        </td>
+                        <td className="py-1 px-2 text-center">
+                          <a href={editHref} onClick={(e) => e.stopPropagation()} className="text-[10px] font-bold text-[#2E3093] hover:underline">
+                            View / Edit
+                          </a>
                         </td>
                       </tr>
                       {isExpanded && p.Person_Id != null && (
-                        <tr key={`${key}-expand`} className="bg-slate-50/70 border-b border-slate-100">
-                          <td colSpan={7} className="px-3 py-2">
+                        <tr key={`${key}-expand`} className="bg-slate-50/70 border-b border-slate-200">
+                          <td colSpan={11} className="px-2 py-1">
                             {expandLoading === p.Person_Id ? (
                               <div className="text-[11px] text-slate-400 py-2 pl-6">Loading history…</div>
                             ) : (
-                              <div className="pl-6 flex flex-col gap-1">
-                                {(expandedEnquiries[p.Person_Id] ?? []).map((e) => (
-                                  <div key={e.Inquiry_Id} className="flex items-center gap-2 text-[11px] py-1 border-b border-slate-100 last:border-b-0">
-                                    <span className="font-semibold text-slate-700 min-w-[180px]">{e.CourseName || 'No course'}</span>
-                                    <span className="text-slate-500 min-w-[100px]">{formatDate(e.Inquiry_Dt)}</span>
-                                    {Boolean(e.Is_Re_Enquiry) && (
-                                      <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-bold uppercase tracking-wide">Re-Enquiry</span>
-                                    )}
-                                    <span className="text-slate-400">{e.StatusLabel || 'New'}</span>
-                                    <a
-                                      href={`/dashboard/inquiry/add?editId=${e.Inquiry_Id}&returnTo=${encodeURIComponent(buildReturnTo())}`}
-                                      className="ml-auto text-[10px] font-bold text-[#2E3093] hover:underline"
-                                    >
-                                      View / Follow-up
-                                    </a>
-                                  </div>
-                                ))}
-                              </div>
+                              <table className="w-full text-xs border-collapse">
+                                <tbody>
+                                  {(expandedEnquiries[p.Person_Id] ?? []).map((e) => {
+                                    const childStatusCls = statusRow(e.Status_id ?? null, e.StatusLabel || '');
+                                    return (
+                                      <tr key={e.Inquiry_Id} className={`border-b border-slate-100 last:border-b-0 ${childStatusCls}`}>
+                                        <td className="py-1 pl-8 pr-2 w-8"></td>
+                                        <td className="py-1 px-2 max-w-[160px]">
+                                          <span className="flex items-center gap-1 truncate">
+                                            <span className="truncate">{formatName(p.Name)}</span>
+                                            {Boolean(e.Is_Re_Enquiry) && (
+                                              <span className="px-1 py-0.5 rounded bg-amber-100 text-amber-700 text-[8px] font-bold uppercase tracking-wide shrink-0">Re-Enquiry</span>
+                                            )}
+                                          </span>
+                                        </td>
+                                        <td className="py-1 px-2 max-w-[120px]"><span className="truncate block text-red-600">{e.CourseName || '—'}</span></td>
+                                        <td className="py-1 px-2 whitespace-nowrap font-mono">{p.Mobile || '—'}</td>
+                                        <td className="py-1 px-2 max-w-[140px]"><span className="truncate block">{p.Email || '—'}</span></td>
+                                        <td className="py-1 px-2 whitespace-nowrap">
+                                          {e.Discipline && e.Discipline !== 'NULL' && e.Discipline !== 'Select' ? e.Discipline : '—'}
+                                        </td>
+                                        <td className="py-1 px-2 w-[118px] max-w-[118px]"><span className="font-semibold break-words leading-tight">{e.Source || '—'}</span></td>
+                                        <td className="py-1 px-2 whitespace-nowrap min-w-[108px]"><span className="font-semibold text-slate-700">{formatDate(e.Inquiry_Dt)}</span></td>
+                                        <td className="py-1 px-2 min-w-[240px] max-w-[420px] align-top">
+                                          <span className="block whitespace-pre-wrap break-words text-slate-600 leading-snug">
+                                            {e.Discussion && e.Discussion.trim() && e.Discussion !== 'NULL' ? e.Discussion : <span className="text-slate-300">—</span>}
+                                          </span>
+                                        </td>
+                                        <td className="py-1 px-2 text-center">
+                                          <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(e.Status_id ?? null, e.StatusLabel || '')}`}>
+                                            {e.StatusLabel || 'New'}
+                                          </span>
+                                        </td>
+                                        <td className="py-1 px-2 text-center">
+                                          <a
+                                            href={`/dashboard/inquiry/add?editId=${e.Inquiry_Id}&returnTo=${encodeURIComponent(buildReturnTo())}`}
+                                            className="text-[10px] font-bold text-[#2E3093] hover:underline"
+                                          >
+                                            View / Edit
+                                          </a>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
                             )}
                           </td>
                         </tr>

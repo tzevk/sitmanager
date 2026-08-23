@@ -1566,6 +1566,15 @@ export interface InquiryPersonRow {
   Email: string | null;
   EnquiryCount: number;
   LatestEnquiryDate: string | null;
+  LatestInquiryId: number;
+  /** Same columns the flat list shows, taken from the person's latest enquiry. */
+  CourseName: string | null;
+  Discipline: string | null;
+  Source: string | null;
+  Status_id: number | null;
+  StatusLabel: string | null;
+  Discussion: string | null;
+  DiscussionDate: string | null;
   /** Set only for the Person_Id IS NULL pseudo-rows (legacy/unlinked/conflict-flagged rows). */
   UnlinkedInquiryId?: number;
 }
@@ -1669,7 +1678,7 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
        COALESCE(p.Email, si.Email) as Email,
        COUNT(*) as EnquiryCount,
        MAX(si.Inquiry_Dt) as LatestEnquiryDate,
-       MAX(si.Inquiry_Id) as UnlinkedInquiryId
+       MAX(si.Inquiry_Id) as LatestInquiryId
      FROM \`${inquiryTable}\` si
      ${courseJoin}
      ${disciplineJoin}
@@ -1681,16 +1690,66 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
     [...queryParams, limit, offset]
   );
 
+  const groupRows = rows as any[];
+  const latestIds = groupRows.map((r) => Number(r.LatestInquiryId)).filter((id) => Number.isInteger(id));
+  const latestDetailsById = new Map<number, any>();
+
+  // Same columns the flat list shows (Training/Discipline/Source/Status/Last Discussion),
+  // fetched in one batched query for just this page's latest-per-person rows — not a
+  // correlated subquery per row.
+  if (latestIds.length > 0) {
+    const ph = latestIds.map(() => '?').join(',');
+    const [detailRows] = await pool.query(
+      `SELECT
+         si.Inquiry_Id, c.Course_Name AS CourseName, ${disciplineExpr} as Discipline,
+         si.Inquiry_From, si.Inquiry_Type,
+         CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) as Status_id,
+         sm.Status as StatusLabel, si.Discussion as InlineDiscussion,
+         ld.discussion as LatestDiscussion, ld.date as LatestDiscDate
+       FROM \`${inquiryTable}\` si
+       LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
+       ${disciplineJoin}
+       LEFT JOIN status_master sm ON sm.Id = CAST(NULLIF(si.OnlineState,'') AS UNSIGNED)
+       LEFT JOIN (
+         SELECT d1.Inquiry_id, d1.discussion, d1.date
+         FROM awt_inquirydiscussion d1
+         INNER JOIN (
+           SELECT Inquiry_id, MAX(id) AS max_id
+           FROM awt_inquirydiscussion
+           WHERE deleted = 0 AND Inquiry_id IN (${ph})
+           GROUP BY Inquiry_id
+         ) latest ON latest.Inquiry_id = d1.Inquiry_id AND latest.max_id = d1.id
+       ) ld ON ld.Inquiry_id = CAST(si.Inquiry_Id AS CHAR)
+       WHERE si.Inquiry_Id IN (${ph})`,
+      [...latestIds.map((id) => String(id)), ...latestIds]
+    );
+    for (const d of detailRows as any[]) {
+      latestDetailsById.set(Number(d.Inquiry_Id), d);
+    }
+  }
+
   return {
-    rows: (rows as any[]).map((r) => ({
-      Person_Id: r.Person_Id ?? null,
-      Name: r.Name ?? null,
-      Mobile: normalizeInquiryMobile(r.Mobile),
-      Email: r.Email ?? null,
-      EnquiryCount: Number(r.EnquiryCount || 0),
-      LatestEnquiryDate: r.LatestEnquiryDate ?? null,
-      ...(r.Person_Id == null ? { UnlinkedInquiryId: Number(r.UnlinkedInquiryId) } : {}),
-    })),
+    rows: groupRows.map((r) => {
+      const latestInquiryId = Number(r.LatestInquiryId);
+      const detail = latestDetailsById.get(latestInquiryId) ?? {};
+      return {
+        Person_Id: r.Person_Id ?? null,
+        Name: r.Name ?? null,
+        Mobile: normalizeInquiryMobile(r.Mobile),
+        Email: r.Email ?? null,
+        EnquiryCount: Number(r.EnquiryCount || 0),
+        LatestEnquiryDate: r.LatestEnquiryDate ?? null,
+        LatestInquiryId: latestInquiryId,
+        CourseName: detail.CourseName ?? null,
+        Discipline: detail.Discipline ?? null,
+        Source: detail.Inquiry_Type || detail.Inquiry_From || null,
+        Status_id: detail.Status_id ?? null,
+        StatusLabel: detail.StatusLabel ?? null,
+        Discussion: detail.LatestDiscussion ?? detail.InlineDiscussion ?? null,
+        DiscussionDate: detail.LatestDiscDate ?? null,
+        ...(r.Person_Id == null ? { UnlinkedInquiryId: latestInquiryId } : {}),
+      };
+    }),
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   };
 }

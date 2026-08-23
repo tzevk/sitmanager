@@ -107,6 +107,11 @@ export interface PersonMatch {
   Inquiry_Dt: string | null;
   StatusLabel: string | null;
   Is_Re_Enquiry?: number | null;
+  Discipline?: string | null;
+  Source?: string | null;
+  Status_id?: number | null;
+  Discussion?: string | null;
+  DiscussionDate?: string | null;
 }
 
 export interface ResolvePersonResult {
@@ -260,7 +265,9 @@ export async function findPersonEnquiries(personId: number): Promise<PersonMatch
   const inquiryTable = await resolveInquiryTableName(pool);
   const [rows] = await pool.query(
     `SELECT si.Inquiry_Id, c.Course_Name AS CourseName, si.Inquiry_Dt,
-            s.Status AS StatusLabel, si.Is_Re_Enquiry
+            si.Discipline, si.Inquiry_From, si.Inquiry_Type,
+            CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) AS Status_id,
+            s.Status AS StatusLabel, si.Is_Re_Enquiry, si.Discussion AS InlineDiscussion
      FROM \`${inquiryTable}\` si
      LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
      LEFT JOIN status_master s ON s.Id = CAST(NULLIF(si.OnlineState,'') AS UNSIGNED)
@@ -268,7 +275,43 @@ export async function findPersonEnquiries(personId: number): Promise<PersonMatch
      ORDER BY si.Inquiry_Dt ASC, si.Inquiry_Id ASC`,
     [personId]
   );
-  return rows as PersonMatch[];
+  const enquiries = rows as any[];
+  if (enquiries.length === 0) return [];
+
+  // Bounded to this person's own (typically small) enquiry list — cheap IN lookup,
+  // not a per-row correlated subquery over the whole discussion table.
+  const ids = enquiries.map((r) => r.Inquiry_Id);
+  const ph = ids.map(() => '?').join(',');
+  const [discRows] = await pool.query(
+    `SELECT d1.Inquiry_id, d1.discussion, d1.date
+     FROM awt_inquirydiscussion d1
+     INNER JOIN (
+       SELECT Inquiry_id, MAX(id) AS max_id
+       FROM awt_inquirydiscussion
+       WHERE deleted = 0 AND Inquiry_id IN (${ph})
+       GROUP BY Inquiry_id
+     ) latest ON latest.Inquiry_id = d1.Inquiry_id AND latest.max_id = d1.id`,
+    ids.map((id) => String(id))
+  );
+  const discussionByInquiryId = new Map(
+    (discRows as any[]).map((r) => [String(r.Inquiry_id), { discussion: r.discussion, date: r.date }])
+  );
+
+  return enquiries.map((r) => {
+    const latestDisc = discussionByInquiryId.get(String(r.Inquiry_Id));
+    return {
+      Inquiry_Id: r.Inquiry_Id,
+      CourseName: r.CourseName ?? null,
+      Inquiry_Dt: r.Inquiry_Dt ?? null,
+      StatusLabel: r.StatusLabel ?? null,
+      Is_Re_Enquiry: r.Is_Re_Enquiry,
+      Discipline: r.Discipline ?? null,
+      Source: r.Inquiry_Type || r.Inquiry_From || null,
+      Status_id: r.Status_id ?? null,
+      Discussion: latestDisc?.discussion ?? r.InlineDiscussion ?? null,
+      DiscussionDate: latestDisc?.date ?? null,
+    };
+  });
 }
 
 export async function detectReEnquiry(
