@@ -83,6 +83,103 @@ function DocumentViewLink({ label, url }: { label: string; url?: string }) {
   );
 }
 
+/* ─── Mode of Payment options ─────────────────────────────────────────────── */
+type PaymentOption = { value: string; label: string; sub: string; icon: 'full' | 'split' | 'loan' | 'office' | 'qr'; tone: 'emerald' | 'violet' | 'rose' | 'amber' | 'sky' };
+
+const PAYMENT_PLAN_OPTIONS: PaymentOption[] = [
+  { value: 'Full Payment',        label: 'Full Payment',           sub: 'Full amount in one go — 5% discount applied', icon: 'full',  tone: 'emerald' },
+  { value: '50% Installment',     label: '50% in 2 Installments',  sub: 'Pay 50% now, 50% later',                      icon: 'split', tone: 'violet' },
+  { value: '2-Payment Plan',      label: '2-Payment Plan',         sub: 'Two scheduled instalments',                   icon: 'split', tone: 'violet' },
+  { value: '3-Installment Plan',  label: '3-Installment Plan',     sub: 'Three scheduled instalments',                 icon: 'split', tone: 'violet' },
+  { value: '6-Installment Plan',  label: '6-Installment Plan',     sub: 'Six scheduled instalments',                   icon: 'split', tone: 'violet' },
+  { value: 'Loan (0% Interest)',  label: 'Loan (0% Interest)',     sub: 'Financed via a 0% interest loan partner',     icon: 'loan',  tone: 'rose' },
+];
+
+const PAYMENT_CHANNEL_OPTIONS: PaymentOption[] = [
+  { value: 'Pay at Office',       label: 'Pay at Office',          sub: 'Staff only — offline collection at office counter', icon: 'office', tone: 'amber' },
+  { value: 'Direct UPI Transfer', label: 'Direct UPI Transfer',    sub: 'Institute QR, for all admissions',                  icon: 'qr',     tone: 'sky' },
+];
+
+const PAYMENT_MODE_VALUES = [...PAYMENT_PLAN_OPTIONS, ...PAYMENT_CHANNEL_OPTIONS].map(o => o.value);
+
+const PAYMENT_OPTION_ICON_PATHS: Record<PaymentOption['icon'], string> = {
+  full:   'M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+  split:  'M9 7h6m0 10v-3m-3 3v-3m-3 3v-3m9-6H6a2 2 0 00-2 2v9a2 2 0 002 2h12a2 2 0 002-2V9a2 2 0 00-2-2z',
+  loan:   'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V6m0 10v2m9-8a9 9 0 11-18 0 9 9 0 0118 0z',
+  office: 'M3 21h18M5 21V7l8-4v18M19 21V11l-6-4M9 9v.01M9 12v.01M9 15v.01M9 18v.01',
+  qr:     'M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 4h2m2 0h2m-6-4h2m-2 2v2m4-2v4',
+};
+
+const PAYMENT_OPTION_TONE_CLS: Record<PaymentOption['tone'], { border: string; bg: string; icon: string; dot: string }> = {
+  emerald: { border: 'border-emerald-500', bg: 'bg-emerald-50', icon: 'text-emerald-600 bg-emerald-100', dot: 'bg-emerald-500' },
+  violet:  { border: 'border-violet-500',  bg: 'bg-violet-50',  icon: 'text-violet-600 bg-violet-100',  dot: 'bg-violet-500' },
+  rose:    { border: 'border-rose-500',    bg: 'bg-rose-50',    icon: 'text-rose-600 bg-rose-100',      dot: 'bg-rose-500' },
+  amber:   { border: 'border-amber-500',   bg: 'bg-amber-50',   icon: 'text-amber-600 bg-amber-100',    dot: 'bg-amber-500' },
+  sky:     { border: 'border-sky-500',     bg: 'bg-sky-50',     icon: 'text-sky-600 bg-sky-100',        dot: 'bg-sky-500' },
+};
+
+function PaymentOptionCard({ opt, selected, onSelect }: { opt: PaymentOption; selected: boolean; onSelect: () => void }) {
+  const t = PAYMENT_OPTION_TONE_CLS[opt.tone];
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`relative text-left p-3.5 rounded-xl border-2 transition-all ${selected ? `${t.border} ${t.bg}` : 'border-gray-200 hover:border-gray-300 bg-white'}`}
+    >
+      <div className="flex items-start gap-2.5">
+        <span className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center ${selected ? t.icon : 'text-gray-400 bg-gray-100'}`}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d={PAYMENT_OPTION_ICON_PATHS[opt.icon]} />
+          </svg>
+        </span>
+        <div className="min-w-0">
+          <p className="text-xs font-bold text-gray-800 leading-tight">{opt.label}</p>
+          <p className="text-[10.5px] text-gray-500 mt-0.5 leading-snug">{opt.sub}</p>
+        </div>
+      </div>
+      {selected && (
+        <span className={`absolute top-2.5 right-2.5 w-4 h-4 rounded-full flex items-center justify-center ${t.dot}`}>
+          <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </span>
+      )}
+    </button>
+  );
+}
+
+const PAYMENT_PANEL_TONE_CLS: Record<'amber' | 'sky' | 'emerald', string> = {
+  amber:   'border-amber-200 bg-amber-50 text-amber-900',
+  sky:     'border-sky-200 bg-sky-50 text-sky-900',
+  emerald: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+};
+const PAYMENT_PANEL_ICON_PATHS: Record<'office' | 'qr' | 'check' | 'bank' | 'card', string> = {
+  office: 'M3 21h18M5 21V7l8-4v18M19 21V11l-6-4',
+  qr:     'M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6z',
+  check:  'M5 13l4 4L19 7',
+  bank:   'M3 21h18M5 21V10m14 11V10M3 10l9-6 9 6M6 21v-6m4 6v-6m4 6v-6m4 6v-6',
+  card:   'M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3M3.75 4.5h16.5a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5H3.75a1.5 1.5 0 01-1.5-1.5V6a1.5 1.5 0 011.5-1.5z',
+};
+
+function PaymentDetailPanel({ tone, icon, title, children }: {
+  tone: 'amber' | 'sky' | 'emerald';
+  icon: 'office' | 'qr' | 'check' | 'bank' | 'card';
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`rounded-lg border px-3.5 py-3 text-[11px] ${PAYMENT_PANEL_TONE_CLS[tone]}`}>
+      <div className="flex items-center gap-1.5 font-bold mb-1">
+        <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d={PAYMENT_PANEL_ICON_PATHS[icon]} />
+        </svg>
+        {title}
+      </div>
+      <div>{children}</div>
+    </div>
+  );
+}
+
 function KTTable({ ktCount, ktDetails }: { ktCount: string; ktDetails: KTDetail[] }) {
   const count = Number(ktCount);
   if (!count || !ktDetails.length) return null;
@@ -1219,210 +1316,140 @@ export default function EditOnlineAdmissionPage() {
       ══════════════════════════════════════════════ */}
       {activeTab === 'payment' && (
         <SectionCard title="Mode of Payment">
-          <p className="text-xs text-gray-500 mb-4">Payment preference selected by the candidate during admission. Pay at Office can only be set here by staff.</p>
+          <p className="text-xs text-gray-500 mb-5">Payment preference selected by the candidate during admission. Pay at Office can only be set here by staff.</p>
 
-          {/* Payment option cards */}
-          <div className="space-y-3 max-w-md">
-            {[
-              {
-                value: 'Full Payment',
-                label: 'Full Payment',
-                sub: 'Pay the full amount in one go (5% discount applied)',
-                color: 'emerald',
-              },
-              {
-                value: '50% Installment',
-                label: '50% Payment in 2 Installments',
-                sub: 'Pay 50% now and 50% later',
-                color: 'violet',
-              },
-              {
-                value: '2-Payment Plan',
-                label: '2-Payment Plan',
-                sub: 'Pay in two scheduled instalments',
-                color: 'violet',
-              },
-              {
-                value: '3-Installment Plan',
-                label: '3-Installment Plan',
-                sub: 'Pay in three scheduled instalments',
-                color: 'violet',
-              },
-              {
-                value: '6-Installment Plan',
-                label: '6-Installment Plan',
-                sub: 'Pay in six scheduled instalments',
-                color: 'violet',
-              },
-              {
-                value: 'Loan (0% Interest)',
-                label: 'Loan (0% Interest)',
-                sub: 'Financed via a 0% interest loan partner',
-                color: 'rose',
-              },
-              {
-                value: 'Pay at Office',
-                label: 'Pay at Office (Staff Only)',
-                sub: 'Allow offline payment collection at office counter',
-                color: 'amber',
-              },
-              {
-                value: 'Direct UPI Transfer',
-                label: 'Direct UPI Transfer',
-                sub: 'Another option for all admissions using institute QR',
-                color: 'sky',
-              },
-            ].map(opt => {
-              const isSelected = formData.modeOfPayment === opt.value;
-              const colors: Record<string, string> = {
-                emerald: isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:border-emerald-300',
-                violet:  isSelected ? 'border-violet-500 bg-violet-50'  : 'border-gray-200 hover:border-violet-300',
-                rose:    isSelected ? 'border-rose-500 bg-rose-50'      : 'border-gray-200 hover:border-rose-300',
-                amber:   isSelected ? 'border-amber-500 bg-amber-50'   : 'border-gray-200 hover:border-amber-300',
-                sky:     isSelected ? 'border-sky-500 bg-sky-50'       : 'border-gray-200 hover:border-sky-300',
-              };
-              const dotColors: Record<string, string> = {
-                emerald: 'border-emerald-500 bg-emerald-500',
-                violet:  'border-violet-500 bg-violet-500',
-                rose:    'border-rose-500 bg-rose-500',
-                amber:   'border-amber-500 bg-amber-500',
-                sky:     'border-sky-500 bg-sky-500',
-              };
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => set('modeOfPayment', opt.value)}
-                  className={`w-full text-left p-4 rounded-xl border-2 transition-all ${colors[opt.color]}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-bold text-gray-800">{opt.label}</p>
-                      <p className="text-[11px] text-gray-500 mt-0.5">{opt.sub}</p>
-                    </div>
-                    <div className={`w-5 h-5 shrink-0 rounded-full border-2 flex items-center justify-center mt-0.5 ${
-                      isSelected ? dotColors[opt.color] : 'border-gray-300'
-                    }`}>
-                      {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+          {!formData.modeOfPayment && (
+            <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700 mb-4">
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+              No payment mode was selected by the candidate.
+            </div>
+          )}
+          {formData.modeOfPayment && !PAYMENT_MODE_VALUES.includes(formData.modeOfPayment) && (
+            <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700 mb-4">
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+              Saved value &ldquo;{formData.modeOfPayment}&rdquo; doesn&apos;t match any option below.
+            </div>
+          )}
 
-            {!formData.modeOfPayment && (
-              <p className="text-[11px] text-amber-600 italic">No payment mode was selected by the candidate.</p>
-            )}
-            {formData.modeOfPayment && ![
-              'Full Payment', '50% Installment', '2-Payment Plan', '3-Installment Plan',
-              '6-Installment Plan', 'Loan (0% Interest)', 'Pay at Office', 'Direct UPI Transfer',
-            ].includes(formData.modeOfPayment) && (
-              <p className="text-[11px] text-amber-600 italic">Saved value: {formData.modeOfPayment} (not one of the options above)</p>
-            )}
-
-            {formData.modeOfPayment === 'Pay at Office' && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
-                {payAtOfficeAudit?.enabledAt ? (
-                  <>
-                    <span className="font-semibold">Audit:</span> Enabled by{' '}
-                    <span className="font-semibold">{payAtOfficeAudit.enabledByName || `User ${payAtOfficeAudit.enabledByUserId || ''}`.trim()}</span>
-                    {payAtOfficeAudit.enabledByEmail ? ` (${payAtOfficeAudit.enabledByEmail})` : ''}
-                    {' '}on {new Date(payAtOfficeAudit.enabledAt).toLocaleString('en-IN')}.
-                  </>
-                ) : (
-                  <>Audit will be recorded when you save this update.</>
-                )}
-              </div>
-            )}
-
-            {formData.modeOfPayment === 'Direct UPI Transfer' && (
-              <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-3 text-[11px] text-sky-900 space-y-2">
-                <p className="font-semibold">Direct UPI Transfer enabled for this admission.</p>
-                <div className="rounded-lg border border-sky-200 bg-white p-2 flex flex-col items-center gap-2">
-                  <Image
-                    src="/phot.jpg"
-                    alt="Direct UPI Transfer QR"
-                    width={200}
-                    height={250}
-                    className="rounded border border-slate-200"
-                  />
-                  <p className="text-[10px] text-slate-600 text-center">Account Ref: 037326012440007 | 54972698</p>
-                </div>
-              </div>
-            )}
-
-            {/* UPI / QR payment confirmation details */}
-            {(formData.upiTransferConfirmed || formData.upiTransferReference) && (
-              <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-3 text-[11px] text-sky-900 space-y-1.5">
-                <p className="font-semibold">QR / UPI Payment</p>
-                <div className="flex items-center gap-2">
-                  <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
-                    formData.upiTransferConfirmed ? 'bg-emerald-500' : 'bg-gray-200'
-                  }`}>
-                    {formData.upiTransferConfirmed && (
-                      <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </div>
-                  <span>{formData.upiTransferConfirmed ? 'Student confirmed payment via QR' : 'Payment not yet confirmed'}</span>
-                </div>
-                {formData.upiTransferReference && (
-                  <div>
-                    <span className="font-semibold">UTR / Reference: </span>
-                    <span className="font-mono">{formData.upiTransferReference}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {formData.neftTransactionNumber && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-[11px] text-emerald-900 space-y-1.5">
-                <p className="font-semibold">NEFT Payment</p>
-                {formData.neftAmount != null && (
-                  <div>
-                    <span className="font-semibold">Amount: </span>
-                    <span>₹{Number(formData.neftAmount).toLocaleString('en-IN')}</span>
-                  </div>
-                )}
-                <div>
-                  <span className="font-semibold">Transaction Number: </span>
-                  <span className="font-mono">{formData.neftTransactionNumber}</span>
-                </div>
-              </div>
-            )}
+          {/* Payment plan */}
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Payment Plan</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-6">
+            {PAYMENT_PLAN_OPTIONS.map(opt => (
+              <PaymentOptionCard key={opt.value} opt={opt} selected={formData.modeOfPayment === opt.value} onSelect={() => set('modeOfPayment', opt.value)} />
+            ))}
           </div>
 
-          {/* Razorpay payment details — read-only */}
-          {(formData.razorpayPaid || formData.razorpayPaymentId) && (
-            <div className="mt-5 pt-4 border-t border-gray-100">
-              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">Online Payment (Razorpay)</p>
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 text-[11px]">
-                <div>
-                  <p className="font-semibold text-gray-500 mb-0.5">Status</p>
-                  <p className={`font-bold ${formData.razorpayPaid ? 'text-emerald-700' : 'text-amber-600'}`}>
-                    {formData.razorpayPaid ? 'Paid' : 'Not confirmed'}
-                  </p>
-                </div>
-                {formData.razorpayAmount != null && (
-                  <div>
-                    <p className="font-semibold text-gray-500 mb-0.5">Amount</p>
-                    <p className="font-bold text-gray-800">₹{Number(formData.razorpayAmount).toLocaleString('en-IN')}</p>
+          {/* Payment channel */}
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Payment Channel</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {PAYMENT_CHANNEL_OPTIONS.map(opt => (
+              <PaymentOptionCard key={opt.value} opt={opt} selected={formData.modeOfPayment === opt.value} onSelect={() => set('modeOfPayment', opt.value)} />
+            ))}
+          </div>
+
+          {/* Payment detail panels — shown when relevant to the saved data */}
+          {(formData.modeOfPayment === 'Pay at Office'
+            || formData.modeOfPayment === 'Direct UPI Transfer'
+            || formData.upiTransferConfirmed || formData.upiTransferReference
+            || formData.neftTransactionNumber
+            || formData.razorpayPaid || formData.razorpayPaymentId) && (
+            <div className="mt-6 pt-5 border-t border-gray-100 space-y-3">
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Payment Details</p>
+
+              {formData.modeOfPayment === 'Pay at Office' && (
+                <PaymentDetailPanel tone="amber" icon="office" title="Pay at Office — Staff Override">
+                  {payAtOfficeAudit?.enabledAt ? (
+                    <>
+                      Enabled by{' '}
+                      <span className="font-semibold">{payAtOfficeAudit.enabledByName || `User ${payAtOfficeAudit.enabledByUserId || ''}`.trim()}</span>
+                      {payAtOfficeAudit.enabledByEmail ? ` (${payAtOfficeAudit.enabledByEmail})` : ''}
+                      {' '}on {new Date(payAtOfficeAudit.enabledAt).toLocaleString('en-IN')}.
+                    </>
+                  ) : (
+                    'Audit will be recorded when you save this update.'
+                  )}
+                </PaymentDetailPanel>
+              )}
+
+              {formData.modeOfPayment === 'Direct UPI Transfer' && (
+                <PaymentDetailPanel tone="sky" icon="qr" title="Direct UPI Transfer">
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <Image
+                      src="/phot.jpg"
+                      alt="Direct UPI Transfer QR"
+                      width={72}
+                      height={90}
+                      className="rounded border border-slate-200 shrink-0"
+                    />
+                    <span className="text-[11px]">Account Ref: 037326012440007 | 54972698</span>
                   </div>
-                )}
-                {formData.razorpayPaymentId && (
-                  <div className="md:col-span-2">
-                    <p className="font-semibold text-gray-500 mb-0.5">Payment ID</p>
-                    <p className="font-mono text-gray-700 break-all">{formData.razorpayPaymentId}</p>
+                </PaymentDetailPanel>
+              )}
+
+              {(formData.upiTransferConfirmed || formData.upiTransferReference) && (
+                <PaymentDetailPanel tone="sky" icon="check" title="QR / UPI Payment">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${formData.upiTransferConfirmed ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                    <span>{formData.upiTransferConfirmed ? 'Student confirmed payment via QR' : 'Payment not yet confirmed'}</span>
                   </div>
-                )}
-                {formData.razorpayOrderId && (
-                  <div className="md:col-span-2">
-                    <p className="font-semibold text-gray-500 mb-0.5">Order ID</p>
-                    <p className="font-mono text-gray-700 break-all">{formData.razorpayOrderId}</p>
+                  {formData.upiTransferReference && (
+                    <div className="mt-1">
+                      <span className="font-semibold">UTR / Reference: </span>
+                      <span className="font-mono">{formData.upiTransferReference}</span>
+                    </div>
+                  )}
+                </PaymentDetailPanel>
+              )}
+
+              {formData.neftTransactionNumber && (
+                <PaymentDetailPanel tone="emerald" icon="bank" title="NEFT Payment">
+                  {formData.neftAmount != null && (
+                    <div>
+                      <span className="font-semibold">Amount: </span>
+                      <span>₹{Number(formData.neftAmount).toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                  <div className="mt-1">
+                    <span className="font-semibold">Transaction Number: </span>
+                    <span className="font-mono">{formData.neftTransactionNumber}</span>
                   </div>
-                )}
-              </div>
+                </PaymentDetailPanel>
+              )}
+
+              {(formData.razorpayPaid || formData.razorpayPaymentId) && (
+                <PaymentDetailPanel tone="emerald" icon="card" title="Online Payment (Razorpay)">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 mt-1">
+                    <div>
+                      <p className="font-semibold text-gray-500 mb-0.5">Status</p>
+                      <p className={`font-bold ${formData.razorpayPaid ? 'text-emerald-700' : 'text-amber-600'}`}>
+                        {formData.razorpayPaid ? 'Paid' : 'Not confirmed'}
+                      </p>
+                    </div>
+                    {formData.razorpayAmount != null && (
+                      <div>
+                        <p className="font-semibold text-gray-500 mb-0.5">Amount</p>
+                        <p className="font-bold text-gray-800">₹{Number(formData.razorpayAmount).toLocaleString('en-IN')}</p>
+                      </div>
+                    )}
+                    {formData.razorpayPaymentId && (
+                      <div className="md:col-span-2">
+                        <p className="font-semibold text-gray-500 mb-0.5">Payment ID</p>
+                        <p className="font-mono text-gray-700 break-all">{formData.razorpayPaymentId}</p>
+                      </div>
+                    )}
+                    {formData.razorpayOrderId && (
+                      <div className="md:col-span-2">
+                        <p className="font-semibold text-gray-500 mb-0.5">Order ID</p>
+                        <p className="font-mono text-gray-700 break-all">{formData.razorpayOrderId}</p>
+                      </div>
+                    )}
+                  </div>
+                </PaymentDetailPanel>
+              )}
             </div>
           )}
         </SectionCard>
