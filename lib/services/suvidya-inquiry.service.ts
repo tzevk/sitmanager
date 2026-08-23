@@ -1,6 +1,12 @@
 import type mysql from 'mysql2/promise';
 import { cached, getPool } from '@/lib/db';
 import { resolveInquiryTableName } from '@/lib/services/inquiry.service';
+import {
+  ensureInquiryPersonColumns,
+  resolvePersonForEnquiry,
+  detectReEnquiry,
+  recordIdentityConflict,
+} from '@/lib/services/person.service';
 
 const DEFAULT_SUVIDYA_INQUIRY_API_URL = 'https://suvidya.ac.in/admission/GetInquiry.php';
 
@@ -350,6 +356,15 @@ async function insertInquiry(
   const inquiryType = await fitStudentInquiryText(connection, inquiryTable, 'Inquiry_Type', payload.inquiryType);
   const qualification = await fitStudentInquiryText(connection, inquiryTable, 'Qualification', payload.qualification);
 
+  // No CRM user is present for an automated website-sync insert, so the person is
+  // resolved and linked automatically — never a blocking popup. A conflicting match
+  // (mobile -> one person, email -> another) leaves Person_Id unlinked and is flagged
+  // in person_identity_conflicts for manual review, rather than guessing which is right.
+  const resolved = await resolvePersonForEnquiry({ name: studentName, mobile, email });
+  const isReEnquiry = resolved.personId
+    ? await detectReEnquiry(resolved.personId, payload.courseId)
+    : false;
+
   const [result] = await connection.query(
     `INSERT INTO \`${inquiryTable}\` (
       Student_Name,
@@ -362,10 +377,12 @@ async function insertInquiry(
       Inquiry_Type,
       Course_Id,
       Qualification,
+      Person_Id,
+      Is_Re_Enquiry,
       IsDelete,
       Inquiry,
       Date_Added
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'Inquiry', NOW())`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'Inquiry', NOW())`,
     [
       studentName,
       mobile,
@@ -377,12 +394,24 @@ async function insertInquiry(
       inquiryType,
       payload.courseId,
       qualification,
+      resolved.personId,
+      isReEnquiry ? 1 : 0,
     ]
   );
 
   const insertId = Number((result as { insertId?: unknown }).insertId || 0);
   if (!Number.isFinite(insertId) || insertId <= 0) {
     throw new Error('Failed to create local inquiry for Suvidya record');
+  }
+
+  if (resolved.conflict) {
+    await recordIdentityConflict({
+      inquiryId: insertId,
+      mobilePersonId: resolved.mobilePersonId ?? null,
+      emailPersonId: resolved.emailPersonId ?? null,
+      mobile,
+      email,
+    });
   }
 
   await connection.query(
@@ -488,6 +517,7 @@ export async function syncSuvidyaInquiries(
     summary.totalRecordsHint = toPositiveInt(payload.total_records);
 
     const inquiryTable = await resolveInquiryTableName(pool);
+    await ensureInquiryPersonColumns(pool, inquiryTable);
 
     // Pre-validate records and batch-check which ones already exist.
     // This replaces N sequential SELECTs with a single query, which is the main

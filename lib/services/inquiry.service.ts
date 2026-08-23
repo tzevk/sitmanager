@@ -1,6 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { cached, getPool, invalidateCache } from '@/lib/db';
 import { getSlowRequestThresholdMs } from '@/lib/perf-log';
+import {
+  ensureInquiryPersonColumns,
+  resolvePersonForEnquiry,
+  detectReEnquiry,
+  recordIdentityConflict,
+} from '@/lib/services/person.service';
 
 let inquiryTableNameCache: string | null = null;
 let disciplineTableNameCache: string | null | undefined;
@@ -862,6 +868,17 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
   await ensureInquiryPreferredLocationColumn(pool, inquiryTable);
+  await ensureInquiryPersonColumns(pool, inquiryTable);
+
+  const resolved = await resolvePersonForEnquiry({
+    name: studentName,
+    mobile: data.Present_Mobile,
+    email: data.Email,
+  });
+  const isReEnquiry = resolved.personId
+    ? await detectReEnquiry(resolved.personId, data.Course_Id ?? null)
+    : false;
+
   const [result] = await pool.query(
     `INSERT INTO \`${inquiryTable}\` (
        Student_Name, Sex, DOB, Present_Mobile, Present_Mobile2,
@@ -869,8 +886,9 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
        OnlineState, Inquiry_Dt, Inquiry_From, Inquiry_Type,
        Course_Id, Batch_Category_id, Batch_Code,
        Qualification, Discipline, Percentage, Preferred_Location,
+       Person_Id, Is_Re_Enquiry,
        IsDelete, Inquiry, Date_Added
-     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'Inquiry',NOW())`,
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'Inquiry',NOW())`,
     [
       studentName,
       data.Sex ?? null,
@@ -892,9 +910,21 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
       data.Discipline ?? null,
       data.Percentage ?? null,
       data.Preferred_Location ?? null,
+      resolved.personId,
+      isReEnquiry ? 1 : 0,
     ]
   );
   const insertId = (result as any).insertId as number;
+
+  if (resolved.conflict) {
+    await recordIdentityConflict({
+      inquiryId: insertId,
+      mobilePersonId: resolved.mobilePersonId ?? null,
+      emailPersonId: resolved.emailPersonId ?? null,
+      mobile: data.Present_Mobile ?? null,
+      email: data.Email ?? null,
+    });
+  }
 
   if (data.Discussion?.trim()) {
     await pool.query(
@@ -1511,6 +1541,157 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       batchCategories,
       statusOptions,
     },
+  };
+}
+
+// ── Person-grouped listing ──────────────────────────────────────────────────────
+
+export interface InquiryPersonListParams {
+  page: number;
+  limit: number;
+  search?: string;
+  discipline?: string;
+  inquiryType?: string;
+  training?: string;
+  batchCategory?: string;
+  statusId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export interface InquiryPersonRow {
+  Person_Id: number | null;
+  Name: string | null;
+  Mobile: string | null;
+  Email: string | null;
+  EnquiryCount: number;
+  LatestEnquiryDate: string | null;
+  /** Set only for the Person_Id IS NULL pseudo-rows (legacy/unlinked/conflict-flagged rows). */
+  UnlinkedInquiryId?: number;
+}
+
+export interface InquiryPersonListResult {
+  rows: InquiryPersonRow[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+
+/**
+ * Groups the enquiry list by Person_Id — the "one row per person" Enquiry Master view.
+ * Deliberately a separate, simpler query path from listInquiries(): it supports the
+ * common filters (search/discipline/inquiryType/status/course/date range) but not the
+ * Meta-ads/Pune/duplicates/follow-up-due filters, which stay on the flat /api/inquiry
+ * view. Rows with no Person_Id (pre-backfill legacy data, or identity-conflict-flagged
+ * enquiries) are surfaced as their own single-enquiry rows so nothing disappears.
+ */
+export async function listInquiryPersons(params: InquiryPersonListParams): Promise<InquiryPersonListResult> {
+  const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
+  await ensureInquiryPersonColumns(pool, inquiryTable);
+  const disciplineTable = await resolveDisciplineTableName(pool);
+  const disciplineJoin = disciplineTable
+    ? `LEFT JOIN \`${disciplineTable}\` md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)`
+    : '';
+  const disciplineExpr = disciplineTable ? DISCIPLINE_NAME_EXPR : `NULLIF(TRIM(si.Discipline),'')`;
+
+  const {
+    page, limit, search = '', discipline = '', inquiryType = '',
+    training = '', batchCategory = '', statusId = '', dateFrom = '', dateTo = '',
+  } = params;
+
+  const needsCourseJoin = Boolean(search || training);
+  const courseJoin = needsCourseJoin ? 'LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id' : '';
+  const mobileExpressions = await resolveInquiryMobileExpressions(pool, inquiryTable);
+
+  const conditions: string[] = ['(si.IsDelete = 0 OR si.IsDelete IS NULL)'];
+  const queryParams: any[] = [];
+
+  if (search) {
+    conditions.push(
+      `(si.Student_Name LIKE ? OR si.Email LIKE ? OR ${mobileExpressions.searchable} LIKE ? OR c.Course_Name LIKE ?)`
+    );
+    const s = `%${search}%`;
+    queryParams.push(s, s, s, s);
+  }
+  if (discipline) {
+    conditions.push(`${disciplineExpr} = ?`);
+    queryParams.push(discipline);
+  }
+  if (inquiryType) {
+    conditions.push('si.Inquiry_Type = ?');
+    queryParams.push(inquiryType);
+  }
+  if (statusId) {
+    conditions.push('si.OnlineState = ?');
+    queryParams.push(parseInt(statusId));
+  }
+  if (training) {
+    conditions.push('c.Course_Name = ?');
+    queryParams.push(training);
+  }
+  if (batchCategory) {
+    conditions.push('si.Batch_Category_id = ?');
+    queryParams.push(batchCategory);
+  }
+  if (dateFrom) {
+    conditions.push('si.Inquiry_Dt >= ?');
+    queryParams.push(dateFrom);
+  }
+  if (dateTo) {
+    conditions.push('si.Inquiry_Dt <= ?');
+    queryParams.push(dateTo);
+  }
+
+  const whereClause = `WHERE (${conditions.join(') AND (')})`;
+  const offset = (page - 1) * limit;
+
+  // One grouped row per Person_Id, plus one pseudo-row per unlinked enquiry (grouped by
+  // its own Inquiry_Id so it never merges with anything else).
+  const groupKeyExpr = `COALESCE(CONCAT('p', si.Person_Id), CONCAT('i', si.Inquiry_Id))`;
+
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) as total FROM (
+       SELECT ${groupKeyExpr} as gk
+       FROM \`${inquiryTable}\` si
+       ${courseJoin}
+       ${disciplineJoin}
+       ${whereClause}
+       GROUP BY gk
+     ) t`,
+    queryParams
+  );
+  const total = Number((countRows as any[])[0]?.total || 0);
+
+  const [rows] = await pool.query(
+    `SELECT
+       si.Person_Id,
+       COALESCE(p.Name, si.Student_Name) as Name,
+       COALESCE(p.Mobile, ${mobileExpressions.primary}) as Mobile,
+       COALESCE(p.Email, si.Email) as Email,
+       COUNT(*) as EnquiryCount,
+       MAX(si.Inquiry_Dt) as LatestEnquiryDate,
+       MAX(si.Inquiry_Id) as UnlinkedInquiryId
+     FROM \`${inquiryTable}\` si
+     ${courseJoin}
+     ${disciplineJoin}
+     LEFT JOIN person_master p ON p.Person_Id = si.Person_Id
+     ${whereClause}
+     GROUP BY ${groupKeyExpr}
+     ORDER BY LatestEnquiryDate DESC
+     LIMIT ? OFFSET ?`,
+    [...queryParams, limit, offset]
+  );
+
+  return {
+    rows: (rows as any[]).map((r) => ({
+      Person_Id: r.Person_Id ?? null,
+      Name: r.Name ?? null,
+      Mobile: normalizeInquiryMobile(r.Mobile),
+      Email: r.Email ?? null,
+      EnquiryCount: Number(r.EnquiryCount || 0),
+      LatestEnquiryDate: r.LatestEnquiryDate ?? null,
+      ...(r.Person_Id == null ? { UnlinkedInquiryId: Number(r.UnlinkedInquiryId) } : {}),
+    })),
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   };
 }
 

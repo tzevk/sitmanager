@@ -81,6 +81,24 @@ interface InquiryRow {
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
 interface Filters { disciplines: string[]; inquiryTypes: string[]; trainings: string[]; batchCategories: { id: number; label: string }[]; statusOptions: { id: number; label: string }[]; }
 
+interface PersonRow {
+  Person_Id: number | null;
+  Name: string | null;
+  Mobile: string | null;
+  Email: string | null;
+  EnquiryCount: number;
+  LatestEnquiryDate: string | null;
+  UnlinkedInquiryId?: number;
+}
+
+interface PersonEnquiry {
+  Inquiry_Id: number;
+  CourseName: string | null;
+  Inquiry_Dt: string | null;
+  StatusLabel: string | null;
+  Is_Re_Enquiry?: number | null;
+}
+
 function statusPill(id: number | null, label: string) {
   if (id === 1 || label.toLowerCase() === 'new') return 'border-red-300 bg-white/70 text-red-700';
   return 'border-slate-400 bg-white/70 text-slate-800';
@@ -134,6 +152,62 @@ export default function InquiryPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Person-grouped view — the default "one row per person" Enquiry Master. The flat,
+  // fully-featured table (CSV export, Meta/Pune badges, etc.) stays available as a
+  // fallback so nothing about the existing view regresses.
+  const [viewMode, setViewMode] = useState<'grouped' | 'flat'>('grouped');
+  const [personRows, setPersonRows] = useState<PersonRow[]>([]);
+  const [personPagination, setPersonPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
+  const [personPage, setPersonPage] = useState(1);
+  const [personLoading, setPersonLoading] = useState(true);
+  const [expandedPersonId, setExpandedPersonId] = useState<number | null>(null);
+  const [expandedEnquiries, setExpandedEnquiries] = useState<Record<number, PersonEnquiry[]>>({});
+  const [expandLoading, setExpandLoading] = useState<number | null>(null);
+
+  const fetchPersonData = useCallback(async () => {
+    setPersonLoading(true);
+    try {
+      setError('');
+      const p = new URLSearchParams({ page: String(personPage), limit: '25' });
+      if (search) p.set('search', search);
+      if (inquiryType) p.set('inquiryType', inquiryType);
+      if (status) p.set('status', status);
+      if (dateFrom) p.set('dateFrom', dateFrom);
+      if (dateTo) p.set('dateTo', dateTo);
+      if (training) p.set('training', training);
+      if (batchCategory) p.set('batchCategory', batchCategory);
+      const res = await fetch(`/api/inquiry/persons?${p}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.details || data?.error || 'Failed to fetch enquiries');
+      setPersonRows(data.rows ?? []);
+      setPersonPagination(data.pagination ?? { page: 1, limit: 25, total: 0, totalPages: 0 });
+    } catch (e: unknown) {
+      console.error(e);
+      setPersonRows([]);
+      setError(e instanceof Error ? e.message : 'Failed to load enquiries');
+    }
+    setPersonLoading(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [personPage, fetchTrigger]);
+
+  useEffect(() => { if (viewMode === 'grouped') fetchPersonData(); }, [viewMode, fetchPersonData]);
+
+  const toggleExpand = async (personId: number | null) => {
+    if (personId == null) return;
+    if (expandedPersonId === personId) { setExpandedPersonId(null); return; }
+    setExpandedPersonId(personId);
+    if (expandedEnquiries[personId]) return;
+    setExpandLoading(personId);
+    try {
+      const res = await fetch(`/api/inquiry/persons/${personId}`);
+      const data = await res.json();
+      if (res.ok) setExpandedEnquiries((prev) => ({ ...prev, [personId]: data.enquiries ?? [] }));
+    } catch (err) {
+      console.error(err);
+    }
+    setExpandLoading(null);
+  };
+
   const fetchData = useCallback(async () => {
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -173,7 +247,7 @@ export default function InquiryPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, fetchTrigger]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { if (viewMode === 'flat') fetchData(); }, [viewMode, fetchData]);
 
   const syncUrl = (params: Record<string, string>) => {
     const p = new URLSearchParams();
@@ -193,14 +267,14 @@ export default function InquiryPage() {
       puneOnly,
     };
     syncUrl(params);
-    setPage(1); setFetchTrigger(t => t + 1);
+    setPage(1); setPersonPage(1); setExpandedPersonId(null); setFetchTrigger(t => t + 1);
   };
   const doClear = () => {
     router.replace(pathname, { scroll: false });
     setSearch(''); setInquiryType('');
     setStatus(''); setDateFrom(''); setDateTo(''); setTraining('');
     setBatchCategory(''); setPuneOnly('');
-    setPage(1); setFetchTrigger(t => t + 1);
+    setPage(1); setPersonPage(1); setExpandedPersonId(null); setFetchTrigger(t => t + 1);
   };
 
   // Built from the URL (last *applied* search via doSearch/doClear), not the live filter
@@ -271,8 +345,28 @@ export default function InquiryPage() {
       <PageHeader
         title="Inquiry Listing"
         breadcrumbs={[{ label: 'Admission Activity' }, { label: 'Inquiry' }]}
-        meta={`${pagination.total.toLocaleString()} records`}
+        meta={viewMode === 'grouped' ? `${personPagination.total.toLocaleString()} people` : `${pagination.total.toLocaleString()} records`}
         action={<>
+          <div className="flex items-center rounded-lg border border-slate-200 overflow-hidden text-xs font-bold">
+            <button
+              onClick={() => setViewMode('grouped')}
+              className={`px-2.5 py-1.5 transition-colors ${viewMode === 'grouped' ? 'bg-[#2E3093] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+            >
+              By Person
+            </button>
+            <button
+              onClick={() => setViewMode('flat')}
+              className={`px-2.5 py-1.5 transition-colors ${viewMode === 'flat' ? 'bg-[#2E3093] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+            >
+              Flat List
+            </button>
+          </div>
+          <GhostBtn href="/dashboard/inquiry/identity-conflicts">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.008M12 21a9 9 0 100-18 9 9 0 000 18z" />
+            </svg>
+            Identity Conflicts
+          </GhostBtn>
           <GhostBtn href="/public/inquiry" target="_blank" rel="noreferrer">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h6m0 0v6m0-6L10 16m-4 0h2a2 2 0 002-2V8a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" />
@@ -348,7 +442,121 @@ export default function InquiryPage() {
         </div>
       )}
 
-      {/* Table */}
+      {/* Person-grouped Enquiry Master — one row per person, expandable to full course history */}
+      {viewMode === 'grouped' && (
+        <div className="bg-white rounded-xl border border-slate-300 overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse [&_th]:border-r [&_th]:border-slate-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-slate-200 [&_td:last-child]:border-r-0">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wider text-slate-700 bg-slate-200 border-b border-slate-300">
+                  <th className="text-left py-2 px-3 font-bold w-8"></th>
+                  <th className="text-left py-2 px-3 font-bold">Name</th>
+                  <th className="text-left py-2 px-3 font-bold">Mobile</th>
+                  <th className="text-left py-2 px-3 font-bold">Email</th>
+                  <th className="text-center py-2 px-3 font-bold">Enquiries</th>
+                  <th className="text-left py-2 px-3 font-bold">Latest Enquiry</th>
+                  <th className="text-center py-2 px-3 font-bold">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {personLoading ? (
+                  <tr><td colSpan={7} className="py-10 text-center text-xs text-slate-400">Loading…</td></tr>
+                ) : personRows.length === 0 ? (
+                  <tr><td colSpan={7} className="py-10 text-center text-xs text-slate-400">No enquiries found.</td></tr>
+                ) : personRows.map((p) => {
+                  const key = p.Person_Id ?? `u${p.UnlinkedInquiryId}`;
+                  const isExpanded = p.Person_Id != null && expandedPersonId === p.Person_Id;
+                  const editHref = p.Person_Id == null
+                    ? `/dashboard/inquiry/add?editId=${p.UnlinkedInquiryId}&returnTo=${encodeURIComponent(buildReturnTo())}`
+                    : null;
+                  return (
+                    <>
+                      <tr
+                        key={key}
+                        className={`border-b border-slate-100 hover:bg-slate-50 ${p.Person_Id != null ? 'cursor-pointer' : ''}`}
+                        onClick={() => p.Person_Id != null && toggleExpand(p.Person_Id)}
+                      >
+                        <td className="py-2 px-3">
+                          {p.Person_Id != null && p.EnquiryCount > 1 && (
+                            <svg className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 font-semibold text-slate-700">{formatName(p.Name)}</td>
+                        <td className="py-2 px-3 text-slate-600">{p.Mobile || '—'}</td>
+                        <td className="py-2 px-3 text-slate-600">{p.Email || '—'}</td>
+                        <td className="py-2 px-3 text-center">
+                          <span className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold ${p.EnquiryCount > 1 ? 'bg-[#2E3093]/10 text-[#2E3093]' : 'bg-slate-100 text-slate-500'}`}>
+                            {p.EnquiryCount}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-slate-600">{formatDate(p.LatestEnquiryDate)}</td>
+                        <td className="py-2 px-3 text-center">
+                          {editHref && (
+                            <a href={editHref} onClick={(e) => e.stopPropagation()} className="text-[10px] font-bold text-[#2E3093] hover:underline">
+                              View / Edit
+                            </a>
+                          )}
+                        </td>
+                      </tr>
+                      {isExpanded && p.Person_Id != null && (
+                        <tr key={`${key}-expand`} className="bg-slate-50/70 border-b border-slate-100">
+                          <td colSpan={7} className="px-3 py-2">
+                            {expandLoading === p.Person_Id ? (
+                              <div className="text-[11px] text-slate-400 py-2 pl-6">Loading history…</div>
+                            ) : (
+                              <div className="pl-6 flex flex-col gap-1">
+                                {(expandedEnquiries[p.Person_Id] ?? []).map((e) => (
+                                  <div key={e.Inquiry_Id} className="flex items-center gap-2 text-[11px] py-1 border-b border-slate-100 last:border-b-0">
+                                    <span className="font-semibold text-slate-700 min-w-[180px]">{e.CourseName || 'No course'}</span>
+                                    <span className="text-slate-500 min-w-[100px]">{formatDate(e.Inquiry_Dt)}</span>
+                                    {Boolean(e.Is_Re_Enquiry) && (
+                                      <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-bold uppercase tracking-wide">Re-Enquiry</span>
+                                    )}
+                                    <span className="text-slate-400">{e.StatusLabel || 'New'}</span>
+                                    <a
+                                      href={`/dashboard/inquiry/add?editId=${e.Inquiry_Id}&returnTo=${encodeURIComponent(buildReturnTo())}`}
+                                      className="ml-auto text-[10px] font-bold text-[#2E3093] hover:underline"
+                                    >
+                                      View / Follow-up
+                                    </a>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {personPagination.totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-2 border-t border-slate-100 bg-slate-50/50">
+              <p className="text-[11px] text-slate-400">
+                {(personPagination.page - 1) * personPagination.limit + 1}–{Math.min(personPagination.page * personPagination.limit, personPagination.total)} of {personPagination.total.toLocaleString()}
+              </p>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setPersonPage(1)} disabled={personPagination.page <= 1} className="px-2 py-0.5 text-[11px] rounded border border-slate-200 hover:bg-white disabled:opacity-30 font-semibold text-slate-600">First</button>
+                <button onClick={() => setPersonPage(p => Math.max(1, p - 1))} disabled={personPagination.page <= 1} className="px-1.5 py-0.5 rounded border border-slate-200 hover:bg-white disabled:opacity-30 text-slate-600">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <button onClick={() => setPersonPage(p => Math.min(personPagination.totalPages, p + 1))} disabled={personPagination.page >= personPagination.totalPages} className="px-1.5 py-0.5 rounded border border-slate-200 hover:bg-white disabled:opacity-30 text-slate-600">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </button>
+                <button onClick={() => setPersonPage(personPagination.totalPages)} disabled={personPagination.page >= personPagination.totalPages} className="px-2 py-0.5 text-[11px] rounded border border-slate-200 hover:bg-white disabled:opacity-30 font-semibold text-slate-600">Last</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Table (flat, legacy view) */}
+      {viewMode === 'flat' && (
       <div className="bg-white rounded-xl border border-slate-300 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse [&_th]:border-r [&_th]:border-slate-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-slate-200 [&_td:last-child]:border-r-0">
@@ -544,6 +752,7 @@ export default function InquiryPage() {
           </div>
         )}
       </div>
+      )}
 
       </>)}
     </div>

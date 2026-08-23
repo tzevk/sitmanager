@@ -4,6 +4,12 @@ import { getPool } from '@/lib/db';
 import { sendPublicInquirySubmissionEmail } from '@/lib/mailer';
 import { publicFormRateLimiter } from '@/lib/rate-limit';
 import { resolveInquiryTableName } from '@/lib/services/inquiry.service';
+import {
+  ensureInquiryPersonColumns,
+  resolvePersonForEnquiry,
+  detectReEnquiry,
+  recordIdentityConflict,
+} from '@/lib/services/person.service';
 
 /**
  * Public endpoint — no auth required.
@@ -178,13 +184,25 @@ export async function POST(req: NextRequest) {
     }
 
     const inquiryTable = await resolveInquiryTableName(pool);
+    await ensureInquiryPersonColumns(pool, inquiryTable);
+
+    // No CRM user is present for a public website submission, so the person is
+    // resolved and linked automatically — never a blocking popup. A conflicting
+    // match (mobile -> one person, email -> another) leaves Person_Id unlinked and
+    // is flagged in person_identity_conflicts for manual review.
+    const resolved = await resolvePersonForEnquiry({ name: studentName, mobile, email });
+    const isReEnquiry = resolved.personId
+      ? await detectReEnquiry(resolved.personId, courseId)
+      : false;
+
     const [result] = await pool.query(
       `INSERT INTO \`${inquiryTable}\` (
         Student_Name, Sex, DOB, Present_Mobile, Email,
         Nationality, Discussion, OnlineState, Inquiry_Dt, Inquiry_From, Inquiry_Type,
         Course_Id, Qualification, Discipline, Percentage,
+        Person_Id, Is_Re_Enquiry,
         IsDelete, Inquiry, Date_Added
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, 0, 'Inquiry', NOW())`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, 0, 'Inquiry', NOW())`,
       [
         studentName,
         gender,
@@ -200,10 +218,22 @@ export async function POST(req: NextRequest) {
         qualification,
         discipline,
         percentage,
+        resolved.personId,
+        isReEnquiry ? 1 : 0,
       ]
     );
 
     const insertedId = (result as any).insertId;
+
+    if (resolved.conflict) {
+      await recordIdentityConflict({
+        inquiryId: insertedId,
+        mobilePersonId: resolved.mobilePersonId ?? null,
+        emailPersonId: resolved.emailPersonId ?? null,
+        mobile,
+        email,
+      });
+    }
 
     try {
       await sendPublicInquirySubmissionEmail({

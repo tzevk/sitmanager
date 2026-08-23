@@ -164,6 +164,11 @@ export default function AddInquiryPage() {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [duplicateCheck, setDuplicateCheck] = useState<{
+    personName: string | null;
+    matches: { Inquiry_Id: number; CourseName: string | null; Inquiry_Dt: string | null; StatusLabel: string | null }[];
+  } | null>(null);
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   const [showMailModal, setShowMailModal] = useState(false);
   const [sendingMail, setSendingMail] = useState(false);
   const [loggingContact, setLoggingContact] = useState<string | null>(null);
@@ -254,7 +259,7 @@ export default function AddInquiryPage() {
     opts?.statuses.find(s => s.id === statusId)?.label?.toLowerCase() ?? ''
   );
 
-  const handleSave = async () => {
+  const handleSave = async (skipDuplicateCheck = false) => {
     if (!Number.isInteger(statusId) || statusId <= 0) { setError('Status is required'); return; }
     if (!isStatusOnlySave) {
       if (!name.trim()) { setError('Name is required'); return; }
@@ -262,7 +267,28 @@ export default function AddInquiryPage() {
       if (!inquiryType.trim()) { setError('How They Know About SIT is required'); return; }
       if (!batchCode.trim()) { setError('Batch Code is required'); return; }
     }
-    setError(''); setSaving(true);
+    setError('');
+
+    if (!editId && !skipDuplicateCheck && (mobile.trim() || email.trim())) {
+      setCheckingDuplicate(true);
+      try {
+        const p = new URLSearchParams();
+        if (mobile.trim()) p.set('mobile', mobile.trim());
+        if (email.trim()) p.set('email', email.trim());
+        const res = await fetch(`/api/inquiry/check-person?${p}`);
+        const data = await res.json();
+        if (res.ok && data.matches?.length > 0) {
+          setDuplicateCheck({ personName: data.personName, matches: data.matches });
+          setCheckingDuplicate(false);
+          return;
+        }
+      } catch {
+        // Best-effort check — fall through to save if it fails.
+      }
+      setCheckingDuplicate(false);
+    }
+
+    setSaving(true);
     try {
       const res = await fetch('/api/inquiry', {
         method: editId ? 'PUT' : 'POST',
@@ -467,9 +493,9 @@ export default function AddInquiryPage() {
             );
           })}
           {contactLogged && <span className="text-[10px] font-semibold text-emerald-200">Logged</span>}
-          <button onClick={handleSave} disabled={saving}
+          <button onClick={() => handleSave()} disabled={saving || checkingDuplicate}
             className="flex items-center gap-1 bg-white text-[#2E3093] px-3 py-1 rounded-lg text-xs font-bold hover:bg-white/90 transition-colors disabled:opacity-60">
-            {saving
+            {saving || checkingDuplicate
               ? <div className="w-3 h-3 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
               : <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
             {editId ? 'Update' : 'Save'}
@@ -761,6 +787,44 @@ export default function AddInquiryPage() {
           </div>
         )}
       </div>
+
+      {/* Duplicate-person confirmation */}
+      {duplicateCheck && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
+            <div className="px-5 py-3 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5]">
+              <h3 className="text-sm font-bold text-white">Existing Enquiry Found</h3>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-slate-600">
+                This person{duplicateCheck.personName ? ` (${duplicateCheck.personName})` : ''} has already enquired with us. Do you want to add a new enquiry?
+              </p>
+              <div className="border border-slate-100 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                {duplicateCheck.matches.map((m) => (
+                  <div key={m.Inquiry_Id} className="px-3 py-2 border-b border-slate-100 last:border-b-0 text-xs">
+                    <span className="font-semibold text-slate-700">{m.CourseName || 'No course'}</span>
+                    <span className="text-slate-400"> — {fmtDate(m.Inquiry_Dt)}{m.StatusLabel ? ` · ${m.StatusLabel}` : ''}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setDuplicateCheck(null)}
+                className="px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-lg text-slate-600 hover:bg-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setDuplicateCheck(null); handleSave(true); }}
+                className="px-3 py-1.5 text-xs font-bold bg-[#2E3093] hover:bg-[#252780] text-white rounded-lg transition-colors"
+              >
+                Yes – Add Enquiry
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mail Modal */}
       {showMailModal && editId && (
