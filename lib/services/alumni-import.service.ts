@@ -34,21 +34,33 @@ export interface AlumniCsvRow {
   trainingProgram: string;
 }
 
-export interface AlumniMatch extends AlumniCsvRow {
-  matchType: 'phone' | 'name';
+/** One row per active student — the primary result: does this student have an alumni
+ * portal account (found in the CSV) or not, plus their details either way. */
+export interface StudentAccountRow {
   studentId: number;
   studentName: string;
+  mobile: string | null;
+  email: string | null;
+  hasAccount: boolean;
+  matchType: 'phone' | 'name' | null;
   currentAlumniStatus: string | null;
+  // Populated only when hasAccount is true — details pulled from their matched CSV row.
+  csvEmail: string | null;
+  csvSecondaryEmail: string | null;
+  csvDob: string | null;
+  csvBatchNumber: string | null;
+  csvTrainingProgram: string | null;
 }
 
 export interface AlumniPreviewResult {
   totalRows: number;
-  matches: AlumniMatch[];
-  unmatched: AlumniCsvRow[];
-  /** Active students with no matching row anywhere in this CSV — i.e. no alumni portal
-   * account found for them. These get explicitly marked 'No' on apply (see
-   * applyAlumniMatches), not just left blank. */
+  totalStudents: number;
+  matchedCount: number;
   noAccountCount: number;
+  students: StudentAccountRow[];
+  /** CSV rows that didn't match any current student (e.g. not yet admitted, or a
+   * mismatched name/phone) — kept for reference, not the primary view. */
+  unmatchedCsvRows: AlumniCsvRow[];
 }
 
 /** Parses the alumni CSV/XLSX export. Auto-detects the header row (the export has a
@@ -110,6 +122,7 @@ interface StudentLookupRow {
   LName: string | null;
   Present_Mobile: string | null;
   Present_Mobile2: string | null;
+  Email: string | null;
   Alumni_Registered: string | null;
 }
 
@@ -121,12 +134,14 @@ function nameKey(first: string, last: string): string {
  * this export), falling back to an exact first+last name match when phone is missing,
  * ambiguous (shared by multiple students), or doesn't match. Read-only.
  *
- * Loads a lean student roster once and matches in memory — no per-row DB query, so this
- * stays fast regardless of file size. */
+ * Returns one row per active student — has an alumni account or not, with details
+ * either way — which is the primary thing this screen answers. Loads a lean student
+ * roster once and matches in memory, no per-row DB query, so this stays fast
+ * regardless of file size. */
 export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPreviewResult> {
   const pool = getPool();
   const [studentRows] = await pool.query(
-    `SELECT Student_Id, Student_Name, FName, LName, Present_Mobile, Present_Mobile2, Alumni_Registered
+    `SELECT Student_Id, Student_Name, FName, LName, Present_Mobile, Present_Mobile2, Email, Alumni_Registered
      FROM student_master
      WHERE (IsDelete = 0 OR IsDelete IS NULL)`
   );
@@ -150,8 +165,10 @@ export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPrevi
     }
   }
 
-  const matches: AlumniMatch[] = [];
-  const unmatched: AlumniCsvRow[] = [];
+  // studentId -> matched CSV row + how it matched. First match wins if the same
+  // student appears more than once in the CSV (e.g. re-registered).
+  const matchByStudentId = new Map<number, { row: AlumniCsvRow; matchType: 'phone' | 'name' }>();
+  const unmatchedCsvRows: AlumniCsvRow[] = [];
 
   for (const row of rows) {
     let matched: StudentLookupRow | null = null;
@@ -175,22 +192,46 @@ export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPrevi
     }
 
     if (matched && matchType) {
-      matches.push({
-        ...row,
-        matchType,
-        studentId: matched.Student_Id,
-        studentName: matched.Student_Name,
-        currentAlumniStatus: matched.Alumni_Registered,
-      });
+      if (!matchByStudentId.has(matched.Student_Id)) {
+        matchByStudentId.set(matched.Student_Id, { row, matchType });
+      }
     } else {
-      unmatched.push(row);
+      unmatchedCsvRows.push(row);
     }
   }
 
-  const matchedStudentIds = new Set(matches.map((m) => m.studentId));
-  const noAccountCount = students.filter((s) => !matchedStudentIds.has(s.Student_Id)).length;
+  const students_: StudentAccountRow[] = students.map((s) => {
+    const match = matchByStudentId.get(s.Student_Id);
+    return {
+      studentId: s.Student_Id,
+      studentName: s.Student_Name,
+      mobile: s.Present_Mobile,
+      email: s.Email,
+      hasAccount: Boolean(match),
+      matchType: match?.matchType ?? null,
+      currentAlumniStatus: s.Alumni_Registered,
+      csvEmail: match?.row.email || null,
+      csvSecondaryEmail: match?.row.secondaryEmail || null,
+      csvDob: match?.row.dob || null,
+      csvBatchNumber: match?.row.batchNumber || null,
+      csvTrainingProgram: match?.row.trainingProgram || null,
+    };
+  });
 
-  return { totalRows: rows.length, matches, unmatched, noAccountCount };
+  // Accounts first, then by name, so the "has account" rows are easy to scan at a glance.
+  students_.sort((a, b) => {
+    if (a.hasAccount !== b.hasAccount) return a.hasAccount ? -1 : 1;
+    return a.studentName.localeCompare(b.studentName);
+  });
+
+  return {
+    totalRows: rows.length,
+    totalStudents: students.length,
+    matchedCount: matchByStudentId.size,
+    noAccountCount: students.length - matchByStudentId.size,
+    students: students_,
+    unmatchedCsvRows,
+  };
 }
 
 let importLogTableReady = false;
