@@ -45,6 +45,10 @@ export interface AlumniPreviewResult {
   totalRows: number;
   matches: AlumniMatch[];
   unmatched: AlumniCsvRow[];
+  /** Active students with no matching row anywhere in this CSV — i.e. no alumni portal
+   * account found for them. These get explicitly marked 'No' on apply (see
+   * applyAlumniMatches), not just left blank. */
+  noAccountCount: number;
 }
 
 /** Parses the alumni CSV/XLSX export. Auto-detects the header row (the export has a
@@ -183,7 +187,10 @@ export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPrevi
     }
   }
 
-  return { totalRows: rows.length, matches, unmatched };
+  const matchedStudentIds = new Set(matches.map((m) => m.studentId));
+  const noAccountCount = students.filter((s) => !matchedStudentIds.has(s.Student_Id)).length;
+
+  return { totalRows: rows.length, matches, unmatched, noAccountCount };
 }
 
 let importLogTableReady = false;
@@ -205,15 +212,20 @@ async function ensureImportLogTable(pool: ReturnType<typeof getPool>): Promise<v
   importLogTableReady = true;
 }
 
-/** Marks the given students as registered alumni. Idempotent — already-'Yes' students
- * are a no-op. Logs one summary row per apply for basic audit traceability. */
+/** Marks the given students as registered alumni ('Yes'), and — unless disabled —
+ * everyone else who was never checked before ('No', since they have no matching
+ * account anywhere in the CSV) as explicitly not registered. Idempotent: only touches
+ * rows that actually need to change, and never overwrites an existing explicit status
+ * (e.g. set manually via the Student Master edit page) with 'No'. Logs one summary
+ * row per apply for basic audit traceability. */
 export async function applyAlumniMatches(opts: {
   studentIds: number[];
   fileName?: string | null;
   totalRows: number;
   matchedCount: number;
   importedBy?: number | null;
-}): Promise<{ updatedCount: number }> {
+  markOthersAsNo?: boolean;
+}): Promise<{ updatedCount: number; markedNoCount: number }> {
   const pool = getPool();
   await ensureAlumniColumn(pool);
   await ensureImportLogTable(pool);
@@ -232,11 +244,27 @@ export async function applyAlumniMatches(opts: {
     updatedCount = Number(result.affectedRows || 0);
   }
 
+  let markedNoCount = 0;
+  if (opts.markOthersAsNo) {
+    const excludeClause = uniqueIds.length > 0
+      ? `AND Student_Id NOT IN (${uniqueIds.map(() => '?').join(',')})`
+      : '';
+    const [noResult] = await pool.query<any>(
+      `UPDATE student_master
+       SET Alumni_Registered = 'No'
+       WHERE (IsDelete = 0 OR IsDelete IS NULL)
+         AND Alumni_Registered IS NULL
+         ${excludeClause}`,
+      uniqueIds
+    );
+    markedNoCount = Number(noResult.affectedRows || 0);
+  }
+
   await pool.query(
     `INSERT INTO alumni_import_log (File_Name, Total_Rows, Matched_Count, Applied_Count, Imported_By)
      VALUES (?, ?, ?, ?, ?)`,
     [opts.fileName || null, opts.totalRows, opts.matchedCount, uniqueIds.length, opts.importedBy || null]
   );
 
-  return { updatedCount };
+  return { updatedCount, markedNoCount };
 }

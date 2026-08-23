@@ -29,6 +29,7 @@ interface PreviewResult {
   matches: AlumniMatch[];
   unmatched: AlumniCsvRow[];
   fileName: string;
+  noAccountCount: number;
 }
 
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] transition-colors';
@@ -41,7 +42,8 @@ export default function AlumniAssociationPage() {
   const [error, setError] = useState('');
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [appliedCount, setAppliedCount] = useState<number | null>(null);
+  const [markOthersAsNo, setMarkOthersAsNo] = useState(true);
+  const [appliedCount, setAppliedCount] = useState<{ updatedCount: number; markedNoCount: number } | null>(null);
 
   const runPreview = async () => {
     if (!file) { setError('Choose a CSV file first'); return; }
@@ -76,7 +78,7 @@ export default function AlumniAssociationPage() {
   };
 
   const applySelected = async () => {
-    if (!preview || selected.size === 0) return;
+    if (!preview || (selected.size === 0 && !markOthersAsNo)) return;
     setError('');
     setApplying(true);
     try {
@@ -88,11 +90,12 @@ export default function AlumniAssociationPage() {
           fileName: preview.fileName,
           totalRows: preview.totalRows,
           matchedCount: preview.matches.length,
+          markOthersAsNo,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Failed to apply');
-      setAppliedCount(data.updatedCount);
+      setAppliedCount({ updatedCount: data.updatedCount, markedNoCount: data.markedNoCount });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to apply');
     } finally {
@@ -136,7 +139,7 @@ export default function AlumniAssociationPage() {
 
       {preview && (
         <>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-5 gap-2">
             <div className="bg-white rounded-xl border border-slate-200 p-3">
               <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Total Rows</div>
               <div className="text-lg font-black text-slate-700">{preview.totalRows}</div>
@@ -150,14 +153,19 @@ export default function AlumniAssociationPage() {
               <div className="text-lg font-black text-amber-600">{nameMatches.length}</div>
             </div>
             <div className="bg-white rounded-xl border border-slate-200 p-3">
-              <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Unmatched</div>
+              <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Unmatched CSV Rows</div>
               <div className="text-lg font-black text-slate-400">{preview.unmatched.length}</div>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-3">
+              <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">No Alumni Account</div>
+              <div className="text-lg font-black text-red-500">{preview.noAccountCount}</div>
             </div>
           </div>
 
           {appliedCount != null && (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 font-semibold">
-              Applied — {appliedCount} student{appliedCount === 1 ? '' : 's'} marked as registered alumni.
+              Applied — {appliedCount.updatedCount} student{appliedCount.updatedCount === 1 ? '' : 's'} marked Yes (registered alumni),{' '}
+              {appliedCount.markedNoCount} student{appliedCount.markedNoCount === 1 ? '' : 's'} marked No (no account found).
             </div>
           )}
 
@@ -216,16 +224,26 @@ export default function AlumniAssociationPage() {
                 </tbody>
               </table>
             </div>
-            {canUpdate && preview.matches.length > 0 && (
-              <div className="flex items-center justify-between px-4 py-2 border-t border-slate-100 bg-slate-50/50">
-                <p className="text-[11px] text-slate-400">{selected.size} selected</p>
-                <button
-                  onClick={applySelected}
-                  disabled={applying || selected.size === 0}
-                  className="px-3 py-1.5 text-xs font-bold bg-[#2E3093] hover:bg-[#252780] text-white rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {applying ? 'Applying…' : `Apply Selected (${selected.size})`}
-                </button>
+            {canUpdate && (
+              <div className="flex items-center justify-between px-4 py-2 border-t border-slate-100 bg-slate-50/50 gap-3">
+                <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={markOthersAsNo}
+                    onChange={(e) => setMarkOthersAsNo(e.target.checked)}
+                  />
+                  Also mark the {preview.noAccountCount} student{preview.noAccountCount === 1 ? '' : 's'} with no alumni account as No
+                </label>
+                <div className="flex items-center gap-3">
+                  <p className="text-[11px] text-slate-400">{selected.size} selected</p>
+                  <button
+                    onClick={applySelected}
+                    disabled={applying || (selected.size === 0 && !markOthersAsNo)}
+                    className="px-3 py-1.5 text-xs font-bold bg-[#2E3093] hover:bg-[#252780] text-white rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {applying ? 'Applying…' : `Apply (${selected.size} Yes${markOthersAsNo ? `, ${preview.noAccountCount} No` : ''})`}
+                  </button>
+                </div>
               </div>
             )}
           </div>

@@ -14,8 +14,9 @@ export async function POST(req: NextRequest) {
     const studentIds = Array.isArray(body?.studentIds)
       ? body.studentIds.map((id: unknown) => Number(id)).filter((id: number) => Number.isInteger(id) && id > 0)
       : [];
+    const markOthersAsNo = body?.markOthersAsNo !== false;
 
-    if (studentIds.length === 0) {
+    if (studentIds.length === 0 && !markOthersAsNo) {
       return NextResponse.json({ error: 'No students selected' }, { status: 400 });
     }
 
@@ -25,6 +26,7 @@ export async function POST(req: NextRequest) {
       totalRows: Number(body?.totalRows) || studentIds.length,
       matchedCount: Number(body?.matchedCount) || studentIds.length,
       importedBy: auth.session.userId,
+      markOthersAsNo,
     });
 
     return NextResponse.json({ success: true, ...result });
