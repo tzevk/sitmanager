@@ -39,11 +39,16 @@ export interface AlumniCsvRow {
 export interface StudentAccountRow {
   studentId: number;
   studentName: string;
+  batchCode: string | null;
   mobile: string | null;
   email: string | null;
   hasAccount: boolean;
   matchType: 'phone' | 'name' | null;
   currentAlumniStatus: string | null;
+  /** True if a receipted "One Time Membership Fees - Sitians Alumni Association" row
+   * already exists for this student in s_fees_mst — i.e. the alumni fee receipt has
+   * already been generated, independent of whether they have a portal account. */
+  hasReceipt: boolean;
   // Populated only when hasAccount is true — details pulled from their matched CSV row.
   csvEmail: string | null;
   csvSecondaryEmail: string | null;
@@ -57,6 +62,7 @@ export interface AlumniPreviewResult {
   totalStudents: number;
   matchedCount: number;
   noAccountCount: number;
+  batchCodes: string[];
   students: StudentAccountRow[];
   /** CSV rows that didn't match any current student (e.g. not yet admitted, or a
    * mismatched name/phone) — kept for reference, not the primary view. */
@@ -118,6 +124,7 @@ export function parseAlumniCsv(buffer: Buffer): AlumniCsvRow[] {
 interface StudentLookupRow {
   Student_Id: number;
   Student_Name: string;
+  Batch_Code: string | null;
   FName: string | null;
   LName: string | null;
   Present_Mobile: string | null;
@@ -141,11 +148,32 @@ function nameKey(first: string, last: string): string {
 export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPreviewResult> {
   const pool = getPool();
   const [studentRows] = await pool.query(
-    `SELECT Student_Id, Student_Name, FName, LName, Present_Mobile, Present_Mobile2, Email, Alumni_Registered
+    `SELECT Student_Id, Student_Name, Batch_Code, FName, LName, Present_Mobile, Present_Mobile2, Email, Alumni_Registered
      FROM student_master
      WHERE (IsDelete = 0 OR IsDelete IS NULL)`
   );
   const students = studentRows as StudentLookupRow[];
+
+  // Bounded to this batch of active students — one flat IN query, not a per-student
+  // lookup, so this stays cheap regardless of roster size.
+  const studentIds = students.map((s) => s.Student_Id);
+  const receiptStudentIds = new Set<number>();
+  if (studentIds.length > 0) {
+    const placeholders = studentIds.map(() => '?').join(',');
+    const [receiptRows] = await pool.query(
+      `SELECT DISTINCT Student_Id
+       FROM s_fees_mst
+       WHERE (IsDelete = 0 OR IsDelete IS NULL)
+         AND Fees_Code IS NOT NULL
+         AND LOWER(Notes) LIKE ?
+         AND Student_Id IN (${placeholders})`,
+      // Matches the same substring the rest of the codebase checks for this fee
+      // (see has_membership_debit in lib/fee-balance.ts) rather than the full label,
+      // since historical Notes text isn't always the exact MEMBERSHIP_FEE_LABEL string.
+      ['%one time membership fees%', ...studentIds]
+    );
+    for (const r of receiptRows as { Student_Id: number }[]) receiptStudentIds.add(r.Student_Id);
+  }
 
   const byMobile = new Map<string, StudentLookupRow[]>();
   const byName = new Map<string, StudentLookupRow[]>();
@@ -205,11 +233,13 @@ export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPrevi
     return {
       studentId: s.Student_Id,
       studentName: s.Student_Name || '',
+      batchCode: s.Batch_Code,
       mobile: s.Present_Mobile,
       email: s.Email,
       hasAccount: Boolean(match),
       matchType: match?.matchType ?? null,
       currentAlumniStatus: s.Alumni_Registered,
+      hasReceipt: receiptStudentIds.has(s.Student_Id),
       csvEmail: match?.row.email || null,
       csvSecondaryEmail: match?.row.secondaryEmail || null,
       csvDob: match?.row.dob || null,
@@ -224,11 +254,15 @@ export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPrevi
     return a.studentName.localeCompare(b.studentName);
   });
 
+  const batchCodes = [...new Set(students.map((s) => s.Batch_Code).filter((b): b is string => Boolean(b)))]
+    .sort((a, b) => a.localeCompare(b));
+
   return {
     totalRows: rows.length,
     totalStudents: students.length,
     matchedCount: matchByStudentId.size,
     noAccountCount: students.length - matchByStudentId.size,
+    batchCodes,
     students: students_,
     unmatchedCsvRows,
   };
