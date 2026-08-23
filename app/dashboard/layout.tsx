@@ -47,6 +47,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Admission Activity > Meta Leads': '/dashboard/meta-leads',
   'Admission Activity > Online Admission': '/dashboard/online-admission',
   'Admission Activity > Student': '/dashboard/student',
+  'Admission Activity > Alumni Association': '/dashboard/alumni-association',
   'Monitoring > Weekly Report': '/dashboard/monitoring',
   'Corporate Training > Corporate Inquiry': '/dashboard/corporate-inquiry',
   'Corporate Training > Training Execution': '/dashboard/corporate-inquiry/execution',
@@ -134,6 +135,7 @@ const SUB_MENUS: Record<string, string[]> = {
     'Meta Leads',
     'Online Admission',
     'Student',
+    'Alumni Association',
   ],
   'Monitoring': [
     'Weekly Report',
@@ -273,6 +275,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Admission Activity > Meta Leads': ['inquiry.view', 'meta_lead.view'],
   'Admission Activity > Online Admission': ['online_admission.view'],
   'Admission Activity > Student': ['student.view'],
+  'Admission Activity > Alumni Association': ['alumni.view'],
   'Monitoring > Weekly Report': ['monitoring.view'],
   'Corporate Training > Corporate Inquiry': ['corporate_inquiry.view'],
   'Corporate Training > Training Execution': ['corporate_inquiry.view'],
@@ -466,7 +469,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     if (path.startsWith('/dashboard/corporate-inquiry')) return 'Corporate Training';
     if (path.startsWith('/dashboard/utility')) return 'Utility';
     if (path.startsWith('/dashboard/support')) return 'Support';
-    if (path.startsWith('/dashboard/inquiry') || path.startsWith('/dashboard/meta-leads') || path.startsWith('/dashboard/online-admission') || path.startsWith('/dashboard/student')) return 'Admission Activity';
+    if (path.startsWith('/dashboard/inquiry') || path.startsWith('/dashboard/meta-leads') || path.startsWith('/dashboard/online-admission') || path.startsWith('/dashboard/student') || path.startsWith('/dashboard/alumni-association')) return 'Admission Activity';
     if (path.startsWith('/dashboard/monitoring')) return 'Monitoring';
     if (path.startsWith('/dashboard/placement') || path.startsWith('/dashboard/cv-shortlisted')) return 'Placement';
     return 'Dashboard';

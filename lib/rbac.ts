@@ -140,6 +140,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       },
       ...createPermissions('online_admission', 'Online Admission'),
       ...createPermissions('student', 'Student'),
+      ...createPermissions('alumni', 'Alumni Association'),
     ],
   },
 
