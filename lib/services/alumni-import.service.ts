@@ -26,8 +26,19 @@ export interface AlumniMatch {
   csvName: string;
   csvPhone: string;
   matchType: 'phone' | 'name';
+  // Same fields the Student Master list (app/dashboard/student/page.tsx) shows, so the
+  // import preview reads as the familiar student table rather than a bespoke layout.
   studentId: number;
   studentName: string;
+  batchCode: string | null;
+  presentAddress: string | null;
+  email: string | null;
+  mobile: string | null;
+  paymentType: string | null;
+  totalFees: number | null;
+  paidFees: number | null;
+  balanceFees: number | null;
+  isActive: number | null;
   currentAlumniStatus: string | null;
 }
 
@@ -87,10 +98,31 @@ interface StudentLookupRow {
   Present_Mobile: string | null;
   Present_Mobile2: string | null;
   Alumni_Registered: string | null;
+  Batch_Code: string | null;
+  Present_Address: string | null;
+  Email: string | null;
+  IsActive: number | null;
+  Payment_Type: string | null;
 }
 
 function nameKey(first: string, last: string): string {
   return `${first.trim().toLowerCase()}|${last.trim().toLowerCase()}`;
+}
+
+/** Runs async work over items with limited concurrency — avoids firing hundreds of
+ * simultaneous queries at once against the shared DB (see the per-student fee lookup
+ * below, one of the few places here that still needs a per-row query). */
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
 }
 
 /** Matches CSV rows against student_master: phone first (primary/most reliable key in
@@ -103,9 +135,23 @@ function nameKey(first: string, last: string): string {
 export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPreviewResult> {
   const pool = getPool();
   const [studentRows] = await pool.query(
-    `SELECT Student_Id, Student_Name, FName, LName, Present_Mobile, Present_Mobile2, Alumni_Registered
-     FROM student_master
-     WHERE (IsDelete = 0 OR IsDelete IS NULL)`
+    `SELECT
+       sm.Student_Id, sm.Student_Name, sm.FName, sm.LName,
+       sm.Present_Mobile, sm.Present_Mobile2, sm.Alumni_Registered,
+       sm.Batch_Code, sm.Present_Address, sm.Email, sm.IsActive,
+       la.Payment_Type
+     FROM student_master sm
+     LEFT JOIN (
+       SELECT am.Student_Id, am.Payment_Type, am.Admission_Id
+       FROM admission_master am
+       INNER JOIN (
+         SELECT Student_Id, MAX(Admission_Id) AS Admission_Id
+         FROM admission_master
+         WHERE IsDelete = 0 AND IsActive = 1
+         GROUP BY Student_Id
+       ) latest ON latest.Admission_Id = am.Admission_Id
+     ) la ON la.Student_Id = sm.Student_Id
+     WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL)`
   );
   const students = studentRows as StudentLookupRow[];
 
@@ -127,7 +173,7 @@ export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPrevi
     }
   }
 
-  const matches: AlumniMatch[] = [];
+  const pending: { row: AlumniCsvRow; student: StudentLookupRow; matchType: 'phone' | 'name' }[] = [];
   const unmatched: AlumniCsvRow[] = [];
 
   for (const row of rows) {
@@ -152,18 +198,36 @@ export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPrevi
     }
 
     if (matched && matchType) {
-      matches.push({
-        csvName: row.csvName,
-        csvPhone: row.csvPhone,
-        matchType,
-        studentId: matched.Student_Id,
-        studentName: matched.Student_Name,
-        currentAlumniStatus: matched.Alumni_Registered,
-      });
+      pending.push({ row, student: matched, matchType });
     } else {
       unmatched.push(row);
     }
   }
+
+  // Fee totals reuse the canonical per-student formula (lib/fee-balance.ts) rather than
+  // re-deriving it here. Only run for the matched subset, with capped concurrency —
+  // still far fewer round trips than the old per-CSV-row approach.
+  const { computeStudentFeeBalance } = await import('@/lib/fee-balance');
+  const matches: AlumniMatch[] = await mapWithConcurrency(pending, 8, async ({ row, student, matchType }) => {
+    const { totalFees, totalPaid, balance } = await computeStudentFeeBalance(pool, student.Student_Id);
+    return {
+      csvName: row.csvName,
+      csvPhone: row.csvPhone,
+      matchType,
+      studentId: student.Student_Id,
+      studentName: student.Student_Name,
+      batchCode: student.Batch_Code,
+      presentAddress: student.Present_Address,
+      email: student.Email,
+      mobile: student.Present_Mobile,
+      paymentType: student.Payment_Type,
+      totalFees,
+      paidFees: totalPaid,
+      balanceFees: balance,
+      isActive: student.IsActive,
+      currentAlumniStatus: student.Alumni_Registered,
+    };
+  });
 
   return { totalRows: rows.length, matches, unmatched };
 }
