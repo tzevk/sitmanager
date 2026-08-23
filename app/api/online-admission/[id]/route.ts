@@ -349,6 +349,23 @@ export async function GET(
     const lastName   = si.Student_LName || payload.lastName || (nameParts.length > 1 ? nameParts[nameParts.length - 1] : '') || '';
     const middleName = si.Student_MName || payload.middleName || (nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '') || '';
 
+    // Saved photo/marksheet uploads, so the admin view can render "View" links —
+    // same shape as the public draft endpoint above. These are the inquiry-scoped
+    // uploads; once an admission is granted they get moved onto the student's own
+    // `documents` row instead (fetched separately client-side via studentId).
+    let savedAdmissionAssetsDetail: Array<{ key: string; isPhoto: boolean; filename: string; url: string }> = [];
+    try {
+      const details = await getAdmissionInquiryAssetDetails(inquiryId);
+      savedAdmissionAssetsDetail = details.map((d) => ({
+        key: d.key,
+        isPhoto: d.isPhoto,
+        filename: d.filename,
+        url: `/api/public/online-admission/${inquiryId}/document/${encodeURIComponent(d.key)}`,
+      }));
+    } catch (e) {
+      console.warn('[OnlineAdmission] getAdmissionInquiryAssetDetails failed:', e);
+    }
+
     return NextResponse.json({
       // metadata
       inquiryId:      si.Inquiry_Id,
@@ -473,6 +490,7 @@ export async function GET(
       consentChecks:         Array.isArray(payload.consentChecks) ? payload.consentChecks : [],
       consentData:           payload.consentData || { eligibility: '', qualification: '', candidateRemark: '' },
       draftMeta:             payload.__draftProgress || null,
+      savedAdmissionAssetsDetail,
     });
   } catch (err: unknown) {
     console.error('Online Admission [id] GET error:', err);
