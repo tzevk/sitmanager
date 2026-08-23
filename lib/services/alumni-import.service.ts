@@ -79,53 +79,73 @@ export function parseAlumniCsv(buffer: Buffer): AlumniCsvRow[] {
     .filter((row) => row.firstName || row.lastName);
 }
 
-const MOBILE_NORMALIZE_EXPR = (col: string) =>
-  `RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(${col}),' ',''),'-',''),'+',''),'(',''),')',''),10)`;
+interface StudentLookupRow {
+  Student_Id: number;
+  Student_Name: string;
+  FName: string | null;
+  LName: string | null;
+  Present_Mobile: string | null;
+  Present_Mobile2: string | null;
+  Alumni_Registered: string | null;
+}
+
+function nameKey(first: string, last: string): string {
+  return `${first.trim().toLowerCase()}|${last.trim().toLowerCase()}`;
+}
 
 /** Matches CSV rows against student_master: phone first (primary/most reliable key in
  * this export), falling back to an exact first+last name match when phone is missing,
- * ambiguous (shared by multiple students), or doesn't match. Read-only. */
+ * ambiguous (shared by multiple students), or doesn't match. Read-only.
+ *
+ * Loads the student roster once and matches in memory — a per-row query here (up to
+ * ~2000 round trips for a 1000-row file against the remote DB host) is what made the
+ * previous version slow; one query + in-memory lookups is the fix. */
 export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPreviewResult> {
   const pool = getPool();
+  const [studentRows] = await pool.query(
+    `SELECT Student_Id, Student_Name, FName, LName, Present_Mobile, Present_Mobile2, Alumni_Registered
+     FROM student_master
+     WHERE (IsDelete = 0 OR IsDelete IS NULL)`
+  );
+  const students = studentRows as StudentLookupRow[];
+
+  const byMobile = new Map<string, StudentLookupRow[]>();
+  const byName = new Map<string, StudentLookupRow[]>();
+  for (const s of students) {
+    for (const rawMobile of [s.Present_Mobile, s.Present_Mobile2]) {
+      const normalized = normalizeMobile(rawMobile);
+      if (!normalized) continue;
+      const list = byMobile.get(normalized) ?? [];
+      if (!list.some((existing) => existing.Student_Id === s.Student_Id)) list.push(s);
+      byMobile.set(normalized, list);
+    }
+    if (s.FName && s.LName) {
+      const key = nameKey(s.FName, s.LName);
+      const list = byName.get(key) ?? [];
+      list.push(s);
+      byName.set(key, list);
+    }
+  }
+
   const matches: AlumniMatch[] = [];
   const unmatched: AlumniCsvRow[] = [];
 
   for (const row of rows) {
-    const normalizedPhone = normalizeMobile(row.csvPhone);
-    let matched: { Student_Id: number; Student_Name: string; Alumni_Registered: string | null } | null = null;
+    let matched: StudentLookupRow | null = null;
     let matchType: 'phone' | 'name' | null = null;
 
+    const normalizedPhone = normalizeMobile(row.csvPhone);
     if (normalizedPhone) {
-      const [phoneRows] = await pool.query(
-        `SELECT Student_Id, Student_Name, Alumni_Registered
-         FROM student_master
-         WHERE (IsDelete = 0 OR IsDelete IS NULL)
-           AND (
-             ${MOBILE_NORMALIZE_EXPR('Present_Mobile')} = ?
-             OR ${MOBILE_NORMALIZE_EXPR('Present_Mobile2')} = ?
-           )
-         LIMIT 2`,
-        [normalizedPhone, normalizedPhone]
-      );
-      const found = phoneRows as any[];
-      if (found.length === 1) {
+      const found = byMobile.get(normalizedPhone);
+      if (found && found.length === 1) {
         matched = found[0];
         matchType = 'phone';
       }
     }
 
     if (!matched && row.firstName && row.lastName) {
-      const [nameRows] = await pool.query(
-        `SELECT Student_Id, Student_Name, Alumni_Registered
-         FROM student_master
-         WHERE (IsDelete = 0 OR IsDelete IS NULL)
-           AND LOWER(TRIM(FName)) = LOWER(TRIM(?))
-           AND LOWER(TRIM(LName)) = LOWER(TRIM(?))
-         LIMIT 2`,
-        [row.firstName, row.lastName]
-      );
-      const found = nameRows as any[];
-      if (found.length === 1) {
+      const found = byName.get(nameKey(row.firstName, row.lastName));
+      if (found && found.length === 1) {
         matched = found[0];
         matchType = 'name';
       }
