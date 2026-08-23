@@ -10,35 +10,34 @@ import { normalizeMobile } from '@/lib/services/person.service';
 const HEADERS = {
   FIRST_NAME: 'First Name',
   LAST_NAME: 'Last Name',
+  EMAIL: 'E-mail',
   PHONE: 'Phone',
+  SECONDARY_EMAIL: 'secondary_email',
+  DOB: 'DoB',
+  BATCH_NUMBER: 'Batch Number (eg.01157)',
+  TRAINING_PROGRAM: 'Training Program',
 } as const;
 
 const REQUIRED_HEADERS = [HEADERS.FIRST_NAME, HEADERS.LAST_NAME, HEADERS.PHONE];
 
+// The full set of CSV columns shown in the preview table — same names/order as the
+// Excel/CSV export, so the preview reads as "the sheet" rather than a derived view.
 export interface AlumniCsvRow {
   csvName: string;
   csvPhone: string;
   firstName: string;
   lastName: string;
+  email: string;
+  secondaryEmail: string;
+  dob: string;
+  batchNumber: string;
+  trainingProgram: string;
 }
 
-export interface AlumniMatch {
-  csvName: string;
-  csvPhone: string;
+export interface AlumniMatch extends AlumniCsvRow {
   matchType: 'phone' | 'name';
-  // Same fields the Student Master list (app/dashboard/student/page.tsx) shows, so the
-  // import preview reads as the familiar student table rather than a bespoke layout.
   studentId: number;
   studentName: string;
-  batchCode: string | null;
-  presentAddress: string | null;
-  email: string | null;
-  mobile: string | null;
-  paymentType: string | null;
-  totalFees: number | null;
-  paidFees: number | null;
-  balanceFees: number | null;
-  isActive: number | null;
   currentAlumniStatus: string | null;
 }
 
@@ -71,20 +70,30 @@ export function parseAlumniCsv(buffer: Buffer): AlumniCsvRow[] {
   const colIndex = (name: string) => headers.indexOf(name);
   const firstNameIdx = colIndex(HEADERS.FIRST_NAME);
   const lastNameIdx = colIndex(HEADERS.LAST_NAME);
+  const emailIdx = colIndex(HEADERS.EMAIL);
   const phoneIdx = colIndex(HEADERS.PHONE);
+  const secondaryEmailIdx = colIndex(HEADERS.SECONDARY_EMAIL);
+  const dobIdx = colIndex(HEADERS.DOB);
+  const batchNumberIdx = colIndex(HEADERS.BATCH_NUMBER);
+  const trainingProgramIdx = colIndex(HEADERS.TRAINING_PROGRAM);
+  const cell = (row: any[], idx: number) => (idx === -1 ? '' : String(row[idx] ?? '').trim());
 
   return raw
     .slice(headerRowIdx + 1)
-    .filter((row) => row.some((cell) => String(cell ?? '').trim()))
+    .filter((row) => row.some((c) => String(c ?? '').trim()))
     .map((row) => {
-      const firstName = String(row[firstNameIdx] ?? '').trim();
-      const lastName = String(row[lastNameIdx] ?? '').trim();
-      const csvPhone = String(row[phoneIdx] ?? '').trim();
+      const firstName = cell(row, firstNameIdx);
+      const lastName = cell(row, lastNameIdx);
       return {
         csvName: [firstName, lastName].filter(Boolean).join(' '),
-        csvPhone,
+        csvPhone: cell(row, phoneIdx),
         firstName,
         lastName,
+        email: cell(row, emailIdx),
+        secondaryEmail: cell(row, secondaryEmailIdx),
+        dob: cell(row, dobIdx),
+        batchNumber: cell(row, batchNumberIdx),
+        trainingProgram: cell(row, trainingProgramIdx),
       };
     })
     .filter((row) => row.firstName || row.lastName);
@@ -98,60 +107,24 @@ interface StudentLookupRow {
   Present_Mobile: string | null;
   Present_Mobile2: string | null;
   Alumni_Registered: string | null;
-  Batch_Code: string | null;
-  Present_Address: string | null;
-  Email: string | null;
-  IsActive: number | null;
-  Payment_Type: string | null;
 }
 
 function nameKey(first: string, last: string): string {
   return `${first.trim().toLowerCase()}|${last.trim().toLowerCase()}`;
 }
 
-/** Runs async work over items with limited concurrency — avoids firing hundreds of
- * simultaneous queries at once against the shared DB (see the per-student fee lookup
- * below, one of the few places here that still needs a per-row query). */
-async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  async function worker() {
-    while (next < items.length) {
-      const i = next++;
-      results[i] = await fn(items[i]);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
-}
-
 /** Matches CSV rows against student_master: phone first (primary/most reliable key in
  * this export), falling back to an exact first+last name match when phone is missing,
  * ambiguous (shared by multiple students), or doesn't match. Read-only.
  *
- * Loads the student roster once and matches in memory — a per-row query here (up to
- * ~2000 round trips for a 1000-row file against the remote DB host) is what made the
- * previous version slow; one query + in-memory lookups is the fix. */
+ * Loads a lean student roster once and matches in memory — no per-row DB query, so this
+ * stays fast regardless of file size. */
 export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPreviewResult> {
   const pool = getPool();
   const [studentRows] = await pool.query(
-    `SELECT
-       sm.Student_Id, sm.Student_Name, sm.FName, sm.LName,
-       sm.Present_Mobile, sm.Present_Mobile2, sm.Alumni_Registered,
-       sm.Batch_Code, sm.Present_Address, sm.Email, sm.IsActive,
-       la.Payment_Type
-     FROM student_master sm
-     LEFT JOIN (
-       SELECT am.Student_Id, am.Payment_Type, am.Admission_Id
-       FROM admission_master am
-       INNER JOIN (
-         SELECT Student_Id, MAX(Admission_Id) AS Admission_Id
-         FROM admission_master
-         WHERE IsDelete = 0 AND IsActive = 1
-         GROUP BY Student_Id
-       ) latest ON latest.Admission_Id = am.Admission_Id
-     ) la ON la.Student_Id = sm.Student_Id
-     WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL)`
+    `SELECT Student_Id, Student_Name, FName, LName, Present_Mobile, Present_Mobile2, Alumni_Registered
+     FROM student_master
+     WHERE (IsDelete = 0 OR IsDelete IS NULL)`
   );
   const students = studentRows as StudentLookupRow[];
 
@@ -173,7 +146,7 @@ export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPrevi
     }
   }
 
-  const pending: { row: AlumniCsvRow; student: StudentLookupRow; matchType: 'phone' | 'name' }[] = [];
+  const matches: AlumniMatch[] = [];
   const unmatched: AlumniCsvRow[] = [];
 
   for (const row of rows) {
@@ -198,36 +171,17 @@ export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPrevi
     }
 
     if (matched && matchType) {
-      pending.push({ row, student: matched, matchType });
+      matches.push({
+        ...row,
+        matchType,
+        studentId: matched.Student_Id,
+        studentName: matched.Student_Name,
+        currentAlumniStatus: matched.Alumni_Registered,
+      });
     } else {
       unmatched.push(row);
     }
   }
-
-  // Fee totals reuse the canonical per-student formula (lib/fee-balance.ts) rather than
-  // re-deriving it here. Only run for the matched subset, with capped concurrency —
-  // still far fewer round trips than the old per-CSV-row approach.
-  const { computeStudentFeeBalance } = await import('@/lib/fee-balance');
-  const matches: AlumniMatch[] = await mapWithConcurrency(pending, 8, async ({ row, student, matchType }) => {
-    const { totalFees, totalPaid, balance } = await computeStudentFeeBalance(pool, student.Student_Id);
-    return {
-      csvName: row.csvName,
-      csvPhone: row.csvPhone,
-      matchType,
-      studentId: student.Student_Id,
-      studentName: student.Student_Name,
-      batchCode: student.Batch_Code,
-      presentAddress: student.Present_Address,
-      email: student.Email,
-      mobile: student.Present_Mobile,
-      paymentType: student.Payment_Type,
-      totalFees,
-      paidFees: totalPaid,
-      balanceFees: balance,
-      isActive: student.IsActive,
-      currentAlumniStatus: student.Alumni_Registered,
-    };
-  });
 
   return { totalRows: rows.length, matches, unmatched };
 }
