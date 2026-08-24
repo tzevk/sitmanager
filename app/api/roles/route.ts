@@ -69,6 +69,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: message }, { status: 400 });
     }
     console.error('Error creating role:', error);
-    return NextResponse.json({ success: false, error: 'Failed to create role' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Failed to create role', details: message }, { status: 500 });
   }
 }

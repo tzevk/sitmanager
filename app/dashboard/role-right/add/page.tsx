@@ -75,6 +75,7 @@ export default function AddRolePage() {
 
   const handleSave = async () => {
     if (!title.trim()) { setSaveError('Role name is required'); return; }
+    if (title.trim().length > 150) { setSaveError('Role name must be 150 characters or fewer'); return; }
     setSaveError('');
     setSaving(true);
     try {
@@ -90,7 +91,7 @@ export default function AddRolePage() {
       });
       const data = await res.json();
       if (data.success) router.push('/dashboard/role-right');
-      else setSaveError(data.error || 'Failed to create role');
+      else setSaveError(data.details ? `${data.error}: ${data.details}` : (data.error || 'Failed to create role'));
     } catch {
       setSaveError('Failed to create role');
     } finally {
@@ -161,8 +162,10 @@ export default function AddRolePage() {
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="e.g., Department Manager"
+                maxLength={150}
                 className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-gray-300"
               />
+              <div className="text-right text-[10px] text-gray-300 mt-1">{title.length}/150</div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Description</label>

@@ -98,7 +98,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ success: false, error: message }, { status: 400 });
     }
     console.error('Error updating role:', error);
-    return NextResponse.json({ success: false, error: 'Failed to update role' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Failed to update role', details: message }, { status: 500 });
   }
 }
 

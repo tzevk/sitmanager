@@ -73,8 +73,22 @@ async function ensureDashboardDeptColumn(pool: ReturnType<typeof getPool>): Prom
   });
 }
 
+async function ensureTitleColumnWidth(pool: ReturnType<typeof getPool>): Promise<void> {
+  await cached('schema:role_title_width', 60 * 60 * 1000, async () => {
+    const [cols] = await pool.execute(
+      `SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'role' AND COLUMN_NAME = 'title'`
+    );
+    const row = (cols as any[])[0];
+    if (row && Number(row.CHARACTER_MAXIMUM_LENGTH) < 150) {
+      await pool.execute(`ALTER TABLE role MODIFY COLUMN title VARCHAR(150) DEFAULT NULL`);
+    }
+    return true;
+  });
+}
+
 async function ensureSchema(pool: ReturnType<typeof getPool>): Promise<void> {
-  await Promise.all([ensurePermissionsTable(pool), ensureDashboardDeptColumn(pool)]);
+  await Promise.all([ensurePermissionsTable(pool), ensureDashboardDeptColumn(pool), ensureTitleColumnWidth(pool)]);
 }
 
 function validatePermissions(permissions: string[]): string[] {
