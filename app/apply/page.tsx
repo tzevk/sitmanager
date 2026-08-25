@@ -135,13 +135,13 @@ export default function ApplyLandingPage() {
       {/* Header */}
       <header className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] shadow-lg">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3">
-          <div className="bg-white rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 shadow-md">
+          <div className="bg-white rounded-xl px-3 py-2 sm:px-4 sm:py-2.5 shadow-md flex items-center shrink-0">
             <Image
               src="/sit.png"
               alt="Suvidya Institute of Technology"
               width={666}
               height={375}
-              className="h-9 sm:h-12 w-auto"
+              className="block h-12 sm:h-16 w-auto"
               priority
             />
           </div>
