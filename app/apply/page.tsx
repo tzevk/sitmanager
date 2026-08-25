@@ -31,6 +31,48 @@ const BENEFITS = [
   },
 ];
 
+const STATS = [
+  {
+    value: '18,000+',
+    label: 'Students Trained',
+    icon: 'M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422A12.083 12.083 0 0112 20.055 12.083 12.083 0 015.84 10.578L12 14zm0 0v6',
+  },
+  {
+    value: '650+',
+    label: 'Successful Batches',
+    icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+  },
+  {
+    value: '250+',
+    label: 'Corporate Trainings',
+    icon: 'M3 21h18M5 21V7l8-4v18M13 21V11l6 3v7M9 9h.01M9 12h.01M9 15h.01',
+  },
+  {
+    value: '25+',
+    label: 'Years of Excellence',
+    icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+  },
+];
+
+const FORM_ICONS: Record<string, string> = {
+  name: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+  phone: 'M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-1.687.845a11.037 11.037 0 006.105 6.105l.845-1.687a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z',
+  city: 'M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z',
+  email: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+  course: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
+  qualification: 'M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422A12.083 12.083 0 0112 20.055 12.083 12.083 0 015.84 10.578L12 14z',
+  discipline: 'M9.75 17L15.75 7m0 0h-4.5m4.5 0v4.5M6 21h12a2 2 0 002-2V5a2 2 0 00-2-2H6a2 2 0 00-2 2v14a2 2 0 002 2z',
+  percentage: 'M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z',
+};
+
+function FieldIcon({ d }: { d: string }) {
+  return (
+    <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d={d} />
+    </svg>
+  );
+}
+
 function readUtmContext(): string {
   if (typeof window === 'undefined') return '';
   const p = new URLSearchParams(window.location.search);
@@ -145,14 +187,34 @@ export default function ApplyLandingPage() {
               priority
             />
           </div>
+          <div className="hidden sm:flex items-center gap-4">
+            <a
+              href="mailto:enquiry@suvidya.ac.in"
+              className="inline-flex items-center gap-1.5 text-white/90 text-xs font-semibold hover:text-white transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              enquiry@suvidya.ac.in
+            </a>
+            <a
+              href="tel:+912226682290"
+              className="inline-flex items-center gap-1.5 text-white/90 text-xs font-semibold hover:text-white transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-1.687.845a11.037 11.037 0 006.105 6.105l.845-1.687a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+              (022) 2668 2290
+            </a>
+          </div>
           <a
             href="tel:+912226682290"
-            className="hidden sm:inline-flex items-center gap-1.5 text-white/90 text-xs font-semibold hover:text-white transition-colors"
+            className="sm:hidden inline-flex items-center gap-1.5 text-white/90 text-xs font-semibold hover:text-white transition-colors"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-1.687.845a11.037 11.037 0 006.105 6.105l.845-1.687a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
             </svg>
-            (022) 2668 2290
+            Call
           </a>
         </div>
       </header>
@@ -204,54 +266,78 @@ export default function ApplyLandingPage() {
                 <p className="text-xs text-gray-500 mt-0.5 mb-4">Fill in your details — our team will call you back.</p>
                 <form onSubmit={handleSubmit} className="space-y-3">
                   <div>
-                    <input
-                      type="text" placeholder="Full Name *" value={form.Student_Name}
-                      onChange={(e) => set('Student_Name', e.target.value)}
-                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]"
-                    />
+                    <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
+                      <FieldIcon d={FORM_ICONS.name} />
+                      <input
+                        type="text" placeholder="Full Name *" value={form.Student_Name}
+                        onChange={(e) => set('Student_Name', e.target.value)}
+                        className="w-full bg-transparent text-sm focus:outline-none"
+                      />
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
+                    <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
+                      <FieldIcon d={FORM_ICONS.phone} />
+                      <input
+                        type="tel" placeholder="Mobile Number *" value={form.Present_Mobile}
+                        onChange={(e) => set('Present_Mobile', e.target.value.replace(/\D/g, '').slice(0, 10))}
+                        className="w-full bg-transparent text-sm focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
+                      <FieldIcon d={FORM_ICONS.city} />
+                      <input
+                        type="text" placeholder="City" value={form.City}
+                        onChange={(e) => set('City', e.target.value)}
+                        className="w-full bg-transparent text-sm focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
+                    <FieldIcon d={FORM_ICONS.email} />
                     <input
-                      type="tel" placeholder="Mobile Number *" value={form.Present_Mobile}
-                      onChange={(e) => set('Present_Mobile', e.target.value.replace(/\D/g, '').slice(0, 10))}
-                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]"
-                    />
-                    <input
-                      type="text" placeholder="City" value={form.City}
-                      onChange={(e) => set('City', e.target.value)}
-                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]"
+                      type="email" placeholder="Email Address *" value={form.Email}
+                      onChange={(e) => set('Email', e.target.value)}
+                      className="w-full bg-transparent text-sm focus:outline-none"
                     />
                   </div>
-                  <input
-                    type="email" placeholder="Email Address *" value={form.Email}
-                    onChange={(e) => set('Email', e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]"
-                  />
-                  <select
-                    value={form.Course_Id} onChange={(e) => set('Course_Id', e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]"
-                  >
-                    <option value="">Course Interested In</option>
-                    {courses.map((c) => <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>)}
-                  </select>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
+                    <FieldIcon d={FORM_ICONS.course} />
                     <select
-                      value={form.Qualification} onChange={(e) => set('Qualification', e.target.value)}
-                      className="col-span-1 w-full bg-white border border-gray-300 rounded-lg px-2 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]"
+                      value={form.Course_Id} onChange={(e) => set('Course_Id', e.target.value)}
+                      className="w-full bg-transparent text-sm focus:outline-none"
                     >
-                      <option value="">Qualification *</option>
-                      {QUALIFICATIONS.map((q) => <option key={q} value={q}>{q}</option>)}
+                      <option value="">Course Interested In</option>
+                      {courses.map((c) => <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>)}
                     </select>
-                    <input
-                      type="text" placeholder="Discipline *" value={form.Discipline}
-                      onChange={(e) => set('Discipline', e.target.value)}
-                      className="col-span-1 w-full bg-white border border-gray-300 rounded-lg px-2 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]"
-                    />
-                    <input
-                      type="number" placeholder="% / CGPA *" value={form.Percentage}
-                      onChange={(e) => set('Percentage', e.target.value)}
-                      className="col-span-1 w-full bg-white border border-gray-300 rounded-lg px-2 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5]"
-                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-1 flex items-center gap-1.5 bg-white border border-gray-300 rounded-lg px-2 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
+                      <FieldIcon d={FORM_ICONS.qualification} />
+                      <select
+                        value={form.Qualification} onChange={(e) => set('Qualification', e.target.value)}
+                        className="w-full bg-transparent text-sm focus:outline-none"
+                      >
+                        <option value="">Qualification *</option>
+                        {QUALIFICATIONS.map((q) => <option key={q} value={q}>{q}</option>)}
+                      </select>
+                    </div>
+                    <div className="col-span-1 flex items-center gap-1.5 bg-white border border-gray-300 rounded-lg px-2 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
+                      <FieldIcon d={FORM_ICONS.discipline} />
+                      <input
+                        type="text" placeholder="Discipline *" value={form.Discipline}
+                        onChange={(e) => set('Discipline', e.target.value)}
+                        className="w-full bg-transparent text-sm focus:outline-none"
+                      />
+                    </div>
+                    <div className="col-span-1 flex items-center gap-1.5 bg-white border border-gray-300 rounded-lg px-2 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
+                      <FieldIcon d={FORM_ICONS.percentage} />
+                      <input
+                        type="number" placeholder="% / CGPA *" value={form.Percentage}
+                        onChange={(e) => set('Percentage', e.target.value)}
+                        className="w-full bg-transparent text-sm focus:outline-none"
+                      />
+                    </div>
                   </div>
 
                   {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
@@ -270,6 +356,25 @@ export default function ApplyLandingPage() {
               </>
             )}
           </div>
+        </div>
+      </section>
+
+      {/* Stats */}
+      <section className="bg-white border-b border-gray-100">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 grid grid-cols-2 lg:grid-cols-4 gap-6">
+          {STATS.map((s) => (
+            <div key={s.label} className="flex items-center gap-3 justify-center lg:justify-start">
+              <div className="w-10 h-10 rounded-full bg-[#2E3093]/10 text-[#2E3093] flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d={s.icon} />
+                </svg>
+              </div>
+              <div>
+                <div className="text-lg sm:text-xl font-extrabold text-gray-900 leading-none">{s.value}</div>
+                <div className="text-[11px] sm:text-xs text-gray-500 mt-1">{s.label}</div>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -302,8 +407,11 @@ export default function ApplyLandingPage() {
                   key={c.Course_Id}
                   type="button"
                   onClick={() => { set('Course_Id', String(c.Course_Id)); scrollToForm(); }}
-                  className="bg-white border border-gray-200 hover:border-[#2A6BB5] hover:text-[#2A6BB5] rounded-full px-4 py-2 text-xs font-semibold text-gray-700 shadow-sm transition-colors"
+                  className="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:border-[#2A6BB5] hover:text-[#2A6BB5] rounded-full px-4 py-2 text-xs font-semibold text-gray-700 shadow-sm transition-colors"
                 >
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
                   {c.Course_Name}
                 </button>
               ))}
@@ -325,9 +433,22 @@ export default function ApplyLandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-[#2E3093] text-white/80 text-center py-5 text-xs">
-        <p>enquiry@suvidya.ac.in · (022) 2668 2290</p>
-        <p className="mt-1">© {new Date().getFullYear()} Suvidya Institute of Technology. All rights reserved.</p>
+      <footer className="bg-[#2E3093] text-white/80 text-center py-6 text-xs">
+        <div className="flex items-center justify-center gap-5">
+          <a href="mailto:enquiry@suvidya.ac.in" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            enquiry@suvidya.ac.in
+          </a>
+          <a href="tel:+912226682290" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-1.687.845a11.037 11.037 0 006.105 6.105l.845-1.687a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+            (022) 2668 2290
+          </a>
+        </div>
+        <p className="mt-2">© {new Date().getFullYear()} Suvidya Institute of Technology. All rights reserved.</p>
       </footer>
     </div>
   );
