@@ -330,7 +330,8 @@
       "Bash(node scripts/log-change.mjs --title 'Fix /apply landing page logo: correct proportions, made prominent' --category Fix --description 'The header logo \\(sit.png, actual 666x375 wide lockup with the institute name baked into the image\\) was being force-squeezed into a 40x40 square, badly distorting it. Fixed to render at its correct aspect ratio \\(h-9 sm:h-12, w-auto\\) inside a white rounded card for contrast against the header'\\\\''s indigo gradient, and removed the now-redundant separate '\\\\''Suvidya Institute of Technology'\\\\'' text label since the logo already includes it. Makes the branding significantly more visible and legible.')",
       "Bash(node -e \"require.resolve\\('playwright'\\)\")",
       "Bash(npm init *)",
-      "Bash(node shot.mjs)"
+      "Bash(node shot.mjs)",
+      "Bash(node scripts/log-change.mjs --title 'Fix /apply landing page logo positioning and size' --category Fix --description 'Logo card padding/sizing left it looking cramped -- the tagline text at the bottom of the sit.png lockup sat too close to the card edge. Increased the rendered size \\(h-12 sm:h-16, up from h-9 sm:h-12\\), added explicit block display to remove inline baseline gap, and made the card a flex container so the image centers cleanly within it. Verified visually with a headless-Chromium screenshot of the live dev page rather than guessing from code alone.')"
     ],
     "additionalDirectories": [
       "/Users/tanvikadam/Desktop/SIT/sitmanager/app/api/cbd-content-calendar",
