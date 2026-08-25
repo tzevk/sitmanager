@@ -23,17 +23,20 @@ export default function GlobalError({
   reset: () => void;
 }) {
   const chunkError = isChunkLoadError(error);
-  const [autoReloading, setAutoReloading] = useState(false);
+  // Only auto-reload once per browser session — if a hard reload doesn't clear
+  // it, something else is wrong and we shouldn't loop forever. Computed as a
+  // lazy initializer (not via setState in an effect) so the "Reloading…" copy
+  // is correct on the very first render, before the effect below fires.
+  const [autoReloading] = useState(() => {
+    if (!chunkError || typeof window === 'undefined') return false;
+    return !sessionStorage.getItem(RELOAD_GUARD_KEY);
+  });
 
   useEffect(() => {
-    if (!chunkError) return;
-    // Only auto-reload once per browser session — if a hard reload doesn't
-    // clear it, something else is wrong and we shouldn't loop forever.
-    if (sessionStorage.getItem(RELOAD_GUARD_KEY)) return;
+    if (!autoReloading) return;
     sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
-    setAutoReloading(true);
     window.location.reload();
-  }, [chunkError]);
+  }, [autoReloading]);
 
   return (
     <html>
