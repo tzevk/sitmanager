@@ -15,8 +15,8 @@ const BENEFITS = [
     icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
   },
   {
-    title: 'Placement Assistance',
-    body: '100% placement assistance for Indian students, based on performance and market demand.',
+    title: 'Career Support',
+    body: 'Guidance and industry connections to help you move from training into the job market.',
     icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4',
   },
   {
@@ -134,10 +134,16 @@ export default function ApplyLandingPage() {
     <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] shadow-lg">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <Image src="/sit.png" alt="SIT logo" width={40} height={40} className="rounded-lg bg-white/10 p-0.5" />
-            <span className="text-white font-bold text-sm sm:text-base leading-tight">Suvidya Institute of Technology</span>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3">
+          <div className="bg-white rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 shadow-md">
+            <Image
+              src="/sit.png"
+              alt="Suvidya Institute of Technology"
+              width={666}
+              height={375}
+              className="h-9 sm:h-12 w-auto"
+              priority
+            />
           </div>
           <a
             href="tel:+912226682290"
@@ -160,12 +166,11 @@ export default function ApplyLandingPage() {
               25+ Years Training Engineers
             </span>
             <h1 className="text-3xl sm:text-4xl lg:text-[42px] font-extrabold leading-tight text-balance">
-              Build a Career in Engineering Design &amp; Drafting
+              Industry-Ready Training for Your Engineering Career
             </h1>
             <p className="mt-4 text-white/85 text-sm sm:text-base max-w-lg text-pretty">
               Industry-focused training in Piping, HVAC, Structural, Rotating Equipment, Engineering Design
-              &amp; Drafting and Software programmes — with placement assistance, at Suvidya Institute of
-              Technology, Mumbai.
+              &amp; Drafting and Software programmes at Suvidya Institute of Technology, Mumbai.
             </p>
             <button
               type="button"
