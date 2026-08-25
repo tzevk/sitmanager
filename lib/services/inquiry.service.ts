@@ -556,6 +556,110 @@ async function ensureInquiryReminderColumn(pool: ReturnType<typeof getPool>, inq
   });
 }
 
+/** Tracks when OnlineState (the inquiry status) last actually changed, so automated
+ * follow-up escalation (see escalateStaleInterestedInquiries below) can tell how long
+ * an inquiry has sat at a given status — distinct from Reminder_At, which is a manual,
+ * staff-set alarm, not a status-change timestamp. */
+async function ensureInquiryStatusChangedColumn(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<void> {
+  await cached(`schema:inquiry_status_changed:${inquiryTable}`, 60 * 60 * 1000, async () => {
+    const [rows] = await pool.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'Status_Changed_At'`,
+      [inquiryTable]
+    );
+    if ((rows as any[]).length === 0) {
+      await pool.query(`ALTER TABLE \`${inquiryTable}\` ADD COLUMN Status_Changed_At DATETIME NULL`);
+    }
+    const [indexRows] = await pool.query(
+      `SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = 'idx_si_status_changed'`,
+      [inquiryTable]
+    );
+    if ((indexRows as any[]).length === 0) {
+      await pool.query(`ALTER TABLE \`${inquiryTable}\` ADD INDEX idx_si_status_changed (OnlineState, Status_Changed_At)`);
+    }
+    return true;
+  });
+}
+
+/** Resolves a Main Inquiry status label (see MAIN_INQUIRY_STATUS_LABELS) to its live
+ * status_master.Id — never hardcode these ids, status_master is admin-editable and the
+ * seeded rows' auto-increment values aren't fixed constants. */
+async function resolveInquiryStatusIdByLabel(pool: ReturnType<typeof getPool>, label: string): Promise<number | null> {
+  await ensureMainInquiryStatuses(pool);
+  const [rows] = await pool.query(
+    `SELECT Id FROM status_master WHERE Status = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+    [label]
+  );
+  const id = (rows as any[])[0]?.Id;
+  return id != null ? Number(id) : null;
+}
+
+/** Cached lookup used purely for sort-priority (put Follow up pending inquiries at the
+ * top of the list) — shared by both listInquiries and listInquiryPersons. Short TTL since
+ * this runs on every list load, including the perf-sensitive fast path; status_master
+ * rarely changes so a brief cache is safe. Does NOT call ensureMainInquiryStatuses (that
+ * runs INSERT...WHERE NOT EXISTS checks, too heavy for a hot read path) — if the status
+ * hasn't been seeded yet, sorting simply falls back to plain recency until it has. */
+async function getFollowUpPendingStatusId(pool: ReturnType<typeof getPool>): Promise<number | null> {
+  return cached('inquiry:status-id:follow-up-pending', 5 * 60_000, async () => {
+    const [rows] = await pool.query(
+      `SELECT Id FROM status_master WHERE Status = 'Follow up pending' AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`
+    );
+    const id = (rows as any[])[0]?.Id;
+    return Number.isInteger(Number(id)) ? Number(id) : null;
+  });
+}
+
+export interface FollowUpEscalationResult {
+  interestedStatusId: number | null;
+  followUpStatusId: number | null;
+  escalated: number;
+  escalatedInquiryIds: number[];
+}
+
+/** Automated 24h follow-up escalation: an inquiry marked "Contacted (interested)" that
+ * has sat there for `hoursThreshold` hours with no further status change is flipped to
+ * "Follow up pending" so it surfaces (see listOrderByClause below, which sorts Follow up
+ * pending to the top of the list). Inquiries whose Status_Changed_At is NULL (set
+ * Interested before this feature existed, or via a path that predates the column) are
+ * deliberately left alone rather than guessed at — the clock starts once they're next
+ * touched by any status update. Intended to run from a scheduled cron route. */
+export async function escalateStaleInterestedInquiries(hoursThreshold = 24): Promise<FollowUpEscalationResult> {
+  const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
+  await ensureInquiryStatusChangedColumn(pool, inquiryTable);
+
+  const interestedStatusId = await resolveInquiryStatusIdByLabel(pool, 'Contacted (interested)');
+  const followUpStatusId = await resolveInquiryStatusIdByLabel(pool, 'Follow up pending');
+  if (!interestedStatusId || !followUpStatusId) {
+    return { interestedStatusId, followUpStatusId, escalated: 0, escalatedInquiryIds: [] };
+  }
+
+  const [dueRows] = await pool.query(
+    `SELECT Inquiry_Id FROM \`${inquiryTable}\`
+     WHERE CAST(NULLIF(OnlineState,'') AS UNSIGNED) = ?
+       AND Status_Changed_At IS NOT NULL
+       AND Status_Changed_At <= DATE_SUB(NOW(), INTERVAL ? HOUR)
+       AND (IsDelete = 0 OR IsDelete IS NULL)`,
+    [interestedStatusId, hoursThreshold]
+  );
+  const dueIds = (dueRows as any[]).map((r) => Number(r.Inquiry_Id)).filter((id) => Number.isInteger(id) && id > 0);
+  if (!dueIds.length) {
+    return { interestedStatusId, followUpStatusId, escalated: 0, escalatedInquiryIds: [] };
+  }
+
+  await pool.query(
+    `UPDATE \`${inquiryTable}\` SET OnlineState = ?, Status_Changed_At = NOW() WHERE Inquiry_Id IN (?)`,
+    [followUpStatusId, dueIds]
+  );
+
+  invalidateCache('inquiry:filters');
+  invalidateCache('inquiry:list-count');
+
+  return { interestedStatusId, followUpStatusId, escalated: dueIds.length, escalatedInquiryIds: dueIds };
+}
+
 /** Sets a reminder N hours from now on an enquiry. Deliberately a standalone,
  * single-column write (not routed through updateInquiry) so it can be set from the
  * list/detail view without touching or re-validating the rest of the enquiry form. */
@@ -874,10 +978,13 @@ export async function updateInquiryStatus(inquiryId: number, statusId: number): 
   }
 
   const inquiryTable = await resolveInquiryTableName(pool);
+  await ensureInquiryStatusChangedColumn(pool, inquiryTable);
   await pool.query(
-    `UPDATE \`${inquiryTable}\` SET OnlineState = ?
+    `UPDATE \`${inquiryTable}\` SET
+       OnlineState = ?,
+       Status_Changed_At = CASE WHEN COALESCE(CAST(NULLIF(OnlineState,'') AS UNSIGNED), 0) <> ? THEN NOW() ELSE Status_Changed_At END
      WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
-    [statusId, inquiryId]
+    [statusId, statusId, inquiryId]
   );
 }
 
@@ -1304,11 +1411,19 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   );
   const useFastUnfilteredPath = !hasActiveFilters;
 
+  // Inquiries auto-escalated to "Follow up pending" (see escalateStaleInterestedInquiries)
+  // are sorted to the very top of the list, ahead of normal recency ordering, so they
+  // don't stay buried once they go cold.
+  const followUpPendingStatusId = await getFollowUpPendingStatusId(pool);
+  const followUpFirstExpr = followUpPendingStatusId != null
+    ? `CASE WHEN CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) = ${followUpPendingStatusId} THEN 0 ELSE 1 END, `
+    : '';
+
   // When _inquiry_date is not available yet, sorting with STR_TO_DATE(...) is very expensive
   // on large tables. Fall back to primary-key recency to keep first page responsive.
   const listOrderByClause = inquiryDateColumnAvailable
-    ? `${inquiryDateExpr} DESC, si.Inquiry_Id DESC`
-    : `si.Inquiry_Id DESC`;
+    ? `${followUpFirstExpr}${inquiryDateExpr} DESC, si.Inquiry_Id DESC`
+    : `${followUpFirstExpr}si.Inquiry_Id DESC`;
 
   let total = 0;
   let pageIds: number[] = [];
@@ -1759,6 +1874,15 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
   );
   const total = Number((countRows as any[])[0]?.total || 0);
 
+  // Same "Follow up pending sorts first" priority as listInquiries — a person with
+  // ANY inquiry auto-escalated to Follow up pending (see escalateStaleInterestedInquiries)
+  // moves to the top of their group.
+  const followUpPendingStatusId = await getFollowUpPendingStatusId(pool);
+  const followUpFirstSelect = followUpPendingStatusId != null
+    ? `MAX(CASE WHEN CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) = ${followUpPendingStatusId} THEN 1 ELSE 0 END) as HasFollowUpPending,`
+    : '';
+  const followUpFirstOrder = followUpPendingStatusId != null ? 'HasFollowUpPending DESC, ' : '';
+
   const [rows] = await pool.query(
     `SELECT
        si.Person_Id,
@@ -1766,6 +1890,7 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
        COALESCE(p.Mobile, ${mobileExpressions.primary}) as Mobile,
        COALESCE(p.Email, si.Email) as Email,
        COUNT(*) as EnquiryCount,
+       ${followUpFirstSelect}
        MAX(si.Inquiry_Dt) as LatestEnquiryDate,
        MAX(si.Inquiry_Id) as LatestInquiryId
      FROM \`${inquiryTable}\` si
@@ -1774,7 +1899,7 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
      LEFT JOIN person_master p ON p.Person_Id = si.Person_Id
      ${whereClause}
      GROUP BY ${groupKeyExpr}
-     ORDER BY LatestEnquiryDate DESC
+     ORDER BY ${followUpFirstOrder}LatestEnquiryDate DESC
      LIMIT ? OFFSET ?`,
     [...queryParams, limit, offset]
   );
@@ -1851,6 +1976,7 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
   await ensureInquiryPreferredLocationColumn(pool, inquiryTable);
+  await ensureInquiryStatusChangedColumn(pool, inquiryTable);
   const previousRows = await pool.query(
     `SELECT Discussion FROM \`${inquiryTable}\` WHERE Inquiry_Id = ? LIMIT 1`,
     [id]
@@ -1862,7 +1988,9 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
        Student_Name=?, Sex=?, DOB=?,
        Present_Mobile=?, Present_Mobile2=?,
        Email=?, Nationality=?, Present_Country=?,
-       Discussion=?, OnlineState=?, Inquiry_Dt=?,
+       Discussion=?, OnlineState=?,
+       Status_Changed_At = CASE WHEN COALESCE(CAST(NULLIF(OnlineState,'') AS UNSIGNED), 0) <> ? THEN NOW() ELSE Status_Changed_At END,
+       Inquiry_Dt=?,
        Inquiry_From=?, Inquiry_Type=?,
        Course_Id=?, Batch_Category_id=?, Batch_Code=?,
        Qualification=?, Discipline=?, Percentage=?, Preferred_Location=?
@@ -1877,6 +2005,7 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
       data.Nationality ?? null,
       data.Present_Country ?? null,
       nextDiscussion,
+      statusId,
       statusId,
       data.Inquiry_Dt ?? null,
       data.Inquiry_From ?? null,

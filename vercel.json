@@ -21,6 +21,10 @@
     {
       "path": "/api/cron/sync-biometric-attendance",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/inquiry-followup-escalation",
+      "schedule": "0 * * * *"
     }
   ],
   "functions": {

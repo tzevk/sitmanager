@@ -146,6 +146,20 @@ function statusRow(id: number | null, label: string) {
   return 'bg-slate-50 hover:bg-slate-100 [&>td]:text-slate-800';
 }
 
+const isFollowUpPending = (label: string | null | undefined) =>
+  (label || '').toLowerCase().includes('follow up pending');
+
+/** Small pulsing dot marking a "Follow up pending" row — CSS-only (Tailwind's
+ * animate-ping), so it's a lightweight visual cue rather than a full re-render loop. */
+function FollowUpPendingDot() {
+  return (
+    <span className="relative inline-flex h-2 w-2 shrink-0" title="Follow-up due — no status change in 24h">
+      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+      <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
+    </span>
+  );
+}
+
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 
 export default function InquiryPage() {
@@ -608,8 +622,11 @@ export default function InquiryPage() {
                           </span>
                         </td>
                         <td className="py-1 px-2 text-center">
-                          <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(p.Status_id, p.StatusLabel || '')}`}>
-                            {p.StatusLabel || 'New'}
+                          <span className="inline-flex items-center gap-1">
+                            {isFollowUpPending(p.StatusLabel) && <FollowUpPendingDot />}
+                            <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(p.Status_id, p.StatusLabel || '')}`}>
+                              {p.StatusLabel || 'New'}
+                            </span>
                           </span>
                         </td>
                         <td className="py-1 px-2 text-center">
@@ -653,8 +670,11 @@ export default function InquiryPage() {
                                           </span>
                                         </td>
                                         <td className="py-1 px-2 text-center">
-                                          <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(e.Status_id ?? null, e.StatusLabel || '')}`}>
-                                            {e.StatusLabel || 'New'}
+                                          <span className="inline-flex items-center gap-1">
+                                            {isFollowUpPending(e.StatusLabel) && <FollowUpPendingDot />}
+                                            <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(e.Status_id ?? null, e.StatusLabel || '')}`}>
+                                              {e.StatusLabel || 'New'}
+                                            </span>
                                           </span>
                                         </td>
                                         <td className="py-1 px-2 text-center">
@@ -828,8 +848,11 @@ export default function InquiryPage() {
                       })()}
                     </td>
                     <td className="py-1 px-2 text-center">
-                      <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(r.Status_id, r.StatusLabel)}`}>
-                        {r.StatusLabel}
+                      <span className="inline-flex items-center gap-1">
+                        {isFollowUpPending(r.StatusLabel) && <FollowUpPendingDot />}
+                        <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(r.Status_id, r.StatusLabel)}`}>
+                          {r.StatusLabel}
+                        </span>
                       </span>
                     </td>
                     <td className="py-1 px-2">
