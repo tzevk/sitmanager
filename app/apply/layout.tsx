@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
-import { GA4_MEASUREMENT_ID, ADS_CONVERSION_ID } from './tracking-config';
+import { GA4_MEASUREMENT_ID } from './tracking-config';
 
 export const metadata: Metadata = {
   title: 'Apply Now — Suvidya Institute of Technology',
@@ -25,7 +25,6 @@ export default function ApplyLayout({ children }: { children: React.ReactNode })
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
             gtag('config', '${GA4_MEASUREMENT_ID}');
-            gtag('config', '${ADS_CONVERSION_ID}');
           `,
         }}
       />

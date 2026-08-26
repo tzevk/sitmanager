@@ -9,9 +9,6 @@ const GOLD = '#F5C518';
 
 export default function ThankYouPage() {
   useEffect(() => {
-    // Fire Google Ads conversion event on page load.
-    // Replace ADS_CONVERSION_ID and ADS_CONVERSION_LABEL in tracking-config.ts
-    // with your real values from Google Ads > Tools > Conversions.
     const w = window as unknown as { gtag?: (...a: unknown[]) => void };
     if (typeof w.gtag === 'function') {
       w.gtag('event', 'conversion', {
