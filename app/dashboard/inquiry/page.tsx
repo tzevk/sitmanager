@@ -600,8 +600,8 @@ export default function InquiryPage() {
                             )}
                           </span>
                         </td>
-                        <td className="py-1 px-2 max-w-[120px]">
-                          <span className="truncate block text-red-600">{p.CourseName || '—'}</span>
+                        <td className="py-1 px-2 max-w-[200px]">
+                          <span className="truncate block text-red-600" title={p.CourseName || undefined}>{p.CourseName || '—'}</span>
                         </td>
                         <td className="py-1 px-2 whitespace-nowrap font-mono">{p.Mobile || '—'}</td>
                         <td className="py-1 px-2 max-w-[140px]">
@@ -656,7 +656,7 @@ export default function InquiryPage() {
                                             )}
                                           </span>
                                         </td>
-                                        <td className="py-1 px-2 max-w-[120px]"><span className="truncate block text-red-600">{e.CourseName || '—'}</span></td>
+                                        <td className="py-1 px-2 max-w-[200px]"><span className="truncate block text-red-600" title={e.CourseName || undefined}>{e.CourseName || '—'}</span></td>
                                         <td className="py-1 px-2 whitespace-nowrap font-mono">{p.Mobile || '—'}</td>
                                         <td className="py-1 px-2 max-w-[140px]"><span className="truncate block">{p.Email || '—'}</span></td>
                                         <td className="py-1 px-2 whitespace-nowrap">
@@ -769,8 +769,8 @@ export default function InquiryPage() {
                     <td className="py-1 px-2 font-semibold max-w-[140px]">
                       <span className="truncate block">{formatName(r.Student_Name)}</span>
                     </td>
-                    <td className="py-1 px-2 max-w-[120px]">
-                      <span className="truncate block text-red-600">{r.CourseName || '—'}</span>
+                    <td className="py-1 px-2 max-w-[200px]">
+                      <span className="truncate block text-red-600" title={r.CourseName || undefined}>{r.CourseName || '—'}</span>
                     </td>
                     <td className="py-1 px-2 whitespace-nowrap font-mono">{r.Present_Mobile || '—'}</td>
                     <td className="py-1 px-2 max-w-[140px]">

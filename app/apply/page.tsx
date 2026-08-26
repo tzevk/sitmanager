@@ -389,7 +389,7 @@ export default function ApplyLandingPage() {
               <div key={t.name} className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
                 <div className="flex items-center gap-3">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={t.img} alt={t.name} className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-offset-1" style={{ ringColor: `${GOLD}55` }} loading="lazy" />
+                  <img src={t.img} alt={t.name} className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-offset-1 ring-yellow-300" loading="lazy" />
                   <div>
                     <p className="text-sm font-bold text-slate-800">{t.name}</p>
                     <p className="text-[10px] text-slate-400">{t.batch}</p>
