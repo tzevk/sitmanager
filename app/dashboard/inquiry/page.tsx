@@ -69,6 +69,7 @@ interface InquiryRow {
   Inquiry_From: string | null;
   Inquiry_Type: string | null;
   IsMetaAdConverted?: boolean;
+  IsGoogleAdLead?: boolean;
   Status_id: number | null;
   StatusLabel: string;
   FollowUpBy?: string | null;
@@ -620,7 +621,25 @@ export default function InquiryPage() {
                           {p.Discipline && p.Discipline !== 'NULL' && p.Discipline !== 'Select' ? p.Discipline : '—'}
                         </td>
                         <td className="py-1 px-2 w-[118px] max-w-[118px]">
-                          <span className="font-semibold break-words leading-tight">{p.Source || '—'}</span>
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="font-semibold break-words leading-tight">{p.Source || '—'}</span>
+                            {p.Source?.toLowerCase().includes('meta') && (
+                              <span
+                                title="Meta Ads Lead"
+                                className="inline-flex items-center rounded-full border border-[#2E3093]/30 bg-[#2E3093]/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-[#2E3093]"
+                              >
+                                Meta
+                              </span>
+                            )}
+                            {p.Source?.toLowerCase().includes('google') && (
+                              <span
+                                title="Google Ads Lead"
+                                className="inline-flex items-center rounded-full border border-green-600/40 bg-green-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-green-700"
+                              >
+                                Google
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-1 px-2 whitespace-nowrap min-w-[108px]">
                           <span className="font-semibold text-slate-700">{formatDate(p.LatestEnquiryDate)}</span>
@@ -798,6 +817,14 @@ export default function InquiryPage() {
                               className="inline-flex items-center rounded-full border border-[#2E3093]/30 bg-[#2E3093]/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-[#2E3093]"
                             >
                               Meta
+                            </span>
+                          )}
+                          {r.IsGoogleAdLead && (
+                            <span
+                              title="Google Ads Lead"
+                              className="inline-flex items-center rounded-full border border-green-600/40 bg-green-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-green-700"
+                            >
+                              Google
                             </span>
                           )}
                           {r.IsPuneInquiry && (
