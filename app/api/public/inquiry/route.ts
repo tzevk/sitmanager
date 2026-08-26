@@ -162,14 +162,8 @@ export async function POST(req: NextRequest) {
     if (!discipline) {
       return NextResponse.json({ success: false, error: 'Discipline is required' }, { status: 400 });
     }
-    if (percentage === null || !Number.isFinite(percentage)) {
-      return NextResponse.json({ success: false, error: 'Percentage is required' }, { status: 400 });
-    }
     if (!mobile) {
       return NextResponse.json({ success: false, error: 'Mobile number is required' }, { status: 400 });
-    }
-    if (!email) {
-      return NextResponse.json({ success: false, error: 'Email address is required' }, { status: 400 });
     }
 
     if (!courseId && courseName) {
@@ -235,14 +229,16 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    try {
-      await sendPublicInquirySubmissionEmail({
-        toEmail: email,
-        studentName,
-        inquiryId: insertedId,
-      });
-    } catch (mailError) {
-      console.error('Public inquiry thank-you email error:', mailError);
+    if (email) {
+      try {
+        await sendPublicInquirySubmissionEmail({
+          toEmail: email,
+          studentName,
+          inquiryId: insertedId,
+        });
+      } catch (mailError) {
+        console.error('Public inquiry thank-you email error:', mailError);
+      }
     }
 
     return NextResponse.json({
