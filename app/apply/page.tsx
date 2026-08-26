@@ -105,7 +105,7 @@ export default function ApplyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
-  const formRef = useRef<HTMLElement>(null);
+  const formRef = useRef<HTMLDivElement>(null);
 
   const set = useCallback((key: string, value: string) => setForm((f) => ({ ...f, [key]: value })), []);
 
@@ -197,7 +197,7 @@ export default function ApplyPage() {
           </div>
 
           {/* Quick form */}
-          <div ref={formRef as React.RefObject<HTMLElement>} className="rounded-2xl border border-white/10 bg-white/10 backdrop-blur-sm p-6 lg:p-8">
+          <div ref={formRef} className="rounded-2xl border border-white/10 bg-white/10 backdrop-blur-sm p-6 lg:p-8">
             {done ? (
               <div className="text-center py-8">
                 <div className="text-5xl mb-4">✅</div>
