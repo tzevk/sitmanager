@@ -1962,7 +1962,7 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
         Discipline: detail.Discipline ?? null,
         Source: detail.Inquiry_Type || detail.Inquiry_From || null,
         Status_id: detail.Status_id ?? null,
-        StatusLabel: detail.StatusLabel ?? null,
+        StatusLabel: LEGACY_MAIN_STATUS_LABELS[Number(detail.Status_id)] ?? (detail.StatusLabel ?? null),
         Discussion: detail.LatestDiscussion ?? detail.InlineDiscussion ?? null,
         DiscussionDate: detail.LatestDiscDate ?? null,
         ...(r.Person_Id == null ? { UnlinkedInquiryId: latestInquiryId } : {}),
