@@ -136,8 +136,8 @@ export default function ApplyLandingPage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({
-    Student_Name: '', Present_Mobile: '', Email: '',
-    Course_Id: '', Qualification: '', Discipline: '', Percentage: '', City: '',
+    Student_Name: '', Present_Mobile: '',
+    Course_Id: '', Qualification: '', Discipline: '', City: '',
   });
 
   useEffect(() => {
@@ -158,10 +158,8 @@ export default function ApplyLandingPage() {
     setError('');
     if (!form.Student_Name.trim()) return setError('Please enter your full name.');
     if (!/^[0-9]{10}$/.test(form.Present_Mobile.trim())) return setError('Please enter a valid 10-digit mobile number.');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.Email.trim())) return setError('Please enter a valid email address.');
     if (!form.Qualification) return setError('Please select your highest qualification.');
     if (!form.Discipline.trim()) return setError('Please enter your discipline / stream.');
-    if (form.Percentage === '' || Number.isNaN(Number(form.Percentage))) return setError('Please enter your percentage or CGPA.');
     setSubmitting(true);
     try {
       const utm = readUtmContext();
@@ -171,9 +169,9 @@ export default function ApplyLandingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           Student_Name: form.Student_Name.trim(), Present_Mobile: form.Present_Mobile.trim(),
-          Email: form.Email.trim(), Course_Id: form.Course_Id ? Number(form.Course_Id) : undefined,
+          Course_Id: form.Course_Id ? Number(form.Course_Id) : undefined,
           Qualification: form.Qualification, Discipline: form.Discipline.trim(),
-          Percentage: Number(form.Percentage), Discussion: notes,
+          Discussion: notes,
           Inquiry_From: 'Google Ads Landing Page', Inquiry_Type: 'Google Ads Leads',
         }),
       });
@@ -270,17 +268,13 @@ export default function ApplyLandingPage() {
                     </div>
                   </div>
                   <div className={fieldCls}>
-                    <FieldIcon d={FORM_ICONS.email} />
-                    <input className={inputCls} type="email" placeholder="Email Address *" value={form.Email} onChange={e => set('Email', e.target.value)} />
-                  </div>
-                  <div className={fieldCls}>
                     <FieldIcon d={FORM_ICONS.course} />
                     <select className={inputCls} value={form.Course_Id} onChange={e => set('Course_Id', e.target.value)}>
                       <option value="">Select Course *</option>
                       {courses.map(c => <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>)}
                     </select>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
                     <div className={fieldCls}>
                       <FieldIcon d={FORM_ICONS.qualification} />
                       <select className={inputCls} value={form.Qualification} onChange={e => set('Qualification', e.target.value)}>
@@ -291,10 +285,6 @@ export default function ApplyLandingPage() {
                     <div className={fieldCls}>
                       <FieldIcon d={FORM_ICONS.discipline} />
                       <input className={inputCls} placeholder="Discipline *" value={form.Discipline} onChange={e => set('Discipline', e.target.value)} />
-                    </div>
-                    <div className={fieldCls}>
-                      <FieldIcon d={FORM_ICONS.percentage} />
-                      <input className={inputCls} type="number" placeholder="% / CGPA *" value={form.Percentage} onChange={e => set('Percentage', e.target.value)} />
                     </div>
                   </div>
                   {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{error}</p>}
@@ -413,7 +403,9 @@ export default function ApplyLandingPage() {
 
       {/* ── FOOTER ─────────────────────────────────────────────────────────── */}
       <footer style={{ background: NAV }} className="px-4 py-8 text-center">
-        <Image src="/sit.png" alt="SIT" width={120} height={68} className="mx-auto h-10 w-auto brightness-0 invert opacity-80 mb-4" />
+        <div className="mx-auto mb-4 inline-block rounded-lg bg-white px-3 py-1.5">
+          <Image src="/sit.png" alt="SIT" width={120} height={68} className="h-10 w-auto" />
+        </div>
         <div className="flex items-center justify-center gap-6 text-xs text-white/60">
           <a href="mailto:enquiry@suvidya.ac.in" className="hover:text-white transition-colors">enquiry@suvidya.ac.in</a>
           <a href="tel:+919821569885" className="hover:text-white transition-colors">+91 98215 69885</a>
