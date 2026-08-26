@@ -258,6 +258,15 @@ export default function InquiryPage() {
 
   useEffect(() => { if (viewMode === 'grouped') fetchPersonData(); }, [viewMode, fetchPersonData]);
 
+  // Load filter options (trainings, disciplines, statuses, etc.) on mount — independent
+  // of view mode, since fetchData only runs in flat view but filters are shared.
+  useEffect(() => {
+    fetch('/api/inquiry?page=1&limit=1')
+      .then(r => r.json())
+      .then(d => { if (d.filters) setFilters(d.filters); })
+      .catch(() => {});
+  }, []);
+
   const toggleExpand = async (personId: number | null) => {
     if (personId == null) return;
     if (expandedPersonId === personId) { setExpandedPersonId(null); return; }
