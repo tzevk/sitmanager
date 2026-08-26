@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { ADS_CONVERSION_ID, ADS_CONVERSION_LABEL } from './tracking-config';
 
 interface Course { Course_Id: number; Course_Name: string }
 
@@ -133,7 +132,6 @@ function StatCard({ value, suffix, label }: { value: number; suffix: string; lab
 export default function ApplyLandingPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({
     Student_Name: '', Present_Mobile: '',
@@ -177,10 +175,7 @@ export default function ApplyLandingPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Something went wrong.');
-      setSubmitted(true);
-      const w = window as unknown as { gtag?: (...a: unknown[]) => void };
-      if (typeof w.gtag === 'function' && !ADS_CONVERSION_ID.includes('XXXXXXXXX'))
-        w.gtag('event', 'conversion', { send_to: `${ADS_CONVERSION_ID}/${ADS_CONVERSION_LABEL}` });
+      window.location.href = '/apply/thank-you';
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
@@ -240,61 +235,49 @@ export default function ApplyLandingPage() {
 
           {/* Form */}
           <div id="enquiry-form" className="scroll-mt-20 rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
-            {submitted ? (
-              <div className="py-10 text-center">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full" style={{ background: `${GOLD}22`, color: GOLD }}>
-                  <svg className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                </div>
-                <h3 className="text-lg font-bold" style={{ color: NAV }}>Thank you!</h3>
-                <p className="mt-2 text-sm text-slate-500">Our admissions team will call you shortly.</p>
+            <h2 className="text-base font-bold" style={{ color: NAV }}>Enquire today for your desired program!</h2>
+            <p className="mt-0.5 mb-5 text-xs text-slate-400">All fields are required.</p>
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div className={fieldCls}>
+                <FieldIcon d={FORM_ICONS.name} />
+                <input className={inputCls} placeholder="Full Name *" value={form.Student_Name} onChange={e => set('Student_Name', e.target.value)} />
               </div>
-            ) : (
-              <>
-                <h2 className="text-base font-bold" style={{ color: NAV }}>Enquire today for your desired program!</h2>
-                <p className="mt-0.5 mb-5 text-xs text-slate-400">All fields are required.</p>
-                <form onSubmit={handleSubmit} className="space-y-3">
-                  <div className={fieldCls}>
-                    <FieldIcon d={FORM_ICONS.name} />
-                    <input className={inputCls} placeholder="Full Name *" value={form.Student_Name} onChange={e => set('Student_Name', e.target.value)} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className={fieldCls}>
-                      <FieldIcon d={FORM_ICONS.phone} />
-                      <input className={inputCls} type="tel" placeholder="Mobile *" value={form.Present_Mobile} onChange={e => set('Present_Mobile', e.target.value.replace(/\D/g,'').slice(0,10))} />
-                    </div>
-                    <div className={fieldCls}>
-                      <FieldIcon d={FORM_ICONS.city} />
-                      <input className={inputCls} placeholder="City" value={form.City} onChange={e => set('City', e.target.value)} />
-                    </div>
-                  </div>
-                  <div className={fieldCls}>
-                    <FieldIcon d={FORM_ICONS.course} />
-                    <select className={inputCls} value={form.Course_Id} onChange={e => set('Course_Id', e.target.value)}>
-                      <option value="">Select Course *</option>
-                      {courses.map(c => <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>)}
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className={fieldCls}>
-                      <FieldIcon d={FORM_ICONS.qualification} />
-                      <select className={inputCls} value={form.Qualification} onChange={e => set('Qualification', e.target.value)}>
-                        <option value="">Qualification *</option>
-                        {QUALIFICATIONS.map(q => <option key={q} value={q}>{q}</option>)}
-                      </select>
-                    </div>
-                    <div className={fieldCls}>
-                      <FieldIcon d={FORM_ICONS.discipline} />
-                      <input className={inputCls} placeholder="Discipline *" value={form.Discipline} onChange={e => set('Discipline', e.target.value)} />
-                    </div>
-                  </div>
-                  {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{error}</p>}
-                  <button type="submit" disabled={submitting} className="mt-1 w-full rounded-lg py-3 text-sm font-bold uppercase tracking-wider text-white transition-opacity hover:opacity-90 disabled:opacity-50" style={{ background: NAV }}>
-                    {submitting ? 'Submitting…' : 'Submit'}
-                  </button>
-                  <p className="text-center text-[10px] text-slate-400">By submitting you agree to be contacted by SIT regarding admissions.</p>
-                </form>
-              </>
-            )}
+              <div className="grid grid-cols-2 gap-3">
+                <div className={fieldCls}>
+                  <FieldIcon d={FORM_ICONS.phone} />
+                  <input className={inputCls} type="tel" placeholder="Mobile *" value={form.Present_Mobile} onChange={e => set('Present_Mobile', e.target.value.replace(/\D/g,'').slice(0,10))} />
+                </div>
+                <div className={fieldCls}>
+                  <FieldIcon d={FORM_ICONS.city} />
+                  <input className={inputCls} placeholder="City" value={form.City} onChange={e => set('City', e.target.value)} />
+                </div>
+              </div>
+              <div className={fieldCls}>
+                <FieldIcon d={FORM_ICONS.course} />
+                <select className={inputCls} value={form.Course_Id} onChange={e => set('Course_Id', e.target.value)}>
+                  <option value="">Select Course *</option>
+                  {courses.map(c => <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className={fieldCls}>
+                  <FieldIcon d={FORM_ICONS.qualification} />
+                  <select className={inputCls} value={form.Qualification} onChange={e => set('Qualification', e.target.value)}>
+                    <option value="">Qualification *</option>
+                    {QUALIFICATIONS.map(q => <option key={q} value={q}>{q}</option>)}
+                  </select>
+                </div>
+                <div className={fieldCls}>
+                  <FieldIcon d={FORM_ICONS.discipline} />
+                  <input className={inputCls} placeholder="Discipline *" value={form.Discipline} onChange={e => set('Discipline', e.target.value)} />
+                </div>
+              </div>
+              {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{error}</p>}
+              <button type="submit" disabled={submitting} className="mt-1 w-full rounded-lg py-3 text-sm font-bold uppercase tracking-wider text-white transition-opacity hover:opacity-90 disabled:opacity-50" style={{ background: NAV }}>
+                {submitting ? 'Submitting…' : 'Submit'}
+              </button>
+              <p className="text-center text-[10px] text-slate-400">By submitting you agree to be contacted by SIT regarding admissions.</p>
+            </form>
           </div>
         </div>
       </section>
