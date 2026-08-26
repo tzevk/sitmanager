@@ -32,38 +32,173 @@ const BENEFITS = [
 ];
 
 const STATS = [
-  { value: 18000, suffix: '+', label: 'Students Trained', icon: 'M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422A12.083 12.083 0 0112 20.055 12.083 12.083 0 015.84 10.578L12 14zm0 0v6' },
-  { value: 650,   suffix: '+', label: 'Successful Batches', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
-  { value: 250,   suffix: '+', label: 'Corporate Trainings', icon: 'M3 21h18M5 21V7l8-4v18M13 21V11l6 3v7M9 9h.01M9 12h.01M9 15h.01' },
-  { value: 25,    suffix: '+', label: 'Years of Excellence', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { value: 18000, suffix: '+', label: 'Students Trained',    icon: 'M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422A12.083 12.083 0 0112 20.055 12.083 12.083 0 015.84 10.578L12 14zm0 0v6' },
+  { value: 650,   suffix: '+', label: 'Successful Batches',  icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { value: 250,   suffix: '+', label: 'Corporate Training',  icon: 'M3 21h18M5 21V7l8-4v18M13 21V11l6 3v7M9 9h.01M9 12h.01M9 15h.01' },
+  { value: 40,    suffix: '+', label: 'Professional Training', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
 ];
 
 const BASE = 'https://suvidya.ac.in/inquire-now/images/';
 const PROGRAMMES = [
-  { name: 'Piping Engineering',                      img: `${BASE}piping-engineering.jpg` },
-  { name: 'Mechanical Design of Process Equipment',  img: `${BASE}mechanical-design.png` },
-  { name: 'Process Engineering',                     img: `${BASE}process-engineering.png` },
-  { name: 'Advance Pipe Stress Analysis',            img: `${BASE}advance-pipe-stress.jpg` },
-  { name: 'Water & Waste Water Engineering',         img: `${BASE}water-waste_water-engineering.jpg` },
-  { name: 'Process Instrumentation and Control',     img: `${BASE}process-instrumentation-control.png` },
-  { name: 'Air Conditioning System Design',          img: `${BASE}air-conditioning.png` },
-  { name: 'Structural Engineering',                  img: `${BASE}structural-engineering.png` },
-  { name: 'Electrical System Designing',             img: `${BASE}electrical-system-design.jpg` },
-  { name: 'MEP (Mechanical, Electrical, Plumbing)',  img: `${BASE}MEP-engineering.png` },
-  { name: 'Rotating Equipment',                      img: `${BASE}rotating-equipment.png` },
-  { name: 'HSE in Construction',                     img: `${BASE}hse-in-construction.jpg` },
-  { name: 'Piping Design and Drafting',              img: `${BASE}piping-design-drafting.jpg` },
-  { name: 'Engineering Design & Drafting',           img: `${BASE}engineering-design-drafting.jpg` },
-  { name: 'HAVC Design and Drafting',                img: `${BASE}HVAC-design-drafting.jpg` },
-  { name: 'Civil and Structural Drafting',           img: `${BASE}civil-structural-engineering.jpg` },
-  { name: 'Solar PV Power System with Renewable Energy', img: `${BASE}solar.jpg` },
-  { name: 'PDMS (Plant Design Management System)',   img: `${BASE}PDMS.jpg` },
-  { name: 'Offshore Engineering',                    img: `${BASE}Offshore-Engineering.jpg` },
-  { name: 'Process Equipment Fabrication Engineering', img: `${BASE}equipment-fabrication.jpg` },
-  { name: 'Fundamentals Of Offshore',               img: `${BASE}Offshore-Engineering.jpg` },
-  { name: 'Fire Alarm and Protection System',        img: `${BASE}Fire-Alarm.jpg` },
-  { name: 'E3D',                                     img: `${BASE}E3D.jpg` },
-  { name: 'PV Elite',                                img: `${BASE}PV-Elite.jpg` },
+  {
+    name: 'Piping Engineering',
+    img: `${BASE}piping-engineering.jpg`,
+    desc: 'Piping Engineering course is one-of-a-kind. This course is structured to raise the level of expertise in piping design and to improve the competitiveness in the global markets.',
+  },
+  {
+    name: 'Mechanical Design of Process Equipment',
+    img: `${BASE}mechanical-design.png`,
+    desc: 'Process equipment design course is unique, which discusses all the following items in a single course.',
+  },
+  {
+    name: 'Process Engineering',
+    img: `${BASE}process-engineering.png`,
+    desc: 'Process Engineering course is unique. It begins by discussing the design of processes for desired physical and/or chemical transformation of materials.',
+  },
+  {
+    name: 'Advance Pipe Stress Analysis',
+    img: `${BASE}advance-pipe-stress.jpg`,
+    desc: 'The first part discusses the fundamentals of Advance Pipe Stress Analysis with an emphasis on piping systems.',
+  },
+  {
+    name: 'Water & Waste Water Engineering',
+    img: `${BASE}water-waste_water-engineering.jpg`,
+    desc: 'The comprehensive Course includes different modules like basic fundamentals and concepts of design, construction, installation, commissioning and trouble shooting of drinking water, sewage and effluent treatment plants.',
+  },
+  {
+    name: 'Process Instrumentation and Control',
+    img: `${BASE}process-instrumentation-control.png`,
+    desc: 'Automation is one of the fastest growing segments in the field of Process industries like Refinery, Chemical, Oil & Gas, Bottling Plants, Food Processing and many more.',
+  },
+  {
+    name: 'Air Conditioning System Design',
+    img: `${BASE}air-conditioning.png`,
+    desc: 'The design of the HVAC component is critical to achieve an efficient and effective environmental control system.',
+  },
+  {
+    name: 'Structural Engineering',
+    img: `${BASE}structural-engineering.png`,
+    desc: 'This course will help the student to have in-depth understanding of structural behavior, forming a basis for analysis and design of building structures.',
+  },
+  {
+    name: 'Electrical System Designing',
+    img: `${BASE}electrical-system-design.jpg`,
+    desc: 'The design of Electrical Systems deals with the study and application of Electrical Power System, Electrical Machines and Control systems.',
+  },
+  {
+    name: 'MEP (Mechanical, Electrical, Plumbing)',
+    img: `${BASE}MEP-engineering.png`,
+    desc: 'MEP electrical module offering electrical design details with various equipment used in Electrical construction.',
+  },
+  {
+    name: 'Rotating Equipment',
+    img: `${BASE}rotating-equipment.png`,
+    desc: 'Comprehensive training on rotating machinery used in process plants including pumps, compressors, turbines and related systems.',
+  },
+  {
+    name: 'HSE in Construction',
+    img: `${BASE}hse-in-construction.jpg`,
+    desc: 'Health, Safety and Environment training covering regulatory requirements, risk assessment and safe practices in construction environments.',
+  },
+  {
+    name: 'Piping Design and Drafting',
+    img: `${BASE}piping-design-drafting.jpg`,
+    desc: "This is an intermediate piping drafting course. Today's world of engineering requires considerable experience and training in designing and drafting principles and techniques.",
+  },
+  {
+    name: 'Engineering Design & Drafting',
+    img: `${BASE}engineering-design-drafting.jpg`,
+    desc: 'This Course is built on knowledge, skills and insights from the level one Course into production processes and materials, using high-functioning math and advanced critical thinking skills.',
+  },
+  {
+    name: 'HAVC Design and Drafting',
+    img: `${BASE}HVAC-design-drafting.jpg`,
+    desc: 'This Course is built on knowledge, skills and insights from the level one Course into production processes and materials involved in problem solving using advanced critical thinking skills.',
+  },
+  {
+    name: 'Civil and Structural Drafting',
+    img: `${BASE}civil-structural-engineering.jpg`,
+    desc: 'Practical drafting training covering civil and structural drawing standards, detailing and documentation used in construction projects.',
+  },
+  {
+    name: 'Solar PV Power System with Renewable Energy',
+    img: `${BASE}solar.jpg`,
+    desc: 'Covers design, installation and commissioning of solar photovoltaic systems and integration with renewable energy sources.',
+  },
+  {
+    name: 'PDMS (Plant Design Management System)',
+    img: `${BASE}PDMS.jpg`,
+    desc: 'Hands-on training in PDMS software for 3D plant design covering equipment, piping, structures and generating engineering deliverables.',
+  },
+  {
+    name: 'Offshore Engineering',
+    img: `${BASE}Offshore-Engineering.jpg`,
+    desc: 'The Oil and Gas industry have offshore design engineering and construction projects as well as maintenance services which are technically and commercially challenging.',
+  },
+  {
+    name: 'Process Equipment Fabrication Engineering',
+    img: `${BASE}equipment-fabrication.jpg`,
+    desc: 'Fabrication engineering of most commonly used equipment like Vertical and Horizontal Vessel, Heat Exchangers, Distillation Column and Tanks.',
+  },
+  {
+    name: 'Fundamentals Of Offshore',
+    img: `${BASE}Offshore-Engineering.jpg`,
+    desc: 'An introductory course covering the fundamentals of offshore oil and gas platforms, structures, equipment and operational processes.',
+  },
+  {
+    name: 'Fire Alarm and Protection System',
+    img: `${BASE}Fire-Alarm.jpg`,
+    desc: 'Training on design, installation and maintenance of fire alarm, detection and suppression systems as per industry standards.',
+  },
+  {
+    name: 'E3D',
+    img: `${BASE}E3D.jpg`,
+    desc: 'AVEVA E3D Design combines the latest 3-dimensional graphics and user interface technologies with state-of-the-art data management.',
+  },
+  {
+    name: 'PV Elite',
+    img: `${BASE}PV-Elite.jpg`,
+    desc: 'PV Elite is a complete solution for the quick and intuitive design of new pressure vessels, and it also evaluates and re-rates existing vessels, including Fitness for Service analysis.',
+  },
+];
+
+const TESTIMONIALS = [
+  {
+    name: 'Vishwadip Giridhar Yewale',
+    batch: 'Batch No.03053, Process Engineering',
+    img: `${BASE}vishwadip.jpg`,
+    text: 'This training was very useful to me. It made me understand various concept easily. Faculties and staff are very co-operative.',
+  },
+  {
+    name: 'Tabrej Ebrahim Lanjekar',
+    batch: 'Batch No.03053, Process Engineering',
+    img: `${BASE}Tabrej.jpg`,
+    text: 'Training content was made easy to understand. The supportive nature of sir has helped me gain confidence. I got my concepts and basics cleared and understood how to design.',
+  },
+  {
+    name: 'Sonal Nitin Barad',
+    batch: 'Batch No.03053, Process Engineering',
+    img: `${BASE}sonal.jpg`,
+    text: 'Training contents are well organised. I have gained a lot of knowledge about process design field. Faculty have depth knowledge.',
+  },
+  {
+    name: 'Mayur Ajit Patravale',
+    batch: 'Batch No.03053, Process Engineering',
+    img: `${BASE}mayur.jpg`,
+    text: 'Training contents are very useful. This Training Program bridge the gap between academic & industrial knowledge. Highly experienced faculty. This training has changed my looking perspective towards industries.',
+  },
+  {
+    name: 'Tilesh Sudhakar Patil',
+    batch: 'Batch No.09043, Electrical System Design',
+    img: `${BASE}tilesh.jpg`,
+    text: 'SIT has changed me a lot. Contents are very useful as per industry. Infrastructure & amenities are up to the mark. Training gives real industrial exposure.',
+  },
+  {
+    name: 'Shukla Ambkeshwar Brijmohan',
+    batch: 'Batch No.09043, Electrical System Design',
+    img: `${BASE}shukla.jpg`,
+    text: 'The faculty has good knowledge of the Electrical industry. The supportive nature of sir has helped me gain confidence.',
+  },
 ];
 
 const FORM_ICONS: Record<string, string> = {
@@ -239,37 +374,25 @@ export default function ApplyLandingPage() {
 
   return (
     <div className="min-h-screen bg-white">
+
       {/* Header */}
       <header className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] shadow-lg">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3">
           <div className="bg-white rounded-xl px-3 py-2 sm:px-4 sm:py-2.5 shadow-md flex items-center shrink-0">
-            <Image
-              src="/sit.png"
-              alt="Suvidya Institute of Technology"
-              width={666}
-              height={375}
-              className="block h-12 sm:h-16 w-auto"
-              priority
-            />
+            <Image src="/sit.png" alt="Suvidya Institute of Technology" width={666} height={375} className="block h-12 sm:h-16 w-auto" priority />
           </div>
           <div className="hidden sm:flex items-center gap-4">
             <a href="mailto:enquiry@suvidya.ac.in" className="inline-flex items-center gap-1.5 text-white/90 text-xs font-semibold hover:text-white transition-colors">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
               enquiry@suvidya.ac.in
             </a>
-            <a href="tel:+912226682290" className="inline-flex items-center gap-1.5 text-white/90 text-xs font-semibold hover:text-white transition-colors">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-1.687.845a11.037 11.037 0 006.105 6.105l.845-1.687a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-              </svg>
-              (022) 2668 2290
+            <a href="tel:+919821569885" className="inline-flex items-center gap-1.5 text-white/90 text-xs font-semibold hover:text-white transition-colors">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-1.687.845a11.037 11.037 0 006.105 6.105l.845-1.687a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+              +91 9821569885
             </a>
           </div>
-          <a href="tel:+912226682290" className="sm:hidden inline-flex items-center gap-1.5 text-white/90 text-xs font-semibold hover:text-white transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-1.687.845a11.037 11.037 0 006.105 6.105l.845-1.687a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-            </svg>
+          <a href="tel:+919821569885" className="sm:hidden inline-flex items-center gap-1.5 text-white/90 text-xs font-semibold hover:text-white transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-1.687.845a11.037 11.037 0 006.105 6.105l.845-1.687a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
             Call
           </a>
         </div>
@@ -279,23 +402,18 @@ export default function ApplyLandingPage() {
       <section className="bg-gradient-to-br from-[#2E3093] via-[#2A6BB5] to-[#1e5a9e] text-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16 grid lg:grid-cols-2 gap-10 items-center">
           <div>
-            <span className="inline-flex items-center gap-1.5 bg-[#FAE452] text-[#2E3093] text-[11px] font-bold px-3 py-1 rounded-full mb-4">
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l2.4 7.2H22l-6 4.6 2.3 7.2-6.3-4.6-6.3 4.6 2.3-7.2-6-4.6h7.6z" /></svg>
-              25+ Years Training Engineers
-            </span>
             <h1 className="text-3xl sm:text-4xl lg:text-[42px] font-extrabold leading-tight text-balance">
-              Industry-Ready Training for Your Engineering Career
+              Suvidya Institute provides World Class Industrial Training in all disciplines of Engineering.
             </h1>
             <p className="mt-4 text-white/85 text-sm sm:text-base max-w-lg text-pretty">
-              Industry-focused training in Piping, HVAC, Structural, Rotating Equipment, Engineering Design
-              &amp; Drafting and Software programmes at Suvidya Institute of Technology, Mumbai.
+              Training programmes in Piping, Process, Mechanical, Electrical, HVAC, Structural &amp; more — for freshers and working professionals across India.
             </p>
             <button
               type="button"
               onClick={scrollToForm}
               className="mt-7 inline-flex items-center gap-2 bg-[#FAE452] text-[#2E3093] font-bold text-sm px-6 py-3 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all"
             >
-              Get Free Course Guidance
+              Enquire today for your desired program!
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
@@ -318,92 +436,58 @@ export default function ApplyLandingPage() {
               </div>
             ) : (
               <>
-                <h2 className="text-lg font-bold text-[#2E3093]">Get Free Course Guidance</h2>
-                <p className="text-xs text-gray-500 mt-0.5 mb-4">Fill in your details — our team will call you back.</p>
+                <h2 className="text-lg font-bold text-[#2E3093]">Enquire today for your desired program!</h2>
+                <p className="text-xs text-gray-500 mt-0.5 mb-4">All fields are required.</p>
                 <form onSubmit={handleSubmit} className="space-y-3">
                   <div>
                     <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
                       <FieldIcon d={FORM_ICONS.name} />
-                      <input
-                        type="text" placeholder="Full Name *" value={form.Student_Name}
-                        onChange={(e) => set('Student_Name', e.target.value)}
-                        className="w-full bg-transparent text-sm focus:outline-none"
-                      />
+                      <input type="text" placeholder="Full Name *" value={form.Student_Name} onChange={(e) => set('Student_Name', e.target.value)} className="w-full bg-transparent text-sm focus:outline-none" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
                       <FieldIcon d={FORM_ICONS.phone} />
-                      <input
-                        type="tel" placeholder="Mobile Number *" value={form.Present_Mobile}
-                        onChange={(e) => set('Present_Mobile', e.target.value.replace(/\D/g, '').slice(0, 10))}
-                        className="w-full bg-transparent text-sm focus:outline-none"
-                      />
+                      <input type="tel" placeholder="Mobile Number *" value={form.Present_Mobile} onChange={(e) => set('Present_Mobile', e.target.value.replace(/\D/g, '').slice(0, 10))} className="w-full bg-transparent text-sm focus:outline-none" />
                     </div>
                     <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
                       <FieldIcon d={FORM_ICONS.city} />
-                      <input
-                        type="text" placeholder="City" value={form.City}
-                        onChange={(e) => set('City', e.target.value)}
-                        className="w-full bg-transparent text-sm focus:outline-none"
-                      />
+                      <input type="text" placeholder="City" value={form.City} onChange={(e) => set('City', e.target.value)} className="w-full bg-transparent text-sm focus:outline-none" />
                     </div>
                   </div>
                   <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
                     <FieldIcon d={FORM_ICONS.email} />
-                    <input
-                      type="email" placeholder="Email Address *" value={form.Email}
-                      onChange={(e) => set('Email', e.target.value)}
-                      className="w-full bg-transparent text-sm focus:outline-none"
-                    />
+                    <input type="email" placeholder="Email Address *" value={form.Email} onChange={(e) => set('Email', e.target.value)} className="w-full bg-transparent text-sm focus:outline-none" />
                   </div>
                   <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
                     <FieldIcon d={FORM_ICONS.course} />
-                    <select
-                      value={form.Course_Id} onChange={(e) => set('Course_Id', e.target.value)}
-                      className="w-full bg-transparent text-sm focus:outline-none"
-                    >
-                      <option value="">Course Interested In</option>
+                    <select value={form.Course_Id} onChange={(e) => set('Course_Id', e.target.value)} className="w-full bg-transparent text-sm focus:outline-none">
+                      <option value="">Select Course *</option>
                       {courses.map((c) => <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>)}
                     </select>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div className="col-span-1 flex items-center gap-1.5 bg-white border border-gray-300 rounded-lg px-2 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
                       <FieldIcon d={FORM_ICONS.qualification} />
-                      <select
-                        value={form.Qualification} onChange={(e) => set('Qualification', e.target.value)}
-                        className="w-full bg-transparent text-sm focus:outline-none"
-                      >
+                      <select value={form.Qualification} onChange={(e) => set('Qualification', e.target.value)} className="w-full bg-transparent text-sm focus:outline-none">
                         <option value="">Qualification *</option>
                         {QUALIFICATIONS.map((q) => <option key={q} value={q}>{q}</option>)}
                       </select>
                     </div>
                     <div className="col-span-1 flex items-center gap-1.5 bg-white border border-gray-300 rounded-lg px-2 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
                       <FieldIcon d={FORM_ICONS.discipline} />
-                      <input
-                        type="text" placeholder="Discipline *" value={form.Discipline}
-                        onChange={(e) => set('Discipline', e.target.value)}
-                        className="w-full bg-transparent text-sm focus:outline-none"
-                      />
+                      <input type="text" placeholder="Discipline *" value={form.Discipline} onChange={(e) => set('Discipline', e.target.value)} className="w-full bg-transparent text-sm focus:outline-none" />
                     </div>
                     <div className="col-span-1 flex items-center gap-1.5 bg-white border border-gray-300 rounded-lg px-2 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
                       <FieldIcon d={FORM_ICONS.percentage} />
-                      <input
-                        type="number" placeholder="% / CGPA *" value={form.Percentage}
-                        onChange={(e) => set('Percentage', e.target.value)}
-                        className="w-full bg-transparent text-sm focus:outline-none"
-                      />
+                      <input type="number" placeholder="% / CGPA *" value={form.Percentage} onChange={(e) => set('Percentage', e.target.value)} className="w-full bg-transparent text-sm focus:outline-none" />
                     </div>
                   </div>
 
                   {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
 
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="w-full bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold text-sm py-3 rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-60"
-                  >
-                    {submitting ? 'Submitting…' : 'Submit Enquiry'}
+                  <button type="submit" disabled={submitting} className="w-full bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold text-sm py-3 rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-60">
+                    {submitting ? 'Submitting…' : 'Submit'}
                   </button>
                   <p className="text-[10px] text-gray-400 text-center leading-relaxed">
                     By submitting, you agree to be contacted by SIT regarding admissions.
@@ -418,9 +502,7 @@ export default function ApplyLandingPage() {
       {/* Stats — animated */}
       <section className="bg-white border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 grid grid-cols-2 lg:grid-cols-4 gap-6">
-          {STATS.map((s) => (
-            <StatCard key={s.label} {...s} />
-          ))}
+          {STATS.map((s) => <StatCard key={s.label} {...s} />)}
         </div>
       </section>
 
@@ -442,12 +524,14 @@ export default function ApplyLandingPage() {
         </div>
       </section>
 
-      {/* Training Programmes — image cards */}
+      {/* Training Programmes */}
       <section className="bg-gray-50 py-12 sm:py-16">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <h2 className="text-2xl font-extrabold text-gray-900 text-center">Our Training Programmes</h2>
-          <p className="mt-2 text-center text-sm text-gray-500 max-w-2xl mx-auto">
-            Training for learners at every career stage — covering the entire spectrum of technical engineering disciplines.
+          <h2 className="text-2xl font-extrabold text-gray-900 text-center uppercase tracking-wide">
+            Training Programme for Learners at Every Career Stage
+          </h2>
+          <p className="mt-3 text-center text-sm text-gray-500 max-w-3xl mx-auto">
+            Our programs cover the entire spectrum of technical training in all the engineering disciplines to meet the requirements of skilled manpower in the field of &ldquo;Oil &amp; Gas&rdquo;, Petrochemical &amp; various Process Chemical Plant industries.
           </p>
           <div className="mt-8 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {PROGRAMMES.map((p) => (
@@ -459,19 +543,13 @@ export default function ApplyLandingPage() {
               >
                 <div className="relative h-36 w-full overflow-hidden bg-gray-100">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={p.img}
-                    alt={p.name}
-                    className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    loading="lazy"
-                  />
+                  <img src={p.img} alt={p.name} className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                 </div>
                 <div className="px-3 py-2.5">
-                  <p className="text-xs font-semibold text-gray-800 leading-snug group-hover:text-[#2A6BB5] transition-colors line-clamp-2">
-                    {p.name}
-                  </p>
-                  <p className="mt-1 text-[10px] text-[#2E3093] font-medium">Enquire Now →</p>
+                  <p className="text-xs font-bold text-gray-800 group-hover:text-[#2A6BB5] transition-colors leading-snug">{p.name}</p>
+                  <p className="mt-1 text-[10px] text-gray-500 leading-relaxed line-clamp-2">{p.desc}</p>
+                  <p className="mt-1.5 text-[10px] text-[#2E3093] font-semibold">Enquire Now →</p>
                 </div>
               </button>
             ))}
@@ -479,14 +557,30 @@ export default function ApplyLandingPage() {
         </div>
       </section>
 
+      {/* Testimonials */}
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
+        <h2 className="text-2xl font-extrabold text-gray-900 text-center">Testimonials</h2>
+        <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {TESTIMONIALS.map((t) => (
+            <div key={t.name} className="rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={t.img} alt={t.name} className="w-12 h-12 rounded-full object-cover border-2 border-[#2E3093]/20 shrink-0" loading="lazy" />
+                <div>
+                  <p className="text-sm font-bold text-gray-900">{t.name}</p>
+                  <p className="text-[10px] text-gray-500">{t.batch}</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-600 leading-relaxed italic">&ldquo;{t.text}&rdquo;</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Bottom CTA */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 py-10 text-center">
         <p className="text-sm text-gray-500 mb-3">Still have questions? Talk to our admissions team.</p>
-        <button
-          type="button"
-          onClick={scrollToForm}
-          className="inline-flex items-center gap-2 bg-[#2E3093] text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all"
-        >
+        <button type="button" onClick={scrollToForm} className="inline-flex items-center gap-2 bg-[#2E3093] text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all">
           Enquire Now
         </button>
       </section>
@@ -495,16 +589,12 @@ export default function ApplyLandingPage() {
       <footer className="bg-[#2E3093] text-white/80 text-center py-6 text-xs">
         <div className="flex items-center justify-center gap-5">
           <a href="mailto:enquiry@suvidya.ac.in" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
             enquiry@suvidya.ac.in
           </a>
-          <a href="tel:+912226682290" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-1.687.845a11.037 11.037 0 006.105 6.105l.845-1.687a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-            </svg>
-            (022) 2668 2290
+          <a href="tel:+919821569885" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-1.687.845a11.037 11.037 0 006.105 6.105l.845-1.687a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+            +91 9821569885
           </a>
         </div>
         <p className="mt-2">© {new Date().getFullYear()} Suvidya Institute of Technology. All rights reserved.</p>
