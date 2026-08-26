@@ -1,357 +1,243 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { ADS_CONVERSION_ID, ADS_CONVERSION_LABEL } from './tracking-config';
+import { useEffect, useRef, useState, useCallback } from 'react';
 
-interface Course { Course_Id: number; Course_Name: string }
-
-const QUALIFICATIONS = ['10th', '12th', 'Diploma', 'Graduate', 'Post Graduate', 'Other'];
-
-const BENEFITS = [
-  {
-    title: 'Industry-Relevant Curriculum',
-    body: 'Hands-on training on the same tools and workflows used on live engineering projects.',
-    icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
-  },
-  {
-    title: 'Career Support',
-    body: 'Guidance and industry connections to help you move from training into the job market.',
-    icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4',
-  },
-  {
-    title: 'Experienced Faculty',
-    body: 'Learn from trainers with real design-office and industry experience, not just theory.',
-    icon: 'M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422A12.083 12.083 0 0112 20.055 12.083 12.083 0 015.84 10.578L12 14zm0 0v6',
-  },
-  {
-    title: 'Flexible Payment Plans',
-    body: 'Full payment, instalment plans, or a 0% interest loan option — pick what works for you.',
-    icon: 'M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3M3.75 4.5h16.5a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5H3.75a1.5 1.5 0 01-1.5-1.5V6a1.5 1.5 0 011.5-1.5z',
-  },
-];
+// ─── Data ───────────────────────────────────────────────────────────────────
 
 const STATS = [
-  {
-    value: '18,000+',
-    label: 'Students Trained',
-    icon: 'M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422A12.083 12.083 0 0112 20.055 12.083 12.083 0 015.84 10.578L12 14zm0 0v6',
-  },
-  {
-    value: '650+',
-    label: 'Successful Batches',
-    icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
-  },
-  {
-    value: '250+',
-    label: 'Corporate Trainings',
-    icon: 'M3 21h18M5 21V7l8-4v18M13 21V11l6 3v7M9 9h.01M9 12h.01M9 15h.01',
-  },
-  {
-    value: '25+',
-    label: 'Years of Excellence',
-    icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
-  },
+  { value: 18000, suffix: '+', label: 'Students Trained' },
+  { value: 650,   suffix: '+', label: 'Successful Batches' },
+  { value: 250,   suffix: '+', label: 'Corporate Training' },
+  { value: 40,    suffix: '+', label: 'Professional Training' },
 ];
 
-const FORM_ICONS: Record<string, string> = {
-  name: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
-  phone: 'M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-1.687.845a11.037 11.037 0 006.105 6.105l.845-1.687a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z',
-  city: 'M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z',
-  email: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
-  course: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
-  qualification: 'M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422A12.083 12.083 0 0112 20.055 12.083 12.083 0 015.84 10.578L12 14z',
-  discipline: 'M9.75 17L15.75 7m0 0h-4.5m4.5 0v4.5M6 21h12a2 2 0 002-2V5a2 2 0 00-2-2H6a2 2 0 00-2 2v14a2 2 0 002 2z',
-  percentage: 'M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z',
-};
+const PROGRAMMES = [
+  { name: 'Piping Engineering', icon: '🔧' },
+  { name: 'Mechanical Design of Process Equipment', icon: '⚙️' },
+  { name: 'Process Engineering', icon: '⚗️' },
+  { name: 'Advance Pipe Stress Analysis', icon: '📐' },
+  { name: 'Water & Waste Water Engineering', icon: '💧' },
+  { name: 'Process Instrumentation and Control', icon: '🎛️' },
+  { name: 'Air Conditioning System Design', icon: '❄️' },
+  { name: 'Structural Engineering', icon: '🏗️' },
+  { name: 'Electrical System Designing', icon: '⚡' },
+  { name: 'MEP (Mechanical, Electrical, Plumbing)', icon: '🔌' },
+  { name: 'Rotating Equipment', icon: '⚙️' },
+  { name: 'HSE in Construction', icon: '🦺' },
+  { name: 'Piping Design and Drafting', icon: '✏️' },
+  { name: 'Engineering Design & Drafting', icon: '📏' },
+  { name: 'HAVC Design and Drafting', icon: '🌬️' },
+  { name: 'Civil and Structural Drafting', icon: '🏛️' },
+  { name: 'Solar PV Power System with Renewable Energy', icon: '☀️' },
+  { name: 'PDMS (Plant Design Management System)', icon: '🏭' },
+  { name: 'Offshore Engineering', icon: '🌊' },
+  { name: 'Process Equipment Fabrication Engineering', icon: '🔩' },
+  { name: 'Fundamentals Of Offshore', icon: '⚓' },
+  { name: 'Fire Alarm and Protection System', icon: '🔥' },
+  { name: 'E3D', icon: '🖥️' },
+  { name: 'PV Elite', icon: '📊' },
+];
 
-function FieldIcon({ d }: { d: string }) {
+const COURSES = PROGRAMMES.map((p) => p.name);
+
+const QUALIFICATIONS = ['S.S.C.', 'H.S.C.', 'I.T.I.', 'Diploma', 'B.E. / B.Tech', 'M.E. / M.Tech', 'BSC', 'MSC', 'P.HD.', 'OTHERS'];
+const DISCIPLINES = ['Mechanical', 'Chemical', 'Civil', 'Electrical', 'Electronics & Tele-Communication', 'Instrumentation', 'Computers', 'Automobile', 'Petrochemical', 'Industrial', 'Commerce', 'Science', 'Arts', 'Others'];
+const SOURCES = ['Website', 'Google', 'Facebook', 'Reference', 'Ex-Student', 'Seminar', 'Advertisement', 'News Paper', 'Exhibition', 'India Mart', 'Others'];
+
+// ─── Animated counter hook ────────────────────────────────────────────────────
+
+function useCountUp(target: number, duration = 2000, startOnView = true) {
+  const [count, setCount] = useState(0);
+  const [started, setStarted] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!startOnView) { setStarted(true); return; }
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setStarted(true); observer.disconnect(); } },
+      { threshold: 0.3 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [startOnView]);
+
+  useEffect(() => {
+    if (!started) return;
+    let start: number | null = null;
+    const step = (timestamp: number) => {
+      if (!start) start = timestamp;
+      const progress = Math.min((timestamp - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setCount(Math.floor(eased * target));
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [started, target, duration]);
+
+  return { count, ref };
+}
+
+// ─── Stat card ───────────────────────────────────────────────────────────────
+
+function StatCard({ value, suffix, label }: { value: number; suffix: string; label: string }) {
+  const { count, ref } = useCountUp(value);
   return (
-    <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d={d} />
-    </svg>
+    <div ref={ref} className="flex flex-col items-center py-8 px-4">
+      <span className="text-4xl sm:text-5xl font-black text-white tabular-nums">
+        {count.toLocaleString()}{suffix}
+      </span>
+      <span className="mt-3 block h-1 w-14 rounded-full bg-[#FAE452]" />
+      <span className="mt-3 text-sm sm:text-base font-medium text-slate-300 text-center">{label}</span>
+    </div>
   );
 }
 
-function readUtmContext(): string {
-  if (typeof window === 'undefined') return '';
-  const p = new URLSearchParams(window.location.search);
-  const parts: string[] = [];
-  for (const key of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid']) {
-    const v = p.get(key);
-    if (v) parts.push(`${key}=${v}`);
-  }
-  return parts.join(' | ');
-}
+// ─── Main page ────────────────────────────────────────────────────────────────
 
-export default function ApplyLandingPage() {
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [error, setError] = useState('');
-
+export default function ApplyPage() {
   const [form, setForm] = useState({
-    Student_Name: '',
-    Present_Mobile: '',
-    Email: '',
-    Course_Id: '',
-    Qualification: '',
-    Discipline: '',
-    Percentage: '',
-    City: '',
+    course: '', name: '', mobile: '', email: '',
+    qualification: '', discipline: '', gender: '', source: '', notes: '',
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState('');
+  const formRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    fetch('/api/public/courses')
-      .then((r) => r.json())
-      .then((d) => { if (d.success) setCourses(d.courses || []); })
-      .catch(() => {});
-  }, []);
-
-  // Pre-fill the course from a ?course=<Course_Id> query param, if the ad
-  // campaign links to a course-specific landing URL.
-  useEffect(() => {
-    if (!courses.length) return;
-    const courseParam = new URLSearchParams(window.location.search).get('course');
-    if (courseParam && courses.some((c) => String(c.Course_Id) === courseParam)) {
-      setForm((prev) => (prev.Course_Id ? prev : { ...prev, Course_Id: courseParam }));
-    }
-  }, [courses]);
-
-  const set = (field: keyof typeof form, value: string) =>
-    setForm((prev) => ({ ...prev, [field]: value }));
+  const set = useCallback((key: string, value: string) => setForm((f) => ({ ...f, [key]: value })), []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-
-    if (!form.Student_Name.trim()) return setError('Please enter your full name.');
-    if (!/^[0-9]{10}$/.test(form.Present_Mobile.trim())) return setError('Please enter a valid 10-digit mobile number.');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.Email.trim())) return setError('Please enter a valid email address.');
-    if (!form.Qualification) return setError('Please select your highest qualification.');
-    if (!form.Discipline.trim()) return setError('Please enter your discipline / stream.');
-    if (form.Percentage === '' || Number.isNaN(Number(form.Percentage))) return setError('Please enter your percentage or CGPA.');
-
     setSubmitting(true);
+    setError('');
     try {
-      const utm = readUtmContext();
-      const notesParts = ['Source: Google Ads Landing Page (/apply)'];
-      if (form.City.trim()) notesParts.push(`City: ${form.City.trim()}`);
-      if (utm) notesParts.push(utm);
-
       const res = await fetch('/api/public/inquiry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          Student_Name: form.Student_Name.trim(),
-          Present_Mobile: form.Present_Mobile.trim(),
-          Email: form.Email.trim(),
-          Course_Id: form.Course_Id ? Number(form.Course_Id) : undefined,
-          Qualification: form.Qualification,
-          Discipline: form.Discipline.trim(),
-          Percentage: Number(form.Percentage),
-          Discussion: notesParts.join(' | '),
-          Inquiry_From: 'Google Ads Landing Page',
-          Inquiry_Type: 'Google Ads Leads',
+          Student_Name: form.name,
+          Inquiry_Type: 'Online Inquiry',
+          Course_Name: form.course || null,
+          Qualification: form.qualification || null,
+          Discipline: form.discipline || null,
+          Sex: form.gender || null,
+          Present_Mobile: form.mobile,
+          Email: form.email,
+          Discussion: form.notes || null,
+          Inquiry_From: form.source || null,
         }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Something went wrong. Please try again.');
-
-      setSubmitted(true);
-      const w = window as unknown as { gtag?: (...args: unknown[]) => void };
-      if (typeof w.gtag === 'function' && !ADS_CONVERSION_ID.includes('XXXXXXXXX')) {
-        w.gtag('event', 'conversion', { send_to: `${ADS_CONVERSION_ID}/${ADS_CONVERSION_LABEL}` });
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) throw new Error(data?.error || 'Submission failed');
+      setForm({ course: '', name: '', mobile: '', email: '', qualification: '', discipline: '', gender: '', source: '', notes: '' });
+      setDone(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof Error ? err.message : 'Submission failed');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const scrollToForm = () => document.getElementById('enquiry-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const scrollToForm = () => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const inp = 'w-full rounded border border-slate-300 bg-white/95 px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#2E3093] focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20';
+  const sel = `${inp} appearance-none`;
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] shadow-lg">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3">
-          <div className="bg-white rounded-xl px-3 py-2 sm:px-4 sm:py-2.5 shadow-md flex items-center shrink-0">
-            <Image
-              src="/sit.png"
-              alt="Suvidya Institute of Technology"
-              width={666}
-              height={375}
-              className="block h-12 sm:h-16 w-auto"
-              priority
-            />
+    <div className="relative min-h-screen bg-white text-slate-900">
+
+      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-[#1a2744] shadow-lg">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-2 sm:px-6">
+          <div className="flex items-center gap-3">
+            <Image src="/sit.png" alt="SIT" width={56} height={56} className="h-14 w-14 object-contain" priority />
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-[#FAE452]">Suvidya Institute of Technology</p>
+              <p className="text-[10px] text-slate-400 leading-tight">World Class Industrial Training</p>
+            </div>
           </div>
-          <div className="hidden sm:flex items-center gap-4">
-            <a
-              href="mailto:enquiry@suvidya.ac.in"
-              className="inline-flex items-center gap-1.5 text-white/90 text-xs font-semibold hover:text-white transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              enquiry@suvidya.ac.in
-            </a>
-            <a
-              href="tel:+912226682290"
-              className="inline-flex items-center gap-1.5 text-white/90 text-xs font-semibold hover:text-white transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-1.687.845a11.037 11.037 0 006.105 6.105l.845-1.687a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-              </svg>
-              (022) 2668 2290
-            </a>
-          </div>
-          <a
-            href="tel:+912226682290"
-            className="sm:hidden inline-flex items-center gap-1.5 text-white/90 text-xs font-semibold hover:text-white transition-colors"
+          <button
+            onClick={scrollToForm}
+            className="hidden sm:inline-flex items-center gap-2 rounded bg-[#FAE452] px-4 py-2 text-xs font-black uppercase tracking-wider text-[#1a2744] hover:bg-yellow-400 transition-colors"
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-1.687.845a11.037 11.037 0 006.105 6.105l.845-1.687a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-            </svg>
-            Call
-          </a>
+            Enquire Now
+          </button>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="bg-gradient-to-br from-[#2E3093] via-[#2A6BB5] to-[#1e5a9e] text-white">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16 grid lg:grid-cols-2 gap-10 items-center">
-          <div>
-            <span className="inline-flex items-center gap-1.5 bg-[#FAE452] text-[#2E3093] text-[11px] font-bold px-3 py-1 rounded-full mb-4">
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l2.4 7.2H22l-6 4.6 2.3 7.2-6.3-4.6-6.3 4.6 2.3-7.2-6-4.6h7.6z" /></svg>
-              25+ Years Training Engineers
-            </span>
-            <h1 className="text-3xl sm:text-4xl lg:text-[42px] font-extrabold leading-tight text-balance">
-              Industry-Ready Training for Your Engineering Career
+      {/* ── HERO ───────────────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden bg-[#1a2744]">
+        <div className="absolute inset-0">
+          <Image src="/banner.jpg" alt="" fill className="object-cover opacity-20" />
+          <div className="absolute inset-0 bg-gradient-to-br from-[#1a2744]/95 via-[#1a2744]/80 to-[#2E3093]/70" />
+        </div>
+        <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:py-20 grid lg:grid-cols-2 gap-12 items-center">
+
+          {/* Left copy */}
+          <div className="text-center lg:text-left">
+            <p className="text-xs font-black uppercase tracking-[0.3em] text-[#FAE452] mb-3">Enrol Today</p>
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black leading-tight text-white">
+              Build Your Career in<br />
+              <span className="text-[#FAE452]">Engineering</span>
             </h1>
-            <p className="mt-4 text-white/85 text-sm sm:text-base max-w-lg text-pretty">
-              Industry-focused training in Piping, HVAC, Structural, Rotating Equipment, Engineering Design
-              &amp; Drafting and Software programmes at Suvidya Institute of Technology, Mumbai.
+            <p className="mt-5 text-base text-slate-300 leading-relaxed max-w-lg mx-auto lg:mx-0">
+              Industry-aligned training programmes in Piping, Process, Mechanical, Electrical &amp; more — designed for freshers and working professionals.
             </p>
-            <button
-              type="button"
-              onClick={scrollToForm}
-              className="mt-7 inline-flex items-center gap-2 bg-[#FAE452] text-[#2E3093] font-bold text-sm px-6 py-3 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all"
-            >
-              Get Free Course Guidance
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </button>
+            <div className="mt-8 flex flex-wrap gap-3 justify-center lg:justify-start">
+              <button onClick={scrollToForm} className="rounded bg-[#FAE452] px-6 py-3 text-sm font-black uppercase tracking-wider text-[#1a2744] hover:bg-yellow-400 transition-colors shadow-lg">
+                Enquire Now
+              </button>
+              <a href="tel:+912269701234" className="rounded border-2 border-white/30 px-6 py-3 text-sm font-bold text-white hover:bg-white/10 transition-colors">
+                Call Now
+              </a>
+            </div>
           </div>
 
-          {/* Enquiry form card */}
-          <div id="enquiry-form" className="bg-white rounded-2xl shadow-2xl p-5 sm:p-7 text-gray-900 scroll-mt-6">
-            {submitted ? (
-              <div className="py-10 text-center">
-                <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-bold text-gray-900">Thank you!</h3>
-                <p className="text-sm text-gray-500 mt-1.5">
-                  Your enquiry has been received. Our admissions team will call you shortly.
-                </p>
+          {/* Quick form */}
+          <div ref={formRef} className="rounded-2xl border border-white/10 bg-white/10 backdrop-blur-sm p-6 lg:p-8">
+            {done ? (
+              <div className="text-center py-8">
+                <div className="text-5xl mb-4">✅</div>
+                <h3 className="text-xl font-black text-white">Thank You!</h3>
+                <p className="mt-2 text-slate-300 text-sm">Your enquiry has been submitted. Our team will contact you shortly.</p>
+                <button onClick={() => setDone(false)} className="mt-6 rounded bg-[#FAE452] px-5 py-2 text-sm font-bold text-[#1a2744] hover:bg-yellow-400">
+                  Submit Another
+                </button>
               </div>
             ) : (
               <>
-                <h2 className="text-lg font-bold text-[#2E3093]">Get Free Course Guidance</h2>
-                <p className="text-xs text-gray-500 mt-0.5 mb-4">Fill in your details — our team will call you back.</p>
+                <h2 className="text-lg font-black text-white mb-5">Free Counselling — Enquire Now</h2>
                 <form onSubmit={handleSubmit} className="space-y-3">
-                  <div>
-                    <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
-                      <FieldIcon d={FORM_ICONS.name} />
-                      <input
-                        type="text" placeholder="Full Name *" value={form.Student_Name}
-                        onChange={(e) => set('Student_Name', e.target.value)}
-                        className="w-full bg-transparent text-sm focus:outline-none"
-                      />
-                    </div>
+                  <select className={sel} value={form.course} onChange={(e) => set('course', e.target.value)}>
+                    <option value="">Select Course *</option>
+                    {COURSES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <input className={inp} placeholder="Full Name *" required value={form.name} onChange={(e) => set('name', e.target.value)} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <input className={inp} placeholder="Mobile *" type="tel" required value={form.mobile} onChange={(e) => set('mobile', e.target.value)} />
+                    <input className={inp} placeholder="Email" type="email" value={form.email} onChange={(e) => set('email', e.target.value)} />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
-                      <FieldIcon d={FORM_ICONS.phone} />
-                      <input
-                        type="tel" placeholder="Mobile Number *" value={form.Present_Mobile}
-                        onChange={(e) => set('Present_Mobile', e.target.value.replace(/\D/g, '').slice(0, 10))}
-                        className="w-full bg-transparent text-sm focus:outline-none"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
-                      <FieldIcon d={FORM_ICONS.city} />
-                      <input
-                        type="text" placeholder="City" value={form.City}
-                        onChange={(e) => set('City', e.target.value)}
-                        className="w-full bg-transparent text-sm focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
-                    <FieldIcon d={FORM_ICONS.email} />
-                    <input
-                      type="email" placeholder="Email Address *" value={form.Email}
-                      onChange={(e) => set('Email', e.target.value)}
-                      className="w-full bg-transparent text-sm focus:outline-none"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
-                    <FieldIcon d={FORM_ICONS.course} />
-                    <select
-                      value={form.Course_Id} onChange={(e) => set('Course_Id', e.target.value)}
-                      className="w-full bg-transparent text-sm focus:outline-none"
-                    >
-                      <option value="">Course Interested In</option>
-                      {courses.map((c) => <option key={c.Course_Id} value={c.Course_Id}>{c.Course_Name}</option>)}
+                    <select className={sel} value={form.qualification} onChange={(e) => set('qualification', e.target.value)}>
+                      <option value="">Qualification</option>
+                      {QUALIFICATIONS.map((q) => <option key={q} value={q}>{q}</option>)}
+                    </select>
+                    <select className={sel} value={form.source} onChange={(e) => set('source', e.target.value)}>
+                      <option value="">How did you hear?</option>
+                      {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="col-span-1 flex items-center gap-1.5 bg-white border border-gray-300 rounded-lg px-2 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
-                      <FieldIcon d={FORM_ICONS.qualification} />
-                      <select
-                        value={form.Qualification} onChange={(e) => set('Qualification', e.target.value)}
-                        className="w-full bg-transparent text-sm focus:outline-none"
-                      >
-                        <option value="">Qualification *</option>
-                        {QUALIFICATIONS.map((q) => <option key={q} value={q}>{q}</option>)}
-                      </select>
-                    </div>
-                    <div className="col-span-1 flex items-center gap-1.5 bg-white border border-gray-300 rounded-lg px-2 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
-                      <FieldIcon d={FORM_ICONS.discipline} />
-                      <input
-                        type="text" placeholder="Discipline *" value={form.Discipline}
-                        onChange={(e) => set('Discipline', e.target.value)}
-                        className="w-full bg-transparent text-sm focus:outline-none"
-                      />
-                    </div>
-                    <div className="col-span-1 flex items-center gap-1.5 bg-white border border-gray-300 rounded-lg px-2 py-2.5 focus-within:ring-2 focus-within:ring-[#2A6BB5]/20 focus-within:border-[#2A6BB5]">
-                      <FieldIcon d={FORM_ICONS.percentage} />
-                      <input
-                        type="number" placeholder="% / CGPA *" value={form.Percentage}
-                        onChange={(e) => set('Percentage', e.target.value)}
-                        className="w-full bg-transparent text-sm focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
-
+                  {error && <p className="rounded bg-red-500/20 border border-red-400/30 px-3 py-2 text-xs text-red-300">{error}</p>}
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="w-full bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold text-sm py-3 rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-60"
+                    className="w-full rounded bg-[#FAE452] py-3 text-sm font-black uppercase tracking-wider text-[#1a2744] hover:bg-yellow-400 transition-colors disabled:opacity-60 shadow-lg"
                   >
-                    {submitting ? 'Submitting…' : 'Submit Enquiry'}
+                    {submitting ? 'Submitting…' : 'SUBMIT'}
                   </button>
-                  <p className="text-[10px] text-gray-400 text-center leading-relaxed">
-                    By submitting, you agree to be contacted by SIT regarding admissions.
-                  </p>
                 </form>
               </>
             )}
@@ -359,97 +245,202 @@ export default function ApplyLandingPage() {
         </div>
       </section>
 
-      {/* Stats */}
-      <section className="bg-white border-b border-gray-100">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 grid grid-cols-2 lg:grid-cols-4 gap-6">
-          {STATS.map((s) => (
-            <div key={s.label} className="flex items-center gap-3 justify-center lg:justify-start">
-              <div className="w-10 h-10 rounded-full bg-[#2E3093]/10 text-[#2E3093] flex items-center justify-center shrink-0">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d={s.icon} />
-                </svg>
-              </div>
-              <div>
-                <div className="text-lg sm:text-xl font-extrabold text-gray-900 leading-none">{s.value}</div>
-                <div className="text-[11px] sm:text-xs text-gray-500 mt-1">{s.label}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* ── TAGLINE ────────────────────────────────────────────────────────── */}
+      <section className="bg-[#b8e4f9] px-4 py-12 sm:py-16 text-center">
+        <p className="mx-auto max-w-3xl text-2xl sm:text-3xl lg:text-4xl font-black leading-snug text-[#1a2744]">
+          <span className="text-[#e6a800]">SUVIDYA INSTITUTE</span>{' '}
+          provides World Class Industrial Training in all disciplines of Engineering.
+        </p>
       </section>
 
-      {/* Benefits */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
-        <h2 className="text-2xl font-extrabold text-gray-900 text-center">Why Train With SIT</h2>
-        <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {BENEFITS.map((b) => (
-            <div key={b.title} className="rounded-xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow">
-              <div className="w-11 h-11 rounded-lg bg-[#2E3093]/10 text-[#2E3093] flex items-center justify-center mb-3">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d={b.icon} />
-                </svg>
-              </div>
-              <h3 className="text-sm font-bold text-gray-900">{b.title}</h3>
-              <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">{b.body}</p>
-            </div>
-          ))}
+      {/* ── STATS ──────────────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden bg-[#1a2744]">
+        <div className="absolute inset-0">
+          <Image src="/phot.jpg" alt="" fill className="object-cover opacity-15" />
+          <div className="absolute inset-0 bg-[#1a2744]/85" />
         </div>
-      </section>
-
-      {/* Courses */}
-      {courses.length > 0 && (
-        <section className="bg-gray-50 py-12 sm:py-16">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6">
-            <h2 className="text-2xl font-extrabold text-gray-900 text-center">Our Training Programmes</h2>
-            <div className="mt-8 flex flex-wrap justify-center gap-2.5">
-              {courses.map((c) => (
-                <button
-                  key={c.Course_Id}
-                  type="button"
-                  onClick={() => { set('Course_Id', String(c.Course_Id)); scrollToForm(); }}
-                  className="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:border-[#2A6BB5] hover:text-[#2A6BB5] rounded-full px-4 py-2 text-xs font-semibold text-gray-700 shadow-sm transition-colors"
-                >
-                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                  {c.Course_Name}
-                </button>
-              ))}
-            </div>
+        <div className="relative mx-auto max-w-4xl">
+          <div className="grid grid-cols-2 divide-x divide-y divide-white/10">
+            {STATS.map((stat) => (
+              <StatCard key={stat.label} {...stat} />
+            ))}
           </div>
-        </section>
-      )}
+        </div>
+      </section>
 
-      {/* Bottom CTA */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-10 text-center">
-        <p className="text-sm text-gray-500 mb-3">Still have questions? Talk to our admissions team.</p>
-        <button
-          type="button"
-          onClick={scrollToForm}
-          className="inline-flex items-center gap-2 bg-[#2E3093] text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all"
-        >
+      {/* ── PROGRAMMES ─────────────────────────────────────────────────────── */}
+      <section className="bg-white px-4 py-14 sm:py-20">
+        <div className="mx-auto max-w-6xl">
+          <div className="text-center mb-10">
+            <p className="text-xs font-black uppercase tracking-[0.3em] text-[#2E3093] mb-2">What We Offer</p>
+            <h2 className="text-2xl sm:text-3xl font-black text-[#1a2744] uppercase leading-tight">
+              Training Programme for Learners at<br className="hidden sm:block" /> Every Career Stage
+            </h2>
+            <div className="mx-auto mt-3 h-1 w-16 rounded-full bg-[#FAE452]" />
+            <p className="mt-5 mx-auto max-w-3xl text-sm sm:text-base text-slate-600 uppercase leading-relaxed font-medium">
+              Our programs cover the entire spectrum of technical training in all the engineering disciplines
+              to meet the requirements of skilled manpower in the field of{' '}
+              <span className="text-[#2E3093] font-bold">&quot;Oil &amp; Gas&quot;</span>,{' '}
+              Petrochemical &amp; various Process Chemical Plant industries.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {PROGRAMMES.map((prog, i) => (
+              <div
+                key={prog.name}
+                className="group flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 hover:border-[#2E3093]/30 hover:bg-[#2E3093]/5 hover:shadow-md transition-all cursor-default"
+              >
+                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white border border-slate-200 text-lg shadow-sm group-hover:border-[#2E3093]/20">
+                  {prog.icon}
+                </span>
+                <div>
+                  <p className="text-sm font-bold text-slate-800 group-hover:text-[#2E3093] transition-colors">{prog.name}</p>
+                  <p className="mt-0.5 text-[11px] text-slate-500">Professional · {i % 3 === 0 ? 'Full Time' : i % 3 === 1 ? 'Weekend' : 'Part Time'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── WHY SIT ────────────────────────────────────────────────────────── */}
+      <section className="bg-[#f0f7ff] px-4 py-14 sm:py-20">
+        <div className="mx-auto max-w-6xl">
+          <div className="text-center mb-10">
+            <h2 className="text-2xl sm:text-3xl font-black text-[#1a2744] uppercase">Why Choose SIT?</h2>
+            <div className="mx-auto mt-3 h-1 w-16 rounded-full bg-[#FAE452]" />
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { icon: '🎓', title: 'Expert Faculty', desc: 'Learn from industry veterans with 15+ years of hands-on experience' },
+              { icon: '🏭', title: 'Industry Projects', desc: 'Work on real-world projects from Oil & Gas and Petrochemical sectors' },
+              { icon: '💼', title: 'Placement Support', desc: 'Dedicated placement cell with strong industry connections' },
+              { icon: '📜', title: 'Recognised Certification', desc: 'Certificates recognised by leading engineering companies across India' },
+            ].map((item) => (
+              <div key={item.title} className="text-center rounded-2xl bg-white border border-slate-100 p-6 shadow-sm hover:shadow-md transition-shadow">
+                <div className="text-4xl mb-3">{item.icon}</div>
+                <h3 className="font-black text-[#1a2744] mb-2">{item.title}</h3>
+                <p className="text-xs text-slate-600 leading-relaxed">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── FULL ENQUIRY FORM ───────────────────────────────────────────────── */}
+      <section id="enquire" className="bg-[#1a2744] px-4 py-14 sm:py-20">
+        <div className="mx-auto max-w-3xl">
+          <div className="text-center mb-8">
+            <p className="text-xs font-black uppercase tracking-[0.3em] text-[#FAE452] mb-2">Get In Touch</p>
+            <h2 className="text-2xl sm:text-3xl font-black text-white">Request Free Counselling</h2>
+            <p className="mt-2 text-slate-400 text-sm">Fill in your details and our team will reach out within 24 hours.</p>
+          </div>
+
+          {done ? (
+            <div className="text-center py-12 rounded-2xl bg-white/10 border border-white/10">
+              <div className="text-6xl mb-4">🎉</div>
+              <h3 className="text-2xl font-black text-white">Thank You!</h3>
+              <p className="mt-2 text-slate-300">Your enquiry has been received. We&apos;ll call you shortly.</p>
+              <button onClick={() => setDone(false)} className="mt-6 rounded bg-[#FAE452] px-6 py-2.5 text-sm font-bold text-[#1a2744] hover:bg-yellow-400">
+                Submit Another Enquiry
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm p-6 sm:p-8 space-y-4">
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Training Programme *</label>
+                  <select className={sel} value={form.course} onChange={(e) => set('course', e.target.value)} required>
+                    <option value="">Select programme</option>
+                    {COURSES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Full Name *</label>
+                  <input className={inp} placeholder="Enter your full name" required value={form.name} onChange={(e) => set('name', e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Mobile Number *</label>
+                  <input className={inp} type="tel" placeholder="Enter mobile number" required value={form.mobile} onChange={(e) => set('mobile', e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Email Address</label>
+                  <input className={inp} type="email" placeholder="Enter email address" value={form.email} onChange={(e) => set('email', e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Academic Qualification</label>
+                  <select className={sel} value={form.qualification} onChange={(e) => set('qualification', e.target.value)}>
+                    <option value="">Select qualification</option>
+                    {QUALIFICATIONS.map((q) => <option key={q} value={q}>{q}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Discipline / Branch</label>
+                  <select className={sel} value={form.discipline} onChange={(e) => set('discipline', e.target.value)}>
+                    <option value="">Select discipline</option>
+                    {DISCIPLINES.map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Gender</label>
+                  <div className="flex gap-4 rounded border border-slate-300 bg-white/95 px-3 py-2.5">
+                    {['Male', 'Female'].map((g) => (
+                      <label key={g} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                        <input type="radio" name="gender2" value={g} checked={form.gender === g} onChange={() => set('gender', g)} className="accent-[#2E3093]" />
+                        {g}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">How did you hear about us?</label>
+                  <select className={sel} value={form.source} onChange={(e) => set('source', e.target.value)}>
+                    <option value="">Select source</option>
+                    {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Additional Notes</label>
+                  <textarea className={`${inp} min-h-[80px] resize-y`} placeholder="Any specific queries or requirements…" value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+                </div>
+              </div>
+              {error && <p className="rounded bg-red-500/20 border border-red-400/30 px-3 py-2 text-xs text-red-300">{error}</p>}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full rounded bg-[#FAE452] py-3.5 text-sm font-black uppercase tracking-widest text-[#1a2744] hover:bg-yellow-400 transition-colors disabled:opacity-60 shadow-lg"
+              >
+                {submitting ? 'Submitting…' : 'SUBMIT ENQUIRY'}
+              </button>
+            </form>
+          )}
+        </div>
+      </section>
+
+      {/* ── FOOTER ─────────────────────────────────────────────────────────── */}
+      <footer className="bg-[#111827] px-4 py-6 text-center">
+        <Image src="/sit.png" alt="SIT" width={48} height={48} className="mx-auto h-12 w-12 object-contain opacity-80 mb-2" />
+        <p className="text-xs text-slate-500">© {new Date().getFullYear()} Suvidya Institute of Technology. All rights reserved.</p>
+      </footer>
+
+      {/* ── STICKY BOTTOM CTA (mobile) ──────────────────────────────────────── */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 flex items-stretch sm:hidden shadow-2xl border-t border-white/10">
+        <a href="tel:+912269701234" className="flex flex-1 items-center justify-center gap-2 bg-[#FAE452] py-4 text-sm font-black uppercase tracking-wider text-[#1a2744]">
+          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
+          Call Now
+        </a>
+        <div className="flex items-center justify-center w-14 bg-white z-10">
+          <span className="text-[11px] font-black text-slate-500">OR</span>
+        </div>
+        <button onClick={scrollToForm} className="flex flex-1 items-center justify-center gap-2 bg-[#1a2744] py-4 text-sm font-black uppercase tracking-wider text-white">
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
           Enquire Now
         </button>
-      </section>
+      </div>
 
-      {/* Footer */}
-      <footer className="bg-[#2E3093] text-white/80 text-center py-6 text-xs">
-        <div className="flex items-center justify-center gap-5">
-          <a href="mailto:enquiry@suvidya.ac.in" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-            enquiry@suvidya.ac.in
-          </a>
-          <a href="tel:+912226682290" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-1.687.845a11.037 11.037 0 006.105 6.105l.845-1.687a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-            </svg>
-            (022) 2668 2290
-          </a>
-        </div>
-        <p className="mt-2">© {new Date().getFullYear()} Suvidya Institute of Technology. All rights reserved.</p>
-      </footer>
+      {/* Bottom padding for sticky bar on mobile */}
+      <div className="h-16 sm:hidden" />
     </div>
   );
 }
