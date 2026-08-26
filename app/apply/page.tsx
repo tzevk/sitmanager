@@ -170,7 +170,7 @@ export default function ApplyLandingPage() {
           Course_Id: form.Course_Id ? Number(form.Course_Id) : undefined,
           Qualification: form.Qualification, Discipline: form.Discipline.trim(),
           Discussion: notes,
-          Inquiry_From: 'Google Ads Landing Page', Inquiry_Type: 'Google Ads Leads',
+          Inquiry_From: 'Google Ads Landing Page', Inquiry_Type: 'Google Ads',
         }),
       });
       const data = await res.json();
