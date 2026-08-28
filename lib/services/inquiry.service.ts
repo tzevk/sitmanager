@@ -1680,6 +1680,9 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       sourceFrom.includes('meta')
       || sourceType.includes('meta')
       || Boolean(r.MetaCampaignName || r.MetaFormName);
+    const isGoogleAdLead =
+      sourceFrom.includes('google')
+      || sourceType.includes('google');
 
     return {
       Student_Id: r.Student_Id,
@@ -1694,6 +1697,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       Inquiry_From: r.Inquiry_From ?? null,
       Inquiry_Type: inquiryTypeVal,
       IsMetaAdConverted: isMetaAdConverted,
+      IsGoogleAdLead: isGoogleAdLead,
       Status_id: r.Status_id ?? null,
       StatusLabel:
         LEGACY_MAIN_STATUS_LABELS[Number(r.Status_id)] ??
@@ -1958,7 +1962,7 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
         Discipline: detail.Discipline ?? null,
         Source: detail.Inquiry_Type || detail.Inquiry_From || null,
         Status_id: detail.Status_id ?? null,
-        StatusLabel: detail.StatusLabel ?? null,
+        StatusLabel: LEGACY_MAIN_STATUS_LABELS[Number(detail.Status_id)] ?? (detail.StatusLabel ?? null),
         Discussion: detail.LatestDiscussion ?? detail.InlineDiscussion ?? null,
         DiscussionDate: detail.LatestDiscDate ?? null,
         ...(r.Person_Id == null ? { UnlinkedInquiryId: latestInquiryId } : {}),

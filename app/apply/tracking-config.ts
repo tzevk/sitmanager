@@ -6,9 +6,6 @@
 // to change — layout.tsx loads gtag.js with these IDs, and page.tsx fires
 // the conversion event on successful submit using the same values.
 // ─────────────────────────────────────────────────────────────────────────
-export const GA4_MEASUREMENT_ID = 'G-XXXXXXXXXX';
-export const ADS_CONVERSION_ID = 'AW-XXXXXXXXX';
-export const ADS_CONVERSION_LABEL = 'XXXXXXXXXX';
-
-export const TRACKING_CONFIGURED =
-  !GA4_MEASUREMENT_ID.includes('XXXXXXXXXX') || !ADS_CONVERSION_ID.includes('XXXXXXXXX');
+export const GA4_MEASUREMENT_ID   = 'G-PERX0EH5FS';
+export const ADS_CONVERSION_ID    = 'AW-824743763';
+export const ADS_CONVERSION_LABEL = 'wRpUCOmbkHsQ066iiQM';

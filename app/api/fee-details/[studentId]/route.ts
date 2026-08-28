@@ -324,7 +324,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
     const {
       Type, Payment_Type, Cheque_Bank, Cheque_No, Transaction_No, PaymentId, Cheque_Date, Cheque_Branch,
       Amount, Particular, RDate, TaxType, Fees_Code: customFeesCode,
+      GenerateReceipt,
     } = body;
+    // Default to true so existing callers (e.g. [studentId] edit page) keep generating receipts.
+    const generateReceiptFlag = GenerateReceipt !== false;
 
     if (!Amount || !RDate) {
       return NextResponse.json({ error: 'Amount and Receipt Date are required' }, { status: 400 });
@@ -359,7 +362,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
       rowParticular: string,
       txTaxType?: string | null,
       forcedFeesCode?: string | null,
-      options?: { paymentType?: string | null; transactionNo?: string | null; bank?: string | null; chequeDate?: string | null; branch?: string | null }
+      options?: { paymentType?: string | null; transactionNo?: string | null; bank?: string | null; chequeDate?: string | null; branch?: string | null; skipReceipt?: boolean }
     ) => {
       const [result] = await pool.query<any>(
         `INSERT INTO s_fees_mst
@@ -381,12 +384,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
       );
 
       const insertedId = Number(result.insertId);
-      // The one-time alumni/membership fee is an internal ledger charge, not a
-      // real cash receipt — no receipt number, and (since /api/fee-details'
-      // "recent receipts" list requires Fees_Code IS NOT NULL) it also stays
-      // out of the Fee Details list.
-      const isReceiptless = rowParticular.trim().toLowerCase() === MEMBERSHIP_FEE_LABEL.toLowerCase()
-        || rowParticular.trim().toLowerCase() === DISCOUNT_LABEL.toLowerCase();
+      // Discounts are internal ledger adjustments — no receipt number.
+      // skipReceipt covers auto-inserted system rows (e.g. membership debit) and
+      // the case where the user explicitly unticked "Generate Receipt".
+      const isReceiptless = rowParticular.trim().toLowerCase() === DISCOUNT_LABEL.toLowerCase()
+        || options?.skipReceipt === true;
       if (isReceiptless) {
         return { Fees_Id: insertedId, Fees_Code: null };
       }
@@ -402,6 +404,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
       String(Particular ?? '').trim(),
       TaxType || null,
       typeof customFeesCode === 'string' ? customFeesCode : null,
+      { skipReceipt: !generateReceiptFlag },
     );
 
     const isTuitionDebit = typeR === 'D' && /tuition\s+fees/i.test(String(Particular ?? ''));
@@ -423,6 +426,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ studentId:
           bank: null,
           chequeDate: null,
           branch: null,
+          skipReceipt: true,
         });
       }
     }

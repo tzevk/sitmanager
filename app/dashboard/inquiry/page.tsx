@@ -69,6 +69,7 @@ interface InquiryRow {
   Inquiry_From: string | null;
   Inquiry_Type: string | null;
   IsMetaAdConverted?: boolean;
+  IsGoogleAdLead?: boolean;
   Status_id: number | null;
   StatusLabel: string;
   FollowUpBy?: string | null;
@@ -257,6 +258,15 @@ export default function InquiryPage() {
   }, [personPage, fetchTrigger]);
 
   useEffect(() => { if (viewMode === 'grouped') fetchPersonData(); }, [viewMode, fetchPersonData]);
+
+  // Load filter options (trainings, disciplines, statuses, etc.) on mount — independent
+  // of view mode, since fetchData only runs in flat view but filters are shared.
+  useEffect(() => {
+    fetch('/api/inquiry?page=1&limit=1')
+      .then(r => r.json())
+      .then(d => { if (d.filters) setFilters(d.filters); })
+      .catch(() => {});
+  }, []);
 
   const toggleExpand = async (personId: number | null) => {
     if (personId == null) return;
@@ -600,8 +610,8 @@ export default function InquiryPage() {
                             )}
                           </span>
                         </td>
-                        <td className="py-1 px-2 max-w-[120px]">
-                          <span className="truncate block text-red-600">{p.CourseName || '—'}</span>
+                        <td className="py-1 px-2 max-w-[200px]">
+                          <span className="truncate block text-red-600" title={p.CourseName || undefined}>{p.CourseName || '—'}</span>
                         </td>
                         <td className="py-1 px-2 whitespace-nowrap font-mono">{p.Mobile || '—'}</td>
                         <td className="py-1 px-2 max-w-[140px]">
@@ -611,7 +621,25 @@ export default function InquiryPage() {
                           {p.Discipline && p.Discipline !== 'NULL' && p.Discipline !== 'Select' ? p.Discipline : '—'}
                         </td>
                         <td className="py-1 px-2 w-[118px] max-w-[118px]">
-                          <span className="font-semibold break-words leading-tight">{p.Source || '—'}</span>
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="font-semibold break-words leading-tight">{p.Source || '—'}</span>
+                            {p.Source?.toLowerCase().includes('meta') && (
+                              <span
+                                title="Meta Ads Lead"
+                                className="inline-flex items-center rounded-full border border-[#2E3093]/30 bg-[#2E3093]/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-[#2E3093]"
+                              >
+                                Meta
+                              </span>
+                            )}
+                            {p.Source?.toLowerCase().includes('google') && (
+                              <span
+                                title="Google Ads Lead"
+                                className="inline-flex items-center rounded-full border border-green-600/40 bg-green-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-green-700"
+                              >
+                                Google
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-1 px-2 whitespace-nowrap min-w-[108px]">
                           <span className="font-semibold text-slate-700">{formatDate(p.LatestEnquiryDate)}</span>
@@ -656,7 +684,7 @@ export default function InquiryPage() {
                                             )}
                                           </span>
                                         </td>
-                                        <td className="py-1 px-2 max-w-[120px]"><span className="truncate block text-red-600">{e.CourseName || '—'}</span></td>
+                                        <td className="py-1 px-2 max-w-[200px]"><span className="truncate block text-red-600" title={e.CourseName || undefined}>{e.CourseName || '—'}</span></td>
                                         <td className="py-1 px-2 whitespace-nowrap font-mono">{p.Mobile || '—'}</td>
                                         <td className="py-1 px-2 max-w-[140px]"><span className="truncate block">{p.Email || '—'}</span></td>
                                         <td className="py-1 px-2 whitespace-nowrap">
@@ -769,8 +797,8 @@ export default function InquiryPage() {
                     <td className="py-1 px-2 font-semibold max-w-[140px]">
                       <span className="truncate block">{formatName(r.Student_Name)}</span>
                     </td>
-                    <td className="py-1 px-2 max-w-[120px]">
-                      <span className="truncate block text-red-600">{r.CourseName || '—'}</span>
+                    <td className="py-1 px-2 max-w-[200px]">
+                      <span className="truncate block text-red-600" title={r.CourseName || undefined}>{r.CourseName || '—'}</span>
                     </td>
                     <td className="py-1 px-2 whitespace-nowrap font-mono">{r.Present_Mobile || '—'}</td>
                     <td className="py-1 px-2 max-w-[140px]">
@@ -789,6 +817,14 @@ export default function InquiryPage() {
                               className="inline-flex items-center rounded-full border border-[#2E3093]/30 bg-[#2E3093]/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-[#2E3093]"
                             >
                               Meta
+                            </span>
+                          )}
+                          {r.IsGoogleAdLead && (
+                            <span
+                              title="Google Ads Lead"
+                              className="inline-flex items-center rounded-full border border-green-600/40 bg-green-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-green-700"
+                            >
+                              Google
                             </span>
                           )}
                           {r.IsPuneInquiry && (
