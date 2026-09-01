@@ -217,17 +217,6 @@ const MAIN_INQUIRY_TYPE_OPTIONS = [
   'Alumni Reference',
 ];
 
-const LEGACY_MAIN_STATUS_LABELS: Record<number, string> = {
-  1: 'New',
-  2: 'Contacted (not recieved call)',
-  3: 'Contacted (interested)',
-  4: 'Contacted (next batch)',
-  6: 'Irrelevant',
-  7: 'Follow up pending',
-  8: 'Admission confirmed',
-  9: 'Lost lead',
-};
-
 function normalizeInquiryText(value: unknown): string | null {
   if (value == null) return null;
   const normalized = String(value)
@@ -1699,7 +1688,6 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       IsGoogleAdLead: isGoogleAdLead,
       Status_id: r.Status_id ?? null,
       StatusLabel:
-        LEGACY_MAIN_STATUS_LABELS[Number(r.Status_id)] ??
         (r.StatusLabelFromMaster?.trim() || null) ??
         statusMap[r.Status_id] ??
         (r.OnlineStateRaw?.trim() || null) ??
@@ -1960,7 +1948,7 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
         Discipline: detail.Discipline ?? null,
         Source: detail.Inquiry_Type || detail.Inquiry_From || null,
         Status_id: detail.Status_id ?? null,
-        StatusLabel: LEGACY_MAIN_STATUS_LABELS[Number(detail.Status_id)] ?? (detail.StatusLabel ?? null),
+        StatusLabel: detail.StatusLabel?.trim() || null,
         Discussion: detail.LatestDiscussion ?? detail.InlineDiscussion ?? null,
         DiscussionDate: detail.LatestDiscDate ?? null,
         ...(r.Person_Id == null ? { UnlinkedInquiryId: latestInquiryId } : {}),

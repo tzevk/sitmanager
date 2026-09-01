@@ -122,22 +122,14 @@ interface DueReminder {
   Reminder_At: string;
 }
 
-function statusPill(id: number | null, label: string) {
-  if (id === 1 || label.toLowerCase() === 'new') return 'border-red-300 bg-white/70 text-red-700';
+function statusPill(label: string) {
+  if (label.toLowerCase() === 'new') return 'border-red-300 bg-white/70 text-red-700';
   return 'border-slate-400 bg-white/70 text-slate-800';
 }
 
-function statusRow(id: number | null, label: string) {
+function statusRow(label: string) {
   const l = label.toLowerCase();
-  if (id === 1 || l === 'new') return 'bg-white hover:bg-red-50 [&>td]:text-red-600';
-  if (id != null) {
-    if (id === 8) return 'bg-emerald-100 hover:bg-emerald-200/80 [&>td]:text-emerald-950';
-    if (id === 2) return 'bg-blue-100 hover:bg-blue-200/80 [&>td]:text-blue-950';
-    if ([3,5].includes(id)) return 'bg-orange-100 hover:bg-orange-200/80 [&>td]:text-orange-950';
-    if (id === 7) return 'bg-amber-100 hover:bg-amber-200/80 [&>td]:text-amber-950';
-    if ([6,9].includes(id)) return 'bg-red-100 hover:bg-red-200/80 [&>td]:text-red-950';
-    if (id === 4) return 'bg-indigo-100 hover:bg-indigo-200/80 [&>td]:text-indigo-950';
-  }
+  if (l === 'new') return 'bg-white hover:bg-red-50 [&>td]:text-red-600';
   if (l.includes('admission confirmed')) return 'bg-emerald-100 hover:bg-emerald-200/80 [&>td]:text-emerald-950';
   if (l.includes('not recieved call')) return 'bg-blue-100 hover:bg-blue-200/80 [&>td]:text-blue-950';
   if (l.includes('interested') || l.includes('eligible')) return 'bg-orange-100 hover:bg-orange-200/80 [&>td]:text-orange-950';
@@ -584,7 +576,7 @@ export default function InquiryPage() {
                   const key = p.Person_Id ?? `u${p.UnlinkedInquiryId}`;
                   const isExpanded = p.Person_Id != null && expandedPersonId === p.Person_Id;
                   const editHref = `/dashboard/inquiry/add?editId=${p.Person_Id == null ? p.UnlinkedInquiryId : p.LatestInquiryId}&returnTo=${encodeURIComponent(buildReturnTo())}`;
-                  const rowStatusCls = statusRow(p.Status_id, p.StatusLabel || '');
+                  const rowStatusCls = statusRow(p.StatusLabel || '');
                   return (
                     <Fragment key={key}>
                       <tr
@@ -651,7 +643,7 @@ export default function InquiryPage() {
                         <td className="py-1 px-2 text-center">
                           <span className="inline-flex items-center gap-1">
                             {isFollowUpPending(p.StatusLabel) && <FollowUpPendingDot />}
-                            <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(p.Status_id, p.StatusLabel || '')}`}>
+                            <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(p.StatusLabel || '')}`}>
                               {p.StatusLabel || 'New'}
                             </span>
                           </span>
@@ -671,7 +663,7 @@ export default function InquiryPage() {
                               <table className="w-full text-xs border-collapse">
                                 <tbody>
                                   {(expandedEnquiries[p.Person_Id] ?? []).map((e) => {
-                                    const childStatusCls = statusRow(e.Status_id ?? null, e.StatusLabel || '');
+                                    const childStatusCls = statusRow(e.StatusLabel || '');
                                     return (
                                       <tr key={e.Inquiry_Id} className={`border-b border-slate-100 last:border-b-0 ${childStatusCls}`}>
                                         <td className="py-1 pl-8 pr-2 w-8"></td>
@@ -699,7 +691,7 @@ export default function InquiryPage() {
                                         <td className="py-1 px-2 text-center">
                                           <span className="inline-flex items-center gap-1">
                                             {isFollowUpPending(e.StatusLabel) && <FollowUpPendingDot />}
-                                            <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(e.Status_id ?? null, e.StatusLabel || '')}`}>
+                                            <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(e.StatusLabel || '')}`}>
                                               {e.StatusLabel || 'New'}
                                             </span>
                                           </span>
@@ -783,7 +775,7 @@ export default function InquiryPage() {
                   <td colSpan={11} className="py-10 text-center text-xs text-slate-400">No inquiries found</td>
                 </tr>
               ) : rows.map((r, i) => {
-                const rowStatusCls = statusRow(r.Status_id, r.StatusLabel);
+                const rowStatusCls = statusRow(r.StatusLabel);
                 const primarySource = r.Inquiry_From || r.Inquiry_Type || '—';
                 const secondarySource = r.Inquiry_From && r.Inquiry_Type && r.Inquiry_From !== r.Inquiry_Type
                   ? r.Inquiry_Type
@@ -885,7 +877,7 @@ export default function InquiryPage() {
                     <td className="py-1 px-2 text-center">
                       <span className="inline-flex items-center gap-1">
                         {isFollowUpPending(r.StatusLabel) && <FollowUpPendingDot />}
-                        <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(r.Status_id, r.StatusLabel)}`}>
+                        <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(r.StatusLabel)}`}>
                           {r.StatusLabel}
                         </span>
                       </span>
