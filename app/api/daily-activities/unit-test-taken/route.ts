@@ -289,23 +289,52 @@ export async function POST(req: NextRequest) {
     const pool = getPool();
     const body = await req.json();
 
-    const { Course_Id, Batch_Id, Test_Id, Test_No, Marks, Test_Dt } = body;
+    const { Course_Id, Batch_Id, Test_Id, Test_No, Marks, Test_Dt, studentMarks } = body;
 
     if (!Course_Id || !Batch_Id || !Test_Dt) {
       return NextResponse.json({ error: 'Course, Batch, and Test Date are required' }, { status: 400 });
     }
 
-    const [result] = await pool.query(
-      `INSERT INTO test_taken_master
-       (Course_Id, Batch_Id, Test_Id, Test_No, Marks, Test_Dt, IsActive, IsDelete)
-       VALUES (?, ?, ?, ?, ?, ?, 1, 0)`,
-      [
-        Course_Id, Batch_Id,
-        Test_Id || null, Test_No || null, Marks || null,
-        Test_Dt,
-      ]
-    );
-    const insertId = (result as any).insertId;
+    const connection = await pool.getConnection();
+    let insertId: number;
+    try {
+      await connection.beginTransaction();
+      const [result] = await connection.query(
+        `INSERT INTO test_taken_master
+         (Course_Id, Batch_Id, Test_Id, Test_No, Marks, Test_Dt, IsActive, IsDelete)
+         VALUES (?, ?, ?, ?, ?, ?, 1, 0)`,
+        [
+          Course_Id, Batch_Id,
+          Test_Id || null, Test_No || null, Marks || null,
+          Test_Dt,
+        ]
+      );
+      insertId = (result as any).insertId;
+
+      if (Array.isArray(studentMarks) && studentMarks.length > 0) {
+        const { studentCol, marksCol, statusCol } = await getTestChildSchema(connection);
+        for (const studentMark of studentMarks) {
+          await connection.query(
+            `INSERT INTO test_taken_child
+               (Take_Id, Test_Id, \`${studentCol}\`, Student_Name, \`${marksCol}\`, Marks_from, \`${statusCol}\`, IsActive, IsDelete)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+            [
+              insertId, Test_Id || null,
+              studentMark.Student_Id, studentMark.Student_Name || '',
+              studentMark.marks_obtained ?? null,
+              Marks || null,
+              studentMark.status ?? null,
+            ]
+          );
+        }
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
 
     return NextResponse.json({ success: true, Take_Id: insertId });
   } catch (error: any) {

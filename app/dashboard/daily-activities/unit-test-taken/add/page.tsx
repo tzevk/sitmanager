@@ -123,14 +123,14 @@ export default function AddUnitTestTakenPage() {
     })();
   }, [form.Course_Id]);
 
-  /* ── Load students in edit mode when batch is known ── */
+  /* ── Load students when batch is known ── */
   useEffect(() => {
-    if (!isEdit || !editId || !form.Batch_Id) { setStudents([]); setMarkEdits({}); return; }
+    if (!form.Batch_Id) { setStudents([]); setMarkEdits({}); return; }
     setStudentsLoading(true);
     (async () => {
       try {
         const res = await fetch(
-          `/api/daily-activities/unit-test-taken?options=students&batchId=${form.Batch_Id}&takeId=${editId}`
+          `/api/daily-activities/unit-test-taken?options=students&batchId=${form.Batch_Id}${editId ? `&takeId=${editId}` : ''}`
         );
         const data = await res.json();
         const list: StudentMark[] = data.students ?? [];
@@ -148,7 +148,7 @@ export default function AddUnitTestTakenPage() {
       } catch { setStudents([]); setMarkEdits({}); }
       setStudentsLoading(false);
     })();
-  }, [isEdit, editId, form.Batch_Id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [editId, form.Batch_Id]);
 
   /* ── Load test definitions when batch changes ── */
   useEffect(() => {
@@ -176,8 +176,14 @@ export default function AddUnitTestTakenPage() {
     }
   };
 
-  const set = (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm(prev => ({ ...prev, [field]: e.target.value }));
+  const set = (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const value = e.target.value;
+    setForm(prev => {
+      if (field === 'Course_Id') return { ...prev, Course_Id: value, Batch_Id: '', Test_Id: '' };
+      if (field === 'Batch_Id') return { ...prev, Batch_Id: value, Test_Id: '' };
+      return { ...prev, [field]: value };
+    });
+  };
 
   /* ── Submit ── */
   const handleSubmit = async (e: React.FormEvent) => {
@@ -196,7 +202,7 @@ export default function AddUnitTestTakenPage() {
       };
       if (isEdit) payload.Take_Id = parseInt(editId!);
 
-      if (isEdit && Object.keys(markEdits).length > 0) {
+      if (Object.keys(markEdits).length > 0) {
         payload.studentMarks = Object.entries(markEdits).map(([studentId, edit]) => ({
           Student_Id: parseInt(studentId),
           Student_Name: edit.Student_Name,
@@ -347,8 +353,8 @@ export default function AddUnitTestTakenPage() {
             </div>
           </div>
 
-          {/* ── Students (edit mode only) ── */}
-          {isEdit && (
+          {/* ── Students ── */}
+          {form.Batch_Id && form.Test_Id && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <div className="flex items-center gap-2 mb-4">
                 <svg className="w-4 h-4 text-[#2E3093]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
