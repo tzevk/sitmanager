@@ -67,6 +67,7 @@ export default function StudentPage() {
   const [rows, setRows]             = useState<StudentRow[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
   const [legacyTotalStudentCount, setLegacyTotalStudentCount] = useState(0);
+  const [countedBatchCode, setCountedBatchCode] = useState('');
   const [loading, setLoading]       = useState(true);
   const [busyId, setBusyId]         = useState<number | null>(null);
 
@@ -108,6 +109,7 @@ export default function StudentPage() {
       setRows(data.rows ?? []);
       setPagination(data.pagination ?? { page: 1, limit: 25, total: 0, totalPages: 0 });
       setLegacyTotalStudentCount(data.legacyTotalStudentCount ?? 0);
+      setCountedBatchCode(field === 'batchCode' ? search.trim() : '');
     } catch (e) {
       console.error('Failed to fetch students', e);
     } finally {
@@ -254,7 +256,11 @@ export default function StudentPage() {
         <div className="flex items-center justify-between relative z-10">
           <div>
             <h2 className="text-sm font-black text-white tracking-tight leading-none">Student</h2>
-            <p className="text-[11px] text-white/60 mt-0.5">Total Student: {legacyTotalStudentCount.toLocaleString()}</p>
+            <p className="text-[11px] text-white/60 mt-0.5">
+              {countedBatchCode
+                ? `Students matching batch ${countedBatchCode}: ${pagination.total.toLocaleString()}`
+                : `Total Student: ${legacyTotalStudentCount.toLocaleString()}`}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <button
