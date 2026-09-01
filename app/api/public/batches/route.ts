@@ -3,6 +3,28 @@ import { getPool } from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
 // Public endpoint — no auth required (used by online admission form)
+// batch_mst date columns are varchar and stored in mixed formats; parse before comparing.
+const BATCH_SDATE_EXPR = `COALESCE(
+  STR_TO_DATE(CAST(SDate AS CHAR), '%Y-%m-%d'),
+  STR_TO_DATE(CAST(SDate AS CHAR), '%d-%m-%Y'),
+  STR_TO_DATE(CAST(SDate AS CHAR), '%d/%m/%Y'),
+  STR_TO_DATE(CAST(SDate AS CHAR), '%m/%d/%Y')
+)`;
+const BATCH_EDATE_EXPR = `COALESCE(
+  STR_TO_DATE(CAST(EDate AS CHAR), '%Y-%m-%d'),
+  STR_TO_DATE(CAST(EDate AS CHAR), '%d-%m-%Y'),
+  STR_TO_DATE(CAST(EDate AS CHAR), '%d/%m/%Y'),
+  STR_TO_DATE(CAST(EDate AS CHAR), '%m/%d/%Y')
+)`;
+// A batch counts as "ongoing" once it has started (or has no parseable start
+// date) and hasn't ended yet (or has no parseable end date) — an unparseable
+// date shouldn't hide an otherwise-active batch from the public form.
+const BATCH_ONGOING_FILTER = `
+  AND COALESCE(IsActive, 0) = 1
+  AND (${BATCH_SDATE_EXPR} IS NULL OR ${BATCH_SDATE_EXPR} <= CURDATE())
+  AND (${BATCH_EDATE_EXPR} IS NULL OR ${BATCH_EDATE_EXPR} >= CURDATE())
+`;
+
 export async function GET(req: NextRequest) {
   try {
     const pool = getPool();
@@ -50,6 +72,7 @@ export async function GET(req: NextRequest) {
            AND LOWER(TRIM(Category)) <> 'offline'
            AND LOWER(TRIM(Category)) NOT LIKE '%corporate%'
            AND (Cancel IS NULL OR Cancel = 0)
+           ${BATCH_ONGOING_FILTER}
          ORDER BY TRIM(Category) ASC`,
         [courseId]
       );
@@ -67,7 +90,8 @@ export async function GET(req: NextRequest) {
        FROM batch_mst
        WHERE Course_Id = ? AND TRIM(Category) = ? AND (IsDelete = 0 OR IsDelete IS NULL)
          AND (Cancel IS NULL OR Cancel = 0)
-       ORDER BY COALESCE(IsActive, 0) DESC, COALESCE(Admission_Date, SDate, Date_Added) DESC, Batch_Id DESC`,
+         ${BATCH_ONGOING_FILTER}
+       ORDER BY COALESCE(Admission_Date, SDate, Date_Added) DESC, Batch_Id DESC`,
       [courseId, category.trim()]
     );
     return NextResponse.json({ success: true, categories: [], batches });
