@@ -30,10 +30,7 @@ export async function POST(req: NextRequest) {
     // handled separately (password override) and never reaches this endpoint.
     const ONLINE_PAYMENT_MODES = [
       'Full Payment',
-      '50% Installment',
       '2-Payment Plan',
-      '3-Installment Plan',
-      '6-Installment Plan',
       'Loan (0% Interest)',
     ];
     if (!ONLINE_PAYMENT_MODES.includes(modeOfPayment)) {

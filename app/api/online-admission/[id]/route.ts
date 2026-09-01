@@ -9,6 +9,11 @@ import { getAdmissionInquiryAssetSummary, getAdmissionInquiryAssetDetails, hasAd
 
 const ONLINE_ADMISSION_PAYLOAD_TABLE = 'online_admission_payload';
 
+// Discontinued payment plans — no longer offered on the admission form.
+// Rejected here too so a raw API call can't submit with one even though the
+// form itself no longer shows them.
+const RETIRED_PAYMENT_MODES = ['50% Installment', '3-Installment Plan', '6-Installment Plan'];
+
 const STATIC_DOCUMENT_FIELDS = [
   ['ssc_marksheetFile', 'ssc_marksheet'],
   ['hsc_marksheetFile', 'hsc_marksheet'],
@@ -530,6 +535,9 @@ export async function POST(
     const payload = body?.payload;
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       return NextResponse.json({ error: 'payload is required' }, { status: 400 });
+    }
+    if (RETIRED_PAYMENT_MODES.includes(payload.modeOfPayment)) {
+      return NextResponse.json({ error: 'This payment mode is no longer available' }, { status: 400 });
     }
 
     const pool = getPool();

@@ -201,7 +201,7 @@ export default function PublicAdmissionFormPage() {
   const [availableBatches, setAvailableBatches] = useState<{ batchCode: string; timings: string | null; totalFees: number | null; feesFullPayment: number | null; feesInstallment: number | null }[]>([]);
   const [batchFees, setBatchFees] = useState<number | null>(null);
   const [, setBatchFeesFullPayment] = useState<number | null>(null);
-  const [batchFeesInstallment, setBatchFeesInstallment] = useState<number | null>(null);
+  const [, setBatchFeesInstallment] = useState<number | null>(null);
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [loadingBatches, setLoadingBatches] = useState(false);
@@ -935,7 +935,6 @@ export default function PublicAdmissionFormPage() {
 
   const calculateAdmissionPayableAmount = () => {
     const baseFees = batchFees ?? 0;
-    const installmentTotal = batchFeesInstallment ?? baseFees;
     const isPipingEngineeringFulltimeMode =
       /piping\s+engineering/i.test(formData.trainingProgrammeName || '') &&
       /full.?time/i.test(formData.trainingCategory || '');
@@ -949,15 +948,11 @@ export default function PublicAdmissionFormPage() {
     const isProcessWeekendMode = /process\s+engineering/i.test(formData.trainingProgrammeName || '') && /weekend/i.test(formData.trainingCategory || '');
     const payableTuition = formData.modeOfPayment === 'Full Payment'
       ? Math.round(baseFees * 0.95)
-      : formData.modeOfPayment === '3-Installment Plan'
-      ? (isProcessWeekendMode ? 15000 : 25000)
       : formData.modeOfPayment === '2-Payment Plan'
-      ? 15000
-      : formData.modeOfPayment === '6-Installment Plan'
       ? 15000
       : formData.modeOfPayment === 'Loan (0% Interest)'
       ? (isPipingEngineeringFulltimeMode ? 12000 : ((isEngineeringDesignDraftingFulltimeMode || isLoanAdmission15000Mode || isProcessWeekendMode) ? 15000 : 12000))
-      : Math.round(installmentTotal / 2);
+      : Math.round(baseFees * 0.95);
 
     return payableTuition + (formData.modeOfPayment ? ALUMNI_MEMBERSHIP_FEE : 0);
   };
@@ -3369,9 +3364,6 @@ export default function PublicAdmissionFormPage() {
                     const hasFees = baseFees > 0;
                     const fullPayAmount = Math.round(baseFees * 0.95);
                     const discount = Math.max(baseFees - fullPayAmount, 0);
-                    const installmentPlanTotal = batchFeesInstallment ?? baseFees;
-                    const firstInstallmentAmount = Math.round(installmentPlanTotal / 2);
-                    const secondInstallmentAmount = Math.max(installmentPlanTotal - firstInstallmentAmount, 0);
                     const fmt = (n: number) => n.toLocaleString('en-IN');
                     const isPipingFulltime =
                       /piping\s+engineering/i.test(formData.trainingProgrammeName || '') &&
@@ -3394,15 +3386,11 @@ export default function PublicAdmissionFormPage() {
                     const payableNow =
                       (formData.modeOfPayment === 'Full Payment'
                         ? fullPayAmount
-                        : formData.modeOfPayment === '3-Installment Plan'
-                        ? (isProcessWeekend ? 15000 : 25000)
                         : formData.modeOfPayment === '2-Payment Plan'
-                        ? 15000
-                        : formData.modeOfPayment === '6-Installment Plan'
                         ? 15000
                         : formData.modeOfPayment === 'Loan (0% Interest)'
                         ? (isPipingEngineeringFulltime ? 12000 : ((isEngineeringDesignDraftingFulltime || isProcessWeekend || is75kPlan) ? 15000 : 12000))
-                        : firstInstallmentAmount) + (formData.modeOfPayment ? ALUMNI_MEMBERSHIP_FEE : 0);
+                        : fullPayAmount) + (formData.modeOfPayment ? ALUMNI_MEMBERSHIP_FEE : 0);
 
                     return (
                     <div className="space-y-4 sm:space-y-5" style={stepEnterStyle}>
@@ -3552,272 +3540,6 @@ export default function PublicAdmissionFormPage() {
                                   <div className="flex items-start gap-1.5 pt-1">
                                     <i className="fas fa-exclamation-circle text-teal-400 text-[10px] mt-0.5 flex-shrink-0"></i>
                                     <p className="text-[10px] text-teal-700">Delay charges of &#8377;2,500 apply if the second payment is not made on time.</p>
-                                  </div>
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })()}
-
-                        {/* Option 2/3: Installment Plan */}
-                        {isProcessWeekend ? (() => {
-                          const isSelected = formData.modeOfPayment === '3-Installment Plan';
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => handleChange('modeOfPayment', '3-Installment Plan')}
-                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
-                                isSelected
-                                  ? 'bg-violet-50 border-violet-500 ring-2 ring-violet-200 shadow-md'
-                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                              }`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                                  isSelected ? 'bg-violet-100 text-violet-600' : 'bg-gray-100 text-gray-400'
-                                }`}>
-                                  <i className="fas fa-calendar-check text-lg"></i>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <span className={`text-sm font-bold ${isSelected ? 'text-violet-800' : 'text-gray-800'}`}>3-Installment Plan</span>
-                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-violet-600' : 'text-gray-500'}`}>
-                                    &#8377;{fmt(15000 + ALUMNI_MEMBERSHIP_FEE)} at admission + &#8377;17,500 × 2 — total &#8377;{fmt(50000 + ALUMNI_MEMBERSHIP_FEE)}
-                                  </div>
-                                </div>
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                                  isSelected ? 'border-violet-500 bg-violet-50' : 'border-gray-300'
-                                }`}>
-                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-violet-500" />}
-                                </div>
-                              </div>
-                              {isSelected && (
-                                <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>Tuition Fee</span>
-                                    <span className="font-bold text-violet-800">&#8377;50,000</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>One Time Membership Fee (Sitians Alumni Association)</span>
-                                    <span className="font-bold text-violet-800">&#8377;{fmt(ALUMNI_MEMBERSHIP_FEE)}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>At Admission (pay now)</span>
-                                    <span className="font-bold text-violet-800">&#8377;{fmt(15000 + ALUMNI_MEMBERSHIP_FEE)}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>1st Instalment (30 days from batch start)</span>
-                                    <span className="font-bold text-violet-800">&#8377;17,500</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>2nd Instalment (60 days from batch start)</span>
-                                    <span className="font-bold text-violet-800">&#8377;17,500</span>
-                                  </div>
-                                  <div className="border-t border-violet-200 pt-2 flex items-center justify-between text-xs">
-                                    <span className="text-violet-800 font-bold">Total</span>
-                                    <span className="font-extrabold text-violet-900">&#8377;{fmt(50000 + ALUMNI_MEMBERSHIP_FEE)}</span>
-                                  </div>
-                                  <div className="flex items-start gap-1.5 pt-1">
-                                    <i className="fas fa-exclamation-circle text-violet-400 text-[10px] mt-0.5 flex-shrink-0"></i>
-                                    <p className="text-[10px] text-violet-700">Delay charges of &#8377;2,500 apply per instalment if payment is not made on time.</p>
-                                  </div>
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })() : is75kPlan ? (() => {
-                          const isSelected = formData.modeOfPayment === '6-Installment Plan';
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => handleChange('modeOfPayment', '6-Installment Plan')}
-                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
-                                isSelected
-                                  ? 'bg-violet-50 border-violet-500 ring-2 ring-violet-200 shadow-md'
-                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                              }`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                                  isSelected ? 'bg-violet-100 text-violet-600' : 'bg-gray-100 text-gray-400'
-                                }`}>
-                                  <i className="fas fa-calendar-check text-lg"></i>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <span className={`text-sm font-bold ${isSelected ? 'text-violet-800' : 'text-gray-800'}`}>6-Installment Plan</span>
-                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-violet-600' : 'text-gray-500'}`}>
-                                    &#8377;{fmt(15000 + ALUMNI_MEMBERSHIP_FEE)} at admission + &#8377;12,000 × 5 — total &#8377;{fmt(75000 + ALUMNI_MEMBERSHIP_FEE)}
-                                  </div>
-                                </div>
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                                  isSelected ? 'border-violet-500 bg-violet-50' : 'border-gray-300'
-                                }`}>
-                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-violet-500" />}
-                                </div>
-                              </div>
-                              {isSelected && (
-                                <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>Tuition Fee</span>
-                                    <span className="font-bold text-violet-800">&#8377;75,000</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>One Time Membership Fee (Sitians Alumni Association)</span>
-                                    <span className="font-bold text-violet-800">&#8377;{fmt(ALUMNI_MEMBERSHIP_FEE)}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>At Admission (pay now)</span>
-                                    <span className="font-bold text-violet-800">&#8377;{fmt(15000 + ALUMNI_MEMBERSHIP_FEE)}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>1st Instalment (30 days from batch start)</span>
-                                    <span className="font-bold text-violet-800">&#8377;12,000</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>2nd Instalment (60 days from batch start)</span>
-                                    <span className="font-bold text-violet-800">&#8377;12,000</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>3rd Instalment (90 days from batch start)</span>
-                                    <span className="font-bold text-violet-800">&#8377;12,000</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>4th Instalment (120 days from batch start)</span>
-                                    <span className="font-bold text-violet-800">&#8377;12,000</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>5th Instalment (150 days from batch start)</span>
-                                    <span className="font-bold text-violet-800">&#8377;12,000</span>
-                                  </div>
-                                  <div className="border-t border-violet-200 pt-2 flex items-center justify-between text-xs">
-                                    <span className="text-violet-800 font-bold">Total</span>
-                                    <span className="font-extrabold text-violet-900">&#8377;{fmt(75000 + ALUMNI_MEMBERSHIP_FEE)}</span>
-                                  </div>
-                                  <div className="flex items-start gap-1.5 pt-1">
-                                    <i className="fas fa-exclamation-circle text-violet-400 text-[10px] mt-0.5 flex-shrink-0"></i>
-                                    <p className="text-[10px] text-violet-700">Delay charges of &#8377;2,500 apply per instalment if payment is not made on time.</p>
-                                  </div>
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })() : isPipingFulltime ? (() => {
-                          const isSelected = formData.modeOfPayment === '3-Installment Plan';
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => handleChange('modeOfPayment', '3-Installment Plan')}
-                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
-                                isSelected
-                                  ? 'bg-violet-50 border-violet-500 ring-2 ring-violet-200 shadow-md'
-                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                              }`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                                  isSelected ? 'bg-violet-100 text-violet-600' : 'bg-gray-100 text-gray-400'
-                                }`}>
-                                  <i className="fas fa-calendar-check text-lg"></i>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <span className={`text-sm font-bold ${isSelected ? 'text-violet-800' : 'text-gray-800'}`}>3-Installment Plan</span>
-                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-violet-600' : 'text-gray-500'}`}>
-                                    &#8377;{fmt(25000 + ALUMNI_MEMBERSHIP_FEE)} at admission + &#8377;43,500 × 2 — total &#8377;{fmt(112000 + ALUMNI_MEMBERSHIP_FEE)}
-                                  </div>
-                                </div>
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                                  isSelected ? 'border-violet-500 bg-violet-50' : 'border-gray-300'
-                                }`}>
-                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-violet-500" />}
-                                </div>
-                              </div>
-                              {isSelected && (
-                                <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>Tuition Fee</span>
-                                    <span className="font-bold text-violet-800">&#8377;1,12,000</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>One Time Membership Fee (Sitians Alumni Association)</span>
-                                    <span className="font-bold text-violet-800">&#8377;{fmt(ALUMNI_MEMBERSHIP_FEE)}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>At Admission (pay now)</span>
-                                    <span className="font-bold text-violet-800">&#8377;{fmt(25000 + ALUMNI_MEMBERSHIP_FEE)}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>1st Instalment (30 days from batch start)</span>
-                                    <span className="font-bold text-violet-800">&#8377;43,500</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>2nd Instalment (60 days from batch start)</span>
-                                    <span className="font-bold text-violet-800">&#8377;43,500</span>
-                                  </div>
-                                  <div className="border-t border-violet-200 pt-2 flex items-center justify-between text-xs">
-                                    <span className="text-violet-800 font-bold">Total</span>
-                                    <span className="font-extrabold text-violet-900">&#8377;{fmt(112000 + ALUMNI_MEMBERSHIP_FEE)}</span>
-                                  </div>
-                                  <div className="flex items-start gap-1.5 pt-1">
-                                    <i className="fas fa-exclamation-circle text-violet-400 text-[10px] mt-0.5 flex-shrink-0"></i>
-                                    <p className="text-[10px] text-violet-700">Delay charges of &#8377;2,500 apply per instalment if payment is not made on time.</p>
-                                  </div>
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })() : null}
-
-                        {/* Pay in 2 Installments — available for ALL training programmes */}
-                        {(() => {
-                          const isSelected = formData.modeOfPayment === '50% Installment';
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => handleChange('modeOfPayment', '50% Installment')}
-                              className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 ${
-                                isSelected
-                                  ? 'bg-violet-50 border-violet-500 ring-2 ring-violet-200 shadow-md'
-                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                              }`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                                  isSelected ? 'bg-violet-100 text-violet-600' : 'bg-gray-100 text-gray-400'
-                                }`}>
-                                  <i className="fas fa-calendar-check text-lg"></i>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <span className={`text-sm font-bold ${isSelected ? 'text-violet-800' : 'text-gray-800'}`}>Pay in 2 Installments</span>
-                                  <div className={`text-xs mt-0.5 ${isSelected ? 'text-violet-600' : 'text-gray-500'}`}>
-                                    Pay &#8377;{fmt(firstInstallmentAmount + ALUMNI_MEMBERSHIP_FEE)} now + &#8377;{fmt(secondInstallmentAmount)} later — total &#8377;{fmt(installmentPlanTotal + ALUMNI_MEMBERSHIP_FEE)}
-                                  </div>
-                                </div>
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                                  isSelected ? 'border-violet-500 bg-violet-50' : 'border-gray-300'
-                                }`}>
-                                  {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-violet-500" />}
-                                </div>
-                              </div>
-                              {isSelected && (
-                                <div className="mt-3 ml-[52px] bg-violet-100/50 rounded-lg p-3 space-y-2">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>Tuition Fee</span>
-                                    <span className="font-bold text-violet-800">&#8377;{fmt(installmentPlanTotal)}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>One Time Membership Fee (Sitians Alumni Association)</span>
-                                    <span className="font-bold text-violet-800">&#8377;{fmt(ALUMNI_MEMBERSHIP_FEE)}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>1st Installment (now)</span>
-                                    <span className="font-bold text-violet-800">&#8377;{fmt(firstInstallmentAmount + ALUMNI_MEMBERSHIP_FEE)}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-violet-700 font-medium flex items-center gap-1.5"><i className="fas fa-circle text-[6px] text-violet-400"></i>2nd Installment</span>
-                                    <span className="font-bold text-violet-800">&#8377;{fmt(secondInstallmentAmount)}</span>
-                                  </div>
-                                  <div className="border-t border-violet-200 pt-2 flex items-center justify-between text-xs">
-                                    <span className="text-violet-800 font-bold">Total</span>
-                                    <span className="font-extrabold text-violet-900">&#8377;{fmt(installmentPlanTotal + ALUMNI_MEMBERSHIP_FEE)}</span>
                                   </div>
                                 </div>
                               )}
@@ -4046,10 +3768,7 @@ export default function PublicAdmissionFormPage() {
                             <p className="text-xs text-green-700 mt-0.5">
                               You have selected <span className="font-bold">{formData.modeOfPayment}</span>
                               {formData.modeOfPayment === 'Full Payment' && <> — you pay <span className="font-bold">&#8377;{fmt(payableNow)}</span> (5% discount applied on Tuition Fee, plus &#8377;{ALUMNI_MEMBERSHIP_FEE} Membership Fee)</>}
-                              {formData.modeOfPayment === '50% Installment' && <> — &#8377;{fmt(payableNow)} now + &#8377;{fmt(secondInstallmentAmount)} later</>}
-                              {formData.modeOfPayment === '3-Installment Plan' && <> — {isProcessWeekend ? `₹${fmt(payableNow)} now + ₹17,500 × 2 instalments` : `₹${fmt(payableNow)} now + ₹43,500 × 2 instalments`}</>}
                               {formData.modeOfPayment === '2-Payment Plan' && <> — &#8377;{fmt(payableNow)} now + &#8377;35,000 on first day of batch</>}
-                              {formData.modeOfPayment === '6-Installment Plan' && <> — &#8377;{fmt(payableNow)} now + &#8377;12,000 × 5 instalments</>}
                               {formData.modeOfPayment === 'Loan (0% Interest)' && <> — &#8377;{fmt(payableNow)} at admission + &#8377;{isProcessWeekend ? '35,000' : is75kPlan ? '60,000' : '1,00,000'} loan via financial institution</>}
                               {paymentSubMethod === 'qr' && <> — pay &#8377;{fmt(payableNow)} via QR code / UPI.</>}
                               {paymentSubMethod === 'neft' && <> — pay &#8377;{fmt(payableNow)} by NEFT.</>}

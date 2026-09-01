@@ -111,10 +111,7 @@ type PaymentOption = { value: string; label: string; sub: string; icon: 'full' |
 
 const PAYMENT_PLAN_OPTIONS: PaymentOption[] = [
   { value: 'Full Payment',        label: 'Full Payment',           sub: 'Full amount in one go — 5% discount applied', icon: 'full',  tone: 'emerald' },
-  { value: '50% Installment',     label: '50% in 2 Installments',  sub: 'Pay 50% now, 50% later',                      icon: 'split', tone: 'violet' },
   { value: '2-Payment Plan',      label: '2-Payment Plan',         sub: 'Two scheduled instalments',                   icon: 'split', tone: 'violet' },
-  { value: '3-Installment Plan',  label: '3-Installment Plan',     sub: 'Three scheduled instalments',                 icon: 'split', tone: 'violet' },
-  { value: '6-Installment Plan',  label: '6-Installment Plan',     sub: 'Six scheduled instalments',                   icon: 'split', tone: 'violet' },
   { value: 'Loan (0% Interest)',  label: 'Loan (0% Interest)',     sub: 'Financed via a 0% interest loan partner',     icon: 'loan',  tone: 'rose' },
 ];
 
