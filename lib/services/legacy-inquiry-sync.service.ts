@@ -147,7 +147,7 @@ async function loadExistingContactKeys(
   }
 
   const [contactRows] = await newPool.query(
-    `SELECT Inquiry_Id, Present_Mobile, Email
+    `SELECT Inquiry_Id, Present_Mobile, Email, Created_By
      FROM \`${dstTable}\`
      WHERE (IsDelete = 0 OR IsDelete IS NULL)
        AND (${conditions.join(' OR ')})`,
@@ -165,6 +165,9 @@ async function loadExistingContactKeys(
     const id = Number(row.Inquiry_Id);
     // Only flag as website-origin if this inquiry_id is NOT one the legacy DB owns
     if (legacyIdSet.has(id)) continue;
+    // Dashboard Add Inquiry records are owned by the staff user who created them and
+    // must remain visible alongside cron-synced records, even when contact data matches.
+    if (row.Created_By != null && Number(row.Created_By) > 0) continue;
     const phone = normalizeMobileForDedup(row.Present_Mobile);
     const email = normalizeEmailForDedup(row.Email);
     if (phone) linkContact(`phone:${phone}`, id);

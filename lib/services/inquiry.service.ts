@@ -1072,8 +1072,8 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
        Course_Id, Batch_Category_id, Batch_Code,
        Qualification, Discipline, Percentage, Preferred_Location,
        Person_Id, Is_Re_Enquiry,
-       IsDelete, Inquiry, Date_Added
-     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'Inquiry',NOW())`,
+       IsDelete, Inquiry, Date_Added, Created_By
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'Inquiry',NOW(),?)`,
     [
       studentName,
       data.Sex ?? null,
@@ -1097,6 +1097,7 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
       data.Preferred_Location ?? null,
       resolved.personId,
       isReEnquiry ? 1 : 0,
+      createdBy,
     ]
   );
   const insertId = (result as any).insertId as number;
