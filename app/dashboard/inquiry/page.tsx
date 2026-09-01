@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { Fragment, useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -586,9 +586,8 @@ export default function InquiryPage() {
                   const editHref = `/dashboard/inquiry/add?editId=${p.Person_Id == null ? p.UnlinkedInquiryId : p.LatestInquiryId}&returnTo=${encodeURIComponent(buildReturnTo())}`;
                   const rowStatusCls = statusRow(p.Status_id, p.StatusLabel || '');
                   return (
-                    <>
+                    <Fragment key={key}>
                       <tr
-                        key={key}
                         className={`border-b border-slate-200 transition-colors ${rowStatusCls} ${p.Person_Id != null && p.EnquiryCount > 1 ? 'cursor-pointer' : ''}`}
                         onClick={() => p.Person_Id != null && p.EnquiryCount > 1 && toggleExpand(p.Person_Id)}
                       >
@@ -722,7 +721,7 @@ export default function InquiryPage() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>
