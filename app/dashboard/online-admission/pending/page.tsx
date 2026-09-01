@@ -36,6 +36,7 @@ export default function PendingAdmissionFormsPage() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const fetchRows = useCallback(async () => {
@@ -83,6 +84,29 @@ export default function PendingAdmissionFormsPage() {
       alert(err instanceof Error ? err.message : 'Failed to delete admission form');
     } finally {
       setDeletingId(null);
+    }
+  }, []);
+
+  const handleReject = useCallback(async (r: DraftRow) => {
+    const ok = window.confirm(`Reject admission for ${r.Student_Name || `Inquiry #${r.Inquiry_Id}`}?`);
+    if (!ok) return;
+
+    setRejectingId(r.Inquiry_Id);
+    try {
+      const res = await fetch(`/api/online-admission/${r.Inquiry_Id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statusAction: 'reject' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Failed to reject admission');
+      }
+      setRows((prev) => prev.filter((row) => row.Inquiry_Id !== r.Inquiry_Id));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to reject admission');
+    } finally {
+      setRejectingId(null);
     }
   }, []);
 
@@ -168,10 +192,20 @@ export default function PendingAdmissionFormsPage() {
                       >
                         Open
                       </button>
+                      {canUpdate && (
+                        <button
+                          onClick={() => void handleReject(r)}
+                          disabled={rejectingId === r.Inquiry_Id || deletingId === r.Inquiry_Id}
+                          title="Reject admission"
+                          className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold text-red-600 border border-red-200 bg-white hover:bg-red-50 disabled:opacity-50"
+                        >
+                          {rejectingId === r.Inquiry_Id ? 'Rejecting…' : 'Reject'}
+                        </button>
+                      )}
                       {canRemove && (
                         <button
                           onClick={() => void handleDelete(r)}
-                          disabled={deletingId === r.Inquiry_Id}
+                          disabled={deletingId === r.Inquiry_Id || rejectingId === r.Inquiry_Id}
                           title="Delete"
                           className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 disabled:opacity-50"
                         >
