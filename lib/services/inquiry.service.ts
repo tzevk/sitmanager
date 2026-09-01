@@ -1411,9 +1411,8 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   );
   const useFastUnfilteredPath = !hasActiveFilters;
 
-  // Inquiries auto-escalated to "Follow up pending" (see escalateStaleInterestedInquiries)
-  // are sorted to the very top of the list, ahead of normal recency ordering, so they
-  // don't stay buried once they go cold.
+  // Keep newly inserted inquiries at the top. Follow-up priority and inquiry date are
+  // secondary ordering rules for older records.
   const followUpPendingStatusId = await getFollowUpPendingStatusId(pool);
   const followUpFirstExpr = followUpPendingStatusId != null
     ? `CASE WHEN CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) = ${followUpPendingStatusId} THEN 0 ELSE 1 END, `
@@ -1422,8 +1421,8 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   // When _inquiry_date is not available yet, sorting with STR_TO_DATE(...) is very expensive
   // on large tables. Fall back to primary-key recency to keep first page responsive.
   const listOrderByClause = inquiryDateColumnAvailable
-    ? `${followUpFirstExpr}${inquiryDateExpr} DESC, si.Inquiry_Id DESC`
-    : `${followUpFirstExpr}si.Inquiry_Id DESC`;
+    ? `si.Inquiry_Id DESC, ${followUpFirstExpr}${inquiryDateExpr} DESC`
+    : `si.Inquiry_Id DESC`;
 
   let total = 0;
   let pageIds: number[] = [];
@@ -1878,9 +1877,8 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
   );
   const total = Number((countRows as any[])[0]?.total || 0);
 
-  // Same "Follow up pending sorts first" priority as listInquiries — a person with
-  // ANY inquiry auto-escalated to Follow up pending (see escalateStaleInterestedInquiries)
-  // moves to the top of their group.
+  // Keep the person with the newest inserted inquiry first. Follow-up priority remains
+  // a secondary ordering rule for older person groups.
   const followUpPendingStatusId = await getFollowUpPendingStatusId(pool);
   const followUpFirstSelect = followUpPendingStatusId != null
     ? `MAX(CASE WHEN CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) = ${followUpPendingStatusId} THEN 1 ELSE 0 END) as HasFollowUpPending,`
@@ -1903,7 +1901,7 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
      LEFT JOIN person_master p ON p.Person_Id = si.Person_Id
      ${whereClause}
      GROUP BY ${groupKeyExpr}
-     ORDER BY ${followUpFirstOrder}LatestEnquiryDate DESC
+    ORDER BY LatestInquiryId DESC, ${followUpFirstOrder}LatestEnquiryDate DESC
      LIMIT ? OFFSET ?`,
     [...queryParams, limit, offset]
   );
