@@ -1006,7 +1006,7 @@ export default function EditConsultancyPage() {
                           <td className="px-3 py-2 text-gray-700">{f.Purpose || '-'}</td>
                           <td className="px-3 py-2 text-gray-700">{f.Course || '-'}</td>
                           <td className="px-3 py-2 text-gray-700">{f.Direct_Line || '-'}</td>
-                          <td className="px-3 py-2 text-gray-700 truncate max-w-[120px]" title={f.Remarks || undefined}>{f.Remarks || '-'}</td>
+                          <td className="px-3 py-2 text-gray-700 whitespace-pre-wrap break-words min-w-[160px]">{f.Remarks || '-'}</td>
                           <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{f.Created_By || 'System'}</td>
                           <td className="px-3 py-2 text-gray-700">
                             {f.Entry_Type === 'deputation' ? (
