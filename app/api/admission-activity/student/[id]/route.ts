@@ -522,8 +522,7 @@ export async function PUT(
       Alumni_Registered,
     } = body;
 
-    const fullName = Student_Name ||
-      [FName, MName, LName].filter(Boolean).join(' ') || null;
+    const fullName = [FName, MName, LName].filter(Boolean).join(' ') || Student_Name || null;
     const resolvedTransfered = String(Transfered ?? '').trim().toLowerCase() === 'yes' ? 'Yes' : null;
     const resolvedCancel = Cancel === undefined ? null : (['1', 1, true, 'yes', 'Yes'].includes(Cancel) ? 1 : 0);
     const resolvedMovedToCourseId = Moved_To_Course_Id ? parseInt(Moved_To_Course_Id) : null;
