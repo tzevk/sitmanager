@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     const result = await cached(`api:inquiry:persons:${queryKey}`, 20_000, () => listInquiryPersons({
       page: Math.max(1, parseInt(url.searchParams.get('page') || '1')),
       limit: Math.min(100, Math.max(10, parseInt(url.searchParams.get('limit') || '25'))),
+      pinnedInquiryId: Math.max(0, parseInt(url.searchParams.get('pinnedInquiryId') || '0')),
       search: url.searchParams.get('search')?.trim() || '',
       discipline: url.searchParams.get('discipline') || '',
       inquiryType: url.searchParams.get('inquiryType') || '',

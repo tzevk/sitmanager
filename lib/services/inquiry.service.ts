@@ -140,6 +140,7 @@ export interface UpdateInquiryInput extends Omit<CreateInquiryInput, 'Student_Na
 export interface InquiryListParams {
   page: number;
   limit: number;
+  pinnedInquiryId?: number;
   search?: string;
   discipline?: string;
   inquiryType?: string;
@@ -1176,7 +1177,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     : `NULLIF(TRIM(si.Discipline),'')`;
   warmInquirySchema(pool, inquiryTable);
   const {
-    page, limit, search = '', discipline = '', inquiryType = '', leadTag = '',
+    page, limit, pinnedInquiryId, search = '', discipline = '', inquiryType = '', leadTag = '',
     location = '', training = '', batchCategory = '', statusId = '', duplicatesOnly = false, dateFrom = '', dateTo = '',
     puneOnly = false,
     followUpDue = false,
@@ -1400,9 +1401,12 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   );
   const useFastUnfilteredPath = !hasActiveFilters;
 
-  // Keep newly inserted inquiries at the top. Follow-up priority and inquiry date are
-  // secondary ordering rules for older records.
+  // A just-created inquiry may be temporarily pinned by the listing redirect. After
+  // that one row, retain the established cron-escalated follow-up priority and recency.
   const followUpPendingStatusId = await getFollowUpPendingStatusId(pool);
+  const pinFirstExpr = Number.isInteger(pinnedInquiryId) && Number(pinnedInquiryId) > 0
+    ? `CASE WHEN si.Inquiry_Id = ${Number(pinnedInquiryId)} THEN 0 ELSE 1 END, `
+    : '';
   const followUpFirstExpr = followUpPendingStatusId != null
     ? `CASE WHEN CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) = ${followUpPendingStatusId} THEN 0 ELSE 1 END, `
     : '';
@@ -1410,8 +1414,8 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   // When _inquiry_date is not available yet, sorting with STR_TO_DATE(...) is very expensive
   // on large tables. Fall back to primary-key recency to keep first page responsive.
   const listOrderByClause = inquiryDateColumnAvailable
-    ? `si.Inquiry_Id DESC, ${followUpFirstExpr}${inquiryDateExpr} DESC`
-    : `si.Inquiry_Id DESC`;
+    ? `${pinFirstExpr}${followUpFirstExpr}${inquiryDateExpr} DESC, si.Inquiry_Id DESC`
+    : `${pinFirstExpr}${followUpFirstExpr}si.Inquiry_Id DESC`;
 
   let total = 0;
   let pageIds: number[] = [];
@@ -1744,6 +1748,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
 export interface InquiryPersonListParams {
   page: number;
   limit: number;
+  pinnedInquiryId?: number;
   search?: string;
   discipline?: string;
   inquiryType?: string;
@@ -1798,7 +1803,7 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
   const disciplineExpr = disciplineTable ? DISCIPLINE_NAME_EXPR : `NULLIF(TRIM(si.Discipline),'')`;
 
   const {
-    page, limit, search = '', discipline = '', inquiryType = '',
+    page, limit, pinnedInquiryId, search = '', discipline = '', inquiryType = '',
     training = '', batchCategory = '', statusId = '', dateFrom = '', dateTo = '',
   } = params;
 
@@ -1865,9 +1870,13 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
   );
   const total = Number((countRows as any[])[0]?.total || 0);
 
-  // Keep the person with the newest inserted inquiry first. Follow-up priority remains
-  // a secondary ordering rule for older person groups.
+  // Temporarily pin the person group containing a just-created inquiry, then preserve
+  // the established cron-escalated follow-up priority for every remaining group.
   const followUpPendingStatusId = await getFollowUpPendingStatusId(pool);
+  const pinFirstSelect = Number.isInteger(pinnedInquiryId) && Number(pinnedInquiryId) > 0
+    ? `MAX(CASE WHEN si.Inquiry_Id = ${Number(pinnedInquiryId)} THEN 1 ELSE 0 END) as HasPinnedInquiry,`
+    : '';
+  const pinFirstOrder = pinFirstSelect ? 'HasPinnedInquiry DESC, ' : '';
   const followUpFirstSelect = followUpPendingStatusId != null
     ? `MAX(CASE WHEN CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) = ${followUpPendingStatusId} THEN 1 ELSE 0 END) as HasFollowUpPending,`
     : '';
@@ -1880,6 +1889,7 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
        COALESCE(p.Mobile, ${mobileExpressions.primary}) as Mobile,
        COALESCE(p.Email, si.Email) as Email,
        COUNT(*) as EnquiryCount,
+      ${pinFirstSelect}
        ${followUpFirstSelect}
        MAX(si.Inquiry_Dt) as LatestEnquiryDate,
        MAX(si.Inquiry_Id) as LatestInquiryId
@@ -1889,7 +1899,7 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
      LEFT JOIN person_master p ON p.Person_Id = si.Person_Id
      ${whereClause}
      GROUP BY ${groupKeyExpr}
-    ORDER BY LatestInquiryId DESC, ${followUpFirstOrder}LatestEnquiryDate DESC
+    ORDER BY ${pinFirstOrder}${followUpFirstOrder}LatestEnquiryDate DESC, LatestInquiryId DESC
      LIMIT ? OFFSET ?`,
     [...queryParams, limit, offset]
   );

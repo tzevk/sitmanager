@@ -167,6 +167,7 @@ export default function InquiryPage() {
   const [error, setError] = useState('');
 
   const getInitParam = (key: string) => searchParams.get(key) || '';
+  const pinnedInquiryId = Math.max(0, parseInt(searchParams.get('pinnedInquiryId') || '0'));
 
   const [search, setSearch] = useState(() => getInitParam('search'));
   const [inquiryType, setInquiryType] = useState(() => getInitParam('inquiryType'));
@@ -228,6 +229,7 @@ export default function InquiryPage() {
     try {
       setError('');
       const p = new URLSearchParams({ page: String(personPage), limit: '25' });
+      if (pinnedInquiryId) p.set('pinnedInquiryId', String(pinnedInquiryId));
       if (search) p.set('search', search);
       if (inquiryType) p.set('inquiryType', inquiryType);
       if (status) p.set('status', status);
@@ -284,6 +286,7 @@ export default function InquiryPage() {
     try {
       setError('');
       const p = new URLSearchParams({ page: String(page), limit: '25' });
+      if (pinnedInquiryId) p.set('pinnedInquiryId', String(pinnedInquiryId));
       if (search) p.set('search', search);
       if (inquiryType) p.set('inquiryType', inquiryType);
       if (status) p.set('status', status);
@@ -351,6 +354,7 @@ export default function InquiryPage() {
   const buildReturnTo = () => {
     const p = new URLSearchParams(searchParams.toString());
     p.delete('page');
+    p.delete('pinnedInquiryId');
     if (page > 1) p.set('page', String(page));
     const qs = p.toString();
     return qs ? `${pathname}?${qs}` : pathname;
