@@ -176,6 +176,8 @@ export interface InquiryRow {
   FirstDiscussionTime?: string | null;
   NextFollowUpDate: string | null;
   FollowUpBy: string | null;
+  StatusChangedAt?: string | null;
+  StatusChangedBy?: string | null;
   MetaCampaignName?: string | null;
   MetaFormName?: string | null;
   IsMetaAdConverted?: boolean;
@@ -560,6 +562,14 @@ async function ensureInquiryStatusChangedColumn(pool: ReturnType<typeof getPool>
     if ((rows as any[]).length === 0) {
       await pool.query(`ALTER TABLE \`${inquiryTable}\` ADD COLUMN Status_Changed_At DATETIME NULL`);
     }
+    const [byRows] = await pool.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'Status_Changed_By'`,
+      [inquiryTable]
+    );
+    if ((byRows as any[]).length === 0) {
+      await pool.query(`ALTER TABLE \`${inquiryTable}\` ADD COLUMN Status_Changed_By INT NULL`);
+    }
     const [indexRows] = await pool.query(
       `SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = 'idx_si_status_changed'`,
@@ -942,7 +952,7 @@ export async function getStatusMasterOptions(): Promise<StatusOption[]> {
  * admin-managed status rather than being limited to the hardcoded allowlist. Two
  * small indexed queries — intentionally cheaper than the full updateInquiry path.
  */
-export async function updateInquiryStatus(inquiryId: number, statusId: number): Promise<void> {
+export async function updateInquiryStatus(inquiryId: number, statusId: number, changedBy?: number | null): Promise<void> {
   if (!Number.isInteger(inquiryId) || inquiryId <= 0) {
     const error = new Error('Valid inquiryId is required');
     (error as { status?: number }).status = 400;
@@ -969,12 +979,14 @@ export async function updateInquiryStatus(inquiryId: number, statusId: number): 
 
   const inquiryTable = await resolveInquiryTableName(pool);
   await ensureInquiryStatusChangedColumn(pool, inquiryTable);
+  const statusActuallyChanging = `COALESCE(CAST(NULLIF(OnlineState,'') AS UNSIGNED), 0) <> ?`;
   await pool.query(
     `UPDATE \`${inquiryTable}\` SET
        OnlineState = ?,
-       Status_Changed_At = CASE WHEN COALESCE(CAST(NULLIF(OnlineState,'') AS UNSIGNED), 0) <> ? THEN NOW() ELSE Status_Changed_At END
+       Status_Changed_At = CASE WHEN ${statusActuallyChanging} THEN NOW() ELSE Status_Changed_At END,
+       Status_Changed_By = CASE WHEN ${statusActuallyChanging} THEN ? ELSE Status_Changed_By END
      WHERE Inquiry_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
-    [statusId, statusId, inquiryId]
+    [statusId, statusId, statusId, changedBy ?? null, inquiryId]
   );
 }
 
@@ -1169,6 +1181,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
 
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
+  await ensureInquiryStatusChangedColumn(pool, inquiryTable);
   const disciplineTable = await resolveDisciplineTableName(pool);
   const disciplineJoin = disciplineTable
     ? `LEFT JOIN \`${disciplineTable}\` md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)`
@@ -1555,6 +1568,12 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
            NULLIF(TRIM(au.username),''), NULLIF(TRIM(au.email),''),
            NULLIF(TRIM(oe.Employee_Name),'')
          ) as LatestDiscussionByName,
+         si.Status_Changed_At,
+         COALESCE(
+           NULLIF(TRIM(CONCAT(COALESCE(scu.firstname,''),' ',COALESCE(scu.lastname,''))),''),
+           NULLIF(TRIM(scu.username),''), NULLIF(TRIM(scu.email),''),
+           NULLIF(TRIM(sce.Employee_Name),'')
+         ) as StatusChangedByName,
         ${puneMatchedCondition} as IsPuneInquiry,
          ${puneLocationExpr} as PuneSourceLocation,
          ${punePageSourceExpr} as PunePageSource
@@ -1612,6 +1631,8 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
        LEFT JOIN awt_inquirydiscussion fd ON fd.id = COALESCE(tfd_primary.min_id, tfd_legacy.min_id)
        LEFT JOIN awt_adminuser au ON au.id = ld.created_by
        LEFT JOIN office_employee_mst oe ON oe.Emp_Id = ld.created_by
+       LEFT JOIN awt_adminuser scu ON scu.id = si.Status_Changed_By
+       LEFT JOIN office_employee_mst sce ON sce.Emp_Id = si.Status_Changed_By
        WHERE si.Inquiry_Id IN (${ph})`,
       [...pageIds, ...pageIds, ...pageIds, ...pageIds, ...pageIds],
       10,
@@ -1702,6 +1723,8 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       FirstDiscussionTime: r.FirstDiscussionTime ?? null,
       NextFollowUpDate: r.NextFollowUpDate ?? null,
       FollowUpBy: r.LatestDiscussionByName || (r.LatestDiscussionById != null ? `User ${r.LatestDiscussionById}` : null),
+      StatusChangedAt: r.Status_Changed_At ?? null,
+      StatusChangedBy: r.StatusChangedByName || null,
       MetaCampaignName: r.MetaCampaignName ?? null,
       MetaFormName: r.MetaFormName ?? null,
       IsPuneInquiry: Boolean(r.IsPuneInquiry),
@@ -1991,6 +2014,7 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
        Email=?, Nationality=?, Present_Country=?,
        Discussion=?, OnlineState=?,
        Status_Changed_At = CASE WHEN COALESCE(CAST(NULLIF(OnlineState,'') AS UNSIGNED), 0) <> ? THEN NOW() ELSE Status_Changed_At END,
+       Status_Changed_By = CASE WHEN COALESCE(CAST(NULLIF(OnlineState,'') AS UNSIGNED), 0) <> ? THEN ? ELSE Status_Changed_By END,
        Inquiry_Dt=?,
        Inquiry_From=?, Inquiry_Type=?,
        Course_Id=?, Batch_Category_id=?, Batch_Code=?,
@@ -2008,6 +2032,8 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
       nextDiscussion,
       statusId,
       statusId,
+      statusId,
+      createdBy,
       data.Inquiry_Dt ?? null,
       data.Inquiry_From ?? null,
       data.Inquiry_Type ?? null,

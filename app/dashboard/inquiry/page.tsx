@@ -73,6 +73,8 @@ interface InquiryRow {
   Status_id: number | null;
   StatusLabel: string;
   FollowUpBy?: string | null;
+  StatusChangedAt?: string | null;
+  StatusChangedBy?: string | null;
   IsDuplicateLead?: boolean;
   IsPuneInquiry?: boolean;
   PuneSourceLocation?: string | null;
@@ -879,12 +881,22 @@ export default function InquiryPage() {
                       })()}
                     </td>
                     <td className="py-1 px-2 text-center">
-                      <span className="inline-flex items-center gap-1">
-                        {isFollowUpPending(r.StatusLabel) && <FollowUpPendingDot />}
-                        <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(r.StatusLabel)}`}>
-                          {r.StatusLabel}
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="inline-flex items-center gap-1">
+                          {isFollowUpPending(r.StatusLabel) && <FollowUpPendingDot />}
+                          <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(r.StatusLabel)}`}>
+                            {r.StatusLabel}
+                          </span>
                         </span>
-                      </span>
+                        {r.StatusChangedBy && (
+                          <span
+                            className="text-[9px] text-slate-400 truncate max-w-[110px]"
+                            title={r.StatusChangedAt ? `Changed by ${r.StatusChangedBy} on ${formatDate(r.StatusChangedAt)}` : `Changed by ${r.StatusChangedBy}`}
+                          >
+                            by {r.StatusChangedBy}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-1 px-2">
                       <div className="flex items-center justify-center gap-1 flex-nowrap min-w-[48px] whitespace-nowrap">

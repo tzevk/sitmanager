@@ -145,7 +145,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Valid Student_Id is required' }, { status: 400 });
     }
 
-    await updateInquiryStatus(inquiryId, statusId);
+    await updateInquiryStatus(inquiryId, statusId, auth.session.userId);
 
     await logTableActivity(req, {
       tableName: 'Student_Inquiry',
