@@ -4,11 +4,11 @@ import { RowDataPacket } from 'mysql2';
 
 // Public endpoint — no auth required (used by online admission form)
 // batch_mst date columns are varchar and stored in mixed formats; parse before comparing.
-const BATCH_SDATE_EXPR = `COALESCE(
-  STR_TO_DATE(CAST(SDate AS CHAR), '%Y-%m-%d'),
-  STR_TO_DATE(CAST(SDate AS CHAR), '%d-%m-%Y'),
-  STR_TO_DATE(CAST(SDate AS CHAR), '%d/%m/%Y'),
-  STR_TO_DATE(CAST(SDate AS CHAR), '%m/%d/%Y')
+const BATCH_ADMISSION_DATE_EXPR = `COALESCE(
+  STR_TO_DATE(CAST(Admission_Date AS CHAR), '%Y-%m-%d'),
+  STR_TO_DATE(CAST(Admission_Date AS CHAR), '%d-%m-%Y'),
+  STR_TO_DATE(CAST(Admission_Date AS CHAR), '%d/%m/%Y'),
+  STR_TO_DATE(CAST(Admission_Date AS CHAR), '%m/%d/%Y')
 )`;
 const BATCH_EDATE_EXPR = `COALESCE(
   STR_TO_DATE(CAST(EDate AS CHAR), '%Y-%m-%d'),
@@ -16,12 +16,13 @@ const BATCH_EDATE_EXPR = `COALESCE(
   STR_TO_DATE(CAST(EDate AS CHAR), '%d/%m/%Y'),
   STR_TO_DATE(CAST(EDate AS CHAR), '%m/%d/%Y')
 )`;
-// A batch counts as "ongoing" once it has started (or has no parseable start
-// date) and hasn't ended yet (or has no parseable end date) — an unparseable
-// date shouldn't hide an otherwise-active batch from the public form.
+// A batch counts as "ongoing" for the public admission form while its Last
+// Date of Admission (Admission_Date) hasn't passed and it hasn't ended yet
+// (EDate) — an unparseable/missing date shouldn't hide an otherwise-active
+// batch, so it only excludes a batch when the date is present AND passed.
 const BATCH_ONGOING_FILTER = `
   AND COALESCE(IsActive, 0) = 1
-  AND (${BATCH_SDATE_EXPR} IS NULL OR ${BATCH_SDATE_EXPR} <= CURDATE())
+  AND (${BATCH_ADMISSION_DATE_EXPR} IS NULL OR ${BATCH_ADMISSION_DATE_EXPR} >= CURDATE())
   AND (${BATCH_EDATE_EXPR} IS NULL OR ${BATCH_EDATE_EXPR} >= CURDATE())
 `;
 
