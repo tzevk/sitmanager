@@ -14,6 +14,11 @@ const STEPS = [
   { id: 7, title: 'Mode of Payment', icon: 'fa-credit-card', description: 'Select your payment method' },
 ];
 
+// Matches the Payment_Type options on the internal Fee Details page
+// (app/dashboard/fee-details/add/page.tsx) so this self-declared confirmation
+// lines up with staff-side reporting.
+const PAYMENT_CONFIRM_MODES = ['Cash', 'Cheque', 'DD', 'Online', 'UPI', 'Razorpay', 'NEFT', 'PDC'];
+
 const STEP_GUIDANCE: Record<number, { focus: string; tip: string }> = {
   1: {
     focus: 'Enter the student’s core identity and contact details first. Address fields can be completed in the same pass.',
@@ -133,6 +138,13 @@ export default function PublicAdmissionFormPage() {
   const [upiTransferReference, setUpiTransferReference] = useState('');
   const [neftTransactionNumber, setNeftTransactionNumber] = useState('');
   const [paymentSubMethod, setPaymentSubMethod] = useState<PaymentSubMethod>('');
+  // Student self-declared payment confirmation — required before submit,
+  // regardless of channel. Becomes the actual Fee Details (s_fees_mst) entry.
+  const [paymentConfirmDate, setPaymentConfirmDate] = useState('');
+  const [paymentConfirmName, setPaymentConfirmName] = useState('');
+  const [paymentConfirmMode, setPaymentConfirmMode] = useState('');
+  const [paymentConfirmTransactionNo, setPaymentConfirmTransactionNo] = useState('');
+  const [paymentConfirmAmount, setPaymentConfirmAmount] = useState('');
   const [showPayAtOfficeModal, setShowPayAtOfficeModal] = useState(false);
   const [payAtOfficePassword, setPayAtOfficePassword] = useState('');
   const [payAtOfficeVerifying, setPayAtOfficeVerifying] = useState(false);
@@ -391,6 +403,11 @@ export default function PublicAdmissionFormPage() {
       upiTransferReference?: string;
       neftTransactionNumber?: string;
       paymentSubMethod?: PaymentSubMethod;
+      paymentConfirmDate?: string;
+      paymentConfirmName?: string;
+      paymentConfirmMode?: string;
+      paymentConfirmTransactionNo?: string;
+      paymentConfirmAmount?: string | number;
       consentData?: {
         eligibility?: string;
         qualification?: string;
@@ -530,6 +547,21 @@ export default function PublicAdmissionFormPage() {
       if (bestProgress?.paymentSubMethod === 'razorpay' || bestProgress?.paymentSubMethod === 'qr' || bestProgress?.paymentSubMethod === 'neft') {
         setPaymentSubMethod(bestProgress.paymentSubMethod);
       }
+      if (typeof bestProgress?.paymentConfirmDate === 'string') {
+        setPaymentConfirmDate(bestProgress.paymentConfirmDate);
+      }
+      if (typeof bestProgress?.paymentConfirmName === 'string') {
+        setPaymentConfirmName(bestProgress.paymentConfirmName);
+      }
+      if (typeof bestProgress?.paymentConfirmMode === 'string') {
+        setPaymentConfirmMode(bestProgress.paymentConfirmMode);
+      }
+      if (typeof bestProgress?.paymentConfirmTransactionNo === 'string') {
+        setPaymentConfirmTransactionNo(bestProgress.paymentConfirmTransactionNo);
+      }
+      if (bestProgress?.paymentConfirmAmount != null) {
+        setPaymentConfirmAmount(String(bestProgress.paymentConfirmAmount));
+      }
       if (bestProgress?.consentData && typeof bestProgress.consentData === 'object') {
         setConsentData(prev => ({
           ...prev,
@@ -585,6 +617,11 @@ export default function PublicAdmissionFormPage() {
         upiTransferReference,
         neftTransactionNumber,
         paymentSubMethod,
+        paymentConfirmDate,
+        paymentConfirmName,
+        paymentConfirmMode,
+        paymentConfirmTransactionNo,
+        paymentConfirmAmount,
         consentData,
       };
 
@@ -691,6 +728,11 @@ export default function PublicAdmissionFormPage() {
     formData,
     payAtOfficeVerified,
     paymentSubMethod,
+    paymentConfirmDate,
+    paymentConfirmName,
+    paymentConfirmMode,
+    paymentConfirmTransactionNo,
+    paymentConfirmAmount,
     neftTransactionNumber,
     upiTransferConfirmed,
     upiTransferReference,
@@ -956,6 +998,24 @@ export default function PublicAdmissionFormPage() {
 
     return payableTuition + (formData.modeOfPayment ? ALUMNI_MEMBERSHIP_FEE : 0);
   };
+
+  // Default-fill the Payment Confirmation table once a fee plan is chosen —
+  // convenience only, every field stays editable and is still validated
+  // before submit. Only fills fields that are still blank, so it never
+  // clobbers something the student already typed.
+  useEffect(() => {
+    if (!formData.modeOfPayment) return;
+    if (!paymentConfirmDate) setPaymentConfirmDate(new Date().toISOString().slice(0, 10));
+    if (!paymentConfirmName) {
+      const fullName = [formData.firstName, formData.middleName, formData.lastName].filter(Boolean).join(' ');
+      if (fullName) setPaymentConfirmName(fullName);
+    }
+    if (!paymentConfirmAmount) {
+      const amt = calculateAdmissionPayableAmount();
+      if (amt > 0) setPaymentConfirmAmount(String(amt));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.modeOfPayment, formData.firstName, formData.middleName, formData.lastName]);
 
   // Tracks the programme|category combo we've already fetched batches for, so the
   // centralized loader below runs once per combo and never loops on empty results.
@@ -1444,6 +1504,11 @@ export default function PublicAdmissionFormPage() {
         return;
       }
     }
+    if (!paymentConfirmDate || !paymentConfirmName.trim() || !paymentConfirmMode || !paymentConfirmTransactionNo.trim() || !paymentConfirmAmount || Number(paymentConfirmAmount) <= 0) {
+      alert('Please complete the Payment Confirmation table (Date, Name, Payment Mode, Transaction No. and Amount) in Step 7 before submitting.');
+      setCurrentStep(7);
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -1561,6 +1626,13 @@ export default function PublicAdmissionFormPage() {
         razorpayOrderId:    razorpayOrderId    || null,
         razorpaySignature:  razorpaySignature  || null,
         razorpayAmount:     razorpayPaid ? payableAmount : null,
+        // Student self-declared payment confirmation — required, becomes the
+        // actual Fee Details (s_fees_mst) entry for this admission.
+        paymentConfirmDate,
+        paymentConfirmName: paymentConfirmName.trim(),
+        paymentConfirmMode,
+        paymentConfirmTransactionNo: paymentConfirmTransactionNo.trim(),
+        paymentConfirmAmount: Number(paymentConfirmAmount),
       };
 
       const requestBody = new FormData();
@@ -3923,6 +3995,81 @@ export default function PublicAdmissionFormPage() {
                           )}
                         </div>
                       )}
+
+                      {/* Payment Confirmation — required after any payment method, becomes
+                          the actual Fee Details entry for this admission. */}
+                      {formData.modeOfPayment && (
+                        <div className="rounded-xl p-4 space-y-3 border-2 border-[#2E3093]/30 bg-[#2E3093]/5">
+                          <p className="text-xs font-bold text-[#2E3093] flex items-center gap-2">
+                            <i className="fas fa-receipt"></i>
+                            Payment Confirmation <span className="text-red-500">*</span>
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            Please confirm the details of the payment you made — this is required before you can submit the application.
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Date <span className="text-red-500">*</span></label>
+                              <input
+                                type="date"
+                                value={paymentConfirmDate}
+                                onChange={(e) => setPaymentConfirmDate(e.target.value)}
+                                max={new Date().toISOString().slice(0, 10)}
+                                className="w-full h-10 px-3 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20"
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Student Name <span className="text-red-500">*</span></label>
+                              <input
+                                type="text"
+                                value={paymentConfirmName}
+                                onChange={(e) => setPaymentConfirmName(e.target.value)}
+                                placeholder="Name as on payment"
+                                className="w-full h-10 px-3 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20"
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Payment Mode <span className="text-red-500">*</span></label>
+                              <select
+                                value={paymentConfirmMode}
+                                onChange={(e) => setPaymentConfirmMode(e.target.value)}
+                                className="w-full h-10 px-3 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20"
+                                required
+                              >
+                                <option value="">Select mode</option>
+                                {PAYMENT_CONFIRM_MODES.map((m) => (
+                                  <option key={m} value={m}>{m}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Transaction No. <span className="text-red-500">*</span></label>
+                              <input
+                                type="text"
+                                value={paymentConfirmTransactionNo}
+                                onChange={(e) => setPaymentConfirmTransactionNo(e.target.value)}
+                                placeholder="Reference / UTR / receipt no."
+                                className="w-full h-10 px-3 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20"
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Amount (&#8377;) <span className="text-red-500">*</span></label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={paymentConfirmAmount}
+                                onChange={(e) => setPaymentConfirmAmount(e.target.value)}
+                                placeholder={String(payableNow)}
+                                className="w-full h-10 px-3 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20"
+                                required
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     );
                   })()}
@@ -4133,8 +4280,8 @@ export default function PublicAdmissionFormPage() {
                       ) : (
                         <button
                           type="submit"
-                          disabled={submitting || !formData.modeOfPayment || (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : paymentSubMethod === 'razorpay' ? !razorpayPaid : paymentSubMethod === 'qr' ? !upiTransferConfirmed : paymentSubMethod === 'neft' ? !neftTransactionNumber.trim() : true)}
-                          title={(!formData.modeOfPayment || (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : paymentSubMethod === 'razorpay' ? !razorpayPaid : paymentSubMethod === 'qr' ? !upiTransferConfirmed : paymentSubMethod === 'neft' ? !neftTransactionNumber.trim() : true)) ? (formData.modeOfPayment === 'Pay at Office' ? 'Enter override password to submit' : 'Complete payment details to submit') : undefined}
+                          disabled={submitting || !formData.modeOfPayment || (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : paymentSubMethod === 'razorpay' ? !razorpayPaid : paymentSubMethod === 'qr' ? !upiTransferConfirmed : paymentSubMethod === 'neft' ? !neftTransactionNumber.trim() : true) || !paymentConfirmDate || !paymentConfirmName.trim() || !paymentConfirmMode || !paymentConfirmTransactionNo.trim() || !paymentConfirmAmount || Number(paymentConfirmAmount) <= 0}
+                          title={(!formData.modeOfPayment || (formData.modeOfPayment === 'Pay at Office' ? !payAtOfficeVerified : paymentSubMethod === 'razorpay' ? !razorpayPaid : paymentSubMethod === 'qr' ? !upiTransferConfirmed : paymentSubMethod === 'neft' ? !neftTransactionNumber.trim() : true)) ? (formData.modeOfPayment === 'Pay at Office' ? 'Enter override password to submit' : 'Complete payment details to submit') : (!paymentConfirmDate || !paymentConfirmName.trim() || !paymentConfirmMode || !paymentConfirmTransactionNo.trim() || !paymentConfirmAmount || Number(paymentConfirmAmount) <= 0) ? 'Complete the Payment Confirmation table to submit' : undefined}
                           className="px-4 sm:px-6 py-2 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white rounded-lg font-bold text-xs sm:text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                           {submitting ? (
                             <><i className="fas fa-spinner fa-spin mr-1 sm:mr-2"></i><span className="hidden sm:inline">Submitting...</span><span className="sm:hidden">Wait...</span></>

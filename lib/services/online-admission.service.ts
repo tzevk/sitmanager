@@ -198,6 +198,13 @@ const FORM_COLUMNS: [string, string][] = [
   ['Upi_Transfer_Reference',    'VARCHAR(300) NULL'],
   ['Upi_Amount',                'DECIMAL(10,2) NULL'],
   ['Pay_At_Office_Audit',       'TEXT NULL'],
+  // Student self-declared payment confirmation — required before submit,
+  // becomes the actual s_fees_mst entry regardless of payment channel.
+  ['Payment_Confirm_Date',            'DATE NULL'],
+  ['Payment_Confirm_Name',            'VARCHAR(200) NULL'],
+  ['Payment_Confirm_Mode',            'VARCHAR(50) NULL'],
+  ['Payment_Confirm_Transaction_No',  'VARCHAR(200) NULL'],
+  ['Payment_Confirm_Amount',          'DECIMAL(12,2) NULL'],
   // Consent
   ['Terms_Agreed',                      'TINYINT(1) NULL DEFAULT 0'],
   ['Consent_Acknowledged',              'TINYINT(1) NULL DEFAULT 0'],
@@ -556,6 +563,11 @@ export async function saveStructuredAdmissionData(
     ['Upi_Transfer_Reference',  n(input.upiTransferReference)],
     ['Upi_Amount',              num(input.upiAmount)],
     ['Pay_At_Office_Audit',     jstr(input.payAtOfficeAudit)],
+    ['Payment_Confirm_Date',           n(input.paymentConfirmDate)],
+    ['Payment_Confirm_Name',           n(input.paymentConfirmName)],
+    ['Payment_Confirm_Mode',           n(input.paymentConfirmMode)],
+    ['Payment_Confirm_Transaction_No', n(input.paymentConfirmTransactionNo)],
+    ['Payment_Confirm_Amount',         num(input.paymentConfirmAmount)],
     // Consent
     ['Terms_Agreed',                     maybeBool(input.termsAgreed)],
     ['Consent_Acknowledged',             maybeBool(input.consentAcknowledged)],
@@ -1206,95 +1218,44 @@ export async function syncOnlineAdmissionIntoCurrentDb(
       }
     }
 
-    // If the applicant paid online during the admission form, record it in the
-    // fees ledger so it shows up as "Paid" on the student page. Dedupe on
-    // PaymentId so re-granting / re-syncing doesn't create duplicate entries.
-    const razorpayPaid = input.razorpayPaid === true;
-    const razorpayAmount = parseOptionalNumber(input.razorpayAmount);
-    const razorpayPaymentId = normalizeText(input.razorpayPaymentId);
-    if (razorpayPaid && razorpayAmount && razorpayAmount > 0 && razorpayPaymentId) {
-      const [existingFee] = await pool.query(
-        `SELECT Fees_Id FROM s_fees_mst WHERE PaymentId = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
-        [razorpayPaymentId]
+    // The student self-declares Date/Name/Mode/Transaction No/Amount for their
+    // payment (required on the admission form regardless of channel — see
+    // Step 7 in app/admission/[id]/page.tsx). This is the single source of
+    // truth for the fee-ledger entry, replacing the old per-channel
+    // (Razorpay/UPI/NEFT) auto-detection so there's exactly one entry per
+    // payment instead of a risk of duplicates across the two paths. Dedupe on
+    // PaymentId (the declared transaction no) + Student_Id so re-granting /
+    // re-syncing doesn't create duplicate entries.
+    const paymentConfirmDate = normalizeText(input.paymentConfirmDate);
+    const paymentConfirmName = normalizeText(input.paymentConfirmName);
+    const paymentConfirmMode = normalizeText(input.paymentConfirmMode);
+    const paymentConfirmTransactionNo = normalizeText(input.paymentConfirmTransactionNo);
+    const paymentConfirmAmount = parseOptionalNumber(input.paymentConfirmAmount);
+    if (paymentConfirmMode && paymentConfirmTransactionNo && paymentConfirmAmount && paymentConfirmAmount > 0) {
+      const [existingConfirm] = await pool.query(
+        `SELECT Fees_Id FROM s_fees_mst
+         WHERE PaymentId = ? AND Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
+        [paymentConfirmTransactionNo, resolvedStudentId]
       ) as [any[], any];
 
-      if (!existingFee.length) {
+      if (!existingConfirm.length) {
         const now = new Date();
         const [insertResult] = await pool.query(
           `INSERT INTO s_fees_mst (
              Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type,
              Amount, Total_Amt, TypeR, Notes, RDate, Date_Added, FeesMonth, FeesYear,
              PaymentId, IsActive, IsDelete
-           ) VALUES (?, ?, ?, ?, 'Online', ?, ?, 'C', ?, ?, ?, ?, ?, ?, 1, 0)`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, 'C', ?, ?, ?, ?, ?, ?, 1, 0)`,
           [
-            resolvedStudentId, courseId, batchId, admissionId,
-            razorpayAmount, razorpayAmount, 'Online Admission Payment (Razorpay)',
-            admissionDate, now, now.getMonth() + 1, now.getFullYear(), razorpayPaymentId,
+            resolvedStudentId, courseId, batchId, admissionId, paymentConfirmMode,
+            paymentConfirmAmount, paymentConfirmAmount,
+            `Online Admission Payment — confirmed by student${paymentConfirmName ? ` (${paymentConfirmName})` : ''}`,
+            paymentConfirmDate || admissionDate, now, now.getMonth() + 1, now.getFullYear(), paymentConfirmTransactionNo,
           ]
         ) as [any, any];
         const insertedId = Number(insertResult.insertId);
         const feesCode = await generateFeesReceiptNo(pool);
         await pool.query(`UPDATE s_fees_mst SET Fees_Code = ? WHERE Fees_Id = ?`, [feesCode, insertedId]);
-      }
-    }
-
-    // Record UPI / QR payment in the fees ledger (same dedup pattern as Razorpay, keyed on UTR).
-    const upiConfirmed = input.upiTransferConfirmed === true;
-    const upiReference = normalizeText(input.upiTransferReference);
-    const upiAmount    = parseOptionalNumber(input.upiAmount);
-    if (upiConfirmed && upiReference && upiAmount && upiAmount > 0) {
-      const [existingUpi] = await pool.query(
-        `SELECT Fees_Id FROM s_fees_mst WHERE Notes LIKE ? AND Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
-        [`%${upiReference}%`, resolvedStudentId]
-      ) as [any[], any];
-
-      if (!existingUpi.length) {
-        const now = new Date();
-        const [upiInsertResult] = await pool.query(
-          `INSERT INTO s_fees_mst (
-             Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type,
-             Amount, Total_Amt, TypeR, Notes, RDate, Date_Added, FeesMonth, FeesYear,
-             IsActive, IsDelete
-           ) VALUES (?, ?, ?, ?, 'UPI', ?, ?, 'C', ?, ?, ?, ?, ?, 1, 0)`,
-          [
-            resolvedStudentId, courseId, batchId, admissionId,
-            upiAmount, upiAmount,
-            `Online Admission Payment (UPI/QR) — UTR: ${upiReference}`,
-            admissionDate, now, now.getMonth() + 1, now.getFullYear(),
-          ]
-        ) as [any, any];
-        const upiInsertedId = Number(upiInsertResult.insertId);
-        const upiFeesCode = await generateFeesReceiptNo(pool);
-        await pool.query(`UPDATE s_fees_mst SET Fees_Code = ? WHERE Fees_Id = ?`, [upiFeesCode, upiInsertedId]);
-      }
-    }
-
-    const neftReference = normalizeText(input.neftTransactionNumber);
-    const neftAmount = parseOptionalNumber(input.neftAmount);
-    if (neftReference && neftAmount && neftAmount > 0) {
-      const [existingNeft] = await pool.query(
-        `SELECT Fees_Id FROM s_fees_mst WHERE PaymentId = ? AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1`,
-        [neftReference]
-      ) as [any[], any];
-
-      if (!existingNeft.length) {
-        const now = new Date();
-        const [neftInsertResult] = await pool.query(
-          `INSERT INTO s_fees_mst (
-             Student_Id, Course_Id, Batch_Id, Admission_Id, Payment_Type,
-             Amount, Total_Amt, TypeR, Notes, RDate, Date_Added, FeesMonth, FeesYear,
-             PaymentId, IsActive, IsDelete
-           ) VALUES (?, ?, ?, ?, 'NEFT', ?, ?, 'C', ?, ?, ?, ?, ?, ?, 1, 0)`,
-          [
-            resolvedStudentId, courseId, batchId, admissionId,
-            neftAmount, neftAmount,
-            `Online Admission Payment (NEFT) - Transaction: ${neftReference}`,
-            admissionDate, now, now.getMonth() + 1, now.getFullYear(), neftReference,
-          ]
-        ) as [any, any];
-        const neftInsertedId = Number(neftInsertResult.insertId);
-        const neftFeesCode = await generateFeesReceiptNo(pool);
-        await pool.query(`UPDATE s_fees_mst SET Fees_Code = ? WHERE Fees_Id = ?`, [neftFeesCode, neftInsertedId]);
       }
     }
   }
@@ -1612,6 +1573,15 @@ export async function submitOnlineAdmission(
   if (!Number.isFinite(inquiryId) || inquiryId <= 0) throw new Error('Invalid Inquiry ID');
   if (String(input.paymentSubMethod || '').toLowerCase() === 'neft' && !normalizeText(input.neftTransactionNumber)) {
     throw Object.assign(new Error('NEFT transaction number is required'), { status: 400 });
+  }
+  if (normalizeText(input.modeOfPayment) && (
+    !normalizeText(input.paymentConfirmDate) ||
+    !normalizeText(input.paymentConfirmName) ||
+    !normalizeText(input.paymentConfirmMode) ||
+    !normalizeText(input.paymentConfirmTransactionNo) ||
+    !(parseOptionalNumber(input.paymentConfirmAmount) && Number(input.paymentConfirmAmount) > 0)
+  )) {
+    throw Object.assign(new Error('Payment confirmation details (date, name, mode, transaction no. and amount) are required'), { status: 400 });
   }
   if (!normalizeText(input.familyContact)) {
     throw Object.assign(new Error('Family contact number is required'), { status: 400 });

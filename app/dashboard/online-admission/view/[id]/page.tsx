@@ -319,6 +319,8 @@ export default function EditOnlineAdmissionPage() {
     paymentSubMethod: '', neftTransactionNumber: '', neftAmount: null as number | null,
     razorpayPaid: false, razorpayPaymentId: '', razorpayOrderId: '',
     razorpayAmount: null as number | null,
+    paymentConfirmDate: '', paymentConfirmName: '', paymentConfirmMode: '',
+    paymentConfirmTransactionNo: '', paymentConfirmAmount: null as number | null,
     termsAgreed: false, consentAcknowledged: false,
     experiencedConsentAcknowledged: false,
     consentData: { eligibility: '', qualification: '', candidateRemark: '' },
@@ -511,6 +513,11 @@ export default function EditOnlineAdmissionPage() {
         razorpayPaymentId: d.razorpayPaymentId || '',
         razorpayOrderId: d.razorpayOrderId || '',
         razorpayAmount: d.razorpayAmount != null ? Number(d.razorpayAmount) : null,
+        paymentConfirmDate: d.paymentConfirmDate || '',
+        paymentConfirmName: d.paymentConfirmName || '',
+        paymentConfirmMode: d.paymentConfirmMode || '',
+        paymentConfirmTransactionNo: d.paymentConfirmTransactionNo || '',
+        paymentConfirmAmount: d.paymentConfirmAmount != null ? Number(d.paymentConfirmAmount) : null,
         termsAgreed: Boolean(d.termsAgreed),
         consentAcknowledged: Boolean(d.consentAcknowledged),
         experiencedConsentAcknowledged: Boolean(d.experiencedConsentAcknowledged),
@@ -1396,7 +1403,8 @@ export default function EditOnlineAdmissionPage() {
             || formData.modeOfPayment === 'Direct UPI Transfer'
             || formData.upiTransferConfirmed || formData.upiTransferReference
             || formData.neftTransactionNumber
-            || formData.razorpayPaid || formData.razorpayPaymentId) && (
+            || formData.razorpayPaid || formData.razorpayPaymentId
+            || formData.paymentConfirmTransactionNo) && (
             <div className="mt-6 pt-5 border-t border-gray-100 space-y-3">
               <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Payment Details</p>
 
@@ -1487,6 +1495,41 @@ export default function EditOnlineAdmissionPage() {
                         <p className="font-mono text-gray-700 break-all">{formData.razorpayOrderId}</p>
                       </div>
                     )}
+                  </div>
+                </PaymentDetailPanel>
+              )}
+
+              {formData.paymentConfirmTransactionNo && (
+                <PaymentDetailPanel tone="emerald" icon="check" title="Payment Confirmation (Student Declared)">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 mt-1">
+                    {formData.paymentConfirmDate && (
+                      <div>
+                        <p className="font-semibold text-gray-500 mb-0.5">Date</p>
+                        <p className="font-bold text-gray-800">{formData.paymentConfirmDate}</p>
+                      </div>
+                    )}
+                    {formData.paymentConfirmName && (
+                      <div>
+                        <p className="font-semibold text-gray-500 mb-0.5">Name</p>
+                        <p className="font-bold text-gray-800">{formData.paymentConfirmName}</p>
+                      </div>
+                    )}
+                    {formData.paymentConfirmMode && (
+                      <div>
+                        <p className="font-semibold text-gray-500 mb-0.5">Payment Mode</p>
+                        <p className="font-bold text-gray-800">{formData.paymentConfirmMode}</p>
+                      </div>
+                    )}
+                    {formData.paymentConfirmAmount != null && (
+                      <div>
+                        <p className="font-semibold text-gray-500 mb-0.5">Amount</p>
+                        <p className="font-bold text-gray-800">₹{Number(formData.paymentConfirmAmount).toLocaleString('en-IN')}</p>
+                      </div>
+                    )}
+                    <div className="md:col-span-2">
+                      <p className="font-semibold text-gray-500 mb-0.5">Transaction No.</p>
+                      <p className="font-mono text-gray-700 break-all">{formData.paymentConfirmTransactionNo}</p>
+                    </div>
                   </div>
                 </PaymentDetailPanel>
               )}
