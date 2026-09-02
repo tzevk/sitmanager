@@ -33,6 +33,12 @@ export async function GET(req: NextRequest) {
     const courseId = searchParams.get('courseId');
     const category = searchParams.get('category');
     const batchCode = searchParams.get('batchCode');
+    // Internal/staff callers (e.g. the online-admission review page, editing an
+    // already-submitted application) need every batch for the course — not just
+    // ones currently open for new admissions — so they can view or correct a
+    // batch assignment regardless of whether its admission window has passed.
+    const includeAll = searchParams.get('all') === '1';
+    const ongoingFilter = includeAll ? '' : BATCH_ONGOING_FILTER;
 
     // Lookup fees for a specific batch code
     if (batchCode) {
@@ -73,7 +79,7 @@ export async function GET(req: NextRequest) {
            AND LOWER(TRIM(Category)) <> 'offline'
            AND LOWER(TRIM(Category)) NOT LIKE '%corporate%'
            AND (Cancel IS NULL OR Cancel = 0)
-           ${BATCH_ONGOING_FILTER}
+           ${ongoingFilter}
          ORDER BY TRIM(Category) ASC`,
         [courseId]
       );
@@ -91,7 +97,7 @@ export async function GET(req: NextRequest) {
        FROM batch_mst
        WHERE Course_Id = ? AND TRIM(Category) = ? AND (IsDelete = 0 OR IsDelete IS NULL)
          AND (Cancel IS NULL OR Cancel = 0)
-         ${BATCH_ONGOING_FILTER}
+         ${ongoingFilter}
        ORDER BY COALESCE(Admission_Date, SDate, Date_Added) DESC, Batch_Id DESC`,
       [courseId, category.trim()]
     );

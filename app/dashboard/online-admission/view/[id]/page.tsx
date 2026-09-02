@@ -387,7 +387,7 @@ export default function EditOnlineAdmissionPage() {
     const restore = async () => {
       setLoadingCategories(true);
       try {
-        const cr = await fetch(`/api/public/batches?courseId=${progId}`);
+        const cr = await fetch(`/api/public/batches?courseId=${progId}&all=1`);
         const cd = await cr.json();
         if (cd.success) setBatchCategories(cd.categories);
       } finally { setLoadingCategories(false); }
@@ -395,7 +395,7 @@ export default function EditOnlineAdmissionPage() {
       if (cat) {
         setLoadingBatches(true);
         try {
-          const br = await fetch(`/api/public/batches?courseId=${progId}&category=${encodeURIComponent(cat)}`);
+          const br = await fetch(`/api/public/batches?courseId=${progId}&category=${encodeURIComponent(cat)}&all=1`);
           const bd = await br.json();
           if (bd.success) setAvailableBatches(bd.batches || []);
         } finally { setLoadingBatches(false); }
@@ -574,7 +574,7 @@ export default function EditOnlineAdmissionPage() {
     if (!courseId) return;
     setLoadingCategories(true);
     try {
-      const r = await fetch(`/api/public/batches?courseId=${courseId}`);
+      const r = await fetch(`/api/public/batches?courseId=${courseId}&all=1`);
       const d = await r.json();
       if (d.success) setBatchCategories(d.categories);
     } finally { setLoadingCategories(false); }
@@ -587,7 +587,7 @@ export default function EditOnlineAdmissionPage() {
     if (!category || !formData.trainingProgrammeId) return;
     setLoadingBatches(true);
     try {
-      const r = await fetch(`/api/public/batches?courseId=${formData.trainingProgrammeId}&category=${encodeURIComponent(category)}`);
+      const r = await fetch(`/api/public/batches?courseId=${formData.trainingProgrammeId}&category=${encodeURIComponent(category)}&all=1`);
       const d = await r.json();
       if (d.success) setAvailableBatches(d.batches || []);
     } finally { setLoadingBatches(false); }
