@@ -695,11 +695,11 @@ export default function MetaLeadsPage() {
   const [filters, setFilters] = useState<Filters>({ trainings: [], sources: [], statusOptions: [] });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [source, setSource] = useState('');
+  const [source, setSource] = useState(() => { try { return sessionStorage.getItem('metaLeads_source') ?? ''; } catch { return ''; } });
   const [status, setStatus] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [training, setTraining] = useState('');
+  const [training, setTraining] = useState(() => { try { return sessionStorage.getItem('metaLeads_training') ?? ''; } catch { return ''; } });
   const [duplicatesOnly, setDuplicatesOnly] = useState(false);
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [allUntouchedRows, setAllUntouchedRows] = useState<InquiryRow[]>([]);
@@ -714,6 +714,7 @@ export default function MetaLeadsPage() {
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
   const [rowDrafts, setRowDrafts] = useState<Record<string, LeadRowDraft>>({});
   const [convertError, setConvertError] = useState('');
+  const [convertedToast, setConvertedToast] = useState<{ inquiryId: number; name: string } | null>(null);
   const [untouchedExpanded, setUntouchedExpanded] = useState(false);
   const [leadsSubTab, setLeadsSubTab] = useState<'fresh' | 'engaged' | 'all'>('fresh');
   const [followUpModalLeadId, setFollowUpModalLeadId] = useState<string | null>(null);
@@ -788,6 +789,9 @@ export default function MetaLeadsPage() {
     }
     setRowDrafts(nextDrafts);
   }, [rows]);
+
+  useEffect(() => { try { sessionStorage.setItem('metaLeads_training', training); } catch {} }, [training]);
+  useEffect(() => { try { sessionStorage.setItem('metaLeads_source', source); } catch {} }, [source]);
 
   useEffect(() => {
     if (!editingLeadId) return;
@@ -878,7 +882,6 @@ export default function MetaLeadsPage() {
 
   const handleConvertLead = useCallback(async (row: InquiryRow) => {
     if (!row.MetaLead_Id) return;
-    const returnTo = encodeURIComponent(buildMetaReturnTo());
     const canProceed = row.Student_Id > 0 ? (canUpdate || canConvert) : canConvert;
     if (!canProceed) {
       setConvertError(row.Student_Id > 0
@@ -918,8 +921,15 @@ export default function MetaLeadsPage() {
       setRows((prev) => prev.map((r) =>
         r.MetaLead_Id === row.MetaLead_Id ? { ...r, Student_Id: inquiryId } : r
       ));
-      router.refresh();
-      router.push(`/dashboard/inquiry/add?editId=${inquiryId}&returnTo=${returnTo}`);
+      if (row.Student_Id > 0) {
+        // "Open" — already converted, navigate directly to the inquiry
+        const returnTo = encodeURIComponent(buildMetaReturnTo());
+        router.push(`/dashboard/inquiry/add?editId=${inquiryId}&returnTo=${returnTo}`);
+      } else {
+        // "Convert" — stay on list, show brief toast with optional link
+        setConvertedToast({ inquiryId, name: row.Student_Name || 'Lead' });
+        setTimeout(() => setConvertedToast(null), 6000);
+      }
     } catch (error: unknown) {
       setConvertError(error instanceof Error ? error.message : 'Failed to convert Meta lead');
     } finally {
@@ -1536,6 +1546,14 @@ export default function MetaLeadsPage() {
                 </div>
 
                 {convertError && <div className="border-b border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700">{convertError}</div>}
+                {convertedToast && (
+                  <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2.5 flex items-center gap-3">
+                    <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    <span className="text-xs font-semibold text-emerald-800 flex-1"><span className="font-bold">{convertedToast.name}</span> converted to inquiry</span>
+                    <a href={`/dashboard/inquiry/add?editId=${convertedToast.inquiryId}`} className="text-[11px] font-bold text-emerald-700 underline underline-offset-2 hover:text-emerald-900 shrink-0">Open Inquiry →</a>
+                    <button type="button" onClick={() => setConvertedToast(null)} className="w-5 h-5 flex items-center justify-center rounded text-emerald-500 hover:bg-emerald-100 shrink-0"><svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                  </div>
+                )}
 
                 <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                   <table className="w-full text-xs border-collapse">
