@@ -846,12 +846,12 @@ export default function EditBatchPage() {
         if (row) saveSLectureRow(row).catch(() => {});
       }
       sLectureSaveTimers.current = {};
-      // unitTestDateTimers' own callback already reads the row fresh and
-      // resolves PUT-vs-create itself, so just let each pending one fire
-      // immediately instead of duplicating that logic here.
       for (const id of Object.keys(unitTestDateTimers.current)) {
         const numId = Number(id);
         clearTimeout(unitTestDateTimers.current[numId]);
+        const row = standardLecturesRef.current.find((l) => l.id === numId);
+        const pendingDate = row?.unit_test_date ?? '';
+        if (row) flushUnitTestDate(numId, pendingDate, row);
       }
       unitTestDateTimers.current = {};
     };
