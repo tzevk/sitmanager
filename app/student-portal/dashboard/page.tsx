@@ -77,6 +77,7 @@ interface AcademicsData {
     assignment: string;
     unit_test: string;
     unit_test_date: string | null;
+    session: string | null;
   }>;
   exam_results: Array<{
     Take_Id: number;
@@ -389,8 +390,12 @@ export default function StudentDashboardPage() {
               <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
                 {upcoming.map(lec => {
                   const hasUnitTest = Boolean(lec.unit_test) && Boolean(lec.unit_test_date);
+                  const noSession = !lec.session;
+                  const rowClass = noSession
+                    ? 'bg-pink-50/70 border-l-2 border-pink-400'
+                    : hasUnitTest ? 'bg-amber-50/70 border-l-2 border-amber-400' : '';
                   return (
-                    <div key={lec.id} className={`flex items-start justify-between px-4 py-3 gap-3 ${hasUnitTest ? 'bg-amber-50/70 border-l-2 border-amber-400' : ''}`}>
+                    <div key={lec.id} className={`flex items-start justify-between px-4 py-3 gap-3 ${rowClass}`}>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold text-gray-800 truncate">
                           {lec.subject_topic || lec.subject || `Lecture ${lec.lecture_no}`}
@@ -399,6 +404,9 @@ export default function StudentDashboardPage() {
                           {lec.faculty_name || 'TBD'}
                           {lec.date && ` · ${fmtDate(lec.date)}`}
                         </p>
+                        {noSession && (
+                          <p className="text-[11px] text-pink-600 font-semibold mt-0.5">Session not set</p>
+                        )}
                         {hasUnitTest && (
                           <p className="text-[11px] text-amber-700 font-semibold mt-0.5">
                             Unit Test · {fmtDate(lec.unit_test_date as string)}
@@ -408,6 +416,9 @@ export default function StudentDashboardPage() {
                       <div className="flex items-center gap-1 shrink-0 mt-0.5">
                         {lec.assignment === '1' && (
                           <span className="text-[9px] font-black px-1.5 py-0.5 bg-[#FAE452] text-[#2E3093] rounded-md">ASSGN</span>
+                        )}
+                        {noSession && (
+                          <span className="text-[9px] font-black px-1.5 py-0.5 bg-pink-500 text-white rounded-md">SESSION</span>
                         )}
                         {hasUnitTest && (
                           <span className="text-[9px] font-black px-1.5 py-0.5 bg-amber-400 text-white rounded-md">TEST</span>

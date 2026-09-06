@@ -192,7 +192,8 @@ export async function GET(req: NextRequest) {
     if (batchId) {
       const [upcoming] = await pool.query<any[]>(
         `SELECT s.id, s.lecture_no, s.subject_topic, s.subject, s.faculty_name, s.date,
-                s.starttime, s.endtime, s.class_room, s.assignment, s.unit_test, u.utdate AS unit_test_date
+                s.starttime, s.endtime, s.class_room, s.assignment, s.unit_test, u.utdate AS unit_test_date,
+                s.session
          FROM batch_slecture_master s
          LEFT JOIN lecture_taken_master lt
            ON lt.Lecture_Id = s.id AND lt.Batch_Id = s.batch_id AND (lt.IsDelete = 0 OR lt.IsDelete IS NULL)

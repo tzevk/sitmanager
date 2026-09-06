@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
     const [lectures] = await pool.query<any[]>(
       `SELECT s.id, s.lecture_no, s.subject_topic, s.subject, s.faculty_name, s.date,
               s.starttime, s.endtime, s.class_room, s.assignment, s.unit_test, u.utdate AS unit_test_date,
+              s.session,
               (lt.Take_Id IS NOT NULL) AS taken
        FROM batch_slecture_master s
        LEFT JOIN lecture_taken_master lt
