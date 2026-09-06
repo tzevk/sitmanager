@@ -2834,6 +2834,31 @@ export default function EditBatchPage() {
     setAddingTemplateId(null);
   };
 
+  /* Add a blank lecture row directly, for batches with no Standard Lecture Plan
+     to import from (or an ad-hoc lecture that isn't in the template at all).
+     Staff fill in the details afterward via the row's normal inline autosave. */
+  const [addingBlankLecture, setAddingBlankLecture] = useState(false);
+  const handleAddBlankLecture = async () => {
+    if (stdPlanLocked || addingBlankLecture) return;
+    setAddingBlankLecture(true);
+    try {
+      const maxLectureNo = standardLectures.reduce((max, l) => Math.max(max, l.lecture_no ?? 0), 0);
+      await fetch(`/api/masters/batch/${batchId}/slectures`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lecture_no: maxLectureNo + 1,
+          session: 'first_half',
+          publish: 'No',
+        }),
+      });
+      await fetchStandardLectures();
+    } catch {
+      alert('Failed to add lecture. Please try again.');
+    }
+    setAddingBlankLecture(false);
+  };
+
   /* Reorder existing rows by swapping lecture_no (this batch's own build position) with the
      adjacent row. standard_seq is left untouched — it stays fixed as the row's original
      reference number from the Standard Lecture Plan. */
@@ -2958,6 +2983,14 @@ export default function EditBatchPage() {
             {stdPlanLocked ? 'Locked' : 'Unlocked'}
           </button>
           <button
+            onClick={handleAddBlankLecture}
+            disabled={stdPlanLocked || addingBlankLecture}
+            className="px-2 py-1 bg-emerald-600 text-white text-xs font-medium rounded h-7 hover:bg-emerald-700 disabled:opacity-50"
+            title="Add a blank lecture row to fill in directly — no Standard Lecture Plan topic needed"
+          >
+            {addingBlankLecture ? 'Adding...' : '+ Add Lecture'}
+          </button>
+          <button
             onClick={handleReimportFromStandardPlan}
             disabled={stdPlanLocked || !hasStandardPlan || reimporting}
             className="px-2 py-1 border border-red-300 text-red-700 text-xs font-medium rounded h-7 hover:bg-red-50 disabled:opacity-50"
@@ -3070,7 +3103,7 @@ export default function EditBatchPage() {
                   ) : filteredSLectures.length === 0 ? (
                     <tr>
                       <td colSpan={18} className="px-2 py-8 text-center text-gray-400">
-                        Click Add on a topic in the Standard Lecture Plan on the left to start planning.
+                        Click &quot;+ Add Lecture&quot; above, or Add on a topic in the Standard Lecture Plan on the left, to start planning.
                       </td>
                     </tr>
                   ) : (
