@@ -76,6 +76,7 @@ interface AcademicsData {
     endtime: string;
     assignment: string;
     unit_test: string;
+    unit_test_date: string | null;
   }>;
   exam_results: Array<{
     Take_Id: number;
@@ -96,28 +97,6 @@ function fmtDate(s: string) {
 
 function fmtINR(n: number): string {
   return '₹' + Math.round(Math.abs(n)).toLocaleString('en-IN');
-}
-
-function fmtTime(value?: string | null): string {
-  const t = String(value ?? '').trim();
-  if (!t) return '';
-  const hhmm = t.slice(0, 5);
-  if (!/^\d{2}:\d{2}$/.test(hhmm)) return t;
-  const [hhRaw, mmRaw] = hhmm.split(':');
-  const hh = Number(hhRaw);
-  const mm = Number(mmRaw);
-  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return t;
-  const period = hh >= 12 ? 'PM' : 'AM';
-  const twelveHour = hh % 12 || 12;
-  return `${String(twelveHour).padStart(2, '0')}:${String(mm).padStart(2, '0')} ${period}`;
-}
-
-function normalizeUrl(link?: string | null): string | null {
-  const raw = String(link ?? '').trim();
-  if (!raw) return null;
-  if (/^https?:\/\//i.test(raw)) return raw;
-  if (/^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(raw)) return `https://${raw}`;
-  return null;
 }
 
 export default function StudentDashboardPage() {
@@ -177,11 +156,6 @@ export default function StudentDashboardPage() {
 
   const firstName = student?.student_name?.split(' ')[0] ?? 'Student';
   const timings = student?.batch_timings ? cleanTimings(student.batch_timings) : '';
-  const trainerFrom = fmtTime(student?.trainer_time_from);
-  const trainerTo = fmtTime(student?.trainer_time_to);
-  const trainerLink = normalizeUrl(student?.trainer_link);
-  const trainerLinkLabel = String(student?.trainer_link ?? '').trim();
-  const trainerDate = student?.trainer_date ? fmtDate(student.trainer_date) : '';
 
   return (
     <div className="pb-6">
@@ -212,34 +186,6 @@ export default function StudentDashboardPage() {
               </span>
             </div>
           </div>
-
-          {(student?.trainer_name || trainerFrom || trainerTo || trainerLinkLabel || trainerDate) && (
-            <div className="mt-4 rounded-xl bg-white/10 border border-white/15 px-3 py-2.5 sm:px-4 sm:py-3 max-w-md">
-              <p className="text-[10px] uppercase tracking-wider text-white/50 font-bold">Trainer</p>
-              {student?.trainer_name ? (
-                <p className="text-xs sm:text-sm text-white font-semibold mt-0.5">{student.trainer_name}</p>
-              ) : null}
-              {(trainerFrom || trainerTo || trainerDate) ? (
-                <p className="text-[11px] sm:text-xs text-[#FAE452] mt-1">
-                  {trainerDate}
-                  {trainerDate && (trainerFrom || trainerTo) ? ' · ' : ''}
-                  {(trainerFrom || trainerTo) ? <>{trainerFrom || '—'} - {trainerTo || '—'}</> : null}
-                </p>
-              ) : null}
-              {trainerLink ? (
-                <a
-                  href={trainerLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-block mt-1 text-[11px] text-white underline underline-offset-2 break-all"
-                >
-                  Join link
-                </a>
-              ) : trainerLinkLabel ? (
-                <p className="text-[11px] text-white/70 mt-1 break-all">{trainerLinkLabel}</p>
-              ) : null}
-            </div>
-          )}
         </div>
       </div>
 
@@ -304,25 +250,33 @@ export default function StudentDashboardPage() {
 
         </div>
 
-        {/* ── Notices teaser ──────────────────────────────────── */}
+        {/* ── Notice Board ─────────────────────────────────── */}
         {notices.length > 0 && (
-          <div className="px-4 sm:px-8 lg:px-10 mt-4">
-            <Link href="/student-portal/dashboard/notices" className="block">
-              <div className="bg-white rounded-2xl border border-[#2A6BB5]/15 px-4 py-3 flex items-center gap-3 hover:border-[#2A6BB5]/35 transition-colors" style={{ boxShadow: '0 4px 20px rgba(46,48,147,0.08)' }}>
-                <div className="w-8 h-8 rounded-lg bg-[#2A6BB5]/10 flex items-center justify-center shrink-0">
-                  <svg className="w-4 h-4 text-[#2A6BB5]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 00-7.029-5.912c-.563.097-.994.577-.94 1.145l.152 1.596a3.75 3.75 0 01-1.052 3.06l-4.243 4.243a3.75 3.75 0 01-3.06 1.052l-1.596-.152c-.568-.054-1.048.377-1.145.94a6 6 0 005.911 7.03m4.5-8.25L14.25 15" />
-                  </svg>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-black text-[#2A6BB5] uppercase tracking-widest">Notice Board</p>
-                  <p className="text-xs font-semibold text-gray-800 truncate mt-0.5">{notices[0].title || notices[0].specification}</p>
-                </div>
-                <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                </svg>
-              </div>
-            </Link>
+          <div className="px-4 sm:px-8 lg:px-10 mt-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-[11px] font-black text-[#2E3093] uppercase tracking-[0.18em]">Notice Board</h2>
+              <Link href="/student-portal/dashboard/notices"
+                className="text-[11px] font-bold text-gray-400 hover:text-[#2E3093] transition-colors">
+                See all →
+              </Link>
+            </div>
+            <div className="space-y-2.5">
+              {notices.slice(0, 3).map((n) => (
+                <Link key={n.id} href="/student-portal/dashboard/notices" className="block">
+                  <div className="bg-white rounded-2xl border border-gray-100 px-4 py-3 flex items-start gap-3 hover:border-[#2A6BB5]/35 transition-colors" style={{ boxShadow: '0 4px 20px rgba(46,48,147,0.06)' }}>
+                    <div className="w-8 h-8 rounded-lg bg-[#2A6BB5]/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <svg className="w-4 h-4 text-[#2A6BB5]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 00-7.029-5.912c-.563.097-.994.577-.94 1.145l.152 1.596a3.75 3.75 0 01-1.052 3.06l-4.243 4.243a3.75 3.75 0 01-3.06 1.052l-1.596-.152c-.568-.054-1.048.377-1.145.94a6 6 0 005.911 7.03m4.5-8.25L14.25 15" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-gray-800 truncate">{n.title || 'Announcement'}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{n.specification}</p>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
           </div>
         )}
 
@@ -433,27 +387,35 @@ export default function StudentDashboardPage() {
                 </Link>
               </div>
               <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
-                {upcoming.map(lec => (
-                  <div key={lec.id} className="flex items-start justify-between px-4 py-3 gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-gray-800 truncate">
-                        {lec.subject_topic || lec.subject || `Lecture ${lec.lecture_no}`}
-                      </p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">
-                        {lec.faculty_name || 'TBD'}
-                        {lec.date && ` · ${fmtDate(lec.date)}`}
-                      </p>
+                {upcoming.map(lec => {
+                  const hasUnitTest = Boolean(lec.unit_test) && Boolean(lec.unit_test_date);
+                  return (
+                    <div key={lec.id} className={`flex items-start justify-between px-4 py-3 gap-3 ${hasUnitTest ? 'bg-amber-50/70 border-l-2 border-amber-400' : ''}`}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-gray-800 truncate">
+                          {lec.subject_topic || lec.subject || `Lecture ${lec.lecture_no}`}
+                        </p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          {lec.faculty_name || 'TBD'}
+                          {lec.date && ` · ${fmtDate(lec.date)}`}
+                        </p>
+                        {hasUnitTest && (
+                          <p className="text-[11px] text-amber-700 font-semibold mt-0.5">
+                            Unit Test · {fmtDate(lec.unit_test_date as string)}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                        {lec.assignment === '1' && (
+                          <span className="text-[9px] font-black px-1.5 py-0.5 bg-[#FAE452] text-[#2E3093] rounded-md">ASSGN</span>
+                        )}
+                        {hasUnitTest && (
+                          <span className="text-[9px] font-black px-1.5 py-0.5 bg-amber-400 text-white rounded-md">TEST</span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0 mt-0.5">
-                      {lec.assignment === '1' && (
-                        <span className="text-[9px] font-black px-1.5 py-0.5 bg-[#FAE452] text-[#2E3093] rounded-md">ASSGN</span>
-                      )}
-                      {lec.unit_test === '1' && (
-                        <span className="text-[9px] font-black px-1.5 py-0.5 bg-[#2E3093] text-[#FAE452] rounded-md">TEST</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

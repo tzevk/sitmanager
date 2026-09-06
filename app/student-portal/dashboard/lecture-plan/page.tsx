@@ -15,6 +15,7 @@ interface Lecture {
   class_room: string | null;
   assignment: string | null;
   unit_test: string | null;
+  unit_test_date: string | null;
 }
 
 function fmtDate(d: string | null) {
@@ -87,28 +88,36 @@ export default function StudentLecturePlanPage() {
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
-            {filtered.map((lec) => (
-              <div key={lec.id} className="flex items-start justify-between px-4 py-3 gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-gray-800 truncate">
-                    {lec.subject_topic || lec.subject || `Lecture ${lec.lecture_no ?? ''}`}
-                  </p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">
-                    {lec.faculty_name || 'TBD'} · {fmtDate(lec.date)}
-                    {lec.starttime && ` · ${lec.starttime}${lec.endtime ? `–${lec.endtime}` : ''}`}
-                  </p>
-                  {lec.class_room && <p className="text-[11px] text-gray-400 mt-0.5">{lec.class_room}</p>}
+            {filtered.map((lec) => {
+              const hasUnitTest = Boolean(lec.unit_test) && Boolean(lec.unit_test_date);
+              return (
+                <div key={lec.id} className={`flex items-start justify-between px-4 py-3 gap-3 ${hasUnitTest ? 'bg-amber-50/70 border-l-2 border-amber-400' : ''}`}>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-gray-800 truncate">
+                      {lec.subject_topic || lec.subject || `Lecture ${lec.lecture_no ?? ''}`}
+                    </p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">
+                      {lec.faculty_name || 'TBD'} · {fmtDate(lec.date)}
+                      {lec.starttime && ` · ${lec.starttime}${lec.endtime ? `–${lec.endtime}` : ''}`}
+                    </p>
+                    {lec.class_room && <p className="text-[11px] text-gray-400 mt-0.5">{lec.class_room}</p>}
+                    {hasUnitTest && (
+                      <p className="text-[11px] text-amber-700 font-semibold mt-0.5">
+                        Unit Test · {fmtDate(lec.unit_test_date)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                    {lec.assignment === '1' && (
+                      <span className="text-[9px] font-black px-1.5 py-0.5 bg-[#FAE452] text-[#2E3093] rounded-md">ASSGN</span>
+                    )}
+                    {hasUnitTest && (
+                      <span className="text-[9px] font-black px-1.5 py-0.5 bg-amber-400 text-white rounded-md">TEST</span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0 mt-0.5">
-                  {lec.assignment === '1' && (
-                    <span className="text-[9px] font-black px-1.5 py-0.5 bg-[#FAE452] text-[#2E3093] rounded-md">ASSGN</span>
-                  )}
-                  {lec.unit_test === '1' && (
-                    <span className="text-[9px] font-black px-1.5 py-0.5 bg-[#2E3093] text-[#FAE452] rounded-md">TEST</span>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

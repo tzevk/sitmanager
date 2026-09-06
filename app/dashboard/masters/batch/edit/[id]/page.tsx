@@ -78,6 +78,9 @@ interface StandardLecture {
   documents: string | null;
   unit_test: string | null;
   unit_test_date?: string | null;
+  unit_test_subject?: string | null;
+  unit_test_duration?: string | null;
+  unit_test_marks?: number | null;
   publish: string | null;
   standard_seq?: number | null;
   actual_seq?: number | null;
@@ -397,6 +400,7 @@ function SortableLectureRow({
   onToggleSubtopic,
   onMoveUp,
   onMoveDown,
+  onUnitTestDateChange,
 }: {
   row: StandardLecture;
   disabled: boolean;
@@ -413,6 +417,7 @@ function SortableLectureRow({
   onToggleSubtopic: (row: StandardLecture, idx: number) => void;
   onMoveUp: (row: StandardLecture) => void;
   onMoveDown: (row: StandardLecture) => void;
+  onUnitTestDateChange: (row: StandardLecture, newDate: string) => void;
 }) {
   return (
     <tr className={`border-b border-gray-100 hover:bg-gray-50 ${colorClass}`}>
@@ -594,8 +599,10 @@ function SortableLectureRow({
         <input
           type="date"
           value={formatDateForInput(row.unit_test_date || null)}
-          disabled
-          className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-gray-100"
+          disabled={disabled || !row.unit_test}
+          onChange={(e) => onUnitTestDateChange(row, e.target.value)}
+          title={!row.unit_test ? 'Enter a Unit Test ID first' : undefined}
+          className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
         />
       </td>
       <td className="px-2 py-1.5">
@@ -871,6 +878,33 @@ export default function EditBatchPage() {
         covered_subtopics: row.covered_subtopics ?? null,
       }),
     });
+
+  /* unit_test_date isn't a column on batch_slecture_master — it's joined in from
+     awt_unittesttaken via the numeric unit_test id, so editing it updates that
+     row directly. The PUT endpoint replaces subject/duration/marks wholesale, so
+     the currently-known values (already fetched alongside the date) are resent
+     unchanged to avoid clobbering them. */
+  const handleUnitTestDateChange = async (row: StandardLecture, newDate: string) => {
+    if (!row.unit_test) return;
+    updateStandardLectureInline(row.id, { unit_test_date: newDate || null });
+    try {
+      const res = await fetch(`/api/masters/batch/${batchId}/unittests`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: row.unit_test,
+          subject: row.unit_test_subject ?? null,
+          utdate: newDate || null,
+          duration: row.unit_test_duration ?? null,
+          marks: row.unit_test_marks ?? null,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to save');
+    } catch {
+      updateStandardLectureInline(row.id, { unit_test_date: row.unit_test_date ?? null });
+      alert('Failed to save unit test date. Please try again.');
+    }
+  };
 
   /* Mark a still-pending row as conducted — opens the Lecture Taken form pre-filled with
      this row's details (topic, faculty, timing) and today's date, for staff to confirm/adjust
@@ -3022,6 +3056,7 @@ export default function EditBatchPage() {
                         onToggleSubtopic={toggleSubtopicCovered}
                         onMoveUp={(row) => handleMoveLecture(row, 'up')}
                         onMoveDown={(row) => handleMoveLecture(row, 'down')}
+                        onUnitTestDateChange={handleUnitTestDateChange}
                       />
                     ))
                   )}
