@@ -39,6 +39,11 @@ export async function GET(req: NextRequest) {
     const studentId = session.studentId;
 
     // 1. Student info + batch + course
+    // Resolve the batch via admission_master's "latest active admission" —
+    // the same convention app/api/daily-activities/attendance/route.ts and
+    // the biometric-sync cron rely on — instead of student_master.Batch_Code
+    // directly, which goes stale after a transfer/re-admission and used to
+    // point the portal at the wrong (or no) batch's attendance/lectures.
     const [studentRows] = await pool.query<any[]>(
       `SELECT s.Student_Id, s.Student_Name, s.Email, s.Present_Mobile,
               s.Batch_Code, s.Course_Id, s.Percentage, s.Status_id,
@@ -46,8 +51,18 @@ export async function GET(req: NextRequest) {
               b.Batch_Id, b.Batch_code, b.Category, b.Timings, b.SDate, b.EDate,
               b.No_of_Lectures, b.AttendWtg, b.AssignWtg, b.ExamWtg, b.UnitTestWtg
        FROM student_master s
+       LEFT JOIN (
+         SELECT Student_Id, MAX(Admission_Id) AS Admission_Id
+         FROM admission_master
+         WHERE IsDelete = 0 AND IsActive = 1
+         GROUP BY Student_Id
+       ) latest ON latest.Student_Id = s.Student_Id
+       LEFT JOIN admission_master a ON a.Admission_Id = latest.Admission_Id
        LEFT JOIN course_mst c ON s.Course_Id = c.Course_Id
-       LEFT JOIN batch_mst b ON b.Batch_code = s.Batch_Code AND b.Course_Id = s.Course_Id
+       LEFT JOIN batch_mst b ON b.Batch_Id = COALESCE(
+         a.Batch_Id,
+         (SELECT Batch_Id FROM batch_mst WHERE Batch_code = s.Batch_Code AND Course_Id = s.Course_Id ORDER BY Batch_Id DESC LIMIT 1)
+       )
        WHERE s.Student_Id = ?`,
       [studentId]
     );

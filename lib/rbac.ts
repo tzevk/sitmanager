@@ -110,6 +110,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       ...createPermissions('library_book', 'Library Book'),
       ...createPermissions('faculty', 'Faculty'),
       ...createPermissions('standard_lecture_plan', 'Standard Lecture Plan'),
+      ...createPermissions('notice_board', 'Notice Board'),
     ],
   },
 

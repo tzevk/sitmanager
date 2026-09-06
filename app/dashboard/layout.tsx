@@ -35,6 +35,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Masters > Trainer': '/dashboard/masters/faculty',
   'Masters > Standard Lecture Plan': '/dashboard/masters/standard-lecture-plan',
   'Masters > Interview Master': '/dashboard/masters/interview-master',
+  'Masters > Notice Board': '/dashboard/masters/notice-board',
   'Masters > Closed Batches': '/dashboard/masters/closed-batches',
   'Admin/Accounts > Employee Profession Tax': '/dashboard/account-master/employee-profession-tax',
   'Admin/Accounts > Account Head': '/dashboard/account-master/account-head',
@@ -130,6 +131,7 @@ const SUB_MENUS: Record<string, string[]> = {
     'Trainer',
     'Standard Lecture Plan',
     'Interview Master',
+    'Notice Board',
   ],
   'Admission Activity': [
     'Add Inquiry',
@@ -266,6 +268,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Masters > Interview Master': ['interview_master.view'],
   'Masters > Closed Batches': ['batch.view'],
   'Masters > Standard Lecture Plan': ['standard_lecture_plan.view'],
+  'Masters > Notice Board': ['notice_board.view'],
   'Admin/Accounts > Employee Profession Tax': ['profession_tax.view'],
   'Admin/Accounts > Account Head': ['account_head.view'],
   'Admin/Accounts > Assets': ['assets.view'],

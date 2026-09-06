@@ -33,6 +33,24 @@ const navItems = [
       </svg>
     ),
   },
+  {
+    label: 'Lectures',
+    href: '/student-portal/dashboard/lecture-plan',
+    icon: (
+      <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s4.332.477 5.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Notices',
+    href: '/student-portal/dashboard/notices',
+    icon: (
+      <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 00-7.029-5.912c-.563.097-.994.577-.94 1.145l.152 1.596a3.75 3.75 0 01-1.052 3.06l-4.243 4.243a3.75 3.75 0 01-3.06 1.052l-1.596-.152c-.568-.054-1.048.377-1.145.94a6 6 0 005.911 7.03m4.5-8.25L14.25 15" />
+      </svg>
+    ),
+  },
 ];
 
 export default function StudentDashboardLayout({ children }: { children: React.ReactNode }) {
