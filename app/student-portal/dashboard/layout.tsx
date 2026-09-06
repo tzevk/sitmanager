@@ -93,9 +93,15 @@ export default function StudentDashboardLayout({ children }: { children: React.R
     return <ForceChangePasswordModal onDone={() => setMustChangePassword(false)} />;
   }
 
+  // No extra centering/max-width wrapper here — app/student-portal/layout.tsx
+  // (the parent layout for every /student-portal route) already provides a
+  // single centered, width-constrained (max-w-[430px] sm:max-w-xl) container.
+  // A second, differently-sized wrapper here previously fought with it: since
+  // the bottom nav below is `fixed` (positions against the viewport, not any
+  // ancestor), it was sized/centered against ITS OWN max-width rather than the
+  // actual visible content's, so the two drifted out of alignment.
   return (
-    <div className="min-h-screen bg-slate-200 flex justify-center">
-     <div className="relative w-full max-w-[480px] lg:max-w-3xl xl:max-w-5xl min-h-screen bg-[#f0f2f8] flex flex-col shadow-2xl transition-[max-width] duration-200">
+    <div className="min-h-screen bg-[#f0f2f8] flex flex-col">
 
       {/* App bar */}
       <header className="sticky top-0 z-20 bg-white border-b border-gray-100">
@@ -126,9 +132,11 @@ export default function StudentDashboardLayout({ children }: { children: React.R
         {children}
       </main>
 
-      {/* Bottom nav */}
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] lg:max-w-3xl xl:max-w-5xl z-30 bg-white border-t border-gray-100 shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
-        <div className="flex max-w-md lg:max-w-lg mx-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      {/* Bottom nav — width must match app/student-portal/layout.tsx's
+          container exactly (max-w-[430px] sm:max-w-xl), since `fixed`
+          positions against the viewport rather than that container. */}
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] sm:max-w-xl z-30 bg-white border-t border-gray-100 shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
+        <div className="flex" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           {navItems.map(item => {
             const active = isActive(item.href);
             return (
@@ -148,7 +156,6 @@ export default function StudentDashboardLayout({ children }: { children: React.R
           })}
         </div>
       </nav>
-     </div>
     </div>
   );
 }

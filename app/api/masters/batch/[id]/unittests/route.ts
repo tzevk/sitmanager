@@ -58,10 +58,18 @@ export async function PUT(request: NextRequest) {
 
     const pool = getPool();
 
-    await pool.query(
+    const [result] = await pool.query<ResultSetHeader>(
       `UPDATE awt_unittesttaken SET subject = ?, utdate = ?, duration = ?, marks = ? WHERE id = ?`,
       [subject, utdate || null, duration || null, marks || null, id]
     );
+
+    // The row's linked id can be stale (e.g. hand-typed, or left over from a
+    // deleted unit test) — an UPDATE against a nonexistent id succeeds with
+    // zero rows affected, silently swallowing the edit. Surface that so the
+    // caller can recover instead of believing the save worked.
+    if (result.affectedRows === 0) {
+      return NextResponse.json({ error: 'No unit test found with that ID', notFound: true }, { status: 404 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

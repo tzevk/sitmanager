@@ -887,6 +887,24 @@ export default function EditBatchPage() {
      locally and via a slectures save, so "UT" persists as the visible id). The
      unittests PUT endpoint replaces subject/duration/marks wholesale, so the
      currently-known values (fetched alongside the date) are resent unchanged. */
+  const createUnitTestForRow = async (row: StandardLecture, newDate: string) => {
+    const res = await fetch(`/api/masters/batch/${batchId}/unittests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subject: row.subject || row.subject_topic || null,
+        utdate: newDate,
+        duration: null,
+        marks: null,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.id) throw new Error('Failed to create unit test');
+    const newUnitTestId = String(data.id);
+    updateStandardLectureInline(row.id, { unit_test: newUnitTestId });
+    await saveSLectureRow({ ...row, unit_test: newUnitTestId });
+  };
+
   const handleUnitTestDateChange = async (row: StandardLecture, newDate: string) => {
     const previousUnitTest = row.unit_test;
     const previousDate = row.unit_test_date ?? null;
@@ -904,28 +922,23 @@ export default function EditBatchPage() {
             marks: row.unit_test_marks ?? null,
           }),
         });
-        if (!res.ok) throw new Error('Failed to save');
+        if (res.status === 404) {
+          // The linked UT id is stale/orphaned (points at a deleted or
+          // never-existing record) — the update silently affected nothing.
+          // Recover by creating a fresh record and relinking, same as the
+          // no-id path, instead of pretending the save worked.
+          if (!newDate) throw new Error('Unit test link is broken and there is no date to recreate it with');
+          await createUnitTestForRow(row, newDate);
+        } else if (!res.ok) {
+          throw new Error('Failed to save');
+        }
       } else {
         if (!newDate) return; // nothing to create for a cleared date with no existing link
-        const res = await fetch(`/api/masters/batch/${batchId}/unittests`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            subject: row.subject || row.subject_topic || null,
-            utdate: newDate,
-            duration: null,
-            marks: null,
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data?.id) throw new Error('Failed to create unit test');
-        const newUnitTestId = String(data.id);
-        updateStandardLectureInline(row.id, { unit_test: newUnitTestId });
-        await saveSLectureRow({ ...row, unit_test: newUnitTestId });
+        await createUnitTestForRow(row, newDate);
       }
-    } catch {
+    } catch (err) {
       updateStandardLectureInline(row.id, { unit_test_date: previousDate, unit_test: previousUnitTest });
-      alert('Failed to save unit test date. Please try again.');
+      alert(err instanceof Error ? err.message : 'Failed to save unit test date. Please try again.');
     }
   };
 
