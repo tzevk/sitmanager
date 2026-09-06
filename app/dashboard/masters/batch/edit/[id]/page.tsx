@@ -923,47 +923,52 @@ export default function EditBatchPage() {
   // row fresh from standardLecturesRef when it fires — never the possibly
   // stale `row` object captured back when the keystroke happened.
   const unitTestDateTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
+  const flushUnitTestDate = async (rowId: number, newDate: string, fallbackRow: StandardLecture) => {
+    const currentRow = standardLecturesRef.current.find((l) => l.id === rowId) ?? fallbackRow;
+    const previousUnitTest = fallbackRow.unit_test;
+    const previousDate = fallbackRow.unit_test_date ?? null;
+    try {
+      if (currentRow.unit_test) {
+        const res = await fetch(`/api/masters/batch/${batchId}/unittests`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: currentRow.unit_test,
+            subject: currentRow.unit_test_subject ?? null,
+            utdate: newDate || null,
+            duration: currentRow.unit_test_duration ?? null,
+            marks: currentRow.unit_test_marks ?? null,
+          }),
+        });
+        if (res.status === 404) {
+          // The linked UT id is stale/orphaned (points at a deleted or
+          // never-existing record) — the update silently affected nothing.
+          // Recover by creating a fresh record and relinking, same as the
+          // no-id path, instead of pretending the save worked.
+          if (!newDate) throw new Error('Unit test link is broken and there is no date to recreate it with');
+          await createUnitTestForRow(currentRow, newDate);
+        } else if (!res.ok) {
+          throw new Error('Failed to save');
+        }
+      } else {
+        if (!newDate) return; // nothing to create for a cleared date with no existing link
+        await createUnitTestForRow(currentRow, newDate);
+      }
+    } catch (err) {
+      updateStandardLectureInline(rowId, { unit_test_date: previousDate, unit_test: previousUnitTest });
+      alert(err instanceof Error ? err.message : 'Failed to save unit test date. Please try again.');
+    }
+  };
+
   const handleUnitTestDateChange = (row: StandardLecture, newDate: string) => {
-    const previousUnitTest = row.unit_test;
-    const previousDate = row.unit_test_date ?? null;
     updateStandardLectureInline(row.id, { unit_test_date: newDate || null });
 
     const existingTimer = unitTestDateTimers.current[row.id];
     if (existingTimer) clearTimeout(existingTimer);
-    unitTestDateTimers.current[row.id] = setTimeout(async () => {
+    unitTestDateTimers.current[row.id] = setTimeout(() => {
       delete unitTestDateTimers.current[row.id];
-      const currentRow = standardLecturesRef.current.find((l) => l.id === row.id) ?? row;
-      try {
-        if (currentRow.unit_test) {
-          const res = await fetch(`/api/masters/batch/${batchId}/unittests`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: currentRow.unit_test,
-              subject: currentRow.unit_test_subject ?? null,
-              utdate: newDate || null,
-              duration: currentRow.unit_test_duration ?? null,
-              marks: currentRow.unit_test_marks ?? null,
-            }),
-          });
-          if (res.status === 404) {
-            // The linked UT id is stale/orphaned (points at a deleted or
-            // never-existing record) — the update silently affected nothing.
-            // Recover by creating a fresh record and relinking, same as the
-            // no-id path, instead of pretending the save worked.
-            if (!newDate) throw new Error('Unit test link is broken and there is no date to recreate it with');
-            await createUnitTestForRow(currentRow, newDate);
-          } else if (!res.ok) {
-            throw new Error('Failed to save');
-          }
-        } else {
-          if (!newDate) return; // nothing to create for a cleared date with no existing link
-          await createUnitTestForRow(currentRow, newDate);
-        }
-      } catch (err) {
-        updateStandardLectureInline(row.id, { unit_test_date: previousDate, unit_test: previousUnitTest });
-        alert(err instanceof Error ? err.message : 'Failed to save unit test date. Please try again.');
-      }
+      flushUnitTestDate(row.id, newDate, row);
     }, 700);
   };
 
