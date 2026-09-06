@@ -846,6 +846,14 @@ export default function EditBatchPage() {
         if (row) saveSLectureRow(row).catch(() => {});
       }
       sLectureSaveTimers.current = {};
+      // unitTestDateTimers' own callback already reads the row fresh and
+      // resolves PUT-vs-create itself, so just let each pending one fire
+      // immediately instead of duplicating that logic here.
+      for (const id of Object.keys(unitTestDateTimers.current)) {
+        const numId = Number(id);
+        clearTimeout(unitTestDateTimers.current[numId]);
+      }
+      unitTestDateTimers.current = {};
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -905,41 +913,58 @@ export default function EditBatchPage() {
     await saveSLectureRow({ ...row, unit_test: newUnitTestId });
   };
 
-  const handleUnitTestDateChange = async (row: StandardLecture, newDate: string) => {
+  // Native <input type="date"> fires onChange once per segment typed (day,
+  // month, year), not just once on a complete date — so without debouncing,
+  // each keystroke re-entered this function with a stale `row.unit_test`
+  // (React state from the previous render hadn't caught up yet with the id
+  // the prior keystroke's auto-create had just written), and each one saw
+  // "no id yet" and created ANOTHER new awt_unittesttaken record, so the UT
+  // number kept changing. Debounce the actual network call, and read the
+  // row fresh from standardLecturesRef when it fires — never the possibly
+  // stale `row` object captured back when the keystroke happened.
+  const unitTestDateTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const handleUnitTestDateChange = (row: StandardLecture, newDate: string) => {
     const previousUnitTest = row.unit_test;
     const previousDate = row.unit_test_date ?? null;
     updateStandardLectureInline(row.id, { unit_test_date: newDate || null });
-    try {
-      if (row.unit_test) {
-        const res = await fetch(`/api/masters/batch/${batchId}/unittests`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: row.unit_test,
-            subject: row.unit_test_subject ?? null,
-            utdate: newDate || null,
-            duration: row.unit_test_duration ?? null,
-            marks: row.unit_test_marks ?? null,
-          }),
-        });
-        if (res.status === 404) {
-          // The linked UT id is stale/orphaned (points at a deleted or
-          // never-existing record) — the update silently affected nothing.
-          // Recover by creating a fresh record and relinking, same as the
-          // no-id path, instead of pretending the save worked.
-          if (!newDate) throw new Error('Unit test link is broken and there is no date to recreate it with');
-          await createUnitTestForRow(row, newDate);
-        } else if (!res.ok) {
-          throw new Error('Failed to save');
+
+    const existingTimer = unitTestDateTimers.current[row.id];
+    if (existingTimer) clearTimeout(existingTimer);
+    unitTestDateTimers.current[row.id] = setTimeout(async () => {
+      delete unitTestDateTimers.current[row.id];
+      const currentRow = standardLecturesRef.current.find((l) => l.id === row.id) ?? row;
+      try {
+        if (currentRow.unit_test) {
+          const res = await fetch(`/api/masters/batch/${batchId}/unittests`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: currentRow.unit_test,
+              subject: currentRow.unit_test_subject ?? null,
+              utdate: newDate || null,
+              duration: currentRow.unit_test_duration ?? null,
+              marks: currentRow.unit_test_marks ?? null,
+            }),
+          });
+          if (res.status === 404) {
+            // The linked UT id is stale/orphaned (points at a deleted or
+            // never-existing record) — the update silently affected nothing.
+            // Recover by creating a fresh record and relinking, same as the
+            // no-id path, instead of pretending the save worked.
+            if (!newDate) throw new Error('Unit test link is broken and there is no date to recreate it with');
+            await createUnitTestForRow(currentRow, newDate);
+          } else if (!res.ok) {
+            throw new Error('Failed to save');
+          }
+        } else {
+          if (!newDate) return; // nothing to create for a cleared date with no existing link
+          await createUnitTestForRow(currentRow, newDate);
         }
-      } else {
-        if (!newDate) return; // nothing to create for a cleared date with no existing link
-        await createUnitTestForRow(row, newDate);
+      } catch (err) {
+        updateStandardLectureInline(row.id, { unit_test_date: previousDate, unit_test: previousUnitTest });
+        alert(err instanceof Error ? err.message : 'Failed to save unit test date. Please try again.');
       }
-    } catch (err) {
-      updateStandardLectureInline(row.id, { unit_test_date: previousDate, unit_test: previousUnitTest });
-      alert(err instanceof Error ? err.message : 'Failed to save unit test date. Please try again.');
-    }
+    }, 700);
   };
 
   /* Mark a still-pending row as conducted — opens the Lecture Taken form pre-filled with
@@ -2848,7 +2873,6 @@ export default function EditBatchPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lecture_no: maxLectureNo + 1,
-          session: 'first_half',
           publish: 'No',
         }),
       });
