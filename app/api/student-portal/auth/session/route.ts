@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
+import { getPool } from '@/lib/db';
 
 const STUDENT_COOKIE = 'sit_student_session';
 
@@ -36,5 +37,24 @@ export async function GET(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ authenticated: false, user: null });
   }
-  return NextResponse.json({ authenticated: true, user: session });
+
+  // mustChangePassword is baked into the JWT at login and never reissued, so a
+  // successful password change (which resets the DB flag immediately) would
+  // otherwise keep showing the force-change modal on every subsequent
+  // navigation for the rest of that session's 12-hour lifetime. Re-check the
+  // live DB value instead of trusting the token's stale copy.
+  let mustChangePassword = session.mustChangePassword;
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query<any[]>(
+      `SELECT Must_Change_Password FROM student_portal_auth WHERE Student_Id = ? AND IsActive = 1 LIMIT 1`,
+      [session.studentId]
+    );
+    if (rows.length) mustChangePassword = Boolean(rows[0].Must_Change_Password);
+  } catch {
+    // Fall back to the token's value if the DB check fails — never block
+    // the session check entirely over this.
+  }
+
+  return NextResponse.json({ authenticated: true, user: { ...session, mustChangePassword } });
 }

@@ -599,9 +599,9 @@ function SortableLectureRow({
         <input
           type="date"
           value={formatDateForInput(row.unit_test_date || null)}
-          disabled={disabled || !row.unit_test}
+          disabled={disabled}
           onChange={(e) => onUnitTestDateChange(row, e.target.value)}
-          title={!row.unit_test ? 'Enter a Unit Test ID first' : undefined}
+          title={!row.unit_test ? 'Setting a date creates a new Unit Test record for this lecture' : undefined}
           className="w-32 px-1 py-0.5 border border-gray-200 rounded text-xs bg-white disabled:bg-gray-100"
         />
       </td>
@@ -880,28 +880,51 @@ export default function EditBatchPage() {
     });
 
   /* unit_test_date isn't a column on batch_slecture_master — it's joined in from
-     awt_unittesttaken via the numeric unit_test id, so editing it updates that
-     row directly. The PUT endpoint replaces subject/duration/marks wholesale, so
-     the currently-known values (already fetched alongside the date) are resent
-     unchanged to avoid clobbering them. */
+     awt_unittesttaken via the numeric unit_test id in the row's "UT" field. Most
+     rows have no UT id yet (staff shouldn't have to know/type an internal id
+     just to set a date), so setting a date with none linked auto-creates the
+     awt_unittesttaken record here and wires the new id back onto the row (both
+     locally and via a slectures save, so "UT" persists as the visible id). The
+     unittests PUT endpoint replaces subject/duration/marks wholesale, so the
+     currently-known values (fetched alongside the date) are resent unchanged. */
   const handleUnitTestDateChange = async (row: StandardLecture, newDate: string) => {
-    if (!row.unit_test) return;
+    const previousUnitTest = row.unit_test;
+    const previousDate = row.unit_test_date ?? null;
     updateStandardLectureInline(row.id, { unit_test_date: newDate || null });
     try {
-      const res = await fetch(`/api/masters/batch/${batchId}/unittests`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: row.unit_test,
-          subject: row.unit_test_subject ?? null,
-          utdate: newDate || null,
-          duration: row.unit_test_duration ?? null,
-          marks: row.unit_test_marks ?? null,
-        }),
-      });
-      if (!res.ok) throw new Error('Failed to save');
+      if (row.unit_test) {
+        const res = await fetch(`/api/masters/batch/${batchId}/unittests`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: row.unit_test,
+            subject: row.unit_test_subject ?? null,
+            utdate: newDate || null,
+            duration: row.unit_test_duration ?? null,
+            marks: row.unit_test_marks ?? null,
+          }),
+        });
+        if (!res.ok) throw new Error('Failed to save');
+      } else {
+        if (!newDate) return; // nothing to create for a cleared date with no existing link
+        const res = await fetch(`/api/masters/batch/${batchId}/unittests`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subject: row.subject || row.subject_topic || null,
+            utdate: newDate,
+            duration: null,
+            marks: null,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.id) throw new Error('Failed to create unit test');
+        const newUnitTestId = String(data.id);
+        updateStandardLectureInline(row.id, { unit_test: newUnitTestId });
+        await saveSLectureRow({ ...row, unit_test: newUnitTestId });
+      }
     } catch {
-      updateStandardLectureInline(row.id, { unit_test_date: row.unit_test_date ?? null });
+      updateStandardLectureInline(row.id, { unit_test_date: previousDate, unit_test: previousUnitTest });
       alert('Failed to save unit test date. Please try again.');
     }
   };
