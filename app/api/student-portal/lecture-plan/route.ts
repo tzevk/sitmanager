@@ -34,12 +34,21 @@ export async function GET(req: NextRequest) {
     const batchId = studentRows[0]?.Batch_Id ?? null;
     if (!batchId) return NextResponse.json({ lectures: [] });
 
+    // batch_slecture_master is the table staff actually maintain via the Batch
+    // Master "Lecture Plan" tab — batch_lecture_master is a stale legacy table
+    // with heavy duplicate junk data, no longer edited there. A lecture shows
+    // here once staff mark it published, or once it's actually been taken
+    // (matches the same "Converted" linkage the staff-side tab shows).
     const [lectures] = await pool.query<any[]>(
-      `SELECT id, lecture_no, subject_topic, subject, faculty_name, date,
-              starttime, endtime, duration, class_room, assignment, unit_test, status
-       FROM batch_lecture_master
-       WHERE batch_id = ? AND (deleted = '0' OR deleted IS NULL)
-       ORDER BY lecture_no ASC, date ASC`,
+      `SELECT s.id, s.lecture_no, s.subject_topic, s.subject, s.faculty_name, s.date,
+              s.starttime, s.endtime, s.class_room, s.assignment, s.unit_test,
+              (lt.Take_Id IS NOT NULL) AS taken
+       FROM batch_slecture_master s
+       LEFT JOIN lecture_taken_master lt
+         ON lt.Lecture_Id = s.id AND lt.Batch_Id = s.batch_id AND (lt.IsDelete = 0 OR lt.IsDelete IS NULL)
+       WHERE s.batch_id = ? AND (s.deleted = '0' OR s.deleted IS NULL)
+         AND (s.publish = 'Yes' OR lt.Take_Id IS NOT NULL)
+       ORDER BY s.lecture_no ASC, s.date ASC`,
       [batchId]
     );
 

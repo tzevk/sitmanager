@@ -12,11 +12,9 @@ interface Lecture {
   date: string | null;
   starttime: string | null;
   endtime: string | null;
-  duration: string | null;
   class_room: string | null;
   assignment: string | null;
   unit_test: string | null;
-  status: string | null;
 }
 
 function fmtDate(d: string | null) {

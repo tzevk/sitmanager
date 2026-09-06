@@ -75,28 +75,33 @@ export async function GET(req: NextRequest) {
       trainer_time_from: string | null;
       trainer_time_to: string | null;
       trainer_link: string | null;
+      trainer_date: string | null;
     } = {
       trainer_name: null,
       trainer_time_from: null,
       trainer_time_to: null,
       trainer_link: null,
+      trainer_date: null,
     };
 
     if (batchId) {
       const [trainerRows] = await pool.query<any[]>(
-        `SELECT faculty_name, starttime, endtime, class_room, date
-         FROM batch_lecture_master
-         WHERE batch_id = ?
-           AND (deleted = '0' OR deleted IS NULL)
+        `SELECT s.faculty_name, s.starttime, s.endtime, s.class_room, s.date
+         FROM batch_slecture_master s
+         LEFT JOIN lecture_taken_master lt
+           ON lt.Lecture_Id = s.id AND lt.Batch_Id = s.batch_id AND (lt.IsDelete = 0 OR lt.IsDelete IS NULL)
+         WHERE s.batch_id = ?
+           AND (s.deleted = '0' OR s.deleted IS NULL)
+           AND (s.publish = 'Yes' OR lt.Take_Id IS NOT NULL)
          ORDER BY
            CASE
-             WHEN date = CURDATE() THEN 0
-             WHEN date > CURDATE() THEN 1
+             WHEN s.date = CURDATE() THEN 0
+             WHEN s.date > CURDATE() THEN 1
              ELSE 2
            END,
-           CASE WHEN date >= CURDATE() THEN date END ASC,
-           CASE WHEN date < CURDATE() THEN date END DESC,
-           id DESC
+           CASE WHEN s.date >= CURDATE() THEN s.date END ASC,
+           CASE WHEN s.date < CURDATE() THEN s.date END DESC,
+           s.id DESC
          LIMIT 1`,
         [batchId]
       );
@@ -108,6 +113,7 @@ export async function GET(req: NextRequest) {
           trainer_time_from: trainer.starttime ? String(trainer.starttime) : null,
           trainer_time_to: trainer.endtime ? String(trainer.endtime) : null,
           trainer_link: trainer.class_room ? String(trainer.class_room).trim() : null,
+          trainer_date: trainer.date ? String(trainer.date) : null,
         };
       }
     }
@@ -122,11 +128,14 @@ export async function GET(req: NextRequest) {
     const lecturesByDate = new Map<string, Array<{ subject: string | null; faculty_name: string | null }>>();
     if (batchId) {
       const [slectureRows] = await pool.query<any[]>(
-        `SELECT date, subject, subject_topic, faculty_name, lecture_no
-         FROM batch_slecture_master
-         WHERE batch_id = ? AND date IS NOT NULL
-           AND (deleted = '0' OR deleted IS NULL)
-         ORDER BY date ASC, lecture_no ASC`,
+        `SELECT s.date, s.subject, s.subject_topic, s.faculty_name, s.lecture_no
+         FROM batch_slecture_master s
+         LEFT JOIN lecture_taken_master lt
+           ON lt.Lecture_Id = s.id AND lt.Batch_Id = s.batch_id AND (lt.IsDelete = 0 OR lt.IsDelete IS NULL)
+         WHERE s.batch_id = ? AND s.date IS NOT NULL
+           AND (s.deleted = '0' OR s.deleted IS NULL)
+           AND (s.publish = 'Yes' OR lt.Take_Id IS NOT NULL)
+         ORDER BY s.date ASC, s.lecture_no ASC`,
         [batchId]
       );
       for (const row of slectureRows as any[]) {
@@ -176,16 +185,21 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 3. Upcoming lectures from batch_lecture_master
+    // 3. Upcoming lectures from batch_slecture_master — the table staff actually
+    // maintain via the Batch Master "Lecture Plan" tab (batch_lecture_master is a
+    // stale legacy table with heavy duplicate junk data, no longer edited there).
     let upcomingLectures: any[] = [];
     if (batchId) {
       const [upcoming] = await pool.query<any[]>(
-        `SELECT id, lecture_no, subject_topic, subject, faculty_name, date,
-                starttime, endtime, duration, class_room, assignment, unit_test
-         FROM batch_lecture_master
-         WHERE batch_id = ? AND (deleted = '0' OR deleted IS NULL)
-           AND (date IS NULL OR date >= CURDATE())
-         ORDER BY lecture_no ASC
+        `SELECT s.id, s.lecture_no, s.subject_topic, s.subject, s.faculty_name, s.date,
+                s.starttime, s.endtime, s.class_room, s.assignment, s.unit_test
+         FROM batch_slecture_master s
+         LEFT JOIN lecture_taken_master lt
+           ON lt.Lecture_Id = s.id AND lt.Batch_Id = s.batch_id AND (lt.IsDelete = 0 OR lt.IsDelete IS NULL)
+         WHERE s.batch_id = ? AND (s.deleted = '0' OR s.deleted IS NULL)
+           AND (s.publish = 'Yes' OR lt.Take_Id IS NOT NULL)
+           AND (s.date IS NULL OR s.date >= CURDATE())
+         ORDER BY s.lecture_no ASC
          LIMIT 5`,
         [batchId]
       );
@@ -334,6 +348,7 @@ export async function GET(req: NextRequest) {
         trainer_time_from: trainerSchedule.trainer_time_from,
         trainer_time_to: trainerSchedule.trainer_time_to,
         trainer_link: trainerSchedule.trainer_link,
+        trainer_date: trainerSchedule.trainer_date,
       },
       attendance: attendanceSummary,
       assignments: assignmentsSummary,

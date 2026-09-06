@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -796,9 +796,52 @@ export default function EditBatchPage() {
   const [newGradeBoundary, setNewGradeBoundary] = useState({ startFrom: '', endTo: '', grade: '' });
   const [editingGradeBoundaryId, setEditingGradeBoundaryId] = useState<number | null>(null);
 
+  // Per-row debounce timers for inline autosave, keyed by lecture id — edits
+  // typed into a row fire onChange per keystroke, so the actual PUT is
+  // debounced instead of sent on every character.
+  const sLectureSaveTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
   const updateStandardLectureInline = (id: number, patch: Partial<StandardLecture>) => {
-    setStandardLectures(prev => prev.map(l => (l.id === id ? { ...l, ...patch } : l)));
+    setStandardLectures((prev) => {
+      const next = prev.map((l) => (l.id === id ? { ...l, ...patch } : l));
+      const updatedRow = next.find((l) => l.id === id);
+      if (updatedRow) {
+        const existingTimer = sLectureSaveTimers.current[id];
+        if (existingTimer) clearTimeout(existingTimer);
+        sLectureSaveTimers.current[id] = setTimeout(() => {
+          delete sLectureSaveTimers.current[id];
+          setSavingSLectureRowId(id);
+          saveSLectureRow(updatedRow)
+            .catch(() => { /* best-effort — Save All remains available as a fallback */ })
+            .finally(() => setSavingSLectureRowId((cur) => (cur === id ? null : cur)));
+        }, 700);
+      }
+      return next;
+    });
   };
+
+  // Kept in sync below so the unmount-flush cleanup (which runs once, with a
+  // closure fixed at mount time) can still see the latest rows rather than
+  // whatever standardLectures was when the component first mounted.
+  const standardLecturesRef = useRef<StandardLecture[]>(standardLectures);
+  useEffect(() => {
+    standardLecturesRef.current = standardLectures;
+  }, [standardLectures]);
+
+  // Flush any pending debounced row-edit immediately if the user navigates
+  // away before the 700ms debounce fires, instead of silently dropping it.
+  useEffect(() => {
+    return () => {
+      for (const id of Object.keys(sLectureSaveTimers.current)) {
+        const numId = Number(id);
+        clearTimeout(sLectureSaveTimers.current[numId]);
+        const row = standardLecturesRef.current.find((l) => l.id === numId);
+        if (row) saveSLectureRow(row).catch(() => {});
+      }
+      sLectureSaveTimers.current = {};
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const saveSLectureRow = (row: StandardLecture) =>
     fetch(`/api/masters/batch/${batchId}/slectures`, {
@@ -1474,6 +1517,20 @@ export default function EditBatchPage() {
 
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to save');
+
+      // The footer Save button is visible (and expected to work) from every
+      // tab, including Lecture Plan — flush any lecture-plan rows still
+      // sitting on debounced autosave (or that autosave hasn't reached yet)
+      // instead of only relying on the tab's own "Save All" button.
+      for (const timer of Object.values(sLectureSaveTimers.current)) clearTimeout(timer);
+      sLectureSaveTimers.current = {};
+      if (!stdPlanLocked && standardLectures.length) {
+        try {
+          await Promise.all(standardLectures.map((row) => saveSLectureRow(row)));
+        } catch {
+          // Best-effort — batch fields already saved successfully above.
+        }
+      }
 
       // Refresh data
       const refreshRes = await fetch(`/api/masters/batch/${batchId}`);
