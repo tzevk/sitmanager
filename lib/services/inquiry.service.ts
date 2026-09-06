@@ -1714,6 +1714,9 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
       IsGoogleAdLead: isGoogleAdLead,
       Status_id: r.Status_id ?? null,
       StatusLabel:
+        // ALLOWED_INQUIRY_STATUSES has inquiry-specific names that override
+        // status_master (which uses student-lifecycle names like 'Conducted' for id=1).
+        ALLOWED_INQUIRY_STATUSES.find((s) => s.id === r.Status_id)?.label ??
         (r.StatusLabelFromMaster?.trim() || null) ??
         statusMap[r.Status_id] ??
         (r.OnlineStateRaw?.trim() || null) ??
@@ -1982,7 +1985,9 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
         Discipline: detail.Discipline ?? null,
         Source: detail.Inquiry_Type || detail.Inquiry_From || null,
         Status_id: detail.Status_id ?? null,
-        StatusLabel: detail.StatusLabel?.trim() || null,
+        StatusLabel:
+          ALLOWED_INQUIRY_STATUSES.find((s) => s.id === detail.Status_id)?.label ??
+          detail.StatusLabel?.trim() ?? null,
         Discussion: detail.LatestDiscussion ?? detail.InlineDiscussion ?? null,
         DiscussionDate: detail.LatestDiscDate ?? null,
         ...(r.Person_Id == null ? { UnlinkedInquiryId: latestInquiryId } : {}),

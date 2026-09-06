@@ -269,10 +269,13 @@ export default function EditStudentPage() {
 
         const s = data.student;
         setStudentPhotoUrl(resolveStudentPhotoSrc(s.Photo, studentId));
+        // When the student was registered with only Student_Name (no FName/LName split),
+        // pre-populate FName so the user can see and build on the existing name.
+        const derivedParts = (s.FName || s.LName) ? null : (s.Student_Name || '').trim().split(/\s+/);
         setForm({
-          FName:            s.FName            || '',
+          FName:            s.FName            || (derivedParts ? derivedParts[0] || '' : ''),
           MName:            s.MName            || '',
-          LName:            s.LName            || '',
+          LName:            s.LName            || (derivedParts && derivedParts.length > 1 ? derivedParts.slice(1).join(' ') : ''),
           Student_Name:     s.Student_Name     || '',
           DOB:              s.DOB ? String(s.DOB).slice(0, 10) : '',
           Sex:              s.Sex              || '',
