@@ -830,6 +830,7 @@ function InquiryReportContent({
                     <th className="px-3 py-2.5 text-left font-semibold border-r border-[#1a5a9e] whitespace-nowrap">Email</th>
                     <th className="px-3 py-2.5 text-left font-semibold border-r border-[#1a5a9e] whitespace-nowrap">Training</th>
                     <th className="px-3 py-2.5 text-left font-semibold border-r border-[#1a5a9e] whitespace-nowrap">Batch</th>
+                    <th className="px-3 py-2.5 text-left font-semibold border-r border-[#1a5a9e] whitespace-nowrap">Batch Type</th>
                     <th className="px-3 py-2.5 text-left font-semibold border-r border-[#1a5a9e] whitespace-nowrap">Inquiry Date</th>
                     <th className="px-3 py-2.5 text-left font-semibold border-r border-[#1a5a9e] whitespace-nowrap">Type</th>
                     <th className="px-3 py-2.5 text-left font-semibold border-r border-[#1a5a9e] whitespace-nowrap">From</th>
@@ -850,9 +851,11 @@ function InquiryReportContent({
                         <td className="px-3 py-2 text-gray-600 border-r border-gray-100 whitespace-nowrap">{r.Present_Mobile}</td>
                         <td className="px-3 py-2 text-gray-600 border-r border-gray-100 max-w-[180px] truncate">{r.Email}</td>
                         <td className="px-3 py-2 text-gray-700 border-r border-gray-100 whitespace-nowrap">{r.Course_Name}</td>
-                        <td className="px-3 py-2 text-gray-600 border-r border-gray-100 whitespace-nowrap">
-                          {r.Batch_code}
-                          {r.Batch_Category && <span className="ml-1 text-[10px] text-gray-400">({r.Batch_Category})</span>}
+                        <td className="px-3 py-2 text-gray-600 border-r border-gray-100 whitespace-nowrap">{r.Batch_code || '—'}</td>
+                        <td className="px-3 py-2 border-r border-gray-100 whitespace-nowrap">
+                          {r.Batch_Category
+                            ? <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">{r.Batch_Category}</span>
+                            : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-3 py-2 text-gray-600 border-r border-gray-100 whitespace-nowrap">{fmtDate(r.Inquiry_Dt)}</td>
                         <td className="px-3 py-2 text-gray-600 border-r border-gray-100 whitespace-nowrap">{r.Inquiry_Type}</td>

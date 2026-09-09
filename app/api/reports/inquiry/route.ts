@@ -196,7 +196,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Step 4: Status labels — prefer DB table, fall back to hardcoded map
+    // Step 4: Status labels from status_master, with inquiry-specific overrides.
+    // status_master id=1 is 'Conducted' (student lifecycle) but for inquiries it means 'New'.
+    const inquiryStatusOverrides: Record<number, string> = { 1: 'New' };
     const fallbackStatusMap: Record<number, string> = {
       1: 'New', 2: 'Contacted', 3: 'Inquiry', 4: 'Follow Up',
       5: 'Interested', 6: 'Not Interested', 7: 'Admitted', 8: 'Closed',
@@ -208,13 +210,13 @@ export async function GET(req: NextRequest) {
     let statusMap: Record<number, string> = { ...fallbackStatusMap };
     try {
       const [statusRows] = await pool.query(
-        `SELECT Status_id AS id, Status AS label FROM awt_status WHERE (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Status_id`
+        `SELECT Id AS id, Status AS label FROM status_master WHERE (IsDelete = 0 OR IsDelete IS NULL) ORDER BY Id`
       ) as any;
       const dbMap: Record<number, string> = {};
       for (const s of statusRows as any[]) {
-        if (s.id && s.label) dbMap[Number(s.id)] = String(s.label).trim();
+        if (s.id != null && s.label) dbMap[Number(s.id)] = String(s.label).trim();
       }
-      if (Object.keys(dbMap).length > 0) statusMap = dbMap;
+      if (Object.keys(dbMap).length > 0) statusMap = { ...dbMap, ...inquiryStatusOverrides };
     } catch { /* use fallback */ }
 
     const enriched = dataRows.map((r: any, idx: number) => ({
