@@ -29,6 +29,12 @@ export async function GET(req: NextRequest) {
 
     const dateFrom = url.searchParams.get('dateFrom') || '';
     const dateTo = url.searchParams.get('dateTo') || '';
+    // 'inquiry' (default) filters by Inquiry_Dt — when the inquiry/lead
+    // actually came in. 'software' filters by Date_Added — when it was
+    // entered into the system, which can lag behind (or predate re-entry of)
+    // the real inquiry date.
+    const dateFieldParam = url.searchParams.get('dateField') || 'inquiry';
+    const dateField: 'inquiry' | 'software' = dateFieldParam === 'software' ? 'software' : 'inquiry';
     const courseId = url.searchParams.get('courseId') || '';
     const batchType = url.searchParams.get('batchType') || '';
     const batchId = url.searchParams.get('batchId') || '';
@@ -39,10 +45,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'From Date and To Date are required' }, { status: 400 });
     }
 
-    const cacheKey = `report:inquiry:data:${dateFrom}:${dateTo}:${courseId}:${batchType}:${batchId}:${inquiryType}:${inquiryFrom}`;
+    const cacheKey = `report:inquiry:data:${dateFrom}:${dateTo}:${dateField}:${courseId}:${batchType}:${batchId}:${inquiryType}:${inquiryFrom}`;
     const cachedData = await cache.get<any>(cacheKey);
     if (cachedData) {
-      logReportCacheTiming('inquiry.report', startedAt, 'HIT', { dateFrom, dateTo, courseId, batchType, batchId, inquiryType, inquiryFrom });
+      logReportCacheTiming('inquiry.report', startedAt, 'HIT', { dateFrom, dateTo, dateField, courseId, batchType, batchId, inquiryType, inquiryFrom });
       return NextResponse.json(cachedData, {
         headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60', 'X-Cache': 'HIT' },
       });
@@ -60,10 +66,28 @@ export async function GET(req: NextRequest) {
       + `DATE('1970-01-01')`
       + `))`;
 
+    // Date_Added ("software date" — when the record was actually entered into
+    // the system) is sparsely populated and has some corrupted/truncated
+    // values (e.g. time-only fragments) — those simply fail every format
+    // below and fall back to 1970-01-01, which naturally excludes them from
+    // any real date-range filter rather than crashing the query.
+    const dateAddedAsDate =
+      `DATE(COALESCE(`
+      + `STR_TO_DATE(SUBSTRING(si.Date_Added, 1, 19), '%Y-%m-%d %H:%i:%s'),`
+      + `STR_TO_DATE(SUBSTRING(si.Date_Added, 1, 10), '%Y-%m-%d'),`
+      + `STR_TO_DATE(SUBSTRING(si.Date_Added, 1, 10), '%d-%m-%Y'),`
+      + `STR_TO_DATE(SUBSTRING(si.Date_Added, 1, 10), '%d/%m/%Y'),`
+      + `STR_TO_DATE(SUBSTRING(si.Date_Added, 1, 10), '%d.%m.%Y'),`
+      + `STR_TO_DATE(SUBSTRING(si.Date_Added, 1, 10), '%Y/%m/%d'),`
+      + `DATE('1970-01-01')`
+      + `))`;
+
+    const filterDateAsDate = dateField === 'software' ? dateAddedAsDate : inquiryDtAsDate;
+
     const conditions: string[] = [
       '(si.IsDelete = 0 OR si.IsDelete IS NULL)',
-      `${inquiryDtAsDate} >= ?`,
-      `${inquiryDtAsDate} <= ?`,
+      `${filterDateAsDate} >= ?`,
+      `${filterDateAsDate} <= ?`,
     ];
     const params: any[] = [dateFrom, dateTo];
 
@@ -111,7 +135,7 @@ export async function GET(req: NextRequest) {
     if (totalCount === 0) {
       const responseData = {
         rows: [], total: 0, statusSummary: {},
-        filters: { dateFrom, dateTo, courseId, batchType, batchId, inquiryType, inquiryFrom },
+        filters: { dateFrom, dateTo, dateField, courseId, batchType, batchId, inquiryType, inquiryFrom },
       };
       await cache.set(cacheKey, responseData, cacheTTL.short);
       logReportCacheTiming('inquiry.report', startedAt, 'MISS', { dateFrom, dateTo, courseId, batchType, batchId, inquiryType, inquiryFrom, total: 0 });
@@ -141,7 +165,7 @@ export async function GET(req: NextRequest) {
          b.Batch_code,
          b.Category AS Batch_Category
        ${baseSql}
-       ORDER BY ${inquiryDtAsDate} DESC, si.Inquiry_Id DESC
+       ORDER BY ${filterDateAsDate} DESC, si.Inquiry_Id DESC
        LIMIT 5000`,
       params
     ) as any;
@@ -224,7 +248,7 @@ export async function GET(req: NextRequest) {
       rows: enriched,
       total: enriched.length,
       statusSummary,
-      filters: { dateFrom, dateTo, courseId, batchType, batchId, inquiryType, inquiryFrom },
+      filters: { dateFrom, dateTo, dateField, courseId, batchType, batchId, inquiryType, inquiryFrom },
     };
     await cache.set(cacheKey, responseData, cacheTTL.short);
     logReportCacheTiming('inquiry.report', startedAt, 'MISS', { dateFrom, dateTo, courseId, batchType, batchId, inquiryType, inquiryFrom, total: enriched.length });

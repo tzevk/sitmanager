@@ -130,6 +130,10 @@ function InquiryReportContent({
   /* --- Filter state --- */
   const [dateFrom, setDateFrom] = useState(monthAgoISO());
   const [dateTo, setDateTo] = useState(todayISO());
+  // "Normal" filters by Inquiry_Dt (when the inquiry/lead actually came in);
+  // "Software Date" filters by Date_Added (when it was entered into the
+  // system) — the two can differ when an inquiry is logged late.
+  const [dateField, setDateField] = useState<'inquiry' | 'software'>('inquiry');
   const [courseId, setCourseId] = useState('');
   const [batchType, setBatchType] = useState('');
   const [batchId, setBatchId] = useState('');
@@ -203,7 +207,7 @@ function InquiryReportContent({
     setSearched(true);
     setError('');
     try {
-      const qs = new URLSearchParams({ dateFrom, dateTo });
+      const qs = new URLSearchParams({ dateFrom, dateTo, dateField });
       if (courseId) qs.set('courseId', courseId);
       if (batchType) qs.set('batchType', batchType);
       if (batchId) qs.set('batchId', batchId);
@@ -225,7 +229,7 @@ function InquiryReportContent({
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, courseId, batchType, batchId, inquiryType, inquiryFrom]);
+  }, [dateFrom, dateTo, dateField, courseId, batchType, batchId, inquiryType, inquiryFrom]);
 
   /* ---- Export to CSV ---- */
   const exportCSV = useCallback(() => {
@@ -558,6 +562,32 @@ function InquiryReportContent({
               className="input-sm !max-w-[170px]"
               required
             />
+          </div>
+
+          <div>
+            <label className="label">Filter By</label>
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 h-10">
+              <button
+                type="button"
+                onClick={() => setDateField('inquiry')}
+                title="Filter by the date the inquiry actually came in (Inquiry Date)"
+                className={`px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${
+                  dateField === 'inquiry' ? 'bg-white text-[#2E3093] shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Normal
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateField('software')}
+                title="Filter by the date the inquiry was entered into the software (Software Date)"
+                className={`px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${
+                  dateField === 'software' ? 'bg-white text-[#2E3093] shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Inquiry in Software Date
+              </button>
+            </div>
           </div>
 
           <button
