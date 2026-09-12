@@ -7,6 +7,7 @@ import { ensureAlumniColumn } from '@/lib/student-alumni';
 import { ensureFamilyContactColumn } from '@/lib/student-family-contact';
 import { saveStructuredAdmissionData } from '@/lib/services/online-admission.service';
 import { computeStudentFeeBalance } from '@/lib/fee-balance';
+import { assignRollNumberOnGrant } from '@/lib/roll-number';
 
 const REFUND_NOTE = 'Refund - Admission Cancelled';
 
@@ -725,14 +726,20 @@ export async function PUT(
         // No active admission row to update — e.g. a transferred student whose only
         // prior admission was cancelled/deleted. Without this, the sync above is a
         // no-op and the student never appears under the new batch anywhere
-        // (attendance, allot roll number, etc). Roll_No is left blank; it gets
-        // allotted for the new batch the normal way via Allot Roll Number.
-        await pool.query(
+        // (attendance, allot roll number, etc).
+        const [insResult] = await pool.query(
           `INSERT INTO admission_master (
              Student_Id, Course_Id, Batch_Id, Admission_Date, IsActive, Cancel, IsDelete
            ) VALUES (?, ?, ?, ?, 1, 0, 0)`,
           [id, resolvedCourseId, batchId, Admission_Dt || new Date().toISOString().slice(0, 10)]
-        );
+        ) as [any, any];
+        // Roll number for the new batch is assigned here, once, permanently —
+        // see lib/roll-number.ts. Never recomputed afterward.
+        try {
+          await assignRollNumberOnGrant(pool, Number(insResult.insertId), batchId);
+        } catch (e) {
+          console.warn('Student PUT: assignRollNumberOnGrant failed (non-fatal):', (e as Error)?.message);
+        }
       }
     } catch (admErr) {
       console.warn('Student PUT: admission_master sync skipped:', (admErr as Error)?.message);

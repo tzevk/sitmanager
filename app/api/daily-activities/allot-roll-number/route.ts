@@ -212,57 +212,13 @@ export async function PATCH(req: NextRequest) {
 
     const pool = getPool();
 
-    if (action === 'reorder-roll-numbers') {
-      const conn = await pool.getConnection();
-      try {
-        await conn.beginTransaction();
-
-        const [admissions] = await conn.query<any[]>(
-          `SELECT
-             am.Admission_Id,
-             COALESCE(TRIM(CAST(am.Roll_No AS CHAR)), '') AS Roll_No,
-             COALESCE(NULLIF(TRIM(s.Student_Name), ''), TRIM(CONCAT_WS(' ', s.FName, s.LName)), CONCAT('Student #', s.Student_Id)) AS Student_Name
-           FROM admission_master am
-           JOIN student_master s ON s.Student_Id = am.Student_Id
-           WHERE am.Batch_Id = ?
-             AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
-             AND (am.Cancel = 0 OR am.Cancel IS NULL)
-             AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
-           ORDER BY Student_Name ASC, am.Admission_Id ASC
-           FOR UPDATE`,
-          [bid]
-        );
-
-        if (admissions.length === 0) {
-          await conn.rollback();
-          return NextResponse.json({ success: false, error: 'No students found in this batch.' }, { status: 400 });
-        }
-
-        const batch = await getBatchInfo(conn, bid);
-        if (!batch) {
-          await conn.rollback();
-          return NextResponse.json({ success: false, error: 'Batch not found.' }, { status: 400 });
-        }
-        const prefix = rollNumberPrefix(batch.Batch_code, batch.SDate);
-
-        for (let i = 0; i < admissions.length; i++) {
-          const newRollNo = buildRollNumber(prefix, i + 1);
-          await conn.query(
-            `UPDATE admission_master SET Roll_No = ? WHERE Admission_Id = ? AND Batch_Id = ?`,
-            [newRollNo, admissions[i].Admission_Id, bid]
-          );
-        }
-
-        await conn.commit();
-        const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
-        return NextResponse.json({ success: true, rows, updated: admissions.length });
-      } catch (err) {
-        await conn.rollback();
-        throw err;
-      } finally {
-        conn.release();
-      }
-    }
+    // 'reorder-roll-numbers' (alphabetical A–Z renumber of the whole batch) has
+    // been removed: roll numbers are now assigned automatically, once, at the
+    // moment admission is granted (see lib/roll-number.ts, called from every
+    // admission-grant path) and are permanently fixed from then on. A newly
+    // admitted student is simply appended after the highest serial already
+    // used in the batch, regardless of alphabetical name order, so no
+    // existing student's roll number ever shifts when someone new is added.
 
     if (action === 'auto-generate-roll-numbers') {
       const conn = await pool.getConnection();
@@ -280,7 +236,7 @@ export async function PATCH(req: NextRequest) {
              AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
              AND (am.Cancel = 0 OR am.Cancel IS NULL)
              AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
-           ORDER BY Student_Name ASC, am.Admission_Id ASC
+           ORDER BY am.Admission_Id ASC
            FOR UPDATE`,
           [bid]
         );

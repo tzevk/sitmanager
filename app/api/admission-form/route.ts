@@ -4,6 +4,7 @@ import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { apiRateLimiter } from '@/lib/rate-limit';
 import { logTableActivity } from '@/lib/activity-log';
+import { assignRollNumberOnGrant } from '@/lib/roll-number';
 
 export async function POST(req: NextRequest) {
   try {
@@ -146,6 +147,18 @@ export async function POST(req: NextRequest) {
         [Student_Id, batchId]
       );
       admissionId = (admissionResult as any).insertId;
+    }
+
+    // Roll number is assigned exactly once, at grant time — permanently
+    // fixed, appended after whatever's already used in this batch. See
+    // lib/roll-number.ts. No-op if this admission already has one, or if
+    // there's no batch resolved yet.
+    if (admissionId && batchId) {
+      try {
+        await assignRollNumberOnGrant(pool, admissionId, batchId);
+      } catch (e) {
+        console.warn('[AdmissionForm] assignRollNumberOnGrant failed (non-fatal):', e);
+      }
     }
 
     await logTableActivity(req, {

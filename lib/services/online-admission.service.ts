@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getPool } from '@/lib/db';
 import { generateFeesReceiptNo } from '@/lib/fees-receipt';
+import { assignRollNumberOnGrant } from '@/lib/roll-number';
 import { sendOnlineAdmissionSubmissionEmail } from '@/lib/mailer';
 import { getAdmissionInquiryAssetSummary, hasAdmissionUploads, type AdmissionUploadBundle, saveAdmissionAssetsForStudent, saveAdmissionAssetsForInquiry, attachInquiryAssetsToStudent } from '@/lib/student-documents.server';
 import { ensureFamilyContactColumn } from '@/lib/student-family-contact';
@@ -1153,6 +1154,19 @@ export async function syncOnlineAdmissionIntoCurrentDb(
         [resolvedStudentId, courseId, batchId, admissionDate, modeOfPayment, batchFees]
       ) as [any, any];
       admissionId = Number(admInsert.insertId);
+    }
+
+    // Roll number is assigned exactly once, here, at the moment admission is
+    // granted — permanently fixed, appended after whatever's already used in
+    // this batch. It never depends on alphabetical name order and is never
+    // recomputed when a later student is admitted, so no existing student's
+    // roll number ever shifts. No-ops if this admission already has one.
+    if (admissionId && batchId) {
+      try {
+        await assignRollNumberOnGrant(pool, admissionId, batchId);
+      } catch (e) {
+        console.warn('[OnlineAdmission] assignRollNumberOnGrant failed (non-fatal):', e);
+      }
     }
 
     // Invariant: granting an admission ⟹ the student is "Admission confirmed"
