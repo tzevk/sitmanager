@@ -1,0 +1,165 @@
+SIT FACESCAN RELAY — SETUP INSTRUCTIONS
+=========================================
+
+WHAT THIS IS
+------------
+A small Electron app that runs on a machine inside the institute's local
+network. It reads today's biometric punches from SmartOffice's own SQL
+Server database and sends them to SIT Manager, so attendance can be
+pre-filled from real facescan data. It has to run on-site because SIT
+Manager (hosted on Vercel) cannot reach a private SQL Server instance on
+your local network directly.
+
+
+STEP 1 — INSTALL NODE.JS
+-------------------------
+On the machine that will run this (ideally the SmartOffice machine itself,
+or any PC on the same local network that can reach it):
+
+  1. Go to https://nodejs.org
+  2. Download and install the "LTS" version.
+  3. Confirm it installed: open Command Prompt and run
+       node --version
+     It should print something like v20.x.x or v22.x.x.
+
+
+STEP 2 — UNZIP AND INSTALL DEPENDENCIES
+-----------------------------------------
+  1. Unzip this folder anywhere convenient, e.g. C:\facescan-relay
+  2. Open Command Prompt in that folder (Shift + Right-click inside the
+     folder → "Open PowerShell window here" or "Open command window here")
+  3. Run:
+       npm install
+     This downloads the required packages (takes a minute or two).
+
+
+STEP 3 — FILL IN YOUR SQL SERVER PASSWORD
+--------------------------------------------
+Everything else is already filled in below, EXCEPT the actual SQL Server
+password, which was never shared with me.
+
+  1. Open the file:  src\sync.js  in Notepad (or any text editor)
+  2. Find this block near the top:
+
+       const DEFAULTS = {
+         DB_SERVER: 'ATS-PC-026',
+         DB_INSTANCE: 'SQLEXPRESS',
+         DB_PORT: '1433',
+         DB_NAME: 'SmartOfficedb',
+         DB_USER: 'sa',
+         DB_PASSWORD: 'PUT_SQL_SERVER_PASSWORD_HERE',   <-- CHANGE THIS LINE
+         ...
+
+  3. Replace PUT_SQL_SERVER_PASSWORD_HERE with the real password for the
+     "sa" SQL Server login (the same one used in SmartOffice's own
+     "Parallel Database Export" configuration screen).
+  4. Save the file.
+
+Everything else in that DEFAULTS block is already correct for your setup —
+you should not need to change it unless SmartOffice's export configuration
+changes.
+
+
+ALL ENVIRONMENT VARIABLES / CONFIG VALUES USED
+-------------------------------------------------
+These are the exact values already hardcoded in src\sync.js. Listed here so
+you have a full record of what this app is configured to do:
+
+  DB_SERVER                 = ATS-PC-026
+  DB_INSTANCE                = SQLEXPRESS
+  DB_PORT                    = 1433
+  DB_NAME                    = SmartOfficedb
+  DB_USER                    = sa
+  DB_PASSWORD                = (YOU must fill this in — see Step 3)
+  DB_TABLE                   = Machine_Final_Log
+  DB_COLUMN_EMPLOYEE_CODE    = Student_Code
+  DB_COLUMN_LOG_DATETIME     = Entry_Time
+  DB_COLUMN_PUNCH_DIRECTION  = Type_of
+  INGEST_URL                 = https://suvidya.app/api/daily-activities/attendance/facescan-ingest
+  INGEST_SECRET               = 865e45cf2660bcd8606f7eabc4ac43992af18c4960098bd5a453d70aad9bcfb3
+  POLL_INTERVAL_MINUTES       = 10   (how often it auto-syncs, in minutes)
+
+IMPORTANT: The INGEST_SECRET value above must ALSO be set as an environment
+variable named FACESCAN_INGEST_SECRET in SIT Manager's Vercel project
+settings (Vercel dashboard → your project → Settings → Environment
+Variables → Add New), with the exact same value, on the Production
+environment. Without that, SIT Manager will reject every push from this
+relay with an authorization error. This is the one step I cannot do for
+you — it requires access to the Vercel dashboard.
+
+If you ever need to change any of these values without editing the code,
+you can instead copy the file ".env.example" to a new file named ".env" in
+this same folder and put your values there — anything in .env overrides
+the hardcoded defaults automatically.
+
+
+STEP 4 — TEST THE CONNECTION FIRST (recommended before running the app)
+---------------------------------------------------------------------------
+In the same Command Prompt window, run:
+
+    npm run dry-run
+
+This connects to the SQL Server database only — it does NOT send anything
+to SIT Manager yet. You should see output like:
+
+    Fetching punches for 2026-09-15 from ATS-PC-026\SQLEXPRESS / SmartOfficedb.Machine_Final_Log...
+    Found 12 punch(es) today.
+
+If instead you see an error, check the TROUBLESHOOTING section below.
+
+
+STEP 5 — RUN THE APP
+------------------------
+Once the dry run works, start the real app:
+
+    npm start
+
+A small window opens. It syncs immediately, shows "Synced X new punch(es)
+of Y found" when successful, and repeats automatically every 10 minutes for
+as long as the window stays open. Click "Sync Now" any time to trigger an
+extra sync manually.
+
+Keep this window open/running during school hours so attendance keeps
+syncing. Closing it stops the relay — there's no background service, by
+design, to keep this simple.
+
+
+TROUBLESHOOTING
+------------------
+"Database fetch failed" / connection error
+  - Double check DB_SERVER / DB_INSTANCE / DB_PORT in src\sync.js match
+    SmartOffice's export dialog exactly.
+  - Make sure the "SQL Server Browser" Windows service is running (required
+    for named-instance connections like \SQLEXPRESS).
+  - Make sure this machine's firewall allows outbound connections to port
+    1433 (and UDP 1434 for SQL Browser) on the SQL Server machine.
+
+"Login failed for user 'sa'"
+  - The password you entered in Step 3 is wrong, or the "sa" login is
+    disabled in SQL Server (check SQL Server Management Studio →
+    Security → Logins → sa → make sure it's enabled and the password
+    matches).
+
+"Found 0 punches"
+  - The app only looks at TODAY's punches. If you're testing outside school
+    hours or with old data, this is expected — check back during active
+    hours, or query the Machine_Final_Log table directly in SQL Server
+    Management Studio to confirm today's rows exist.
+
+"Ingest push failed" (during npm start or after a real dry-run-free sync)
+  - Make sure this machine has normal internet access (it needs to reach
+    suvidya.app over HTTPS).
+  - Make sure FACESCAN_INGEST_SECRET was added in Vercel with the exact
+    same value shown above — a mismatch here causes every push to be
+    rejected.
+
+App window doesn't open at all
+  - Run "npm run dry-run" from Command Prompt instead — the error message
+    printed there will point at the real problem without Electron in the
+    way.
+
+Punches show up but attach to the wrong student, or don't show at all
+  - Confirm the Student_Code column in Machine_Final_Log holds the
+    student's numeric Student_Id from SIT Manager — not a roll number or a
+    separate employee code. This is required for punches to match to the
+    right student.

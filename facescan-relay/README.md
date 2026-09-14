@@ -1,47 +1,44 @@
 # SIT Facescan Relay
 
-A small Electron app that runs on a machine inside the institute's local
-network (the same LAN as the facescan biometric device) and pushes punch
-logs to SIT Manager, so student attendance can be pre-filled from real
-facescan data.
+A minimal Electron app that runs on a machine inside the institute's local
+network (the same machine/LAN as the SmartOffice SQL Server database) and
+pushes today's punch logs to SIT Manager, so student attendance can be
+pre-filled from real facescan data.
 
-## Why this exists
+Kept deliberately simple: one small window showing sync status and a
+"Sync Now" button, no tray icon, no installer/packaging step. Config
+(server, credentials, table/column names) is hardcoded directly in
+`src/sync.js` — no `.env` file required, though one is still supported as
+an override.
 
-SIT Manager's server can't reach the biometric device directly — it sits on
-a private network address (e.g. `172.16.1.40`) that's only visible from
-inside the building. This app bridges that gap: it polls the device's
-`GetDeviceLogs` API every few minutes and pushes whatever it finds to a
-new endpoint, `/api/daily-activities/attendance/facescan-ingest`, which
-stores it for the Attendance page's "Facescan Sync" button to read.
+**See [DOCUMENTATION.md](./DOCUMENTATION.md) for full setup, configuration,
+and troubleshooting details.**
 
-It's a small rewrite of an older internal tool that did the same polling
-against a different destination — same idea, new target, minimal Electron
-app (tray icon + one small status window with a manual "Sync Now" button).
+## Quick start
 
-## Setup
+```bash
+cd facescan-relay
+npm install
+```
 
-1. `cd facescan-relay && npm install`
-2. Copy `.env.example` to `.env` and fill in:
-   - `DEVICE_BASE_URL` / `DEVICE_API_KEY` — the facescan device's local API (same values the old tool used).
-   - `INGEST_URL` — `https://<your-sitmanager-domain>/api/daily-activities/attendance/facescan-ingest`
-   - `INGEST_SECRET` — must match `FACESCAN_INGEST_SECRET` set in SIT Manager's environment variables (Vercel → Settings → Environment Variables). Generate any long random string for this.
-   - `POLL_INTERVAL_MINUTES` — how often to sync (defaults to 10, matching the old tool).
-3. `npm start`
+Open `src/sync.js`, fill in `DB_PASSWORD` and `INGEST_SECRET` (and
+`INGEST_URL`) inside the `DEFAULTS` object, then:
 
-The app minimizes to the system tray on launch. Right-click the tray icon
-for "Show App", "Sync Now", or "Quit". The window itself shows sync status
-and a manual "Sync Now" button — useful for triggering a sync outside the
-regular interval, or checking that the device/ingest connection is healthy.
+```bash
+npm start
+```
 
-## Packaging for a shared machine
+This opens the app window, which syncs immediately and then every
+`POLL_INTERVAL_MINUTES` (default 10) automatically.
 
-This repo only includes the source (`npm start` via `electron .`). To hand
-someone a double-clickable installer instead, add `@electron-forge/cli` and
-run its make command — not set up here to keep this minimal until it's
-confirmed working end-to-end.
+To test from the command line instead (no window):
+```bash
+npm run dry-run     # test the SQL Server connection only, nothing sent
+npm run test-once   # fetch today's punches and push them once
+```
 
 ## Security note
 
-`INGEST_SECRET` authenticates this app to the server (no user login
-involved — it's a machine-to-machine push). Treat it like a password: don't
-commit `.env`, and rotate it if the relay machine is ever decommissioned.
+Credentials live in plaintext in `src/sync.js` by design (for easy
+deployment). Don't push this repo publicly, and rotate `DB_PASSWORD` /
+`INGEST_SECRET` if this machine or repo is ever exposed.

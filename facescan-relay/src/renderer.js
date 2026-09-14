@@ -1,4 +1,5 @@
 const statusEl = document.getElementById('status');
+const sourceEl = document.getElementById('source');
 const metaEl = document.getElementById('meta');
 const syncBtn = document.getElementById('sync-btn');
 
@@ -22,11 +23,8 @@ function updateCountdown() {
 }
 
 window.relay.getConfig().then((cfg) => {
+  sourceEl.textContent = cfg.source;
   if (cfg.nextSyncAt) nextSyncAt = cfg.nextSyncAt;
-  if (!cfg.deviceBaseUrl || !cfg.ingestUrl) {
-    statusEl.textContent = 'Not configured — fill in facescan-relay/.env and restart.';
-    statusEl.className = 'status err';
-  }
 });
 
 window.relay.onStatus(render);

@@ -5,48 +5,44 @@
   <title>SIT Facescan Relay</title>
   <style>
     body {
-      font-family: -apple-system, Segoe UI, Roboto, sans-serif;
-      background: #f4f5f7;
       margin: 0;
+      font-family: -apple-system, Segoe UI, Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
       padding: 20px;
-      color: #1f2937;
     }
-    h1 { font-size: 15px; margin: 0 0 4px; color: #2E3093; }
-    p.sub { font-size: 11px; color: #6b7280; margin: 0 0 16px; }
-    .card {
-      background: #fff;
-      border: 1px solid #e5e7eb;
-      border-radius: 10px;
-      padding: 14px;
+    h1 { font-size: 15px; margin: 0 0 4px; color: #f8fafc; }
+    .source { font-size: 12px; color: #94a3b8; margin-bottom: 16px; }
+    .status {
+      font-size: 13px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      background: #1e293b;
+      min-height: 40px;
+      word-break: break-word;
     }
-    .status { font-size: 12px; margin-bottom: 8px; }
-    .status.ok { color: #15803d; }
-    .status.err { color: #b91c1c; }
-    .meta { font-size: 11px; color: #9ca3af; }
+    .status.ok { border-left: 3px solid #22c55e; }
+    .status.err { border-left: 3px solid #ef4444; }
+    .meta { font-size: 11px; color: #64748b; margin-top: 8px; }
     button {
-      margin-top: 12px;
-      width: 100%;
-      padding: 8px;
-      font-size: 12px;
-      font-weight: 600;
-      color: #fff;
-      background: #2E3093;
+      margin-top: 14px;
+      background: #2563eb;
+      color: white;
       border: none;
-      border-radius: 8px;
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 13px;
       cursor: pointer;
     }
-    button:hover { background: #23257A; }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    button:disabled { background: #334155; cursor: default; }
   </style>
 </head>
 <body>
   <h1>SIT Facescan Relay</h1>
-  <p class="sub">Polls the biometric device on this network and syncs punches to SIT Manager.</p>
-  <div class="card">
-    <div id="status" class="status">Starting…</div>
-    <div id="meta" class="meta"></div>
-    <button id="sync-btn">Sync Now</button>
-  </div>
+  <div class="source" id="source">Loading…</div>
+  <div class="status" id="status">Starting…</div>
+  <div class="meta" id="meta"></div>
+  <button id="sync-btn">Sync Now</button>
   <script src="renderer.js"></script>
 </body>
 </html>
