@@ -1379,10 +1379,18 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                           </div>
                         )}
                         {(fhMeta?.inTime || fhMeta?.outTime) && (
-                          <p className="mt-1 text-center text-[10px] text-gray-400 tabular-nums">
-                            {fhMeta.inTime ? `In: ${formatTime12Hour(fhMeta.inTime.slice(0, 5))}` : ''}
-                            {fhMeta.outTime ? ` · Out: ${formatTime12Hour(fhMeta.outTime.slice(0, 5))}` : ''}
-                          </p>
+                          <div className="mt-1.5 flex items-center justify-center gap-1 flex-wrap">
+                            {fhMeta.inTime && (
+                              <span className="inline-flex items-center rounded-md bg-green-100 px-1.5 py-0.5 text-[11px] font-bold text-green-700 tabular-nums">
+                                In {formatTime12Hour(fhMeta.inTime.slice(0, 5))}
+                              </span>
+                            )}
+                            {fhMeta.outTime && (
+                              <span className="inline-flex items-center rounded-md bg-red-100 px-1.5 py-0.5 text-[11px] font-bold text-red-700 tabular-nums">
+                                Out {formatTime12Hour(fhMeta.outTime.slice(0, 5))}
+                              </span>
+                            )}
+                          </div>
                         )}
                         {fhMeta?.remarks && (
                           <p className="mt-0.5 text-center text-[10px] text-amber-600 font-medium">{fhMeta.remarks}</p>
@@ -1428,10 +1436,18 @@ function AttendanceContent({ canCreate }: { canCreate: boolean }) {
                           </div>
                         )}
                         {(shMeta?.inTime || shMeta?.outTime) && (
-                          <p className="mt-1 text-center text-[10px] text-gray-400 tabular-nums">
-                            {shMeta.inTime ? `In: ${formatTime12Hour(shMeta.inTime.slice(0, 5))}` : ''}
-                            {shMeta.outTime ? ` · Out: ${formatTime12Hour(shMeta.outTime.slice(0, 5))}` : ''}
-                          </p>
+                          <div className="mt-1.5 flex items-center justify-center gap-1 flex-wrap">
+                            {shMeta.inTime && (
+                              <span className="inline-flex items-center rounded-md bg-green-100 px-1.5 py-0.5 text-[11px] font-bold text-green-700 tabular-nums">
+                                In {formatTime12Hour(shMeta.inTime.slice(0, 5))}
+                              </span>
+                            )}
+                            {shMeta.outTime && (
+                              <span className="inline-flex items-center rounded-md bg-red-100 px-1.5 py-0.5 text-[11px] font-bold text-red-700 tabular-nums">
+                                Out {formatTime12Hour(shMeta.outTime.slice(0, 5))}
+                              </span>
+                            )}
+                          </div>
                         )}
                         {shMeta?.remarks && (
                           <p className="mt-0.5 text-center text-[10px] text-amber-600 font-medium">{shMeta.remarks}</p>
