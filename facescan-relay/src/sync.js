@@ -13,12 +13,12 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 // if this file (or the repo) is ever exposed.
 // ---------------------------------------------------------------------------
 const DEFAULTS = {
-  DB_SERVER: 'ATS-PC-026',
+  DB_SERVER: 'localhost', // relay runs on the same machine as SQL Server, so no hostname/IP lookup is needed
   DB_INSTANCE: 'SQLEXPRESS',
   DB_PORT: '1433',
   DB_NAME: 'SmartOfficedb',
   DB_USER: 'sa',
-  DB_PASSWORD: 'PUT_SQL_SERVER_PASSWORD_HERE', // <-- fill in the real "sa" password
+  DB_PASSWORD: 'Biomax@123',
   DB_TABLE: 'Machine_Final_Log',
   DB_COLUMN_EMPLOYEE_CODE: 'Student_Code',
   DB_COLUMN_LOG_DATETIME: 'Entry_Time',
@@ -74,16 +74,22 @@ function describeError(err) {
 async function fetchLogsFromDatabase(date) {
   const poolConfig = {
     server: config.dbServer,
+    // Connect straight to the port instead of looking up the named
+    // instance via the SQL Server Browser service (UDP 1434) — if that
+    // service isn't running, specifying both port and instanceName makes
+    // the driver ignore the port and hang for ~15s waiting on the browser
+    // lookup instead. SmartOffice's export dialog specifying port 1433
+    // means this instance is already listening there directly.
     port: config.dbPort,
     database: config.dbName,
     user: config.dbUser,
     password: config.dbPassword,
+    connectTimeout: 15000,
     options: {
       // On-prem SQL Server Express instances almost never have a real TLS
       // cert configured; this only ever talks to it over the LAN.
       encrypt: false,
       trustServerCertificate: true,
-      ...(config.dbInstance ? { instanceName: config.dbInstance } : {}),
     },
   };
 

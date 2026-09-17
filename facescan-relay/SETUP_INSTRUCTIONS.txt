@@ -33,31 +33,19 @@ STEP 2 — UNZIP AND INSTALL DEPENDENCIES
      This downloads the required packages (takes a minute or two).
 
 
-STEP 3 — FILL IN YOUR SQL SERVER PASSWORD
---------------------------------------------
-Everything else is already filled in below, EXCEPT the actual SQL Server
-password, which was never shared with me.
+STEP 3 — NOTHING TO FILL IN
+------------------------------
+Every value below (including the SQL Server password) is already filled in
+directly inside src\sync.js — there is nothing you need to edit to get
+started. This app assumes it runs ON THE SAME MACHINE as the SQL Server
+database (DB_SERVER is set to "localhost"), which is the simplest, most
+reliable setup — no need to look up hostnames or IP addresses.
 
-  1. Open the file:  src\sync.js  in Notepad (or any text editor)
-  2. Find this block near the top:
-
-       const DEFAULTS = {
-         DB_SERVER: 'ATS-PC-026',
-         DB_INSTANCE: 'SQLEXPRESS',
-         DB_PORT: '1433',
-         DB_NAME: 'SmartOfficedb',
-         DB_USER: 'sa',
-         DB_PASSWORD: 'PUT_SQL_SERVER_PASSWORD_HERE',   <-- CHANGE THIS LINE
-         ...
-
-  3. Replace PUT_SQL_SERVER_PASSWORD_HERE with the real password for the
-     "sa" SQL Server login (the same one used in SmartOffice's own
-     "Parallel Database Export" configuration screen).
-  4. Save the file.
-
-Everything else in that DEFAULTS block is already correct for your setup —
-you should not need to change it unless SmartOffice's export configuration
-changes.
+If you ever run this relay from a DIFFERENT machine than the SQL Server
+itself, you'll need to change DB_SERVER in src\sync.js from 'localhost' to
+that machine's actual IP address (a plain Windows computer name like
+"ATS-PC-026" often fails to resolve from another PC on the network — this
+is what caused the "getaddrinfo ENOTFOUND" error during initial testing).
 
 
 ALL ENVIRONMENT VARIABLES / CONFIG VALUES USED
@@ -65,12 +53,12 @@ ALL ENVIRONMENT VARIABLES / CONFIG VALUES USED
 These are the exact values already hardcoded in src\sync.js. Listed here so
 you have a full record of what this app is configured to do:
 
-  DB_SERVER                 = ATS-PC-026
+  DB_SERVER                 = localhost   (change only if running off-machine — see above)
   DB_INSTANCE                = SQLEXPRESS
   DB_PORT                    = 1433
   DB_NAME                    = SmartOfficedb
   DB_USER                    = sa
-  DB_PASSWORD                = (YOU must fill this in — see Step 3)
+  DB_PASSWORD                = Biomax@123
   DB_TABLE                   = Machine_Final_Log
   DB_COLUMN_EMPLOYEE_CODE    = Student_Code
   DB_COLUMN_LOG_DATETIME     = Entry_Time
@@ -78,6 +66,11 @@ you have a full record of what this app is configured to do:
   INGEST_URL                 = https://suvidya.app/api/daily-activities/attendance/facescan-ingest
   INGEST_SECRET               = 865e45cf2660bcd8606f7eabc4ac43992af18c4960098bd5a453d70aad9bcfb3
   POLL_INTERVAL_MINUTES       = 10   (how often it auto-syncs, in minutes)
+
+SECURITY NOTE: this file and src\sync.js now contain your real SQL Server
+password and ingest secret in plain text. Keep this zip/folder private —
+don't upload it anywhere public, and don't forward it outside people who
+need to install this relay.
 
 IMPORTANT: The INGEST_SECRET value above must ALSO be set as an environment
 variable named FACESCAN_INGEST_SECRET in SIT Manager's Vercel project
@@ -102,7 +95,7 @@ In the same Command Prompt window, run:
 This connects to the SQL Server database only — it does NOT send anything
 to SIT Manager yet. You should see output like:
 
-    Fetching punches for 2026-09-15 from ATS-PC-026\SQLEXPRESS / SmartOfficedb.Machine_Final_Log...
+    Fetching punches for 2026-09-17 from localhost\SQLEXPRESS / SmartOfficedb.Machine_Final_Log...
     Found 12 punch(es) today.
 
 If instead you see an error, check the TROUBLESHOOTING section below.
@@ -135,10 +128,26 @@ TROUBLESHOOTING
     1433 (and UDP 1434 for SQL Browser) on the SQL Server machine.
 
 "Login failed for user 'sa'"
-  - The password you entered in Step 3 is wrong, or the "sa" login is
-    disabled in SQL Server (check SQL Server Management Studio →
+  - The password in src\sync.js doesn't match what's set in SQL Server, or
+    the "sa" login is disabled (check SQL Server Management Studio →
     Security → Logins → sa → make sure it's enabled and the password
     matches).
+
+"getaddrinfo ENOTFOUND ..."
+  - DB_SERVER couldn't be resolved as a network address. Confirm the relay
+    is running on the same machine as SQL Server (DB_SERVER should be
+    "localhost"); if it's running elsewhere, change DB_SERVER to that
+    machine's IP address instead of its Windows computer name.
+
+"Failed to connect to ...\SQLEXPRESS in 15000ms"
+  - This is a known SQL Server named-instance quirk: the app connects
+    straight to port 1433 now (it no longer waits on the "SQL Server
+    Browser" service to look up the instance's port), which should fix
+    this. If it still happens, open SQL Server Configuration Manager on
+    that machine → SQL Server Network Configuration → Protocols for
+    SQLEXPRESS → make sure "TCP/IP" is Enabled, and under its IPAll
+    properties, that "TCP Port" is set to 1433 — then restart the SQL
+    Server (SQLEXPRESS) service.
 
 "Found 0 punches"
   - The app only looks at TODAY's punches. If you're testing outside school
