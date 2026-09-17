@@ -1149,14 +1149,21 @@ export default function MetaLeadsPage() {
   const displayRows = leadsSubTab === 'fresh' ? freshRows : leadsSubTab === 'engaged' ? engagedRows : rows;
 
   const [exportingTab, setExportingTab] = useState<null | 'all' | 'fresh' | 'engaged'>(null);
+  const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
+
+  // How many pages to fetch at once. Each individual request is still the
+  // same <=100-row query the table itself uses (see the API route's
+  // maxLimit comment for why that per-request cap exists) — this only
+  // controls how many of those already-safe requests run concurrently, to
+  // cut wall-clock time on large exports (e.g. ~11k leads = ~111 pages,
+  // which at one-at-a-time took minutes).
+  const EXPORT_CONCURRENCY = 6;
 
   // Downloads every row matching the current filters for one sub-tab — not
-  // just the loaded page — by paging through the same capped (<=100/page)
-  // endpoint the table already uses, so it never bypasses the per-row
-  // Discussion query's safe-scale cap (see the API route for why that cap
-  // exists).
+  // just the loaded page.
   const exportLeadsCsv = useCallback(async (tab: 'all' | 'fresh' | 'engaged') => {
     setExportingTab(tab);
+    setExportProgress(null);
     try {
       const baseParams = { limit: String(PAGE_SIZE) } as Record<string, string>;
       if (search) baseParams.search = search;
@@ -1167,19 +1174,34 @@ export default function MetaLeadsPage() {
       if (training) baseParams.training = training;
       if (duplicatesOnly) baseParams.duplicatesOnly = '1';
 
-      const all: InquiryRow[] = [];
-      let fetchedPage = 1;
-      let totalPages = 1;
-      do {
-        const p = new URLSearchParams({ ...baseParams, page: String(fetchedPage) });
+      const fetchPage = async (pageNum: number) => {
+        const p = new URLSearchParams({ ...baseParams, page: String(pageNum) });
         const res = await fetch(`/api/meta-ads/leads?${p.toString()}`);
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || 'Failed to export Meta leads');
-        all.push(...(data.rows ?? []));
-        totalPages = data.pagination?.totalPages ?? 1;
-        fetchedPage += 1;
-      } while (fetchedPage <= totalPages);
+        return data as { rows?: InquiryRow[]; pagination?: { totalPages?: number } };
+      };
 
+      const first = await fetchPage(1);
+      const totalPages = first.pagination?.totalPages ?? 1;
+      const pagesByIndex: InquiryRow[][] = new Array(totalPages);
+      pagesByIndex[0] = first.rows ?? [];
+      setExportProgress({ done: 1, total: totalPages });
+
+      let nextPage = 2;
+      let doneCount = 1;
+      const workers = Array.from({ length: Math.min(EXPORT_CONCURRENCY, Math.max(0, totalPages - 1)) }, async () => {
+        while (nextPage <= totalPages) {
+          const pageNum = nextPage++;
+          const data = await fetchPage(pageNum);
+          pagesByIndex[pageNum - 1] = data.rows ?? [];
+          doneCount += 1;
+          setExportProgress({ done: doneCount, total: totalPages });
+        }
+      });
+      await Promise.all(workers);
+
+      const all = pagesByIndex.flat();
       const filtered = tab === 'fresh' ? all.filter(isFreshLead) : tab === 'engaged' ? all.filter((r) => !isFreshLead(r)) : all;
       const stamp = new Date().toISOString().slice(0, 10);
       downloadCsv(`meta-leads-${tab}-${stamp}.csv`, rowsToCsv(filtered));
@@ -1187,6 +1209,7 @@ export default function MetaLeadsPage() {
       console.error(error);
       alert(error instanceof Error ? error.message : 'Failed to export CSV');
     } finally {
+      setExportProgress(null);
       setExportingTab(null);
     }
   }, [search, source, status, dateFrom, dateTo, training, duplicatesOnly]);
@@ -1634,7 +1657,11 @@ export default function MetaLeadsPage() {
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                    {exportingTab === leadsSubTab ? 'Exporting…' : 'Download CSV'}
+                    {exportingTab === leadsSubTab
+                      ? exportProgress && exportProgress.total > 1
+                        ? `Exporting… ${exportProgress.done}/${exportProgress.total}`
+                        : 'Exporting…'
+                      : 'Download CSV'}
                   </button>
                 </div>
 

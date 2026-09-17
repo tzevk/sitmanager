@@ -38,6 +38,7 @@ const PUBLIC_ROUTES = [
   '/api/auth/logout',
   '/api/auth/session',
   '/api/health',
+  '/api/daily-activities/attendance/facescan-ingest',
   '/api/cron/meta-leads-refresh',
   '/api/cron/meta-batch-recommendations',
   '/api/cron/suvidya-inquiry-sync',
