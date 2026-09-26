@@ -25,6 +25,10 @@
     {
       "path": "/api/cron/inquiry-followup-escalation",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/calendly-sync",
+      "schedule": "*/10 * * * *"
     }
   ],
   "functions": {

@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { PermissionProvider, usePermissions } from '@/lib/permissions-context';
+import AppointmentReminderPopup from './components/AppointmentReminderPopup';
 
 // ── Static data hoisted outside component to avoid re-creation ──────
 const MENU_ITEMS = [
@@ -50,6 +51,9 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Admission Activity > Online Admission': '/dashboard/online-admission',
   'Admission Activity > Student': '/dashboard/student',
   'Admission Activity > Alumni Association': '/dashboard/alumni-association',
+  'Admission Activity > Appointments': '/dashboard/appointments',
+  'Admission Activity > Appointment Calendar': '/dashboard/appointments/calendar',
+  'Admission Activity > Scheduling Settings': '/dashboard/appointments/settings',
   'Monitoring > Weekly Report': '/dashboard/monitoring',
   'Corporate Training > Corporate Inquiry': '/dashboard/corporate-inquiry',
   'Corporate Training > Training Execution': '/dashboard/corporate-inquiry/execution',
@@ -140,6 +144,9 @@ const SUB_MENUS: Record<string, string[]> = {
     'Online Admission',
     'Student',
     'Alumni Association',
+    'Appointments',
+    'Appointment Calendar',
+    'Scheduling Settings',
   ],
   'Monitoring': [
     'Weekly Report',
@@ -282,6 +289,9 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Admission Activity > Online Admission': ['online_admission.view'],
   'Admission Activity > Student': ['student.view'],
   'Admission Activity > Alumni Association': ['alumni.view'],
+  'Admission Activity > Appointments': ['appointment.view', 'appointment.manage'],
+  'Admission Activity > Appointment Calendar': ['appointment.view', 'appointment.manage'],
+  'Admission Activity > Scheduling Settings': ['appointment_settings.manage'],
   'Monitoring > Weekly Report': ['monitoring.view'],
   'Corporate Training > Corporate Inquiry': ['corporate_inquiry.view'],
   'Corporate Training > Training Execution': ['corporate_inquiry.view'],
@@ -475,7 +485,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     if (path.startsWith('/dashboard/corporate-inquiry')) return 'Corporate Training';
     if (path.startsWith('/dashboard/utility')) return 'Utility';
     if (path.startsWith('/dashboard/support')) return 'Support';
-    if (path.startsWith('/dashboard/inquiry') || path.startsWith('/dashboard/meta-leads') || path.startsWith('/dashboard/online-admission') || path.startsWith('/dashboard/student') || path.startsWith('/dashboard/alumni-association')) return 'Admission Activity';
+    if (path.startsWith('/dashboard/inquiry') || path.startsWith('/dashboard/meta-leads') || path.startsWith('/dashboard/online-admission') || path.startsWith('/dashboard/student') || path.startsWith('/dashboard/alumni-association') || path.startsWith('/dashboard/appointments')) return 'Admission Activity';
     if (path.startsWith('/dashboard/monitoring')) return 'Monitoring';
     if (path.startsWith('/dashboard/placement') || path.startsWith('/dashboard/cv-shortlisted')) return 'Placement';
     return 'Dashboard';
@@ -1034,6 +1044,9 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
       <main className="flex-1 min-h-0 overflow-y-auto p-6">
         {children}
       </main>
+
+      {/* 30-minute counselling appointment reminders (assigned counsellor only) */}
+      <AppointmentReminderPopup />
 
       {/* ── Reset Password Modal ── */}
       {showResetModal && (

@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import BatchMarketingWidget from './BatchMarketingWidget';
 import AnnualTargetsWidget from './AnnualTargetsWidget';
 import ContentCalendarWidget from './ContentCalendarWidget';
+import AppointmentsWidget from './AppointmentsWidget';
 import { toBatchNumber } from '@/lib/batch-display';
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -772,6 +773,9 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
           </table>
         </div>
       </div>
+
+      {/* ②  Today's Appointments (counsellor scheduling) */}
+      <AppointmentsWidget />
 
       {/* ②  Pending Fees */}
       {pendingFeesCard}

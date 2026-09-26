@@ -146,6 +146,33 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   },
 
   // -------------------------------------------------------------------------
+  // APPOINTMENTS
+  // -------------------------------------------------------------------------
+  {
+    id: 'appointments',
+    name: 'Appointments',
+    description: 'Counselling appointment booking, calendar and scheduling',
+    icon: 'calendar',
+    permissions: [
+      ...createPermissions('appointment', 'Appointment'),
+      {
+        id: 'appointment.manage',
+        name: 'Manage All Appointments',
+        description: 'See and act on every counsellor\'s appointments (otherwise only your own)',
+        resource: 'appointment',
+        action: 'manage',
+      },
+      {
+        id: 'appointment_settings.manage',
+        name: 'Manage Appointment Settings',
+        description: 'Configure working hours, slots, holidays, breaks and counsellors',
+        resource: 'appointment_settings',
+        action: 'manage',
+      },
+    ],
+  },
+
+  // -------------------------------------------------------------------------
   // MONITORING
   // -------------------------------------------------------------------------
   {
@@ -588,6 +615,11 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/dashboard/corporate-inquiry/add': ['corporate_inquiry.create'],
   '/dashboard/corporate-inquiry/edit': ['corporate_inquiry.update'],
   '/dashboard/reports/college-follow-up': ['report_college_followup.view'],
+
+  // Appointments
+  '/dashboard/appointments': ['appointment.view'],
+  '/dashboard/appointments/calendar': ['appointment.view'],
+  '/dashboard/appointments/settings': ['appointment_settings.manage'],
 
   // Monitoring
   '/dashboard/monitoring': ['monitoring.view'],
