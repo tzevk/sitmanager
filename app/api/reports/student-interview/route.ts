@@ -4,6 +4,7 @@ import ExcelJS from 'exceljs';
 import { getPool } from '@/lib/db';
 import { requireAuth, requirePermission } from '@/lib/api-auth';
 import { cache, cacheTTL } from '@/lib/cache';
+import { buildFinalExamReport } from '@/lib/final-exam-report';
 
 type StudentInterviewStatus = 'Placed' | 'Interview Call' | '';
 
@@ -484,6 +485,39 @@ export async function GET(req: NextRequest) {
          s.Student_Id`,
       params
     );
+
+    // Final grade/percent come from the same live calculation as the Final Exam
+    // report (current marks + batch weightages + Passing_Criteria). The stored
+    // generate_final_child values above are a legacy snapshot that this app
+    // never writes, so they're missing for new batches and stale for any batch
+    // whose marks changed. Fall back to the snapshot only when the live report
+    // has no exam marks to grade from ('NA'), e.g. old batches whose marks
+    // were never migrated.
+    const finalReport = await buildFinalExamReport(pool, parseInt(batchId, 10));
+    const liveByStudent = new Map<number, { totalScore: number; classObtained: string }>(
+      (finalReport?.students || []).map((st: any) => [Number(st.Student_Id), st])
+    );
+    for (const row of rows as any[]) {
+      const live = liveByStudent.get(Number(row.Student_Id));
+      if (live && live.classObtained !== 'NA') {
+        row.Final_Grade = live.classObtained;
+        row.Final_Result_Percent = String(live.totalScore);
+      }
+    }
+    // Re-apply the SQL's "highest percent first" ordering with the live values;
+    // sort is stable, so the remaining SQL tie-break order is preserved.
+    const pctOf = (row: any) => {
+      const n = Number(String(row.Final_Result_Percent ?? '').trim());
+      return String(row.Final_Result_Percent ?? '').trim() !== '' && Number.isFinite(n) ? n : null;
+    };
+    (rows as any[]).sort((a, b) => {
+      const pa = pctOf(a);
+      const pb = pctOf(b);
+      if (pa === pb) return 0;
+      if (pa === null) return 1;
+      if (pb === null) return -1;
+      return pb - pa;
+    });
 
     const responseData = { rows };
     await cache.set(cacheKey, responseData, cacheTTL.short);
