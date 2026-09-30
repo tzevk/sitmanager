@@ -102,6 +102,7 @@ export default function AllotRollNumberPage() {
   const [loadingRows, setLoadingRows] = useState(false);
   const [savingRollAdmissionId, setSavingRollAdmissionId] = useState<number | null>(null);
   const [autoGeneratingRolls, setAutoGeneratingRolls] = useState(false);
+  const [reorderingRolls, setReorderingRolls] = useState(false);
   const [rollInputs, setRollInputs] = useState<Record<number, string>>({});
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -323,6 +324,37 @@ export default function AllotRollNumberPage() {
       setError(err instanceof Error ? err.message : 'Failed to auto-generate roll numbers');
     } finally {
       setAutoGeneratingRolls(false);
+    }
+  };
+
+  const handleReorderRollNumbers = async () => {
+    if (!canUpdate || !batchId || !rows.length || reorderingRolls) return;
+    const batchCode = selectedBatch?.Batch_code || batchId;
+    const ok = window.confirm(
+      `Re-number all students in batch ${batchCode} in alphabetical order (A–Z)?\n\n` +
+      'This overwrites every existing roll number in the batch. Students will need their new roll number to sign in to the student portal.'
+    );
+    if (!ok) return;
+
+    setError('');
+    setMessage('');
+    setReorderingRolls(true);
+    try {
+      const res = await fetch('/api/daily-activities/allot-roll-number', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reorder-roll-numbers', batchId: Number(batchId) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) throw new Error(data?.error || 'Failed to reorder roll numbers');
+      const nextRows = Array.isArray(data.rows) ? data.rows : [];
+      setRows(nextRows);
+      setRollInputs(Object.fromEntries(nextRows.map((student: StudentRow) => [student.Admission_Id, student.Roll_No || ''])));
+      setMessage(`Re-numbered ${Number(data.updated || 0)} students in alphabetical order.`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to reorder roll numbers');
+    } finally {
+      setReorderingRolls(false);
     }
   };
 
@@ -571,6 +603,17 @@ export default function AllotRollNumberPage() {
               </svg>
               Export Excel
             </button>
+            {canUpdate && (
+              <button
+                type="button"
+                onClick={handleReorderRollNumbers}
+                disabled={!batchId || !rows.length || reorderingRolls}
+                title="Sort all students A–Z and re-allocate roll numbers 0001, 0002, …"
+                className="inline-flex items-center px-3 py-1.5 rounded-md border border-violet-200 bg-violet-50 text-violet-700 text-[11px] font-bold hover:bg-violet-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {reorderingRolls ? 'Reordering...' : 'Reorder A–Z'}
+              </button>
+            )}
             {canUpdate ? (
               <button
                 type="button"

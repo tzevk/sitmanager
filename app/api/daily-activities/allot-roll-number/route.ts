@@ -212,13 +212,68 @@ export async function PATCH(req: NextRequest) {
 
     const pool = getPool();
 
-    // 'reorder-roll-numbers' (alphabetical A–Z renumber of the whole batch) has
-    // been removed: roll numbers are now assigned automatically, once, at the
-    // moment admission is granted (see lib/roll-number.ts, called from every
-    // admission-grant path) and are permanently fixed from then on. A newly
-    // admitted student is simply appended after the highest serial already
-    // used in the batch, regardless of alphabetical name order, so no
-    // existing student's roll number ever shifts when someone new is added.
+    // Roll numbers are assigned once at admission grant (lib/roll-number.ts),
+    // appended after the batch's highest serial — so late admissions end up
+    // out of name order, and stray/duplicate numbers can creep in. This is the
+    // explicit, user-confirmed reset: sort every active student in the batch
+    // A–Z and renumber them 0001..N, overwriting existing roll numbers.
+    if (action === 'reorder-roll-numbers') {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+
+        const [admissions] = await conn.query<any[]>(
+          `SELECT
+             am.Admission_Id,
+             COALESCE(NULLIF(TRIM(s.Student_Name), ''), TRIM(CONCAT_WS(' ', s.FName, s.LName)), CONCAT('Student #', s.Student_Id)) AS Student_Name
+           FROM admission_master am
+           JOIN student_master s ON s.Student_Id = am.Student_Id
+           WHERE am.Batch_Id = ?
+             AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+             AND (am.Cancel = 0 OR am.Cancel IS NULL)
+             AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
+           FOR UPDATE`,
+          [bid]
+        );
+
+        if (admissions.length === 0) {
+          await conn.rollback();
+          return NextResponse.json({ success: false, error: 'No students found in this batch.' }, { status: 400 });
+        }
+
+        const batch = await getBatchInfo(conn, bid);
+        if (!batch) {
+          await conn.rollback();
+          return NextResponse.json({ success: false, error: 'Batch not found.' }, { status: 400 });
+        }
+        const prefix = rollNumberPrefix(batch.Batch_code, batch.SDate);
+
+        // Sort in JS rather than SQL ORDER BY so casing ("RUPESH" vs "Ratnesh")
+        // and stray/double spaces don't affect the order, whatever the column
+        // collation is. Admission_Id breaks ties between identical names.
+        const normalize = (name: unknown) => String(name || '').trim().replace(/\s+/g, ' ');
+        admissions.sort((a, b) =>
+          normalize(a.Student_Name).localeCompare(normalize(b.Student_Name), 'en', { sensitivity: 'base', numeric: true })
+          || Number(a.Admission_Id) - Number(b.Admission_Id)
+        );
+
+        for (let i = 0; i < admissions.length; i++) {
+          await conn.query(
+            `UPDATE admission_master SET Roll_No = ? WHERE Admission_Id = ? AND Batch_Id = ?`,
+            [buildRollNumber(prefix, i + 1), admissions[i].Admission_Id, bid]
+          );
+        }
+
+        await conn.commit();
+        const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
+        return NextResponse.json({ success: true, rows, updated: admissions.length });
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      } finally {
+        conn.release();
+      }
+    }
 
     if (action === 'auto-generate-roll-numbers') {
       const conn = await pool.getConnection();
