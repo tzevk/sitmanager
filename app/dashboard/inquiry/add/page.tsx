@@ -790,18 +790,18 @@ export default function AddInquiryPage() {
                 <tr className="text-[10px] uppercase tracking-wider text-[#2A6BB5]/60 bg-zinc-50 border-b border-zinc-200">
                   <th className="text-left py-2 px-3 font-bold">Current Date</th>
                   <th className="text-left py-2 px-3 font-bold">Next Follow-Up Date</th>
-                  <th className="text-left py-2 px-3 font-bold">Follow-Up Discussion</th>
+                  <th className="text-left py-2 px-3 font-bold w-full">Follow-Up Discussion</th>
                   <th className="text-center py-2 px-3 font-bold">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                <tr className="border-b border-slate-100 bg-slate-50/60">
+                <tr className="border-b border-slate-100 bg-slate-50/60 align-top">
                   <td className="py-2 px-3 whitespace-nowrap font-semibold text-slate-500">{fmtDate(today())}</td>
                   <td className="py-2 px-3 min-w-[160px]">
                     <input type="date" value={newNextDate} onChange={e => setNewNextDate(e.target.value)} className={ctrl} />
                   </td>
-                  <td className="py-2 px-3 min-w-[280px]">
-                    <textarea value={newDiscussion} onChange={e => setNewDiscussion(e.target.value)} placeholder="Follow-up discussion…" rows={1} className={`${ctrl} resize-none`} />
+                  <td className="py-2 px-3 min-w-[420px] w-full">
+                    <textarea value={newDiscussion} onChange={e => setNewDiscussion(e.target.value)} placeholder="Follow-up discussion…" rows={8} className={`${ctrl} py-2 min-h-[180px] resize-y leading-relaxed`} />
                   </td>
                   <td className="py-2 px-3 text-center">
                     <button onClick={handleAddDiscussion} disabled={discLoading || !newDiscussion.trim() || !newNextDate}
@@ -816,16 +816,16 @@ export default function AddInquiryPage() {
                 {discussions.length === 0 ? (
                   <tr><td colSpan={4} className="py-6 text-center text-xs text-slate-400">No discussions yet.</td></tr>
                 ) : discussions.map((d) => (
-                  <tr key={d.id} className="border-b border-slate-100 last:border-b-0">
+                  <tr key={d.id} className="border-b border-slate-100 last:border-b-0 align-top">
                     <td className="py-2 px-3 whitespace-nowrap text-slate-600">{fmtDate(d.date)}</td>
                     <td className="py-2 px-3 whitespace-nowrap text-[#2E3093] font-medium">{fmtDate(d.nextdate)}</td>
-                    <td className="py-2 px-3 min-w-[280px]">
+                    <td className="py-2 px-3 min-w-[420px] w-full">
                       {editingDiscId === d.id ? (
                         <textarea
                           value={editingDiscText}
                           onChange={(e) => setEditingDiscText(e.target.value)}
-                          rows={2}
-                          className="w-full text-xs border border-slate-300 rounded-md p-2 resize-none focus:outline-none focus:ring-2 focus:ring-[#2E3093]"
+                          rows={8}
+                          className="w-full min-h-[180px] text-xs leading-relaxed border border-slate-300 rounded-md p-2 resize-y focus:outline-none focus:ring-2 focus:ring-[#2E3093]"
                         />
                       ) : (
                         <span className="text-slate-700 whitespace-pre-wrap">{d.discussion}</span>
