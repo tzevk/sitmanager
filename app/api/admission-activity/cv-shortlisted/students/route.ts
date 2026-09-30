@@ -31,18 +31,34 @@ export async function GET(req: NextRequest) {
 
     // Get students by batch
     if (batchCode) {
+      // student_master.Batch_Code is also set on inquiry-stage duplicates that
+      // were never admitted, and the CV forms dedupe by name keeping the first
+      // row — so within the same name, list the student actually admitted to
+      // this batch first. Otherwise shortlist rows get saved against the stale
+      // duplicate and never show on the real student's profile.
       const [students] = await pool.query<any[]>(
         `SELECT
-           Student_Id,
-           TRIM(Student_Name) AS Student_Name,
-           Batch_Code
-         FROM student_master
-         WHERE Batch_Code = ?
-           AND (IsDelete = 0 OR IsDelete IS NULL)
-           AND Student_Name IS NOT NULL
-           AND TRIM(Student_Name) <> ''
-         GROUP BY Student_Id, Batch_Code
-         ORDER BY TRIM(Student_Name)`,
+           s.Student_Id,
+           TRIM(s.Student_Name) AS Student_Name,
+           s.Batch_Code
+         FROM student_master s
+         WHERE s.Batch_Code = ?
+           AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
+           AND s.Student_Name IS NOT NULL
+           AND TRIM(s.Student_Name) <> ''
+         GROUP BY s.Student_Id, s.Batch_Code
+         ORDER BY
+           TRIM(s.Student_Name),
+           EXISTS (
+             SELECT 1
+             FROM admission_master am
+             JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
+             WHERE am.Student_Id = s.Student_Id
+               AND b.Batch_code = s.Batch_Code
+               AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+               AND (am.Cancel = 0 OR am.Cancel IS NULL)
+           ) DESC,
+           s.Student_Id DESC`,
         [batchCode]
       );
       return NextResponse.json({ students });

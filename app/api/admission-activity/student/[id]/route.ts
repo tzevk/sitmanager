@@ -654,7 +654,9 @@ export async function PUT(
       { col: 'Login_Password', val: Login_Password || null },
       { col: 'WorkingSince',   val: WorkingSince || null },
       { col: 'SitPerformance', val: SitPerformance ? parseFloat(SitPerformance) : null },
-      { col: 'PlacementRemark', val: PlacementRemark || null },
+      // '' (not null) so clearing the remark in the form actually clears it —
+      // null would be dropped by the filter below and leave the old text.
+      { col: 'PlacementRemark', val: PlacementRemark === undefined ? undefined : (PlacementRemark || '') },
       { col: 'Alumni_Registered', val: Alumni_Registered || null },
     ].filter(({ val }) => val !== null && val !== undefined);
 
@@ -664,8 +666,11 @@ export async function PUT(
           `UPDATE student_master SET \`${col}\` = ? WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
           [val, id]
         );
-      } catch {
-        // Column doesn't exist in this deployment — skip silently
+      } catch (err: any) {
+        // Column doesn't exist in this deployment — skip silently. Anything
+        // else (e.g. "Data too long") must surface, or the page reports a
+        // successful save while the value quietly stays unchanged.
+        if (err?.code !== 'ER_BAD_FIELD_ERROR') throw err;
       }
     }
 
