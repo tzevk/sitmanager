@@ -726,6 +726,65 @@ export async function getDueReminders(): Promise<DueReminderRow[]> {
   });
 }
 
+export interface DueFollowUpRow {
+  Inquiry_Id: number;
+  Student_Name: string;
+  CourseName: string | null;
+  Present_Mobile: string | null;
+  StatusLabel: string | null;
+  /** YYYY-MM-DD */
+  NextFollowUpDate: string;
+  /** 0 = due today, N = N days overdue */
+  Days_Overdue: number;
+}
+
+/** How far back an unactioned follow-up date still counts as "due". Older ones are
+ * treated as abandoned so the reminder doesn't drown in years-old leads. */
+export const FOLLOW_UP_DUE_WINDOW_DAYS = 7;
+
+/** Status labels (status_master.Status, lower-cased) that mean the lead is finished,
+ * so a due follow-up date on it is ignored: admission taken/confirmed, not
+ * interested, irrelevant, junk, lost lead, closed/close, duplicate, not eligible. */
+const CLOSED_STATUS_REGEXP = 'admission (taken|confirmed)|not interested|irrelevant|junk|lost lead|clos|duplicate|not eligible';
+
+/** Enquiries whose LATEST discussion's next follow-up date is today or within the
+ * last FOLLOW_UP_DUE_WINDOW_DAYS days, skipping closed statuses. Drives the
+ * "Follow-ups Due" tray on the inquiry list and the app-wide follow-up toast.
+ * Only a newer discussion clears a follow-up — logging the call with a new
+ * next date moves it forward. Driven by idx_disc_due (deleted, nextdate, …) and
+ * idx_disc_lookup for the "is it the latest" check. Cached under the api:inquiry
+ * prefix so the discussions API's invalidateCache('api:inquiry') clears it the
+ * moment a follow-up is logged. The short TTL keeps the toast's polling from
+ * every open dashboard tab cheap. */
+export async function getDueFollowUps(): Promise<DueFollowUpRow[]> {
+  const pool = getPool();
+  const inquiryTable = await resolveInquiryTableName(pool);
+  return cached('api:inquiry:followups-due', 60_000, async () => {
+    const [rows] = await pool.query(
+      `SELECT si.Inquiry_Id, si.Student_Name, c.Course_Name AS CourseName, si.Present_Mobile,
+              s.Status AS StatusLabel,
+              DATE_FORMAT(d.nextdate, '%Y-%m-%d') AS NextFollowUpDate,
+              DATEDIFF(CURDATE(), d.nextdate) AS Days_Overdue
+       FROM awt_inquirydiscussion d
+       JOIN \`${inquiryTable}\` si ON si.Inquiry_Id = d.Inquiry_id
+       LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
+       LEFT JOIN status_master s ON s.Id = CAST(NULLIF(si.OnlineState,'') AS UNSIGNED)
+       WHERE d.deleted = 0
+         AND d.nextdate BETWEEN CURDATE() - INTERVAL ? DAY AND CURDATE()
+         AND NOT EXISTS (
+           SELECT 1 FROM awt_inquirydiscussion d2
+           WHERE d2.Inquiry_id = d.Inquiry_id AND d2.deleted = 0 AND d2.id > d.id
+         )
+         AND (si.IsDelete = 0 OR si.IsDelete IS NULL)
+         AND LOWER(COALESCE(s.Status, '')) NOT REGEXP ?
+       ORDER BY d.nextdate DESC, si.Inquiry_Id DESC
+       LIMIT 300`,
+      [FOLLOW_UP_DUE_WINDOW_DAYS, CLOSED_STATUS_REGEXP]
+    );
+    return (rows as any[]).map((r) => ({ ...r, Days_Overdue: Number(r.Days_Overdue) || 0 })) as DueFollowUpRow[];
+  });
+}
+
 async function ensureSchemaIndexes(
   pool: ReturnType<typeof getPool>,
   indexes: InquirySchemaIndexSpec[]

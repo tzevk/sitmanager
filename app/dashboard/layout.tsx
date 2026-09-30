@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { PermissionProvider, usePermissions } from '@/lib/permissions-context';
 import AppointmentReminderPopup from './components/AppointmentReminderPopup';
+import FollowUpDueToast from './components/FollowUpDueToast';
 
 // ── Static data hoisted outside component to avoid re-creation ──────
 const MENU_ITEMS = [
@@ -1047,6 +1048,9 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
 
       {/* 30-minute counselling appointment reminders (assigned counsellor only) */}
       <AppointmentReminderPopup />
+
+      {/* Due inquiry follow-ups (latest next follow-up date), top of every screen */}
+      <FollowUpDueToast />
 
       {/* ── Reset Password Modal ── */}
       {showResetModal && (

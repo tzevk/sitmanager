@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useState, useCallback, useRef } from 'react';
+import { Fragment, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -155,6 +155,29 @@ function FollowUpPendingDot() {
   );
 }
 
+interface DueFollowUp {
+  Inquiry_Id: number;
+  Student_Name: string;
+  CourseName: string | null;
+  Present_Mobile: string | null;
+  StatusLabel: string | null;
+  NextFollowUpDate: string;
+  Days_Overdue: number;
+}
+
+/** Marks a row whose latest next follow-up date is due (today, or overdue within
+ * the server's window). Uses the same brand-tinted pill as the Meta badge. */
+function FollowUpDueBadge({ daysOverdue }: { daysOverdue: number }) {
+  return (
+    <span
+      title={daysOverdue === 0 ? 'Next follow-up is due today' : `Next follow-up was due ${daysOverdue} day${daysOverdue === 1 ? '' : 's'} ago`}
+      className="inline-flex items-center rounded-full border border-[#2E3093]/30 bg-[#2E3093]/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-[#2E3093] shrink-0 whitespace-nowrap"
+    >
+      {daysOverdue === 0 ? 'Follow-up today' : `Overdue ${daysOverdue}d`}
+    </span>
+  );
+}
+
 const ctrl = 'bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/20 focus:border-[#2E3093] placeholder:text-slate-400 transition-colors';
 
 export default function InquiryPage() {
@@ -213,6 +236,25 @@ export default function InquiryPage() {
       setDismissingReminderId(null);
     }
   };
+
+  // Due follow-ups — driven by each enquiry's latest next follow-up date. Shown as a
+  // pinned tray (like reminders) and as a badge on matching rows; the list's own
+  // ordering, filters and row colours are untouched.
+  const [dueFollowUps, setDueFollowUps] = useState<DueFollowUp[]>([]);
+  const fetchDueFollowUps = useCallback(async () => {
+    try {
+      const res = await fetch('/api/inquiry/follow-ups/due');
+      const data = await res.json();
+      if (res.ok) setDueFollowUps(data.followUps ?? []);
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+  useEffect(() => { fetchDueFollowUps(); }, [fetchDueFollowUps, fetchTrigger]);
+  const dueFollowUpById = useMemo(
+    () => new Map(dueFollowUps.map((f) => [f.Inquiry_Id, f])),
+    [dueFollowUps]
+  );
 
   // Person-grouped view — the default "one row per person" Enquiry Master. The flat,
   // fully-featured table (CSV export, Meta/Pune badges, etc.) stays available as a
@@ -507,6 +549,39 @@ export default function InquiryPage() {
         </div>
       )}
 
+      {dueFollowUps.length > 0 && (
+        <div className="rounded-xl border border-sky-300 bg-sky-100 overflow-hidden">
+          <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-sky-200">
+            <svg className="w-3.5 h-3.5 text-sky-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span className="text-[11px] font-black uppercase tracking-wider text-sky-900">
+              Follow-ups Due ({dueFollowUps.length})
+            </span>
+          </div>
+          <div className="divide-y divide-sky-200 max-h-56 overflow-y-auto">
+            {dueFollowUps.map((f) => (
+              <div key={f.Inquiry_Id} className="flex items-center gap-3 px-3 py-1.5 text-xs hover:bg-sky-200/50 transition-colors">
+                <span className="font-semibold text-slate-800 truncate max-w-[160px]">{formatName(f.Student_Name)}</span>
+                <span className="text-slate-500 truncate max-w-[140px]">{f.CourseName || '—'}</span>
+                <span className="text-slate-400 font-mono">{f.Present_Mobile || '—'}</span>
+                <span className="text-slate-400 whitespace-nowrap">
+                  {f.Days_Overdue === 0 ? 'Due today' : `Due ${formatDate(f.NextFollowUpDate)} · ${f.Days_Overdue}d overdue`}
+                </span>
+                <div className="ml-auto flex items-center gap-2 shrink-0">
+                  <a
+                    href={`/dashboard/inquiry/add?editId=${f.Inquiry_Id}&returnTo=${encodeURIComponent(pathname)}`}
+                    className="text-[10px] font-bold text-[#2E3093] hover:underline"
+                  >
+                    Open
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <FilterBar>
         <input
           type="text" value={search} placeholder="Search name, mobile, email…"
@@ -600,6 +675,10 @@ export default function InquiryPage() {
                               </svg>
                             )}
                             <span className="truncate">{formatName(p.Name)}</span>
+                            {(() => {
+                              const due = dueFollowUpById.get(p.Person_Id == null ? Number(p.UnlinkedInquiryId) : p.LatestInquiryId);
+                              return due ? <FollowUpDueBadge daysOverdue={due.Days_Overdue} /> : null;
+                            })()}
                             {p.EnquiryCount > 1 && (
                               <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[9px] font-bold bg-[#2E3093]/10 text-[#2E3093] shrink-0">
                                 {p.EnquiryCount}
@@ -676,6 +755,9 @@ export default function InquiryPage() {
                                         <td className="py-1 px-2 max-w-[160px]">
                                           <span className="flex items-center gap-1 truncate">
                                             <span className="truncate">{formatName(p.Name)}</span>
+                                            {dueFollowUpById.has(e.Inquiry_Id) && (
+                                              <FollowUpDueBadge daysOverdue={dueFollowUpById.get(e.Inquiry_Id)!.Days_Overdue} />
+                                            )}
                                             {Boolean(e.Is_Re_Enquiry) && (
                                               <span className="px-1 py-0.5 rounded bg-amber-100 text-amber-700 text-[8px] font-bold uppercase tracking-wide shrink-0">Re-Enquiry</span>
                                             )}
@@ -793,6 +875,9 @@ export default function InquiryPage() {
                     </td>
                     <td className="py-1 px-2 font-semibold max-w-[140px]">
                       <span className="truncate block">{formatName(r.Student_Name)}</span>
+                      {dueFollowUpById.has(r.Student_Id) && (
+                        <FollowUpDueBadge daysOverdue={dueFollowUpById.get(r.Student_Id)!.Days_Overdue} />
+                      )}
                     </td>
                     <td className="py-1 px-2 max-w-[200px]">
                       <span className="truncate block text-red-600" title={r.CourseName || undefined}>{r.CourseName || '—'}</span>
