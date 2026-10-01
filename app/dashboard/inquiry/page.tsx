@@ -53,6 +53,17 @@ interface InquiryRow {
 
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
 interface Filters { disciplines: string[]; inquiryTypes: string[]; trainings: string[]; statusOptions: { id: number; label: string }[]; }
+interface CalendlyBooking {
+  id: number;
+  name: string;
+  email: string;
+  mobile: string | null;
+  eventStartTime: string | null;
+  eventType: string | null;
+  receivedAt: string;
+  calledAt: string | null;
+  minutesSinceReceived: number;
+}
 
 function hasLatestFollowUp(r: InquiryRow) { return Boolean(r.Discussion && r.Discussion !== 'NULL' && r.Discussion.trim()); }
 function hasScheduledFollowUp(r: InquiryRow) { return Boolean(r.NextFollowUpDate); }
@@ -272,6 +283,55 @@ export default function InquiryPage() {
   const [overdueExpanded, setOverdueExpanded] = useState(false);
   const [overdueLoadedForTrigger, setOverdueLoadedForTrigger] = useState<number | null>(null);
 
+  // Calendly bookings — polled every 90 seconds
+  const [calendlyBookings, setCalendlyBookings] = useState<CalendlyBooking[]>([]);
+  const [calendlyExpanded, setCalendlyExpanded] = useState(true);
+  const [calendlyMarkingId, setCalendlyMarkingId] = useState<number | null>(null);
+  const [, setCalendlyTick] = useState(0);
+  const calendlyIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchCalendlyBookings = useCallback(async () => {
+    try {
+      const res = await fetch('/api/calendly/bookings?windowHours=2&uncalledOnly=1');
+      if (!res.ok) return;
+      const data = await res.json();
+      setCalendlyBookings(data.bookings ?? []);
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => {
+    fetchCalendlyBookings();
+    calendlyIntervalRef.current = setInterval(() => {
+      fetchCalendlyBookings();
+      setCalendlyTick(t => t + 1); // force re-render for countdown timers
+    }, 90_000);
+    return () => { if (calendlyIntervalRef.current) clearInterval(calendlyIntervalRef.current); };
+  }, [fetchCalendlyBookings]);
+
+  const markCalendlyCalled = async (id: number) => {
+    setCalendlyMarkingId(id);
+    try {
+      await fetch('/api/calendly/webhook', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, called: true }),
+      });
+      setCalendlyBookings((prev: CalendlyBooking[]) => prev.filter((b: CalendlyBooking) => b.id !== id));
+    } catch { /* ignore */ }
+    finally { setCalendlyMarkingId(null); }
+  };
+
+  const dismissCalendlyBooking = async (id: number) => {
+    try {
+      await fetch('/api/calendly/webhook', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, delete: true }),
+      });
+      setCalendlyBookings((prev: CalendlyBooking[]) => prev.filter((b: CalendlyBooking) => b.id !== id));
+    } catch { /* ignore */ }
+  };
+
   const exportCsv = () => {
     if (rows.length === 0) return;
     const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
@@ -361,6 +421,138 @@ export default function InquiryPage() {
           )}
         </>}
       />
+
+      {/* Calendly Bookings — 30-Minute Call Alert */}
+      {calendlyBookings.length > 0 && (
+        <div className="rounded-xl overflow-hidden shadow-lg ring-2 ring-[#0ae448]/60 animate-pulse-ring" style={{ background: 'linear-gradient(135deg, #00a2ff 0%, #0ae448 100%)' }}>
+          <style>{`
+            @keyframes pulse-ring {
+              0%, 100% { box-shadow: 0 0 0 0 rgba(10,228,72,0.5), 0 4px 24px rgba(0,162,255,0.25); }
+              50% { box-shadow: 0 0 0 8px rgba(10,228,72,0), 0 4px 24px rgba(0,162,255,0.4); }
+            }
+            .animate-pulse-ring { animation: pulse-ring 2s ease-in-out infinite; }
+          `}</style>
+
+          <button
+            type="button"
+            onClick={() => setCalendlyExpanded(v => !v)}
+            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:brightness-110 transition-all"
+          >
+            {/* Calendar icon */}
+            <span className="shrink-0 w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+              <svg className="w-4.5 h-4.5 text-white" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </span>
+
+            <span className="flex-1">
+              <span className="text-white font-black text-sm tracking-tight drop-shadow">
+                🔔 Calendly Booking{calendlyBookings.length > 1 ? 's' : ''} — Call Within 30 Minutes!
+              </span>
+              <span className="ml-2 text-xs font-semibold text-white/80">(received in last 2 hours, uncalled)</span>
+            </span>
+
+            <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-white text-[#0070cc] font-black text-sm shadow">
+              {calendlyBookings.length}
+            </span>
+
+            <svg
+              className={`w-4 h-4 text-white/80 transition-transform shrink-0 ${calendlyExpanded ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {calendlyExpanded && (
+            <div className="overflow-x-auto border-t border-white/20 bg-white/95 backdrop-blur-sm">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[10px] uppercase tracking-wider text-[#0070cc] bg-gradient-to-r from-blue-50 to-green-50 border-b border-blue-100">
+                    <th className="text-left py-2 px-3 font-black">Name</th>
+                    <th className="text-left py-2 px-3 font-black">Mobile</th>
+                    <th className="text-left py-2 px-3 font-black">Email</th>
+                    <th className="text-left py-2 px-3 font-black">Event Type</th>
+                    <th className="text-left py-2 px-3 font-black">Received</th>
+                    <th className="text-center py-2 px-3 font-black">⏱ Time Left</th>
+                    <th className="text-center py-2 px-3 font-black">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {calendlyBookings.map(b => {
+                    const minsLeft = Math.max(0, 30 - b.minutesSinceReceived);
+                    const isUrgent = minsLeft <= 10;
+                    const isWarning = minsLeft <= 20;
+                    const urgencyClass = isUrgent
+                      ? 'bg-red-100 text-red-700 font-black animate-pulse'
+                      : isWarning
+                        ? 'bg-amber-100 text-amber-700 font-bold'
+                        : 'bg-emerald-100 text-emerald-700 font-semibold';
+                    const rowBg = isUrgent ? 'bg-red-50/60' : isWarning ? 'bg-amber-50/40' : '';
+
+                    const receivedDate = new Date(b.receivedAt);
+                    const receivedStr = receivedDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+                    return (
+                      <tr key={b.id} className={`border-b border-blue-100/60 hover:bg-blue-50/40 transition-colors ${rowBg}`}>
+                        <td className="py-2 px-3 font-bold text-slate-800">{b.name || '—'}</td>
+                        <td className="py-2 px-3 font-mono text-slate-700 whitespace-nowrap">
+                          {b.mobile
+                            ? <a href={`tel:${b.mobile}`} className="text-blue-600 hover:underline font-bold">{b.mobile}</a>
+                            : <span className="text-slate-400">—</span>}
+                        </td>
+                        <td className="py-2 px-3 text-slate-600 max-w-[180px]">
+                          <span className="truncate block">{b.email || '—'}</span>
+                        </td>
+                        <td className="py-2 px-3 text-slate-600 max-w-[140px]">
+                          <span className="truncate block">{b.eventType || 'Calendly Event'}</span>
+                        </td>
+                        <td className="py-2 px-3 text-slate-500 whitespace-nowrap">{receivedStr}</td>
+                        <td className="py-2 px-3 text-center">
+                          <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] ${urgencyClass}`}>
+                            {minsLeft === 0 ? 'OVERDUE!' : `${minsLeft}m left`}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              title="Mark as Called"
+                              disabled={calendlyMarkingId === b.id}
+                              onClick={() => markCalendlyCalled(b.id)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-gradient-to-r from-blue-500 to-emerald-500 text-white hover:from-blue-600 hover:to-emerald-600 transition-all shadow-sm disabled:opacity-50"
+                            >
+                              {calendlyMarkingId === b.id ? (
+                                <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />
+                              ) : (
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                </svg>
+                              )}
+                              Called
+                            </button>
+                            <button
+                              title="Dismiss"
+                              onClick={() => dismissCalendlyBooking(b.id)}
+                              className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Scheduled Follow-ups Due Today & Overdue */}
       {
