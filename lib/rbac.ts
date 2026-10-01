@@ -169,6 +169,20 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         resource: 'appointment_settings',
         action: 'manage',
       },
+      {
+        id: 'calendly.view',
+        name: 'View Calendly Integration',
+        description: 'See the Calendly connection, webhook status and last booking sync',
+        resource: 'calendly',
+        action: 'view',
+      },
+      {
+        id: 'calendly.manage',
+        name: 'Manage Calendly Integration',
+        description: 'Connect or reconnect the Calendly webhook and run a manual booking sync',
+        resource: 'calendly',
+        action: 'manage',
+      },
     ],
   },
 
@@ -619,7 +633,7 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // Appointments
   '/dashboard/appointments': ['appointment.view'],
   '/dashboard/appointments/calendar': ['appointment.view'],
-  '/dashboard/appointments/settings': ['appointment_settings.manage'],
+  '/dashboard/appointments/settings': ['appointment_settings.manage', 'calendly.view', 'calendly.manage'],
 
   // Monitoring
   '/dashboard/monitoring': ['monitoring.view'],

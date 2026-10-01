@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { calendlyStatus, connectCalendlyWebhook, syncCalendly } from '@/lib/appointments/calendly';
-import { requireSettingsAccess } from '@/lib/appointments/http';
+import { requireCalendlyAccess } from '@/lib/appointments/http';
 
 export const maxDuration = 300;
 
@@ -8,10 +8,10 @@ const callbackUrl = (req: NextRequest) => `${req.nextUrl.origin}/api/webhook/cal
 
 /** GET — connection + webhook + last-sync status for the Scheduling Settings page. */
 export async function GET(req: NextRequest) {
-  const auth = await requireSettingsAccess(req, false);
+  const auth = await requireCalendlyAccess(req, false);
   if (auth instanceof NextResponse) return auth;
   try {
-    return NextResponse.json({ success: true, callbackUrl: callbackUrl(req), ...(await calendlyStatus(callbackUrl(req))) });
+    return NextResponse.json({ success: true, canManage: auth.canManage, callbackUrl: callbackUrl(req), ...(await calendlyStatus(callbackUrl(req))) });
   } catch (err) {
     console.error('[calendly] status', err);
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : 'Unable to reach Calendly' }, { status: 502 });
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
 /** POST { action: 'connect' | 'sync' } */
 export async function POST(req: NextRequest) {
-  const auth = await requireSettingsAccess(req, true);
+  const auth = await requireCalendlyAccess(req, true);
   if (auth instanceof NextResponse) return auth;
   try {
     const body = await req.json().catch(() => ({}));

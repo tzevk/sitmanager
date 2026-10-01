@@ -63,6 +63,24 @@ export async function requireSettingsAccess(req: NextRequest, write: boolean) {
   return auth;
 }
 
+/** Calendly integration (status / connect webhook / manual sync) has its own
+ * permissions so roles can be granted or denied it independently of the other
+ * scheduling settings. Reading needs calendly.view (or .manage). The inbound
+ * webhook and the background sync cron authenticate separately and don't use this. */
+export async function requireCalendlyAccess(req: NextRequest, write: boolean) {
+  const auth = await requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+  const canManage = auth.permissions.includes('calendly.manage');
+  const allowed = canManage || (!write && auth.permissions.includes('calendly.view'));
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Forbidden', message: 'You do not have permission to access the Calendly integration' },
+      { status: 403 }
+    );
+  }
+  return { ...auth, canManage };
+}
+
 export function apptErrorResponse(err: unknown, context: string) {
   if (err instanceof AppointmentError) {
     return NextResponse.json({ success: false, error: err.message, code: err.code }, { status: err.status });

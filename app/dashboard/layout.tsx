@@ -292,7 +292,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Admission Activity > Alumni Association': ['alumni.view'],
   'Admission Activity > Appointments': ['appointment.view', 'appointment.manage'],
   'Admission Activity > Appointment Calendar': ['appointment.view', 'appointment.manage'],
-  'Admission Activity > Scheduling Settings': ['appointment_settings.manage'],
+  'Admission Activity > Scheduling Settings': ['appointment_settings.manage', 'calendly.view', 'calendly.manage'],
   'Monitoring > Weekly Report': ['monitoring.view'],
   'Corporate Training > Corporate Inquiry': ['corporate_inquiry.view'],
   'Corporate Training > Training Execution': ['corporate_inquiry.view'],

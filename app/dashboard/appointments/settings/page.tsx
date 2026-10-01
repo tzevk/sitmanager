@@ -3,6 +3,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePermissions } from '@/lib/permissions-context';
 import { btnGhost, btnPrimary, fmt12, fmtDate, inputCls, labelCls, localNow } from '../_components/shared';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -52,15 +53,21 @@ function Card({ title, subtitle, children, right }: { title: string; subtitle?: 
 }
 
 export default function SchedulingSettingsPage() {
+  const { hasAnyPermission } = usePermissions();
+  // Calendly has its own permissions (calendly.view / calendly.manage), separate
+  // from the rest of the scheduling settings.
+  const canCalendly = hasAnyPermission(['calendly.view', 'calendly.manage']);
   const [tab, setTab] = useState<Tab>('general');
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState('');
+  const [settingsForbidden, setSettingsForbidden] = useState(false);
   const [flash, setFlash] = useState('');
   const [previewKey, setPreviewKey] = useState(0);
 
   const load = useCallback(async () => {
     try {
       const r = await fetch('/api/appointments/settings', { cache: 'no-store' });
+      if (r.status === 403) { setSettingsForbidden(true); return; }
       const d = await r.json();
       if (!r.ok || !d.success) throw new Error(d.error || d.message || 'Unable to load settings');
       setData(d);
@@ -75,6 +82,20 @@ export default function SchedulingSettingsPage() {
     setTimeout(() => setFlash(''), 3000);
   };
 
+  // A role with only Calendly access can't read the other scheduling settings —
+  // show just the Calendly tab instead of an error.
+  if (settingsForbidden) {
+    if (!canCalendly) return <p className="rounded-lg bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">You do not have permission to view scheduling settings.</p>;
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Scheduling Settings</h1>
+          <p className="text-sm text-gray-500">Calendly integration.</p>
+        </div>
+        <div className="space-y-4"><CalendlyTab /></div>
+      </div>
+    );
+  }
   if (error) return <p className="rounded-lg bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">{error}</p>;
   if (!data) return <p className="p-6 text-sm text-gray-400">Loading…</p>;
   const canWrite = Boolean(data.canWrite);
@@ -92,20 +113,20 @@ export default function SchedulingSettingsPage() {
       </div>
 
       <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
-        {([['general', 'General availability'], ['exceptions', 'Holidays, blocks & breaks'], ['counsellors', `Counsellors (${data.counsellors.length})`], ['calendly', 'Calendly']] as [Tab, string][]).map(([t, l]) => (
+        {([['general', 'General availability'], ['exceptions', 'Holidays, blocks & breaks'], ['counsellors', `Counsellors (${data.counsellors.length})`], ...(canCalendly ? [['calendly', 'Calendly']] : [])] as [Tab, string][]).map(([t, l]) => (
           <button key={t} onClick={() => setTab(t)} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${tab === t ? 'bg-[#2E3093] text-white' : 'text-gray-600 hover:bg-gray-50'}`}>{l}</button>
         ))}
       </div>
 
       {flash && <p className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-700">{flash}</p>}
-      {!canWrite && <p className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-2 text-xs text-amber-800">Read-only — you need “Manage Appointment Settings” to change these.</p>}
+      {!canWrite && tab !== 'calendly' && <p className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-2 text-xs text-amber-800">Read-only — you need “Manage Appointment Settings” to change these.</p>}
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4 items-start">
         <div className="space-y-4">
           {tab === 'general' && <GeneralTab settings={data.settings} canWrite={canWrite} onSaved={saved} />}
           {tab === 'exceptions' && <ExceptionsTab exceptions={data.exceptions} breaks={data.breaks} canWrite={canWrite} onSaved={saved} />}
           {tab === 'counsellors' && <CounsellorsTab data={data} canWrite={canWrite} onSaved={saved} />}
-          {tab === 'calendly' && <CalendlyTab canWrite={canWrite} />}
+          {tab === 'calendly' && canCalendly && <CalendlyTab />}
         </div>
         <SlotPreview refreshKey={previewKey} />
       </div>
@@ -428,7 +449,7 @@ function BlocksCard({ counsellor, onClose, onSaved }: { counsellor: Counsellor; 
 
 // ── Calendly integration ──────────────────────────────────────────────
 
-function CalendlyTab({ canWrite }: { canWrite: boolean }) {
+function CalendlyTab() {
   const [status, setStatus] = useState<any>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [busy, setBusy] = useState<'' | 'connect' | 'sync'>('');
@@ -472,6 +493,7 @@ function CalendlyTab({ canWrite }: { canWrite: boolean }) {
   }
 
   const last = status.lastSync;
+  const canWrite = Boolean(status.canManage);
   return (
     <>
       <Card title="Calendly booking sync" subtitle="Calendly bookings are copied into Appointments, assigned to a counsellor, and get tasks + reminders.">
