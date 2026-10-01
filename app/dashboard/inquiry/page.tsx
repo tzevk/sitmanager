@@ -321,17 +321,6 @@ export default function InquiryPage() {
     finally { setCalendlyMarkingId(null); }
   };
 
-  const dismissCalendlyBooking = async (id: number) => {
-    try {
-      await fetch('/api/calendly/webhook', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, delete: true }),
-      });
-      setCalendlyBookings((prev: CalendlyBooking[]) => prev.filter((b: CalendlyBooking) => b.id !== id));
-    } catch { /* ignore */ }
-  };
-
   const exportCsv = () => {
     if (rows.length === 0) return;
     const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
@@ -517,7 +506,7 @@ export default function InquiryPage() {
                           </span>
                         </td>
                         <td className="py-2 px-3">
-                          <div className="flex items-center justify-center gap-1.5">
+                          <div className="flex items-center justify-center">
                             <button
                               title="Mark as Called"
                               disabled={calendlyMarkingId === b.id}
@@ -532,15 +521,6 @@ export default function InquiryPage() {
                                 </svg>
                               )}
                               Called
-                            </button>
-                            <button
-                              title="Dismiss"
-                              onClick={() => dismissCalendlyBooking(b.id)}
-                              className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                              </svg>
                             </button>
                           </div>
                         </td>
