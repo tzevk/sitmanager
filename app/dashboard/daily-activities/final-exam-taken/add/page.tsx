@@ -58,6 +58,7 @@ export default function AddFinalExamTakenPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [examDefs, setExamDefs] = useState<ExamDef[]>([]);
+  const [examDefsReload, setExamDefsReload] = useState(0);
   const [saving, setSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [error, setError] = useState('');
@@ -140,7 +141,7 @@ export default function AddFinalExamTakenPage() {
         setExamDefs(data.exams || []);
       } catch { /* ignore */ }
     })();
-  }, [form.Batch_Id]);
+  }, [form.Batch_Id, examDefsReload]);
 
   /* ── Load students in edit mode when batch is known ── */
   useEffect(() => {
@@ -179,6 +180,35 @@ export default function AddFinalExamTakenPage() {
     // "Not Taken" only exists on re-exams; switched back to the regular exam → Present.
     return edit.status === NOT_TAKEN && !isReExam ? 'Present' : edit.status;
   };
+
+  // Re-exam flag. With no exam entry chosen, saving reuses — or adds to Batch
+  // Master — "Re-Final Exam" (2nd attempt) / "Re-Final Exam - II" (3rd attempt).
+  const isReExamDef = (t: ExamDef | undefined) => !!t && RE_EXAM_PATTERN.test(t.subject);
+  const autoReExamSubject = Number(form.Attempt_No) >= 3 ? 'Re-Final Exam - II' : 'Re-Final Exam';
+  const autoReExamExists = examDefs.some(t => t.subject.trim().toLowerCase() === autoReExamSubject.toLowerCase());
+  const AUTO_SUBJECTS = ['re-final exam', 're-final exam - ii'];
+
+  const toggleReExam = (on: boolean) => setForm(prev => {
+    const current = examDefs.find(t => String(t.id) === prev.Exam_Id);
+    const regular = examDefs.find(t => !isReExamDef(t));
+    return {
+      ...prev,
+      Attempt_No: on ? (Number(prev.Attempt_No) >= 2 ? prev.Attempt_No : '2') : '1',
+      // A regular exam entry can't stand for a re-exam, or the other way round.
+      Exam_Id: on === isReExamDef(current) ? prev.Exam_Id : '',
+      // Re-exam papers are normally marked out of the same total as the regular exam.
+      Max_Marks: on && !prev.Max_Marks ? (regular?.max_marks || '') : prev.Max_Marks,
+      // Test No is numbered automatically for re-exams.
+      Test_No: on ? '' : prev.Test_No,
+    };
+  });
+
+  const changeAttempt = (value: string) => setForm(prev => {
+    const current = examDefs.find(t => String(t.id) === prev.Exam_Id);
+    // The automatic entries belong to one attempt each — switching attempt drops them.
+    const isAutoEntry = !!current && AUTO_SUBJECTS.includes(current.subject.trim().toLowerCase());
+    return { ...prev, Attempt_No: value, Exam_Id: isAutoEntry ? '' : prev.Exam_Id };
+  });
 
   /* ── Auto-fill from selected exam definition ── */
   const handleExamSelect = (examId: string) => {
@@ -238,7 +268,12 @@ export default function AddFinalExamTakenPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save');
 
-      setSuccess(isEdit ? 'Final exam updated successfully!' : 'Final exam created successfully!');
+      const added = data.createdReExamEntry ? ` "${data.createdReExamEntry}" was added to Batch Master.` : '';
+      setSuccess((isEdit ? 'Final exam updated successfully!' : 'Final exam created successfully!') + added);
+      if (isEdit && data.Exam_Id) {
+        setForm(prev => ({ ...prev, Exam_Id: String(data.Exam_Id) }));
+        if (data.createdReExamEntry) setExamDefsReload(n => n + 1);
+      }
       if (!isEdit) {
         setTimeout(() => router.push('/dashboard/daily-activities/final-exam-taken'), 1200);
       }
@@ -336,11 +371,13 @@ export default function AddFinalExamTakenPage() {
 
               {/* Exam Test Name */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Exam Test Name <span className="text-red-400">*</span></label>
-                <select value={form.Exam_Id} onChange={(e) => handleExamSelect(e.target.value)} required disabled={!form.Batch_Id}
+                <label className="text-xs font-semibold text-gray-600">Exam Test Name {!isReExam && <span className="text-red-400">*</span>}</label>
+                <select value={form.Exam_Id} onChange={(e) => handleExamSelect(e.target.value)} required={!isReExam} disabled={!form.Batch_Id}
                   className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white disabled:opacity-50">
-                  <option value="">-Select-</option>
-                  {examDefs.map(t => (
+                  {isReExam
+                    ? <option value="">{autoReExamExists ? `Auto — use “${autoReExamSubject}” from Batch Master` : `Auto — add “${autoReExamSubject}” to Batch Master`}</option>
+                    : <option value="">-Select-</option>}
+                  {(isReExam ? examDefs.filter(isReExamDef) : examDefs).map(t => (
                     <option key={t.id} value={t.id}>
                       {t.subject}{t.max_marks ? ` (${t.max_marks} marks)` : ''}{t.duration ? ` — ${t.duration}` : ''}
                     </option>
@@ -348,22 +385,31 @@ export default function AddFinalExamTakenPage() {
                 </select>
               </div>
 
-              {/* Attempt */}
+              {/* Re-Exam flag */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Attempt <span className="text-red-400">*</span></label>
-                <select value={form.Attempt_No} onChange={set('Attempt_No')} required
-                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white">
-                  {FINAL_EXAM_ATTEMPTS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-                </select>
+                <label className="text-xs font-semibold text-gray-600">Re-Exam</label>
+                <div className="flex h-10 items-center gap-3">
+                  <label className="inline-flex shrink-0 items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+                    <input type="checkbox" checked={isReExam} onChange={(e) => toggleReExam(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 accent-[#2E3093]" />
+                    This is a re-exam
+                  </label>
+                  {isReExam && (
+                    <select value={form.Attempt_No} onChange={(e) => changeAttempt(e.target.value)} aria-label="Re-exam attempt"
+                      className="h-10 min-w-0 flex-1 rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white">
+                      {FINAL_EXAM_ATTEMPTS.filter(a => a.value >= 2).map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+                    </select>
+                  )}
+                </div>
                 {isReExam && (
-                  <p className="text-[11px] text-gray-500">Re-exam: enter marks only for students who sat it; leave the rest as “Not Taken”.</p>
+                  <p className="text-[11px] text-gray-500">Enter marks only for students who sat the re-exam; leave the rest as “Not Taken”.</p>
                 )}
               </div>
 
               {/* Max Marks */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Max Marks</label>
-                <input type="number" value={form.Max_Marks} onChange={set('Max_Marks')} placeholder="Max Marks"
+                <label className="text-xs font-semibold text-gray-600">Max Marks {isReExam && <span className="text-red-400">*</span>}</label>
+                <input type="number" value={form.Max_Marks} onChange={set('Max_Marks')} placeholder="Max Marks" required={isReExam} min={1}
                   className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
               </div>
 
@@ -376,8 +422,8 @@ export default function AddFinalExamTakenPage() {
 
               {/* Test No */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-gray-600">Test No <span className="text-red-400">*</span></label>
-                <input type="number" value={form.Test_No} onChange={set('Test_No')} required placeholder="e.g. 1"
+                <label className="text-xs font-semibold text-gray-600">Test No {!isReExam && <span className="text-red-400">*</span>}</label>
+                <input type="number" value={form.Test_No} onChange={set('Test_No')} required={!isReExam} placeholder={isReExam ? 'Auto' : 'e.g. 1'}
                   className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white" />
               </div>
             </div>

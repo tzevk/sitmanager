@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
-import { ResultSetHeader, RowDataPacket } from 'mysql2';
+import { RowDataPacket } from 'mysql2';
+import { addBatchFinalExam } from '@/lib/final-exam-sitting';
 
 export async function GET(
   request: NextRequest,
@@ -39,15 +40,15 @@ export async function POST(
 
     const pool = getPool();
 
-    const [result] = await pool.query<ResultSetHeader>(
-      `INSERT INTO batch_final_exam (Batch_Id, Subject, Exam_Date, Max_Marks, Duration, IsDelete)
-       VALUES (?, ?, ?, ?, ?, 0)`,
-      [id, subject, exam_date || null, max_marks || null, duration || null]
-    );
+    // batch_final_exam has no AUTO_INCREMENT; the shared helper allocates Exam_Id
+    // (inserting without one left it NULL, so the exam could never be selected).
+    const examId = await addBatchFinalExam(pool, {
+      batchId: Number(id), subject, examDate: exam_date, maxMarks: max_marks, duration,
+    });
 
-    return NextResponse.json({ 
-      success: true, 
-      id: result.insertId 
+    return NextResponse.json({
+      success: true,
+      id: examId
     });
   } catch (error) {
     console.error('Error creating final exam:', error);

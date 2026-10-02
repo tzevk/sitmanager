@@ -2,8 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
-import { recordedAttempt } from '@/lib/final-exam-attempt';
 import { ensureFinalExamAttemptColumn } from '@/lib/final-exam-attempt-schema';
+import { saveFinalExamSitting, SittingError } from '@/lib/final-exam-sitting';
 
 /** Per-student status on a re-exam sitting for a student who didn't sit it —
  * no exam_taken_child row is kept for them. */
@@ -230,27 +230,12 @@ export async function POST(req: NextRequest) {
     const pool = getPool();
     const body = await req.json();
 
-    const { Course_Id, Batch_Id, Exam_Id, Test_No, Max_Marks, Exam_Dt } = body;
-    await ensureFinalExamAttemptColumn(pool);
-
-    if (!Course_Id || !Batch_Id || !Exam_Dt) {
-      return NextResponse.json({ error: 'Course, Batch, and Exam Date are required' }, { status: 400 });
-    }
-
-    const [result] = await pool.query(
-      `INSERT INTO final_exam_master
-       (Course_Id, Batch_Id, Test_Id, Test_No, Attempt_No, Marks, Test_Dt, IsActive, IsDelete)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0)`,
-      [
-        Course_Id, Batch_Id,
-        Exam_Id || null, Test_No || null, recordedAttempt(body.Attempt_No) ?? 1, Max_Marks || null,
-        Exam_Dt,
-      ]
-    );
-    const insertId = (result as any).insertId;
-
-    return NextResponse.json({ success: true, Take_Id: insertId });
+    // Re-exams with no exam entry chosen get their batch master entry created
+    // automatically (lib/final-exam-sitting.ts).
+    const saved = await saveFinalExamSitting(pool, body);
+    return NextResponse.json({ success: true, Take_Id: saved.Take_Id, Exam_Id: saved.Exam_Id, createdReExamEntry: saved.createdReExamEntry });
   } catch (error: any) {
+    if (error instanceof SittingError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error('Final exam taken POST error:', error);
     return NextResponse.json(
       { error: 'Failed to create final exam record', details: error.message },
@@ -271,20 +256,7 @@ export async function PUT(req: NextRequest) {
     if (!Take_Id) {
       return NextResponse.json({ error: 'Take_Id is required' }, { status: 400 });
     }
-    await ensureFinalExamAttemptColumn(pool);
-
-    await pool.query(
-      `UPDATE final_exam_master SET
-        Course_Id = ?, Batch_Id = ?, Test_Id = ?, Test_No = ?, Attempt_No = ?,
-        Marks = ?, Test_Dt = ?
-       WHERE Take_Id = ?`,
-      [
-        body.Course_Id || null, body.Batch_Id || null,
-        body.Exam_Id || null, body.Test_No || null, recordedAttempt(body.Attempt_No) ?? 1,
-        body.Max_Marks || null, body.Exam_Dt || null,
-        Take_Id,
-      ]
-    );
+    const saved = await saveFinalExamSitting(pool, body, parseInt(Take_Id));
 
     /* ── Save per-student marks into exam_taken_child ── */
     if (body.studentMarks && Array.isArray(body.studentMarks) && body.studentMarks.length > 0) {
@@ -316,8 +288,9 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, Exam_Id: saved.Exam_Id, createdReExamEntry: saved.createdReExamEntry });
   } catch (error: any) {
+    if (error instanceof SittingError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error('Final exam taken PUT error:', error);
     return NextResponse.json(
       { error: 'Failed to update final exam record', details: error.message },
