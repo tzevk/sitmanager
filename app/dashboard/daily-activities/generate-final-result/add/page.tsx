@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
+import { renderPerformanceReportHtml } from '@/lib/performance-report-html';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -209,130 +210,12 @@ export default function AddGenerateFinalResultPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load performance report');
 
-      /* eslint-disable @typescript-eslint/no-explicit-any */
-      const header: any = data.header || {};
-      const students: any[] = data.students || [];
-      const criteria: any[] = data.passingCriteria || [];
-      /* eslint-enable @typescript-eslint/no-explicit-any */
-
-      const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
-      const fix2 = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '0.00'; };
-      const pct = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? String(Math.round(n * 100) / 100) : '0'; };
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const reportDate = (() => {
-        const m = String(header.Result_date || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
-        return m ? `${m[3]} - ${months[Number(m[2]) - 1]} - ${m[1]}` : '';
-      })();
-      const gradeLabel = (g: string) => (g === 'NO CERT' ? 'NO CERTIFICATE' : g || 'NA');
-      const range = (c: { grade: string; from: number; to: number | null }) =>
-        c.grade === 'No certificate' ? `${fix2(c.to)} and below` : `${fix2(c.from)}% to ${c.to === 100 ? '100' : fix2(c.to)}%`;
-
-      // One cell per assignment / unit test: number on top, mark (or Absent /
-      // Not Submitted / -) underneath. Absent-type cells are bold so they stand out.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const markGrid = (cells: any[], prefix: string) => cells.length === 0
-        ? '<span class="muted">None recorded</span>'
-        : `<table class="grid"><tr>${cells.map((c) => `<th>${prefix}${esc(c.no)}</th>`).join('')}</tr>
-             <tr>${cells.map((c) => `<td class="${c.status === 'marks' ? '' : 'flag'}">${esc(c.display)}</td>`).join('')}</tr></table>`;
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const card = (s: any) => `
-        <div class="page">
-          <table class="rep">
-            <tr><th colspan="4" class="title">PERFORMANCE REPORT</th></tr>
-            <tr>
-              <td colspan="2">Name : <b>${esc(s.Student_Name)}</b></td>
-              <td colspan="2">ID No : <b>${esc(s.Roll_No || s.Student_Code)}</b></td>
-            </tr>
-            <tr>
-              <td colspan="2">Training Programme: <b>${esc(header.Course_Name)}</b></td>
-              <td>Batch No : <b>${esc(header.Batch_code)}</b></td>
-              <td>Date: <b>${esc(reportDate)}</b></td>
-            </tr>
-            <tr>
-              <td class="lbl" colspan="2"><b>Passing Criteria :</b></td>
-              <td colspan="2" class="nopad">
-                <table class="crit">${criteria.map((c) => `<tr><td>${esc(c.grade)}</td><td>${esc(range(c))}</td></tr>`).join('')}</table>
-              </td>
-            </tr>
-            ${header.Course_Description ? `<tr><td colspan="4" class="desc"><b>Brief Description of Training Programme :</b><br/>${esc(header.Course_Description)}</td></tr>` : ''}
-          </table>
-
-          <table class="rep sec">
-            <tr><td rowspan="5" class="no">01</td><td rowspan="5" class="name">Assignments</td>
-                <td class="k">Total No of Assignments</td><td>${esc(s.assignments.total)}</td></tr>
-            <tr><td class="k">Assignments Submitted</td><td>${esc(s.assignments.submitted)}</td></tr>
-            <tr><td class="k">Marks obtained in Assignments</td><td class="nopad">${markGrid(s.assignments.cells, 'A')}</td></tr>
-            <tr><td class="k">Total Marks obtained in Assignments</td><td>${esc(s.assignments.obtained)} / ${esc(s.assignments.max)}</td></tr>
-            <tr><td class="k"><b>Weightage - ${esc(s.assignments.weightage)}%</b></td><td>${fix2(s.assignments.weighted)}<span class="tag">(A)</span></td></tr>
-
-            <tr><td rowspan="5" class="no">02</td><td rowspan="5" class="name">Unit Tests</td>
-                <td class="k">Total Unit Test/s</td><td>${esc(s.unitTests.total)}</td></tr>
-            <tr><td class="k">Attended Unit Test/s</td><td>${esc(s.unitTests.attended)}</td></tr>
-            <tr><td class="k">Marks obtained in Unit Test/s</td><td class="nopad">${markGrid(s.unitTests.cells, 'T')}</td></tr>
-            <tr><td class="k">Total Marks obtained in Unit Test/s</td><td>${esc(s.unitTests.obtained)} / ${esc(s.unitTests.max)}</td></tr>
-            <tr><td class="k"><b>Weightage - ${esc(s.unitTests.weightage)}%</b></td><td>${fix2(s.unitTests.weighted)}<span class="tag">(B)</span></td></tr>
-
-            <tr><td rowspan="2" class="no">03</td><td rowspan="2" class="name">Final Examination</td>
-                <td class="k">Marks obtained</td>
-                <td class="nopad"><table class="grid">
-                  <tr>${s.finalExam.attempts.map((a: { label: string }) => `<th>${esc(a.label)}</th>`).join('')}</tr>
-                  <tr>${s.finalExam.attempts.map((a: { status: string; display: string }) => `<td class="${a.status === 'marks' ? '' : 'flag'}">${esc(a.display)}</td>`).join('')}</tr>
-                </table></td></tr>
-            <tr><td class="k"><b>Weightage - ${esc(s.finalExam.weightage)}%</b></td><td>${fix2(s.finalExam.weighted)}<span class="tag">(C)</span></td></tr>
-
-            <tr><td rowspan="3" class="no">04</td><td rowspan="3" class="name">Attendance Record</td>
-                <td class="k">Attended Lectures/Total Lectures</td><td>${esc(s.attendance.attended)} / ${esc(s.attendance.total)}</td></tr>
-            <tr><td class="k">Total No of Absent Days</td><td>${esc(s.attendance.absentDays)}</td></tr>
-            <tr><td class="k"><b>Attendance %</b></td><td>${pct(s.attendance.percentage)}</td></tr>
-
-            <tr><td rowspan="${Number(s.discipline) > 0 ? 3 : 2}" class="no">05</td><td rowspan="${Number(s.discipline) > 0 ? 3 : 2}" class="name">Final Result</td>
-                <td class="k"><b>A + B + C${Number(s.discipline) > 0 ? ' − Discipline' : ''}</b></td><td>${fix2(s.totalScore)}</td></tr>
-            ${Number(s.discipline) > 0 ? `<tr><td class="k">Discipline deduction</td><td>${fix2(s.discipline)}</td></tr>` : ''}
-            <tr><td class="k"><b>Grade</b></td><td><b>${esc(gradeLabel(s.grade))}</b></td></tr>
-          </table>
-
-          <table class="rep sign">
-            <tr><td class="space"></td><td class="space"></td><td class="space"></td></tr>
-            <tr><td>${esc(header.faculty2)}</td><td>${esc(header.faculty1)}</td><td>${esc(header.approve_by)}</td></tr>
-            <tr><th>${esc(header.Label2 || 'Training Coordinator')}</th><th>${esc(header.Label1 || 'Faculty')}</th><th>Managing Director</th></tr>
-          </table>
-          <div class="form-no">F/TD/08/02</div>
-        </div>`;
+      const html = renderPerformanceReportHtml(data);
 
       const w = window.open('', '_blank');
       if (!w) { setError('Please allow popups to print the performance report.'); setPrinting(false); return; }
 
-      w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Performance Report - ${esc(header.Batch_code)}</title><style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: Arial, sans-serif; color: #000; background: #fff; font-size: 11.5px; }
-        .page { width: 760px; margin: 0 auto; padding: 36px 40px 20px; page-break-after: always; }
-        table.rep { width: 100%; border-collapse: collapse; }
-        table.rep + table.rep { margin-top: -1px; }
-        .rep th, .rep td { border: 1px solid #000; padding: 4px 6px; vertical-align: middle; text-align: left; }
-        .rep .title { text-align: center; font-size: 13px; padding: 7px; }
-        .rep .lbl { vertical-align: middle; }
-        .rep .nopad { padding: 0; }
-        .rep .desc { font-size: 9.5px; line-height: 1.35; }
-        .crit { width: 100%; border-collapse: collapse; }
-        .crit td { border: none; border-bottom: 1px solid #000; padding: 1.5px 6px; font-size: 10.5px; }
-        .crit tr:last-child td { border-bottom: none; }
-        .sec .no { width: 28px; text-align: center; }
-        .sec .name { width: 120px; }
-        .sec .k { width: 220px; }
-        .tag { float: right; padding-right: 30px; }
-        .grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        .grid th, .grid td { border: none; border-right: 1px solid #999; text-align: center; padding: 2px 1px; font-size: 10px; }
-        .grid th { font-weight: 600; color: #444; border-bottom: 1px solid #999; }
-        .grid th:last-child, .grid td:last-child { border-right: none; }
-        .grid td.flag { font-weight: 700; font-size: 9px; }
-        .muted { color: #666; padding: 4px 6px; display: inline-block; }
-        .sign { margin-top: 18px !important; }
-        .sign td, .sign th { text-align: center; width: 33.33%; }
-        .sign .space { height: 54px; }
-        .form-no { margin-top: 6px; font-weight: 700; font-size: 11px; }
-        @media print { @page { size: A4 portrait; margin: 8mm; } .page { width: 100%; padding: 14px 18px 8px; } }
-      </style></head><body>${students.map(card).join('')}<script>window.onload = () => { setTimeout(() => window.print(), 500); };<\/script></body></html>`);
+      w.document.write(html);
       w.document.close();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to print performance report');
