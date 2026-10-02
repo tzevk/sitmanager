@@ -35,7 +35,8 @@ interface Lecture {
   taken: number | boolean | null;
 }
 
-interface AssignmentRecord {
+interface TestRecord {
+  sourceModule: 'ASSIGNMENT' | 'UNIT_TEST';
   parentId: number;
   assessmentName: string;
   assessmentNo: number | null;
@@ -97,15 +98,17 @@ const LECTURE_TONE: Record<LectureKey, string> = {
   unscheduled: 'bg-[#F4F4F5] text-[#71717A] border-[#E4E4E7]',
 };
 
-/* ── Assignment status (0 is a mark; null is "no mark") ─────────────────── */
+/* ── Test status (0 is a mark; null is "no mark") ───────────────────────── */
 
-function assignmentDisplay(r: AssignmentRecord): { text: string; tone: string } {
+const TEST_TYPE: Record<TestRecord['sourceModule'], string> = { ASSIGNMENT: 'Assignment Test', UNIT_TEST: 'Unit Test' };
+
+function testDisplay(r: TestRecord): { text: string; tone: string } {
   if (r.status === 'EVALUATED' && r.marksObtained !== null) {
     return { text: r.maxMarks !== null ? `${r.marksObtained} / ${r.maxMarks}` : String(r.marksObtained), tone: 'bg-[#2E3093]/[0.06] text-[#2E3093] border-[#2E3093]/20' };
   }
   switch (r.status) {
     case 'RESULT_PENDING': return { text: 'Result pending', tone: 'bg-[#F4F4F5] text-[#52525B] border-[#E4E4E7]' };
-    case 'NOT_EVALUATED': return { text: 'Pending', tone: 'bg-amber-50 text-amber-800 border-amber-200' };
+    case 'NOT_EVALUATED': return { text: 'Not recorded yet', tone: 'bg-[#F4F4F5] text-[#71717A] border-[#E4E4E7]' };
     case 'NOT_SUBMITTED': return { text: 'Not submitted', tone: 'bg-red-50 text-red-700 border-red-200' };
     case 'ABSENT': return { text: 'Absent', tone: 'bg-red-50 text-red-700 border-red-200' };
     default: return { text: '—', tone: 'bg-[#F4F4F5] text-[#71717A] border-[#E4E4E7]' };
@@ -215,7 +218,7 @@ export default function StudentDashboardPage() {
   const router = useRouter();
   const [academics, setAcademics] = useState<Load<AcademicsData>>({ state: 'loading' });
   const [lectures, setLectures] = useState<Load<Lecture[]>>({ state: 'loading' });
-  const [assignments, setAssignments] = useState<Load<AssignmentRecord[]>>({ state: 'loading' });
+  const [tests, setTests] = useState<Load<TestRecord[]>>({ state: 'loading' });
   const [notices, setNotices] = useState<Notice[]>([]);
   const [lectureFilter, setLectureFilter] = useState<LectureFilter>('all');
   const [feesOpen, setFeesOpen] = useState(false);
@@ -240,21 +243,21 @@ export default function StudentDashboardPage() {
       .then((d) => { setToday(localToday()); setLectures({ state: 'ready', data: Array.isArray(d.lectures) ? d.lectures : [] }); })
       .catch(() => setLectures({ state: 'error' }));
   }, [fetchJson]);
-  const loadAssignments = useCallback(() => {
-    setAssignments({ state: 'loading' });
-    fetchJson('/api/student-portal/assignments')
-      .then((d) => setAssignments({ state: 'ready', data: Array.isArray(d.records) ? d.records : [] }))
-      .catch(() => setAssignments({ state: 'error' }));
+  const loadTests = useCallback(() => {
+    setTests({ state: 'loading' });
+    fetchJson('/api/student-portal/tests')
+      .then((d) => setTests({ state: 'ready', data: Array.isArray(d.records) ? d.records : [] }))
+      .catch(() => setTests({ state: 'error' }));
   }, [fetchJson]);
 
   useEffect(() => {
     // Promise callbacks (not the effect body) set state.
     const academicsP = fetchJson('/api/student-portal/academics');
     const lecturesP = fetchJson('/api/student-portal/lecture-plan');
-    const assignmentsP = fetchJson('/api/student-portal/assignments');
+    const testsP = fetchJson('/api/student-portal/tests');
     academicsP.then((d) => { setToday(localToday()); setAcademics({ state: 'ready', data: d }); }).catch(() => setAcademics({ state: 'error' }));
     lecturesP.then((d) => { setToday(localToday()); setLectures({ state: 'ready', data: Array.isArray(d.lectures) ? d.lectures : [] }); }).catch(() => setLectures({ state: 'error' }));
-    assignmentsP.then((d) => setAssignments({ state: 'ready', data: Array.isArray(d.records) ? d.records : [] })).catch(() => setAssignments({ state: 'error' }));
+    testsP.then((d) => setTests({ state: 'ready', data: Array.isArray(d.records) ? d.records : [] })).catch(() => setTests({ state: 'error' }));
     // Notices are secondary — a failure just hides them.
     fetchJson('/api/student-portal/notices').then((d) => setNotices(Array.isArray(d.notices) ? d.notices.slice(0, 2) : [])).catch(() => {});
   }, [fetchJson]);
@@ -284,19 +287,19 @@ export default function StudentDashboardPage() {
     return { upcomingNext, counts, list: filtered.slice(0, 8), total: filtered.length };
   }, [lectures, today, lectureFilter]);
 
-  const assignmentView = useMemo(() => {
-    if (assignments.state !== 'ready') return null;
-    const all = assignments.data;
+  // Assignment tests + unit tests together.
+  const testView = useMemo(() => {
+    if (tests.state !== 'ready') return null;
+    const all = tests.data;
     return {
       total: all.length,
-      pending: all.filter((r) => r.status === 'NOT_EVALUATED').length,
       // Recorded by staff but not published yet. This also covers entries recorded
       // as not submitted, so it must not be labelled "Submitted".
       awaiting: all.filter((r) => r.status === 'RESULT_PENDING').length,
       evaluated: all.filter((r) => r.status === 'EVALUATED' && r.published).length,
-      recent: [...all].sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? ''))).slice(0, 6),
+      recent: [...all].sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? ''))).slice(0, 8),
     };
-  }, [assignments]);
+  }, [tests]);
 
   const a = academics.state === 'ready' ? academics.data : null;
 
@@ -319,7 +322,7 @@ export default function StudentDashboardPage() {
         )}
       </section>
 
-      {/* 2. Attendance · Fees · Assignments */}
+      {/* 2. Attendance · Fees · Tests */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card title="Attendance" accent={a && a.attendance.total_lectures > 0 ? attendanceTone(a.attendance.percentage).color : '#2E3093'} action={<Link href="/student-portal/dashboard/attendance" className={linkCls}>View attendance</Link>}>
           {academics.state === 'loading' && <Skeleton rows={2} />}
@@ -352,29 +355,28 @@ export default function StudentDashboardPage() {
           ))}
         </Card>
 
-        <Card title="Assignments" accent="#2A6BB5" action={<Link href="/student-portal/dashboard/assignments" className={linkCls}>View all</Link>}>
-          {assignments.state === 'loading' && <Skeleton rows={2} />}
-          {assignments.state === 'error' && <ErrorState what="assignments" onRetry={loadAssignments} />}
-          {assignmentView && (assignmentView.total === 0 ? <Empty>No assignments given yet.</Empty> : (
+        <Card title="Tests" accent="#2A6BB5">
+          {tests.state === 'loading' && <Skeleton rows={2} />}
+          {tests.state === 'error' && <ErrorState what="tests" onRetry={loadTests} />}
+          {testView && (testView.total === 0 ? <Empty>No tests given yet.</Empty> : (
             <>
-              <p className="text-3xl font-semibold text-[#2A6BB5]">{assignmentView.total}</p>
-              <p className="text-xs text-[#71717A]">assignments given</p>
-              <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
-                <div><dt className="text-xs text-[#71717A]">Pending</dt><dd className="font-medium">{assignmentView.pending}</dd></div>
-                <div><dt className="text-xs text-[#71717A]">Awaiting result</dt><dd className="font-medium">{assignmentView.awaiting}</dd></div>
-                <div><dt className="text-xs text-[#71717A]">Evaluated</dt><dd className="font-medium">{assignmentView.evaluated}</dd></div>
+              <p className="text-3xl font-semibold text-[#2A6BB5]">{testView.total}</p>
+              <p className="text-xs text-[#71717A]">assignment tests &amp; unit tests</p>
+              <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                <div><dt className="text-xs text-[#71717A]">Awaiting result</dt><dd className="font-medium">{testView.awaiting}</dd></div>
+                <div><dt className="text-xs text-[#71717A]">Evaluated</dt><dd className="font-medium">{testView.evaluated}</dd></div>
               </dl>
             </>
           ))}
         </Card>
       </div>
 
-      {/* 3. Upcoming lectures · 4. All lectures */}
+      {/* 3. Upcoming sessions · 4. All lectures */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Card title="Upcoming Lectures" accent="#2E3093" action={<Link href="/student-portal/dashboard/lecture-plan" className={linkCls}>Schedule</Link>}>
+        <Card title="Upcoming Sessions" accent="#2E3093" action={<Link href="/student-portal/dashboard/lecture-plan" className={linkCls}>Schedule</Link>}>
           {lectures.state === 'loading' && <Skeleton rows={4} />}
           {lectures.state === 'error' && <ErrorState what="lectures" onRetry={loadLectures} />}
-          {lectureView && (lectureView.upcomingNext.length === 0 ? <Empty>No upcoming lectures scheduled.</Empty> : (
+          {lectureView && (lectureView.upcomingNext.length === 0 ? <Empty>No upcoming sessions scheduled.</Empty> : (
             <ul className="divide-y divide-[#F4F4F5]">
               {lectureView.upcomingNext.map(({ l, s }) => (
                 <li key={l.id} className="py-2.5 first:pt-0 last:pb-0">
@@ -434,21 +436,22 @@ export default function StudentDashboardPage() {
         </Card>
       </div>
 
-      {/* 5. Assignments */}
-      <Card title="Assignments" accent="#2A6BB5" action={<Link href="/student-portal/dashboard/assignments" className={linkCls}>View all</Link>}>
-        {assignments.state === 'loading' && <Skeleton rows={4} />}
-        {assignments.state === 'error' && <ErrorState what="assignments" onRetry={loadAssignments} />}
-        {assignmentView && (assignmentView.recent.length === 0 ? <Empty>No assignments given yet.</Empty> : (
+      {/* 5. Tests — assignment tests and unit tests */}
+      <Card title="Tests" accent="#2A6BB5">
+        {tests.state === 'loading' && <Skeleton rows={4} />}
+        {tests.state === 'error' && <ErrorState what="tests" onRetry={loadTests} />}
+        {testView && (testView.recent.length === 0 ? <Empty>No tests given yet.</Empty> : (
           <>
             <ul className="divide-y divide-[#F4F4F5]">
-              {assignmentView.recent.map((r) => {
-                const shown = assignmentDisplay(r);
+              {testView.recent.map((r) => {
+                const shown = testDisplay(r);
                 return (
-                  <li key={r.parentId} className="flex items-start justify-between gap-3 py-2.5 first:pt-0">
+                  <li key={`${r.sourceModule}-${r.parentId}`} className="flex items-start justify-between gap-3 py-2.5 first:pt-0">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-[#18181B]">{r.assessmentName}</p>
                       <p className="mt-0.5 text-xs text-[#71717A]">
-                        {fmtDate(r.date)}{r.maxMarks !== null ? ` · Max. ${r.maxMarks} marks` : ''}
+                        <span className="font-medium text-[#2A6BB5]">{TEST_TYPE[r.sourceModule]}</span>
+                        {' · '}{fmtDate(r.date)}{r.maxMarks !== null ? ` · Max. ${r.maxMarks} marks` : ''}
                         {r.absentOnLectureDate === true && <span className="text-amber-700"> · Absent on lecture date</span>}
                       </p>
                     </div>
@@ -457,7 +460,7 @@ export default function StudentDashboardPage() {
                 );
               })}
             </ul>
-            {assignmentView.awaiting > 0 && assignmentView.evaluated === 0 && (
+            {testView.awaiting > 0 && testView.evaluated === 0 && (
               <p className="mt-3 text-xs text-[#71717A]">Marks will appear here once results are published.</p>
             )}
           </>
