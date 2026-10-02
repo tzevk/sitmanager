@@ -604,16 +604,28 @@ function reminderKey(a: { id: number; appt_date: string; start_time: string; cou
   return `appt:${a.id}:${a.appt_date}T${String(a.start_time).slice(0, 5)}:c${a.counsellor_user_id}:r${REMINDER_LEAD_MINUTES}:${channel}`;
 }
 
+/** Reminder for an UNASSIGNED appointment, sent to each manager — dedupe_key is
+ * globally unique, so the recipient is part of the key. */
+function unassignedReminderKey(a: { id: number; appt_date: string; start_time: string }, userId: number, channel = 'in_app') {
+  return `appt:${a.id}:${a.appt_date}T${String(a.start_time).slice(0, 5)}:cnone:r${REMINDER_LEAD_MINUTES}:${channel}:u${userId}`;
+}
+
 /**
  * Materialise due reminders for a counsellor (idempotent via the UNIQUE
  * dedupe_key) and return the unread ones still relevant. The key embeds the
  * date/time/counsellor, so a reschedule or reassignment re-arms the reminder
  * while stale ones stop matching and disappear.
  *
+ * With `includeUnassigned` (users who can manage all appointments), the same
+ * 30-minute reminder is also raised for appointments that have NO counsellor —
+ * e.g. a Calendly booking nobody could be assigned to — so they can't slip by
+ * unnoticed. Once someone is assigned, that reminder stops matching and the
+ * assigned counsellor gets their own.
+ *
  * Future email/SMS/WhatsApp reminders: insert rows with a different `channel`
  * and let a cron dispatcher send + set delivered_at.
  */
-export async function pollReminders(userId: number) {
+export async function pollReminders(userId: number, opts: { includeUnassigned?: boolean } = {}) {
   await ensureAppointmentTables();
   const pool = getPool();
   const now = nowLocal();
@@ -622,11 +634,13 @@ export async function pollReminders(userId: number) {
 
   const [due] = await pool.query(
     `${SELECT_APPT}
-     WHERE a.counsellor_user_id = ? AND a.status = 'Scheduled' AND a.appt_date = ?
+     WHERE (a.counsellor_user_id = ? ${opts.includeUnassigned ? 'OR a.counsellor_user_id IS NULL' : ''})
+       AND a.status = 'Scheduled' AND a.appt_date = ?
        AND a.start_time >= ? AND a.start_time <= ?`,
     [userId, now.date, nowTime, leadTime]
   );
   for (const a of due as AppointmentRow[]) {
+    const unassigned = a.counsellor_user_id == null;
     const program = a.needs_guidance ? 'Needs guidance' : (a.program_name || '—');
     await pool.query(
       `INSERT IGNORE INTO staff_notifications
@@ -634,17 +648,18 @@ export async function pollReminders(userId: number) {
        VALUES (?, 'in_app', 'appointment_reminder', ?, ?, ?, 'appointment', ?, ?)`,
       [
         userId,
-        'Upcoming Counselling Appointment',
+        unassigned ? 'Unassigned Counselling Appointment' : 'Upcoming Counselling Appointment',
         JSON.stringify({
           applicant: `${a.first_name} ${a.last_name}`,
           time: formatTime12(a.start_time),
           program,
           mode: a.mode === 'online' ? 'Online' : 'Offline',
           code: a.appointment_code,
+          unassigned,
         }),
         `/dashboard/appointments?open=${a.id}`,
         a.id,
-        reminderKey(a),
+        unassigned ? unassignedReminderKey(a, userId) : reminderKey(a),
       ]
     );
   }
@@ -654,10 +669,15 @@ export async function pollReminders(userId: number) {
      FROM staff_notifications n
      JOIN appointments a ON a.id = n.source_id
      WHERE n.user_id = ? AND n.channel = 'in_app' AND n.kind = 'appointment_reminder' AND n.read_at IS NULL
-       AND a.status = 'Scheduled' AND a.counsellor_user_id = n.user_id
-       AND a.appt_date = ? AND a.end_time > ?
-       AND n.dedupe_key = CONCAT('appt:', a.id, ':', a.appt_date, 'T', TIME_FORMAT(a.start_time, '%H:%i'),
-                                 ':c', a.counsellor_user_id, ':r${REMINDER_LEAD_MINUTES}:in_app')
+       AND a.status = 'Scheduled' AND a.appt_date = ? AND a.end_time > ?
+       AND (
+         (a.counsellor_user_id = n.user_id
+          AND n.dedupe_key = CONCAT('appt:', a.id, ':', a.appt_date, 'T', TIME_FORMAT(a.start_time, '%H:%i'),
+                                    ':c', a.counsellor_user_id, ':r${REMINDER_LEAD_MINUTES}:in_app'))
+         ${opts.includeUnassigned ? `OR (a.counsellor_user_id IS NULL
+          AND n.dedupe_key = CONCAT('appt:', a.id, ':', a.appt_date, 'T', TIME_FORMAT(a.start_time, '%H:%i'),
+                                    ':cnone:r${REMINDER_LEAD_MINUTES}:in_app:u', n.user_id))` : ''}
+       )
      ORDER BY a.start_time`,
     [userId, now.date, nowTime]
   );

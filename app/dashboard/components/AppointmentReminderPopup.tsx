@@ -13,6 +13,8 @@ interface Reminder {
   program?: string;
   mode?: string;
   code?: string;
+  /** No counsellor assigned — shown to users who manage all appointments. */
+  unassigned?: boolean;
 }
 
 const POLL_MS = 60 * 1000;
@@ -20,7 +22,9 @@ const POLL_MS = 60 * 1000;
 const IDLE_POLL_MS = 15 * 60 * 1000;
 
 /**
- * "Upcoming Counselling Appointment" popup, 30 minutes before start.
+ * "Upcoming Counselling Appointment" popup, 30 minutes before start. Users who
+ * manage all appointments also get it for appointments with no counsellor
+ * assigned ("Unassigned Counselling Appointment"), so those aren't missed.
  * Mounted once in the dashboard shell. The server de-duplicates reminders
  * (one per appointment + time + counsellor), only returns them for the assigned
  * counsellor while the appointment is still Scheduled, and records
@@ -85,7 +89,11 @@ export default function AppointmentReminderPopup() {
             <button onClick={() => markRead([r.id])} className="rounded p-0.5 text-white/70 hover:bg-white/10 hover:text-white" aria-label="Dismiss">✕</button>
           </div>
           <div className="px-4 py-3 text-sm text-gray-700">
-            <p><span className="font-bold text-gray-900">{r.applicant}</span> has an appointment with you at <span className="font-bold text-[#2E3093]">{r.time}</span>.</p>
+            {r.unassigned ? (
+              <p><span className="font-bold text-gray-900">{r.applicant}</span> has an appointment at <span className="font-bold text-[#2E3093]">{r.time}</span> with <span className="font-bold">no counsellor assigned</span>.</p>
+            ) : (
+              <p><span className="font-bold text-gray-900">{r.applicant}</span> has an appointment with you at <span className="font-bold text-[#2E3093]">{r.time}</span>.</p>
+            )}
             <dl className="mt-2 space-y-0.5 text-xs">
               <div className="flex gap-2"><dt className="w-16 text-gray-400">Program</dt><dd className="font-semibold">{r.program}</dd></div>
               <div className="flex gap-2"><dt className="w-16 text-gray-400">Mode</dt><dd className="font-semibold">{r.mode}</dd></div>
@@ -97,7 +105,7 @@ export default function AppointmentReminderPopup() {
                 onClick={() => { markRead([r.id]); router.push(r.link); }}
                 className="rounded-lg bg-[#2E3093] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#252780]"
               >
-                View Appointment
+                {r.unassigned ? 'Assign Counsellor' : 'View Appointment'}
               </button>
             </div>
           </div>
