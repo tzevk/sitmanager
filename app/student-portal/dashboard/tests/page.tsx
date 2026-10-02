@@ -55,7 +55,7 @@ function display(r: TestRecord, today: string): { text: string; tone: string } {
   switch (r.status) {
     case 'RESULT_PENDING': return { text: 'Result pending', tone: 'bg-[#F4F4F5] text-[#52525B] border-[#E4E4E7]' };
     case 'NOT_EVALUATED':
-      return r.sourceModule === 'FINAL_EXAM' && r.date && r.date.slice(0, 10) > today
+      return r.date && r.date.slice(0, 10) > today
         ? { text: 'Scheduled', tone: 'bg-[#2A6BB5]/[0.08] text-[#2A6BB5] border-[#2A6BB5]/20' }
         : { text: 'Not recorded yet', tone: 'bg-[#F4F4F5] text-[#71717A] border-[#E4E4E7]' };
     case 'NOT_SUBMITTED': return { text: 'Not submitted', tone: 'bg-red-50 text-red-700 border-red-200' };

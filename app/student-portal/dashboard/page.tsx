@@ -107,13 +107,16 @@ const dashboardTests = (records: unknown): TestRecord[] =>
 
 const TEST_TYPE: Record<TestRecord['sourceModule'], string> = { ASSIGNMENT: 'Assignment Test', UNIT_TEST: 'Unit Test' };
 
-function testDisplay(r: TestRecord): { text: string; tone: string } {
+function testDisplay(r: TestRecord, today: string): { text: string; tone: string } {
   if (r.status === 'EVALUATED' && r.marksObtained !== null) {
     return { text: r.maxMarks !== null ? `${r.marksObtained} / ${r.maxMarks}` : String(r.marksObtained), tone: 'bg-[#2E3093]/[0.06] text-[#2E3093] border-[#2E3093]/20' };
   }
   switch (r.status) {
     case 'RESULT_PENDING': return { text: 'Result pending', tone: 'bg-[#F4F4F5] text-[#52525B] border-[#E4E4E7]' };
-    case 'NOT_EVALUATED': return { text: 'Not recorded yet', tone: 'bg-[#F4F4F5] text-[#71717A] border-[#E4E4E7]' };
+    case 'NOT_EVALUATED':
+      return r.date && today && r.date.slice(0, 10) > today
+        ? { text: 'Scheduled', tone: 'bg-[#2A6BB5]/[0.08] text-[#2A6BB5] border-[#2A6BB5]/20' }
+        : { text: 'Not recorded yet', tone: 'bg-[#F4F4F5] text-[#71717A] border-[#E4E4E7]' };
     case 'NOT_SUBMITTED': return { text: 'Not submitted', tone: 'bg-red-50 text-red-700 border-red-200' };
     case 'ABSENT': return { text: 'Absent', tone: 'bg-red-50 text-red-700 border-red-200' };
     default: return { text: '—', tone: 'bg-[#F4F4F5] text-[#71717A] border-[#E4E4E7]' };
@@ -450,7 +453,7 @@ export default function StudentDashboardPage() {
           <>
             <ul className="divide-y divide-[#F4F4F5]">
               {testView.recent.map((r) => {
-                const shown = testDisplay(r);
+                const shown = testDisplay(r, today);
                 return (
                   <li key={`${r.sourceModule}-${r.parentId}`} className="flex items-start justify-between gap-3 py-2.5 first:pt-0">
                     <div className="min-w-0">
@@ -463,11 +466,13 @@ export default function StudentDashboardPage() {
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-2">
                       <Chip text={shown.text} tone={shown.tone} />
-                      <IssueButton tracker={issues} target={{
-                        sourceModule: r.sourceModule, parentId: r.parentId, title: r.assessmentName,
-                        subtitle: `${TEST_TYPE[r.sourceModule]} · ${fmtDate(r.date)}${r.maxMarks !== null ? ` · Max. ${r.maxMarks} marks` : ''}`,
-                        shown: shown.text,
-                      }} />
+                      {shown.text !== 'Scheduled' && (
+                        <IssueButton tracker={issues} target={{
+                          sourceModule: r.sourceModule, parentId: r.parentId, title: r.assessmentName,
+                          subtitle: `${TEST_TYPE[r.sourceModule]} · ${fmtDate(r.date)}${r.maxMarks !== null ? ` · Max. ${r.maxMarks} marks` : ''}`,
+                          shown: shown.text,
+                        }} />
+                      )}
                     </div>
                   </li>
                 );

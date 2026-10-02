@@ -28,8 +28,15 @@ export type SourceModule = 'ASSIGNMENT' | 'UNIT_TEST' | 'FINAL_EXAM' | 'VIVA_MOC
 
 export interface AcademicRecord {
   sourceModule: SourceModule;
-  /** The sheet / sitting the record belongs to (Given_Id, Take_Id, viva id). */
+  /**
+   * Which test this is. ASSIGNMENT / UNIT_TEST: the Batch Master entry
+   * (assignmentstaken.id / awt_unittesttaken.id) — stable before and after
+   * marks are entered; a legacy sheet with no Batch Master entry uses the
+   * negated sheet id. FINAL_EXAM: the sitting (Take_Id). VIVA_MOC: the sheet id.
+   */
   parentId: number;
+  /** The marks sheet staff fill in (Given_Id / Take_Id / viva id); null when no sheet exists yet. */
+  sheetId: number | null;
   /** The student's own row in the child table, or null when nothing is recorded. */
   recordId: number | null;
   studentId: number;
@@ -79,6 +86,38 @@ function newestByParent(rows: any[], parentCol: string): Map<number, any> {
   return map;
 }
 
+/** Batch Master dates are free-text varchar; keep YYYY-MM-DD, drop anything else. */
+function normDate(v: unknown): string | null {
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(String(v ?? '').trim());
+  return m ? m[1] : null;
+}
+
+/**
+ * Pairs each Batch Master definition with its marks sheet. When a definition
+ * has several sheets (re-entered), the newest one holding this student's row
+ * wins, else the newest sheet. Sheets that link to no definition of this batch
+ * (legacy data) are returned on their own so recorded marks are never dropped.
+ */
+function linkSheetsToDefinitions(
+  defs: any[], sheets: any[], sheetIdCol: string, defIdCol: string, mine: Map<number, any>
+): Array<{ def: any | null; sheet: any | null }> {
+  const defIds = new Set(defs.map((d) => Number(d.id)));
+  const byDef = new Map<number, any[]>();
+  const orphans: any[] = [];
+  for (const sh of sheets) {
+    const d = Number(sh[defIdCol]);
+    if (defIds.has(d)) byDef.set(d, [...(byDef.get(d) ?? []), sh]);
+    else orphans.push(sh);
+  }
+  const out: Array<{ def: any | null; sheet: any | null }> = defs.map((def) => {
+    const list = byDef.get(Number(def.id)) ?? []; // ascending by sheet id
+    const withMine = list.filter((sh) => mine.has(Number(sh[sheetIdCol])));
+    return { def, sheet: withMine.at(-1) ?? list.at(-1) ?? null };
+  });
+  for (const sh of orphans) out.push({ def: null, sheet: sh });
+  return out;
+}
+
 export async function getStudentAcademicRecords(
   pool: any,
   ctx: StudentPortalContext,
@@ -103,13 +142,20 @@ export async function getStudentAcademicRecords(
   };
 
   if (want.has('ASSIGNMENT')) {
+    // Source of truth: the batch's Assignment list in Batch Master
+    // (assignmentstaken). Marks come from the "Assignments Taken" sheet linked
+    // to each entry (assignment_taken.Assignment_Id).
+    const [defs] = await pool.query(
+      `SELECT id, assignmentname, subjects, marks, assignmentdate FROM assignmentstaken
+       WHERE batch_id = ? AND (deleted = 0 OR deleted IS NULL)
+       ORDER BY id`,
+      [String(batchId)]
+    );
     const [sheets] = await pool.query(
-      `SELECT at.Given_Id, at.Assign_No, DATE_FORMAT(at.Assign_Dt, '%Y-%m-%d') AS Assign_Dt,
-              COALESCE(am.marks, at.Marks) AS Max_Marks, am.assignmentname, am.subjects
-       FROM assignment_taken at
-       LEFT JOIN assignmentstaken am ON am.id = at.Assignment_Id
-       WHERE at.Batch_Id = ? AND (at.IsDelete = 0 OR at.IsDelete IS NULL)
-       ORDER BY at.Assign_No, at.Given_Id`,
+      `SELECT Given_Id, Assignment_Id, Assign_No, DATE_FORMAT(Assign_Dt, '%Y-%m-%d') AS Assign_Dt, Marks
+       FROM assignment_taken
+       WHERE Batch_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+       ORDER BY Given_Id`,
       [batchId]
     );
     const sheetIds = (sheets as any[]).map((s) => s.Given_Id);
@@ -123,34 +169,43 @@ export async function getStudentAcademicRecords(
       : [];
     const mine = newestByParent(rows as any[], 'Given_Id');
     const absentByDate = await getAbsentAllDayByDate(pool, ctx);
-    for (const s of sheets as any[]) {
-      const date = s.Assign_Dt ?? null;
+    const items = linkSheetsToDefinitions(defs as any[], sheets as any[], 'Given_Id', 'Assignment_Id', mine);
+    for (const { def, sheet } of items) {
+      const date = sheet?.Assign_Dt ?? normDate(def?.assignmentdate);
       push({
         ...base,
-        ...fromRow(mine.get(Number(s.Given_Id)) ?? null, 'ASSIGNMENT'),
+        ...fromRow(sheet ? mine.get(Number(sheet.Given_Id)) ?? null : null, 'ASSIGNMENT'),
         sourceModule: 'ASSIGNMENT',
-        parentId: Number(s.Given_Id),
-        assessmentName: s.assignmentname || `Assignment ${s.Assign_No ?? ''}`.trim(),
-        assessmentNo: num(s.Assign_No),
+        parentId: def ? Number(def.id) : -Number(sheet.Given_Id),
+        sheetId: sheet ? Number(sheet.Given_Id) : null,
+        assessmentName: def?.assignmentname || `Assignment ${sheet?.Assign_No ?? ''}`.trim(),
+        assessmentNo: num(sheet?.Assign_No),
         attempt: null,
         date,
-        maxMarks: num(s.Max_Marks),
+        maxMarks: num(def?.marks) ?? num(sheet?.Marks),
         absentOnLectureDate: date && absentByDate.has(date) ? absentByDate.get(date)! : null,
       });
     }
   }
 
   if (want.has('UNIT_TEST')) {
-    const [sittings] = await pool.query(
-      `SELECT ttm.Take_Id, ttm.Test_No, DATE_FORMAT(ttm.Test_Dt, '%Y-%m-%d') AS Test_Dt,
-              COALESCE(ut.marks, ttm.Marks) AS Max_Marks, ut.subject
-       FROM test_taken_master ttm
-       LEFT JOIN awt_unittesttaken ut ON ut.id = ttm.Test_Id
-       WHERE ttm.Batch_Id = ? AND (ttm.IsDelete = 0 OR ttm.IsDelete IS NULL)
-       ORDER BY ttm.Test_No, ttm.Take_Id`,
+    // Source of truth: the batch's Unit Test list in Batch Master
+    // (awt_unittesttaken). Marks come from the "Unit Test Taken" sheet linked to
+    // each entry (test_taken_master.Test_Id).
+    const [defs] = await pool.query(
+      `SELECT id, subject, marks, utdate FROM awt_unittesttaken
+       WHERE batch_id = ? AND (deleted = 0 OR deleted IS NULL)
+       ORDER BY id`,
+      [String(batchId)]
+    );
+    const [sheets] = await pool.query(
+      `SELECT Take_Id, Test_Id, Test_No, DATE_FORMAT(Test_Dt, '%Y-%m-%d') AS Test_Dt, Marks
+       FROM test_taken_master
+       WHERE Batch_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)
+       ORDER BY Take_Id`,
       [batchId]
     );
-    const takeIds = (sittings as any[]).map((s) => s.Take_Id);
+    const takeIds = (sheets as any[]).map((s) => s.Take_Id);
     const rows = takeIds.length
       ? (await pool.query(
           `SELECT ID, Take_Id, Marks_Given, Status FROM test_taken_child
@@ -160,17 +215,19 @@ export async function getStudentAcademicRecords(
         ))[0]
       : [];
     const mine = newestByParent(rows as any[], 'Take_Id');
-    for (const s of sittings as any[]) {
+    const items = linkSheetsToDefinitions(defs as any[], sheets as any[], 'Take_Id', 'Test_Id', mine);
+    for (const { def, sheet } of items) {
       push({
         ...base,
-        ...fromRow(mine.get(Number(s.Take_Id)) ?? null, 'UNIT_TEST'),
+        ...fromRow(sheet ? mine.get(Number(sheet.Take_Id)) ?? null : null, 'UNIT_TEST'),
         sourceModule: 'UNIT_TEST',
-        parentId: Number(s.Take_Id),
-        assessmentName: s.subject || `Unit Test ${s.Test_No ?? ''}`.trim(),
-        assessmentNo: num(s.Test_No),
+        parentId: def ? Number(def.id) : -Number(sheet.Take_Id),
+        sheetId: sheet ? Number(sheet.Take_Id) : null,
+        assessmentName: def?.subject || `Unit Test ${sheet?.Test_No ?? ''}`.trim(),
+        assessmentNo: num(sheet?.Test_No),
         attempt: null,
-        date: s.Test_Dt ?? null,
-        maxMarks: num(s.Max_Marks),
+        date: sheet?.Test_Dt ?? normDate(def?.utdate),
+        maxMarks: num(def?.marks) ?? num(sheet?.Marks),
       });
     }
   }
@@ -209,6 +266,7 @@ export async function getStudentAcademicRecords(
         ...rec,
         sourceModule: 'FINAL_EXAM',
         parentId: Number(s.Take_Id),
+        sheetId: Number(s.Take_Id),
         assessmentName: s.Subject || (attempt === 1 ? 'Final Exam' : 'Re-Exam'),
         assessmentNo: num(s.Test_No),
         attempt,
@@ -242,6 +300,7 @@ export async function getStudentAcademicRecords(
         ...fromRow(row, 'VIVA_MOC'),
         sourceModule: 'VIVA_MOC',
         parentId: Number(s.id),
+        sheetId: Number(s.id),
         assessmentName: s.vivamocname || 'Viva / MOC',
         assessmentNo: null,
         attempt: null,

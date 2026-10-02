@@ -145,7 +145,8 @@ export async function raiseIssue(
   const description = String(input.description ?? '').trim();
 
   if (!ISSUE_MODULES.includes(mod)) throw new IssueError('Unknown record type.');
-  if (!Number.isInteger(parentId) || parentId <= 0) throw new IssueError('Unknown record.');
+  // Negative = a legacy marks sheet with no Batch Master entry (see academic-records).
+  if (!Number.isInteger(parentId) || parentId === 0) throw new IssueError('Unknown record.');
   if (!(ISSUE_TYPES as readonly string[]).includes(issueType)) throw new IssueError('Please choose an issue type.');
   if (description.length < 10) throw new IssueError('Please describe the issue (at least 10 characters).');
   if (description.length > 2000) throw new IssueError('Description is too long (2000 characters max).');
@@ -266,15 +267,17 @@ export async function listIssuesForStaff(pool: any, f: { status?: string; batchI
   };
 }
 
-/** Where staff correct the original record — the existing CRM marks screens. */
-export function correctionLink(module: IssueModule, parentId: number): string | null {
-  switch (module) {
-    case 'ASSIGNMENT': return `/dashboard/daily-activities/assignments-taken/add?id=${parentId}`;
-    case 'UNIT_TEST': return `/dashboard/daily-activities/unit-test-taken/add?id=${parentId}`;
-    case 'FINAL_EXAM': return `/dashboard/daily-activities/final-exam-taken/add?id=${parentId}`;
-    case 'VIVA_MOC': return `/dashboard/daily-activities/viva-moc-taken/add?id=${parentId}`;
-    case 'ATTENDANCE': return `/dashboard/daily-activities/lecture-taken/add?id=${parentId}`;
-  }
+/** Where staff correct the original record — the existing CRM marks screens.
+ * sheetId null = no marks sheet exists yet, so link to creating one. */
+export function correctionLink(mod: IssueModule, sheetId: number | null): string {
+  const base: Record<IssueModule, string> = {
+    ASSIGNMENT: '/dashboard/daily-activities/assignments-taken/add',
+    UNIT_TEST: '/dashboard/daily-activities/unit-test-taken/add',
+    FINAL_EXAM: '/dashboard/daily-activities/final-exam-taken/add',
+    VIVA_MOC: '/dashboard/daily-activities/viva-moc-taken/add',
+    ATTENDANCE: '/dashboard/daily-activities/lecture-taken/add',
+  };
+  return sheetId ? `${base[mod]}?id=${sheetId}` : base[mod];
 }
 
 export async function getIssueForStaff(pool: any, issueId: number) {
@@ -298,6 +301,7 @@ export async function getIssueForStaff(pool: any, issueId: number) {
   // Current CRM evidence: the record as it stands now (unpublished marks visible
   // to staff), plus attendance on that date — read live, never copied.
   let current: any = null;
+  let sheetId: number | null = issue.source_module === 'ATTENDANCE' ? Number(issue.parent_id) : null;
   const ctx = await getStudentPortalContext(pool, Number(issue.student_id));
   if (ctx && ctx.batchId === Number(issue.batch_id)) {
     if (issue.source_module === 'ATTENDANCE') {
@@ -307,10 +311,10 @@ export async function getIssueForStaff(pool: any, issueId: number) {
     } else {
       const recs = await getStudentAcademicRecords(pool, ctx, [issue.source_module as SourceModule]);
       const r = recs.find((x) => x.parentId === Number(issue.parent_id));
-      if (r) current = { kind: 'MARKS', ...r, statusLabel: statusLabel(r.status) };
+      if (r) { current = { kind: 'MARKS', ...r, statusLabel: statusLabel(r.status) }; sheetId = r.sheetId; }
     }
   }
-  return { issue, events, current, roll_no: ctx?.rollNo ?? null, correctionLink: correctionLink(issue.source_module, Number(issue.parent_id)) };
+  return { issue, events, current, roll_no: ctx?.rollNo ?? null, correctionLink: correctionLink(issue.source_module, sheetId) };
 }
 
 const TRANSITIONS: Record<string, { to: IssueStatus; from: IssueStatus[]; needsMessage: boolean; event: string }> = {
