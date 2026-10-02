@@ -4,6 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
+import { FINAL_EXAM_ATTEMPTS, RE_EXAM_PATTERN, recordedAttempt } from '@/lib/final-exam-attempt';
+
+/** Status for a student who didn't sit a re-exam — no marks row is saved for them. */
+const NOT_TAKEN = 'Not Taken';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -28,12 +32,13 @@ interface FormData {
   Batch_Id: string;
   Exam_Id: string;
   Test_No: string;
+  Attempt_No: string;
   Max_Marks: string;
   Exam_Dt: string;
 }
 
 const emptyForm: FormData = {
-  Course_Id: '', Batch_Id: '', Exam_Id: '', Test_No: '',
+  Course_Id: '', Batch_Id: '', Exam_Id: '', Test_No: '', Attempt_No: '1',
   Max_Marks: '',
   Exam_Dt: new Date().toISOString().slice(0, 10),
 };
@@ -68,9 +73,9 @@ export default function AddFinalExamTakenPage() {
   const setStudentMark = (studentId: number, field: 'marks' | 'status', value: string) =>
     setMarkEdits(prev => {
       const current = prev[studentId];
-      // Absent always means 0 marks — clear/lock the marks field the moment status flips,
+      // Absent / Not Taken always mean no marks — clear/lock the marks field the moment status flips,
       // so a stale or mistyped value from before can never get saved for an absent student.
-      const next = field === 'status' && value === 'Absent'
+      const next = field === 'status' && (value === 'Absent' || value === NOT_TAKEN)
         ? { ...current, status: value, marks: '' }
         : { ...current, [field]: value };
       return { ...prev, [studentId]: next };
@@ -102,6 +107,8 @@ export default function AddFinalExamTakenPage() {
             Batch_Id: String(a.Batch_Id || ''),
             Exam_Id: String(a.Exam_Id || ''),
             Test_No: String(a.Test_No || ''),
+            // Older sittings have no Attempt_No — infer it from the exam name.
+            Attempt_No: String(recordedAttempt(a.Attempt_No) ?? (RE_EXAM_PATTERN.test(String(a.ExamName || '')) ? 2 : 1)),
             Max_Marks: String(a.Max_Marks || ''),
             Exam_Dt: a.Exam_Dt ? a.Exam_Dt.slice(0, 10) : '',
           });
@@ -151,7 +158,7 @@ export default function AddFinalExamTakenPage() {
         for (const s of list) {
           edits[s.Student_Id] = {
             marks: s.marks_obtained != null ? String(s.marks_obtained) : '',
-            status: s.status || 'Present',
+            status: s.status || '',
             child_id: s.child_id ?? null,
             Student_Name: s.Student_Name,
           };
@@ -161,6 +168,17 @@ export default function AddFinalExamTakenPage() {
       setStudentsLoading(false);
     })();
   }, [isEdit, editId, form.Batch_Id]);
+
+  /* ── Re-exam sittings ── */
+  // On a re-exam (attempt 2+), students with no saved marks default to "Not Taken"
+  // so only those who actually sat it need entering; on the regular exam they
+  // default to Present as before.
+  const isReExam = Number(form.Attempt_No) >= 2;
+  const effectiveStatus = (edit: MarkEdit | undefined) => {
+    if (!edit?.status) return isReExam ? NOT_TAKEN : 'Present';
+    // "Not Taken" only exists on re-exams; switched back to the regular exam → Present.
+    return edit.status === NOT_TAKEN && !isReExam ? 'Present' : edit.status;
+  };
 
   /* ── Auto-fill from selected exam definition ── */
   const handleExamSelect = (examId: string) => {
@@ -172,6 +190,8 @@ export default function AddFinalExamTakenPage() {
         Exam_Id: examId,
         Max_Marks: def.max_marks || prev.Max_Marks,
         Exam_Dt: def.exam_date ? def.exam_date.slice(0, 10) : prev.Exam_Dt,
+        // An exam named like a re-exam suggests the second attempt; still changeable.
+        Attempt_No: RE_EXAM_PATTERN.test(def.subject) && prev.Attempt_No === '1' ? '2' : prev.Attempt_No,
       }));
     }
   };
@@ -191,19 +211,23 @@ export default function AddFinalExamTakenPage() {
         Batch_Id: form.Batch_Id ? parseInt(form.Batch_Id) : null,
         Exam_Id: form.Exam_Id ? parseInt(form.Exam_Id) : null,
         Test_No: form.Test_No ? parseInt(form.Test_No) : null,
+        Attempt_No: parseInt(form.Attempt_No) || 1,
         Max_Marks: form.Max_Marks ? parseInt(form.Max_Marks) : null,
         Exam_Dt: form.Exam_Dt || null,
       };
       if (isEdit) payload.Take_Id = parseInt(editId!);
 
       if (isEdit && Object.keys(markEdits).length > 0) {
-        payload.studentMarks = Object.entries(markEdits).map(([studentId, edit]) => ({
-          Student_Id: parseInt(studentId),
-          Student_Name: edit.Student_Name,
-          marks_obtained: edit.status === 'Absent' ? 0 : (edit.marks !== '' ? Number(edit.marks) : null),
-          status: edit.status || null,
-          child_id: edit.child_id,
-        }));
+        payload.studentMarks = Object.entries(markEdits).map(([studentId, edit]) => {
+          const status = effectiveStatus(edit);
+          return {
+            Student_Id: parseInt(studentId),
+            Student_Name: edit.Student_Name,
+            marks_obtained: status === 'Absent' || status === NOT_TAKEN ? 0 : (edit.marks !== '' ? Number(edit.marks) : null),
+            status,
+            child_id: edit.child_id,
+          };
+        });
       }
 
       const res = await fetch('/api/daily-activities/final-exam-taken', {
@@ -324,6 +348,18 @@ export default function AddFinalExamTakenPage() {
                 </select>
               </div>
 
+              {/* Attempt */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-gray-600">Attempt <span className="text-red-400">*</span></label>
+                <select value={form.Attempt_No} onChange={set('Attempt_No')} required
+                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white">
+                  {FINAL_EXAM_ATTEMPTS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+                </select>
+                {isReExam && (
+                  <p className="text-[11px] text-gray-500">Re-exam: enter marks only for students who sat it; leave the rest as “Not Taken”.</p>
+                )}
+              </div>
+
               {/* Max Marks */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold text-gray-600">Max Marks</label>
@@ -385,11 +421,13 @@ export default function AddFinalExamTakenPage() {
                     <tbody className="divide-y divide-gray-100 bg-white">
                       {students.map((s) => {
                         const edit = markEdits[s.Student_Id];
-                        const isAbsent = edit?.status === 'Absent';
+                        const status = effectiveStatus(edit);
+                        const isAbsent = status === 'Absent';
+                        const notTaken = status === NOT_TAKEN;
                         const maxMarks = form.Max_Marks ? parseInt(form.Max_Marks) : null;
-                        const marksVal = isAbsent ? '' : (edit?.marks ?? '');
+                        const marksVal = isAbsent || notTaken ? '' : (edit?.marks ?? '');
                         return (
-                          <tr key={s.Student_Id} className={`transition-colors ${isAbsent ? 'bg-red-50/40' : 'hover:bg-blue-50/20'}`}>
+                          <tr key={s.Student_Id} className={`transition-colors ${isAbsent ? 'bg-red-50/40' : notTaken ? 'bg-gray-50 text-gray-400' : 'hover:bg-blue-50/20'}`}>
                             <td className="py-1.5 px-3 text-gray-400 font-mono">{s.row_num}</td>
                             <td className="py-1.5 px-3 text-gray-500">{s.Roll_No || '—'}</td>
                             <td className="py-1.5 px-3 font-medium text-gray-800">{s.Student_Name}</td>
@@ -399,7 +437,7 @@ export default function AddFinalExamTakenPage() {
                                 min={0}
                                 max={maxMarks ?? undefined}
                                 value={marksVal}
-                                disabled={isAbsent}
+                                disabled={isAbsent || notTaken}
                                 onChange={(e) => setStudentMark(s.Student_Id, 'marks', e.target.value)}
                                 placeholder={isAbsent ? '0' : '—'}
                                 className="w-20 h-7 rounded border border-gray-300 px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] bg-white disabled:opacity-40 disabled:bg-gray-50"
@@ -408,7 +446,7 @@ export default function AddFinalExamTakenPage() {
                             <td className="py-1.5 px-3 text-center text-gray-500">{maxMarks ?? '—'}</td>
                             <td className="py-1.5 px-3 text-center">
                               <select
-                                value={edit?.status ?? 'Present'}
+                                value={status}
                                 onChange={(e) => setStudentMark(s.Student_Id, 'status', e.target.value)}
                                 className={`h-7 rounded border px-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#2A6BB5]/20 focus:border-[#2A6BB5] ${
                                   isAbsent ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-300 bg-white'
@@ -416,6 +454,7 @@ export default function AddFinalExamTakenPage() {
                               >
                                 <option value="Present">Present</option>
                                 <option value="Absent">Absent</option>
+                                {isReExam && <option value={NOT_TAKEN}>{NOT_TAKEN}</option>}
                               </select>
                             </td>
                           </tr>

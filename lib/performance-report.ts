@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { buildFinalExamReport, parseClassBoundaries, RE_EXAM_PATTERN } from '@/lib/final-exam-report';
+import { buildFinalExamReport, parseClassBoundaries } from '@/lib/final-exam-report';
+import { isReExamSitting, MAX_FINAL_EXAM_ATTEMPT, recordedAttempt } from '@/lib/final-exam-attempt';
 
 /**
  * Performance Report (form F/TD/08/02) for one batch.
@@ -24,8 +25,11 @@ import { buildFinalExamReport, parseClassBoundaries, RE_EXAM_PATTERN } from '@/l
  *  Unit tests / final exam — their own Status column is the authority:
  *  'Absent' with 0 marks → "Absent", otherwise the mark.
  *
- *  Final exam attempts — regular papers form the First Attempt; each re-exam
- *  paper (told apart by subject name, see RE_EXAM_PATTERN) is a further attempt.
+ *  Final exam attempts — up to three (regular + two re-exams). A sitting's
+ *  recorded Attempt_No decides its attempt; older re-exam sittings without one
+ *  (recognised by subject name) take the next free attempt in date order. All
+ *  papers of the same attempt are shown together as "obtained / max". Students
+ *  who didn't sit a re-exam have no row for it and show "-".
  *
  * Display only: overriding a cell to "Absent" never changes totals or grade,
  * and stored marks are never modified.
@@ -174,13 +178,28 @@ export async function buildPerformanceReport(pool: any, batchId: number): Promis
     return !!list && list.length > 0 && list.every((a) => a === 'Absent');
   };
 
-  // Same regular / re-exam split as buildFinalExamReport.
-  const regular = finalExams.filter((f: any) => !RE_EXAM_PATTERN.test(String(f.Exam_Subject || '')));
-  const reExams = finalExams.filter((f: any) => RE_EXAM_PATTERN.test(String(f.Exam_Subject || '')));
-  const firstAttemptPapers = regular.length > 0 ? regular : finalExams;
-  const laterAttemptPapers = regular.length > 0
-    ? [...reExams].sort((a: any, b: any) => String(a.Test_Dt || '').localeCompare(String(b.Test_Dt || '')) || a.Take_Id - b.Take_Id)
-    : [];
+  // Group the batch's exam papers by attempt (same regular / re-exam split as
+  // buildFinalExamReport). If nothing is marked regular, everything counts as
+  // the first attempt, as the score calculation does.
+  const isRe = (f: any) => isReExamSitting(f.Attempt_No, f.Exam_Subject);
+  const regular = finalExams.filter((f: any) => !isRe(f));
+  const attemptGroups = new Map<number, any[]>([[1, regular.length > 0 ? regular : finalExams]]);
+  if (regular.length > 0) {
+    const reExams = finalExams.filter(isRe)
+      .sort((a: any, b: any) => String(a.Test_Dt || '').localeCompare(String(b.Test_Dt || '')) || a.Take_Id - b.Take_Id);
+    for (const f of reExams) {
+      const n = recordedAttempt(f.Attempt_No);
+      if (n !== null) attemptGroups.set(n, [...(attemptGroups.get(n) ?? []), f]);
+    }
+    let next = 2;
+    for (const f of reExams.filter((r: any) => recordedAttempt(r.Attempt_No) === null)) {
+      while (attemptGroups.has(next)) next++;
+      attemptGroups.set(next, [f]);
+    }
+  }
+  // Always show every attempt column (First/Second/Third), like the printed form.
+  const attemptNos = [...new Set([...Array.from({ length: MAX_FINAL_EXAM_ATTEMPT }, (_, i) => i + 1), ...attemptGroups.keys()])]
+    .sort((a, b) => a - b);
 
   const utWtg = Number(batch.UnitTestWtg) || 35;
   const asWtg = Number(batch.AssignWtg) || 15;
@@ -208,31 +227,17 @@ export async function buildPerformanceReport(pool: any, batchId: number): Promis
       cellFor(testMap.get(key(t.Take_Id, sid)), Number(t.Max_Marks) || 0, Number(t.Test_No) || i + 1, { zeroAbsentLabel: 'absent' })
     );
 
-    // First attempt = all regular papers together; absent only if absent from every one.
-    const firstRows = firstAttemptPapers.map((f: any) => examMap.get(key(f.Take_Id, sid)));
-    const firstMax = firstAttemptPapers.reduce((sum: number, f: any) => sum + (Number(f.Max_Marks) || 0), 0);
-    const firstRecorded = firstRows.filter(Boolean) as { marks: number; status: string }[];
-    const firstAttempt: PerformanceAttempt = firstRecorded.length === 0
-      ? { label: ATTEMPT_LABELS[0], status: 'not_recorded', obtained: null, max: firstMax, display: '-' }
-      : firstRecorded.every((r) => r.status === 'Absent' && r.marks === 0)
-        ? { label: ATTEMPT_LABELS[0], status: 'absent', obtained: 0, max: firstMax, display: 'Absent' }
-        : (() => {
-            const obtained = firstRecorded.reduce((sum, r) => sum + r.marks, 0);
-            return { label: ATTEMPT_LABELS[0], status: 'marks' as const, obtained, max: firstMax, display: `${obtained} / ${firstMax}` };
-          })();
-
-    const laterAttempts: PerformanceAttempt[] = laterAttemptPapers.map((f: any, i: number) => {
-      const label = ATTEMPT_LABELS[i + 1] ?? `Attempt ${i + 2}`;
-      const max = Number(f.Max_Marks) || 0;
-      const row = examMap.get(key(f.Take_Id, sid));
-      if (!row) return { label, status: 'not_recorded', obtained: null, max, display: '-' };
-      if (row.status === 'Absent' && row.marks === 0) return { label, status: 'absent', obtained: 0, max, display: 'Absent' };
-      return { label, status: 'marks', obtained: row.marks, max, display: `${row.marks} / ${max}` };
+    // Each attempt = all of its papers together; absent only if absent from every one.
+    const attempts: PerformanceAttempt[] = attemptNos.map((n) => {
+      const label = ATTEMPT_LABELS[n - 1] ?? `Attempt ${n}`;
+      const papers = attemptGroups.get(n) ?? [];
+      const max = papers.reduce((sum: number, f: any) => sum + (Number(f.Max_Marks) || 0), 0);
+      const recorded = papers.map((f: any) => examMap.get(key(f.Take_Id, sid))).filter(Boolean) as { marks: number; status: string }[];
+      if (recorded.length === 0) return { label, status: 'not_recorded', obtained: null, max, display: '-' };
+      if (recorded.every((r) => r.status === 'Absent' && r.marks === 0)) return { label, status: 'absent', obtained: 0, max, display: 'Absent' };
+      const obtained = recorded.reduce((sum, r) => sum + r.marks, 0);
+      return { label, status: 'marks', obtained, max, display: `${obtained} / ${max}` };
     });
-    // Always show a Second Attempt column, even when the batch had no re-exam.
-    if (laterAttempts.length === 0) {
-      laterAttempts.push({ label: ATTEMPT_LABELS[1], status: 'not_recorded', obtained: null, max: 0, display: '-' });
-    }
 
     return {
       Student_Id: sid,
@@ -251,7 +256,7 @@ export async function buildPerformanceReport(pool: any, batchId: number): Promis
         cells: testCells,
         obtained: s.utObtained, max: s.utTotalMax, weighted: s.utAvg, weightage: utWtg,
       },
-      finalExam: { attempts: [firstAttempt, ...laterAttempts], weighted: s.feAvg, weightage: feWtg },
+      finalExam: { attempts, weighted: s.feAvg, weightage: feWtg },
       attendance: { attended: s.presentCount, total: s.totalLectures, absentDays: s.absentDays, percentage: s.attendPct },
       discipline: s.disciplineObtained,
       totalScore: s.totalScore,

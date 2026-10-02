@@ -2,6 +2,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
+import { recordedAttempt } from '@/lib/final-exam-attempt';
+import { ensureFinalExamAttemptColumn } from '@/lib/final-exam-attempt-schema';
+
+/** Per-student status on a re-exam sitting for a student who didn't sit it —
+ * no exam_taken_child row is kept for them. */
+const NOT_TAKEN = 'Not Taken';
 
 /* ---------- GET — List final exams OR single OR dropdown options ---------- */
 export async function GET(req: NextRequest) {
@@ -10,13 +16,14 @@ export async function GET(req: NextRequest) {
     if (auth instanceof NextResponse) return auth;
     const pool = getPool();
     const { searchParams } = new URL(req.url);
+    await ensureFinalExamAttemptColumn(pool);
 
     /* --- Single final exam by id --- */
     const singleId = searchParams.get('id');
     if (singleId) {
       const [rows] = await pool.query(
         `SELECT ft.Take_Id, ft.Course_Id, ft.Batch_Id, ft.Test_Id AS Exam_Id,
-                ft.Test_No, ft.Marks AS Max_Marks, ft.Test_Dt AS Exam_Dt,
+                ft.Test_No, ft.Attempt_No, ft.Marks AS Max_Marks, ft.Test_Dt AS Exam_Dt,
                 ft.IsActive, ft.IsDelete,
                 c.Course_Name, b.Batch_code,
                 fe.Subject AS ExamName, fe.Max_Marks AS FE_MaxMarks,
@@ -168,7 +175,7 @@ export async function GET(req: NextRequest) {
     // Rows
     const [rows] = await pool.query(
       `SELECT ft.Take_Id, ft.Course_Id, ft.Batch_Id, ft.Test_Id AS Exam_Id,
-              ft.Test_No, ft.Marks AS Max_Marks, ft.Test_Dt AS Exam_Dt,
+              ft.Test_No, ft.Attempt_No, ft.Marks AS Max_Marks, ft.Test_Dt AS Exam_Dt,
               c.Course_Name, b.Batch_code,
               fe.Subject AS ExamName, fe.Max_Marks AS FE_MaxMarks, fe.Duration AS FE_Duration
        FROM final_exam_master ft
@@ -224,6 +231,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const { Course_Id, Batch_Id, Exam_Id, Test_No, Max_Marks, Exam_Dt } = body;
+    await ensureFinalExamAttemptColumn(pool);
 
     if (!Course_Id || !Batch_Id || !Exam_Dt) {
       return NextResponse.json({ error: 'Course, Batch, and Exam Date are required' }, { status: 400 });
@@ -231,11 +239,11 @@ export async function POST(req: NextRequest) {
 
     const [result] = await pool.query(
       `INSERT INTO final_exam_master
-       (Course_Id, Batch_Id, Test_Id, Test_No, Marks, Test_Dt, IsActive, IsDelete)
-       VALUES (?, ?, ?, ?, ?, ?, 1, 0)`,
+       (Course_Id, Batch_Id, Test_Id, Test_No, Attempt_No, Marks, Test_Dt, IsActive, IsDelete)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0)`,
       [
         Course_Id, Batch_Id,
-        Exam_Id || null, Test_No || null, Max_Marks || null,
+        Exam_Id || null, Test_No || null, recordedAttempt(body.Attempt_No) ?? 1, Max_Marks || null,
         Exam_Dt,
       ]
     );
@@ -263,15 +271,16 @@ export async function PUT(req: NextRequest) {
     if (!Take_Id) {
       return NextResponse.json({ error: 'Take_Id is required' }, { status: 400 });
     }
+    await ensureFinalExamAttemptColumn(pool);
 
     await pool.query(
       `UPDATE final_exam_master SET
-        Course_Id = ?, Batch_Id = ?, Test_Id = ?, Test_No = ?,
+        Course_Id = ?, Batch_Id = ?, Test_Id = ?, Test_No = ?, Attempt_No = ?,
         Marks = ?, Test_Dt = ?
        WHERE Take_Id = ?`,
       [
         body.Course_Id || null, body.Batch_Id || null,
-        body.Exam_Id || null, body.Test_No || null,
+        body.Exam_Id || null, body.Test_No || null, recordedAttempt(body.Attempt_No) ?? 1,
         body.Max_Marks || null, body.Exam_Dt || null,
         Take_Id,
       ]
@@ -281,6 +290,13 @@ export async function PUT(req: NextRequest) {
     if (body.studentMarks && Array.isArray(body.studentMarks) && body.studentMarks.length > 0) {
       for (const sm of body.studentMarks) {
         const marks = sm.marks_obtained != null && sm.marks_obtained !== '' ? String(sm.marks_obtained) : null;
+        // Didn't sit this re-exam: keep no row, so reports show "-" rather than 0.
+        if (sm.status === NOT_TAKEN) {
+          if (sm.child_id) {
+            await pool.query('UPDATE exam_taken_child SET IsDelete = 1 WHERE ID = ? AND Take_Id = ?', [sm.child_id, Take_Id]);
+          }
+          continue;
+        }
         if (sm.child_id) {
           await pool.query(
             `UPDATE exam_taken_child SET Marks_Given = ?, Status = ?, Marks_from = ?, Student_Name = ?

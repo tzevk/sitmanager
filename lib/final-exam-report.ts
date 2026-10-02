@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getAttendanceSummary } from '@/lib/attendance-summary';
+import { isReExamSitting } from '@/lib/final-exam-attempt';
+import { ensureFinalExamAttemptColumn } from '@/lib/final-exam-attempt-schema';
 
 /* ─── Schema discovery ─────────────────────────────────────────────── */
 
@@ -117,10 +119,8 @@ function getClassFromBoundaries(pct: number, boundaries: ClassBoundaries): strin
   return 'NO CERT';
 }
 
-/** batch_final_exam.Subject of a re-attempt paper ("Re-Final Exam", "REEXAM",
- * "Repeat - Final Exam", …). final_exam_master.Test_No is NOT an attempt number —
- * multi-paper finals also use Test_No 2, 3… — so attempts are told apart by name. */
-export const RE_EXAM_PATTERN = /re[\s-]*exam|re[\s-]*final|repeat|rexam/i;
+// Re-exported for existing importers; attempt rules live in lib/final-exam-attempt.ts.
+export { RE_EXAM_PATTERN } from '@/lib/final-exam-attempt';
 
 /**
  * Builds the Final Exam report for one batch — the single source of truth for
@@ -275,12 +275,14 @@ export async function buildFinalExamReport(pool: any, batchId: number, studentId
   // paper was being counted as 400). GROUP BY fem.Take_Id collapses the
   // duplicates back to one row per exam sitting; MAX() is safe here since
   // the duplicate rows always agree.
+  await ensureFinalExamAttemptColumn(pool);
   const [feRows] = await pool.query(
     `SELECT fem.Take_Id,
             IFNULL(fem.Test_No, 0)                    AS Test_No,
             MAX(COALESCE(bfe.max_marks, fem.Marks, 0)) AS Max_Marks,
             fem.Test_Dt,
-            MAX(bfe.Subject)                          AS Exam_Subject
+            MAX(bfe.Subject)                          AS Exam_Subject,
+            MAX(fem.Attempt_No)                       AS Attempt_No
      FROM final_exam_master fem
      LEFT JOIN batch_final_exam bfe ON fem.Test_Id = bfe.Exam_Id
      WHERE fem.Batch_Id = ?
@@ -379,9 +381,9 @@ export async function buildFinalExamReport(pool: any, batchId: number, studentId
   // vivaTotalMax already computed above
 
   /* Re-exam handling: a re-exam is stored in final_exam_master as its OWN
-   * Take_Id/Max_Marks row (batch_final_exam.Subject like "Re-Exam" /
-   * "Re-Final Exam" / "Repeat - Final Exam"), not linked to which paper it
-   * replaces. Most students in a batch never sit the re-exam (their marks
+   * Take_Id/Max_Marks row — Attempt_No 2 or 3, or for older sittings a
+   * batch_final_exam.Subject like "Re-Exam" / "Re-Final Exam" / "Repeat - Final
+   * Exam" — not linked to which paper it replaces. Most students in a batch never sit the re-exam (their marks
    * default to 0), so summing every row's Max_Marks into one denominator
    * wrongly dilutes everyone's percentage — e.g. a batch with 1 regular
    * paper + 2 re-exam rows (all 100 marks) turned a 63/100 score into
@@ -391,8 +393,8 @@ export async function buildFinalExamReport(pool: any, batchId: number, studentId
    * that paper's max marks) only if it's a better percentage — it can
    * only help, never hurt, and never inflates the total.
    */
-  const regularExams = finalExams.filter((f: any) => !RE_EXAM_PATTERN.test(String(f.Exam_Subject || '')));
-  const reExamRows    = finalExams.filter((f: any) =>  RE_EXAM_PATTERN.test(String(f.Exam_Subject || '')));
+  const regularExams = finalExams.filter((f: any) => !isReExamSitting(f.Attempt_No, f.Exam_Subject));
+  const reExamRows    = finalExams.filter((f: any) =>  isReExamSitting(f.Attempt_No, f.Exam_Subject));
   // If every row is tagged "re-exam" (no regular paper on record), there's
   // nothing to replace — treat them all as regular so the total isn't zero.
   const effectiveRegularExams = regularExams.length > 0 ? regularExams : finalExams;
