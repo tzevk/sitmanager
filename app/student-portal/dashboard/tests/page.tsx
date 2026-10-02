@@ -121,7 +121,7 @@ export default function StudentTestsPage() {
         <p className="text-white/40 text-[11px] font-medium uppercase tracking-widest">Tests</p>
         <div className="flex items-end gap-2 mt-1">
           <p className="text-6xl font-black text-white leading-none">{records.length}</p>
-          <p className="text-sm font-semibold text-white/50 mb-1.5">recorded</p>
+          <p className="text-sm font-semibold text-white/50 mb-1.5">{records.length === 1 ? 'test' : 'tests'}</p>
         </div>
         <p className="text-white/50 text-[11px] mt-3">
           Assignment tests, unit tests and final exams. Marks appear once results are published.

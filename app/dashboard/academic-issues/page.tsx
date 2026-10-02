@@ -404,7 +404,7 @@ export default function AcademicIssuesPage() {
                           <div>
                             <p className="text-xs font-semibold text-[#2A6BB5]">{MODULE_LABEL[i.source_module]}{i.attempt && i.attempt >= 2 ? ` · Attempt ${i.attempt}` : ''}</p>
                             <p className="text-sm font-semibold text-slate-800">{i.assessment_name}</p>
-                            <p className="text-xs text-slate-500">{i.record_date ?? 'No date'}{i.max_marks !== null ? ` · Max. ${i.max_marks}` : ''}</p>
+                            <p className="text-xs text-slate-500">{i.record_date ?? 'No date'}{i.max_marks !== null ? ` · Max. ${Number(i.max_marks)}` : ''}</p>
                           </div>
                           {detail.correctionLink && canManage && (
                             <Link href={detail.correctionLink} target="_blank"
