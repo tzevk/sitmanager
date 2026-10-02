@@ -93,10 +93,11 @@ export default function StudentDashboardLayout({ children }: { children: React.R
         href={item.href}
         aria-current={active ? 'page' : undefined}
         onClick={closeOverlays}
-        className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-          active ? 'bg-[#2E3093]/[0.07] text-[#2E3093]' : 'text-[#52525B] hover:bg-[#F4F4F5] hover:text-[#18181B]'
+        className={`relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+          active ? 'bg-[#2E3093] text-white' : 'text-[#52525B] hover:bg-[#2E3093]/[0.06] hover:text-[#2E3093]'
         }`}
       >
+        {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-[#FAE452]" aria-hidden />}
         {item.icon}
         {item.label}
       </Link>
@@ -105,17 +106,22 @@ export default function StudentDashboardLayout({ children }: { children: React.R
 
   const sidebarBody = (
     <>
-      <div className="flex items-center gap-2.5 px-5 h-16 border-b border-[#E4E4E7]">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/sit.png" alt="SIT" className="h-7 w-auto object-contain" />
-        <span className="text-sm font-semibold text-[#18181B]">Student Portal</span>
+      <div className="flex items-center gap-2.5 px-5 h-16 bg-[#2E3093]">
+        <span className="flex h-9 w-9 items-center justify-center rounded-md bg-white">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/sit.png" alt="SIT" className="h-6 w-auto object-contain" />
+        </span>
+        <div className="leading-tight">
+          <p className="text-sm font-semibold text-white">Student Portal</p>
+          <p className="text-[11px] text-[#FAE452]">Suvidya Institute of Technology</p>
+        </div>
       </div>
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5" aria-label="Student portal">
         {SIDEBAR_ITEMS.map(navLink)}
       </nav>
       <div className="border-t border-[#E4E4E7] p-3">
         <div className="flex items-center gap-3 px-2 py-2">
-          <div className="w-8 h-8 rounded-full bg-[#2E3093] text-white text-[11px] font-semibold flex items-center justify-center shrink-0">{initials}</div>
+          <div className="w-8 h-8 rounded-full bg-[#FAE452] text-[#2E3093] text-[11px] font-bold flex items-center justify-center shrink-0">{initials}</div>
           <p className="min-w-0 flex-1 truncate text-sm font-medium text-[#18181B]">{studentName || 'Student'}</p>
         </div>
         <button onClick={handleLogout}
@@ -145,21 +151,23 @@ export default function StudentDashboardLayout({ children }: { children: React.R
 
       <div className="lg:pl-60 min-w-0">
         {/* Top bar (tablet + mobile) */}
-        <header className="lg:hidden sticky top-0 z-20 bg-white border-b border-[#E4E4E7]">
+        <header className="lg:hidden sticky top-0 z-20 bg-[#2E3093] text-white">
           <div className="flex items-center gap-3 px-4 h-14">
             <button
               onClick={() => setDrawerOpen(true)}
-              className="hidden md:inline-flex -ml-1 p-2 rounded-lg text-[#52525B] hover:bg-[#F4F4F5]"
+              className="hidden md:inline-flex -ml-1 p-2 rounded-lg text-white/90 hover:bg-white/10"
               aria-label="Open navigation"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/sit.png" alt="SIT" className="h-6 w-auto object-contain" />
-            <p className="flex-1 truncate text-sm font-semibold text-[#18181B]">{pageTitle}</p>
-            <div className="w-8 h-8 rounded-full bg-[#2E3093] text-white text-[11px] font-semibold flex items-center justify-center" aria-hidden>
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/sit.png" alt="SIT" className="h-5 w-auto object-contain" />
+            </span>
+            <p className="flex-1 truncate text-sm font-semibold text-white">{pageTitle}</p>
+            <div className="w-8 h-8 rounded-full bg-[#FAE452] text-[#2E3093] text-[11px] font-bold flex items-center justify-center" aria-hidden>
               {initials}
             </div>
           </div>
@@ -181,7 +189,8 @@ export default function StudentDashboardLayout({ children }: { children: React.R
             const active = isActive(item.href);
             return (
               <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined}
-                className={`flex flex-col items-center justify-center gap-1 h-14 text-[11px] font-medium ${active ? 'text-[#2E3093]' : 'text-[#71717A]'}`}>
+                className={`relative flex flex-col items-center justify-center gap-1 h-14 text-[11px] font-medium ${active ? 'text-[#2E3093] font-semibold' : 'text-[#71717A]'}`}>
+                {active && <span className="absolute top-0 inset-x-5 h-[3px] rounded-b bg-[#FAE452]" aria-hidden />}
                 {item.icon}
                 {item.label}
               </Link>

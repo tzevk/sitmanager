@@ -112,14 +112,22 @@ function assignmentDisplay(r: AssignmentRecord): { text: string; tone: string } 
   }
 }
 
+/* Attendance bands — same thresholds as the Attendance page (75% / 60%). */
+function attendanceTone(pct: number) {
+  if (pct >= 75) return { color: '#047857', label: 'On track' };
+  if (pct >= 60) return { color: '#B45309', label: 'Needs attention' };
+  return { color: '#B91C1C', label: 'Below minimum' };
+}
+
 /* ── Small building blocks ──────────────────────────────────────────────── */
 
-function Card({ title, action, children, className = '' }: { title?: string; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
+function Card({ title, action, children, className = '', accent }: { title?: string; action?: React.ReactNode; children: React.ReactNode; className?: string; accent?: string }) {
   return (
-    <section className={`min-w-0 rounded-xl border border-[#E4E4E7] bg-white ${className}`}>
+    <section className={`min-w-0 overflow-hidden rounded-xl border border-[#E4E4E7] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${className}`}>
+      {accent && <div className="h-[3px]" style={{ background: accent }} aria-hidden />}
       {(title || action) && (
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 pt-4 sm:px-5">
-          {title && <h2 className="text-sm font-semibold text-[#18181B]">{title}</h2>}
+          {title && <h2 className="text-sm font-semibold text-[#2E3093]">{title}</h2>}
           {action}
         </div>
       )}
@@ -296,16 +304,16 @@ export default function StudentDashboardPage() {
     <div className="mx-auto w-full max-w-6xl space-y-4 px-4 py-5 md:px-6 md:py-6 lg:px-8">
 
       {/* 1. Student details */}
-      <section className="rounded-xl border border-[#E4E4E7] bg-white px-4 py-4 sm:px-5" aria-label="Student details">
-        {academics.state === 'loading' && <Skeleton rows={2} />}
-        {academics.state === 'error' && <ErrorState what="your details" onRetry={loadAcademics} />}
+      <section className="rounded-xl bg-[#2E3093] px-4 py-4 text-white sm:px-5" aria-label="Student details">
+        {academics.state === 'loading' && <div className="opacity-40"><Skeleton rows={2} /></div>}
+        {academics.state === 'error' && <div className="rounded-lg bg-white p-3"><ErrorState what="your details" onRetry={loadAcademics} /></div>}
         {a && (
           <>
-            <h1 className="text-lg font-semibold text-[#18181B] sm:text-xl">{a.student.student_name || 'Student'}</h1>
+            <h1 className="text-lg font-semibold sm:text-xl">{a.student.student_name || 'Student'}</h1>
             <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 text-sm md:grid-cols-4">
-              <div className="min-w-0"><dt className="text-xs text-[#71717A]">Roll Number</dt><dd className="truncate font-medium text-[#18181B]">{a.student.roll_no || '—'}</dd></div>
-              <div className="min-w-0"><dt className="text-xs text-[#71717A]">Batch</dt><dd className="truncate font-medium text-[#18181B]">{a.student.batch_code && a.student.batch_code !== 'N/A' ? a.student.batch_code : '—'}</dd></div>
-              <div className="col-span-2 min-w-0"><dt className="text-xs text-[#71717A]">Training Programme</dt><dd className="font-medium text-[#18181B]">{a.student.course_name && a.student.course_name !== 'N/A' ? a.student.course_name : '—'}</dd></div>
+              <div className="min-w-0"><dt className="text-xs text-white/60">Roll Number</dt><dd className="truncate font-semibold text-[#FAE452]">{a.student.roll_no || '—'}</dd></div>
+              <div className="min-w-0"><dt className="text-xs text-white/60">Batch</dt><dd className="truncate font-medium">{a.student.batch_code && a.student.batch_code !== 'N/A' ? a.student.batch_code : '—'}</dd></div>
+              <div className="col-span-2 min-w-0"><dt className="text-xs text-white/60">Training Programme</dt><dd className="font-medium">{a.student.course_name && a.student.course_name !== 'N/A' ? a.student.course_name : '—'}</dd></div>
             </dl>
           </>
         )}
@@ -313,21 +321,24 @@ export default function StudentDashboardPage() {
 
       {/* 2. Attendance · Fees · Assignments */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card title="Attendance" action={<Link href="/student-portal/dashboard/attendance" className={linkCls}>View attendance</Link>}>
+        <Card title="Attendance" accent={a && a.attendance.total_lectures > 0 ? attendanceTone(a.attendance.percentage).color : '#2E3093'} action={<Link href="/student-portal/dashboard/attendance" className={linkCls}>View attendance</Link>}>
           {academics.state === 'loading' && <Skeleton rows={2} />}
           {academics.state === 'error' && <ErrorState what="attendance" onRetry={loadAcademics} />}
           {a && (a.attendance.total_lectures === 0 ? <Empty>No lectures recorded yet.</Empty> : (
             <>
-              <p className="text-3xl font-semibold text-[#18181B]">{a.attendance.percentage}%</p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-3xl font-semibold" style={{ color: attendanceTone(a.attendance.percentage).color }}>{a.attendance.percentage}%</p>
+                <span className="text-xs font-medium" style={{ color: attendanceTone(a.attendance.percentage).color }}>{attendanceTone(a.attendance.percentage).label}</span>
+              </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#F4F4F5]" role="progressbar" aria-valuenow={a.attendance.percentage} aria-valuemin={0} aria-valuemax={100} aria-label="Attendance">
-                <div className="h-full rounded-full bg-[#2E3093]" style={{ width: `${Math.min(100, a.attendance.percentage)}%` }} />
+                <div className="h-full rounded-full" style={{ width: `${Math.min(100, a.attendance.percentage)}%`, background: attendanceTone(a.attendance.percentage).color }} />
               </div>
               <p className="mt-2 text-sm text-[#71717A]">{a.attendance.attended} of {a.attendance.total_lectures} lectures attended</p>
             </>
           ))}
         </Card>
 
-        <Card title="Fees" action={a ? <button onClick={() => setFeesOpen(true)} className={linkCls}>View fees</button> : undefined}>
+        <Card title="Fees" accent={a ? (a.fees.pending > 0 ? '#B91C1C' : '#047857') : '#2E3093'} action={a ? <button onClick={() => setFeesOpen(true)} className={linkCls}>View fees</button> : undefined}>
           {academics.state === 'loading' && <Skeleton rows={2} />}
           {academics.state === 'error' && <ErrorState what="fees" onRetry={loadAcademics} />}
           {a && (a.fees.total === 0 && a.fees.paid === 0 ? <Empty>No fee records yet.</Empty> : (
@@ -341,12 +352,12 @@ export default function StudentDashboardPage() {
           ))}
         </Card>
 
-        <Card title="Assignments" action={<Link href="/student-portal/dashboard/assignments" className={linkCls}>View all</Link>}>
+        <Card title="Assignments" accent="#2A6BB5" action={<Link href="/student-portal/dashboard/assignments" className={linkCls}>View all</Link>}>
           {assignments.state === 'loading' && <Skeleton rows={2} />}
           {assignments.state === 'error' && <ErrorState what="assignments" onRetry={loadAssignments} />}
           {assignmentView && (assignmentView.total === 0 ? <Empty>No assignments given yet.</Empty> : (
             <>
-              <p className="text-3xl font-semibold text-[#18181B]">{assignmentView.total}</p>
+              <p className="text-3xl font-semibold text-[#2A6BB5]">{assignmentView.total}</p>
               <p className="text-xs text-[#71717A]">assignments given</p>
               <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
                 <div><dt className="text-xs text-[#71717A]">Pending</dt><dd className="font-medium">{assignmentView.pending}</dd></div>
@@ -360,7 +371,7 @@ export default function StudentDashboardPage() {
 
       {/* 3. Upcoming lectures · 4. All lectures */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Card title="Upcoming Lectures" action={<Link href="/student-portal/dashboard/lecture-plan" className={linkCls}>Schedule</Link>}>
+        <Card title="Upcoming Lectures" accent="#2E3093" action={<Link href="/student-portal/dashboard/lecture-plan" className={linkCls}>Schedule</Link>}>
           {lectures.state === 'loading' && <Skeleton rows={4} />}
           {lectures.state === 'error' && <ErrorState what="lectures" onRetry={loadLectures} />}
           {lectureView && (lectureView.upcomingNext.length === 0 ? <Empty>No upcoming lectures scheduled.</Empty> : (
@@ -387,7 +398,7 @@ export default function StudentDashboardPage() {
           ))}
         </Card>
 
-        <Card title="All Lectures" action={<Link href="/student-portal/dashboard/lecture-plan" className={linkCls}>View all</Link>}>
+        <Card title="All Lectures" accent="#2E3093" action={<Link href="/student-portal/dashboard/lecture-plan" className={linkCls}>View all</Link>}>
           {lectures.state === 'loading' && <Skeleton rows={4} />}
           {lectures.state === 'error' && <ErrorState what="lectures" onRetry={loadLectures} />}
           {lectureView && (
@@ -424,7 +435,7 @@ export default function StudentDashboardPage() {
       </div>
 
       {/* 5. Assignments */}
-      <Card title="Assignments" action={<Link href="/student-portal/dashboard/assignments" className={linkCls}>View all</Link>}>
+      <Card title="Assignments" accent="#2A6BB5" action={<Link href="/student-portal/dashboard/assignments" className={linkCls}>View all</Link>}>
         {assignments.state === 'loading' && <Skeleton rows={4} />}
         {assignments.state === 'error' && <ErrorState what="assignments" onRetry={loadAssignments} />}
         {assignmentView && (assignmentView.recent.length === 0 ? <Empty>No assignments given yet.</Empty> : (
