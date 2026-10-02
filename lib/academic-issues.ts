@@ -110,8 +110,8 @@ const openKey = (studentId: number, module: IssueModule, parentId: number) => `$
 
 /** What the student currently sees for the record, resolved on the server from
  * CRM data — never trusted from the browser. Null when the record isn't theirs. */
-async function resolveStudentRecord(pool: any, ctx: StudentPortalContext, module: IssueModule, parentId: number) {
-  if (module === 'ATTENDANCE') {
+async function resolveStudentRecord(pool: any, ctx: StudentPortalContext, mod: IssueModule, parentId: number) {
+  if (mod === 'ATTENDANCE') {
     const att = await getAcademicAttendance(pool, ctx);
     const lecture = att.lectures.find((l) => l.Take_Id === parentId);
     if (!lecture) return null;
@@ -124,7 +124,7 @@ async function resolveStudentRecord(pool: any, ctx: StudentPortalContext, module
       shown: lecture.present ? (lecture.Late ? 'Present (late)' : 'Present') : 'Absent',
     };
   }
-  const records = await getStudentAcademicRecords(pool, ctx, [module]);
+  const records = await getStudentAcademicRecords(pool, ctx, [mod]);
   const rec = records.find((r) => r.parentId === parentId);
   if (!rec) return null;
   const view = toStudentView(rec);
@@ -139,12 +139,12 @@ export async function raiseIssue(
   studentId: number,
   input: { sourceModule: unknown; parentId: unknown; issueType: unknown; description: unknown }
 ) {
-  const module = String(input.sourceModule ?? '') as IssueModule;
+  const mod = String(input.sourceModule ?? '') as IssueModule;
   const parentId = Number(input.parentId);
   const issueType = String(input.issueType ?? '').trim();
   const description = String(input.description ?? '').trim();
 
-  if (!ISSUE_MODULES.includes(module)) throw new IssueError('Unknown record type.');
+  if (!ISSUE_MODULES.includes(mod)) throw new IssueError('Unknown record type.');
   if (!Number.isInteger(parentId) || parentId <= 0) throw new IssueError('Unknown record.');
   if (!(ISSUE_TYPES as readonly string[]).includes(issueType)) throw new IssueError('Please choose an issue type.');
   if (description.length < 10) throw new IssueError('Please describe the issue (at least 10 characters).');
@@ -153,17 +153,17 @@ export async function raiseIssue(
   await ensureIssueTables(pool);
   const ctx = await getStudentPortalContext(pool, studentId);
   if (!ctx) throw new IssueError('Student not found.', 404);
-  const record = await resolveStudentRecord(pool, ctx, module, parentId);
+  const record = await resolveStudentRecord(pool, ctx, mod, parentId);
   if (!record) throw new IssueError('This record could not be found on your account.', 404);
 
-  const key = openKey(studentId, module, parentId);
+  const key = openKey(studentId, mod, parentId);
   try {
     const [ins] = await pool.query(
       `INSERT INTO academic_issue
          (student_id, batch_id, source_module, parent_id, record_id, attempt, assessment_name, record_date,
           max_marks, shown_to_student, issue_type, description, status, open_key)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?)`,
-      [studentId, ctx.batchId, module, parentId, record.recordId, record.attempt, record.name.slice(0, 255), record.date,
+      [studentId, ctx.batchId, mod, parentId, record.recordId, record.attempt, record.name.slice(0, 255), record.date,
         record.maxMarks, record.shown, issueType, description, key]
     );
     const issueId = Number((ins as any).insertId);
