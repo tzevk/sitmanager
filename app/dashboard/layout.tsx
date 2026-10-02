@@ -86,6 +86,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Daily Activities > Generate Final Result': '/dashboard/daily-activities/generate-final-result',
   'Daily Activities > Trainer Working Hours': '/dashboard/daily-activities/faculty-working',
   'Daily Activities > Feedback': '/dashboard/daily-activities/feedback',
+  'Daily Activities > Academic Issues': '/dashboard/academic-issues',
   'Placement > Consultancy Master': '/dashboard/masters/consultancy',
   'Placement > CV Shortlisted': '/dashboard/cv-shortlisted',
   'Placement > Consultancy Report': '/dashboard/reports/consultancy',
@@ -165,6 +166,7 @@ const SUB_MENUS: Record<string, string[]> = {
     'Generate Final Result',
     'Trainer Working Hours',
     'Feedback',
+    'Academic Issues',
     'Site Visit',
   ],
   'Reports': [
@@ -323,6 +325,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Daily Activities > Generate Final Result': ['final_result.view'],
   'Daily Activities > Trainer Working Hours': ['faculty_working_hours.view'],
   'Daily Activities > Feedback': ['feedback1.view'],
+  'Daily Activities > Academic Issues': ['academic_issue.view'],
   'Placement > Consultancy Master': ['consultancy.view'],
   'Placement > Interview Master': ['interview_master.view'],
   'Placement > CV Shortlisted': ['cv_shortlisted.view'],
