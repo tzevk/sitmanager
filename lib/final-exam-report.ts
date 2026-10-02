@@ -48,7 +48,7 @@ interface ClassBoundaries {
   [key: string]: number;
 }
 
-function parseClassBoundaries(passingCriteria: string | null): ClassBoundaries {
+export function parseClassBoundaries(passingCriteria: string | null): ClassBoundaries {
   const defaults: ClassBoundaries = {
     'A+': 90,
     'A': 80,
@@ -116,6 +116,11 @@ function getClassFromBoundaries(pct: number, boundaries: ClassBoundaries): strin
 
   return 'NO CERT';
 }
+
+/** batch_final_exam.Subject of a re-attempt paper ("Re-Final Exam", "REEXAM",
+ * "Repeat - Final Exam", …). final_exam_master.Test_No is NOT an attempt number —
+ * multi-paper finals also use Test_No 2, 3… — so attempts are told apart by name. */
+export const RE_EXAM_PATTERN = /re[\s-]*exam|re[\s-]*final|repeat|rexam/i;
 
 /**
  * Builds the Final Exam report for one batch — the single source of truth for
@@ -386,7 +391,6 @@ export async function buildFinalExamReport(pool: any, batchId: number, studentId
    * that paper's max marks) only if it's a better percentage — it can
    * only help, never hurt, and never inflates the total.
    */
-  const RE_EXAM_PATTERN = /re[\s-]*exam|re[\s-]*final|repeat|rexam/i;
   const regularExams = finalExams.filter((f: any) => !RE_EXAM_PATTERN.test(String(f.Exam_Subject || '')));
   const reExamRows    = finalExams.filter((f: any) =>  RE_EXAM_PATTERN.test(String(f.Exam_Subject || '')));
   // If every row is tagged "re-exam" (no regular paper on record), there's

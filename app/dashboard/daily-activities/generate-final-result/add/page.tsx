@@ -194,139 +194,148 @@ export default function AddGenerateFinalResultPage() {
     alert(`Action: ${action}\n\nThis will process "${action}" for the selected batch. Feature coming soon.`);
   };
 
-  /* ── Print Report Card ── */
-  const fmtPct = (v: unknown) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n.toFixed(2) : '0.00';
-  };
-
+  /* ── Print Performance Report (F/TD/08/02) ── */
+  // Marks, attendance and grades are calculated live (lib/performance-report.ts —
+  // same numbers as the Final Exam report); this only lays them out like the
+  // printed Performance Report. Every value is HTML-escaped before printing.
   const handlePrintReportCard = async () => {
     if (!resultId) {
-      setError('Please Generate the final result first, then Print Report Card.');
+      setError('Please Generate the final result first, then Print Performance Report.');
       return;
     }
     setError(''); setPrinting(true);
     try {
-      const res = await fetch(`/api/daily-activities/generate-final-result/report-card?genId=${resultId}`);
+      const res = await fetch(`/api/daily-activities/generate-final-result/performance-report?genId=${resultId}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load report card data');
+      if (!res.ok) throw new Error(data.error || 'Failed to load performance report');
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      /* eslint-disable @typescript-eslint/no-explicit-any */
+      const header: any = data.header || {};
       const students: any[] = data.students || [];
-      const logo = `${window.location.origin}/sit.png`;
+      const criteria: any[] = data.passingCriteria || [];
+      /* eslint-enable @typescript-eslint/no-explicit-any */
 
+      const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+      const fix2 = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '0.00'; };
+      const pct = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? String(Math.round(n * 100) / 100) : '0'; };
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const reportDate = (() => {
+        const m = String(header.Result_date || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? `${m[3]} - ${months[Number(m[2]) - 1]} - ${m[1]}` : '';
+      })();
+      const gradeLabel = (g: string) => (g === 'NO CERT' ? 'NO CERTIFICATE' : g || 'NA');
+      const range = (c: { grade: string; from: number; to: number | null }) =>
+        c.grade === 'No certificate' ? `${fix2(c.to)} and below` : `${fix2(c.from)}% to ${c.to === 100 ? '100' : fix2(c.to)}%`;
+
+      // One cell per assignment / unit test: number on top, mark (or Absent /
+      // Not Submitted / -) underneath. Absent-type cells are bold so they stand out.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const markRows = (label: string, given: string, max: string, status: string, s: any) => {
-        const items: string[] = [];
-        for (let i = 1; i <= 10; i++) {
-          const m = s[`${max.replace('{n}', String(i))}`];
-          if (m === null || m === undefined) continue;
-          const g = s[`${given.replace('{n}', String(i))}`];
-          const st = s[`${status.replace('{n}', String(i))}`];
-          items.push(
-            `<tr><td>${label} ${i}</td><td>${g ?? '-'}</td><td>${m}</td><td>${st || '-'}</td></tr>`
-          );
-        }
-        return items.join('');
-      };
+      const markGrid = (cells: any[], prefix: string) => cells.length === 0
+        ? '<span class="muted">None recorded</span>'
+        : `<table class="grid"><tr>${cells.map((c) => `<th>${prefix}${esc(c.no)}</th>`).join('')}</tr>
+             <tr>${cells.map((c) => `<td class="${c.status === 'marks' ? '' : 'flag'}">${esc(c.display)}</td>`).join('')}</tr></table>`;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const card = (s: any) => `
-        <div class="card">
-          <div class="top-row">
-            <img src="${logo}" alt="SIT" class="logo" />
-            <div class="header">
-              <div class="org-name">Suvidya Institute of Technology Private Limited</div>
-              <div class="org-addr">Regd. Office : 18/140 Anand Nagar, Nehru Road, Vakola, Santacruz (E),<br />Mumbai - 400 055. Tel.: 022 26682290, 9821569885</div>
-              <div class="card-title">FINAL EXAMINATION REPORT CARD</div>
-            </div>
-          </div>
-
-          <div class="info-row">
-            <span>Student Name</span><span class="fill">${s.Student_Name || ''}</span>
-            <span>Roll No</span><span class="fill">${s.Roll_No || s.Student_Code || ''}</span>
-          </div>
-          <div class="info-row">
-            <span>Course</span><span class="fill">${s.Course_Name || ''}</span>
-            <span>Batch</span><span class="fill">${s.Batch_code || ''}</span>
-          </div>
-          <div class="info-row">
-            <span>Period</span><span class="fill">${s.Start_date || ''} to ${s.End_date || ''}</span>
-            <span>Result Date</span><span class="fill">${s.Result_date || ''}</span>
-          </div>
-
-          <div class="section-title">Assignments</div>
-          <table class="marks-table">
-            <thead><tr><th>Assignment</th><th>Given</th><th>Max</th><th>Status</th></tr></thead>
-            <tbody>${markRows('Assignment', 'Ass{n}_Given', 'Ass{n}_Max', 'Ass{n}_Status', s) || '<tr><td colspan="4">No assignments recorded</td></tr>'}</tbody>
+        <div class="page">
+          <table class="rep">
+            <tr><th colspan="4" class="title">PERFORMANCE REPORT</th></tr>
+            <tr>
+              <td colspan="2">Name : <b>${esc(s.Student_Name)}</b></td>
+              <td colspan="2">ID No : <b>${esc(s.Roll_No || s.Student_Code)}</b></td>
+            </tr>
+            <tr>
+              <td colspan="2">Training Programme: <b>${esc(header.Course_Name)}</b></td>
+              <td>Batch No : <b>${esc(header.Batch_code)}</b></td>
+              <td>Date: <b>${esc(reportDate)}</b></td>
+            </tr>
+            <tr>
+              <td class="lbl" colspan="2"><b>Passing Criteria :</b></td>
+              <td colspan="2" class="nopad">
+                <table class="crit">${criteria.map((c) => `<tr><td>${esc(c.grade)}</td><td>${esc(range(c))}</td></tr>`).join('')}</table>
+              </td>
+            </tr>
+            ${header.Course_Description ? `<tr><td colspan="4" class="desc"><b>Brief Description of Training Programme :</b><br/>${esc(header.Course_Description)}</td></tr>` : ''}
           </table>
 
-          <div class="section-title">Unit Tests</div>
-          <table class="marks-table">
-            <thead><tr><th>Test</th><th>Given</th><th>Max</th><th>Status</th></tr></thead>
-            <tbody>${markRows('Test', 'Test{n}_Given', 'Test{n}_Max', 'Test{n}_Status', s) || '<tr><td colspan="4">No tests recorded</td></tr>'}</tbody>
+          <table class="rep sec">
+            <tr><td rowspan="5" class="no">01</td><td rowspan="5" class="name">Assignments</td>
+                <td class="k">Total No of Assignments</td><td>${esc(s.assignments.total)}</td></tr>
+            <tr><td class="k">Assignments Submitted</td><td>${esc(s.assignments.submitted)}</td></tr>
+            <tr><td class="k">Marks obtained in Assignments</td><td class="nopad">${markGrid(s.assignments.cells, 'A')}</td></tr>
+            <tr><td class="k">Total Marks obtained in Assignments</td><td>${esc(s.assignments.obtained)} / ${esc(s.assignments.max)}</td></tr>
+            <tr><td class="k"><b>Weightage - ${esc(s.assignments.weightage)}%</b></td><td>${fix2(s.assignments.weighted)}<span class="tag">(A)</span></td></tr>
+
+            <tr><td rowspan="5" class="no">02</td><td rowspan="5" class="name">Unit Tests</td>
+                <td class="k">Total Unit Test/s</td><td>${esc(s.unitTests.total)}</td></tr>
+            <tr><td class="k">Attended Unit Test/s</td><td>${esc(s.unitTests.attended)}</td></tr>
+            <tr><td class="k">Marks obtained in Unit Test/s</td><td class="nopad">${markGrid(s.unitTests.cells, 'T')}</td></tr>
+            <tr><td class="k">Total Marks obtained in Unit Test/s</td><td>${esc(s.unitTests.obtained)} / ${esc(s.unitTests.max)}</td></tr>
+            <tr><td class="k"><b>Weightage - ${esc(s.unitTests.weightage)}%</b></td><td>${fix2(s.unitTests.weighted)}<span class="tag">(B)</span></td></tr>
+
+            <tr><td rowspan="2" class="no">03</td><td rowspan="2" class="name">Final Examination</td>
+                <td class="k">Marks obtained</td>
+                <td class="nopad"><table class="grid">
+                  <tr>${s.finalExam.attempts.map((a: { label: string }) => `<th>${esc(a.label)}</th>`).join('')}</tr>
+                  <tr>${s.finalExam.attempts.map((a: { status: string; display: string }) => `<td class="${a.status === 'marks' ? '' : 'flag'}">${esc(a.display)}</td>`).join('')}</tr>
+                </table></td></tr>
+            <tr><td class="k"><b>Weightage - ${esc(s.finalExam.weightage)}%</b></td><td>${fix2(s.finalExam.weighted)}<span class="tag">(C)</span></td></tr>
+
+            <tr><td rowspan="3" class="no">04</td><td rowspan="3" class="name">Attendance Record</td>
+                <td class="k">Attended Lectures/Total Lectures</td><td>${esc(s.attendance.attended)} / ${esc(s.attendance.total)}</td></tr>
+            <tr><td class="k">Total No of Absent Days</td><td>${esc(s.attendance.absentDays)}</td></tr>
+            <tr><td class="k"><b>Attendance %</b></td><td>${pct(s.attendance.percentage)}</td></tr>
+
+            <tr><td rowspan="${Number(s.discipline) > 0 ? 3 : 2}" class="no">05</td><td rowspan="${Number(s.discipline) > 0 ? 3 : 2}" class="name">Final Result</td>
+                <td class="k"><b>A + B + C${Number(s.discipline) > 0 ? ' − Discipline' : ''}</b></td><td>${fix2(s.totalScore)}</td></tr>
+            ${Number(s.discipline) > 0 ? `<tr><td class="k">Discipline deduction</td><td>${fix2(s.discipline)}</td></tr>` : ''}
+            <tr><td class="k"><b>Grade</b></td><td><b>${esc(gradeLabel(s.grade))}</b></td></tr>
           </table>
 
-          <div class="section-title">Final Exam</div>
-          <table class="marks-table">
-            <thead><tr><th>Paper</th><th>Given</th><th>Max</th><th>Status</th></tr></thead>
-            <tbody>${markRows('Final', 'Final{n}_Given', 'Final{n}_Max', 'Final{n}_Status', s) || '<tr><td colspan="4">No final exam recorded</td></tr>'}</tbody>
+          <table class="rep sign">
+            <tr><td class="space"></td><td class="space"></td><td class="space"></td></tr>
+            <tr><td>${esc(header.faculty2)}</td><td>${esc(header.faculty1)}</td><td>${esc(header.approve_by)}</td></tr>
+            <tr><th>${esc(header.Label2 || 'Training Coordinator')}</th><th>${esc(header.Label1 || 'Faculty')}</th><th>Managing Director</th></tr>
           </table>
-
-          <div class="summary-grid">
-            <div><span>Assignment %</span><b>${fmtPct(s.Ass_Percent)}%</b></div>
-            <div><span>Test %</span><b>${fmtPct(s.Test_Percent)}%</b></div>
-            <div><span>Viva %</span><b>${fmtPct(s.Viva_Percent)}%</b></div>
-            <div><span>Final Exam %</span><b>${fmtPct(s.Final_Percent)}%</b></div>
-            <div><span>Total Lectures</span><b>${s.Total_Lectures ?? '-'}</b></div>
-            <div><span>Attended</span><b>${s.AttenLectures ?? '-'}</b></div>
-            <div><span>Absents</span><b>${s.Absents ?? '-'}</b></div>
-            <div><span>Attendance %</span><b>${fmtPct(s.Full_Attendance)}%</b></div>
-            <div><span>Discipline</span><b>${s.Discipline ?? '-'}</b></div>
-            <div class="highlight"><span>Final Result %</span><b>${fmtPct(s.Final_Result_Percent)}%</b></div>
-            <div class="highlight"><span>Grade</span><b>${s.Grade || 'NA'}</b></div>
-          </div>
-
-          <div class="sign-row">
-            <div><div class="sign-line"></div><span>${s.Label1 || 'Faculty'}${s.faculty1 ? ` (${s.faculty1})` : ''}</span></div>
-            <div><div class="sign-line"></div><span>${s.Label2 || 'Faculty'}${s.faculty2 ? ` (${s.faculty2})` : ''}</span></div>
-            <div><div class="sign-line"></div><span>Approved By${s.approve_by ? ` (${s.approve_by})` : ''}</span></div>
-          </div>
-          <div class="footer-text">This is a computer generated report card, signature does not required.</div>
+          <div class="form-no">F/TD/08/02</div>
         </div>`;
 
       const w = window.open('', '_blank');
-      if (!w) { setError('Please allow popups to print the report card.'); setPrinting(false); return; }
+      if (!w) { setError('Please allow popups to print the performance report.'); setPrinting(false); return; }
 
-      w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Report Card</title><style>
+      w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Performance Report - ${esc(header.Batch_code)}</title><style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: Arial, sans-serif; color: #000; background: #fff; font-size: 13px; }
-        .card { width: 760px; margin: 0 auto; padding: 40px 44px 24px; background: #fff; page-break-after: always; }
-        .top-row { display: flex; align-items: flex-start; gap: 16px; }
-        .logo { width: 150px; height: auto; object-fit: contain; }
-        .header { flex: 1; text-align: center; }
-        .org-name { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
-        .org-addr { font-size: 11px; line-height: 1.4; }
-        .card-title { font-size: 15px; font-weight: 700; margin-top: 14px; text-decoration: underline; }
-        .info-row { display: flex; gap: 10px; margin-top: 16px; font-size: 13px; }
-        .info-row span:nth-child(odd) { font-weight: 700; width: 90px; }
-        .fill { flex: 1; border-bottom: 1.5px dotted #222; padding-bottom: 2px; }
-        .section-title { margin-top: 20px; font-size: 13px; font-weight: 700; color: #2E3093; text-transform: uppercase; letter-spacing: 0.03em; }
-        .marks-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
-        .marks-table th, .marks-table td { border: 1px solid #999; padding: 5px 8px; font-size: 12px; text-align: left; }
-        .marks-table th { background: #F1F2FA; font-weight: 700; }
-        .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 16px; margin-top: 20px; }
-        .summary-grid div { display: flex; justify-content: space-between; border-bottom: 1px dotted #ccc; padding-bottom: 3px; font-size: 12.5px; }
-        .summary-grid .highlight { background: #F1F2FA; padding: 4px 8px; border-radius: 4px; border-bottom: none; }
-        .sign-row { display: flex; justify-content: space-between; margin-top: 46px; gap: 20px; }
-        .sign-row > div { flex: 1; text-align: center; font-size: 11px; }
-        .sign-line { border-top: 1.5px solid #222; margin-bottom: 4px; height: 1px; }
-        .footer-text { margin-top: 26px; text-align: center; font-size: 11px; font-weight: 700; }
-        @media print { @page { size: A4 portrait; margin: 8mm; } .card { width: 100%; padding: 20px 24px 12px; } }
+        body { font-family: Arial, sans-serif; color: #000; background: #fff; font-size: 11.5px; }
+        .page { width: 760px; margin: 0 auto; padding: 36px 40px 20px; page-break-after: always; }
+        table.rep { width: 100%; border-collapse: collapse; }
+        table.rep + table.rep { margin-top: -1px; }
+        .rep th, .rep td { border: 1px solid #000; padding: 4px 6px; vertical-align: middle; text-align: left; }
+        .rep .title { text-align: center; font-size: 13px; padding: 7px; }
+        .rep .lbl { vertical-align: middle; }
+        .rep .nopad { padding: 0; }
+        .rep .desc { font-size: 9.5px; line-height: 1.35; }
+        .crit { width: 100%; border-collapse: collapse; }
+        .crit td { border: none; border-bottom: 1px solid #000; padding: 1.5px 6px; font-size: 10.5px; }
+        .crit tr:last-child td { border-bottom: none; }
+        .sec .no { width: 28px; text-align: center; }
+        .sec .name { width: 120px; }
+        .sec .k { width: 220px; }
+        .tag { float: right; padding-right: 30px; }
+        .grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .grid th, .grid td { border: none; border-right: 1px solid #999; text-align: center; padding: 2px 1px; font-size: 10px; }
+        .grid th { font-weight: 600; color: #444; border-bottom: 1px solid #999; }
+        .grid th:last-child, .grid td:last-child { border-right: none; }
+        .grid td.flag { font-weight: 700; font-size: 9px; }
+        .muted { color: #666; padding: 4px 6px; display: inline-block; }
+        .sign { margin-top: 18px !important; }
+        .sign td, .sign th { text-align: center; width: 33.33%; }
+        .sign .space { height: 54px; }
+        .form-no { margin-top: 6px; font-weight: 700; font-size: 11px; }
+        @media print { @page { size: A4 portrait; margin: 8mm; } .page { width: 100%; padding: 14px 18px 8px; } }
       </style></head><body>${students.map(card).join('')}<script>window.onload = () => { setTimeout(() => window.print(), 500); };<\/script></body></html>`);
       w.document.close();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to print report card');
+      setError(err instanceof Error ? err.message : 'Failed to print performance report');
     }
     setPrinting(false);
   };
@@ -498,7 +507,7 @@ export default function AddGenerateFinalResultPage() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                 </svg>
-                Print Report Card
+                Print Performance Report
               </button>
 
               {/* MarkSheet */}
