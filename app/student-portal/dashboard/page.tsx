@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { IssueButton, useIssueTracker } from './_components/RaiseIssue';
 
 /* ── API shapes (existing endpoints, unchanged) ─────────────────────────── */
 
@@ -99,6 +100,10 @@ const LECTURE_TONE: Record<LectureKey, string> = {
 };
 
 /* ── Test status (0 is a mark; null is "no mark") ───────────────────────── */
+
+// The Tests card covers assignment + unit tests; final exams have their own card.
+const dashboardTests = (records: unknown): TestRecord[] =>
+  Array.isArray(records) ? records.filter((r) => r.sourceModule === 'ASSIGNMENT' || r.sourceModule === 'UNIT_TEST') : [];
 
 const TEST_TYPE: Record<TestRecord['sourceModule'], string> = { ASSIGNMENT: 'Assignment Test', UNIT_TEST: 'Unit Test' };
 
@@ -223,6 +228,7 @@ export default function StudentDashboardPage() {
   const [lectureFilter, setLectureFilter] = useState<LectureFilter>('all');
   const [feesOpen, setFeesOpen] = useState(false);
   const [today, setToday] = useState('');
+  const issues = useIssueTracker();
 
   const fetchJson = useCallback(async (url: string) => {
     const res = await fetch(url, { cache: 'no-store' });
@@ -246,7 +252,7 @@ export default function StudentDashboardPage() {
   const loadTests = useCallback(() => {
     setTests({ state: 'loading' });
     fetchJson('/api/student-portal/tests')
-      .then((d) => setTests({ state: 'ready', data: Array.isArray(d.records) ? d.records : [] }))
+      .then((d) => setTests({ state: 'ready', data: dashboardTests(d.records) }))
       .catch(() => setTests({ state: 'error' }));
   }, [fetchJson]);
 
@@ -257,7 +263,7 @@ export default function StudentDashboardPage() {
     const testsP = fetchJson('/api/student-portal/tests');
     academicsP.then((d) => { setToday(localToday()); setAcademics({ state: 'ready', data: d }); }).catch(() => setAcademics({ state: 'error' }));
     lecturesP.then((d) => { setToday(localToday()); setLectures({ state: 'ready', data: Array.isArray(d.lectures) ? d.lectures : [] }); }).catch(() => setLectures({ state: 'error' }));
-    testsP.then((d) => setTests({ state: 'ready', data: Array.isArray(d.records) ? d.records : [] })).catch(() => setTests({ state: 'error' }));
+    testsP.then((d) => setTests({ state: 'ready', data: dashboardTests(d.records) })).catch(() => setTests({ state: 'error' }));
     // Notices are secondary — a failure just hides them.
     fetchJson('/api/student-portal/notices').then((d) => setNotices(Array.isArray(d.notices) ? d.notices.slice(0, 2) : [])).catch(() => {});
   }, [fetchJson]);
@@ -437,7 +443,7 @@ export default function StudentDashboardPage() {
       </div>
 
       {/* 5. Tests — assignment tests and unit tests */}
-      <Card title="Tests" accent="#2A6BB5">
+      <Card title="Tests" accent="#2A6BB5" action={<Link href="/student-portal/dashboard/tests" className={linkCls}>View all</Link>}>
         {tests.state === 'loading' && <Skeleton rows={4} />}
         {tests.state === 'error' && <ErrorState what="tests" onRetry={loadTests} />}
         {testView && (testView.recent.length === 0 ? <Empty>No tests given yet.</Empty> : (
@@ -455,7 +461,14 @@ export default function StudentDashboardPage() {
                         {r.absentOnLectureDate === true && <span className="text-amber-700"> · Absent on lecture date</span>}
                       </p>
                     </div>
-                    <Chip text={shown.text} tone={shown.tone} />
+                    <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+                      <Chip text={shown.text} tone={shown.tone} />
+                      <IssueButton tracker={issues} target={{
+                        sourceModule: r.sourceModule, parentId: r.parentId, title: r.assessmentName,
+                        subtitle: `${TEST_TYPE[r.sourceModule]} · ${fmtDate(r.date)}${r.maxMarks !== null ? ` · Max. ${r.maxMarks} marks` : ''}`,
+                        shown: shown.text,
+                      }} />
+                    </div>
                   </li>
                 );
               })}
@@ -479,7 +492,16 @@ export default function StudentDashboardPage() {
                       <p className="text-sm font-medium text-[#18181B]">{e.label}</p>
                       <p className="mt-0.5 text-xs text-[#71717A]">{e.date ? fmtDate(e.date) : 'Date to be announced'}{e.max_marks ? ` · Max. ${e.max_marks} marks` : ''}</p>
                     </div>
-                    <Chip text={e.status === 'upcoming' ? 'Upcoming' : 'Held'} tone={e.status === 'upcoming' ? LECTURE_TONE.upcoming : LECTURE_TONE.past} />
+                    <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+                      <Chip text={e.status === 'upcoming' ? 'Upcoming' : 'Held'} tone={e.status === 'upcoming' ? LECTURE_TONE.upcoming : LECTURE_TONE.past} />
+                      {e.status === 'held' && (
+                        <IssueButton tracker={issues} target={{
+                          sourceModule: 'FINAL_EXAM', parentId: e.take_id, title: e.label,
+                          subtitle: `${e.date ? fmtDate(e.date) : 'Date to be announced'}${e.max_marks ? ` · Max. ${e.max_marks} marks` : ''}`,
+                          shown: 'Result pending',
+                        }} />
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -502,6 +524,7 @@ export default function StudentDashboardPage() {
       ) : null}
 
       {feesOpen && a && <FeesDialog data={a} onClose={closeFees} />}
+      {issues.sheet}
     </div>
   );
 }

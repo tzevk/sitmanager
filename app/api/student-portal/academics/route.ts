@@ -73,10 +73,10 @@ export async function GET(req: NextRequest) {
 
     // 2. Academic attendance (lecture_taken_child, same rules as the reports)
     const academicAttendance = await getAcademicAttendance(pool, ctx);
-    const { total_lectures, attended, absent, percentage } = academicAttendance.summary;
-    const attendanceSummary = { total_lectures, attended, absent, percentage };
+    const { total_lectures, attended, absent, late, late_deductions, percentage } = academicAttendance.summary;
+    const attendanceSummary = { total_lectures, attended, absent, late, late_deductions, percentage };
     const recentLectures = academicAttendance.lectures.slice(0, 10);
-    const allLectures = academicAttendance.lectures.slice(0, 100);
+    const allLectures = academicAttendance.lectures.slice(0, 400);
 
     // 3. Upcoming lectures from batch_slecture_master — the table staff actually
     // maintain via the Batch Master "Lecture Plan" tab (batch_lecture_master is a

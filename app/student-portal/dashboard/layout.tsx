@@ -27,11 +27,12 @@ const icon = (d: string) => (
 const HOME = { label: 'Home', href: '/student-portal/dashboard', icon: icon('M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6') };
 const SCHEDULE = { label: 'Schedule', href: '/student-portal/dashboard/lecture-plan', icon: icon('M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z') };
 const ATTENDANCE = { label: 'Attendance', href: '/student-portal/dashboard/attendance', icon: icon('M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4') };
-const ASSIGNMENTS = { label: 'Assignments', href: '/student-portal/dashboard/assignments', icon: icon('M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z') };
+const TESTS = { label: 'Tests', href: '/student-portal/dashboard/tests', icon: icon('M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z') };
+const ISSUES = { label: 'My Issues', href: '/student-portal/dashboard/issues', icon: icon('M12 9v3.75m0 3.75h.008M21 12a9 9 0 11-18 0 9 9 0 0118 0z') };
 const NOTICES = { label: 'Notices', href: '/student-portal/dashboard/notices', icon: icon('M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 00-4-5.7V5a2 2 0 10-4 0v.3A6 6 0 006 11v3.2c0 .5-.2 1-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9') };
 
-const SIDEBAR_ITEMS: NavItem[] = [HOME, SCHEDULE, ATTENDANCE, ASSIGNMENTS, NOTICES];
-const MORE_ITEMS: NavItem[] = [ATTENDANCE, NOTICES];
+const SIDEBAR_ITEMS: NavItem[] = [HOME, SCHEDULE, ATTENDANCE, TESTS, ISSUES, NOTICES];
+const MORE_ITEMS: NavItem[] = [ATTENDANCE, ISSUES, NOTICES];
 
 export default function StudentDashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -184,7 +185,7 @@ export default function StudentDashboardLayout({ children }: { children: React.R
           {[
             { ...HOME },
             { ...SCHEDULE },
-            { ...ASSIGNMENTS, label: 'Tasks' },
+            { ...TESTS },
           ].map((item) => {
             const active = isActive(item.href);
             return (

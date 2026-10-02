@@ -187,6 +187,32 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   },
 
   // -------------------------------------------------------------------------
+  // STUDENT PORTAL
+  // -------------------------------------------------------------------------
+  {
+    id: 'student_portal',
+    name: 'Student Portal',
+    description: 'Issues students raise about their marks and attendance',
+    icon: 'users',
+    permissions: [
+      {
+        id: 'academic_issue.view',
+        name: 'View Academic Issues',
+        description: 'See issues students raise against marks and attendance records',
+        resource: 'academic_issue',
+        action: 'view',
+      },
+      {
+        id: 'academic_issue.manage',
+        name: 'Manage Academic Issues',
+        description: 'Review, request information, add notes, resolve or reject academic issues',
+        resource: 'academic_issue',
+        action: 'manage',
+      },
+    ],
+  },
+
+  // -------------------------------------------------------------------------
   // MONITORING
   // -------------------------------------------------------------------------
   {

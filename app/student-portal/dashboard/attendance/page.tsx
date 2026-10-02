@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import AttendanceCalendar from './AttendanceCalendar';
+import { IssueButton, useIssueTracker } from '../_components/RaiseIssue';
 
 interface Lecture {
   Take_Id: number;
@@ -47,9 +48,10 @@ export default function AttendancePage() {
   const router = useRouter();
   const [lectures, setLectures] = useState<Lecture[]>([]);
   const [studentInfo, setStudentInfo] = useState<StudentInfo | null>(null);
-  const [summary, setSummary] = useState({ total_lectures: 0, attended: 0, absent: 0, percentage: 0 });
+  const [summary, setSummary] = useState({ total_lectures: 0, attended: 0, absent: 0, late: 0, late_deductions: 0, percentage: 0 });
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'present' | 'absent'>('all');
+  const [filter, setFilter] = useState<'all' | 'present' | 'late' | 'absent'>('all');
+  const issues = useIssueTracker();
   const [view, setView] = useState<'calendar' | 'list'>('calendar');
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export default function AttendancePage() {
         const data = await res.json();
         setLectures(data.all_lectures ?? []);
         setStudentInfo(data.student ?? null);
-        setSummary(data.attendance ?? { total_lectures: 0, attended: 0, absent: 0, percentage: 0 });
+        setSummary({ total_lectures: 0, attended: 0, absent: 0, late: 0, late_deductions: 0, percentage: 0, ...(data.attendance ?? {}) });
       } catch { /* silent */ }
       setLoading(false);
     })();
@@ -74,7 +76,11 @@ export default function AttendancePage() {
     );
   }
 
-  const filtered = filter === 'all' ? lectures : lectures.filter(l => filter === 'present' ? l.present : !l.present);
+  const lateLectures = lectures.filter(l => l.present && l.Late);
+  const filtered = filter === 'all' ? lectures
+    : filter === 'late' ? lateLectures
+    : lectures.filter(l => filter === 'present' ? l.present : !l.present);
+  const fmtLecDate = (d: string) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   const attStatus = summary.percentage >= 75 ? 'good' : summary.percentage >= 60 ? 'warning' : 'low';
   const trainerFrom = fmtTime(studentInfo?.trainer_time_from);
   const trainerTo = fmtTime(studentInfo?.trainer_time_to);
@@ -129,10 +135,11 @@ export default function AttendancePage() {
       </div>
 
       {/* Stats strip — overlap */}
-      <div className="px-4 -mt-5 grid grid-cols-3 gap-2">
+      <div className="px-4 -mt-5 grid grid-cols-4 gap-2">
         {[
           { label: 'Total', value: summary.total_lectures, color: 'text-gray-900' },
           { label: 'Present', value: summary.attended, color: 'text-green-600' },
+          { label: 'Late', value: summary.late, color: 'text-amber-600' },
           { label: 'Absent', value: summary.absent, color: 'text-red-500' },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-100 p-3 text-center">
@@ -141,6 +148,28 @@ export default function AttendancePage() {
           </div>
         ))}
       </div>
+
+      {/* Late marks */}
+      {summary.late > 0 && (
+        <div className="px-4 mt-4">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-amber-800">Late marks: {summary.late}</p>
+                <p className="text-[11px] text-amber-700 mt-0.5">
+                  Every 3 late marks count as 1 absence{summary.late_deductions > 0 ? ` — ${summary.late_deductions} lecture${summary.late_deductions === 1 ? '' : 's'} deducted so far` : ''}.
+                </p>
+              </div>
+              <button
+                onClick={() => { setView('list'); setFilter('late'); }}
+                className="shrink-0 rounded-lg bg-white border border-amber-200 px-3 py-1.5 text-[11px] font-bold text-amber-800 hover:bg-amber-100"
+              >
+                View list
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* View toggle + content */}
       <div className="px-4 mt-4">
@@ -166,7 +195,7 @@ export default function AttendancePage() {
           <>
             {/* List filter tabs */}
             <div className="flex items-center gap-1 mb-3 bg-white border border-[#2E3093]/10 rounded-xl p-1">
-              {(['all', 'present', 'absent'] as const).map(f => (
+              {(['all', 'present', 'late', 'absent'] as const).map(f => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
@@ -174,24 +203,24 @@ export default function AttendancePage() {
                     filter === f ? 'bg-[#2E3093] text-white' : 'text-[#2A6BB5]/60'
                   }`}
                 >
-                  {f === 'all' ? `All (${lectures.length})` : f === 'present' ? `Present (${summary.attended})` : `Absent (${summary.absent})`}
+                  {f === 'all' ? `All (${lectures.length})` : f === 'present' ? `Present (${lectures.filter(l => l.present).length})` : f === 'late' ? `Late (${lateLectures.length})` : `Absent (${lectures.filter(l => !l.present).length})`}
                 </button>
               ))}
             </div>
 
             {filtered.length === 0 ? (
               <div className="bg-white rounded-xl border border-[#2E3093]/10 px-4 py-10 text-center text-sm text-[#2A6BB5]/40">
-                No records
+                {filter === 'late' ? 'No late marks' : 'No records'}
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-[#2E3093]/10 overflow-hidden divide-y divide-zinc-50">
                 {filtered.map((lec, idx) => (
-                  <div key={lec.Take_Id} className="flex items-center justify-between px-4 py-3">
-                    <div className="flex items-center gap-3">
+                  <div key={lec.Take_Id} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="flex min-w-0 items-center gap-3">
                       <span className="text-[11px] font-bold text-zinc-300 w-5 text-right font-mono tabular-nums">{idx + 1}</span>
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-xs font-semibold text-[#1a1f3c]">
-                          {lec.Take_Dt ? new Date(lec.Take_Dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                          {fmtLecDate(lec.Take_Dt)}
                         </p>
                         {lec.Topic ? (
                           <p className="text-[11px] text-[#2A6BB5]/70 mt-0.5 truncate max-w-[180px]">{lec.Topic}</p>
@@ -202,13 +231,20 @@ export default function AttendancePage() {
                         )}
                       </div>
                     </div>
-                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
-                      lec.present
-                        ? lec.Late ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
-                        : 'bg-red-100 text-red-600'
-                    }`}>
-                      {lec.present ? (lec.Late ? 'Late' : 'Present') : 'Absent'}
-                    </span>
+                    <div className="flex shrink-0 flex-col items-end gap-1.5">
+                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
+                        lec.present
+                          ? lec.Late ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+                          : 'bg-red-100 text-red-600'
+                      }`}>
+                        {lec.present ? (lec.Late ? 'Late' : 'Present') : 'Absent'}
+                      </span>
+                      <IssueButton tracker={issues} target={{
+                        sourceModule: 'ATTENDANCE', parentId: lec.Take_Id, title: lec.Topic || 'Lecture',
+                        subtitle: fmtLecDate(lec.Take_Dt) + (lec.Faculty_Name ? ` · ${lec.Faculty_Name}` : ''),
+                        shown: lec.present ? (lec.Late ? 'Present (late)' : 'Present') : 'Absent',
+                      }} />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -216,6 +252,7 @@ export default function AttendancePage() {
           </>
         )}
       </div>
+      {issues.sheet}
     </div>
   );
 }
