@@ -169,25 +169,52 @@ export default function PortalAccountsPage() {
     downloadCsv(`portal-accounts-students-batch${studentBatchId}.csv`, headers, rows);
   }
 
-  async function createStudentAccount(studentId: number, rollNo: string | null, studentName?: string | null) {
-    const username = suggestStudentUsername(rollNo, studentId);
-    const password = studentPasswords[studentId] || generateStudentPassword(studentName);
-    if (!studentPasswords[studentId]) setStudentPasswords(prev => ({ ...prev, [studentId]: password }));
+  async function createStudentAccount(studentId: number, rollNo: string | null, studentName?: string | null, existingUsername?: string | null) {
+    // An existing account keeps its own username (it can differ from the current
+    // roll number after a renumbering) and its password — "Update" only saves
+    // the Active toggle. Passwords change only through Reset password.
+    const isExisting = Boolean(existingUsername);
+    const username = existingUsername || suggestStudentUsername(rollNo, studentId);
+    const password = isExisting ? undefined : (studentPasswords[studentId] || generateStudentPassword(studentName));
+    if (!isExisting && !studentPasswords[studentId]) setStudentPasswords(prev => ({ ...prev, [studentId]: password! }));
+    const isActive = studentActiveMap[studentId] ?? true;
     setStudentSavingId(studentId);
     setError(''); setSuccess('');
     try {
       const res = await fetch('/api/admin/portal-accounts/student', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId, username, password, isActive: studentActiveMap[studentId] ?? true }),
+        body: JSON.stringify({ studentId, username, password, isActive }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.message || data?.error || 'Failed');
       setStudentRows(prev => prev.map(r =>
-        r.Student_Id === studentId ? { ...r, auth_id: 1, existing_username: username, account_active: 1 } : r
+        r.Student_Id === studentId ? { ...r, auth_id: r.auth_id || 1, existing_username: username, account_active: isActive ? 1 : 0 } : r
       ));
-      setSuccess(`Account created: ${username}`);
+      setSuccess(isExisting ? `Account updated: ${username} (${isActive ? 'active' : 'deactivated'})` : `Account created: ${username}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to create account');
+    } finally {
+      setStudentSavingId(null);
+    }
+  }
+
+  /** Sets a new temporary password (forced change at next sign-in) and shows it once. */
+  async function resetStudentPassword(studentId: number, username: string, studentName?: string | null) {
+    if (!window.confirm(`Reset the portal password for ${studentName || username}? They will have to choose a new one at their next sign-in.`)) return;
+    const password = generateStudentPassword(studentName);
+    setStudentSavingId(studentId);
+    setError(''); setSuccess('');
+    try {
+      const res = await fetch('/api/admin/portal-accounts/student', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId, username, password, resetPassword: true, isActive: studentActiveMap[studentId] ?? true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || data?.error || 'Failed');
+      setStudentPasswords(prev => ({ ...prev, [studentId]: password }));
+      setSuccess(`Password reset for ${username}. The new password is shown in the row — share it or use Send credentials.`);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to reset password');
     } finally {
       setStudentSavingId(null);
     }
@@ -690,12 +717,8 @@ export default function PortalAccountsPage() {
           const next = { ...prev };
           rows.forEach(r => {
             if (next[r.Student_Id]) return;
-            if (r.current_password) {
-              // Server can now decrypt and return the real current password (AES-256-GCM).
-              next[r.Student_Id] = r.current_password;
-            } else if (!r.auth_id) {
-              next[r.Student_Id] = generateStudentPassword(r.Student_Name);
-            }
+            if (r.current_password) next[r.Student_Id] = r.current_password;
+            else if (!r.auth_id) next[r.Student_Id] = generateStudentPassword(r.Student_Name);
           });
           return next;
         });
@@ -1027,16 +1050,19 @@ export default function PortalAccountsPage() {
                                   </td>
                                   <td className="px-3 py-2 font-mono text-gray-700">{username}</td>
                                   <td className="px-3 py-2">
-                                    <input
-                                      className={`w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] ${
-                                        hasAccount
-                                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-bold'
-                                          : 'bg-white border-gray-200 text-gray-900'
-                                      }`}
-                                      value={password}
-                                      onChange={e => setStudentPasswords(prev => ({ ...prev, [r.Student_Id]: e.target.value }))}
-                                      placeholder="password"
-                                    />
+                                    {hasAccount ? (
+                                      // Read-only: an existing account's password only changes through Reset password.
+                                      <span className="block w-full border rounded px-2 py-1 text-xs font-mono bg-emerald-50 border-emerald-200 text-emerald-800 font-bold select-all">
+                                        {password || '—'}
+                                      </span>
+                                    ) : (
+                                      <input
+                                        className="w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#2E3093]/30 focus:border-[#2E3093] bg-white border-gray-200 text-gray-900"
+                                        value={password}
+                                        onChange={e => setStudentPasswords(prev => ({ ...prev, [r.Student_Id]: e.target.value }))}
+                                        placeholder="password"
+                                      />
+                                    )}
                                   </td>
                                   <td className="px-3 py-2">
                                     <span className={`px-2 py-0.5 rounded-full border text-[10px] font-semibold ${
@@ -1044,7 +1070,7 @@ export default function PortalAccountsPage() {
                                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                         : 'bg-amber-50 text-amber-700 border-amber-200'
                                     }`}>
-                                      {hasAccount ? 'Active' : 'No account'}
+                                      {!hasAccount ? 'No account' : (r.account_active ?? 1) === 1 ? 'Active' : 'Inactive'}
                                     </span>
                                   </td>
                                   <td className="px-3 py-2">
@@ -1064,11 +1090,21 @@ export default function PortalAccountsPage() {
                                       <button
                                         type="button"
                                         className={btnPrimarySm}
-                                        onClick={() => createStudentAccount(r.Student_Id, r.Roll_No, r.Student_Name)}
+                                        onClick={() => createStudentAccount(r.Student_Id, r.Roll_No, r.Student_Name, r.existing_username)}
                                         disabled={isSaving || bulkCreating}
                                       >
                                         {isSaving ? 'Saving…' : hasAccount ? 'Update' : 'Create'}
                                       </button>
+                                      {hasAccount && (
+                                        <button
+                                          type="button"
+                                          className="text-[11px] font-semibold text-[#2E3093] hover:underline disabled:opacity-50"
+                                          onClick={() => resetStudentPassword(r.Student_Id, username, r.Student_Name)}
+                                          disabled={isSaving || bulkCreating}
+                                        >
+                                          Reset password
+                                        </button>
+                                      )}
                                     </div>
                                   </td>
                                 </tr>

@@ -101,6 +101,26 @@ export function createRateLimiter(options: RateLimiterOptions) {
   };
 }
 
+/**
+ * Counts one attempt against an arbitrary key (e.g. IP + username) using the
+ * same in-memory store as createRateLimiter, which only keys by IP. Returns
+ * whether the attempt is allowed and, if not, how many seconds until the window
+ * resets. Callers build their own (generic) response.
+ */
+export function checkRateLimitKey(
+  scope: string,
+  key: string,
+  maxRequests: number,
+  windowSeconds: number
+): { allowed: boolean; retryAfter: number } {
+  const { allowed, resetAt } = memCheck(key, `${scope}:${maxRequests}:${windowSeconds}`, maxRequests, windowSeconds);
+  return { allowed, retryAfter: Math.max(1, Math.ceil((resetAt - Date.now()) / 1000)) };
+}
+
+export function getRequestIp(request: NextRequest): string {
+  return getClientIp(request);
+}
+
 function normalizeRateLimitPath(pathname: string): string {
   return pathname
     .toLowerCase()

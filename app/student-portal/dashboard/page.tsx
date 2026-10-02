@@ -79,11 +79,13 @@ interface AcademicsData {
     unit_test_date: string | null;
     session: string | null;
   }>;
-  exam_results: Array<{
-    Take_Id: number;
-    Test_Dt: string;
-    Test_No: string;
-    Marks: string;
+  final_exams: Array<{
+    take_id: number;
+    date: string | null;
+    attempt: number;
+    label: string;
+    max_marks: number | null;
+    status: 'upcoming' | 'held';
   }>;
 }
 
@@ -153,7 +155,7 @@ export default function StudentDashboardPage() {
   const recentLectures     = data?.recent_lectures     ?? [];
   const recentAssignments  = data?.recent_assignments  ?? [];
   const upcoming           = data?.upcoming_lectures   ?? [];
-  const exams              = data?.exam_results        ?? [];
+  const exams              = data?.final_exams         ?? [];
 
   const firstName = student?.student_name?.split(' ')[0] ?? 'Student';
   const timings = student?.batch_timings ? cleanTimings(student.batch_timings) : '';
@@ -462,27 +464,30 @@ export default function StudentDashboardPage() {
             </div>
           )}
 
-          {/* Exam results */}
+          {/* Final examinations — schedule only. Obtained marks are not shown
+              until marks publishing exists; max marks is labelled as such. */}
           {exams.length > 0 && (
             <div className="px-4 sm:px-8 lg:px-10 mt-6">
-              <h2 className="text-[11px] font-black text-[#2E3093] uppercase tracking-[0.18em] mb-3">Exam Results</h2>
+              <h2 className="text-[11px] font-black text-[#2E3093] uppercase tracking-[0.18em] mb-3">Final Examinations</h2>
               <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
                 {exams.map(exam => (
-                  <div key={exam.Take_Id} className="flex items-center justify-between px-4 py-3">
-                    <div>
-                      <p className="text-xs font-bold text-gray-800">
-                        {exam.Test_No ? `Test ${exam.Test_No}` : `Exam #${exam.Take_Id}`}
+                  <div key={exam.take_id} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-gray-800">{exam.label}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        {exam.date
+                          ? new Date(`${exam.date}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : 'Date to be announced'}
+                        {exam.max_marks ? ` · Max. ${exam.max_marks} marks` : ''}
                       </p>
-                      {exam.Test_Dt && (
-                        <p className="text-[11px] text-gray-400 mt-0.5">
-                          {new Date(exam.Test_Dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                        </p>
-                      )}
                     </div>
-                    <p className="text-2xl font-black text-[#2E3093]">{exam.Marks ?? '—'}</p>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${exam.status === 'upcoming' ? 'bg-[#2E3093]/10 text-[#2E3093]' : 'bg-gray-100 text-gray-500'}`}>
+                      {exam.status === 'upcoming' ? 'Upcoming' : 'Held'}
+                    </span>
                   </div>
                 ))}
               </div>
+              <p className="mt-2 text-[11px] text-gray-400">Results will appear here once they are published.</p>
             </div>
           )}
 

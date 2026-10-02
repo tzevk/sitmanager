@@ -2,14 +2,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
-import { encryptPassword, decryptPassword } from '@/lib/student-password-crypto';
-import crypto from 'crypto';
+import { PortalAccountError, saveStudentPortalAccount } from '@/lib/student-portal-accounts';
+import { decryptPassword } from '@/lib/student-password-crypto';
 
 export const runtime = 'nodejs';
-
-function md5Hex(value: string): string {
-  return crypto.createHash('md5').update(value).digest('hex');
-}
 
 async function ensureStudentAuthTable(pool: any) {
   await pool.query(`
@@ -68,6 +64,9 @@ export async function GET(req: NextRequest) {
       [batchId]
     );
 
+    // Staff can see each account's current password (by decision of the
+    // institute). Note this includes a password the student chose themselves
+    // after the forced change at first sign-in.
     const resultRows = rows.map((r) => {
       const { password_enc, must_change_password, ...rest } = r;
       let current_password: string | null = null;
@@ -76,21 +75,15 @@ export async function GET(req: NextRequest) {
           current_password = decryptPassword(Buffer.from(password_enc));
         } catch (err) {
           console.error(`Failed to decrypt password for Student_Id=${r.Student_Id}:`, err);
-          current_password = null;
         }
       }
-      return {
-        ...rest,
-        current_password,
-        must_change_password: Boolean(must_change_password),
-      };
+      return { ...rest, current_password, must_change_password: Boolean(must_change_password) };
     });
 
     return NextResponse.json({ success: true, rows: resultRows });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Server error';
     console.error('Admin list student accounts error:', err);
-    return NextResponse.json({ success: false, message }, { status: 500 });
+    return NextResponse.json({ success: false, message: 'Unable to load student accounts.' }, { status: 500 });
   }
 }
 
@@ -100,62 +93,30 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json().catch(() => ({} as any));
-    const studentId = Number(body?.studentId);
-    const username = String(body?.username ?? '').trim();
-    const password = String(body?.password ?? '');
-    const isActive = body?.isActive === false ? 0 : 1;
-
-    if (!Number.isFinite(studentId) || studentId <= 0) {
-      return NextResponse.json({ success: false, message: 'studentId is required' }, { status: 400 });
-    }
-    if (!username) {
-      return NextResponse.json({ success: false, message: 'username is required' }, { status: 400 });
-    }
-    if (!password) {
-      return NextResponse.json({ success: false, message: 'password is required' }, { status: 400 });
-    }
-
     const pool = getPool();
     await ensureStudentAuthTable(pool);
 
-    const [studentRows] = await pool.query<any[]>(
-      `SELECT Student_Id
-       FROM student_master
-       WHERE Student_Id = ?
-         AND (IsDelete = 0 OR IsDelete IS NULL)
-       LIMIT 1`,
-      [studentId]
-    );
+    const result = await saveStudentPortalAccount(pool, {
+      studentId: Number(body?.studentId),
+      username: String(body?.username ?? ''),
+      password: typeof body?.password === 'string' ? body.password : undefined,
+      resetPassword: body?.resetPassword === true,
+      isActive: body?.isActive !== false,
+    });
 
-    if (!studentRows.length) {
-      return NextResponse.json(
-        { success: false, message: 'Student not found or deleted. Create/select a valid student record first.' },
-        { status: 400 }
-      );
-    }
-
-    // Password_Hash is kept in sync (legacy fallback / NOT NULL column) but Password_Enc is the
-    // source of truth going forward. Every admin-driven create/reset forces a change on next login.
-    const passwordHash = md5Hex(password);
-    const passwordEnc = encryptPassword(password);
-
-    // Upsert by username; usernames are unique across student_portal_auth.
-    await pool.query(
-      `INSERT INTO student_portal_auth (Student_Id, Username, Password_Hash, Password_Enc, Must_Change_Password, IsActive)
-       VALUES (?, ?, ?, ?, 1, ?)
-       ON DUPLICATE KEY UPDATE
-         Student_Id = VALUES(Student_Id),
-         Password_Hash = VALUES(Password_Hash),
-         Password_Enc = VALUES(Password_Enc),
-         Must_Change_Password = 1,
-         IsActive = VALUES(IsActive)`,
-      [studentId, username, passwordHash, passwordEnc, isActive]
-    );
-
-    return NextResponse.json({ success: true, username, studentId, isActive: Boolean(isActive) });
+    return NextResponse.json({
+      success: true,
+      action: result.action,
+      username: result.username,
+      passwordReset: result.passwordReset,
+      studentId: Number(body?.studentId),
+      isActive: body?.isActive !== false,
+    });
   } catch (err: unknown) {
+    if (err instanceof PortalAccountError) {
+      return NextResponse.json({ success: false, message: err.message }, { status: err.status });
+    }
     console.error('Admin create student account error:', err);
-    const message = err instanceof Error ? err.message : 'Server error';
-    return NextResponse.json({ success: false, message }, { status: 500 });
+    return NextResponse.json({ success: false, message: 'Unable to save the student account.' }, { status: 500 });
   }
 }

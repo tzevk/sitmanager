@@ -19,7 +19,7 @@ export interface StudentSession {
   mustChangePassword?: boolean;
 }
 
-export async function getStudentSession(req: NextRequest): Promise<StudentSession | null> {
+async function verifyToken(req: NextRequest): Promise<StudentSession | null> {
   const token = req.cookies.get(STUDENT_COOKIE)?.value;
   if (!token) return null;
   try {
@@ -31,30 +31,52 @@ export async function getStudentSession(req: NextRequest): Promise<StudentSessio
   }
 }
 
+/**
+ * The student's portal account state, checked on every request: a valid token
+ * alone isn't enough, so deactivating the account (or deleting the student)
+ * takes effect on the very next request instead of when the 12-hour token
+ * expires. Returns null when there's no active account.
+ */
+async function loadActiveAccount(studentId: number): Promise<{ mustChangePassword: boolean } | null> {
+  const [rows] = await getPool().query<any[]>(
+    `SELECT spa.Must_Change_Password
+     FROM student_portal_auth spa
+     JOIN student_master s ON s.Student_Id = spa.Student_Id
+     WHERE spa.Student_Id = ? AND spa.IsActive = 1
+       AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
+     ORDER BY spa.Id
+     LIMIT 1`,
+    [studentId]
+  );
+  return rows.length ? { mustChangePassword: Boolean(rows[0].Must_Change_Password) } : null;
+}
+
+/**
+ * Authenticated student for a portal API request, or null. Fails closed: if the
+ * account check can't be completed the request is treated as signed out.
+ */
+export async function getStudentSession(req: NextRequest): Promise<StudentSession | null> {
+  const session = await verifyToken(req);
+  if (!session) return null;
+  try {
+    const account = await loadActiveAccount(Number(session.studentId));
+    if (!account) return null;
+    return { ...session, mustChangePassword: account.mustChangePassword };
+  } catch (err) {
+    console.error('[student-portal] session account check failed:', err);
+    return null;
+  }
+}
+
 // GET — check student session
 export async function GET(req: NextRequest) {
+  // getStudentSession re-reads the account on every call, so mustChangePassword
+  // is the live DB value (the token's copy goes stale after a password change)
+  // and a deactivated account comes back as signed out.
   const session = await getStudentSession(req);
   if (!session) {
     return NextResponse.json({ authenticated: false, user: null });
   }
 
-  // mustChangePassword is baked into the JWT at login and never reissued, so a
-  // successful password change (which resets the DB flag immediately) would
-  // otherwise keep showing the force-change modal on every subsequent
-  // navigation for the rest of that session's 12-hour lifetime. Re-check the
-  // live DB value instead of trusting the token's stale copy.
-  let mustChangePassword = session.mustChangePassword;
-  try {
-    const pool = getPool();
-    const [rows] = await pool.query<any[]>(
-      `SELECT Must_Change_Password FROM student_portal_auth WHERE Student_Id = ? AND IsActive = 1 LIMIT 1`,
-      [session.studentId]
-    );
-    if (rows.length) mustChangePassword = Boolean(rows[0].Must_Change_Password);
-  } catch {
-    // Fall back to the token's value if the DB check fails — never block
-    // the session check entirely over this.
-  }
-
-  return NextResponse.json({ authenticated: true, user: { ...session, mustChangePassword } });
+  return NextResponse.json({ authenticated: true, user: session });
 }
